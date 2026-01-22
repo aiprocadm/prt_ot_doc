@@ -1,0 +1,363 @@
+@startuml
+!theme plain
+hide circle
+skinparam linetype ortho
+
+entity tenant {
+  *id: uuid
+  slug: text
+  name: text
+  contact_email: text
+  created_at: timestamptz
+}
+
+entity feature {
+  *id: uuid
+  code: text
+  title: text
+}
+
+entity tenant_feature {
+  *id: uuid
+  tenant_id: uuid
+  feature_id: uuid
+  enabled: bool
+}
+
+entity policy_rule {
+  *id: uuid
+  tenant_id: uuid
+  subject_type: text
+  subject_id: uuid
+  action: text
+  resource: text
+}
+
+entity user_account {
+  *id: uuid
+  tenant_id: uuid
+  email: text
+  role: text
+  is_active: bool
+}
+
+entity company {
+  *id: uuid
+  tenant_id: uuid
+  name: text
+  status: text
+}
+
+entity site {
+  *id: uuid
+  tenant_id: uuid
+  company_id: uuid
+  name: text
+}
+
+entity position {
+  *id: uuid
+  tenant_id: uuid
+  company_id: uuid
+  name: text
+}
+
+entity person {
+  *id: uuid
+  tenant_id: uuid
+  company_id: uuid
+  position_id: uuid
+  first_name: text
+  last_name: text
+}
+
+entity employment_record {
+  *id: uuid
+  tenant_id: uuid
+  person_id: uuid
+  start_date: date
+  end_date: date
+}
+
+entity training_program {
+  *id: uuid
+  tenant_id: uuid
+  code: text
+  title: text
+}
+
+entity training_assignment {
+  *id: uuid
+  tenant_id: uuid
+  person_id: uuid
+  program_id: uuid
+  status: text
+}
+
+entity medical_exam {
+  *id: uuid
+  tenant_id: uuid
+  person_id: uuid
+  exam_type: text
+  exam_date: date
+}
+
+entity permit {
+  *id: uuid
+  tenant_id: uuid
+  person_id: uuid
+  permit_type: text
+  issued_at: date
+}
+
+entity ppe_norm {
+  *id: uuid
+  tenant_id: uuid
+  position_id: uuid
+  item_code: text
+  quantity: int
+}
+
+entity ppe_stock {
+  *id: uuid
+  tenant_id: uuid
+  item_code: text
+  location: text
+  quantity_on_hand: int
+}
+
+entity ppe_issue {
+  *id: uuid
+  tenant_id: uuid
+  person_id: uuid
+  item_code: text
+  status: text
+}
+
+entity template {
+  *id: uuid
+  tenant_id: uuid
+  code: text
+  title: text
+}
+
+entity template_version {
+  *id: uuid
+  tenant_id: uuid
+  template_id: uuid
+  version_no: int
+  status: text
+}
+
+entity document_pack {
+  *id: uuid
+  tenant_id: uuid
+  code: text
+  title: text
+}
+
+entity document_pack_item {
+  *id: uuid
+  tenant_id: uuid
+  pack_id: uuid
+  template_version_id: uuid
+  order_no: int
+}
+
+entity document_job {
+  *id: uuid
+  tenant_id: uuid
+  pack_id: uuid
+  status: text
+  queued_at: timestamptz
+}
+
+entity document {
+  *id: uuid
+  tenant_id: uuid
+  job_id: uuid
+  template_version_id: uuid
+  status: text
+}
+
+entity document_version {
+  *id: uuid
+  tenant_id: uuid
+  document_id: uuid
+  version_no: int
+  status: text
+}
+
+entity checklist {
+  *id: uuid
+  tenant_id: uuid
+  code: text
+  title: text
+}
+
+entity checklist_item {
+  *id: uuid
+  tenant_id: uuid
+  checklist_id: uuid
+  order_no: int
+  text: text
+}
+
+entity inspection {
+  *id: uuid
+  tenant_id: uuid
+  checklist_id: uuid
+  company_id: uuid
+  status: text
+}
+
+entity inspection_item_result {
+  *id: uuid
+  tenant_id: uuid
+  inspection_id: uuid
+  checklist_item_id: uuid
+  answer: text
+}
+
+entity violation {
+  *id: uuid
+  tenant_id: uuid
+  inspection_id: uuid
+  severity: text
+}
+
+entity corrective_action {
+  *id: uuid
+  tenant_id: uuid
+  violation_id: uuid
+  action_text: text
+  due_date: date
+}
+
+entity incident {
+  *id: uuid
+  tenant_id: uuid
+  company_id: uuid
+  site_id: uuid
+  severity: text
+}
+
+entity incident_action {
+  *id: uuid
+  tenant_id: uuid
+  incident_id: uuid
+  action_text: text
+  due_date: date
+}
+
+entity risk_methodology {
+  *id: uuid
+  tenant_id: uuid
+  name: text
+}
+
+entity risk_register {
+  *id: uuid
+  tenant_id: uuid
+  company_id: uuid
+  site_id: uuid
+  methodology_id: uuid
+  revision_no: int
+}
+
+entity risk_entry {
+  *id: uuid
+  tenant_id: uuid
+  register_id: uuid
+  hazard: text
+  risk_level: int
+}
+
+entity npa {
+  *id: uuid
+  tenant_id: uuid
+  code: text
+  title: text
+}
+
+entity npa_binding {
+  *id: uuid
+  tenant_id: uuid
+  npa_id: uuid
+  entity_type: text
+  entity_id: uuid
+}
+
+entity file_asset {
+  *id: uuid
+  tenant_id: uuid
+  storage_key: text
+  mime_type: text
+}
+
+entity audit_log {
+  *id: uuid
+  tenant_id: uuid
+  actor_id: uuid
+  action: text
+  created_at: timestamptz
+}
+
+entity outbox_event {
+  *id: uuid
+  tenant_id: uuid
+  topic: text
+  status: text
+}
+
+entity webhook_subscription {
+  *id: uuid
+  tenant_id: uuid
+  target: text
+  is_active: bool
+}
+
+tenant ||--o{ user_account
+tenant ||--o{ company
+company ||--o{ site
+company ||--o{ position
+position ||--o{ person
+person ||--o{ employment_record
+person ||--o{ training_assignment
+person ||--o{ medical_exam
+person ||--o{ permit
+position ||--o{ ppe_norm
+person ||--o{ ppe_issue
+tenant ||--o{ ppe_stock
+tenant ||--o{ template
+template ||--o{ template_version
+tenant ||--o{ document_pack
+document_pack ||--o{ document_pack_item
+document_pack ||--o{ document_job
+document_job ||--o{ document
+document ||--o{ document_version
+checklist ||--o{ checklist_item
+checklist ||--o{ inspection
+inspection ||--o{ inspection_item_result
+inspection ||--o{ violation
+violation ||--o{ corrective_action
+incident ||--o{ incident_action
+risk_methodology ||--o{ risk_register
+risk_register ||--o{ risk_entry
+tenant ||--o{ npa
+npa ||--o{ npa_binding
+tenant ||--o{ file_asset
+tenant ||--o{ audit_log
+tenant ||--o{ outbox_event
+tenant ||--o{ webhook_subscription
+tenant ||--o{ tenant_feature
+feature ||--o{ tenant_feature
+tenant ||--o{ policy_rule
+tenant ||--o{ document_job
+tenant ||--o{ document
+tenant ||--o{ checklist
+tenant ||--o{ inspection
+tenant ||--o{ violation
+tenant ||--o{ corrective_action
+tenant ||--o{ incident
+@enduml
