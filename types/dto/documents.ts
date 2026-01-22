@@ -1,0 +1,29 @@
+import type { BaseEntityDto, FileLinkDto } from "./common";
+import type { CompanyDto } from "./companies";
+
+export type DocumentStatus = "draft" | "generating" | "ready" | "error";
+
+export interface DocumentVersionDto extends BaseEntityDto {
+  document_id: string;
+  status: DocumentStatus;
+  storage: FileLinkDto | null;
+  comment?: string;
+}
+
+export interface DocumentDto extends BaseEntityDto {
+  name: string;
+  type: string;
+  company: CompanyDto;
+  status: DocumentStatus;
+  version: string;
+  template_id?: string;
+  storage?: FileLinkDto | null;
+  history?: DocumentVersionDto[];
+}
+
+export interface DocumentFiltersDto {
+  search?: string;
+  status?: DocumentStatus;
+  company_id?: string;
+  type?: string;
+}
