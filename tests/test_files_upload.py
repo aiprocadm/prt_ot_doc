@@ -1,0 +1,467 @@
+from __future__ import annotations
+
+import hashlib
+import logging
+import re
+import zipfile
+from datetime import datetime, timezone
+from io import BytesIO
+from typing import BinaryIO
+
+import pytest
+from botocore.exceptions import ClientError
+from moto import mock_aws
+from sqlalchemy import select
+
+from app.api.routes.files import MAX_UPLOAD_BYTES
+from app.core.config import get_settings
+from app.domains.files import s3
+from app.models.file import File as StoredFile, FileKind, FileScanStatus
+from app.services.clamav import (
+    ClamAVScanOutcome,
+    ClamAVVerdict,
+    MemoryQuarantinePublisher,
+    get_quarantine_publisher,
+    process_scan_request,
+    reset_clamav_client,
+    reset_quarantine_publisher,
+)
+
+
+@pytest.fixture(autouse=True)
+def _configure_s3(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("S3_BACKEND", "minio")
+    monkeypatch.setenv("S3_ENDPOINT", "")
+    monkeypatch.setenv("S3_ACCESS_KEY", "test-access")
+    monkeypatch.setenv("S3_SECRET_KEY", "test-secret")
+    monkeypatch.setenv("S3_BUCKET", "test-bucket")
+    monkeypatch.setenv("S3_SECURE", "false")
+    monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
+    monkeypatch.setenv("MAX_REQUEST_BODY_BYTES", str(32_000_000))
+    monkeypatch.setenv("REQUEST_TIMEOUT_SECONDS", "60")
+    monkeypatch.setenv(
+        "FILE_ALLOWED_MIME",
+        "text/plain,image/png,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+    monkeypatch.setenv("FILE_ALLOWED_EXTENSIONS", "txt,png,docx")
+    monkeypatch.setenv("CLAMAV_QUEUE_URL", "memory://")
+    monkeypatch.setenv("CLAMAV_QUARANTINE_QUEUE", "clamav.scan")
+    monkeypatch.setenv("CLAMAV_SCAN_QUEUE", "clamav.scan")
+    get_settings.cache_clear()  # type: ignore[attr-defined]
+    reset_quarantine_publisher()
+    reset_clamav_client()
+    s3.reset_client_cache()
+    monkeypatch.setattr(
+        "app.domains.files.s3.generate_presigned_get_url",
+        lambda key, *, expires_in=3600: f"https://example.com/download/{key}",
+    )
+    yield
+    reset_quarantine_publisher()
+    reset_clamav_client()
+    s3.reset_client_cache()
+
+
+@pytest.fixture()
+def aws() -> None:
+    with mock_aws():
+        s3.ensure_bucket()
+        yield
+
+
+@pytest.mark.anyio
+@pytest.mark.usefixtures("aws")
+async def test_upload_file_happy_path(async_client, make_auth_headers, sessionmaker) -> None:
+    payload = b"Hello, storage!"
+    filename = "greeting.txt"
+    mime = "text/plain"
+    headers = {**dict(async_client.headers), **await make_auth_headers()}
+
+    response = await async_client.post(
+        "/api/v1/files/upload",
+        files={"file": (filename, payload, mime)},
+        headers=headers,
+    )
+    assert response.status_code == 201
+
+    body = response.json()
+    assert body["mime"] == mime
+    assert body["size"] == len(payload)
+    assert body["sha256"] == hashlib.sha256(payload).hexdigest()
+    assert body["kind"] == FileKind.DOCUMENT.value
+    assert body["original_name"] == filename
+    assert body["storage_key"].startswith("tenants/test/")
+    assert body["download_url"] is None
+    assert body["quarantined"] is True
+    assert body["scan_status"] == FileScanStatus.PENDING.value
+    assert body["metadata"] == {}
+    assert response.headers["ETag"] == body["sha256"]
+
+    metadata = s3.head_object(key=body["storage_key"])
+    assert metadata is not None
+    assert metadata["size"] == len(payload)
+    assert metadata["content_type"] == mime
+
+    now = datetime.now(timezone.utc)
+    expected_prefix = f"tenants/test/kind/document/{now.year:04d}/{now.month:02d}/"
+    assert body["storage_key"].startswith(expected_prefix)
+    suffix = body["storage_key"][len(expected_prefix) :]
+    assert re.fullmatch(r"[0-9a-f]{64}-[0-9a-f]{32}\.txt", suffix)
+
+    async with sessionmaker() as session:
+        record = await session.scalar(
+            select(StoredFile).where(StoredFile.storage_key == body["storage_key"])
+        )
+        assert record is not None
+        assert record.id == body["id"]
+        assert record.sha256 == body["sha256"]
+        assert record.size == len(payload)
+        assert record.mime == mime
+        assert record.is_quarantined is True
+        assert record.scan_status == FileScanStatus.PENDING
+        assert record.clamav_signature is None
+        assert record.clamav_scanned_at is None
+
+    publisher = get_quarantine_publisher()
+    assert isinstance(publisher, MemoryQuarantinePublisher)
+    messages = publisher.drain()
+    assert len(messages) == 1
+    message = messages[0]
+    assert message.bucket == get_settings().s3_bucket
+    assert message.key == body["storage_key"]
+    assert message.size == len(payload)
+    assert message.mime == mime
+    assert message.sha256 == body["sha256"]
+    assert message.tenant_slug == "test"
+
+    class _CleanScanner:
+        def scan_stream(self, stream: BinaryIO) -> ClamAVScanOutcome:
+            stream.read()
+            return ClamAVScanOutcome(
+                status=ClamAVVerdict.CLEAN,
+                signature=None,
+                raw="OK",
+            )
+
+    await process_scan_request(
+        message,
+        scanner=_CleanScanner(),
+        session_factory=sessionmaker,
+    )
+
+    async with sessionmaker() as session:
+        refreshed = await session.scalar(select(StoredFile).where(StoredFile.id == body["id"]))
+        assert refreshed is not None
+        assert refreshed.is_quarantined is False
+        assert refreshed.scan_status == FileScanStatus.CLEAN
+        assert refreshed.clamav_signature is None
+        assert refreshed.clamav_scanned_at is not None
+
+    detail_response = await async_client.get(
+        f"/api/v1/files/{body['id']}",
+        headers=headers,
+    )
+    assert detail_response.status_code == 200
+    detail = detail_response.json()
+    assert detail["quarantined"] is False
+    assert detail["scan_status"] == FileScanStatus.CLEAN.value
+    assert detail["download_url"] == f"https://example.com/download/{body['storage_key']}"
+
+
+@pytest.mark.anyio
+@pytest.mark.usefixtures("aws")
+async def test_upload_file_rejects_oversized(async_client, make_auth_headers) -> None:
+    payload = b"a" * (MAX_UPLOAD_BYTES + 1)
+    headers = {**dict(async_client.headers), **await make_auth_headers()}
+
+    response = await async_client.post(
+        "/api/v1/files/upload",
+        files={"file": ("too-big.pdf", payload, "application/pdf")},
+        headers=headers,
+    )
+
+    assert response.status_code == 413
+    body = response.json()
+    assert body["code"] == "http_413"
+    assert "File exceeds" in body["message"]
+    assert body["details"]["limit"] == MAX_UPLOAD_BYTES
+    assert body["details"]["size"] == len(payload)
+    assert body["trace_id"]
+
+
+@pytest.mark.anyio
+@pytest.mark.usefixtures("aws")
+async def test_upload_file_same_payload_produces_unique_keys(
+    async_client, make_auth_headers
+) -> None:
+    payload = b"Hello, storage!"
+    headers = {**dict(async_client.headers), **await make_auth_headers()}
+
+    first = await async_client.post(
+        "/api/v1/files/upload",
+        files={"file": ("greeting.txt", payload, "text/plain")},
+        headers=headers,
+    )
+    second = await async_client.post(
+        "/api/v1/files/upload",
+        files={"file": ("greeting.txt", payload, "text/plain")},
+        headers=headers,
+    )
+
+    assert first.status_code == second.status_code == 201
+    first_body = first.json()
+    second_body = second.json()
+
+    assert first_body["sha256"] == second_body["sha256"]
+    assert first_body["storage_key"] != second_body["storage_key"]
+    assert first_body["download_url"] is None
+    assert second_body["download_url"] is None
+
+
+@pytest.mark.anyio
+@pytest.mark.usefixtures("aws")
+async def test_upload_file_rejects_unsupported_mime(async_client, make_auth_headers) -> None:
+    payload = b"binary"
+    headers = {**dict(async_client.headers), **await make_auth_headers()}
+
+    response = await async_client.post(
+        "/api/v1/files/upload",
+        files={"file": ("payload.bin", payload, "application/octet-stream")},
+        headers=headers,
+    )
+
+    assert response.status_code == 415
+    body = response.json()
+    assert body["code"] == "http_415"
+    assert body["message"] == "Unsupported MIME type"
+    assert body["trace_id"]
+
+
+@pytest.mark.anyio
+@pytest.mark.usefixtures("aws")
+async def test_upload_file_rejects_mismatched_extension(async_client, make_auth_headers) -> None:
+    payload = b"plain text pretending to be pdf"
+    headers = {**dict(async_client.headers), **await make_auth_headers()}
+
+    response = await async_client.post(
+        "/api/v1/files/upload",
+        files={"file": ("report.pdf", payload, "text/plain")},
+        headers=headers,
+    )
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["code"] == "http_400"
+    assert body["message"] == "File extension does not match detected content"
+    assert body["trace_id"]
+
+
+@pytest.mark.anyio
+@pytest.mark.usefixtures("aws")
+async def test_upload_file_rejects_disallowed_extension(async_client, make_auth_headers) -> None:
+    payload = b"%PDF-1.7 fake"
+    headers = {**dict(async_client.headers), **await make_auth_headers()}
+
+    response = await async_client.post(
+        "/api/v1/files/upload",
+        files={"file": ("report.pdf", payload, "application/pdf")},
+        headers=headers,
+    )
+
+    assert response.status_code == 415
+    body = response.json()
+    assert body["code"] == "http_415"
+    assert body["message"] == "Unsupported file extension"
+    assert body["trace_id"]
+
+
+@pytest.mark.anyio
+@pytest.mark.usefixtures("aws")
+async def test_upload_rejects_cross_tenant_scope(async_client, make_auth_headers) -> None:
+    payload = b"Hello scope"
+    headers = {"x-tenant-slug": "acme", **await make_auth_headers()}
+
+    response = await async_client.post(
+        "/api/v1/files/upload",
+        files={"file": ("note.txt", payload, "text/plain")},
+        headers=headers,
+    )
+
+    assert response.status_code == 403
+
+
+@pytest.mark.anyio
+@pytest.mark.usefixtures("aws")
+async def test_clamav_detects_infected_and_blocks_download(
+    async_client,
+    make_auth_headers,
+    sessionmaker,
+    caplog,
+) -> None:
+    payload = b"X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"
+    headers = {**dict(async_client.headers), **await make_auth_headers()}
+
+    response = await async_client.post(
+        "/api/v1/files/upload",
+        files={"file": ("virus.txt", payload, "text/plain")},
+        headers=headers,
+    )
+    assert response.status_code == 201
+    body = response.json()
+
+    publisher = get_quarantine_publisher()
+    message = publisher.drain()[0]
+
+    class _InfectedScanner:
+        def scan_stream(self, stream: BinaryIO) -> ClamAVScanOutcome:
+            stream.read()
+            return ClamAVScanOutcome(
+                status=ClamAVVerdict.INFECTED,
+                signature="Eicar-Test-Signature",
+                raw="FOUND",
+            )
+
+    with caplog.at_level(logging.WARNING):
+        await process_scan_request(
+            message,
+            scanner=_InfectedScanner(),
+            session_factory=sessionmaker,
+        )
+        assert any("files.clamav.detected" in record.message for record in caplog.records)
+
+    detail = await async_client.get(f"/api/v1/files/{body['id']}", headers=headers)
+    assert detail.status_code == 200
+    data = detail.json()
+    assert data["quarantined"] is True
+    assert data["scan_status"] == FileScanStatus.INFECTED.value
+    assert data["download_url"] is None
+
+    async with sessionmaker() as session:
+        record = await session.scalar(select(StoredFile).where(StoredFile.id == body["id"]))
+        assert record is not None
+        assert record.is_quarantined is True
+        assert record.scan_status == FileScanStatus.INFECTED
+        assert record.clamav_signature == "Eicar-Test-Signature"
+
+
+@pytest.mark.anyio
+@pytest.mark.usefixtures("aws")
+async def test_upload_template_adds_metadata(async_client, make_auth_headers, sessionmaker) -> None:
+    payload = b"Template"
+    headers = {**dict(async_client.headers), **await make_auth_headers()}
+
+    response = await async_client.post(
+        "/api/v1/files/upload-template",
+        files={"file": ("template.docx", payload, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+        data={"template_type": "contract", "scenario": "onboarding", "pack_id": "pack-1", "company_id": "comp-1"},
+        headers=headers,
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["kind"] == FileKind.TEMPLATE.value
+    assert body["metadata"]["template_type"] == "contract"
+    assert body["metadata"]["scenario"] == "onboarding"
+    assert body["pack_id"] == "pack-1"
+    assert body["company_id"] == "comp-1"
+    assert "scenario/onboarding" in body["storage_key"]
+    assert "/kind/template/" in body["storage_key"]
+
+
+@pytest.mark.anyio
+@pytest.mark.usefixtures("aws")
+async def test_download_endpoint_streams_file(async_client, make_auth_headers, sessionmaker) -> None:
+    payload = b"downloadable"
+    headers = {**dict(async_client.headers), **await make_auth_headers()}
+
+    upload = await async_client.post(
+        "/api/v1/files/upload",
+        files={"file": ("note.txt", payload, "text/plain")},
+        headers=headers,
+    )
+    body = upload.json()
+    publisher = get_quarantine_publisher()
+    message = publisher.drain()[0]
+
+    class _CleanScanner:
+        def scan_stream(self, stream: BinaryIO) -> ClamAVScanOutcome:
+            stream.read()
+            return ClamAVScanOutcome(status=ClamAVVerdict.CLEAN, signature=None, raw="OK")
+
+    await process_scan_request(message, scanner=_CleanScanner(), session_factory=sessionmaker)
+
+    download = await async_client.get(f"/api/v1/files/{body['id']}/download", headers=headers)
+    assert download.status_code == 200
+    assert download.headers["content-disposition"].startswith("attachment;")
+    assert download.content == payload
+
+
+@pytest.mark.anyio
+@pytest.mark.usefixtures("aws")
+async def test_get_file_returns_404_when_object_missing(
+    async_client,
+    make_auth_headers,
+    sessionmaker,
+) -> None:
+    payload = b"temporary"
+    headers = {**dict(async_client.headers), **await make_auth_headers()}
+
+    response = await async_client.post(
+        "/api/v1/files/upload",
+        files={"file": ("temp.txt", payload, "text/plain")},
+        headers=headers,
+    )
+    body = response.json()
+    publisher = get_quarantine_publisher()
+    message = publisher.drain()[0]
+
+    class _CleanScanner:
+        def scan_stream(self, stream: BinaryIO) -> ClamAVScanOutcome:
+            stream.read()
+            return ClamAVScanOutcome(status=ClamAVVerdict.CLEAN, signature=None, raw="OK")
+
+    await process_scan_request(
+        message,
+        scanner=_CleanScanner(),
+        session_factory=sessionmaker,
+    )
+
+    client = s3.get_client()
+    client.delete_object(Bucket=get_settings().s3_bucket, Key=body["storage_key"])
+
+    detail = await async_client.get(f"/api/v1/files/{body['id']}", headers=headers)
+    assert detail.status_code == 404
+    data = detail.json()
+    assert data["code"] == "http_404"
+    assert data["details"]["storage_code"] == "storage_not_found"
+
+
+@pytest.mark.anyio
+async def test_upload_returns_503_when_bucket_unavailable(
+    async_client, make_auth_headers, monkeypatch
+) -> None:
+    class _BrokenClient:
+        def put_object(self, **kwargs):
+            raise ClientError(
+                {
+                    "Error": {
+                        "Code": "NoSuchBucket",
+                        "Message": "Bucket does not exist",
+                    },
+                    "ResponseMetadata": {"RequestId": "req-123"},
+                },
+                "PutObject",
+            )
+
+    monkeypatch.setattr("app.domains.files.s3.get_client", lambda: _BrokenClient())
+
+    headers = {**dict(async_client.headers), **await make_auth_headers()}
+    response = await async_client.post(
+        "/api/v1/files/upload",
+        files={"file": ("broken.txt", b"content", "text/plain")},
+        headers=headers,
+    )
+
+    assert response.status_code == 503
+    body = response.json()
+    assert body["code"] == "http_503"
+    assert body["details"]["storage_code"] == "storage_unavailable"
