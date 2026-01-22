@@ -1,14 +1,1518 @@
 openapi: 3.1.0
 info:
-  title: PRT OT DOC Backend API
-  version: 1.1.0
+  title: PRT OT Platform Backend API
+  version: 1.0.0
+  description: |
+    REST API для платформы автоматизации охраны труда, промышленной, пожарной и экологической безопасности.
 servers:
-  - url: https://api.example.com/api/v1
-    description: Production
-  - url: /api/v1
-    description: Relative path for internal clients
+  - url: https://api.example.com
+    description: Продакшн
+  - url: https://staging.api.example.com
+    description: Staging
 security:
   - bearerAuth: []
+tags:
+  - name: Auth
+    description: Аутентификация и сессии
+  - name: Tenants
+    description: Управление арендаторами и фичами
+  - name: Users
+    description: Управление пользователями
+  - name: Companies
+    description: Компании, объекты и сотрудники
+  - name: Training
+    description: Обучение и допуски
+  - name: PPE
+    description: СИЗ и склады
+  - name: Templates
+    description: Шаблоны документов и пакеты
+  - name: Documents
+    description: Генерация документов и пакетов
+  - name: Compliance
+    description: Проверки, нарушения, риски и инциденты
+  - name: Files
+    description: Работа с файлами
+  - name: Integrations
+    description: Внешние интеграции и webhooks
+paths:
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Вход пользователя
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Успешная аутентификация
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Обновление access токена
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Новые токены
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Завершить сессию
+      operationId: logout
+      responses:
+        '204':
+          description: Сессия завершена
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/auth/me:
+    get:
+      tags: [Auth]
+      summary: Получить профиль текущего пользователя
+      operationId: getCurrentUser
+      responses:
+        '200':
+          description: Профиль пользователя
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/tenants:
+    get:
+      tags: [Tenants]
+      summary: Список арендаторов
+      operationId: listTenants
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Список арендаторов
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantList'
+    post:
+      tags: [Tenants]
+      summary: Создать арендатора
+      operationId: createTenant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantCreate'
+      responses:
+        '201':
+          description: Арендатор создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tenant'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/v1/tenants/{tenantId}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    get:
+      tags: [Tenants]
+      summary: Получить арендатора
+      operationId: getTenant
+      responses:
+        '200':
+          description: Арендатор
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tenant'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Tenants]
+      summary: Обновить арендатора
+      operationId: updateTenant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantUpdate'
+      responses:
+        '200':
+          description: Обновлённый арендатор
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tenant'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/tenants/{tenantId}/features:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    get:
+      tags: [Tenants]
+      summary: Получить список фич арендатора
+      operationId: listTenantFeatures
+      responses:
+        '200':
+          description: Список фич
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantFeatureList'
+    put:
+      tags: [Tenants]
+      summary: Включить или отключить фичу
+      operationId: upsertTenantFeature
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantFeatureUpsert'
+      responses:
+        '200':
+          description: Статус фичи
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantFeature'
+  /api/v1/features:
+    get:
+      tags: [Tenants]
+      summary: Справочник фич
+      operationId: listFeatures
+      responses:
+        '200':
+          description: Доступные фичи
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeatureList'
+  /api/v1/users:
+    get:
+      tags: [Users]
+      summary: Список пользователей
+      operationId: listUsers
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Sort'
+        - name: role
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Список пользователей
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserList'
+    post:
+      tags: [Users]
+      summary: Создать пользователя
+      operationId: createUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+      responses:
+        '201':
+          description: Пользователь создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/v1/users/{userId}:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    get:
+      tags: [Users]
+      summary: Получить пользователя
+      operationId: getUser
+      responses:
+        '200':
+          description: Пользователь
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Users]
+      summary: Обновить пользователя
+      operationId: updateUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdate'
+      responses:
+        '200':
+          description: Обновлённый пользователь
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+    delete:
+      tags: [Users]
+      summary: Деактивировать пользователя
+      operationId: deleteUser
+      responses:
+        '204':
+          description: Пользователь деактивирован
+  /api/v1/companies:
+    get:
+      tags: [Companies]
+      summary: Список компаний
+      operationId: listCompanies
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Sort'
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Компании
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompanyList'
+    post:
+      tags: [Companies]
+      summary: Создать компанию
+      operationId: createCompany
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompanyCreate'
+      responses:
+        '201':
+          description: Компания создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Company'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/v1/companies/{companyId}:
+    parameters:
+      - $ref: '#/components/parameters/CompanyId'
+    get:
+      tags: [Companies]
+      summary: Получить компанию
+      operationId: getCompany
+      responses:
+        '200':
+          description: Компания
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Company'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Companies]
+      summary: Обновить компанию
+      operationId: updateCompany
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompanyUpdate'
+      responses:
+        '200':
+          description: Обновлённая компания
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Company'
+    delete:
+      tags: [Companies]
+      summary: Архивировать компанию
+      operationId: archiveCompany
+      responses:
+        '204':
+          description: Компания архивирована
+  /api/v1/sites:
+    get:
+      tags: [Companies]
+      summary: Список объектов
+      operationId: listSites
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Sort'
+        - name: company_id
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Объекты
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SiteList'
+    post:
+      tags: [Companies]
+      summary: Создать объект
+      operationId: createSite
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SiteCreate'
+      responses:
+        '201':
+          description: Объект создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Site'
+  /api/v1/sites/{siteId}:
+    parameters:
+      - $ref: '#/components/parameters/SiteId'
+    get:
+      tags: [Companies]
+      summary: Получить объект
+      operationId: getSite
+      responses:
+        '200':
+          description: Объект
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Site'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Companies]
+      summary: Обновить объект
+      operationId: updateSite
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SiteUpdate'
+      responses:
+        '200':
+          description: Обновлённый объект
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Site'
+    delete:
+      tags: [Companies]
+      summary: Архивировать объект
+      operationId: archiveSite
+      responses:
+        '204':
+          description: Объект архивирован
+  /api/v1/positions:
+    get:
+      tags: [Companies]
+      summary: Должности
+      operationId: listPositions
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - name: company_id
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Должности
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PositionList'
+    post:
+      tags: [Companies]
+      summary: Создать должность
+      operationId: createPosition
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PositionCreate'
+      responses:
+        '201':
+          description: Должность создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Position'
+  /api/v1/persons:
+    get:
+      tags: [Companies]
+      summary: Сотрудники
+      operationId: listPersons
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Sort'
+        - name: company_id
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Сотрудники
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonList'
+    post:
+      tags: [Companies]
+      summary: Создать сотрудника
+      operationId: createPerson
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PersonCreate'
+      responses:
+        '201':
+          description: Сотрудник создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Person'
+  /api/v1/persons/{personId}:
+    parameters:
+      - $ref: '#/components/parameters/PersonId'
+    get:
+      tags: [Companies]
+      summary: Получить сотрудника
+      operationId: getPerson
+      responses:
+        '200':
+          description: Сотрудник
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Person'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Companies]
+      summary: Обновить сотрудника
+      operationId: updatePerson
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PersonUpdate'
+      responses:
+        '200':
+          description: Обновлённый сотрудник
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Person'
+    delete:
+      tags: [Companies]
+      summary: Деактивировать сотрудника
+      operationId: deactivatePerson
+      responses:
+        '204':
+          description: Сотрудник деактивирован
+  /api/v1/persons/{personId}/trainings:
+    parameters:
+      - $ref: '#/components/parameters/PersonId'
+    get:
+      tags: [Training]
+      summary: Обучение сотрудника
+      operationId: listTrainings
+      responses:
+        '200':
+          description: Назначения обучения
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrainingAssignmentList'
+    post:
+      tags: [Training]
+      summary: Назначить обучение
+      operationId: assignTraining
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrainingAssignmentCreate'
+      responses:
+        '201':
+          description: Назначение создано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrainingAssignment'
+  /api/v1/persons/{personId}/medical-exams:
+    parameters:
+      - $ref: '#/components/parameters/PersonId'
+    get:
+      tags: [Training]
+      summary: Медосмотры
+      operationId: listMedicalExams
+      responses:
+        '200':
+          description: Медосмотры сотрудника
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MedicalExamList'
+    post:
+      tags: [Training]
+      summary: Добавить медосмотр
+      operationId: createMedicalExam
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MedicalExamCreate'
+      responses:
+        '201':
+          description: Медосмотр создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MedicalExam'
+  /api/v1/persons/{personId}/permits:
+    parameters:
+      - $ref: '#/components/parameters/PersonId'
+    get:
+      tags: [Training]
+      summary: Допуски
+      operationId: listPermits
+      responses:
+        '200':
+          description: Допуски
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermitList'
+    post:
+      tags: [Training]
+      summary: Выдать допуск
+      operationId: createPermit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PermitCreate'
+      responses:
+        '201':
+          description: Допуск создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Permit'
+  /api/v1/ppe/norms:
+    get:
+      tags: [PPE]
+      summary: Нормы выдачи
+      operationId: listPpeNorms
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - name: position_id
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Нормы
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PpeNormList'
+    post:
+      tags: [PPE]
+      summary: Создать норму
+      operationId: createPpeNorm
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PpeNormCreate'
+      responses:
+        '201':
+          description: Норма создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PpeNorm'
+  /api/v1/ppe/stocks:
+    get:
+      tags: [PPE]
+      summary: Складские остатки
+      operationId: listPpeStocks
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - name: location
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Остатки
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PpeStockList'
+    post:
+      tags: [PPE]
+      summary: Обновить остаток
+      operationId: upsertPpeStock
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PpeStockUpsert'
+      responses:
+        '200':
+          description: Остаток
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PpeStock'
+  /api/v1/ppe/issues:
+    get:
+      tags: [PPE]
+      summary: Выдачи СИЗ
+      operationId: listPpeIssues
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - name: person_id
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Выдачи
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PpeIssueList'
+    post:
+      tags: [PPE]
+      summary: Выдать СИЗ
+      operationId: createPpeIssue
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PpeIssueCreate'
+      responses:
+        '201':
+          description: Выдача создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PpeIssue'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/v1/templates:
+    get:
+      tags: [Templates]
+      summary: Список шаблонов
+      operationId: listTemplates
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - name: category
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Шаблоны
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateList'
+    post:
+      tags: [Templates]
+      summary: Создать шаблон
+      operationId: createTemplate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TemplateCreate'
+      responses:
+        '201':
+          description: Шаблон создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+  /api/v1/templates/{templateId}:
+    parameters:
+      - $ref: '#/components/parameters/TemplateId'
+    get:
+      tags: [Templates]
+      summary: Получить шаблон
+      operationId: getTemplate
+      responses:
+        '200':
+          description: Шаблон
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Templates]
+      summary: Обновить шаблон
+      operationId: updateTemplate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TemplateUpdate'
+      responses:
+        '200':
+          description: Обновлённый шаблон
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+    delete:
+      tags: [Templates]
+      summary: Архивировать шаблон
+      operationId: archiveTemplate
+      responses:
+        '204':
+          description: Шаблон архивирован
+  /api/v1/templates/{templateId}/versions:
+    parameters:
+      - $ref: '#/components/parameters/TemplateId'
+    get:
+      tags: [Templates]
+      summary: Версии шаблона
+      operationId: listTemplateVersions
+      responses:
+        '200':
+          description: Версии
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateVersionList'
+    post:
+      tags: [Templates]
+      summary: Добавить версию шаблона
+      operationId: createTemplateVersion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TemplateVersionCreate'
+      responses:
+        '201':
+          description: Версия создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateVersion'
+  /api/v1/document-packs:
+    get:
+      tags: [Templates]
+      summary: Пакеты документов
+      operationId: listDocumentPacks
+      responses:
+        '200':
+          description: Пакеты
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentPackList'
+    post:
+      tags: [Templates]
+      summary: Создать пакет документов
+      operationId: createDocumentPack
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentPackCreate'
+      responses:
+        '201':
+          description: Пакет создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentPack'
+  /api/v1/document-packs/{packId}:
+    parameters:
+      - $ref: '#/components/parameters/PackId'
+    get:
+      tags: [Templates]
+      summary: Получить пакет
+      operationId: getDocumentPack
+      responses:
+        '200':
+          description: Пакет
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentPack'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Templates]
+      summary: Обновить пакет
+      operationId: updateDocumentPack
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentPackUpdate'
+      responses:
+        '200':
+          description: Обновлённый пакет
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentPack'
+    delete:
+      tags: [Templates]
+      summary: Архивировать пакет
+      operationId: archiveDocumentPack
+      responses:
+        '204':
+          description: Пакет архивирован
+  /api/v1/document-jobs:
+    get:
+      tags: [Documents]
+      summary: Задачи генерации
+      operationId: listDocumentJobs
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Задачи генерации
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentJobList'
+    post:
+      tags: [Documents]
+      summary: Запустить генерацию пакета
+      operationId: createDocumentJob
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentJobCreate'
+      responses:
+        '202':
+          description: Задача принята
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentJob'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/v1/document-jobs/{jobId}:
+    parameters:
+      - $ref: '#/components/parameters/JobId'
+    get:
+      tags: [Documents]
+      summary: Получить задачу генерации
+      operationId: getDocumentJob
+      responses:
+        '200':
+          description: Задача
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentJob'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/documents:
+    get:
+      tags: [Documents]
+      summary: Список документов
+      operationId: listDocuments
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Sort'
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: pack_id
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Документы
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentList'
+  /api/v1/documents/{documentId}:
+    parameters:
+      - $ref: '#/components/parameters/DocumentId'
+    get:
+      tags: [Documents]
+      summary: Получить документ
+      operationId: getDocument
+      responses:
+        '200':
+          description: Документ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/documents/{documentId}/status:
+    parameters:
+      - $ref: '#/components/parameters/DocumentId'
+    patch:
+      tags: [Documents]
+      summary: Обновить статус документа
+      operationId: updateDocumentStatus
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentStatusUpdate'
+      responses:
+        '200':
+          description: Обновлённый документ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/v1/documents/{documentId}/versions:
+    parameters:
+      - $ref: '#/components/parameters/DocumentId'
+    get:
+      tags: [Documents]
+      summary: Версии документа
+      operationId: listDocumentVersions
+      responses:
+        '200':
+          description: Версии
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentVersionList'
+  /api/v1/checklists:
+    get:
+      tags: [Compliance]
+      summary: Справочник чек-листов
+      operationId: listChecklists
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - name: scope
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Чек-листы
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChecklistList'
+    post:
+      tags: [Compliance]
+      summary: Создать чек-лист
+      operationId: createChecklist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChecklistCreate'
+      responses:
+        '201':
+          description: Чек-лист создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Checklist'
+  /api/v1/checklists/{checklistId}:
+    parameters:
+      - $ref: '#/components/parameters/ChecklistId'
+    get:
+      tags: [Compliance]
+      summary: Получить чек-лист
+      operationId: getChecklist
+      responses:
+        '200':
+          description: Чек-лист
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Checklist'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Compliance]
+      summary: Обновить чек-лист
+      operationId: updateChecklist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChecklistUpdate'
+      responses:
+        '200':
+          description: Обновлённый чек-лист
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Checklist'
+  /api/v1/inspections:
+    get:
+      tags: [Compliance]
+      summary: Инспекции
+      operationId: listInspections
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Инспекции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InspectionList'
+    post:
+      tags: [Compliance]
+      summary: Создать инспекцию
+      operationId: createInspection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InspectionCreate'
+      responses:
+        '201':
+          description: Инспекция создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Inspection'
+  /api/v1/inspections/{inspectionId}:
+    parameters:
+      - $ref: '#/components/parameters/InspectionId'
+    get:
+      tags: [Compliance]
+      summary: Получить инспекцию
+      operationId: getInspection
+      responses:
+        '200':
+          description: Инспекция
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Inspection'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Compliance]
+      summary: Обновить инспекцию
+      operationId: updateInspection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InspectionUpdate'
+      responses:
+        '200':
+          description: Обновлённая инспекция
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Inspection'
+  /api/v1/inspections/{inspectionId}/violations:
+    parameters:
+      - $ref: '#/components/parameters/InspectionId'
+    get:
+      tags: [Compliance]
+      summary: Нарушения по инспекции
+      operationId: listViolations
+      responses:
+        '200':
+          description: Нарушения
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ViolationList'
+    post:
+      tags: [Compliance]
+      summary: Добавить нарушение
+      operationId: createViolation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ViolationCreate'
+      responses:
+        '201':
+          description: Нарушение создано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Violation'
+  /api/v1/violations/{violationId}/corrective-actions:
+    parameters:
+      - $ref: '#/components/parameters/ViolationId'
+    get:
+      tags: [Compliance]
+      summary: Корректирующие действия
+      operationId: listCorrectiveActions
+      responses:
+        '200':
+          description: Список действий
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CorrectiveActionList'
+    post:
+      tags: [Compliance]
+      summary: Создать корректирующее действие
+      operationId: createCorrectiveAction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CorrectiveActionCreate'
+      responses:
+        '201':
+          description: Действие создано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CorrectiveAction'
+  /api/v1/incidents:
+    get:
+      tags: [Compliance]
+      summary: Инциденты
+      operationId: listIncidents
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Инциденты
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentList'
+    post:
+      tags: [Compliance]
+      summary: Зарегистрировать инцидент
+      operationId: createIncident
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IncidentCreate'
+      responses:
+        '201':
+          description: Инцидент создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Incident'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/v1/incidents/{incidentId}:
+    parameters:
+      - $ref: '#/components/parameters/IncidentId'
+    get:
+      tags: [Compliance]
+      summary: Получить инцидент
+      operationId: getIncident
+      responses:
+        '200':
+          description: Инцидент
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Incident'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Compliance]
+      summary: Обновить инцидент
+      operationId: updateIncident
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IncidentUpdate'
+      responses:
+        '200':
+          description: Обновлённый инцидент
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Incident'
+  /api/v1/risks/registers:
+    get:
+      tags: [Compliance]
+      summary: Реестры рисков
+      operationId: listRiskRegisters
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Реестры
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskRegisterList'
+    post:
+      tags: [Compliance]
+      summary: Создать реестр рисков
+      operationId: createRiskRegister
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiskRegisterCreate'
+      responses:
+        '201':
+          description: Реестр создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskRegister'
+  /api/v1/risks/registers/{registerId}:
+    parameters:
+      - $ref: '#/components/parameters/RegisterId'
+    get:
+      tags: [Compliance]
+      summary: Получить реестр рисков
+      operationId: getRiskRegister
+      responses:
+        '200':
+          description: Реестр
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskRegister'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Compliance]
+      summary: Обновить реестр рисков
+      operationId: updateRiskRegister
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiskRegisterUpdate'
+      responses:
+        '200':
+          description: Обновлённый реестр
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskRegister'
+  /api/v1/files/upload:
+    post:
+      tags: [Files]
+      summary: Загрузить файл
+      operationId: uploadFile
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                purpose:
+                  type: string
+      responses:
+        '201':
+          description: Файл загружен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileAsset'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/files/{fileId}:
+    parameters:
+      - $ref: '#/components/parameters/FileId'
+    get:
+      tags: [Files]
+      summary: Получить метаданные файла
+      operationId: getFile
+      responses:
+        '200':
+          description: Файл
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileAsset'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/webhooks/1c:
+    post:
+      tags: [Integrations]
+      summary: Webhook от 1С
+      operationId: webhook1c
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OneCWebhook'
+      responses:
+        '202':
+          description: Событие принято
+  /api/v1/webhooks/frdo:
+    post:
+      tags: [Integrations]
+      summary: Webhook от ФРДО
+      operationId: webhookFrdo
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FrdoWebhook'
+      responses:
+        '202':
+          description: Событие принято
+  /api/v1/webhooks/eisot:
+    post:
+      tags: [Integrations]
+      summary: Webhook от ЕИСОТ
+      operationId: webhookEisot
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EisotWebhook'
+      responses:
+        '202':
+          description: Событие принято
 components:
   securitySchemes:
     bearerAuth:
@@ -16,43 +1520,190 @@ components:
       scheme: bearer
       bearerFormat: JWT
   parameters:
-    TenantHeader:
-      name: X-Tenant-Id
-      in: header
-      required: true
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    Offset:
+      name: offset
+      in: query
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+    Sort:
+      name: sort
+      in: query
       schema:
         type: string
-        format: uuid
-      description: "UUID арендатора"
+        description: Список полей через запятую, пример `name:asc`.
     IdempotencyKey:
       name: Idempotency-Key
       in: header
       required: true
       schema:
         type: string
-        minLength: 8
-      description: "Идентификатор идемпотентности запроса"
+        format: uuid
+    TenantId:
+      name: tenantId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CompanyId:
+      name: companyId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    SiteId:
+      name: siteId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PositionId:
+      name: positionId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PersonId:
+      name: personId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    TemplateId:
+      name: templateId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PackId:
+      name: packId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    JobId:
+      name: jobId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    DocumentId:
+      name: documentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ChecklistId:
+      name: checklistId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    InspectionId:
+      name: inspectionId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ViolationId:
+      name: violationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    IncidentId:
+      name: incidentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    RegisterId:
+      name: registerId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    FileId:
+      name: fileId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
   responses:
-    Unauthorized:
-      description: Токен отсутствует или просрочен
-    Forbidden:
-      description: Недостаточно прав для выполнения операции
     BadRequest:
-      description: Неверные данные запроса или отсутствует обязательный заголовок
+      description: Неверный запрос
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Требуется аутентификация
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Не найдено
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Конфликт состояния
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ValidationError:
+      description: Ошибка валидации
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationError'
   schemas:
-    Envelope:
+    Pagination:
       type: object
       properties:
-        data:
-          nullable: true
-        error:
-          nullable: true
-          oneOf:
-            - $ref: '#/components/schemas/Error'
-        correlation_id:
-          type: string
-    Error:
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+    ErrorResponse:
       type: object
+      required: [code, message]
       properties:
         code:
           type: string
@@ -61,16 +1712,58 @@ components:
         details:
           type: object
           additionalProperties: true
-          nullable: true
-    Paginated:
+        trace_id:
+          type: string
+    ValidationError:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          properties:
+            errors:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                  message:
+                    type: string
+    LoginRequest:
       type: object
+      required: [email, password, tenant]
       properties:
-        items:
-          type: array
-        total:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+        tenant:
+          type: string
+    RefreshRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+    AuthResponse:
+      type: object
+      required: [access_token, refresh_token, expires_in]
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+          default: Bearer
+        expires_in:
           type: integer
+        user:
+          $ref: '#/components/schemas/UserProfile'
     Tenant:
       type: object
+      required: [id, slug, name, contact_email, settings]
       properties:
         id:
           type: string
@@ -79,12 +1772,179 @@ components:
           type: string
         name:
           type: string
-        plan:
+        contact_email:
           type: string
-        status:
+          format: email
+        settings:
+          type: object
+          additionalProperties: true
+        created_at:
           type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    TenantCreate:
+      type: object
+      required: [slug, name, contact_email]
+      properties:
+        slug:
+          type: string
+        name:
+          type: string
+        contact_email:
+          type: string
+          format: email
+        settings:
+          type: object
+          additionalProperties: true
+    TenantUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        contact_email:
+          type: string
+          format: email
+        settings:
+          type: object
+          additionalProperties: true
+    TenantList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tenant'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    Feature:
+      type: object
+      required: [id, code, title]
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+    FeatureList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Feature'
+    TenantFeature:
+      type: object
+      required: [id, tenant_id, feature_id, enabled]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        feature_id:
+          type: string
+          format: uuid
+        enabled:
+          type: boolean
+        config:
+          type: object
+          additionalProperties: true
+    TenantFeatureList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TenantFeature'
+    TenantFeatureUpsert:
+      type: object
+      required: [feature_code, enabled]
+      properties:
+        feature_code:
+          type: string
+        enabled:
+          type: boolean
+        config:
+          type: object
+          additionalProperties: true
+    User:
+      type: object
+      required: [id, email, full_name, role, is_active]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+        role:
+          type: string
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        last_login_at:
+          type: string
+          format: date-time
+        mfa_enabled:
+          type: boolean
+    UserProfile:
+      allOf:
+        - $ref: '#/components/schemas/User'
+        - type: object
+          properties:
+            tenant:
+              $ref: '#/components/schemas/Tenant'
+    UserCreate:
+      type: object
+      required: [email, full_name, role, password]
+      properties:
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+        role:
+          type: string
+        password:
+          type: string
+        phone:
+          type: string
+        locale:
+          type: string
+    UserUpdate:
+      type: object
+      properties:
+        full_name:
+          type: string
+        role:
+          type: string
+        is_active:
+          type: boolean
+        phone:
+          type: string
+    UserList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
     Company:
       type: object
+      required: [id, name]
       properties:
         id:
           type: string
@@ -93,37 +1953,139 @@ components:
           type: string
         inn:
           type: string
-        ogrn:
-          type: string
         kpp:
           type: string
-        tax_id:
+        ogrn:
           type: string
-          nullable: true
-        address:
+        legal_address:
           type: string
-          nullable: true
+        actual_address:
+          type: string
+        director:
+          type: string
+        bank_name:
+          type: string
+        bank_bik:
+          type: string
+        bank_account:
+          type: string
+        phone_numbers:
+          type: array
+          items:
+            type: string
+        email:
+          type: string
+          format: email
+        logo_file_id:
+          type: string
+        stamp_file_id:
+          type: string
+        work_types:
+          type: array
+          items:
+            type: string
+        hazardous_factors:
+          type: array
+          items:
+            type: string
     CompanyCreate:
       type: object
-      required:
-        - name
+      required: [name]
       properties:
         name:
           type: string
         inn:
           type: string
+        kpp:
+          type: string
         ogrn:
+          type: string
+        legal_address:
+          type: string
+        actual_address:
+          type: string
+        director:
+          type: string
+        bank_name:
+          type: string
+        bank_bik:
+          type: string
+        bank_account:
+          type: string
+        phone_numbers:
+          type: array
+          items:
+            type: string
+        email:
+          type: string
+          format: email
+        logo_file_id:
+          type: string
+        stamp_file_id:
+          type: string
+        work_types:
+          type: array
+          items:
+            type: string
+        hazardous_factors:
+          type: array
+          items:
+            type: string
+    CompanyUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        inn:
           type: string
         kpp:
           type: string
-        tax_id:
+        ogrn:
           type: string
-          nullable: true
-        address:
+        legal_address:
           type: string
-          nullable: true
-    Person:
+        actual_address:
+          type: string
+        director:
+          type: string
+        bank_name:
+          type: string
+        bank_bik:
+          type: string
+        bank_account:
+          type: string
+        phone_numbers:
+          type: array
+          items:
+            type: string
+        email:
+          type: string
+          format: email
+        logo_file_id:
+          type: string
+        stamp_file_id:
+          type: string
+        work_types:
+          type: array
+          items:
+            type: string
+        hazardous_factors:
+          type: array
+          items:
+            type: string
+          type: string
+    CompanyList:
       type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Company'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    Site:
+      type: object
+      required: [id, company_id, name]
       properties:
         id:
           type: string
@@ -131,40 +2093,579 @@ components:
         company_id:
           type: string
           format: uuid
-        fio:
+        name:
           type: string
+        address:
+          type: string
+        geo_json:
+          type: object
+          additionalProperties: true
+        hazard_class:
+          type: string
+    SiteCreate:
+      type: object
+      required: [company_id, name]
+      properties:
+        company_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        address:
+          type: string
+        geo_json:
+          type: object
+          additionalProperties: true
+        hazard_class:
+          type: string
+    SiteUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        address:
+          type: string
+        geo_json:
+          type: object
+          additionalProperties: true
+        hazard_class:
+          type: string
+    SiteList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Site'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    Position:
+      type: object
+      required: [id, company_id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        company_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+    PositionCreate:
+      type: object
+      required: [company_id, name]
+      properties:
+        company_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+    PositionList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Position'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    Person:
+      type: object
+      required: [id, company_id, first_name, last_name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        company_id:
+          type: string
+          format: uuid
         position_id:
           type: string
           format: uuid
-          nullable: true
+        first_name:
+          type: string
+        last_name:
+          type: string
+        middle_name:
+          type: string
+        birth_date:
+          type: string
+          format: date
+        personnel_number:
+          type: string
+        hired_at:
+          type: string
+          format: date
+        qualifications:
+          type: array
+          items:
+            $ref: '#/components/schemas/QualificationRecord'
+        snils:
+          type: string
+        passport:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        current_ppe:
+          type: array
+          items:
+            $ref: '#/components/schemas/PPEItem'
+    PersonCreate:
+      type: object
+      required: [company_id, first_name, last_name]
+      properties:
+        company_id:
+          type: string
+          format: uuid
+        position_id:
+          type: string
+          format: uuid
+        first_name:
+          type: string
+        last_name:
+          type: string
+        middle_name:
+          type: string
+        birth_date:
+          type: string
+          format: date
+        personnel_number:
+          type: string
+        hired_at:
+          type: string
+          format: date
+        qualifications:
+          type: array
+          items:
+            $ref: '#/components/schemas/QualificationRecord'
+        snils:
+          type: string
+        passport:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        current_ppe:
+          type: array
+          items:
+            $ref: '#/components/schemas/PPEItem'
+    PersonUpdate:
+      type: object
+      properties:
+        position_id:
+          type: string
+          format: uuid
+        personnel_number:
+          type: string
+        hired_at:
+          type: string
+          format: date
+        qualifications:
+          type: array
+          items:
+            $ref: '#/components/schemas/QualificationRecord'
+        snils:
+          type: string
+        passport:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        current_ppe:
+          type: array
+          items:
+            $ref: '#/components/schemas/PPEItem'
+    PersonList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Person'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    QualificationRecord:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        kind:
+          type: string
+        issued_at:
+          type: string
+          format: date
+        valid_until:
+          type: string
+          format: date
+        issuer:
+          type: string
+        document:
+          type: string
+    PPEItem:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        issued_at:
+          type: string
+          format: date
+        expires_at:
+          type: string
+          format: date
         status:
           type: string
-    Template:
+    TrainingProgram:
       type: object
+      required: [id, code, title]
       properties:
         id:
           type: string
           format: uuid
         code:
           type: string
-        name:
+        title:
           type: string
-        active_version_id:
+        hours:
+          type: integer
+        regulatory_basis:
+          type: string
+    TrainingAssignment:
+      type: object
+      required: [id, person_id, program_id, status]
+      properties:
+        id:
           type: string
           format: uuid
-          nullable: true
+        person_id:
+          type: string
+          format: uuid
+        program_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        assigned_at:
+          type: string
+          format: date-time
+        due_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        certificate_no:
+          type: string
+        frdo_payload:
+          type: object
+          additionalProperties: true
+    TrainingAssignmentCreate:
+      type: object
+      required: [program_id, due_at]
+      properties:
+        program_id:
+          type: string
+          format: uuid
+        due_at:
+          type: string
+          format: date-time
+    TrainingAssignmentList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrainingAssignment'
+    MedicalExam:
+      type: object
+      required: [id, person_id, exam_type, exam_date]
+      properties:
+        id:
+          type: string
+          format: uuid
+        person_id:
+          type: string
+          format: uuid
+        exam_type:
+          type: string
+        exam_date:
+          type: string
+          format: date
+        conclusion:
+          type: string
+        valid_until:
+          type: string
+          format: date
+        file_id:
+          type: string
+          format: uuid
+    MedicalExamCreate:
+      type: object
+      required: [exam_type, exam_date]
+      properties:
+        exam_type:
+          type: string
+        exam_date:
+          type: string
+          format: date
+        conclusion:
+          type: string
+        valid_until:
+          type: string
+          format: date
+        file_id:
+          type: string
+          format: uuid
+    MedicalExamList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MedicalExam'
+    Permit:
+      type: object
+      required: [id, person_id, permit_type, issued_at, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        person_id:
+          type: string
+          format: uuid
+        permit_type:
+          type: string
+        issued_at:
+          type: string
+          format: date
+        valid_until:
+          type: string
+          format: date
+        status:
+          type: string
+        file_id:
+          type: string
+          format: uuid
+    PermitCreate:
+      type: object
+      required: [permit_type, issued_at]
+      properties:
+        permit_type:
+          type: string
+        issued_at:
+          type: string
+          format: date
+        valid_until:
+          type: string
+          format: date
+        file_id:
+          type: string
+          format: uuid
+    PermitList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Permit'
+    PpeNorm:
+      type: object
+      required: [id, position_id, item_code, quantity]
+      properties:
+        id:
+          type: string
+          format: uuid
+        position_id:
+          type: string
+          format: uuid
+        item_code:
+          type: string
+        item_name:
+          type: string
+        quantity:
+          type: integer
+        interval_days:
+          type: integer
+    PpeNormCreate:
+      type: object
+      required: [position_id, item_code, quantity]
+      properties:
+        position_id:
+          type: string
+          format: uuid
+        item_code:
+          type: string
+        item_name:
+          type: string
+        quantity:
+          type: integer
+        interval_days:
+          type: integer
+    PpeNormList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PpeNorm'
+    PpeStock:
+      type: object
+      required: [id, item_code, quantity_on_hand]
+      properties:
+        id:
+          type: string
+          format: uuid
+        location:
+          type: string
+        item_code:
+          type: string
+        item_name:
+          type: string
+        size:
+          type: string
+        quantity_on_hand:
+          type: integer
+    PpeStockUpsert:
+      type: object
+      required: [item_code, quantity_on_hand]
+      properties:
+        location:
+          type: string
+        item_code:
+          type: string
+        item_name:
+          type: string
+        size:
+          type: string
+        quantity_on_hand:
+          type: integer
+    PpeStockList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PpeStock'
+    PpeIssue:
+      type: object
+      required: [id, person_id, item_code, issued_at, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        person_id:
+          type: string
+          format: uuid
+        item_code:
+          type: string
+        issued_at:
+          type: string
+          format: date-time
+        due_at:
+          type: string
+          format: date-time
+        returned_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+        stock_id:
+          type: string
+          format: uuid
+    PpeIssueCreate:
+      type: object
+      required: [person_id, item_code, issued_at]
+      properties:
+        person_id:
+          type: string
+          format: uuid
+        item_code:
+          type: string
+        issued_at:
+          type: string
+          format: date-time
+        due_at:
+          type: string
+          format: date-time
+        stock_id:
+          type: string
+          format: uuid
+    PpeIssueList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PpeIssue'
+    Template:
+      type: object
+      required: [id, code, title]
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        title:
+          type: string
+        category:
+          type: string
+        description:
+          type: string
+        default_context:
+          type: object
+          additionalProperties: true
     TemplateCreate:
       type: object
-      required:
-        - code
-        - name
+      required: [code, title]
       properties:
         code:
           type: string
-        name:
+        title:
           type: string
+        category:
+          type: string
+        description:
+          type: string
+        default_context:
+          type: object
+          additionalProperties: true
+    TemplateUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+        category:
+          type: string
+        description:
+          type: string
+        default_context:
+          type: object
+          additionalProperties: true
+    TemplateList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Template'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
     TemplateVersion:
       type: object
+      required: [id, template_id, version_no, status]
       properties:
         id:
           type: string
@@ -172,87 +2673,146 @@ components:
         template_id:
           type: string
           format: uuid
-        version:
+        version_no:
           type: integer
-          minimum: 1
-        storage_key:
-          type: string
-        placeholders_json:
-          type: object
-          additionalProperties: true
-        npa_revision:
-          type: string
-          nullable: true
-        checksum:
-          type: string
-          nullable: true
-    DocumentJob:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        preset_id:
-          type: string
-          format: uuid
-          nullable: true
         status:
           type: string
-          enum:
-            - queued
-            - running
-            - done
-            - failed
-        params_json:
+        checksum:
+          type: string
+          format: byte
+        storage_key:
+          type: string
+        schema:
           type: object
           additionalProperties: true
-        result_zip_key:
-          type: string
-          nullable: true
-        report_csv_key:
-          type: string
-          nullable: true
-        created_at:
+        published_at:
           type: string
           format: date-time
-    FileObject:
+    TemplateVersionCreate:
       type: object
+      required: [storage_key]
+      properties:
+        storage_key:
+          type: string
+        schema:
+          type: object
+          additionalProperties: true
+    TemplateVersionList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TemplateVersion'
+    DocumentPack:
+      type: object
+      required: [id, code, title]
       properties:
         id:
           type: string
           format: uuid
-        storage_key:
+        code:
           type: string
-        sha256:
+        title:
           type: string
-        size:
-          type: integer
-        mime:
+        description:
           type: string
-    DocGenerateRequest:
+        module:
+          type: string
+        is_active:
+          type: boolean
+    DocumentPackCreate:
       type: object
-      required:
-        - template_code
-        - company_id
-        - data
+      required: [code, title]
       properties:
-        template_code:
+        code:
           type: string
-        company_id:
+        title:
+          type: string
+        description:
+          type: string
+        module:
+          type: string
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              template_version_id:
+                type: string
+                format: uuid
+              order_no:
+                type: integer
+              required:
+                type: boolean
+              condition:
+                type: object
+                additionalProperties: true
+    DocumentPackUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        module:
+          type: string
+        is_active:
+          type: boolean
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              template_version_id:
+                type: string
+                format: uuid
+              order_no:
+                type: integer
+              required:
+                type: boolean
+              condition:
+                type: object
+                additionalProperties: true
+    DocumentPackList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentPack'
+    DocumentJob:
+      type: object
+      required: [id, pack_id, status]
+      properties:
+        id:
           type: string
           format: uuid
-        person_id:
+        pack_id:
           type: string
           format: uuid
-          nullable: true
-        data:
+        requested_by:
+          type: string
+          format: uuid
+        status:
+          type: string
+        payload:
           type: object
           additionalProperties: true
-    PackRunRequest:
+        idempotency_key:
+          type: string
+        queued_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: string
+          format: date-time
+    DocumentJobCreate:
       type: object
-      required:
-        - pack_code
-        - company_id
+      required: [pack_code]
       properties:
         pack_code:
           type: string
@@ -262,619 +2822,528 @@ components:
         site_id:
           type: string
           format: uuid
-          nullable: true
         person_ids:
           type: array
           items:
             type: string
             format: uuid
+        context:
+          type: object
+          additionalProperties: true
+    DocumentJobList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentJob'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    Document:
+      type: object
+      required:
+        - id
+        - company_id
+        - template_id
+        - status
+        - created_by
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        company_id:
+          type: string
+          format: uuid
+        template_id:
+          type: string
+          format: uuid
+        person_id:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          type: string
+          enum: [draft, review, signed, archived]
+        storage_key:
+          type: string
+          nullable: true
+        created_by:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    DocumentStatusUpdate:
+      type: object
+      required: [to]
+      properties:
+        to:
+          type: string
+          enum: [draft, review, signed, archived]
+    DocumentList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Document'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    DocumentVersion:
+      type: object
+      required: [id, document_id, version_no]
+      properties:
+        id:
+          type: string
+          format: uuid
+        document_id:
+          type: string
+          format: uuid
+        version_no:
+          type: integer
+        status:
+          type: string
         data:
           type: object
           additionalProperties: true
-    PipelineRequest:
-      type: object
-      required:
-        - preset_code
-        - source
-      properties:
-        preset_code:
+        file_id:
           type: string
-        source:
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+    DocumentVersionList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentVersion'
+    Checklist:
+      type: object
+      required: [id, code, title]
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        title:
+          type: string
+        scope:
+          type: string
+        version_no:
+          type: integer
+        source_npa:
+          type: string
+        is_active:
+          type: boolean
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              order_no:
+                type: integer
+              text:
+                type: string
+              severity:
+                type: string
+              required:
+                type: boolean
+              hint:
+                type: string
+    ChecklistCreate:
+      type: object
+      required: [code, title]
+      properties:
+        code:
+          type: string
+        title:
+          type: string
+        scope:
+          type: string
+        version_no:
+          type: integer
+        source_npa:
+          type: string
+        items:
+          type: array
+          items:
+            type: object
+            required: [order_no, text]
+            properties:
+              order_no:
+                type: integer
+              text:
+                type: string
+              severity:
+                type: string
+              required:
+                type: boolean
+              hint:
+                type: string
+    ChecklistUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+        scope:
+          type: string
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              order_no:
+                type: integer
+              text:
+                type: string
+              severity:
+                type: string
+              required:
+                type: boolean
+              hint:
+                type: string
+    ChecklistList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Checklist'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    Inspection:
+      type: object
+      required: [id, checklist_id, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        checklist_id:
+          type: string
+          format: uuid
+        company_id:
+          type: string
+          format: uuid
+        site_id:
+          type: string
+          format: uuid
+        inspector_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: string
+          format: date-time
+        result:
           type: object
-          required:
-            - type
-            - s3_key
-          properties:
-            type:
-              type: string
-              enum:
-                - csv
-                - xlsx
-                - json
-            s3_key:
-              type: string
-paths:
-  /auth/login:
-    post:
-      summary: Вход по email и паролю
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - email
-                - password
-              properties:
-                email:
-                  type: string
-                  format: email
-                password:
-                  type: string
-                  minLength: 6
-      responses:
-        '200':
-          description: Успешная аутентификация
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - type: object
-                    properties:
-                      data:
-                        type: object
-                        properties:
-                          access_token:
-                            type: string
-                          refresh_token:
-                            type: string
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-  /tenants:
-    get:
-      summary: Список арендаторов
-      parameters:
-        - $ref: '#/components/parameters/TenantHeader'
-        - in: query
-          name: limit
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 200
-            default: 50
-        - in: query
-          name: offset
-          schema:
-            type: integer
-            minimum: 0
-            default: 0
-      responses:
-        '200':
-          description: Ок
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - type: object
-                    properties:
-                      data:
-                        allOf:
-                          - $ref: '#/components/schemas/Paginated'
-                          - type: object
-                            properties:
-                              items:
-                                items:
-                                  $ref: '#/components/schemas/Tenant'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-  /companies:
-    get:
-      summary: Список компаний
-      parameters:
-        - $ref: '#/components/parameters/TenantHeader'
-        - in: query
-          name: limit
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 200
-            default: 50
-        - in: query
-          name: offset
-          schema:
-            type: integer
-            minimum: 0
-            default: 0
-      responses:
-        '200':
-          description: Ок
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - type: object
-                    properties:
-                      data:
-                        allOf:
-                          - $ref: '#/components/schemas/Paginated'
-                          - type: object
-                            properties:
-                              items:
-                                items:
-                                  $ref: '#/components/schemas/Company'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-    post:
-      summary: Создать компанию
-      parameters:
-        - $ref: '#/components/parameters/TenantHeader'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CompanyCreate'
-      responses:
-        '201':
-          description: Создано
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - type: object
-                    properties:
-                      data:
-                        $ref: '#/components/schemas/Company'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-  /employees:
-    get:
-      summary: Список сотрудников
-      parameters:
-        - $ref: '#/components/parameters/TenantHeader'
-        - in: query
-          name: limit
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 200
-            default: 50
-        - in: query
-          name: offset
-          schema:
-            type: integer
-            minimum: 0
-            default: 0
-      responses:
-        '200':
-          description: Ок
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - type: object
-                    properties:
-                      data:
-                        allOf:
-                          - $ref: '#/components/schemas/Paginated'
-                          - type: object
-                            properties:
-                              items:
-                                items:
-                                  $ref: '#/components/schemas/Person'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-  /templates:
-    get:
-      summary: Список шаблонов
-      parameters:
-        - $ref: '#/components/parameters/TenantHeader'
-      responses:
-        '200':
-          description: Ок
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - type: object
-                    properties:
-                      data:
-                        allOf:
-                          - $ref: '#/components/schemas/Paginated'
-                          - type: object
-                            properties:
-                              items:
-                                items:
-                                  $ref: '#/components/schemas/Template'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-    post:
-      summary: Создать шаблон
-      parameters:
-        - $ref: '#/components/parameters/TenantHeader'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TemplateCreate'
-      responses:
-        '201':
-          description: Создано
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - type: object
-                    properties:
-                      data:
-                        $ref: '#/components/schemas/Template'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-  /templates/{id}/versions:
-    post:
-      summary: Создать версию шаблона
-      parameters:
-        - $ref: '#/components/parameters/TenantHeader'
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - version
-                - storage_key
-              properties:
-                version:
-                  type: integer
-                  minimum: 1
-                storage_key:
-                  type: string
-                placeholders_json:
-                  type: object
-                  additionalProperties: true
-                npa_revision:
-                  type: string
-                  nullable: true
-                checksum:
-                  type: string
-                  nullable: true
-      responses:
-        '201':
-          description: Создано
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - type: object
-                    properties:
-                      data:
-                        $ref: '#/components/schemas/TemplateVersion'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-  /docx/mass-replace:
-    post:
-      summary: Массовая замена в DOCX
-      parameters:
-        - $ref: '#/components/parameters/TenantHeader'
-        - $ref: '#/components/parameters/IdempotencyKey'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - docx_key
-                - replace_map
-              properties:
-                docx_key:
-                  type: string
-                replace_map:
-                  type: array
-                  items:
-                    type: object
-                    required:
-                      - find
-                      - replace
-                    properties:
-                      find:
-                        type: string
-                      replace:
-                        type: string
-                dry_run:
-                  type: boolean
-                  default: false
-      responses:
-        '200':
-          description: Ок
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Envelope'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-  /docx/headers:
-    post:
-      summary: Применить колонтитулы
-      parameters:
-        - $ref: '#/components/parameters/TenantHeader'
-        - $ref: '#/components/parameters/IdempotencyKey'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - docx_key
-                - header_preset
-              properties:
-                docx_key:
-                  type: string
-                header_preset:
-                  type: object
-                  additionalProperties: true
-      responses:
-        '200':
-          description: Ок
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Envelope'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-  /pipelines/{template_id}/run:
-    post:
-      summary: Запустить пайплайн генерации
-      parameters:
-        - $ref: '#/components/parameters/TenantHeader'
-        - $ref: '#/components/parameters/IdempotencyKey'
-        - in: path
-          name: template_id
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - source
-              properties:
-                source:
-                  type: object
-                  required:
-                    - type
-                    - s3_key
-                  properties:
-                    type:
-                      type: string
-                      enum:
-                        - csv
-                        - xlsx
-                        - json
-                    s3_key:
-                      type: string
-      responses:
-        '202':
-          description: Принято
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - type: object
-                    properties:
-                      data:
-                        $ref: '#/components/schemas/DocumentJob'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-  /pipelines/jobs/{id}:
-    get:
-      summary: Статус задачи пайплайна
-      parameters:
-        - $ref: '#/components/parameters/TenantHeader'
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Ок
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - type: object
-                    properties:
-                      data:
-                        $ref: '#/components/schemas/DocumentJob'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          description: Задача не найдена
-  /files/upload:
-    post:
-      summary: Загрузить файл в хранилище
-      parameters:
-        - $ref: '#/components/parameters/TenantHeader'
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              properties:
-                file:
-                  type: string
-                  format: binary
-      responses:
-        '201':
-          description: Файл сохранён
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - type: object
-                    properties:
-                      data:
-                        $ref: '#/components/schemas/FileObject'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-  /files/{id}/url:
-    get:
-      summary: Получить подписанную ссылку на файл
-      parameters:
-        - $ref: '#/components/parameters/TenantHeader'
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - in: query
-          name: disposition
-          schema:
-            type: string
-            enum:
-              - inline
-              - attachment
-            default: inline
-      responses:
-        '200':
-          description: Ок
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Envelope'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-  /documents/generate:
-    post:
-      summary: Запустить генерацию документа
-      parameters:
-        - $ref: '#/components/parameters/TenantHeader'
-        - $ref: '#/components/parameters/IdempotencyKey'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DocGenerateRequest'
-      responses:
-        '202':
-          description: Принято в асинхронную обработку
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - type: object
-                    properties:
-                      data:
-                        $ref: '#/components/schemas/DocumentJob'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-  /documents/pipeline:
-    post:
-      summary: Запустить пакетную генерацию документов
-      parameters:
-        - $ref: '#/components/parameters/TenantHeader'
-        - $ref: '#/components/parameters/IdempotencyKey'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PipelineRequest'
-      responses:
-        '202':
-          description: Принято в обработку
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - type: object
-                    properties:
-                      data:
-                        $ref: '#/components/schemas/DocumentJob'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-  /documents/jobs/{id}:
-    get:
-      summary: Получить статус задачи генерации
-      parameters:
-        - $ref: '#/components/parameters/TenantHeader'
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Ок
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - type: object
-                    properties:
-                      data:
-                        $ref: '#/components/schemas/DocumentJob'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          description: Задача не найдена
-  /packs/run:
-    post:
-      summary: Выполнить преднастроенный пакет документов
-      parameters:
-        - $ref: '#/components/parameters/TenantHeader'
-        - $ref: '#/components/parameters/IdempotencyKey'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PackRunRequest'
-      responses:
-        '202':
-          description: Пакет поставлен в очередь
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - type: object
-                    properties:
-                      data:
-                        $ref: '#/components/schemas/DocumentJob'
-        '400':
-          $ref: '#/components/responses/BadRequest'
+          additionalProperties: true
+    InspectionCreate:
+      type: object
+      required: [checklist_id, company_id]
+      properties:
+        checklist_id:
+          type: string
+          format: uuid
+        company_id:
+          type: string
+          format: uuid
+        site_id:
+          type: string
+          format: uuid
+        inspector_id:
+          type: string
+          format: uuid
+        scheduled_at:
+          type: string
+          format: date-time
+    InspectionUpdate:
+      type: object
+      properties:
+        status:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: string
+          format: date-time
+        result:
+          type: object
+          additionalProperties: true
+    InspectionList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Inspection'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    Violation:
+      type: object
+      required: [id, inspection_id, severity, description]
+      properties:
+        id:
+          type: string
+          format: uuid
+        inspection_id:
+          type: string
+          format: uuid
+        npa_ref:
+          type: string
+        severity:
+          type: string
+        description:
+          type: string
+        deadline:
+          type: string
+          format: date
+        status:
+          type: string
+    ViolationCreate:
+      type: object
+      required: [npa_ref, severity, description]
+      properties:
+        npa_ref:
+          type: string
+        severity:
+          type: string
+        description:
+          type: string
+        deadline:
+          type: string
+          format: date
+    ViolationList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Violation'
+    CorrectiveAction:
+      type: object
+      required: [id, violation_id, action_text, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        violation_id:
+          type: string
+          format: uuid
+        action_text:
+          type: string
+        responsible_person_id:
+          type: string
+          format: uuid
+        due_date:
+          type: string
+          format: date
+        completed_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+    CorrectiveActionCreate:
+      type: object
+      required: [action_text, due_date]
+      properties:
+        action_text:
+          type: string
+        responsible_person_id:
+          type: string
+          format: uuid
+        due_date:
+          type: string
+          format: date
+    CorrectiveActionList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CorrectiveAction'
+    Incident:
+      type: object
+      required: [id, company_id, site_id, occurred_at, severity, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        company_id:
+          type: string
+          format: uuid
+        site_id:
+          type: string
+          format: uuid
+        reporter_id:
+          type: string
+          format: uuid
+        occurred_at:
+          type: string
+          format: date-time
+        severity:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+        root_cause:
+          type: string
+        file_id:
+          type: string
+          format: uuid
+    IncidentCreate:
+      type: object
+      required: [company_id, site_id, occurred_at, severity]
+      properties:
+        company_id:
+          type: string
+          format: uuid
+        site_id:
+          type: string
+          format: uuid
+        reporter_id:
+          type: string
+          format: uuid
+        occurred_at:
+          type: string
+          format: date-time
+        severity:
+          type: string
+        description:
+          type: string
+        root_cause:
+          type: string
+        file_id:
+          type: string
+          format: uuid
+    IncidentUpdate:
+      type: object
+      properties:
+        status:
+          type: string
+        root_cause:
+          type: string
+    IncidentList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Incident'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    RiskRegister:
+      type: object
+      required: [id, company_id, site_id, methodology_id, revision_no]
+      properties:
+        id:
+          type: string
+          format: uuid
+        company_id:
+          type: string
+          format: uuid
+        site_id:
+          type: string
+          format: uuid
+        methodology_id:
+          type: string
+          format: uuid
+        revision_no:
+          type: integer
+        approved_at:
+          type: string
+          format: date-time
+    RiskRegisterCreate:
+      type: object
+      required: [company_id, site_id, methodology_id]
+      properties:
+        company_id:
+          type: string
+          format: uuid
+        site_id:
+          type: string
+          format: uuid
+        methodology_id:
+          type: string
+          format: uuid
+    RiskRegisterUpdate:
+      type: object
+      properties:
+        revision_no:
+          type: integer
+        approved_at:
+          type: string
+          format: date-time
+    RiskRegisterList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskRegister'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    FileAsset:
+      type: object
+      required: [id, storage_key, bucket, size_bytes, mime_type]
+      properties:
+        id:
+          type: string
+          format: uuid
+        storage_key:
+          type: string
+        bucket:
+          type: string
+        size_bytes:
+          type: integer
+        mime_type:
+          type: string
+        sha256:
+          type: string
+        uploaded_at:
+          type: string
+          format: date-time
+        metadata:
+          type: object
+          additionalProperties: true
+    OneCWebhook:
+      type: object
+      properties:
+        event_id:
+          type: string
+        payload:
+          type: object
+          additionalProperties: true
+    FrdoWebhook:
+      type: object
+      properties:
+        assignment_id:
+          type: string
+        status:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+    EisotWebhook:
+      type: object
+      properties:
+        reference:
+          type: string
+        status:
+          type: string
+        data:
+          type: object
+          additionalProperties: true

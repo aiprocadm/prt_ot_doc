@@ -1,0 +1,880 @@
+openapi: 3.1.0
+info:
+  title: PRT OT DOC Backend API
+  version: 1.1.0
+servers:
+  - url: https://api.example.com/api/v1
+    description: Production
+  - url: /api/v1
+    description: Relative path for internal clients
+security:
+  - bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    TenantHeader:
+      name: X-Tenant-Id
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: "UUID арендатора"
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 8
+      description: "Идентификатор идемпотентности запроса"
+  responses:
+    Unauthorized:
+      description: Токен отсутствует или просрочен
+    Forbidden:
+      description: Недостаточно прав для выполнения операции
+    BadRequest:
+      description: Неверные данные запроса или отсутствует обязательный заголовок
+  schemas:
+    Envelope:
+      type: object
+      properties:
+        data:
+          nullable: true
+        error:
+          nullable: true
+          oneOf:
+            - $ref: '#/components/schemas/Error'
+        correlation_id:
+          type: string
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+          nullable: true
+    Paginated:
+      type: object
+      properties:
+        items:
+          type: array
+        total:
+          type: integer
+    Tenant:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        name:
+          type: string
+        plan:
+          type: string
+        status:
+          type: string
+    Company:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        inn:
+          type: string
+        ogrn:
+          type: string
+        kpp:
+          type: string
+        tax_id:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+    CompanyCreate:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        inn:
+          type: string
+        ogrn:
+          type: string
+        kpp:
+          type: string
+        tax_id:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+    Person:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        company_id:
+          type: string
+          format: uuid
+        fio:
+          type: string
+        position_id:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          type: string
+    Template:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        active_version_id:
+          type: string
+          format: uuid
+          nullable: true
+    TemplateCreate:
+      type: object
+      required:
+        - code
+        - name
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+    TemplateVersion:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        template_id:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          minimum: 1
+        storage_key:
+          type: string
+        placeholders_json:
+          type: object
+          additionalProperties: true
+        npa_revision:
+          type: string
+          nullable: true
+        checksum:
+          type: string
+          nullable: true
+    DocumentJob:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        preset_id:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          type: string
+          enum:
+            - queued
+            - running
+            - done
+            - failed
+        params_json:
+          type: object
+          additionalProperties: true
+        result_zip_key:
+          type: string
+          nullable: true
+        report_csv_key:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    FileObject:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        storage_key:
+          type: string
+        sha256:
+          type: string
+        size:
+          type: integer
+        mime:
+          type: string
+    DocGenerateRequest:
+      type: object
+      required:
+        - template_code
+        - company_id
+        - data
+      properties:
+        template_code:
+          type: string
+        company_id:
+          type: string
+          format: uuid
+        person_id:
+          type: string
+          format: uuid
+          nullable: true
+        data:
+          type: object
+          additionalProperties: true
+    PackRunRequest:
+      type: object
+      required:
+        - pack_code
+        - company_id
+      properties:
+        pack_code:
+          type: string
+        company_id:
+          type: string
+          format: uuid
+        site_id:
+          type: string
+          format: uuid
+          nullable: true
+        person_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        data:
+          type: object
+          additionalProperties: true
+    PipelineRequest:
+      type: object
+      required:
+        - preset_code
+        - source
+      properties:
+        preset_code:
+          type: string
+        source:
+          type: object
+          required:
+            - type
+            - s3_key
+          properties:
+            type:
+              type: string
+              enum:
+                - csv
+                - xlsx
+                - json
+            s3_key:
+              type: string
+paths:
+  /auth/login:
+    post:
+      summary: Вход по email и паролю
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 6
+      responses:
+        '200':
+          description: Успешная аутентификация
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          access_token:
+                            type: string
+                          refresh_token:
+                            type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /tenants:
+    get:
+      summary: Список арендаторов
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Ок
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/Paginated'
+                          - type: object
+                            properties:
+                              items:
+                                items:
+                                  $ref: '#/components/schemas/Tenant'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /companies:
+    get:
+      summary: Список компаний
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Ок
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/Paginated'
+                          - type: object
+                            properties:
+                              items:
+                                items:
+                                  $ref: '#/components/schemas/Company'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      summary: Создать компанию
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompanyCreate'
+      responses:
+        '201':
+          description: Создано
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Company'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /employees:
+    get:
+      summary: Список сотрудников
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Ок
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/Paginated'
+                          - type: object
+                            properties:
+                              items:
+                                items:
+                                  $ref: '#/components/schemas/Person'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /templates:
+    get:
+      summary: Список шаблонов
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      responses:
+        '200':
+          description: Ок
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/Paginated'
+                          - type: object
+                            properties:
+                              items:
+                                items:
+                                  $ref: '#/components/schemas/Template'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      summary: Создать шаблон
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TemplateCreate'
+      responses:
+        '201':
+          description: Создано
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Template'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /templates/{id}/versions:
+    post:
+      summary: Создать версию шаблона
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - version
+                - storage_key
+              properties:
+                version:
+                  type: integer
+                  minimum: 1
+                storage_key:
+                  type: string
+                placeholders_json:
+                  type: object
+                  additionalProperties: true
+                npa_revision:
+                  type: string
+                  nullable: true
+                checksum:
+                  type: string
+                  nullable: true
+      responses:
+        '201':
+          description: Создано
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/TemplateVersion'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /docx/mass-replace:
+    post:
+      summary: Массовая замена в DOCX
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - docx_key
+                - replace_map
+              properties:
+                docx_key:
+                  type: string
+                replace_map:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - find
+                      - replace
+                    properties:
+                      find:
+                        type: string
+                      replace:
+                        type: string
+                dry_run:
+                  type: boolean
+                  default: false
+      responses:
+        '200':
+          description: Ок
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /docx/headers:
+    post:
+      summary: Применить колонтитулы
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - docx_key
+                - header_preset
+              properties:
+                docx_key:
+                  type: string
+                header_preset:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '200':
+          description: Ок
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /pipelines/{template_id}/run:
+    post:
+      summary: Запустить пайплайн генерации
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - in: path
+          name: template_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - source
+              properties:
+                source:
+                  type: object
+                  required:
+                    - type
+                    - s3_key
+                  properties:
+                    type:
+                      type: string
+                      enum:
+                        - csv
+                        - xlsx
+                        - json
+                    s3_key:
+                      type: string
+      responses:
+        '202':
+          description: Принято
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DocumentJob'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /pipelines/jobs/{id}:
+    get:
+      summary: Статус задачи пайплайна
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Ок
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DocumentJob'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Задача не найдена
+  /files/upload:
+    post:
+      summary: Загрузить файл в хранилище
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Файл сохранён
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/FileObject'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /files/{id}/url:
+    get:
+      summary: Получить подписанную ссылку на файл
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: disposition
+          schema:
+            type: string
+            enum:
+              - inline
+              - attachment
+            default: inline
+      responses:
+        '200':
+          description: Ок
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /documents/generate:
+    post:
+      summary: Запустить генерацию документа
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocGenerateRequest'
+      responses:
+        '202':
+          description: Принято в асинхронную обработку
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DocumentJob'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /documents/pipeline:
+    post:
+      summary: Запустить пакетную генерацию документов
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PipelineRequest'
+      responses:
+        '202':
+          description: Принято в обработку
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DocumentJob'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /documents/jobs/{id}:
+    get:
+      summary: Получить статус задачи генерации
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Ок
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DocumentJob'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Задача не найдена
+  /packs/run:
+    post:
+      summary: Выполнить преднастроенный пакет документов
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PackRunRequest'
+      responses:
+        '202':
+          description: Пакет поставлен в очередь
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DocumentJob'
+        '400':
+          $ref: '#/components/responses/BadRequest'
