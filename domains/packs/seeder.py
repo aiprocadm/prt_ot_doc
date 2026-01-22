@@ -1,0 +1,199 @@
+"""Utilities for provisioning default document packs and templates."""
+
+from __future__ import annotations
+
+import hashlib
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.tenant import tenant_prefix_path
+from app.domains.packs.definitions import (
+    DOCX_MIME,
+    DEFAULT_PACKS,
+    PACK_DEFINITIONS_BY_CODE,
+    PackDefinition,
+    PackTemplateSpec,
+)
+from app.models.models import DocumentPack, DocumentPackItem, Template
+from app.repository import create_template
+from app.schemas.template import TemplateCreate
+from app.services.file_storage import FileStorageService
+
+__all__ = ["ensure_default_packs", "ensure_pack_by_code"]
+
+
+async def _ensure_template(
+    session: AsyncSession,
+    *,
+    tenant_slug: str,
+    pack: PackDefinition,
+    template_spec: PackTemplateSpec,
+    storage: FileStorageService,
+) -> Template:
+    key = (
+        f"{tenant_prefix_path(tenant_slug)}/templates/{template_spec.code}.docx"
+    )
+    payload_bytes = template_spec.builder()
+    storage.put(key, payload_bytes, content_type=DOCX_MIME)
+
+    checksum = hashlib.sha256(payload_bytes).digest()
+    payload = TemplateCreate(
+        name=template_spec.code,
+        description=template_spec.description,
+        metadata={
+            "pack_code": pack.code,
+            "display_name": template_spec.name,
+            "category": template_spec.category,
+        },
+    )
+
+    version = await create_template(
+        session,
+        tenant_slug,
+        payload,
+        storage_key=key,
+        checksum=checksum,
+        tenant_slug=tenant_slug,
+    )
+    template = await session.get(Template, version.template_id)
+    if template is None:  # pragma: no cover - defensive
+        raise RuntimeError(
+            f"Template {template_spec.code} was not persisted for tenant {tenant_slug}"
+        )
+    return template
+
+
+async def _ensure_pack(
+    session: AsyncSession,
+    *,
+    tenant_slug: str,
+    definition: PackDefinition,
+    templates: dict[str, Template],
+) -> DocumentPack:
+    stmt = select(DocumentPack).where(
+        DocumentPack.tenant_id == tenant_slug,
+        DocumentPack.code == definition.code,
+        DocumentPack.deleted_at.is_(None),
+    )
+    pack = (await session.execute(stmt)).scalar_one_or_none()
+    if pack is None:
+        pack = DocumentPack(
+            tenant_id=tenant_slug,
+            code=definition.code,
+            name=definition.name,
+            description=definition.description,
+            is_active=True,
+            module=definition.module,
+            scenario_type=definition.scenario_type,
+        )
+        session.add(pack)
+        await session.flush()
+    else:
+        pack.name = definition.name
+        pack.description = definition.description
+        pack.is_active = True
+        pack.module = definition.module
+        pack.scenario_type = definition.scenario_type
+
+    stmt_items = select(DocumentPackItem).where(
+        DocumentPackItem.pack_id == pack.id,
+        DocumentPackItem.deleted_at.is_(None),
+    )
+    existing_items = {
+        item.template_id: item
+        for item in (await session.execute(stmt_items)).scalars().all()
+    }
+
+    if existing_items:
+        return pack
+
+    for position, template_code in enumerate(definition.item_order, start=1):
+        template = templates[template_code]
+        item = existing_items.get(template.id)
+        if item is None:
+            item = DocumentPackItem(
+                tenant_id=tenant_slug,
+                pack_id=pack.id,
+                template_id=template.id,
+                order=position,
+                required=True,
+                condition={},
+            )
+            session.add(item)
+        else:
+            item.order = position
+            item.required = True
+            item.condition = item.condition or {}
+    return pack
+
+
+async def _materialize_pack(
+    session: AsyncSession,
+    *,
+    tenant_slug: str,
+    definition: PackDefinition,
+    storage: FileStorageService,
+) -> None:
+    templates: dict[str, Template] = {}
+    for template_spec in definition.templates:
+        template = await _ensure_template(
+            session,
+            tenant_slug=tenant_slug,
+            pack=definition,
+            template_spec=template_spec,
+            storage=storage,
+        )
+        templates[template_spec.code] = template
+    await _ensure_pack(
+        session,
+        tenant_slug=tenant_slug,
+        definition=definition,
+        templates=templates,
+    )
+
+
+async def ensure_default_packs(
+    session: AsyncSession,
+    *,
+    tenant_slug: str,
+) -> None:
+    """Create default document packs for ``tenant_slug`` when missing."""
+
+    storage = FileStorageService.default()
+    for definition in DEFAULT_PACKS:
+        await _materialize_pack(
+            session,
+            tenant_slug=tenant_slug,
+            definition=definition,
+            storage=storage,
+        )
+
+
+async def ensure_pack_by_code(
+    session: AsyncSession,
+    *,
+    tenant_slug: str,
+    pack_code: str,
+) -> DocumentPack:
+    """Create a document pack for a specific scenario if missing."""
+
+    definition = PACK_DEFINITIONS_BY_CODE.get(pack_code)
+    if definition is None:
+        raise ValueError(f"Unknown pack code: {pack_code}")
+
+    storage = FileStorageService.default()
+    await _materialize_pack(
+        session,
+        tenant_slug=tenant_slug,
+        definition=definition,
+        storage=storage,
+    )
+
+    stmt = select(DocumentPack).where(
+        DocumentPack.tenant_id == tenant_slug,
+        DocumentPack.code == pack_code,
+        DocumentPack.deleted_at.is_(None),
+    )
+    pack = (await session.execute(stmt)).scalar_one()
+    return pack
+
