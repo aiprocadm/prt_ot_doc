@@ -1,0 +1,486 @@
+from __future__ import annotations
+
+import logging
+import tempfile
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+from time import perf_counter
+from typing import Any
+
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.payload_constraints import (
+    enforce_mapping_constraints,
+    normalize_output_basename,
+)
+from app.models.models import PipelineRun, PipelineRunStatus, Template, TemplateVersion
+from app.services.docx import DocxService
+from app.services.file_storage import FileStorageService
+from app.services.pdf import (
+    MINI_PDF_BYTES,
+    PdfConversionError,
+    PdfConversionResult,
+    PdfConverter,
+)
+from app.core.metrics import Metrics, get_metrics, sanitize_label
+from app.core.tenant import get_current_tenant
+from app.domains.files.utils import build_dated_prefix
+
+__all__ = ["PipelineService"]
+
+logger = logging.getLogger(__name__)
+
+DocumentJob = PipelineRun
+DocumentJobStatus = PipelineRunStatus
+
+class PipelineService:
+    """Coordinate template rendering and PDF conversion for document jobs."""
+
+    DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+    @staticmethod
+    def _build_request_metadata(
+        *,
+        replacements: dict[str, str],
+        header_text: str | None,
+        footer_text: str | None,
+        output_basename: str | None,
+    ) -> dict[str, Any]:
+        return {
+            "replacements": replacements,
+            "header_text": header_text,
+            "footer_text": footer_text,
+            "output_basename": output_basename,
+        }
+
+    def _prepare_parameters(
+        self,
+        *,
+        session: AsyncSession,
+        template: Template,
+        template_version: TemplateVersion,
+        context: dict[str, Any],
+        replacements: dict[str, str] | None,
+        header_text: str | None,
+        footer_text: str | None,
+        output_basename: str | None,
+        tenant_id: str | None,
+    ) -> tuple[str, str | None, dict[str, str], dict[str, Any]]:
+        enforce_mapping_constraints(context, field="context")
+        if replacements is not None:
+            enforce_mapping_constraints(replacements, field="replacements")
+
+        normalized_output_basename = normalize_output_basename(output_basename)
+
+        tenant_identifier = tenant_id or template.tenant_id
+        if not tenant_identifier:
+            raise ValueError("Template is not bound to a tenant")
+        if template_version.tenant_id and template_version.tenant_id != tenant_identifier:
+            raise ValueError("Template version belongs to a different tenant")
+        session_tenant = session.info.get("tenant")
+        if session_tenant and session_tenant != tenant_identifier:
+            raise ValueError("Session tenant does not match template tenant")
+
+        replacements_map = dict(replacements or {})
+        metadata = self._build_request_metadata(
+            replacements=dict(replacements_map),
+            header_text=header_text,
+            footer_text=footer_text,
+            output_basename=normalized_output_basename,
+        )
+        return tenant_identifier, normalized_output_basename, replacements_map, metadata
+
+    @staticmethod
+    def _validate_idempotent_run(
+        run: PipelineRun,
+        *,
+        template_id: str,
+        template_version_id: str,
+        payload: dict[str, Any],
+    ) -> None:
+        if run.template_id != template_id or run.template_version_id != template_version_id:
+            raise ValueError("Idempotency key collision for different template")
+        if run.context != payload:
+            raise ValueError("Idempotency key collision for different payload")
+
+    def __init__(
+        self,
+        storage: FileStorageService | None = None,
+        pdf_converter: PdfConverter | None = None,
+        metrics: Metrics | None = None,
+    ):
+        self.storage = storage or FileStorageService.default()
+        self.pdf = pdf_converter or PdfConverter()
+        self.metrics = metrics or get_metrics()
+
+    async def ensure_pending_run(
+        self,
+        session: AsyncSession,
+        *,
+        template: Template,
+        template_version: TemplateVersion,
+        context: dict[str, Any],
+        replacements: dict[str, str] | None,
+        header_text: str | None,
+        footer_text: str | None,
+        idempotency_key: str,
+        output_basename: str | None,
+        tenant_id: str | None = None,
+    ) -> tuple[PipelineRun, bool]:
+        """Ensure a ``PipelineRun`` exists without executing heavy work."""
+
+        (
+            tenant_identifier,
+            _normalized_output_basename,
+            _replacements_map,
+            request_metadata,
+        ) = self._prepare_parameters(
+            session=session,
+            template=template,
+            template_version=template_version,
+            context=context,
+            replacements=replacements,
+            header_text=header_text,
+            footer_text=footer_text,
+            output_basename=output_basename,
+            tenant_id=tenant_id,
+        )
+
+        run, created = await self._get_or_create_pending_run(
+            session,
+            tenant_id=tenant_identifier,
+            idempotency_key=idempotency_key,
+            template_id=template.id,
+            template_version_id=template_version.id,
+            payload=context,
+            defaults={"result_metadata": {"request": request_metadata}},
+        )
+
+        metadata = dict(run.result_metadata or {})
+        existing_request = metadata.get("request")
+        if existing_request and existing_request != request_metadata:
+            raise ValueError("Idempotency key collision for different pipeline options")
+        if not existing_request:
+            metadata["request"] = request_metadata
+        run.result_metadata = metadata
+
+        if created:
+            run.status = PipelineRunStatus.QUEUED
+            run.outputs = None
+            run.docx_storage_key = None
+            run.pdf_storage_key = None
+            run.result_s3_key = None
+            run.error = None
+            run.started_at = None
+            run.finished_at = None
+
+        await session.flush()
+        return run, created
+
+    @staticmethod
+    def _normalize_error_details(exc: Exception) -> tuple[str, str]:
+        message = (str(exc) or exc.__class__.__name__).strip()
+        sanitized = sanitize_label(message)
+        lowered = message.lower()
+        metrics_code = sanitized
+        if "template version payload missing" in lowered:
+            metrics_code = "template_not_uploaded"
+        return sanitized, metrics_code
+
+    async def _get_or_create_pending_run(
+        self,
+        session: AsyncSession,
+        *,
+        tenant_id: str,
+        idempotency_key: str,
+        template_id: str,
+        template_version_id: str,
+        payload: dict[str, Any],
+        defaults: dict[str, Any] | None = None,
+    ) -> tuple[PipelineRun, bool]:
+        """Fetch an existing document job or create a new pending record.
+
+        Ensures idempotency by validating that any existing job registered under
+        ``idempotency_key`` was created for the same template, template version,
+        and payload. When a mismatch is detected we raise ``ValueError`` to make
+        the conflict explicit for callers.
+        """
+
+        stmt = select(PipelineRun).where(
+            PipelineRun.tenant_id == tenant_id,
+            PipelineRun.idempotency_key == idempotency_key,
+        )
+        run = (await session.execute(stmt)).scalar_one_or_none()
+        if run:
+            self._validate_idempotent_run(
+                run,
+                template_id=template_id,
+                template_version_id=template_version_id,
+                payload=payload,
+            )
+            return run, False
+
+        create_kwargs = {
+            "tenant_id": tenant_id,
+            "idempotency_key": idempotency_key,
+            "status": PipelineRunStatus.QUEUED,
+            "template_id": template_id,
+            "template_version_id": template_version_id,
+            "context": payload,
+        }
+        if defaults:
+            create_kwargs.update(defaults)
+        run = PipelineRun(**create_kwargs)
+        session.add(run)
+        try:
+            await session.flush()
+        except IntegrityError:
+            await session.rollback()
+            run = (await session.execute(stmt)).scalar_one()
+            self._validate_idempotent_run(
+                run,
+                template_id=template_id,
+                template_version_id=template_version_id,
+                payload=payload,
+            )
+            return run, False
+        return run, True
+
+    async def run(
+        self,
+        session: AsyncSession,
+        *,
+        template: Template,
+        template_version: TemplateVersion,
+        context: dict,
+        replacements: dict[str, str] | None = None,
+        header_text: str | None = None,
+        footer_text: str | None = None,
+        idempotency_key: str,
+        output_basename: str | None = None,
+        tenant_id: str | None = None,
+    ) -> PipelineRun:
+        """Execute rendering and conversion steps within the current asyncio task."""
+
+        (
+            tenant_identifier,
+            normalized_output_basename,
+            replacements_map,
+            request_metadata,
+        ) = self._prepare_parameters(
+            session=session,
+            template=template,
+            template_version=template_version,
+            context=context,
+            replacements=replacements,
+            header_text=header_text,
+            footer_text=footer_text,
+            output_basename=output_basename,
+            tenant_id=tenant_id,
+        )
+
+        run, created = await self._get_or_create_pending_run(
+            session,
+            tenant_id=tenant_identifier,
+            idempotency_key=idempotency_key,
+            template_id=template.id,
+            template_version_id=template_version.id,
+            payload=context,
+            defaults={"result_metadata": {"request": request_metadata}},
+        )
+
+        metadata = dict(run.result_metadata or {})
+        existing_request = metadata.get("request")
+
+        if run.status in {
+            PipelineRunStatus.RUNNING,
+            PipelineRunStatus.DONE,
+            PipelineRunStatus.ERROR,
+        }:
+            return run
+
+        if existing_request and existing_request != request_metadata:
+            raise ValueError("Idempotency key collision for different pipeline options")
+        if not existing_request:
+            metadata["request"] = request_metadata
+        run.result_metadata = metadata
+
+        if created:
+            run.outputs = None
+            run.docx_storage_key = None
+            run.pdf_storage_key = None
+            run.result_s3_key = None
+            run.error = None
+            run.started_at = None
+            run.finished_at = None
+
+        run.status = PipelineRunStatus.RUNNING
+        run.finished_at = None
+        if run.started_at is None:
+            run.started_at = datetime.now(tz=timezone.utc)
+        await session.flush()
+
+        tenant = get_current_tenant()
+        pipeline_start = perf_counter()
+        logger.info(
+            "Pipeline job started",
+            extra={
+                "job_id": run.id,
+                "template_id": template.id,
+                "template_version_id": template_version.id,
+                "tenant": tenant.slug,
+                "idempotency_key": idempotency_key,
+            },
+        )
+
+        try:
+            self.metrics.observe_pipeline_run(
+                template_id=template.id, status=PipelineRunStatus.RUNNING.value
+            )
+            if not template_version.payload_key:
+                raise RuntimeError("Template version payload missing")
+            src = self.storage.get(template_version.payload_key)
+
+            rendered = DocxService.render_template(src, context)
+            docx_bytes = DocxService.mass_replace(rendered, replacements_map)
+            docx_bytes = DocxService.set_headers_footers(docx_bytes, header_text, footer_text)
+
+            out_base = normalized_output_basename or str(uuid.uuid4())
+            now = datetime.now(tz=timezone.utc)
+            prefix = build_dated_prefix(tenant.slug, now=now)
+            unique_suffix = uuid.uuid4().hex
+            docx_key = f"{prefix}/outputs/{out_base}-{unique_suffix}.docx"
+            self.storage.put(docx_key, docx_bytes, content_type=self.DOCX_CONTENT_TYPE)
+
+            pdf_fallback = False
+            pdf_error: str | None = None
+            pdf_duration = 0.0
+            with tempfile.TemporaryDirectory() as td:
+                temp_dir = Path(td)
+                p_in = temp_dir / "in.docx"
+                p_out_dir = temp_dir / "out"
+                p_in.write_bytes(docx_bytes)
+                pdf_start = perf_counter()
+                try:
+                    conversion: PdfConversionResult = self.pdf.convert(p_in, p_out_dir)
+                except PdfConversionError as exc:
+                    pdf_duration = perf_counter() - pdf_start
+                    pdf_bytes = MINI_PDF_BYTES
+                    pdf_fallback = True
+                    pdf_error_raw = str(exc) or "pdf_conversion_failed"
+                    pdf_error = sanitize_label(pdf_error_raw)
+                    logger.warning(
+                        "PDF conversion failed; using fallback PDF",
+                        extra={
+                            "job_id": run.id,
+                            "template_id": template.id,
+                            "template_version_id": template_version.id,
+                            "tenant": tenant.slug,
+                            "error_code": pdf_error,
+                        },
+                    )
+                    self.metrics.record_error(code=pdf_error)
+                except RuntimeError as exc:
+                    logger.exception("LibreOffice PDF conversion failed")
+                    pdf_bytes = MINI_PDF_BYTES
+                    pdf_fallback = True
+                    pdf_duration = perf_counter() - pdf_start
+                    pdf_error_raw = str(exc) or "pdf_conversion_failed"
+                    pdf_error = sanitize_label(pdf_error_raw)
+                    logger.warning(
+                        "PDF conversion failed; using fallback PDF",
+                        extra={
+                            "job_id": run.id,
+                            "template_id": template.id,
+                            "template_version_id": template_version.id,
+                            "tenant": tenant.slug,
+                            "error_code": pdf_error,
+                        },
+                    )
+                    self.metrics.record_error(code=pdf_error)
+                else:
+                    pdf_duration = perf_counter() - pdf_start
+                    pdf_bytes = conversion.path.read_bytes()
+                    pdf_fallback = conversion.fallback_used
+                    if conversion.error_code:
+                        pdf_error = sanitize_label(conversion.error_code)
+                        self.metrics.record_error(code=pdf_error)
+                finally:
+                    self.metrics.observe_pdf_duration(
+                        template_id=template.id,
+                        seconds=pdf_duration,
+                    )
+            pdf_key = f"{prefix}/outputs/{out_base}-{unique_suffix}.pdf"
+            self.storage.put(pdf_key, pdf_bytes, content_type="application/pdf")
+
+            run.status = PipelineRunStatus.DONE
+            run.docx_storage_key = docx_key
+            run.pdf_storage_key = pdf_key
+            run.outputs = {"docx": docx_key, "pdf": pdf_key}
+            result_metadata = {
+                "output_basename": out_base,
+                "replacements_applied": len(replacements_map),
+                "header_applied": bool(header_text),
+                "footer_applied": bool(footer_text),
+                "pdf_fallback": pdf_fallback,
+            }
+            if pdf_error:
+                result_metadata["pdf_error"] = pdf_error
+            request_meta = metadata.get("request", request_metadata)
+            combined_metadata = {
+                "request": request_meta,
+                "result": result_metadata,
+            }
+            combined_metadata.update(result_metadata)
+            run.result_metadata = combined_metadata
+            run.result_s3_key = pdf_key
+            run.finished_at = datetime.now(tz=timezone.utc)
+            await session.commit()
+            await session.refresh(run)
+            self.metrics.observe_pipeline_run(
+                template_id=template.id, status=PipelineRunStatus.DONE.value
+            )
+            logger.info(
+                "Pipeline job finished",
+                extra={
+                    "job_id": run.id,
+                    "template_id": template.id,
+                    "template_version_id": template_version.id,
+                    "tenant": tenant.slug,
+                    "pdf_fallback": pdf_fallback,
+                    "duration_seconds": perf_counter() - pipeline_start,
+                },
+            )
+            return run
+        except Exception as exc:
+            logger.exception(
+                "Pipeline job failed",
+                extra={
+                    "job_id": run.id,
+                    "template_id": template.id,
+                    "template_version_id": template_version.id,
+                    "tenant": tenant.slug,
+                },
+            )
+            run.status = PipelineRunStatus.ERROR
+            run.docx_storage_key = None
+            run.pdf_storage_key = None
+            run.outputs = None
+            error_label, metrics_code = self._normalize_error_details(exc)
+            run.error = error_label
+            request_meta = metadata.get("request", request_metadata)
+            run.result_metadata = {
+                "request": request_meta,
+                "error": error_label,
+            }
+            run.finished_at = datetime.now(tz=timezone.utc)
+            await session.commit()
+            await session.refresh(run)
+            self.metrics.observe_pipeline_run(
+                template_id=template.id, status=PipelineRunStatus.ERROR.value
+            )
+            self.metrics.record_error(code=metrics_code)
+            raise
