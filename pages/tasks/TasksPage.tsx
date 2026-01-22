@@ -16,7 +16,7 @@ const TasksPage = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <Breadcrumb items={[{ label: "Главная", to: "/" }, { label: "Задачи" }]} />
+        <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Задачи" }]} />
         <Button variant="outline" onClick={() => list()} disabled={loading}>
           Обновить
         </Button>
