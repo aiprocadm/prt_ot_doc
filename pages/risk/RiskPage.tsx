@@ -16,7 +16,7 @@ const RiskPage = () => {
 
   return (
     <div className="space-y-6">
-      <Breadcrumb items={[{ label: "Главная", to: "/" }, { label: "Риски" }]} />
+      <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Риски" }]} />
       <RiskAssessmentForm />
       <Card>
         <CardHeader>

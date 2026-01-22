@@ -17,7 +17,7 @@ const DocumentsPage = () => {
 
   return (
     <div className="space-y-6">
-      <Breadcrumb items={[{ label: "Главная", to: "/" }, { label: "Документы" }]} />
+      <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Документы" }]} />
       <Card>
         <CardContent className="py-6">
           <DocumentTable onSelect={setSelectedDocument} />

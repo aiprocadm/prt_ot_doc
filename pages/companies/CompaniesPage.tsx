@@ -36,7 +36,7 @@ const CompaniesPage = () => {
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-2">
-        <Breadcrumb items={[{ label: "Главная", to: "/" }, { label: "Компании" }]} />
+        <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Компании" }]} />
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">Компании</h1>
           <CompanyFormDialog
