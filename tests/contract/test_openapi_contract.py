@@ -10,8 +10,8 @@ from scripts.contract import validate
 
 @pytest.mark.contract
 def test_openapi_contract_is_valid(capsys: pytest.CaptureFixture[str]) -> None:
-    spec_path = Path("openapi.yaml")
-    assert spec_path.exists(), "OpenAPI specification must be present in the repository root"
+    spec_path = Path("docs/openapi.yaml")
+    assert spec_path.exists(), "OpenAPI specification must be present in docs/openapi.yaml"
 
     validate.main()
 

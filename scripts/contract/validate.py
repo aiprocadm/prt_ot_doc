@@ -23,7 +23,7 @@ def _load_spec(path: Path) -> dict[str, Any]:
 def main() -> None:
     """Ensure the bundled OpenAPI document is well-formed and non-empty."""
 
-    spec_path = Path(os.environ.get("OPENAPI_SPEC_PATH", "openapi.yaml")).resolve()
+    spec_path = Path(os.environ.get("OPENAPI_SPEC_PATH", "docs/openapi.yaml")).resolve()
     if not spec_path.exists():
         raise SystemExit(f"OpenAPI specification not found: {spec_path}")
 

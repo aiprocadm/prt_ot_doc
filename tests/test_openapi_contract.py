@@ -5,12 +5,12 @@ from pathlib import Path
 import pytest
 import yaml
 
-SCHEMA_PATH = Path("openapi.yaml")
+SCHEMA_PATH = Path("docs/openapi.yaml")
 
 
 def test_openapi_exists_and_valid_yaml() -> None:
     if not SCHEMA_PATH.exists():
-        pytest.skip("openapi.yaml not found")
+        pytest.skip("docs/openapi.yaml not found")
     data = yaml.safe_load(SCHEMA_PATH.read_text(encoding="utf-8"))
     assert isinstance(data, dict)
     openapi_version = str(data.get("openapi", ""))

@@ -26,7 +26,7 @@
 - **Frontend** (`frontend/`) — Vite + React SPA (Zustand, API-клиент).
 - **Инфраструктура** (`docker-compose.yml`, `infra/`, `proxy/`) — сервисы разработки, Nginx-прокси, healthchecks.
 
-Архитектурные детали: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Публичный контракт API: [openapi.yaml](openapi.yaml) и снапшот [docs/openapi_snapshot_v01.json](docs/openapi_snapshot_v01.json).
+Архитектурные детали: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Публичный контракт API: [docs/openapi.yaml](docs/openapi.yaml) и снапшот [docs/openapi_snapshot_v01.json](docs/openapi_snapshot_v01.json).
 
 ## Требования
 - Python 3.12.6 (зафиксирован в `.python-version`)
@@ -229,7 +229,7 @@ http GET :8000/api/v1/packs/runs/<run_id> Authorization:"Bearer <token>"
 ```
 
 ## Полезные ссылки
-- [OpenAPI спецификация](./openapi.yaml)
-- [ER-диаграмма](./erd.puml)
-- [Сценарии бизнес-логики](./Backend_TZ.md)
+- [OpenAPI спецификация](./docs/openapi.yaml)
+- [ER-диаграмма](./docs/erd.puml)
+- [Сценарии бизнес-логики](./docs/Backend_TZ.md)
 - [Roadmap](docs/NEXT_FEATURES.md)
