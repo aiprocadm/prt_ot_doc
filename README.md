@@ -4,27 +4,52 @@
 
 ## Оглавление
 1. [Архитектура](#архитектура)
-2. [Требования](#требования)
-3. [10-минутный запуск](#10-минутный-запуск)
-4. [Установка](#установка)
-5. [Конфигурация окружения](#конфигурация-окружения)
-6. [Локальный запуск](#локальный-запуск)
-7. [Docker Compose](#docker-compose)
-8. [Makefile](#makefile)
-9. [Тесты и качество](#тесты-и-качество)
-10. [CI/CD](#cicd)
-11. [Безопасность](#безопасность)
-12. [Troubleshooting](#troubleshooting)
-13. [API-примеры](#api-примеры)
-14. [Полезные ссылки](#полезные-ссылки)
+2. [Структура репозитория](#структура-репозитория)
+3. [Требования](#требования)
+4. [10-минутный запуск](#10-минутный-запуск)
+5. [Установка](#установка)
+6. [Конфигурация окружения](#конфигурация-окружения)
+7. [Локальный запуск](#локальный-запуск)
+8. [Docker Compose](#docker-compose)
+9. [Makefile](#makefile)
+10. [Тесты и качество](#тесты-и-качество)
+11. [CI/CD](#cicd)
+12. [Безопасность](#безопасность)
+13. [Troubleshooting](#troubleshooting)
+14. [API-примеры](#api-примеры)
+15. [Полезные ссылки](#полезные-ссылки)
 
 ## Архитектура
-- **Backend** (`app/`, `backend/`) — REST API на FastAPI, доменные сервисы, Alembic-миграции, интеграции.
-- **Worker** (`app/tasks`, `scripts/`) — Celery-очереди `default`, `notifications`, `pdf` для асинхронной генерации документов.
+- **Backend** (`app/`) — REST API на FastAPI, доменные сервисы, Alembic-миграции, интеграции.
+- **Worker** (`app/tasks.py`, `app/worker.py`) — Celery-очереди `default`, `notifications`, `pdf` для асинхронной генерации документов.
 - **Object storage** — MinIO/S3 для шаблонов и итоговых документов.
 - **Очередь** — Redis как брокер и хранилище результатов Celery.
 - **Frontend** (`frontend/`) — Vite + React SPA (Zustand, API-клиент).
 - **Инфраструктура** (`docker-compose.yml`, `infra/`, `proxy/`) — сервисы разработки, Nginx-прокси, healthchecks.
+
+## Структура репозитория
+Чтобы новичку было проще разобраться, код разделён на бэкенд и фронтенд, а инфраструктура и документация вынесены отдельно.
+
+```
+app/                 # FastAPI приложение, Celery, Alembic, бизнес-логика
+  api/               # маршруты, зависимости, error handlers
+  core/              # конфигурация, безопасность, метрики
+  db/                # сессии, базы, база моделей
+  domains/           # доменные сервисы
+  models/            # модели SQLAlchemy
+  schemas/           # Pydantic-схемы
+  services/          # прикладные сервисы
+  migrations/        # Alembic-миграции
+  tasks.py           # Celery задачи
+  main.py            # FastAPI entrypoint
+frontend/            # Vite + React приложение
+  src/               # исходники SPA
+docs/                # архитектура, ERD, OpenAPI, спецификации
+infra/               # Dockerfiles и инфраструктурные файлы
+proxy/               # Nginx-прокси
+scripts/             # вспомогательные скрипты
+tests/               # тесты бэкенда
+```
 
 Архитектурные детали: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Публичный контракт API: [docs/openapi.yaml](docs/openapi.yaml) и снапшот [docs/openapi_snapshot_v01.json](docs/openapi_snapshot_v01.json).
 
@@ -62,6 +87,11 @@ pytest
 
 # 6. Запустите API
 uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# 7. Запустите фронтенд
+cd frontend
+npm install
+npm run dev
 ```
 
 ## Установка
