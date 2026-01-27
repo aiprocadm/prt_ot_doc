@@ -18,8 +18,11 @@ RUN poetry config virtualenvs.create false \
 COPY app /app/app
 COPY scripts /app/scripts
 COPY sitecustomize.py /app/sitecustomize.py
+COPY alembic.ini /app/alembic.ini
 
 ENV PYTHONPATH=/app
+
+ENTRYPOINT ["/app/scripts/docker-entrypoint.sh"]
 
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
