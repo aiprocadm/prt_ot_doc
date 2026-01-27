@@ -27,7 +27,7 @@ def upgrade() -> None:
         WITH latest AS (
             SELECT DISTINCT ON (template_id) id, template_id
             FROM templateversion
-            WHERE status = 'active'
+            WHERE status = 'ACTIVE'
             ORDER BY template_id, version DESC
         )
         UPDATE document_pack_item AS dpi
