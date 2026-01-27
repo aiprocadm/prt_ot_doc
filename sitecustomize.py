@@ -1,8 +1,9 @@
 """Runtime patches providing compatibility shims for the test suite."""
+
 from __future__ import annotations
 
-import sys
 import os
+import sys
 from pathlib import Path
 from types import ModuleType
 
@@ -10,6 +11,7 @@ from types import ModuleType
 # This ensures app code reads correct configuration during test discovery
 if "pytest" in sys.modules or "pytest" in sys.argv[0] if sys.argv else False:
     os.environ.setdefault("APP_NAME", "TestService")
+    os.environ.setdefault("APP_TRUSTED_HOSTS", "localhost,127.0.0.1,testserver")
     os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
     os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
     os.environ.setdefault("REDIS_RESULT_URL", "redis://localhost:6379/15")
@@ -146,6 +148,7 @@ if schemathesis is not None:
         try:
             from schemathesis.constants import NOT_SET as _not_set  # type: ignore[attr-defined]
         except Exception:  # pragma: no cover
+
             class _Sentinel:
                 pass
 

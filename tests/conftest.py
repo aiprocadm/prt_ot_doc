@@ -6,6 +6,8 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 
 # Set environment variables BEFORE any app imports
 os.environ.setdefault("APP_NAME", "TestService")
+os.environ.setdefault("APP_TRUSTED_HOSTS", "localhost,127.0.0.1,testserver")
+os.environ.setdefault("DEFAULT_LOCALE", "en-US")
 os.environ.setdefault("LIBREOFFICE_BIN", sys.executable)
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
@@ -15,17 +17,17 @@ os.environ.setdefault("S3_ENDPOINT", "http://localhost:9000")
 import pytest
 import pytest_asyncio
 from fastapi import Header, HTTPException, status
-from pydantic import AliasChoices
 from httpx import ASGITransport, AsyncClient
+from pydantic import AliasChoices
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.api import create_app
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.security import issue_access_token
 from app.core.tenant import TENANT_HEADER, tenant_required
 from app.db import Base, SharedBase
 from app.db.session import configure_engine
-from app.core.security import issue_access_token
 from app.models.models import Company, RoleEnum, Tenant, User
 from app.services.clamav import reset_quarantine_publisher
 from app.services.file_storage import FileStorageService
@@ -125,9 +127,7 @@ async def app_fixture():
         info = tenant_required(tenant_slug)
         async with TestSession() as session:
             tenant = (
-                await session.execute(
-                    select(Tenant).where(Tenant.slug == info.slug)
-                )
+                await session.execute(select(Tenant).where(Tenant.slug == info.slug))
             ).scalar_one_or_none()
             if tenant is None or not tenant.is_active:
                 raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found")
