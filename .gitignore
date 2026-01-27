@@ -27,7 +27,7 @@ frontend/dist/
 *.log
 .DS_Store
 .idea/
-.vscode/
+!.vscode/
 artifacts/
 .venv/
 .env
@@ -38,3 +38,4 @@ pytest.ini
 .coverage
 htmlcov/
 .storage/
+!.vscode/settings.json
