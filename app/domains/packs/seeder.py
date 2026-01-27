@@ -14,7 +14,13 @@ from app.domains.packs.definitions import (
     PackDefinition,
     PackTemplateSpec,
 )
-from app.models.models import DocumentPack, DocumentPackItem, Template
+from app.models.models import (
+    DocumentPack,
+    DocumentPackItem,
+    Template,
+    TemplateVersion,
+    TemplateVersionStatus,
+)
 from app.repository import create_template
 from app.schemas.template import TemplateCreate, TemplateVersionMetadata
 from app.services.file_storage import FileStorageService
@@ -112,17 +118,31 @@ async def _ensure_pack(
         for item in (await session.execute(stmt_items)).scalars().all()
     }
 
-    if existing_items:
-        return pack
+    async def _resolve_template_version_id(template: Template) -> str:
+        stmt = (
+            select(TemplateVersion)
+            .where(
+                TemplateVersion.template_id == template.id,
+                TemplateVersion.status == TemplateVersionStatus.ACTIVE,
+            )
+            .order_by(TemplateVersion.version.desc())
+            .limit(1)
+        )
+        version = (await session.execute(stmt)).scalar_one_or_none()
+        if version is None:
+            raise ValueError(f"Template {template.name} has no active version")
+        return version.id
 
     for position, template_code in enumerate(definition.item_order, start=1):
         template = templates[template_code]
         item = existing_items.get(template.id)
         if item is None:
+            version_id = await _resolve_template_version_id(template)
             item = DocumentPackItem(
                 tenant_id=tenant_slug,
                 pack_id=pack.id,
                 template_id=template.id,
+                template_version_id=version_id,
                 order=position,
                 required=True,
                 condition={},
@@ -132,6 +152,8 @@ async def _ensure_pack(
             item.order = position
             item.required = True
             item.condition = item.condition or {}
+            if item.template_version_id is None:
+                item.template_version_id = await _resolve_template_version_id(template)
     return pack
 
 

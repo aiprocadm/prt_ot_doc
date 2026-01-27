@@ -223,6 +223,6 @@ async def make_auth_headers(
             role=role.value,
             additional_claims=claims,
         )
-        return {"Authorization": f"Bearer {token}"}
+        return {"Authorization": f"Bearer {token}", "x-tenant": tenant.slug}
 
     return factory

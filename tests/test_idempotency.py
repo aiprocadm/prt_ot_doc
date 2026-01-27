@@ -181,6 +181,7 @@ async def test_pack_run_idempotency(
             tenant_id=tenant.slug,
             pack_id=pack.id,
             template_id=template.id,
+            template_version_id=version.id,
             order=1,
             required=True,
         )

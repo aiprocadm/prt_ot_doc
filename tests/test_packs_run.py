@@ -167,6 +167,7 @@ async def _prepare_pack_environment(
             tenant_id=tenant.slug,
             pack_id=pack.id,
             template_id=template.id,
+            template_version_id=version.id,
             order=index + 1,
             required=True,
         )
