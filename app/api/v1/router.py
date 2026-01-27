@@ -27,7 +27,7 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, ValidationError
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -59,7 +59,10 @@ from app.core.payload_constraints import (
 from app.core.security import AccessContext, abac
 from app.core.tracing import get_trace_id
 from app.domains.files.utils import build_dated_prefix
+from app.models.document import Document
 from app.models.models import (
+    DocumentPackItem,
+    PipelineRun,
     PipelineRunStatus,
     Template,
     TemplateVersion,
@@ -175,6 +178,73 @@ class PipelineRunRequestData:
 
 MAX_TEMPLATE_SIZE_BYTES = 8 * 1024 * 1024
 MAX_METADATA_JSON_BYTES = 64 * 1024
+
+
+def _tenant_scope(tenant: Tenant) -> tuple[str, ...]:
+    values = [tenant.slug]
+    if getattr(tenant, "id", None):
+        values.append(str(tenant.id))
+    return tuple(values)
+
+
+async def _template_version_in_use(
+    session: AsyncSession,
+    *,
+    tenant: Tenant,
+    template_version_id: str,
+) -> bool:
+    tenant_scope = _tenant_scope(tenant)
+    document_count = await session.scalar(
+        select(func.count()).select_from(Document).where(
+            Document.template_version_id == template_version_id,
+            Document.tenant_id.in_(tenant_scope),
+        )
+    )
+    pipeline_count = await session.scalar(
+        select(func.count()).select_from(PipelineRun).where(
+            PipelineRun.template_version_id == template_version_id,
+            PipelineRun.tenant_id.in_(tenant_scope),
+        )
+    )
+    pack_count = await session.scalar(
+        select(func.count()).select_from(DocumentPackItem).where(
+            DocumentPackItem.template_version_id == template_version_id,
+            DocumentPackItem.tenant_id.in_(tenant_scope),
+        )
+    )
+    return any(
+        count and count > 0 for count in (document_count, pipeline_count, pack_count)
+    )
+
+
+async def _template_in_use(
+    session: AsyncSession,
+    *,
+    tenant: Tenant,
+    template_id: str,
+) -> bool:
+    tenant_scope = _tenant_scope(tenant)
+    document_count = await session.scalar(
+        select(func.count()).select_from(Document).where(
+            Document.template_id == template_id,
+            Document.tenant_id.in_(tenant_scope),
+        )
+    )
+    pipeline_count = await session.scalar(
+        select(func.count()).select_from(PipelineRun).where(
+            PipelineRun.template_id == template_id,
+            PipelineRun.tenant_id.in_(tenant_scope),
+        )
+    )
+    pack_count = await session.scalar(
+        select(func.count()).select_from(DocumentPackItem).where(
+            DocumentPackItem.template_id == template_id,
+            DocumentPackItem.tenant_id.in_(tenant_scope),
+        )
+    )
+    return any(
+        count and count > 0 for count in (document_count, pipeline_count, pack_count)
+    )
 
 
 def _parse_json_object(value: str | None, *, field: str) -> dict[str, Any]:
@@ -448,6 +518,63 @@ async def create_template(
     else:
         response.status_code = status.HTTP_200_OK
     return {"id": version.template_id, "version_id": version.id}
+
+
+@router.delete(
+    "/templates/{template_id}/versions/{version_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_template_version(
+    template_id: str,
+    version_id: str,
+    session: SessionDep,
+    tenant: TenantDep,
+    access: EditorAccess,
+) -> Response:
+    tenant_scope = _tenant_scope(tenant)
+    version = await session.get(TemplateVersion, version_id)
+    if version is None or version.template_id != template_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Template version not found")
+    if version.tenant_id not in tenant_scope:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Template version not found")
+
+    if await _template_version_in_use(
+        session, tenant=tenant, template_version_id=version.id
+    ):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Template version is already used and cannot be deleted",
+        )
+
+    await session.delete(version)
+    await session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete("/templates/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_template(
+    template_id: str,
+    session: SessionDep,
+    tenant: TenantDep,
+    access: EditorAccess,
+) -> Response:
+    tenant_scope = _tenant_scope(tenant)
+    template = await session.get(Template, template_id)
+    if template is None or template.tenant_id not in tenant_scope:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Template not found")
+
+    if await _template_in_use(session, tenant=tenant, template_id=template.id):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Template is already used and cannot be deleted",
+        )
+
+    await session.execute(
+        delete(TemplateVersion).where(TemplateVersion.template_id == template.id)
+    )
+    await session.delete(template)
+    await session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/docx/mass-replace")

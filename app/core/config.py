@@ -195,6 +195,7 @@ def _parse_file_allowed_extensions(value: object) -> list[str]:
 
 CsvMimeList = Annotated[list[str], BeforeValidator(_parse_file_allowed_mime)]
 CsvExtensionList = Annotated[list[str], BeforeValidator(_parse_file_allowed_extensions)]
+CsvUrlList = Annotated[list[str], BeforeValidator(lambda value: split_csv(value, default=()))]
 
 
 def _tolerant_json_loads(value: str, *args, **kwargs) -> object:
@@ -317,6 +318,13 @@ class Settings(BaseSettings):
     celery_retry_backoff_seconds: int = Field(5, alias="CELERY_RETRY_BACKOFF_SECONDS")
     celery_retry_backoff_max_seconds: int = Field(300, alias="CELERY_RETRY_BACKOFF_MAX_SECONDS")
     outbox_poll_interval: float = Field(5.0, alias="OUTBOX_POLL_INTERVAL")
+    webhook_document_generated_urls: CsvUrlList = Field(
+        default_factory=list, alias="WEBHOOK_URLS_DOCUMENT_GENERATED"
+    )
+    webhook_signed_urls: CsvUrlList = Field(
+        default_factory=list, alias="WEBHOOK_URLS_SIGNED"
+    )
+    webhook_timeout_seconds: float = Field(10.0, alias="WEBHOOK_TIMEOUT_SECONDS")
     log_level: str = Field("INFO", alias="LOG_LEVEL")
     log_json: bool = Field(True, alias="LOG_JSON")
     rate_limit_enabled: bool = Field(True, alias="RATE_LIMIT_ENABLED")

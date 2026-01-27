@@ -304,7 +304,12 @@ async def generate_document(
             )
 
         status_url = f"/api/v1/documents/tasks/{run.id}"
-        result = TaskAcceptedResponse(task_id=run.id, status_url=status_url)
+        metadata = run.result_metadata or {}
+        result = TaskAcceptedResponse(
+            task_id=run.id,
+            status_url=status_url,
+            document_version_id=metadata.get("document_version_id"),
+        )
         await idempotency.store_success(
             record,
             status_code=status.HTTP_202_ACCEPTED,
@@ -378,11 +383,15 @@ async def get_generation_task_status(
     metadata.setdefault("pipeline_status", pipeline_status)
 
     document_id = metadata.get("document_id") or outputs.get("document_id")
+    document_version_id = metadata.get("document_version_id") or outputs.get(
+        "document_version_id"
+    )
 
     return TaskStatusResponse(
         task_id=run.id,
         status=pipeline_status,
         document_id=document_id,
+        document_version_id=document_version_id,
         error=run.error,
         metadata=metadata or None,
     )

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, ClassVar, Mapping
 
 from sqlalchemy import event, select
@@ -8,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.document import Document, DocumentStatus, DocumentVersion
 from app.services.audit import AuditService
+from app.services.outbox import OutboxService
 
 
 _ALLOWED_STATUS_TRANSITIONS: Mapping[
@@ -201,6 +203,16 @@ class DocumentWorkflowService:
                 ip=ip,
                 details={"status": new_status.value},
             )
+            outbox = OutboxService(self.session)
+            await outbox.enqueue(
+                tenant_id=document.tenant_id,
+                event_type="Signed",
+                payload={
+                    "document_id": document.id,
+                    "status": new_status.value,
+                    "signed_at": datetime.now(tz=timezone.utc).isoformat(),
+                },
+            )
 
 
 @event.listens_for(DocumentVersion, "before_update", propagate=True)
@@ -208,5 +220,4 @@ def _prevent_document_version_update(*_args, **_kwargs) -> None:
     """Disallow in-place modifications for persisted document versions."""
 
     raise DocumentVersionUpdateError()
-
 
