@@ -7,6 +7,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 import pytest
 import pytest_asyncio
 from fastapi import Header, HTTPException, status
+from pydantic import AliasChoices
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -113,7 +114,9 @@ async def app_fixture():
     app.state.redis_client = _StubRedisClient()
 
     async def override_tenant_record(
-        tenant_slug: str | None = Header(default=None, alias=TENANT_HEADER)
+        tenant_slug: str | None = Header(
+            default=None, validation_alias=AliasChoices(TENANT_HEADER, "x-tenant-slug")
+        )
     ) -> Tenant:
         info = tenant_required(tenant_slug)
         async with TestSession() as session:
@@ -139,7 +142,7 @@ async def async_client(app_fixture):
     async with AsyncClient(
         transport=transport,
         base_url="http://testserver",
-        headers={"x-tenant-slug": "test"},
+        headers={"x-tenant": "test"},
     ) as client:
         yield client
 

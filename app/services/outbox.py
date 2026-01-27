@@ -8,7 +8,10 @@ from typing import Any, Mapping
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from time import perf_counter
+
 from app.core.config import get_settings
+from app.core.metrics import get_metrics
 from app.models.models import Outbox
 from app.services.webhooks import WebhookDispatcher
 
@@ -35,6 +38,9 @@ class OutboxService:
         )
         self.session.add(entry)
         await self.session.flush()
+        if entry.payload.get("event_id") is None:
+            entry.payload = {**entry.payload, "event_id": entry.id}
+            await self.session.flush()
         return entry
 
 
@@ -48,6 +54,7 @@ class OutboxProcessor:
         self.session = session
         self.settings = get_settings()
         self.dispatcher = dispatcher or WebhookDispatcher()
+        self.metrics = get_metrics()
 
     async def run(self) -> None:
         while True:
@@ -70,6 +77,19 @@ class OutboxProcessor:
                 extra={"event_type": entry.event_type, "outbox_id": entry.id},
             )
             entry.attempts += 1
+            if entry.attempts > self.settings.outbox_max_attempts:
+                entry.processed_at = datetime.now(tz=timezone.utc)
+                entry.last_error = "max_attempts_exceeded"
+                logger.warning(
+                    "outbox.discarded",
+                    extra={
+                        "event_type": entry.event_type,
+                        "outbox_id": entry.id,
+                        "attempts": entry.attempts,
+                    },
+                )
+                continue
+            start = perf_counter()
             try:
                 await self.dispatcher.dispatch(
                     event_type=entry.event_type,
@@ -78,6 +98,12 @@ class OutboxProcessor:
                 )
             except Exception as exc:
                 entry.last_error = str(exc)
+                duration = perf_counter() - start
+                self.metrics.observe_pipeline_stage(
+                    stage="webhook_dispatch",
+                    status="error",
+                    seconds=duration,
+                )
                 logger.warning(
                     "outbox.dispatch_failed",
                     extra={
@@ -89,6 +115,12 @@ class OutboxProcessor:
                 continue
             entry.processed_at = datetime.now(tz=timezone.utc)
             entry.last_error = None
+            duration = perf_counter() - start
+            self.metrics.observe_pipeline_stage(
+                stage="webhook_dispatch",
+                status="success",
+                seconds=duration,
+            )
             processed += 1
         if entries:
             await self.session.commit()

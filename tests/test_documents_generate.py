@@ -12,6 +12,7 @@ from sqlalchemy import select
 from app.core.config import get_settings
 from app.domains.files import s3
 from app.models.document import Document as DocumentModel, DocumentVersion
+from app.models.models import TemplateVersion
 from app.models.models import PipelineRun, PipelineRunStatus, RoleEnum
 from app.tasks import celery_app
 import app.tasks as task_module
@@ -129,10 +130,17 @@ async def test_document_generation_flow(
     assert response.status_code == 201
     template_payload = response.json()
     template_id = template_payload["id"]
+    template_version_id = template_payload["version_id"]
+
+    async with sessionmaker() as session:
+        template_version = await session.get(TemplateVersion, template_version_id)
+        assert template_version is not None
+        template_version_number = template_version.version
 
     headers = {"Idempotency-Key": "demo-key", **auth_headers}
     payload = {
         "template_code": "Greeting",
+        "template_version": template_version_number,
         "company_id": company_id,
         "person_id": person_id,
         "data": {"name": "World"},
@@ -191,6 +199,7 @@ async def test_document_generation_flow(
     )
     assert second.status_code == 202
     assert second.json()["task_id"] == body["task_id"]
+    assert second.json()["document_version_id"] == str(version.id)
 
     async with sessionmaker() as session:
         doc_count = len((await session.execute(select(DocumentModel))).scalars().all())
@@ -217,6 +226,7 @@ async def test_document_generation_flow(
     id_headers = {"Idempotency-Key": "demo-key-by-id", **auth_headers}
     payload_by_id = {
         "template_id": template_id,
+        "template_version": template_version_number,
         "company_id": company_id,
         "data": {"name": "Galaxy"},
     }

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import binascii
-import json
 import logging
 import threading
 from datetime import datetime, timezone
@@ -26,8 +25,6 @@ from app.domains.templating.renderer import render_docx
 from app.models.document import Document, DocumentStatus, DocumentVersion
 from app.models.models import (
     Company,
-    IdempotencyKey,
-    IdempotencyStatus,
     Person,
     PipelineRun,
     PipelineRunStatus,
@@ -41,6 +38,7 @@ from app.schemas.template import TemplateCreate
 from app.services.audit import AuditService
 from app.services.celery_app import celery_app
 from app.services.file_storage import FileStorageService
+from app.services.idempotency import IdempotencyService
 from app.services.outbox import OutboxProcessor, OutboxService
 
 settings = get_settings()
@@ -82,38 +80,6 @@ RETRYABLE_EXCEPTIONS: tuple[type[BaseException], ...] = (
 )
 
 
-async def _update_idempotency_record(
-    *,
-    session,
-    tenant_id: str,
-    idempotency_key: str,
-    document_version_id: str,
-) -> None:
-    stmt = select(IdempotencyKey).where(
-        IdempotencyKey.tenant_id == tenant_id,
-        IdempotencyKey.endpoint == "documents.generate",
-        IdempotencyKey.key == idempotency_key,
-    )
-    record = (await session.execute(stmt)).scalar_one_or_none()
-    if record is None or record.status is not IdempotencyStatus.SUCCEEDED:
-        return
-
-    body: dict[str, Any] = {}
-    if record.response_body:
-        try:
-            body = json.loads(record.response_body)
-        except json.JSONDecodeError:
-            body = {}
-    if not body:
-        body = dict((record.result_json or {}).get("body") or {})
-    if body.get("document_version_id") == document_version_id:
-        return
-
-    body["document_version_id"] = document_version_id
-    record.response_body = json.dumps(body, ensure_ascii=False)
-    status_code = record.status_code or 202
-    record.result_json = {"status_code": int(status_code), "body": body}
-    await session.flush()
 
 
 @celery_app.task(
@@ -245,6 +211,7 @@ def generate_document_task(run_id: str, *, tenant_slug: str) -> str:
 
     async def _run() -> str:
         storage = FileStorageService.default()
+        metrics = get_metrics()
         with tenant_context(tenant_slug):
             ensure_tenant_schema(tenant_slug)
             async with session_scope(tenant=tenant_slug) as session:
@@ -297,7 +264,21 @@ def generate_document_task(run_id: str, *, tenant_slug: str) -> str:
 
                 context_payload = dict(run.context or {})
                 template_bytes = storage.get(template_version.payload_key)
-                rendered = render_docx(template_bytes, context_payload)
+                docx_start = perf_counter()
+                try:
+                    rendered = render_docx(template_bytes, context_payload)
+                except Exception:
+                    metrics.observe_pipeline_stage(
+                        stage="generate_docx",
+                        status="error",
+                        seconds=perf_counter() - docx_start,
+                    )
+                    raise
+                metrics.observe_pipeline_stage(
+                    stage="generate_docx",
+                    status="success",
+                    seconds=perf_counter() - docx_start,
+                )
 
                 now = datetime.now(tz=timezone.utc)
                 tenant_prefix = build_dated_prefix(tenant_slug, now=now)
@@ -314,7 +295,21 @@ def generate_document_task(run_id: str, *, tenant_slug: str) -> str:
                 await session.flush()
 
                 storage_key = f"{tenant_prefix}/documents/{document.id}/{uuid4().hex}.docx"
-                s3.put_object(data=rendered, mime=DOCX_MIME, key=storage_key)
+                upload_start = perf_counter()
+                try:
+                    s3.put_object(data=rendered, mime=DOCX_MIME, key=storage_key)
+                except Exception:
+                    metrics.observe_pipeline_stage(
+                        stage="upload_s3",
+                        status="error",
+                        seconds=perf_counter() - upload_start,
+                    )
+                    raise
+                metrics.observe_pipeline_stage(
+                    stage="upload_s3",
+                    status="success",
+                    seconds=perf_counter() - upload_start,
+                )
                 document.storage_key = storage_key
 
                 version = DocumentVersion(
@@ -339,6 +334,11 @@ def generate_document_task(run_id: str, *, tenant_slug: str) -> str:
                     "document_version_id": version.id,
                 }
                 run.finished_at = datetime.now(tz=timezone.utc)
+                metrics.observe_pipeline_stage(
+                    stage="stamp",
+                    status="skipped",
+                    seconds=0.0,
+                )
                 outbox = OutboxService(session)
                 await outbox.enqueue(
                     tenant_id=run.tenant_id,
@@ -353,10 +353,13 @@ def generate_document_task(run_id: str, *, tenant_slug: str) -> str:
                         "storage_key": storage_key,
                     },
                 )
-                await _update_idempotency_record(
+                idempotency = IdempotencyService(
                     session=session,
-                    tenant_id=run.tenant_id,
-                    idempotency_key=run.idempotency_key,
+                    tenant_id=str(run.tenant_id),
+                    endpoint="documents.generate",
+                )
+                await idempotency.update_document_version_id(
+                    key=run.idempotency_key,
                     document_version_id=version.id,
                 )
                 audit = AuditService(session)

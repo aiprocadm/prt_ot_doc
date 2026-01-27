@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 from typing import Annotated, Any
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from uuid import UUID
@@ -70,6 +69,7 @@ class DocGenerateRequest(BaseModel):
 
     template_code: str | None = Field(default=None, min_length=1, max_length=255)
     template_id: str | None = Field(default=None, min_length=1)
+    template_version: int | None = Field(default=None, ge=1)
     company_id: str = Field(..., min_length=1)
     person_id: str | None = Field(default=None)
     data: dict[str, Any] = Field(default_factory=dict)
@@ -78,6 +78,8 @@ class DocGenerateRequest(BaseModel):
     def _ensure_identifier(self) -> "DocGenerateRequest":
         if not self.template_code and not self.template_id:
             raise ValueError("Either template_id or template_code must be provided")
+        if self.template_version is None:
+            raise ValueError("template_version is required to select a template")
         return self
 
 def _serialize_payload(payload: dict[str, Any]) -> str:
@@ -92,6 +94,11 @@ def _hash_payload(payload: dict[str, Any]) -> str:
     digest = hashlib.sha256(serialized.encode("utf-8"))
     return digest.hexdigest()
 
+def _extract_document_version_id(run: PipelineRun) -> str | None:
+    metadata = run.result_metadata or {}
+    outputs = run.outputs or {}
+    return metadata.get("document_version_id") or outputs.get("document_version_id")
+
 
 async def _fetch_template(
     session: AsyncSession,
@@ -99,6 +106,7 @@ async def _fetch_template(
     *,
     template_code: str | None = None,
     template_id: str | None = None,
+    template_version: int | None = None,
 ) -> tuple[Template, TemplateVersion]:
     tenant_slug = tenant.slug
     filters: list[Any] = [
@@ -110,17 +118,23 @@ async def _fetch_template(
         filters.append(Template.id == template_id)
     if template_code:
         filters.append(Template.name == template_code)
+    if template_version is not None:
+        filters.append(TemplateVersion.version == template_version)
     if len(filters) == 2:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             "template_id or template_code must be provided",
+        )
+    if template_version is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "template_version is required for template selection",
         )
 
     stmt = (
         select(Template, TemplateVersion)
         .join(TemplateVersion, TemplateVersion.template_id == Template.id)
         .where(*filters)
-        .order_by(TemplateVersion.version.desc())
         .limit(1)
     )
     row = (await session.execute(stmt)).first()
@@ -260,6 +274,7 @@ async def generate_document(
             tenant,
             template_code=payload.template_code,
             template_id=payload.template_id,
+            template_version=payload.template_version,
         )
         company = await _ensure_company(session, tenant, payload.company_id)
         person = await _ensure_person(session, payload.person_id, company)
@@ -283,6 +298,7 @@ async def generate_document(
         if created_run:
             audit_service = AuditService(session)
             ip = request.client.host if request.client else "unknown"
+            user_agent = request.headers.get("user-agent")
             await audit_service.log_event(
                 tenant_id=str(tenant.id),
                 action="render_start",
@@ -290,6 +306,7 @@ async def generate_document(
                 object_id=run.id,
                 user_id=current_user.id,
                 ip=ip,
+                user_agent=user_agent,
                 details={
                     "template_id": template.id,
                     "company_id": company.id,
@@ -298,6 +315,12 @@ async def generate_document(
             )
 
         if not created_record:
+            document_version_id = _extract_document_version_id(run)
+            if document_version_id:
+                await idempotency.update_document_version_id(
+                    key=normalized_key,
+                    document_version_id=document_version_id,
+                )
             await session.commit()
             return await idempotency.respond_from_store(
                 record, model=TaskAcceptedResponse, response=response
@@ -410,6 +433,7 @@ async def update_document_status(
     service = DocumentWorkflowService(session=session)
     actor_id = getattr(access.user, "id", None)
     ip = request.client.host if request.client else "unknown"
+    user_agent = request.headers.get("user-agent")
     try:
         document = await service.change_status(
             document_id=document_id,
@@ -417,6 +441,7 @@ async def update_document_status(
             new_status=payload.to,
             actor_id=actor_id,
             ip=ip,
+            user_agent=user_agent,
         )
     except DocumentNotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc

@@ -268,7 +268,7 @@ def _handle_http_exception(
     if isinstance(details, Mapping):
         mutable = dict(details)
         candidate = mutable.get("code")
-        if isinstance(candidate, str) and candidate.startswith("http_"):
+        if isinstance(candidate, str) and candidate.strip():
             code_override = mutable.pop("code", None)
         if mutable.get("message") == message:
             mutable.pop("message")

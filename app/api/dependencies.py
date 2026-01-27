@@ -4,11 +4,12 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import AsyncIterator
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Header
+from pydantic import AliasChoices
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.tenant import get_current_tenant
+from app.core.tenant import TENANT_HEADER, get_current_tenant, tenant_required
 from app.db.session import AsyncSessionLocal, ensure_tenant_schema
 from app.models.models import Tenant
 from app.services.file_storage import FileStorageService
@@ -24,8 +25,15 @@ from app.services.integrations import (
 )
 
 
-async def get_tenant_record() -> Tenant:
-    info = get_current_tenant()
+async def get_tenant_record(
+    tenant_slug: str | None = Header(
+        default=None, validation_alias=AliasChoices(TENANT_HEADER, "x-tenant-slug")
+    )
+) -> Tenant:
+    if tenant_slug is not None:
+        info = tenant_required(tenant_slug)
+    else:
+        info = get_current_tenant()
     async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as session:
         result = await session.execute(select(Tenant).where(Tenant.slug == info.slug))
         tenant = result.scalar_one_or_none()

@@ -8,7 +8,7 @@ from starlette.responses import Response
 from starlette.types import ASGIApp
 
 from app.core.security import verify_token
-from app.core.tenant import TENANT_HEADER, tenant_required
+from app.core.tenant import TENANT_HEADER, TENANT_HEADER_ALIASES, tenant_required
 
 
 class TenantMiddleware(BaseHTTPMiddleware):
@@ -18,6 +18,7 @@ class TenantMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self._metrics_enabled = metrics_enabled
         self._system_paths = {"/health", "/ready", "/healthz", "/readyz"}
+        self._public_prefixes = ("/api/v1/auth", "/api/v1/public")
 
     async def dispatch(self, request: Request, call_next):  # type: ignore[override]
         path = request.url.path
@@ -29,10 +30,15 @@ class TenantMiddleware(BaseHTTPMiddleware):
             path in self._system_paths
             or (self._metrics_enabled and path == "/metrics")
             or path.startswith("/docs")
+            or any(path.startswith(prefix) for prefix in self._public_prefixes)
         ):
             return await call_next(request)
 
-        header_slug = request.headers.get(TENANT_HEADER)
+        header_slug = None
+        for header_name in TENANT_HEADER_ALIASES:
+            header_slug = request.headers.get(header_name)
+            if header_slug:
+                break
         token_slug: str | None = None
         auth_header = request.headers.get("authorization") or ""
         if auth_header.lower().startswith("bearer "):
@@ -61,7 +67,6 @@ class TenantMiddleware(BaseHTTPMiddleware):
 
         effective_slug = token_slug or normalized_header
         if not effective_slug:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Tenant context is required")
-
+            tenant_required(None)
         tenant_required(effective_slug)
         return await call_next(request)

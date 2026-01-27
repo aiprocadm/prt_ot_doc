@@ -37,6 +37,8 @@ class WebhookDispatcher:
             return list(self.settings.webhook_document_generated_urls)
         if event_type == "Signed":
             return list(self.settings.webhook_signed_urls)
+        if event_type == "Exported":
+            return list(self.settings.webhook_exported_urls)
         return []
 
     async def dispatch(

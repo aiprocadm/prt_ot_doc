@@ -55,7 +55,7 @@ async def test_cross_tenant_write_is_rejected(
             await session.commit()
 
     auth_headers = await make_auth_headers(RoleEnum.ADMIN, email="admin-rbac@example.com")
-    headers = {**dict(async_client.headers), **auth_headers, "x-tenant-slug": "acme"}
+    headers = {**dict(async_client.headers), **auth_headers, "x-tenant": "acme"}
 
     payload = {
         "name": "Forbidden Corp",
@@ -75,7 +75,7 @@ async def test_cross_tenant_read_is_forbidden(
     async_client: AsyncClient, make_auth_headers
 ) -> None:
     headers = {**dict(async_client.headers), **await make_auth_headers()}
-    headers["x-tenant-slug"] = "acme"
+    headers["x-tenant"] = "acme"
 
     response = await async_client.get("/api/v1/templates", headers=headers)
 

@@ -1,5 +1,6 @@
 import axios, { type AxiosError, type AxiosInstance } from "axios";
 import { tokenStorage } from "@/api/tokenStorage";
+import { tenantStorage } from "@/api/tenantStorage";
 import type { ApiError } from "@/types/dto/common";
 import type { RefreshResponseDto } from "@/types/dto/auth";
 
@@ -56,11 +57,16 @@ export const apiClient: AxiosInstance = axios.create({
 });
 
 tokenStorage.hydrate();
+tenantStorage.hydrate();
 
 apiClient.interceptors.request.use((config) => {
   const token = tokenStorage.getAccessToken();
+  const tenant = tenantStorage.getTenant();
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
+  }
+  if (tenant && config.headers) {
+    config.headers["X-Tenant"] = tenant;
   }
   config.timeout = config.timeout ?? 15_000;
   return config;

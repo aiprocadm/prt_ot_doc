@@ -131,6 +131,12 @@ async def test_document_status_transition_success(
             "to": DocumentStatus.REVIEW.value,
             "outcome": "success",
         }
+        assert entry.changed_fields == {
+            "status": {
+                "from": DocumentStatus.DRAFT.value,
+                "to": DocumentStatus.REVIEW.value,
+            }
+        }
 
 
 @pytest.mark.anyio()
@@ -278,4 +284,3 @@ async def test_document_status_sequential_flow(
             DocumentStatus.ARCHIVED.value,
         ]
         assert all(entry.details["outcome"] == "success" for entry in entries)
-

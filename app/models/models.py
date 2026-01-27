@@ -17,6 +17,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    event,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
 
@@ -891,13 +892,27 @@ class AuditLog(TenantBaseModel):
     object_type: Mapped[str] = mapped_column(String(64), nullable=False)
     object_id: Mapped[str] = mapped_column(String(128), nullable=False)
     ip: Mapped[str] = mapped_column(String(64), nullable=False, default="unknown")
+    request_id: Mapped[str | None] = mapped_column(String(128))
+    session_id: Mapped[str | None] = mapped_column(String(128))
+    user_agent: Mapped[str | None] = mapped_column(String(256))
     details: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    changed_fields: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
 
     __table_args__ = (
         Index("ix_auditlog_action", "action"),
         Index("ix_auditlog_object", "object_type", "object_id"),
         Index("ix_auditlog_when", "when"),
     )
+
+
+@event.listens_for(AuditLog, "before_update", propagate=True)
+def _prevent_auditlog_update(*_args, **_kwargs) -> None:
+    raise RuntimeError("Audit logs are append-only")
+
+
+@event.listens_for(AuditLog, "before_delete", propagate=True)
+def _prevent_auditlog_delete(*_args, **_kwargs) -> None:
+    raise RuntimeError("Audit logs are append-only")
 
 
 class WarehousePPE(TenantBaseModel):
