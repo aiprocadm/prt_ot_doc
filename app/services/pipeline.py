@@ -344,16 +344,48 @@ class PipelineService:
                 raise RuntimeError("Template version payload missing")
             src = self.storage.get(template_version.payload_key)
 
-            rendered = DocxService.render_template(src, context)
-            docx_bytes = DocxService.mass_replace(rendered, replacements_map)
-            docx_bytes = DocxService.set_headers_footers(docx_bytes, header_text, footer_text)
+            docx_start = perf_counter()
+            try:
+                rendered = DocxService.render_template(src, context)
+                docx_bytes = DocxService.mass_replace(rendered, replacements_map)
+                docx_bytes = DocxService.set_headers_footers(
+                    docx_bytes, header_text, footer_text
+                )
+            except Exception:
+                self.metrics.observe_pipeline_stage(
+                    stage="generate_docx",
+                    status="error",
+                    seconds=perf_counter() - docx_start,
+                )
+                raise
+            self.metrics.observe_pipeline_stage(
+                stage="generate_docx",
+                status="success",
+                seconds=perf_counter() - docx_start,
+            )
 
             out_base = normalized_output_basename or str(uuid.uuid4())
             now = datetime.now(tz=timezone.utc)
             prefix = build_dated_prefix(tenant.slug, now=now)
             unique_suffix = uuid.uuid4().hex
             docx_key = f"{prefix}/outputs/{out_base}-{unique_suffix}.docx"
-            self.storage.put(docx_key, docx_bytes, content_type=self.DOCX_CONTENT_TYPE)
+            upload_start = perf_counter()
+            try:
+                self.storage.put(
+                    docx_key, docx_bytes, content_type=self.DOCX_CONTENT_TYPE
+                )
+            except Exception:
+                self.metrics.observe_pipeline_stage(
+                    stage="upload_s3",
+                    status="error",
+                    seconds=perf_counter() - upload_start,
+                )
+                raise
+            self.metrics.observe_pipeline_stage(
+                stage="upload_s3",
+                status="success",
+                seconds=perf_counter() - upload_start,
+            )
 
             pdf_fallback = False
             pdf_error: str | None = None
@@ -368,6 +400,11 @@ class PipelineService:
                     conversion: PdfConversionResult = self.pdf.convert(p_in, p_out_dir)
                 except PdfConversionError as exc:
                     pdf_duration = perf_counter() - pdf_start
+                    self.metrics.observe_pipeline_stage(
+                        stage="convert_pdf",
+                        status="error",
+                        seconds=pdf_duration,
+                    )
                     pdf_bytes = MINI_PDF_BYTES
                     pdf_fallback = True
                     pdf_error_raw = str(exc) or "pdf_conversion_failed"
@@ -388,6 +425,11 @@ class PipelineService:
                     pdf_bytes = MINI_PDF_BYTES
                     pdf_fallback = True
                     pdf_duration = perf_counter() - pdf_start
+                    self.metrics.observe_pipeline_stage(
+                        stage="convert_pdf",
+                        status="error",
+                        seconds=pdf_duration,
+                    )
                     pdf_error_raw = str(exc) or "pdf_conversion_failed"
                     pdf_error = sanitize_label(pdf_error_raw)
                     logger.warning(
@@ -408,13 +450,39 @@ class PipelineService:
                     if conversion.error_code:
                         pdf_error = sanitize_label(conversion.error_code)
                         self.metrics.record_error(code=pdf_error)
+                    self.metrics.observe_pipeline_stage(
+                        stage="convert_pdf",
+                        status="fallback" if pdf_fallback else "success",
+                        seconds=pdf_duration,
+                    )
                 finally:
                     self.metrics.observe_pdf_duration(
                         template_id=template.id,
                         seconds=pdf_duration,
                     )
             pdf_key = f"{prefix}/outputs/{out_base}-{unique_suffix}.pdf"
-            self.storage.put(pdf_key, pdf_bytes, content_type="application/pdf")
+            upload_start = perf_counter()
+            try:
+                self.storage.put(
+                    pdf_key, pdf_bytes, content_type="application/pdf"
+                )
+            except Exception:
+                self.metrics.observe_pipeline_stage(
+                    stage="upload_s3",
+                    status="error",
+                    seconds=perf_counter() - upload_start,
+                )
+                raise
+            self.metrics.observe_pipeline_stage(
+                stage="upload_s3",
+                status="success",
+                seconds=perf_counter() - upload_start,
+            )
+            self.metrics.observe_pipeline_stage(
+                stage="stamp",
+                status="skipped",
+                seconds=0.0,
+            )
 
             run.status = PipelineRunStatus.DONE
             run.docx_storage_key = docx_key

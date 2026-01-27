@@ -122,6 +122,7 @@ class DocumentWorkflowService:
         new_status: DocumentStatus,
         actor_id: str | None,
         ip: str,
+        user_agent: str | None = None,
     ) -> Document:
         """Apply a status transition enforcing workflow rules and auditing."""
 
@@ -138,6 +139,7 @@ class DocumentWorkflowService:
                 new_status=new_status,
                 actor_id=actor_id,
                 outcome="rejected",
+                user_agent=user_agent,
                 ip=ip,
             )
             raise InvalidStatusTransitionError(
@@ -154,6 +156,7 @@ class DocumentWorkflowService:
             new_status=new_status,
             actor_id=actor_id,
             outcome="success",
+            user_agent=user_agent,
             ip=ip,
         )
         return document
@@ -172,6 +175,7 @@ class DocumentWorkflowService:
         actor_id: str | None,
         outcome: str,
         metadata_changes: Mapping[str, Any] | None = None,
+        user_agent: str | None = None,
         ip: str,
     ) -> None:
         audit_service = AuditService(self.session)
@@ -190,6 +194,8 @@ class DocumentWorkflowService:
             object_id=document.id,
             user_id=actor_id,
             ip=ip,
+            user_agent=user_agent,
+            changed_fields={"status": {"from": previous_status.value, "to": new_status.value}},
             details=details,
         )
 
@@ -201,6 +207,8 @@ class DocumentWorkflowService:
                 object_id=document.id,
                 user_id=actor_id,
                 ip=ip,
+                user_agent=user_agent,
+                changed_fields={"status": {"from": previous_status.value, "to": new_status.value}},
                 details={"status": new_status.value},
             )
             outbox = OutboxService(self.session)
@@ -220,4 +228,3 @@ def _prevent_document_version_update(*_args, **_kwargs) -> None:
     """Disallow in-place modifications for persisted document versions."""
 
     raise DocumentVersionUpdateError()
-

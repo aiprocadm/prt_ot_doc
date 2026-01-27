@@ -38,6 +38,8 @@ class Metrics:
 
     registry: CollectorRegistry
     pipeline_runs_total: Counter
+    pipeline_stage_total: Counter
+    pipeline_stage_duration_seconds: Histogram
     pipeline_pdf_duration_seconds: Histogram
     pdf_libreoffice_duration_seconds: Histogram
     pdf_libreoffice_attempts_total: Counter
@@ -60,6 +62,15 @@ class Metrics:
 
     def observe_pipeline_run(self, *, template_id: str, status: str) -> None:
         self.pipeline_runs_total.labels(template_id=template_id, status=status).inc()
+
+    def observe_pipeline_stage(self, *, stage: str, status: str, seconds: float) -> None:
+        safe_seconds = seconds if seconds >= 0 else 0.0
+        normalized_stage = sanitize_label(stage)
+        normalized_status = sanitize_label(status)
+        self.pipeline_stage_total.labels(stage=normalized_stage, status=normalized_status).inc()
+        self.pipeline_stage_duration_seconds.labels(
+            stage=normalized_stage, status=normalized_status
+        ).observe(safe_seconds)
 
     def observe_pdf_duration(self, *, template_id: str, seconds: float) -> None:
         if seconds < 0:
@@ -151,6 +162,19 @@ def _build_metrics() -> Metrics:
         labelnames=("template_id", "status"),
         registry=registry,
     )
+    pipeline_stage_total = Counter(
+        "pipeline_stage_total",
+        "Pipeline stage executions grouped by stage and status.",
+        labelnames=("stage", "status"),
+        registry=registry,
+    )
+    pipeline_stage_duration_seconds = Histogram(
+        "pipeline_stage_duration_seconds",
+        "Pipeline stage duration in seconds grouped by stage and status.",
+        labelnames=("stage", "status"),
+        registry=registry,
+        buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30),
+    )
     pipeline_pdf_duration_seconds = Histogram(
         "pipeline_pdf_duration_seconds",
         "PDF conversion duration in seconds by template.",
@@ -239,6 +263,8 @@ def _build_metrics() -> Metrics:
     return Metrics(
         registry=registry,
         pipeline_runs_total=pipeline_runs_total,
+        pipeline_stage_total=pipeline_stage_total,
+        pipeline_stage_duration_seconds=pipeline_stage_duration_seconds,
         pipeline_pdf_duration_seconds=pipeline_pdf_duration_seconds,
         pdf_libreoffice_duration_seconds=pdf_libreoffice_duration_seconds,
         pdf_libreoffice_attempts_total=pdf_libreoffice_attempts_total,

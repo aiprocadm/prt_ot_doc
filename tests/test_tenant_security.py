@@ -7,7 +7,7 @@ from app.models.models import RoleEnum, Tenant
 @pytest.mark.anyio
 async def test_employee_cannot_list_tenants(async_client, make_auth_headers):
     headers = await make_auth_headers(RoleEnum.EMPLOYEE)
-    headers["x-tenant-slug"] = "test"
+    headers["x-tenant"] = "test"
 
     response = await async_client.get("/api/v1/tenants", headers=headers)
 
@@ -17,7 +17,7 @@ async def test_employee_cannot_list_tenants(async_client, make_auth_headers):
 @pytest.mark.anyio
 async def test_cannot_read_other_tenant(sessionmaker, async_client, make_auth_headers):
     headers = await make_auth_headers(RoleEnum.ADMIN)
-    headers["x-tenant-slug"] = "test"
+    headers["x-tenant"] = "test"
 
     async with sessionmaker() as session:
         other = (
@@ -35,7 +35,7 @@ async def test_cannot_read_other_tenant(sessionmaker, async_client, make_auth_he
 @pytest.mark.anyio
 async def test_header_token_tenant_mismatch_denied(async_client, make_auth_headers):
     headers = await make_auth_headers(RoleEnum.ADMIN)
-    headers["x-tenant-slug"] = "beta"
+    headers["x-tenant"] = "beta"
 
     response = await async_client.get("/api/v1/tenants", headers=headers)
 

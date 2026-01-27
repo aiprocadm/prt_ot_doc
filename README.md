@@ -268,13 +268,15 @@ http GET :8000/api/v1/packs/runs/<run_id> Authorization:"Bearer <token>"
 ```
 
 ### Webhooks (MVP)
-События `DocumentGenerated` и `Signed` доставляются через outbox-воркер в URL-адреса,
+События `DocumentGenerated`, `Signed` и `Exported` доставляются через outbox-воркер в URL-адреса,
 заданные переменными окружения:
 
 ```bash
 WEBHOOK_URLS_DOCUMENT_GENERATED="https://example.com/hooks/documents"
 WEBHOOK_URLS_SIGNED="https://example.com/hooks/signed"
+WEBHOOK_URLS_EXPORTED="https://example.com/hooks/exports"
 WEBHOOK_TIMEOUT_SECONDS=10
+OUTBOX_MAX_ATTEMPTS=10
 ```
 
 ## Полезные ссылки

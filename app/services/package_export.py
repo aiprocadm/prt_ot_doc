@@ -7,9 +7,11 @@ import unicodedata
 import zipfile
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
+from time import perf_counter
 from typing import Callable, Iterable, Sequence
 
 from app.core.config import get_settings
+from app.core.metrics import get_metrics
 from app.domains.files.utils import build_dated_prefix
 from app.domains.files import s3
 from app.services.file_storage import FileStorageService
@@ -200,7 +202,24 @@ class PackageExportService:
         prefix = build_dated_prefix(tenant_slug, now=now)
         raw_key = f"{prefix}/packages/{pack_slug}/{timestamp}-{archive_name}.zip"
         storage_key = self._truncate_storage_key(raw_key)
-        self._storage.put(storage_key, archive_bytes, content_type=self.ZIP_CONTENT_TYPE)
+        metrics = get_metrics()
+        upload_start = perf_counter()
+        try:
+            self._storage.put(
+                storage_key, archive_bytes, content_type=self.ZIP_CONTENT_TYPE
+            )
+        except Exception:
+            metrics.observe_pipeline_stage(
+                stage="upload_s3",
+                status="error",
+                seconds=perf_counter() - upload_start,
+            )
+            raise
+        metrics.observe_pipeline_stage(
+            stage="upload_s3",
+            status="success",
+            seconds=perf_counter() - upload_start,
+        )
         settings = get_settings()
         if settings.s3_backend == "minio":
             try:

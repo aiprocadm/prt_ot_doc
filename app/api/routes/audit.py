@@ -26,6 +26,10 @@ class AuditLogEntry(BaseModel):
     object_id: str
     ip: str
     details: dict[str, Any] = Field(default_factory=dict)
+    request_id: str | None = None
+    session_id: str | None = None
+    user_agent: str | None = None
+    changed_fields: dict[str, Any] = Field(default_factory=dict)
 
 
 class AuditLogHistory(BaseModel):
@@ -67,6 +71,10 @@ async def get_audit_history(
             object_id=record.object_id,
             ip=record.ip,
             details=record.details or {},
+            request_id=record.request_id,
+            session_id=record.session_id,
+            user_agent=record.user_agent,
+            changed_fields=record.changed_fields or {},
         )
         for record in rows
     ]

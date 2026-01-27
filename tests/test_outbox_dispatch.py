@@ -4,6 +4,7 @@ import pytest
 from sqlalchemy import select
 
 from app.models.models import Outbox, Tenant
+from app.core.config import get_settings
 from app.services.outbox import OutboxProcessor
 
 
@@ -76,3 +77,40 @@ async def test_outbox_processor_retries_failed_entries(sessionmaker) -> None:
         assert refreshed.processed_at is None
         assert refreshed.attempts == 1
         assert refreshed.last_error
+
+
+@pytest.mark.anyio
+async def test_outbox_processor_discards_after_max_attempts(
+    sessionmaker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OUTBOX_MAX_ATTEMPTS", "1")
+    get_settings.cache_clear()  # type: ignore[attr-defined]
+
+    async with sessionmaker() as session:
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
+        entry = Outbox(
+            tenant_id=tenant.id,
+            event_type="DocumentGenerated",
+            payload={"document_id": "doc-3"},
+            attempts=1,
+        )
+        session.add(entry)
+        await session.commit()
+        entry_id = entry.id
+
+    dispatcher = DummyDispatcher()
+    async with sessionmaker() as session:
+        processor = OutboxProcessor(session, dispatcher=dispatcher)
+        processed = await processor.process_once()
+
+    assert processed == 0
+    assert dispatcher.calls == []
+
+    async with sessionmaker() as session:
+        refreshed = await session.get(Outbox, entry_id)
+        assert refreshed is not None
+        assert refreshed.processed_at is not None
+        assert refreshed.attempts == 2
+        assert refreshed.last_error == "max_attempts_exceeded"
+
+    get_settings.cache_clear()  # type: ignore[attr-defined]

@@ -90,6 +90,7 @@ async def test_document_generate_idempotency(
     headers = {**await make_auth_headers(), "Idempotency-Key": "doc-key-123"}
     payload = {
         "template_code": "SAFETY_DOC",
+        "template_version": 1,
         "company_id": company_id,
         "person_id": person_id,
         "data": {"employee": "Jane"},
@@ -302,6 +303,7 @@ async def test_documents_generate_requires_idempotency_key(
         "/api/v1/documents/generate",
         json={
             "template_code": "demo",
+            "template_version": 1,
             "company_id": "company",
             "data": {},
         },

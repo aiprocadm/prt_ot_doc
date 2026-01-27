@@ -1,23 +1,27 @@
 import { Bell, CheckCircle2, ChevronDown, LogOut, Moon, Search, Settings, Sun } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { tenantStorage } from "@/api/tenantStorage";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuthStore } from "@/stores/auth";
 
 const tenants = [
-  { id: "1", name: "АО «СеверСтрой»", site: "Северный кластер" },
-  { id: "2", name: "Филиал «Урал»", site: "Площадка Екатеринбург" },
-  { id: "3", name: "Подрядчик «ПромИнжиниринг»", site: "Объект 45" }
+  { id: "1", slug: "severstroy", name: "АО «СеверСтрой»", site: "Северный кластер" },
+  { id: "2", slug: "ural", name: "Филиал «Урал»", site: "Площадка Екатеринбург" },
+  { id: "3", slug: "promengineering", name: "Подрядчик «ПромИнжиниринг»", site: "Объект 45" }
 ];
 
 export const TopNav = () => {
   const { user, logout } = useAuthStore();
   const [theme, , toggleTheme] = useTheme();
-  const [activeTenant, setActiveTenant] = useState(tenants[0]);
+  const storedTenant = tenantStorage.getTenant();
+  const [activeTenant, setActiveTenant] = useState(
+    tenants.find((tenant) => tenant.slug === storedTenant) ?? tenants[0]
+  );
   const kpi = useMemo(
     () => ({
       tasks: 12,
@@ -25,6 +29,10 @@ export const TopNav = () => {
     }),
     []
   );
+
+  useEffect(() => {
+    tenantStorage.setTenant(activeTenant.slug);
+  }, [activeTenant]);
 
   return (
     <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">

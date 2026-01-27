@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from typing import Any, TypeVar
-from uuid import uuid4
 
 from fastapi import HTTPException, Response, status
 from pydantic import BaseModel
@@ -161,3 +160,29 @@ class IdempotencyService:
             raise HTTPException(status_code, body["detail"])
         raise HTTPException(status_code, body)
 
+    async def update_document_version_id(
+        self,
+        *,
+        key: str,
+        document_version_id: str,
+    ) -> None:
+        record = await self.get(key=key)
+        if record is None or record.status is not IdempotencyStatus.SUCCEEDED:
+            return
+
+        body: dict[str, Any] = {}
+        if record.response_body:
+            try:
+                body = json.loads(record.response_body)
+            except json.JSONDecodeError:
+                body = {}
+        if not body:
+            body = dict((record.result_json or {}).get("body") or {})
+        if body.get("document_version_id") == document_version_id:
+            return
+
+        body["document_version_id"] = document_version_id
+        record.response_body = json.dumps(body, ensure_ascii=False)
+        status_code = record.status_code or status.HTTP_200_OK
+        record.result_json = {"status_code": int(status_code), "body": body}
+        await self.session.flush()

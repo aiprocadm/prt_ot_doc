@@ -13,6 +13,7 @@ from app.core.config import get_settings
 
 __all__ = [
     "TENANT_HEADER",
+    "TENANT_HEADER_ALIASES",
     "TenantInfo",
     "get_current_tenant",
     "set_current_tenant",
@@ -22,7 +23,8 @@ __all__ = [
     "tenant_context",
 ]
 
-TENANT_HEADER = "x-tenant-slug"
+TENANT_HEADER = "x-tenant"
+TENANT_HEADER_ALIASES = (TENANT_HEADER, "x-tenant-slug")
 _settings = get_settings()
 _TENANT_VAR: ContextVar[str] = ContextVar(
     "tenant_slug", default=_settings.default_tenant_slug
@@ -78,7 +80,10 @@ def set_current_tenant(slug: str) -> TenantInfo:
 
 def tenant_required(slug: str | None) -> TenantInfo:
     if slug is None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Tenant header is required")
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            {"code": "tenant_required", "message": "Tenant header is required"},
+        )
     return set_current_tenant(slug)
 
 

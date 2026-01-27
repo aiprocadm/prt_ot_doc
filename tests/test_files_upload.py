@@ -278,7 +278,7 @@ async def test_upload_file_rejects_disallowed_extension(async_client, make_auth_
 @pytest.mark.usefixtures("aws")
 async def test_upload_rejects_cross_tenant_scope(async_client, make_auth_headers) -> None:
     payload = b"Hello scope"
-    headers = {"x-tenant-slug": "acme", **await make_auth_headers()}
+    headers = {"x-tenant": "acme", **await make_auth_headers()}
 
     response = await async_client.post(
         "/api/v1/files/upload",

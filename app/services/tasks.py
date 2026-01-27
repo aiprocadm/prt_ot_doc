@@ -27,6 +27,7 @@ from app.models.models import (
 )
 from app.schemas.pack import PackGenerateRequest
 from app.services.audit import AuditService
+from app.services.outbox import OutboxService
 from app.services.celery_app import celery_app
 from app.services.celery_app import settings as celery_settings
 from app.services.package_pipeline import PackGenerationPipeline, person_label
@@ -499,13 +500,27 @@ async def _generate_pack_coroutine(
                 },
             },
         }
+        outbox = OutboxService(session)
+        await outbox.enqueue(
+            tenant_id=str(company.tenant_id),
+            event_type="Exported",
+            payload={
+                "pack_id": pack.id,
+                "pack_code": pack.code,
+                "zip_storage_key": export_result.zip_storage_key,
+                "documents": documents_payload,
+            },
+        )
         audit = AuditService(session)
-        await audit.log(
-            actor_id=None,
+        await audit.log_event(
+            tenant_id=str(company.tenant_id),
             action="pack.generate",
-            entity="document_pack",
-            entity_id=pack.id,
-            diff=audit_payload,
+            object_type="document_pack",
+            object_id=pack.id,
+            user_id=None,
+            ip="system",
+            details=audit_payload,
+            changed_fields=audit_payload,
         )
         await session.commit()
 
@@ -580,4 +595,3 @@ def generate_pack_task(
         payload=payload,
         task_name="packs.generate",
     )
-
