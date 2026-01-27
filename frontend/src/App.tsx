@@ -1,5 +1,10 @@
 import AppRouter from "@/router/AppRouter";
+import { AppErrorBoundary } from "@/components/common/AppErrorBoundary";
 
-const App = () => <AppRouter />;
+const App = () => (
+  <AppErrorBoundary>
+    <AppRouter />
+  </AppErrorBoundary>
+);
 
 export default App;

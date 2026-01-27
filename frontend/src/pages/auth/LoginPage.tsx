@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuthStore } from "@/stores/auth";
 import { loginSchema, type LoginFormValues } from "@/types/forms/auth";
+import { consumeReturnTo } from "@/utils/returnTo";
 
 const LoginPage = () => {
   const form = useForm<LoginFormValues>({ resolver: zodResolver(loginSchema), defaultValues: { email: "", password: "" } });
@@ -17,7 +18,8 @@ const LoginPage = () => {
 
   useEffect(() => {
     if (isAuthenticated) {
-      const redirectTo = (location.state as { from?: Location })?.from?.pathname ?? "/companies";
+      const returnTo = consumeReturnTo();
+      const redirectTo = returnTo ?? (location.state as { from?: Location })?.from?.pathname ?? "/companies";
       navigate(redirectTo, { replace: true });
     }
   }, [isAuthenticated, location.state, navigate]);

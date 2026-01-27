@@ -18,6 +18,7 @@ interface FilesState extends PaginatedState<FileDto, FileFilters> {
   setFilters: (filters: Partial<FileFilters>) => void;
   setPage: (page: number) => void;
   setPageSize: (size: number) => void;
+  reset: () => void;
 }
 
 export const useFilesStore = create<FilesState>()(
@@ -43,6 +44,16 @@ export const useFilesStore = create<FilesState>()(
         state.pagination.page_size = size;
         state.pagination.page = 1;
       });
+    },
+    reset: () => {
+      set(() => ({
+        items: [],
+        item: null,
+        filters: {},
+        pagination: defaultPagination(),
+        loading: false,
+        error: null
+      }));
     },
     list: async (params) => {
       set((state) => {

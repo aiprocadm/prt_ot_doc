@@ -1,27 +1,18 @@
 import { Bell, CheckCircle2, ChevronDown, LogOut, Moon, Search, Settings, Sun } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { tenantStorage } from "@/api/tenantStorage";
+import { useTenantStore } from "@/stores/tenant";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuthStore } from "@/stores/auth";
-
-const tenants = [
-  { id: "1", slug: "severstroy", name: "АО «СеверСтрой»", site: "Северный кластер" },
-  { id: "2", slug: "ural", name: "Филиал «Урал»", site: "Площадка Екатеринбург" },
-  { id: "3", slug: "promengineering", name: "Подрядчик «ПромИнжиниринг»", site: "Объект 45" }
-];
 
 export const TopNav = () => {
   const { user, logout } = useAuthStore();
   const [theme, , toggleTheme] = useTheme();
-  const storedTenant = tenantStorage.getTenant();
-  const [activeTenant, setActiveTenant] = useState(
-    tenants.find((tenant) => tenant.slug === storedTenant) ?? tenants[0]
-  );
+  const { tenant, tenants, setTenant } = useTenantStore();
   const kpi = useMemo(
     () => ({
       tasks: 12,
@@ -29,10 +20,6 @@ export const TopNav = () => {
     }),
     []
   );
-
-  useEffect(() => {
-    tenantStorage.setTenant(activeTenant.slug);
-  }, [activeTenant]);
 
   return (
     <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
@@ -57,8 +44,10 @@ export const TopNav = () => {
             <DropdownMenuTrigger asChild>
               <Button variant="outline" className="gap-2">
                 <span className="hidden text-left text-xs sm:block">
-                  <span className="block font-semibold leading-tight">{activeTenant.name}</span>
-                  <span className="block text-[11px] text-muted-foreground">{activeTenant.site}</span>
+                  <span className="block font-semibold leading-tight">{tenant?.name ?? "Выберите контур"}</span>
+                  <span className="block text-[11px] text-muted-foreground">
+                    {tenant?.site ?? "Контур не выбран"}
+                  </span>
                 </span>
                 <ChevronDown className="h-4 w-4 text-muted-foreground" />
               </Button>
@@ -67,7 +56,7 @@ export const TopNav = () => {
               <DropdownMenuLabel>Контур / площадка</DropdownMenuLabel>
               <DropdownMenuSeparator />
               {tenants.map((tenant) => (
-                <DropdownMenuItem key={tenant.id} onSelect={() => setActiveTenant(tenant)} className="flex flex-col items-start gap-1">
+                <DropdownMenuItem key={tenant.id} onSelect={() => setTenant(tenant)} className="flex flex-col items-start gap-1">
                   <span className="text-sm font-medium">{tenant.name}</span>
                   <span className="text-xs text-muted-foreground">{tenant.site}</span>
                 </DropdownMenuItem>

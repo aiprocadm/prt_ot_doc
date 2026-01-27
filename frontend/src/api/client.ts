@@ -1,10 +1,12 @@
 import axios, { type AxiosError, type AxiosInstance } from "axios";
+import { appConfig } from "@/config/env";
+import { handleApiError } from "@/api/errorHandling";
 import { tokenStorage } from "@/api/tokenStorage";
 import { tenantStorage } from "@/api/tenantStorage";
 import type { ApiError } from "@/types/dto/common";
 import type { RefreshResponseDto } from "@/types/dto/auth";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
+const API_BASE_URL = appConfig.apiBaseUrl;
 
 let isRefreshing = false;
 let refreshPromise: Promise<string | null> | null = null;
@@ -62,11 +64,25 @@ tenantStorage.hydrate();
 apiClient.interceptors.request.use((config) => {
   const token = tokenStorage.getAccessToken();
   const tenant = tenantStorage.getTenant();
-  if (token && config.headers) {
+  config.headers = config.headers ?? {};
+  const requestUrl = config.url ?? "";
+  const requiresTenant = !requestUrl.includes("/auth/");
+  if (!tenant && requiresTenant) {
+    return Promise.reject({
+      status: 0,
+      code: "TENANT_REQUIRED",
+      message: "Выберите контур перед выполнением запроса.",
+      details: { url: requestUrl }
+    } satisfies ApiError);
+  }
+  if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
-  if (tenant && config.headers) {
-    config.headers["X-Tenant"] = tenant;
+  if (tenant) {
+    config.headers["X-Tenant"] = tenant.slug;
+    if (tenant.site) {
+      config.headers["X-Site"] = tenant.site;
+    }
   }
   config.timeout = config.timeout ?? 15_000;
   return config;
@@ -110,6 +126,7 @@ apiClient.interceptors.response.use(
       details: error.response?.data
     };
 
+    handleApiError(apiError, originalRequest?.url);
     return Promise.reject(apiError);
   }
 );

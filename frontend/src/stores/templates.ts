@@ -21,6 +21,7 @@ interface TemplatesState extends PaginatedState<TemplateDto, TemplateFilters> {
   setFilters: (filters: Partial<TemplateFilters>) => void;
   setPage: (page: number) => void;
   setPageSize: (size: number) => void;
+  reset: () => void;
 }
 
 export const useTemplatesStore = create<TemplatesState>()(
@@ -46,6 +47,16 @@ export const useTemplatesStore = create<TemplatesState>()(
         state.pagination.page_size = size;
         state.pagination.page = 1;
       });
+    },
+    reset: () => {
+      set(() => ({
+        items: [],
+        item: null,
+        filters: {},
+        pagination: defaultPagination(),
+        loading: false,
+        error: null
+      }));
     },
     list: async (params) => {
       set((state) => {

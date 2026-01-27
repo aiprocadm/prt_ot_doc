@@ -13,6 +13,7 @@ interface TasksState extends PaginatedState<TaskDto, TaskFiltersDto> {
   setPage: (page: number) => void;
   setPageSize: (size: number) => void;
   updateTask: (task: TaskDto) => void;
+  reset: () => void;
 }
 
 export const useTasksStore = create<TasksState>()(
@@ -38,6 +39,16 @@ export const useTasksStore = create<TasksState>()(
         state.pagination.page_size = size;
         state.pagination.page = 1;
       });
+    },
+    reset: () => {
+      set(() => ({
+        items: [],
+        item: null,
+        filters: {},
+        pagination: defaultPagination(),
+        loading: false,
+        error: null
+      }));
     },
     list: async (params) => {
       set((state) => {

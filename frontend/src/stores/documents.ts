@@ -14,6 +14,7 @@ interface DocumentsState extends PaginatedState<DocumentDto, DocumentFiltersDto>
   setPageSize: (size: number) => void;
   download: (id: string) => Promise<Blob>;
   refreshStatus: (id: string) => Promise<DocumentDto | null>;
+  reset: () => void;
 }
 
 export const useDocumentsStore = create<DocumentsState>()(
@@ -39,6 +40,16 @@ export const useDocumentsStore = create<DocumentsState>()(
         state.pagination.page_size = size;
         state.pagination.page = 1;
       });
+    },
+    reset: () => {
+      set(() => ({
+        items: [],
+        item: null,
+        filters: {},
+        pagination: defaultPagination(),
+        loading: false,
+        error: null
+      }));
     },
     list: async (params) => {
       set((state) => {

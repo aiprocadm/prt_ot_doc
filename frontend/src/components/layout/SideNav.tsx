@@ -8,7 +8,7 @@ import {
   FileText,
   Flame,
   GraduationCap,
-  Hospital,
+  HeartPulse,
   LayoutDashboard,
   Package,
   ShieldAlert,
@@ -32,7 +32,7 @@ const navGroups = [
       { label: "Мероприятия (CAPA)", to: "/activities", icon: Activity },
       { label: "СИЗ и склады", to: "/ppe", icon: Package },
       { label: "Обучение и инструктажи", to: "/training", icon: GraduationCap },
-      { label: "Медосмотры/допуски", to: "/medical", icon: Hospital },
+      { label: "Медосмотры/допуски", to: "/medical", icon: HeartPulse },
       { label: "Инциденты/НС", to: "/incidents", icon: AlertTriangle },
       { label: "Проверки/предписания", to: "/inspections", icon: ClipboardCheck },
       { label: "Подготовка к проверке", to: "/audit-prep", icon: Archive }

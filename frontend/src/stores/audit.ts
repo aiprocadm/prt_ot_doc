@@ -11,6 +11,7 @@ interface AuditState extends PaginatedState<AuditLogDto, AuditFiltersDto> {
   setFilters: (filters: Partial<AuditFiltersDto>) => void;
   setPage: (page: number) => void;
   setPageSize: (size: number) => void;
+  reset: () => void;
 }
 
 export const useAuditStore = create<AuditState>()(
@@ -36,6 +37,16 @@ export const useAuditStore = create<AuditState>()(
         state.pagination.page_size = size;
         state.pagination.page = 1;
       });
+    },
+    reset: () => {
+      set(() => ({
+        items: [],
+        item: null,
+        filters: {},
+        pagination: defaultPagination(),
+        loading: false,
+        error: null
+      }));
     },
     list: async (params) => {
       set((state) => {

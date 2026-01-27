@@ -1,31 +1,56 @@
 const TENANT_KEY = "prt-tenant";
-let tenantSlug: string | null = null;
+
+export type StoredTenant = {
+  slug: string;
+  site?: string | null;
+};
+
+let tenantValue: StoredTenant | null = null;
+
+const parseTenant = (raw: string | null): StoredTenant | null => {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed === "string") {
+      return { slug: parsed };
+    }
+    if (parsed && typeof parsed.slug === "string") {
+      return {
+        slug: parsed.slug,
+        site: typeof parsed.site === "string" ? parsed.site : null
+      };
+    }
+    return null;
+  } catch {
+    return { slug: raw };
+  }
+};
 
 const readTenant = () => {
   if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(TENANT_KEY);
+  return parseTenant(window.localStorage.getItem(TENANT_KEY));
 };
 
-const persistTenant = (slug: string | null) => {
+const persistTenant = (tenant: StoredTenant | null) => {
   if (typeof window === "undefined") return;
-  if (slug) {
-    window.localStorage.setItem(TENANT_KEY, slug);
+  if (tenant) {
+    window.localStorage.setItem(TENANT_KEY, JSON.stringify(tenant));
   } else {
     window.localStorage.removeItem(TENANT_KEY);
   }
 };
 
 export const tenantStorage = {
-  getTenant: () => tenantSlug ?? readTenant(),
-  setTenant: (slug: string | null) => {
-    tenantSlug = slug;
-    persistTenant(slug);
+  getTenant: () => tenantValue ?? readTenant(),
+  setTenant: (tenant: StoredTenant | null) => {
+    tenantValue = tenant;
+    persistTenant(tenant);
   },
   hydrate: () => {
-    tenantSlug = readTenant();
+    tenantValue = readTenant();
   },
   clear: () => {
-    tenantSlug = null;
+    tenantValue = null;
     persistTenant(null);
   }
 };
