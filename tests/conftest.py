@@ -4,6 +4,14 @@ import os
 import sys
 from collections.abc import AsyncIterator, Awaitable, Callable
 
+# Set environment variables BEFORE any app imports
+os.environ.setdefault("APP_NAME", "TestService")
+os.environ.setdefault("LIBREOFFICE_BIN", sys.executable)
+os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
+os.environ.setdefault("REDIS_RESULT_URL", "redis://localhost:6379/15")
+os.environ.setdefault("S3_ENDPOINT", "http://localhost:9000")
+
 import pytest
 import pytest_asyncio
 from fastapi import Header, HTTPException, status
@@ -22,10 +30,6 @@ from app.models.models import Company, RoleEnum, Tenant, User
 from app.services.clamav import reset_quarantine_publisher
 from app.services.file_storage import FileStorageService
 from tests.utils.factories import TestDataFactory
-
-os.environ.setdefault("APP_NAME", "TestService")
-os.environ.setdefault("LIBREOFFICE_BIN", sys.executable)
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 configure_engine(database_url=os.environ["DATABASE_URL"], echo=False)
 
