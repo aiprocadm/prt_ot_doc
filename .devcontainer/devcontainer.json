@@ -1,0 +1,60 @@
+{
+  "name": "prt-ot-doc",
+  "dockerComposeFile": [
+    "../docker-compose.yml",
+    "docker-compose.yml"
+  ],
+  "service": "devcontainer",
+  "workspaceFolder": "/workspaces/prt_ot_doc",
+  "shutdownAction": "stopCompose",
+  "runServices": [
+    "db",
+    "redis",
+    "minio",
+    "minio-setup",
+    "clamav",
+    "libreoffice"
+  ],
+  "containerEnv": {
+    "POETRY_VIRTUALENVS_IN_PROJECT": "true",
+    "POETRY_NO_INTERACTION": "1"
+  },
+  "postCreateCommand": ".devcontainer/post-create.sh",
+  "forwardPorts": [
+    8000,
+    5173,
+    9000,
+    9001
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.black-formatter",
+        "charliermarsh.ruff",
+        "ms-azuretools.vscode-docker"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/workspaces/prt_ot_doc/.venv/bin/python",
+        "python.testing.pytestEnabled": true,
+        "python.testing.unittestEnabled": false,
+        "python.testing.pytestArgs": [
+          "tests"
+        ],
+        "python.envFile": "${workspaceFolder}/.env",
+        "python.analysis.extraPaths": [
+          "${workspaceFolder}"
+        ],
+        "ruff.enable": true,
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "ms-python.black-formatter"
+      }
+    }
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20"
+    }
+  }
+}
