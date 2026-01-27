@@ -328,6 +328,15 @@ class Settings(BaseSettings):
     webhook_exported_urls: CsvUrlList = Field(
         default_factory=list, alias="WEBHOOK_URLS_EXPORTED"
     )
+    webhook_risk_assessed_urls: CsvUrlList = Field(
+        default_factory=list, alias="WEBHOOK_URLS_RISK_ASSESSED"
+    )
+    webhook_ppe_issued_urls: CsvUrlList = Field(
+        default_factory=list, alias="WEBHOOK_URLS_PPE_ISSUED"
+    )
+    webhook_training_completed_urls: CsvUrlList = Field(
+        default_factory=list, alias="WEBHOOK_URLS_TRAINING_COMPLETED"
+    )
     webhook_timeout_seconds: float = Field(10.0, alias="WEBHOOK_TIMEOUT_SECONDS")
     log_level: str = Field("INFO", alias="LOG_LEVEL")
     log_json: bool = Field(True, alias="LOG_JSON")

@@ -31,6 +31,7 @@ from app.models.risk import (
 )
 from app.schemas.risk import RiskListResponse
 from app.services.risk import RiskService
+from app.services.outbox import OutboxService
 
 router = APIRouter(tags=["risks"])
 engine_router = APIRouter(prefix="/risk", tags=["risk"])
@@ -48,6 +49,55 @@ async def _get_tenant_entity(
     if record is None or getattr(record, "tenant_id", None) != tenant_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Entity not found")
     return record
+
+
+async def _resolve_controls(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    control_codes: list[str],
+) -> dict[str, RiskControl]:
+    if not control_codes:
+        return {}
+    stmt = select(RiskControl).where(
+        RiskControl.tenant_id == tenant_id,
+        RiskControl.code.in_(control_codes),
+    )
+    controls = (await session.execute(stmt)).scalars().all()
+    return {control.code: control for control in controls}
+
+
+def _build_action_plan(
+    *,
+    hazard: RiskHazard,
+    controls: list[dict[str, object]],
+) -> dict[str, object]:
+    return {
+        "hazard_code": hazard.code,
+        "steps": controls,
+    }
+
+
+def _build_risk_card(
+    *,
+    hazard: RiskHazard,
+    before: dict[str, object],
+    after: dict[str, object],
+    controls: list[dict[str, object]],
+    action_plan: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "hazard": {
+            "code": hazard.code,
+            "title": hazard.title,
+            "module": hazard.module,
+            "description": hazard.description,
+        },
+        "before": before,
+        "after": after,
+        "controls": controls,
+        "action_plan": action_plan,
+    }
 
 
 class HazardIn(BaseModel):
@@ -574,6 +624,64 @@ async def assess(
 
     controls_json = json.dumps(payload.controls, ensure_ascii=False)
     created_by = payload.created_by or auth.sub
+    controls_lookup = await _resolve_controls(
+        session, tenant_id=tenant_id, control_codes=payload.controls
+    )
+    control_steps: list[dict[str, object]] = []
+    for code in payload.controls:
+        control = controls_lookup.get(code)
+        if control is None:
+            control_steps.append(
+                {
+                    "code": code,
+                    "title": code,
+                    "type": "org",
+                    "description": None,
+                    "status": "planned",
+                    "missing": True,
+                }
+            )
+            continue
+        control_steps.append(
+            {
+                "code": control.code,
+                "title": control.title,
+                "type": control.type,
+                "description": control.description,
+                "status": "planned",
+            }
+        )
+    if not control_steps:
+        control_steps = [
+            {
+                "code": f"review-{hazard.code}",
+                "title": f"Review hazard: {hazard.title}",
+                "type": "org",
+                "description": hazard.description,
+                "status": "planned",
+            }
+        ]
+
+    before_payload = {
+        "severity": severity_before,
+        "likelihood": likelihood_before,
+        "score": score_before,
+        "band": band_before,
+    }
+    after_payload = {
+        "severity": severity_after,
+        "likelihood": likelihood_after,
+        "score": score_after,
+        "band": band_after,
+    }
+    action_plan = _build_action_plan(hazard=hazard, controls=control_steps)
+    risk_card = _build_risk_card(
+        hazard=hazard,
+        before=before_payload,
+        after=after_payload,
+        controls=control_steps,
+        action_plan=action_plan,
+    )
 
     assessment = RiskAssessment(
         tenant_id=tenant_id,
@@ -588,6 +696,8 @@ async def assess(
         score_before=score_before,
         band_before=band_before,
         controls=controls_json,
+        action_plan=action_plan,
+        risk_card=risk_card,
         severity_after=severity_after,
         likelihood_after=likelihood_after,
         score_after=score_after,
@@ -596,23 +706,33 @@ async def assess(
     )
     session.add(assessment)
     await session.flush()
+    outbox = OutboxService(session)
+    await outbox.enqueue(
+        tenant_id=tenant_id,
+        event_type="RiskAssessed",
+        payload={
+            "assessment_id": assessment.id,
+            "hazard_code": hazard.code,
+            "company_id": payload.company_id,
+            "place_id": payload.place_id,
+            "position_id": payload.position_id,
+            "document_pack_id": payload.document_pack_id,
+            "before": before_payload,
+            "after": after_payload,
+            "controls": control_steps,
+            "action_plan": action_plan,
+        },
+    )
     await session.commit()
+
     return {
         "id": assessment.id,
         "hazard": {"code": payload.hazard_code, "title": hazard.title},
-        "before": {
-            "severity": severity_before,
-            "likelihood": likelihood_before,
-            "score": score_before,
-            "band": band_before,
-        },
-        "after": {
-            "severity": severity_after,
-            "likelihood": likelihood_after,
-            "score": score_after,
-            "band": band_after,
-        },
+        "before": before_payload,
+        "after": after_payload,
         "controls": payload.controls,
+        "action_plan": action_plan,
+        "risk_card": risk_card,
     }
 
 

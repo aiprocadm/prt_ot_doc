@@ -3,7 +3,7 @@ import json
 import pytest
 from sqlalchemy import select
 
-from app.models.models import Position, RiskMap, RoleEnum, Site, Tenant
+from app.models.models import Outbox, Position, RiskMap, RoleEnum, Site, Tenant
 from app.models.risk import RiskAssessment, RiskHazard, RiskMatrixCell
 
 
@@ -107,6 +107,9 @@ async def test_risk_engine_flow(
     assert assessment_body["after"]["score"] == 6
     assert assessment_body["after"]["likelihood"] == 2
     assert assessment_body["controls"] == ["harness"]
+    assert assessment_body["action_plan"]["hazard_code"] == "work_height"
+    assert assessment_body["action_plan"]["steps"][0]["code"] == "harness"
+    assert assessment_body["risk_card"]["hazard"]["code"] == "work_height"
 
     risk_map_resp = await async_client.post(
         "/api/v1/risk/maps",
@@ -171,6 +174,10 @@ async def test_risk_engine_flow(
         assert assessment.created_by == "inspector-77"
         assert assessment.position_id == position_id
         assert assessment.place_id == site_id
+        assert assessment.action_plan
+        assert assessment.action_plan["hazard_code"] == "work_height"
+        assert assessment.risk_card
+        assert assessment.risk_card["hazard"]["title"] == "Работы на высоте"
 
         risk_map = (
             await session.execute(
@@ -183,3 +190,13 @@ async def test_risk_engine_flow(
             )
         ).scalar_one()
         assert risk_map.matrix["total_assessments"] == 1
+
+        outbox_entry = (
+            await session.execute(
+                select(Outbox).where(
+                    Outbox.tenant_id == tenant_id,
+                    Outbox.event_type == "RiskAssessed",
+                )
+            )
+        ).scalar_one_or_none()
+        assert outbox_entry is not None
