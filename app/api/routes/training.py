@@ -26,6 +26,7 @@ from app.models.models import (
     TrainingCertificate,
     TrainingCourse,
     TrainingPlan,
+    TrainingSessionStatus,
 )
 from app.schemas.training import (
     TrainingCertificateCreate,
@@ -40,6 +41,7 @@ from app.schemas.training import (
     TrainingSessionCreate,
     TrainingSessionRead,
 )
+from app.services.outbox import OutboxService
 
 router = APIRouter(prefix="/training", tags=["training"])
 
@@ -266,6 +268,23 @@ async def create_session(
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    if record.status == TrainingSessionStatus.COMPLETED:
+        outbox = OutboxService(session)
+        await outbox.enqueue(
+            tenant_id=str(tenant.id),
+            event_type="TrainingCompleted",
+            payload={
+                "session_id": record.id,
+                "person_id": record.person_id,
+                "course_id": record.course_id,
+                "plan_id": record.plan_id,
+                "completed_at": record.completed_at.isoformat()
+                if record.completed_at
+                else None,
+                "status": record.status.value,
+                "score": record.score,
+            },
+        )
     return TrainingSessionRead.model_validate(record)
 
 

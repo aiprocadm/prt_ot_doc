@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -10,6 +10,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -174,6 +175,8 @@ class RiskAssessment(TenantBase):
     score_before: Mapped[int] = mapped_column(Integer, nullable=False)
     band_before: Mapped[str] = mapped_column(String(16), nullable=False)
     controls: Mapped[str | None] = mapped_column(Text, nullable=True)
+    action_plan: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    risk_card: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     severity_after: Mapped[int] = mapped_column(Integer, nullable=False)
     likelihood_after: Mapped[int] = mapped_column(Integer, nullable=False)
     score_after: Mapped[int] = mapped_column(Integer, nullable=False)

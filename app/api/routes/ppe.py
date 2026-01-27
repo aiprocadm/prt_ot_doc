@@ -23,6 +23,7 @@ from app.schemas.ppe import (
     PPEItemRead,
     PPEItemUpdate,
 )
+from app.services.outbox import OutboxService
 
 router = APIRouter(prefix="/ppe", tags=["ppe"])
 
@@ -207,6 +208,20 @@ async def create_issue(
         wear_days=payload.wear_days,
         expires_at=payload.expires_at,
     )
+    outbox = OutboxService(session)
+    await outbox.enqueue(
+        tenant_id=str(tenant.id),
+        event_type="PPEIssued",
+        payload={
+            "issue_id": issue.id,
+            "person_id": issue.person_id,
+            "item_id": issue.item_id,
+            "quantity": issue.quantity,
+            "issued_at": issue.issued_at.isoformat(),
+            "expires_at": issue.expires_at.isoformat() if issue.expires_at else None,
+            "status": issue.status.value,
+        },
+    )
     return _issue_schema(issue)
 
 
@@ -233,4 +248,3 @@ async def update_issue(
     await session.flush()
     await session.refresh(issue)
     return _issue_schema(issue)
-

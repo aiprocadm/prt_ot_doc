@@ -4,9 +4,10 @@ from datetime import date, timedelta
 
 import pytest
 from fastapi import status
+from sqlalchemy import select
 
 from app.models.file import File, FileKind, FileScanStatus
-from app.models.models import RoleEnum
+from app.models.models import Outbox, RoleEnum
 from tests.utils.factories import TestDataFactory
 
 
@@ -16,6 +17,7 @@ async def test_training_api_flow(async_client, make_auth_headers, sessionmaker, 
         tenant = await data_factory.ensure_tenant(session=session)
         company = await data_factory.create_company(tenant=tenant, session=session)
         person = await data_factory.create_person(tenant=tenant, company=company, session=session)
+        tenant_id = str(tenant.id)
         file = File(
             tenant_id=tenant.id,
             storage_key="certificates/sample.pdf",
@@ -70,6 +72,18 @@ async def test_training_api_flow(async_client, make_auth_headers, sessionmaker, 
     )
     assert training_session_response.status_code == status.HTTP_201_CREATED
     training_session = training_session_response.json()
+
+    async with sessionmaker() as session:
+        outbox_entry = (
+            await session.execute(
+                select(Outbox).where(
+                    Outbox.tenant_id == tenant_id,
+                    Outbox.event_type == "TrainingCompleted",
+                )
+            )
+        ).scalar_one_or_none()
+        assert outbox_entry is not None
+        assert outbox_entry.payload["session_id"] == training_session["id"]
 
     certificate_payload = {
         "person_id": person.id,
