@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import binascii
+import hashlib
 import logging
 import threading
 from datetime import datetime, timezone
@@ -17,12 +18,22 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import get_settings
 from app.core.metrics import get_metrics
+from app.core.payload_constraints import normalize_output_basename
 from app.core.tenant import tenant_context
 from app.db import ensure_tenant_schema, session_scope
 from app.domains.files import s3
 from app.domains.files.utils import build_dated_prefix
 from app.domains.templating.renderer import render_docx
-from app.models.document import Document, DocumentStatus, DocumentVersion
+from app.models.document import (
+    Document,
+    DocumentBatchItem,
+    DocumentBatchItemStatus,
+    DocumentBatchRun,
+    DocumentBatchStatus,
+    DocumentSnapshot,
+    DocumentStatus,
+    DocumentVersion,
+)
 from app.models.models import (
     Company,
     Person,
@@ -34,7 +45,7 @@ from app.models.models import (
     User,
 )
 from app.repository import create_template
-from app.schemas.template import TemplateCreate
+from app.schemas.template import TemplateCreate, TemplateVersionMetadata
 from app.services.audit import AuditService
 from app.services.celery_app import celery_app
 from app.services.file_storage import FileStorageService
@@ -80,6 +91,241 @@ RETRYABLE_EXCEPTIONS: tuple[type[BaseException], ...] = (
 )
 
 
+async def _generate_document_for_run(run_id: str, tenant_slug: str) -> tuple[str, str]:
+    storage = FileStorageService.default()
+    metrics = get_metrics()
+    with tenant_context(tenant_slug):
+        ensure_tenant_schema(tenant_slug)
+        async with session_scope(tenant=tenant_slug) as session:
+            run = await session.get(PipelineRun, run_id)
+            if run is None:
+                raise ValueError("Pipeline run not found")
+
+            metadata = dict(run.result_metadata or {})
+            existing_document_id = metadata.get("document_id")
+            existing_version_id = metadata.get("document_version_id")
+            if run.status is PipelineRunStatus.DONE and existing_document_id:
+                return str(existing_document_id), str(existing_version_id or "")
+
+            company_id = metadata.get("company_id")
+            person_id = metadata.get("person_id")
+            initiated_by = metadata.get("initiated_by")
+
+            if not company_id or not initiated_by:
+                raise ValueError("Pipeline run metadata is incomplete")
+
+            template_version = await session.get(TemplateVersion, run.template_version_id)
+            if template_version is None:
+                raise ValueError("Template version not found")
+            if not template_version.payload_key:
+                raise ValueError("Template version payload is missing")
+
+            template = await session.get(Template, run.template_id)
+            if template is None:
+                raise ValueError("Template not found")
+
+            company = await session.get(Company, company_id)
+            if company is None:
+                raise ValueError("Company not found")
+
+            person = None
+            if person_id is not None:
+                person = await session.get(Person, person_id)
+                if person is None:
+                    raise ValueError("Person not found")
+                if person.company_id != company.id:
+                    raise ValueError("Person does not belong to company")
+
+            user = await session.get(User, initiated_by)
+            if user is None:
+                raise ValueError("Initiating user not found")
+
+            run.status = PipelineRunStatus.RUNNING
+            run.started_at = datetime.now(tz=timezone.utc)
+            run.error = None
+            await session.flush()
+
+            context_payload = dict(run.context or {})
+            template_bytes = storage.get(template_version.payload_key)
+            docx_start = perf_counter()
+            try:
+                rendered = render_docx(template_bytes, context_payload)
+            except Exception:
+                metrics.observe_pipeline_stage(
+                    stage="generate_docx",
+                    status="error",
+                    seconds=perf_counter() - docx_start,
+                )
+                raise
+            metrics.observe_pipeline_stage(
+                stage="generate_docx",
+                status="success",
+                seconds=perf_counter() - docx_start,
+            )
+
+            now = datetime.now(tz=timezone.utc)
+            tenant_prefix = build_dated_prefix(tenant_slug, now=now)
+            document = Document(
+                tenant_id=run.tenant_id,
+                company_id=company.id,
+                person_id=person.id if person else None,
+                template_id=template.id,
+                template_version_id=template_version.id,
+                status=DocumentStatus.GENERATED,
+                created_by=user.id,
+            )
+            session.add(document)
+            await session.flush()
+
+            output_name = normalize_output_basename(metadata.get("output_name"))
+            filename = output_name or uuid4().hex
+            storage_key = f"{tenant_prefix}/documents/{document.id}/{filename}.docx"
+            upload_start = perf_counter()
+            try:
+                s3.put_object(data=rendered, mime=DOCX_MIME, key=storage_key)
+            except Exception:
+                metrics.observe_pipeline_stage(
+                    stage="upload_s3",
+                    status="error",
+                    seconds=perf_counter() - upload_start,
+                )
+                raise
+            metrics.observe_pipeline_stage(
+                stage="upload_s3",
+                status="success",
+                seconds=perf_counter() - upload_start,
+            )
+            document.storage_key = storage_key
+
+            integrity_hash = _sha256_bytes(rendered)
+            snapshot = DocumentSnapshot(
+                tenant_id=run.tenant_id,
+                document_id=document.id,
+                template_id=template.id,
+                template_version_id=template_version.id,
+                template_code=template.name,
+                template_version=template_version.version,
+                company_snapshot=_company_snapshot(company),
+                source_refs={
+                    "company_id": company.id,
+                    "person_id": person.id if person else None,
+                    "pipeline_run_id": run.id,
+                },
+                compliance_refs={},
+                render_log={
+                    "pipeline_run_id": run.id,
+                    "status": "generated",
+                    "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+                },
+                integrity_hash=integrity_hash,
+                generated_at=datetime.now(tz=timezone.utc),
+                created_by=user.id,
+            )
+            session.add(snapshot)
+            await session.flush()
+
+            version = DocumentVersion(
+                document=document,
+                template_version=str(template_version.version),
+                data_json=context_payload,
+                file_key=storage_key,
+                template_version_id=template_version.id,
+                snapshot_id=snapshot.id,
+            )
+            session.add(version)
+
+            metadata["document_id"] = document.id
+            metadata["document_version_id"] = version.id
+            metadata["docx_storage_key"] = storage_key
+
+            run.status = PipelineRunStatus.DONE
+            run.docx_storage_key = storage_key
+            run.result_metadata = metadata
+            run.outputs = {
+                **(run.outputs or {}),
+                "document_id": document.id,
+                "document_version_id": version.id,
+            }
+            run.finished_at = datetime.now(tz=timezone.utc)
+            metrics.observe_pipeline_stage(
+                stage="stamp",
+                status="skipped",
+                seconds=0.0,
+            )
+            outbox = OutboxService(session)
+            await outbox.enqueue(
+                tenant_id=run.tenant_id,
+                event_type="DocumentGenerated",
+                payload={
+                    "document_id": document.id,
+                    "document_version_id": version.id,
+                    "template_id": template.id,
+                    "template_version_id": template_version.id,
+                    "company_id": company.id,
+                    "person_id": person.id if person else None,
+                    "storage_key": storage_key,
+                },
+            )
+            idempotency = IdempotencyService(
+                session=session,
+                tenant_id=str(run.tenant_id),
+                endpoint="documents.generate",
+            )
+            await idempotency.update_document_version_id(
+                key=run.idempotency_key,
+                document_version_id=version.id,
+            )
+            audit = AuditService(session)
+            await audit.log_event(
+                tenant_id=run.tenant_id,
+                action="render_done",
+                object_type="pipeline_run",
+                object_id=run.id,
+                user_id=initiated_by,
+                ip="system",
+                details={
+                    "status": "success",
+                    "document_id": document.id,
+                    "template_id": template.id,
+                },
+            )
+            await session.flush()
+            return str(document.id), str(version.id)
+
+
+def _company_snapshot(company: Company) -> dict[str, Any]:
+    return {
+        "id": company.id,
+        "name": company.name,
+        "inn": company.inn,
+        "kpp": company.kpp,
+        "ogrn": company.ogrn,
+        "activity_type": company.activity_type,
+        "okved_codes": list(company.okved_codes or []),
+        "legal_address": company.legal_address,
+        "actual_address": company.actual_address,
+        "director": company.director,
+        "bank_name": company.bank_name,
+        "bank_bik": company.bank_bik,
+        "bank_account": company.bank_account,
+        "phone_numbers": list(company.phone_numbers or []),
+        "contact_person": company.contact_person,
+        "contact_phone": company.contact_phone,
+        "contact_email": company.contact_email,
+        "email": company.email,
+        "work_types": list(company.work_types or []),
+        "hazardous_factors": list(company.hazardous_factors or []),
+        "is_hazardous_production_facility": company.is_hazardous_production_facility,
+        "has_dangerous_objects": company.has_dangerous_objects,
+    }
+
+
+def _sha256_bytes(data: bytes) -> str:
+    digest = hashlib.sha256()
+    digest.update(data)
+    return digest.hexdigest()
+
+
 
 
 @celery_app.task(
@@ -97,6 +343,7 @@ def register_template_task(
     checksum_hex: str,
     description: str | None = None,
     metadata: dict[str, Any] | None = None,
+    version_metadata: dict[str, Any] | None = None,
 ) -> str:
     """Persist template metadata and register an active version for a tenant."""
 
@@ -108,6 +355,9 @@ def register_template_task(
 
     async def _run() -> str:
         payload = TemplateCreate(name=name, description=description, metadata=metadata or {})
+        if version_metadata is None:
+            raise ValueError("template version metadata is required")
+        template_version_metadata = TemplateVersionMetadata.model_validate(version_metadata)
         checksum = decode_checksum()
         with tenant_context(tenant_slug):
             ensure_tenant_schema(tenant_slug)
@@ -120,6 +370,7 @@ def register_template_task(
                     payload,
                     storage_key=storage_key,
                     checksum=checksum,
+                    version_metadata=template_version_metadata,
                 )
                 return str(version.id)
 
@@ -210,174 +461,8 @@ def generate_document_task(run_id: str, *, tenant_slug: str) -> str:
     """Render a document for the provided pipeline run and persist the result."""
 
     async def _run() -> str:
-        storage = FileStorageService.default()
-        metrics = get_metrics()
-        with tenant_context(tenant_slug):
-            ensure_tenant_schema(tenant_slug)
-            async with session_scope(tenant=tenant_slug) as session:
-                run = await session.get(PipelineRun, run_id)
-                if run is None:
-                    raise ValueError("Pipeline run not found")
-
-                metadata = dict(run.result_metadata or {})
-                existing_document_id = metadata.get("document_id")
-                if run.status is PipelineRunStatus.DONE and existing_document_id:
-                    return str(existing_document_id)
-
-                company_id = metadata.get("company_id")
-                person_id = metadata.get("person_id")
-                initiated_by = metadata.get("initiated_by")
-
-                if not company_id or not initiated_by:
-                    raise ValueError("Pipeline run metadata is incomplete")
-
-                template_version = await session.get(TemplateVersion, run.template_version_id)
-                if template_version is None:
-                    raise ValueError("Template version not found")
-                if not template_version.payload_key:
-                    raise ValueError("Template version payload is missing")
-
-                template = await session.get(Template, run.template_id)
-                if template is None:
-                    raise ValueError("Template not found")
-
-                company = await session.get(Company, company_id)
-                if company is None:
-                    raise ValueError("Company not found")
-
-                person = None
-                if person_id is not None:
-                    person = await session.get(Person, person_id)
-                    if person is None:
-                        raise ValueError("Person not found")
-                    if person.company_id != company.id:
-                        raise ValueError("Person does not belong to company")
-
-                user = await session.get(User, initiated_by)
-                if user is None:
-                    raise ValueError("Initiating user not found")
-
-                run.status = PipelineRunStatus.RUNNING
-                run.started_at = datetime.now(tz=timezone.utc)
-                run.error = None
-                await session.flush()
-
-                context_payload = dict(run.context or {})
-                template_bytes = storage.get(template_version.payload_key)
-                docx_start = perf_counter()
-                try:
-                    rendered = render_docx(template_bytes, context_payload)
-                except Exception:
-                    metrics.observe_pipeline_stage(
-                        stage="generate_docx",
-                        status="error",
-                        seconds=perf_counter() - docx_start,
-                    )
-                    raise
-                metrics.observe_pipeline_stage(
-                    stage="generate_docx",
-                    status="success",
-                    seconds=perf_counter() - docx_start,
-                )
-
-                now = datetime.now(tz=timezone.utc)
-                tenant_prefix = build_dated_prefix(tenant_slug, now=now)
-                document = Document(
-                    tenant_id=run.tenant_id,
-                    company_id=company.id,
-                    person_id=person.id if person else None,
-                    template_id=template.id,
-                    template_version_id=template_version.id,
-                    status=DocumentStatus.DRAFT,
-                    created_by=user.id,
-                )
-                session.add(document)
-                await session.flush()
-
-                storage_key = f"{tenant_prefix}/documents/{document.id}/{uuid4().hex}.docx"
-                upload_start = perf_counter()
-                try:
-                    s3.put_object(data=rendered, mime=DOCX_MIME, key=storage_key)
-                except Exception:
-                    metrics.observe_pipeline_stage(
-                        stage="upload_s3",
-                        status="error",
-                        seconds=perf_counter() - upload_start,
-                    )
-                    raise
-                metrics.observe_pipeline_stage(
-                    stage="upload_s3",
-                    status="success",
-                    seconds=perf_counter() - upload_start,
-                )
-                document.storage_key = storage_key
-
-                version = DocumentVersion(
-                    document=document,
-                    template_version=str(template_version.version),
-                    data_json=context_payload,
-                    file_key=storage_key,
-                    template_version_id=template_version.id,
-                )
-                session.add(version)
-
-                metadata["document_id"] = document.id
-                metadata["document_version_id"] = version.id
-                metadata["docx_storage_key"] = storage_key
-
-                run.status = PipelineRunStatus.DONE
-                run.docx_storage_key = storage_key
-                run.result_metadata = metadata
-                run.outputs = {
-                    **(run.outputs or {}),
-                    "document_id": document.id,
-                    "document_version_id": version.id,
-                }
-                run.finished_at = datetime.now(tz=timezone.utc)
-                metrics.observe_pipeline_stage(
-                    stage="stamp",
-                    status="skipped",
-                    seconds=0.0,
-                )
-                outbox = OutboxService(session)
-                await outbox.enqueue(
-                    tenant_id=run.tenant_id,
-                    event_type="DocumentGenerated",
-                    payload={
-                        "document_id": document.id,
-                        "document_version_id": version.id,
-                        "template_id": template.id,
-                        "template_version_id": template_version.id,
-                        "company_id": company.id,
-                        "person_id": person.id if person else None,
-                        "storage_key": storage_key,
-                    },
-                )
-                idempotency = IdempotencyService(
-                    session=session,
-                    tenant_id=str(run.tenant_id),
-                    endpoint="documents.generate",
-                )
-                await idempotency.update_document_version_id(
-                    key=run.idempotency_key,
-                    document_version_id=version.id,
-                )
-                audit = AuditService(session)
-                await audit.log_event(
-                    tenant_id=run.tenant_id,
-                    action="render_done",
-                    object_type="pipeline_run",
-                    object_id=run.id,
-                    user_id=initiated_by,
-                    ip="system",
-                    details={
-                        "status": "success",
-                        "document_id": document.id,
-                        "template_id": template.id,
-                    },
-                )
-                await session.flush()
-                return document.id
+        document_id, _version_id = await _generate_document_for_run(run_id, tenant_slug)
+        return document_id
 
     metrics = get_metrics()
     queue = celery_app.conf.task_default_queue or "default"
@@ -434,3 +519,107 @@ def generate_document_task(run_id: str, *, tenant_slug: str) -> str:
         seconds=duration,
     )
     return result
+
+
+@celery_app.task(
+    name="app.tasks.generate_document_batch_item",
+    autoretry_for=RETRYABLE_EXCEPTIONS,
+    retry_backoff=settings.celery.retry_backoff_seconds,
+    retry_backoff_max=settings.celery.retry_backoff_max_seconds,
+    retry_jitter=True,
+    retry_kwargs={"max_retries": settings.celery.task_max_retries},
+)
+def generate_document_batch_item_task(batch_id: str, item_id: str, *, tenant_slug: str) -> str:
+    """Process a single batch item."""
+
+    async def _run() -> str:
+        with tenant_context(tenant_slug):
+            ensure_tenant_schema(tenant_slug)
+            async with session_scope(tenant=tenant_slug) as session:
+                batch = await session.get(DocumentBatchRun, batch_id)
+                item = await session.get(DocumentBatchItem, item_id)
+                if batch is None or item is None:
+                    raise ValueError("Batch item not found")
+                if item.status is DocumentBatchItemStatus.SUCCEEDED:
+                    return str(item.document_id or "")
+
+                item.status = DocumentBatchItemStatus.RUNNING
+                item.started_at = datetime.now(tz=timezone.utc)
+                batch.status = DocumentBatchStatus.RUNNING
+                if batch.started_at is None:
+                    batch.started_at = datetime.now(tz=timezone.utc)
+                await session.flush()
+
+                if not item.pipeline_run_id:
+                    raise ValueError("Pipeline run not assigned for batch item")
+
+            document_id, version_id = await _generate_document_for_run(
+                item.pipeline_run_id, tenant_slug
+            )
+
+            async with session_scope(tenant=tenant_slug) as session:
+                batch = await session.get(DocumentBatchRun, batch_id)
+                item = await session.get(DocumentBatchItem, item_id)
+                if batch is None or item is None:
+                    raise ValueError("Batch item not found")
+
+                item.status = DocumentBatchItemStatus.SUCCEEDED
+                item.finished_at = datetime.now(tz=timezone.utc)
+                item.document_id = document_id
+                item.document_version_id = version_id
+                batch.processed += 1
+                batch.succeeded += 1
+                if batch.processed >= batch.total:
+                    batch.status = DocumentBatchStatus.DONE
+                    batch.finished_at = datetime.now(tz=timezone.utc)
+                await session.flush()
+                return document_id
+
+    metrics = get_metrics()
+    queue = celery_app.conf.task_default_queue or "default"
+    task_name = "app.tasks.generate_document_batch_item"
+    metrics.record_celery_enqueue(queue=queue, task=task_name)
+    started = perf_counter()
+    try:
+        result = _run_coroutine(_run())
+    except Exception as exc:  # pragma: no cover - Celery surfaces task error
+        duration = perf_counter() - started
+        metrics.record_celery_execution(
+            queue=queue,
+            task=task_name,
+            status="failed",
+            seconds=duration,
+            error_code=str(exc) or exc.__class__.__name__,
+        )
+        logger.exception("generate_document_batch_item_task failed", exc_info=exc)
+        with tenant_context(tenant_slug):
+            ensure_tenant_schema(tenant_slug)
+            _run_coroutine(_mark_batch_item_failed(batch_id, item_id, str(exc), tenant_slug))
+        raise
+    duration = perf_counter() - started
+    metrics.record_celery_execution(
+        queue=queue,
+        task=task_name,
+        status="succeeded",
+        seconds=duration,
+    )
+    return result
+
+
+async def _mark_batch_item_failed(
+    batch_id: str, item_id: str, error: str, tenant_slug: str
+) -> None:
+    async with session_scope(tenant=tenant_slug) as session:
+        batch = await session.get(DocumentBatchRun, batch_id)
+        item = await session.get(DocumentBatchItem, item_id)
+        if batch is None or item is None:
+            return
+        item.status = DocumentBatchItemStatus.FAILED
+        item.error = error[:255]
+        item.finished_at = datetime.now(tz=timezone.utc)
+        batch.processed += 1
+        batch.failed += 1
+        if batch.processed >= batch.total:
+            batch.status = DocumentBatchStatus.FAILED
+            batch.finished_at = datetime.now(tz=timezone.utc)
+        await session.flush()

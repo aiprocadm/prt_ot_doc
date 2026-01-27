@@ -583,6 +583,11 @@ class TemplateVersion(TenantBaseModel):
     checksum: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     status: Mapped[TemplateVersionStatus] = mapped_column(Enum(TemplateVersionStatus), nullable=False)
     payload_key: Mapped[str] = mapped_column(String(512), nullable=False)
+    document_type: Mapped[str | None] = mapped_column(String(255))
+    required_fields_schema: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    applicability_rules: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    output_types: Mapped[list[str] | None] = mapped_column(JSON)
+    profile: Mapped[dict[str, Any] | None] = mapped_column(JSON)
 
     template: Mapped[Template] = relationship(backref="versions")
 
@@ -739,6 +744,7 @@ class IdempotencyKey(TenantBaseModel):
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "endpoint", "key", name="uq_idempotency_keys"),
+        UniqueConstraint("tenant_id", "key", name="uq_idempotency_key_per_tenant"),
         Index("ix_idempotency_keys_lookup", "tenant_id", "endpoint", "key"),
     )
 

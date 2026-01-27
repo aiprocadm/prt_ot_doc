@@ -116,6 +116,42 @@ class PipelineService:
         self.pdf = pdf_converter or PdfConverter()
         self.metrics = metrics or get_metrics()
 
+    @staticmethod
+    def _init_outputs(run: PipelineRun) -> dict[str, Any]:
+        outputs = dict(run.outputs or {})
+        outputs.setdefault("stages", {})
+        return outputs
+
+    @staticmethod
+    def _stage_completed(outputs: dict[str, Any], stage: str) -> bool:
+        stages = outputs.get("stages") or {}
+        entry = stages.get(stage) or {}
+        return entry.get("status") == "success"
+
+    @staticmethod
+    def _record_stage(
+        outputs: dict[str, Any],
+        *,
+        stage: str,
+        status: str,
+        started_at: datetime | None = None,
+        finished_at: datetime | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        stages = dict(outputs.get("stages") or {})
+        entry = dict(stages.get(stage) or {})
+        if started_at is not None:
+            entry["started_at"] = started_at.isoformat()
+        if finished_at is not None:
+            entry["finished_at"] = finished_at.isoformat()
+        entry["status"] = status
+        if details:
+            entry.setdefault("details", {})
+            entry["details"].update(details)
+        stages[stage] = entry
+        outputs["stages"] = stages
+        return outputs
+
     async def ensure_pending_run(
         self,
         session: AsyncSession,
@@ -295,11 +331,7 @@ class PipelineService:
         metadata = dict(run.result_metadata or {})
         existing_request = metadata.get("request")
 
-        if run.status in {
-            PipelineRunStatus.RUNNING,
-            PipelineRunStatus.DONE,
-            PipelineRunStatus.ERROR,
-        }:
+        if run.status in {PipelineRunStatus.RUNNING, PipelineRunStatus.DONE}:
             return run
 
         if existing_request and existing_request != request_metadata:
@@ -317,7 +349,12 @@ class PipelineService:
             run.started_at = None
             run.finished_at = None
 
+        previous_status = run.status
+        outputs = self._init_outputs(run)
+        run.outputs = outputs
+
         run.status = PipelineRunStatus.RUNNING
+        run.error = None
         run.finished_at = None
         if run.started_at is None:
             run.started_at = datetime.now(tz=timezone.utc)
@@ -340,29 +377,164 @@ class PipelineService:
             self.metrics.observe_pipeline_run(
                 template_id=template.id, status=PipelineRunStatus.RUNNING.value
             )
+            if (
+                previous_status is PipelineRunStatus.ERROR
+                and self._stage_completed(outputs, "store")
+                and outputs.get("docx_storage_key")
+                and outputs.get("pdf_storage_key")
+            ):
+                docx_key = str(outputs["docx_storage_key"])
+                pdf_key = str(outputs["pdf_storage_key"])
+                export_status = (outputs.get("stages") or {}).get("export", {}).get("status")
+                pdf_fallback = export_status == "fallback"
+                pdf_error: str | None = None
+                out_base = normalized_output_basename or "resume"
+                audit_started = datetime.now(tz=timezone.utc)
+                run.status = PipelineRunStatus.DONE
+                run.docx_storage_key = docx_key
+                run.pdf_storage_key = pdf_key
+                outputs["docx"] = docx_key
+                outputs["pdf"] = pdf_key
+                result_metadata = {
+                    "output_basename": out_base,
+                    "replacements_applied": len(replacements_map),
+                    "header_applied": bool(header_text),
+                    "footer_applied": bool(footer_text),
+                    "pdf_fallback": pdf_fallback,
+                }
+                if pdf_error:
+                    result_metadata["pdf_error"] = pdf_error
+                request_meta = metadata.get("request", request_metadata)
+                combined_metadata = {
+                    "request": request_meta,
+                    "result": result_metadata,
+                }
+                combined_metadata.update(result_metadata)
+                run.result_metadata = combined_metadata
+                run.result_s3_key = pdf_key
+                run.finished_at = datetime.now(tz=timezone.utc)
+                outputs = self._record_stage(
+                    outputs,
+                    stage="audit",
+                    status="success",
+                    started_at=audit_started,
+                    finished_at=datetime.now(tz=timezone.utc),
+                )
+                run.outputs = outputs
+                await session.commit()
+                await session.refresh(run)
+                self.metrics.observe_pipeline_run(
+                    template_id=template.id, status=PipelineRunStatus.DONE.value
+                )
+                logger.info(
+                    "Pipeline job finished (resume)",
+                    extra={
+                        "job_id": run.id,
+                        "template_id": template.id,
+                        "template_version_id": template_version.id,
+                        "tenant": tenant.slug,
+                        "pdf_fallback": pdf_fallback,
+                        "duration_seconds": perf_counter() - pipeline_start,
+                    },
+                )
+                return run
+            data_stage_start = datetime.now(tz=timezone.utc)
             if not template_version.payload_key:
                 raise RuntimeError("Template version payload missing")
             src = self.storage.get(template_version.payload_key)
+            outputs = self._record_stage(
+                outputs,
+                stage="data_resolve",
+                status="success",
+                started_at=data_stage_start,
+                finished_at=datetime.now(tz=timezone.utc),
+            )
+            run.outputs = outputs
+            await session.flush()
 
             docx_start = perf_counter()
+            render_started = datetime.now(tz=timezone.utc)
             try:
                 rendered = DocxService.render_template(src, context)
-                docx_bytes = DocxService.mass_replace(rendered, replacements_map)
-                docx_bytes = DocxService.set_headers_footers(
-                    docx_bytes, header_text, footer_text
-                )
             except Exception:
                 self.metrics.observe_pipeline_stage(
                     stage="generate_docx",
                     status="error",
                     seconds=perf_counter() - docx_start,
                 )
+                outputs = self._record_stage(
+                    outputs,
+                    stage="template_render",
+                    status="error",
+                    started_at=render_started,
+                    finished_at=datetime.now(tz=timezone.utc),
+                )
+                run.outputs = outputs
+                await session.flush()
                 raise
             self.metrics.observe_pipeline_stage(
                 stage="generate_docx",
                 status="success",
                 seconds=perf_counter() - docx_start,
             )
+            outputs = self._record_stage(
+                outputs,
+                stage="template_render",
+                status="success",
+                started_at=render_started,
+                finished_at=datetime.now(tz=timezone.utc),
+            )
+            run.outputs = outputs
+            await session.flush()
+
+            replace_started = datetime.now(tz=timezone.utc)
+            if replacements_map:
+                docx_bytes = DocxService.mass_replace(rendered, replacements_map)
+                outputs = self._record_stage(
+                    outputs,
+                    stage="text_replace",
+                    status="success",
+                    started_at=replace_started,
+                    finished_at=datetime.now(tz=timezone.utc),
+                    details={"replacements": len(replacements_map)},
+                )
+            else:
+                docx_bytes = rendered
+                outputs = self._record_stage(
+                    outputs,
+                    stage="text_replace",
+                    status="skipped",
+                    started_at=replace_started,
+                    finished_at=datetime.now(tz=timezone.utc),
+                    details={"reason": "no_replacements"},
+                )
+            run.outputs = outputs
+            await session.flush()
+
+            layout_started = datetime.now(tz=timezone.utc)
+            if header_text or footer_text:
+                docx_bytes = DocxService.set_headers_footers(
+                    docx_bytes, header_text, footer_text
+                )
+                outputs = self._record_stage(
+                    outputs,
+                    stage="layout_apply",
+                    status="success",
+                    started_at=layout_started,
+                    finished_at=datetime.now(tz=timezone.utc),
+                    details={"header": bool(header_text), "footer": bool(footer_text)},
+                )
+            else:
+                outputs = self._record_stage(
+                    outputs,
+                    stage="layout_apply",
+                    status="skipped",
+                    started_at=layout_started,
+                    finished_at=datetime.now(tz=timezone.utc),
+                    details={"reason": "no_header_footer"},
+                )
+            run.outputs = outputs
+            await session.flush()
 
             out_base = normalized_output_basename or str(uuid.uuid4())
             now = datetime.now(tz=timezone.utc)
@@ -390,6 +562,7 @@ class PipelineService:
             pdf_fallback = False
             pdf_error: str | None = None
             pdf_duration = 0.0
+            export_started = datetime.now(tz=timezone.utc)
             with tempfile.TemporaryDirectory() as td:
                 temp_dir = Path(td)
                 p_in = temp_dir / "in.docx"
@@ -460,8 +633,19 @@ class PipelineService:
                         template_id=template.id,
                         seconds=pdf_duration,
                     )
+            outputs = self._record_stage(
+                outputs,
+                stage="export",
+                status="success" if not pdf_fallback else "fallback",
+                started_at=export_started,
+                finished_at=datetime.now(tz=timezone.utc),
+                details={"pdf_fallback": pdf_fallback},
+            )
+            run.outputs = outputs
+            await session.flush()
             pdf_key = f"{prefix}/outputs/{out_base}-{unique_suffix}.pdf"
             upload_start = perf_counter()
+            store_started = datetime.now(tz=timezone.utc)
             try:
                 self.storage.put(
                     pdf_key, pdf_bytes, content_type="application/pdf"
@@ -472,6 +656,15 @@ class PipelineService:
                     status="error",
                     seconds=perf_counter() - upload_start,
                 )
+                outputs = self._record_stage(
+                    outputs,
+                    stage="store",
+                    status="error",
+                    started_at=store_started,
+                    finished_at=datetime.now(tz=timezone.utc),
+                )
+                run.outputs = outputs
+                await session.flush()
                 raise
             self.metrics.observe_pipeline_stage(
                 stage="upload_s3",
@@ -483,11 +676,25 @@ class PipelineService:
                 status="skipped",
                 seconds=0.0,
             )
+            outputs["docx_storage_key"] = docx_key
+            outputs["pdf_storage_key"] = pdf_key
+            outputs = self._record_stage(
+                outputs,
+                stage="store",
+                status="success",
+                started_at=store_started,
+                finished_at=datetime.now(tz=timezone.utc),
+                details={"docx": docx_key, "pdf": pdf_key},
+            )
+            run.outputs = outputs
+            await session.flush()
 
+            audit_started = datetime.now(tz=timezone.utc)
             run.status = PipelineRunStatus.DONE
             run.docx_storage_key = docx_key
             run.pdf_storage_key = pdf_key
-            run.outputs = {"docx": docx_key, "pdf": pdf_key}
+            outputs["docx"] = docx_key
+            outputs["pdf"] = pdf_key
             result_metadata = {
                 "output_basename": out_base,
                 "replacements_applied": len(replacements_map),
@@ -506,6 +713,14 @@ class PipelineService:
             run.result_metadata = combined_metadata
             run.result_s3_key = pdf_key
             run.finished_at = datetime.now(tz=timezone.utc)
+            outputs = self._record_stage(
+                outputs,
+                stage="audit",
+                status="success",
+                started_at=audit_started,
+                finished_at=datetime.now(tz=timezone.utc),
+            )
+            run.outputs = outputs
             await session.commit()
             await session.refresh(run)
             self.metrics.observe_pipeline_run(
@@ -536,7 +751,7 @@ class PipelineService:
             run.status = PipelineRunStatus.ERROR
             run.docx_storage_key = None
             run.pdf_storage_key = None
-            run.outputs = None
+            run.outputs = outputs
             error_label, metrics_code = self._normalize_error_details(exc)
             run.error = error_label
             request_meta = metadata.get("request", request_metadata)

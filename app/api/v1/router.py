@@ -31,7 +31,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_session, get_tenant_record, require_tenant_slug
 from app.api.routes import (
     audit,
     auth,
@@ -79,7 +79,7 @@ from app.repository import (
 )
 from app.schemas.common import PipelineRunRead, TemplatePage
 from app.schemas.person import PersonPage
-from app.schemas.template import TemplateCreate
+from app.schemas.template import TemplateCreate, TemplateVersionMetadata
 from app.services.docx import DocxService
 from app.services.file_storage import FileStorageService
 from app.services.pipeline import PipelineService
@@ -109,24 +109,27 @@ EditorAccess = Annotated[
 ]
 
 router = APIRouter()
+tenant_router = APIRouter(dependencies=[Depends(require_tenant_slug)])
 
 router.include_router(auth.router, prefix="/auth", tags=["auth"])
-router.include_router(audit.router, prefix="/audit", tags=["audit"])
-router.include_router(files.router, prefix="/files", tags=["files"])
-router.include_router(packs.router, prefix="/packs", tags=["packs"])
-router.include_router(incidents.router, tags=["incidents"])
-router.include_router(inspections.router, tags=["inspections"])
-router.include_router(npa.router, tags=["npa"])
-router.include_router(ppe.router, tags=["ppe"])
-router.include_router(journals.router, tags=["journals"])
-router.include_router(risk.router, tags=["risks"])
-router.include_router(sites.router, tags=["sites"])
-router.include_router(documents.router, prefix="/documents", tags=["documents"])
-router.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
-router.include_router(tenants.router)
-router.include_router(companies.router)
-router.include_router(persons.router)
-router.include_router(training.router, tags=["training"])
+tenant_router.include_router(audit.router, prefix="/audit", tags=["audit"])
+tenant_router.include_router(files.router, prefix="/files", tags=["files"])
+tenant_router.include_router(packs.router, prefix="/packs", tags=["packs"])
+tenant_router.include_router(incidents.router, tags=["incidents"])
+tenant_router.include_router(inspections.router, tags=["inspections"])
+tenant_router.include_router(npa.router, tags=["npa"])
+tenant_router.include_router(ppe.router, tags=["ppe"])
+tenant_router.include_router(journals.router, tags=["journals"])
+tenant_router.include_router(risk.router, tags=["risks"])
+tenant_router.include_router(sites.router, tags=["sites"])
+tenant_router.include_router(documents.router, prefix="/documents", tags=["documents"])
+tenant_router.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
+tenant_router.include_router(tenants.router)
+tenant_router.include_router(companies.router)
+tenant_router.include_router(persons.router)
+tenant_router.include_router(training.router, tags=["training"])
+
+router.include_router(tenant_router)
 
 setattr(router, "run_pipeline_task", run_pipeline_task)
 
@@ -272,6 +275,23 @@ def _parse_json_object(value: str | None, *, field: str) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{field} must be a JSON object")
 
+    return data
+
+
+def _parse_json_list(value: str | None, *, field: str) -> list[Any]:
+    if value is None:
+        return []
+    trimmed = value.strip()
+    if not trimmed:
+        return []
+    try:
+        data = json.loads(trimmed)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, f"{field} must be a valid JSON array"
+        ) from exc
+    if not isinstance(data, list):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{field} must be a JSON array")
     return data
 
 
@@ -444,6 +464,11 @@ async def create_template(
     name: Annotated[str, Form()],
     description: str | None = Form(None),
     metadata: str | None = Form(None),
+    document_type: str = Form(...),
+    required_fields_schema: str = Form(...),
+    applicability_rules: str | None = Form(None),
+    output_types: str = Form(...),
+    profile: str | None = Form(None),
 ) -> dict[str, str]:
     """Persist a DOCX template and metadata in the database."""
     storage = FileStorageService.default()
@@ -466,8 +491,29 @@ async def create_template(
             )
 
     metadata_payload = _parse_json_object(metadata, field="metadata")
+    required_schema_payload = _parse_json_object(
+        required_fields_schema, field="required_fields_schema"
+    )
+    applicability_payload = _parse_json_object(
+        applicability_rules, field="applicability_rules"
+    )
+    output_types_payload = _parse_json_list(output_types, field="output_types")
+    profile_payload = _parse_json_object(profile, field="profile")
     checksum = hashlib.sha256(payload_bytes).digest()
     payload = TemplateCreate(name=name, description=description, metadata=metadata_payload)
+    try:
+        version_metadata = TemplateVersionMetadata(
+            document_type=document_type,
+            required_fields_schema=required_schema_payload,
+            applicability_rules=applicability_payload,
+            output_types=output_types_payload,
+            profile=profile_payload,
+        )
+    except ValidationError as exc:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"template version metadata is invalid: {exc.errors()[0]['msg']}",
+        ) from exc
 
     tenant_slug = tenant.slug
 
@@ -499,6 +545,7 @@ async def create_template(
             payload,
             storage_key=key,
             checksum=checksum,
+            version_metadata=version_metadata,
             template_id=template_id,
             tenant_slug=tenant_slug,
         )

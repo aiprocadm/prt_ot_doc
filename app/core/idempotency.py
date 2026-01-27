@@ -12,7 +12,7 @@ from sqlalchemy import select
 
 from app.core.tenant import get_current_tenant
 from app.db.session import AsyncSessionLocal
-from app.models.models import IdempotencyKey
+from app.models.models import IdempotencyKey, IdempotencyStatus
 
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
@@ -98,6 +98,47 @@ async def idempotency_dependency(request: Request) -> Response | None:
 async def store_idempotent_response(request: Request, response: Response) -> None:
     """Placeholder hook for updating stored idempotent responses after processing."""
 
-    # Existing endpoints persist idempotent responses explicitly via the service layer.
-    # The middleware hook remains for future extensions but performs no work now.
+    state = getattr(request, "state", None)
+    idem = getattr(state, "idempotency", None) if state is not None else None
+    if not isinstance(idem, dict):
+        return None
+
+    key = str(idem.get("key") or "").strip()
+    fingerprint = str(idem.get("fingerprint") or "").strip()
+    if not key or not fingerprint:
+        return None
+
+    tenant = get_current_tenant()
+    try:
+        async with AsyncSessionLocal(tenant=tenant.slug) as session:
+            session.info["tenant"] = tenant.slug
+            stmt = (
+                select(IdempotencyKey)
+                .where(
+                    IdempotencyKey.key == key,
+                    IdempotencyKey.method == request.method.upper(),
+                    IdempotencyKey.path == request.url.path,
+                )
+                .limit(1)
+            )
+            record = (await session.execute(stmt)).scalar_one_or_none()
+            if record is None:
+                return None
+            if record.request_hash and record.request_hash != fingerprint:
+                raise HTTPException(status.HTTP_409_CONFLICT, "Idempotency key conflict")
+
+            record.request_hash = fingerprint
+            record.status = IdempotencyStatus.SUCCEEDED
+            record.status_code = int(getattr(response, "status_code", status.HTTP_200_OK))
+            body = None
+            if hasattr(response, "body") and response.body:
+                try:
+                    body = response.body.decode("utf-8")
+                except Exception:
+                    body = None
+            if body:
+                record.response_body = body
+            await session.commit()
+    except Exception:  # pragma: no cover - best-effort persistence
+        logger.debug("app.idempotency.store_failed", exc_info=True)
     return None

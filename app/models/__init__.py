@@ -2,8 +2,13 @@
 
 from app.models.document import (
     Document,
+    DocumentBatchItem,
+    DocumentBatchItemStatus,
+    DocumentBatchRun,
+    DocumentBatchStatus,
     DocumentGenerationJob,
     DocumentJobStatus,
+    DocumentSnapshot,
     DocumentStatus,
     DocumentVersion,
 )
@@ -60,8 +65,13 @@ from app.models.risk import Risk, RiskAssessment, RiskControl, RiskHazard, RiskM
 
 __all__ = [
     "Document",
+    "DocumentBatchItem",
+    "DocumentBatchItemStatus",
+    "DocumentBatchRun",
+    "DocumentBatchStatus",
     "DocumentGenerationJob",
     "DocumentJobStatus",
+    "DocumentSnapshot",
     "DocumentStatus",
     "DocumentVersion",
     "File",

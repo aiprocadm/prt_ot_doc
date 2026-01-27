@@ -22,12 +22,12 @@ async def test_document_status_changes(sessionmaker, data_factory: TestDataFacto
         updated = await service.change_status(
             document_id=document.id,
             tenant_id=str(tenant.id),
-            new_status=DocumentStatus.REVIEW,
+            new_status=DocumentStatus.GENERATED,
             actor_id=None,
             ip="127.0.0.1",
         )
 
-        assert updated.status is DocumentStatus.REVIEW
+        assert updated.status is DocumentStatus.GENERATED
 
 
 @pytest.mark.asyncio
