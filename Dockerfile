@@ -25,7 +25,6 @@ RUN python -m pip install --upgrade pip \
 COPY app ./app
 COPY scripts ./scripts
 COPY sitecustomize.py ./sitecustomize.py
-COPY alembic.ini ./alembic.ini
 
 RUN useradd --create-home --shell /bin/bash appuser \
     && chown -R appuser:appuser /srv/app

@@ -82,7 +82,7 @@ pip install -r requirements-dev.txt
 docker compose up -d db redis minio
 
 # 5. Примените миграции и запустите тесты
-python -m alembic upgrade head
+python -m alembic -c app/migrations/alembic.ini upgrade head
 pytest
 
 # 6. Запустите API
