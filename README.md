@@ -244,6 +244,15 @@ GitHub Actions [`ci.yml`](.github/workflows/ci.yml) выполняет:
 
 ## API-примеры
 ```bash
+# Генерация документа (Idempotency-Key обязателен)
+http --json POST :8000/api/v1/documents/generate \
+  Authorization:"Bearer <token>" \
+  Idempotency-Key:"$(uuidgen)" \
+  template_code=SAFETY_DOC \
+  company_id=123 \
+  person_id=456 \
+  data:='{"employee": "Jane Doe"}'
+
 # Запуск пакета документов
 http --json POST :8000/api/v1/packs/run \
   Authorization:"Bearer <token>" \
@@ -256,6 +265,16 @@ http --json POST :8000/api/v1/packs/run \
 
 # Проверка статуса
 http GET :8000/api/v1/packs/runs/<run_id> Authorization:"Bearer <token>"
+```
+
+### Webhooks (MVP)
+События `DocumentGenerated` и `Signed` доставляются через outbox-воркер в URL-адреса,
+заданные переменными окружения:
+
+```bash
+WEBHOOK_URLS_DOCUMENT_GENERATED="https://example.com/hooks/documents"
+WEBHOOK_URLS_SIGNED="https://example.com/hooks/signed"
+WEBHOOK_TIMEOUT_SECONDS=10
 ```
 
 ## Полезные ссылки

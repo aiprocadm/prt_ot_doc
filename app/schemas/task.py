@@ -13,6 +13,10 @@ class TaskAcceptedResponse(BaseSchema):
 
     task_id: str = Field(..., description="Identifier of the scheduled task")
     status_url: str = Field(..., description="URL to poll task status")
+    document_version_id: str | None = Field(
+        default=None,
+        description="Document version identifier when already available",
+    )
 
 
 class TaskStatusResponse(BaseSchema):
@@ -24,6 +28,9 @@ class TaskStatusResponse(BaseSchema):
     )
     document_id: str | None = Field(
         default=None, description="Rendered document identifier when available"
+    )
+    document_version_id: str | None = Field(
+        default=None, description="Document version identifier when available"
     )
     error: str | None = Field(
         default=None, description="Short error code if the task failed"

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import binascii
+import json
 import logging
 import threading
 from datetime import datetime, timezone
@@ -25,6 +26,8 @@ from app.domains.templating.renderer import render_docx
 from app.models.document import Document, DocumentStatus, DocumentVersion
 from app.models.models import (
     Company,
+    IdempotencyKey,
+    IdempotencyStatus,
     Person,
     PipelineRun,
     PipelineRunStatus,
@@ -38,6 +41,7 @@ from app.schemas.template import TemplateCreate
 from app.services.audit import AuditService
 from app.services.celery_app import celery_app
 from app.services.file_storage import FileStorageService
+from app.services.outbox import OutboxProcessor, OutboxService
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -76,6 +80,40 @@ RETRYABLE_EXCEPTIONS: tuple[type[BaseException], ...] = (
     OSError,
     asyncio.TimeoutError,
 )
+
+
+async def _update_idempotency_record(
+    *,
+    session,
+    tenant_id: str,
+    idempotency_key: str,
+    document_version_id: str,
+) -> None:
+    stmt = select(IdempotencyKey).where(
+        IdempotencyKey.tenant_id == tenant_id,
+        IdempotencyKey.endpoint == "documents.generate",
+        IdempotencyKey.key == idempotency_key,
+    )
+    record = (await session.execute(stmt)).scalar_one_or_none()
+    if record is None or record.status is not IdempotencyStatus.SUCCEEDED:
+        return
+
+    body: dict[str, Any] = {}
+    if record.response_body:
+        try:
+            body = json.loads(record.response_body)
+        except json.JSONDecodeError:
+            body = {}
+    if not body:
+        body = dict((record.result_json or {}).get("body") or {})
+    if body.get("document_version_id") == document_version_id:
+        return
+
+    body["document_version_id"] = document_version_id
+    record.response_body = json.dumps(body, ensure_ascii=False)
+    status_code = record.status_code or 202
+    record.result_json = {"status_code": int(status_code), "body": body}
+    await session.flush()
 
 
 @celery_app.task(
@@ -137,6 +175,53 @@ def register_template_task(
         )
         logger.exception("register_template_task failed", exc_info=exc)
         raise
+    duration = perf_counter() - started
+    metrics.record_celery_execution(
+        queue=queue,
+        task=task_name,
+        status="succeeded",
+        seconds=duration,
+    )
+    return result
+
+
+@celery_app.task(
+    name="outbox.dispatch",
+    autoretry_for=RETRYABLE_EXCEPTIONS,
+    retry_backoff=settings.celery.retry_backoff_seconds,
+    retry_backoff_max=settings.celery.retry_backoff_max_seconds,
+    retry_jitter=True,
+    retry_kwargs={"max_retries": settings.celery.task_max_retries},
+)
+def dispatch_outbox_task(tenant_slug: str) -> int:
+    """Dispatch pending outbox entries for a tenant."""
+
+    async def _run() -> int:
+        with tenant_context(tenant_slug):
+            ensure_tenant_schema(tenant_slug)
+            async with session_scope(tenant=tenant_slug) as session:
+                processor = OutboxProcessor(session)
+                return await processor.process_once()
+
+    metrics = get_metrics()
+    queue = celery_app.conf.task_default_queue or "default"
+    task_name = "outbox.dispatch"
+    metrics.record_celery_enqueue(queue=queue, task=task_name)
+    started = perf_counter()
+    try:
+        result = _run_coroutine(_run())
+    except Exception as exc:  # pragma: no cover - surfaced by Celery in production
+        duration = perf_counter() - started
+        metrics.record_celery_execution(
+            queue=queue,
+            task=task_name,
+            status="failed",
+            seconds=duration,
+            error_code=str(exc) or exc.__class__.__name__,
+        )
+        logger.exception("dispatch_outbox_task failed", exc_info=exc)
+        raise
+
     duration = perf_counter() - started
     metrics.record_celery_execution(
         queue=queue,
@@ -221,6 +306,7 @@ def generate_document_task(run_id: str, *, tenant_slug: str) -> str:
                     company_id=company.id,
                     person_id=person.id if person else None,
                     template_id=template.id,
+                    template_version_id=template_version.id,
                     status=DocumentStatus.DRAFT,
                     created_by=user.id,
                 )
@@ -236,17 +322,43 @@ def generate_document_task(run_id: str, *, tenant_slug: str) -> str:
                     template_version=str(template_version.version),
                     data_json=context_payload,
                     file_key=storage_key,
+                    template_version_id=template_version.id,
                 )
                 session.add(version)
 
                 metadata["document_id"] = document.id
+                metadata["document_version_id"] = version.id
                 metadata["docx_storage_key"] = storage_key
 
                 run.status = PipelineRunStatus.DONE
                 run.docx_storage_key = storage_key
                 run.result_metadata = metadata
-                run.outputs = {**(run.outputs or {}), "document_id": document.id}
+                run.outputs = {
+                    **(run.outputs or {}),
+                    "document_id": document.id,
+                    "document_version_id": version.id,
+                }
                 run.finished_at = datetime.now(tz=timezone.utc)
+                outbox = OutboxService(session)
+                await outbox.enqueue(
+                    tenant_id=run.tenant_id,
+                    event_type="DocumentGenerated",
+                    payload={
+                        "document_id": document.id,
+                        "document_version_id": version.id,
+                        "template_id": template.id,
+                        "template_version_id": template_version.id,
+                        "company_id": company.id,
+                        "person_id": person.id if person else None,
+                        "storage_key": storage_key,
+                    },
+                )
+                await _update_idempotency_record(
+                    session=session,
+                    tenant_id=run.tenant_id,
+                    idempotency_key=run.idempotency_key,
+                    document_version_id=version.id,
+                )
                 audit = AuditService(session)
                 await audit.log_event(
                     tenant_id=run.tenant_id,
