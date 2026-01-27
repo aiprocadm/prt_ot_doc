@@ -15,16 +15,21 @@ interface CompaniesState extends PaginatedState<CompanyDto, CompanyFiltersDto> {
   setFilters: (filters: Partial<CompanyFiltersDto>) => void;
   setPage: (page: number) => void;
   setPageSize: (pageSize: number) => void;
+  reset: () => void;
 }
+
+const createInitialState = () => ({
+  items: [] as CompanyDto[],
+  item: null as CompanyDto | null,
+  filters: {} as CompanyFiltersDto,
+  pagination: defaultPagination(),
+  loading: false,
+  error: null as ApiError | null
+});
 
 export const useCompaniesStore = create<CompaniesState>()(
   immer((set, get) => ({
-    items: [],
-    item: null,
-    filters: {},
-    pagination: defaultPagination(),
-    loading: false,
-    error: null,
+    ...createInitialState(),
     setFilters: (filters) => {
       set((state) => {
         state.filters = { ...state.filters, ...filters };
@@ -40,6 +45,9 @@ export const useCompaniesStore = create<CompaniesState>()(
         state.pagination.page_size = pageSize;
         state.pagination.page = 1;
       });
+    },
+    reset: () => {
+      set(() => createInitialState());
     },
     list: async (params) => {
       set((state) => {

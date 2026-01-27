@@ -2,6 +2,8 @@ import { createWithEqualityFn } from "zustand/traditional";
 import { immer } from "zustand/middleware/immer";
 import { apiClient } from "@/api/client";
 import { tokenStorage } from "@/api/tokenStorage";
+import { tenantStorage } from "@/api/tenantStorage";
+import { resetTenantStores } from "@/stores/reset";
 import type { ApiError } from "@/types/dto/common";
 import type { LoginRequestDto, LoginResponseDto, RefreshResponseDto, UserDto } from "@/types/dto/auth";
 
@@ -123,6 +125,8 @@ export const useAuthStore = createWithEqualityFn<AuthState>()(
     logout: async () => {
       await apiClient.post("/auth/logout").catch(() => undefined);
       tokenStorage.clear();
+      tenantStorage.clear();
+      resetTenantStores();
       set((state) => {
         state.user = null;
         state.isAuthenticated = false;

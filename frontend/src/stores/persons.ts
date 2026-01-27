@@ -20,6 +20,7 @@ interface PersonsState extends PaginatedState<PersonDto, PersonFilters> {
   setFilters: (filters: Partial<PersonFilters>) => void;
   setPage: (page: number) => void;
   setPageSize: (pageSize: number) => void;
+  reset: () => void;
 }
 
 export const usePersonsStore = create<PersonsState>()(
@@ -45,6 +46,16 @@ export const usePersonsStore = create<PersonsState>()(
         state.pagination.page_size = pageSize;
         state.pagination.page = 1;
       });
+    },
+    reset: () => {
+      set(() => ({
+        items: [],
+        item: null,
+        filters: {},
+        pagination: defaultPagination(),
+        loading: false,
+        error: null
+      }));
     },
     list: async (params) => {
       set((state) => {

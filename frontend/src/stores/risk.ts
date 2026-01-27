@@ -13,6 +13,7 @@ interface RiskState {
   listAssessments: (companyId?: string) => Promise<void>;
   createAssessment: (payload: CreateRiskAssessmentDto) => Promise<RiskAssessmentDto>;
   exportAssessment: (id: string) => Promise<Blob>;
+  reset: () => void;
 }
 
 export const useRiskStore = create<RiskState>()(
@@ -75,6 +76,14 @@ export const useRiskStore = create<RiskState>()(
         responseType: "blob"
       });
       return data;
+    },
+    reset: () => {
+      set(() => ({
+        hazards: [],
+        assessments: [],
+        loading: false,
+        error: null
+      }));
     }
   }))
 );
