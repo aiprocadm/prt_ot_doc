@@ -109,3 +109,63 @@ async def test_pack_pipeline_plans_and_renders(
         assert len(documents) == 1
         assert documents[0].docx_storage_key.startswith("docx-")
         assert pipeline.pipeline.calls
+
+
+@pytest.mark.asyncio
+async def test_pack_pipeline_uses_explicit_template_version(
+    sessionmaker, data_factory: TestDataFactory
+) -> None:
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        company: Company = await data_factory.create_company(tenant=tenant, session=session)
+        template = await data_factory.create_template(tenant=tenant, session=session)
+        version_one = TemplateVersion(
+            tenant_id=tenant.id,
+            template_id=template.id,
+            version=1,
+            checksum=b"111",
+            status=TemplateVersionStatus.ACTIVE,
+            payload_key="template-v1.docx",
+        )
+        version_two = TemplateVersion(
+            tenant_id=tenant.id,
+            template_id=template.id,
+            version=2,
+            checksum=b"222",
+            status=TemplateVersionStatus.ACTIVE,
+            payload_key="template-v2.docx",
+        )
+        session.add_all([version_one, version_two])
+
+        pack = DocumentPack(
+            tenant_id=tenant.id,
+            code=PACK_CODE_SITE_ACCESS,
+            name="Versioned pack",
+            module=DocumentPackModule.OT,
+            scenario_type=DocumentPackScenario.DOCUMENT_BATCH,
+        )
+        session.add(pack)
+        await session.flush()
+
+        item = DocumentPackItem(
+            tenant_id=tenant.id,
+            pack_id=pack.id,
+            template_id=template.id,
+            template_version_id=version_one.id,
+            order=1,
+        )
+        session.add(item)
+        await session.commit()
+
+        pipeline = PackGenerationPipeline(pipeline=_StubPipeline())
+        specs = await pipeline.plan_documents(
+            session,
+            pack=pack,
+            company=company,
+            site=None,
+            persons=None,
+            payload={"versioned": True},
+            context_builder=lambda **kwargs: {"company": kwargs["company"].name},
+        )
+
+        assert specs[0].version.id == version_one.id

@@ -33,5 +33,6 @@ async def test_webhook_dispatcher_sends_exported_event(monkeypatch: pytest.Monke
     body = json.loads(requests[0].content.decode("utf-8"))
     assert body["event_type"] == "Exported"
     assert body["tenant_id"] == "tenant-1"
+    assert requests[0].headers.get("Idempotency-Key") == "evt-1"
 
     get_settings.cache_clear()  # type: ignore[attr-defined]

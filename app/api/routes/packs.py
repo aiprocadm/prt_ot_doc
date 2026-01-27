@@ -39,6 +39,7 @@ from app.models.models import (
     PPEIssueStatus,
     Site,
     Template,
+    TemplateVersion,
     Tenant,
     Training,
     TrainingStatus,
@@ -61,7 +62,7 @@ from app.services.audit import AuditService
 from app.services.file_storage import FileStorageService
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 from app.services.pipeline import PipelineService
-from app.services.package_pipeline import build_idempotency_key, get_active_template_version
+from app.services.package_pipeline import build_idempotency_key
 from app.services.tasks import generate_document_task, generate_pack_task
 
 logger = logging.getLogger(__name__)
@@ -328,7 +329,8 @@ async def _get_pack(
     stmt = (
         select(DocumentPack)
         .options(
-            selectinload(DocumentPack.items).selectinload(DocumentPackItem.template)
+            selectinload(DocumentPack.items).selectinload(DocumentPackItem.template),
+            selectinload(DocumentPack.items).selectinload(DocumentPackItem.template_version),
         )
         .where(
             DocumentPack.code == pack_code,
@@ -723,7 +725,24 @@ async def run_pack(
                         status.HTTP_409_CONFLICT,
                         "Pack item is missing a template",
                     )
-                version = await get_active_template_version(session, template)
+                if item.template_version_id is None:
+                    raise HTTPException(
+                        status.HTTP_409_CONFLICT,
+                        "Pack item requires template_version_id",
+                    )
+                version = item.template_version
+                if version is None:
+                    version = await session.get(TemplateVersion, item.template_version_id)
+                if version is None:
+                    raise HTTPException(
+                        status.HTTP_409_CONFLICT,
+                        "Pack item references missing template version",
+                    )
+                if version.template_id != template.id:
+                    raise HTTPException(
+                        status.HTTP_409_CONFLICT,
+                        "Pack item template version mismatch",
+                    )
                 person_id = person.id if person is not None else None
                 run_key = build_idempotency_key(
                     pack=pack,
@@ -939,5 +958,3 @@ async def download_pack_files_archive(
     await session.commit()
 
     return StreamingResponse(BytesIO(payload), media_type="application/zip", headers=headers)
-
-

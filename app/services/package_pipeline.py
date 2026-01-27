@@ -83,7 +83,10 @@ class PackGenerationPipeline:
                 await session.execute(
                     select(DocumentPackItem)
                     .where(DocumentPackItem.pack_id == pack.id)
-                    .options(selectinload(DocumentPackItem.template))
+                    .options(
+                        selectinload(DocumentPackItem.template),
+                        selectinload(DocumentPackItem.template_version),
+                    )
                     .order_by(DocumentPackItem.order.asc())
                 )
             )
@@ -104,7 +107,15 @@ class PackGenerationPipeline:
                 template = item.template
                 if template is None:
                     raise ValueError("Pack item is missing a template")
-                version = await get_active_template_version(session, template)
+                if item.template_version_id is None:
+                    raise ValueError("Pack item requires template_version_id")
+                version = item.template_version
+                if version is None:
+                    version = await session.get(TemplateVersion, item.template_version_id)
+                if version is None:
+                    raise ValueError("Pack item references missing template version")
+                if version.template_id != template.id:
+                    raise ValueError("Pack item template version mismatch")
                 person_id = person.id if person else None
                 run_key = build_idempotency_key(
                     pack=pack,

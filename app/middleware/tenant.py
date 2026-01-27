@@ -39,6 +39,8 @@ class TenantMiddleware(BaseHTTPMiddleware):
             header_slug = request.headers.get(header_name)
             if header_slug:
                 break
+        if not header_slug:
+            tenant_required(None)
         token_slug: str | None = None
         auth_header = request.headers.get("authorization") or ""
         if auth_header.lower().startswith("bearer "):
@@ -55,18 +57,11 @@ class TenantMiddleware(BaseHTTPMiddleware):
                 token_slug = raw_slug or None
 
         normalized_header = header_slug.strip() if header_slug else None
-        if (
-            normalized_header
-            and token_slug
-            and normalized_header.casefold() != token_slug.casefold()
-        ):
+        if token_slug and normalized_header.casefold() != token_slug.casefold():
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN,
                 "Tenant header does not match token scope",
             )
 
-        effective_slug = token_slug or normalized_header
-        if not effective_slug:
-            tenant_required(None)
-        tenant_required(effective_slug)
+        tenant_required(normalized_header)
         return await call_next(request)

@@ -64,6 +64,9 @@ class WebhookDispatcher:
             "payload": payload,
         }
         headers = {"X-Correlation-ID": trace_id}
+        event_id = payload.get("event_id")
+        if event_id:
+            headers["Idempotency-Key"] = str(event_id)
 
         async with httpx.AsyncClient(
             timeout=self.settings.webhook_timeout_seconds
