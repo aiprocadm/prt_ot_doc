@@ -18,7 +18,6 @@ RUN poetry config virtualenvs.create false \
 COPY app /app/app
 COPY scripts /app/scripts
 COPY sitecustomize.py /app/sitecustomize.py
-COPY alembic.ini /app/alembic.ini
 
 ENV PYTHONPATH=/app
 

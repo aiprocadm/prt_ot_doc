@@ -1,4 +1,4 @@
-.PHONY: install lint format test contract run build clean up down
+.PHONY: install lint format test contract run build clean up down migrate
 
 LINT_PATHS=app tests scripts
 
@@ -21,6 +21,9 @@ contract:
 
 run:
 	poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+migrate:
+	poetry run alembic -c app/migrations/alembic.ini upgrade head
 
 build:
 	poetry build
