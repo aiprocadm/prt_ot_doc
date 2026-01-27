@@ -164,8 +164,33 @@ class TemplateCreate(BaseSchema):
         return self
 
 
+class TemplateVersionMetadata(BaseSchema):
+    document_type: str = Field(..., min_length=1, max_length=255)
+    required_fields_schema: dict[str, Any] = Field(default_factory=dict)
+    applicability_rules: dict[str, Any] = Field(default_factory=dict)
+    output_types: list[str] = Field(default_factory=list, min_length=1)
+    profile: dict[str, Any] = Field(default_factory=dict)
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("output_types")
+    @classmethod
+    def _normalize_output_types(cls, value: list[str]) -> list[str]:
+        cleaned = [item.strip() for item in value if isinstance(item, str)]
+        cleaned = [item for item in cleaned if item]
+        if not cleaned:
+            raise ValueError("output_types must contain at least one non-empty value")
+        return cleaned
+
+    @model_validator(mode="after")
+    def _validate_required_schema(self) -> "TemplateVersionMetadata":
+        if not isinstance(self.required_fields_schema, dict) or not self.required_fields_schema:
+            raise ValueError("required_fields_schema must be a non-empty JSON object")
+        return self
+
+
 __all__ = [
     "TemplateCreate",
+    "TemplateVersionMetadata",
     "MAX_METADATA_STRING_LENGTH",
     "MAX_METADATA_TOP_LEVEL_KEYS",
     "MAX_METADATA_DEPTH",

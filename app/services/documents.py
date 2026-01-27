@@ -15,10 +15,13 @@ from app.services.outbox import OutboxService
 _ALLOWED_STATUS_TRANSITIONS: Mapping[
     DocumentStatus, frozenset[DocumentStatus]
 ] = {
-    DocumentStatus.DRAFT: frozenset({DocumentStatus.REVIEW}),
-    DocumentStatus.REVIEW: frozenset({DocumentStatus.SIGNED}),
-    DocumentStatus.SIGNED: frozenset({DocumentStatus.ARCHIVED}),
+    DocumentStatus.DRAFT: frozenset({DocumentStatus.GENERATED, DocumentStatus.REVOKED}),
+    DocumentStatus.GENERATED: frozenset({DocumentStatus.REVIEW, DocumentStatus.REVOKED}),
+    DocumentStatus.REVIEW: frozenset({DocumentStatus.APPROVED, DocumentStatus.REVOKED}),
+    DocumentStatus.APPROVED: frozenset({DocumentStatus.SIGNED, DocumentStatus.REVOKED}),
+    DocumentStatus.SIGNED: frozenset({DocumentStatus.ARCHIVED, DocumentStatus.REVOKED}),
     DocumentStatus.ARCHIVED: frozenset(),
+    DocumentStatus.REVOKED: frozenset(),
 }
 
 

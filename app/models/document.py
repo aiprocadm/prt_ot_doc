@@ -22,9 +22,12 @@ class DocumentStatus(str, enum.Enum):
     """Lifecycle states of a document."""
 
     DRAFT = "draft"
+    GENERATED = "generated"
     REVIEW = "review"
+    APPROVED = "approved"
     SIGNED = "signed"
     ARCHIVED = "archived"
+    REVOKED = "revoked"
 
 
 class Document(TenantBaseModel):
@@ -125,6 +128,9 @@ class DocumentVersion(TenantBaseModel):
     document_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("document.id", ondelete="CASCADE"), nullable=False
     )
+    snapshot_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("document_snapshot.id", ondelete="SET NULL"), nullable=True
+    )
     template_version: Mapped[str] = mapped_column(Text, nullable=False)
     data_json: Mapped[dict] = mapped_column(JSONBType, nullable=False, default=dict)
     file_key: Mapped[str] = mapped_column(Text, nullable=False)
@@ -147,6 +153,9 @@ class DocumentVersion(TenantBaseModel):
     )
 
     document = relationship("Document", back_populates="versions")
+    snapshot: Mapped["DocumentSnapshot | None"] = relationship(
+        "DocumentSnapshot", back_populates="document_version", lazy="selectin"
+    )
     file: Mapped[File | None] = relationship(File, foreign_keys=[file_id], lazy="selectin")
     template_version_ref: Mapped[TemplateVersion | None] = relationship(
         TemplateVersion, foreign_keys=[template_version_id], lazy="selectin"
@@ -166,6 +175,52 @@ class DocumentVersion(TenantBaseModel):
         if document is not None:
             self.tenant_id = document.tenant_id
         return document
+
+
+class DocumentSnapshot(TenantBaseModel):
+    """Immutable snapshot of document context at generation time."""
+
+    __tablename__ = "document_snapshot"
+
+    document_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("document.id", ondelete="CASCADE"), nullable=False
+    )
+    template_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("template.id", ondelete="RESTRICT"), nullable=False
+    )
+    template_version_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("templateversion.id", ondelete="SET NULL"), nullable=True
+    )
+    template_code: Mapped[str] = mapped_column(String(255), nullable=False)
+    template_version: Mapped[int | None] = mapped_column(Integer)
+    company_snapshot: Mapped[dict[str, Any]] = mapped_column(JSONBType, nullable=False, default=dict)
+    source_refs: Mapped[dict[str, Any]] = mapped_column(JSONBType, nullable=False, default=dict)
+    compliance_refs: Mapped[dict[str, Any]] = mapped_column(JSONBType, nullable=False, default=dict)
+    render_log: Mapped[dict[str, Any]] = mapped_column(JSONBType, nullable=False, default=dict)
+    integrity_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    generated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(tz=timezone.utc),
+        nullable=False,
+    )
+    created_by: Mapped[str] = mapped_column(
+        String(36), ForeignKey("user.id", ondelete="RESTRICT"), nullable=False
+    )
+
+    document = relationship("Document", backref="snapshots")
+    document_version: Mapped[DocumentVersion | None] = relationship(
+        "DocumentVersion", back_populates="snapshot", uselist=False
+    )
+    template = relationship(Template)
+    template_version_ref: Mapped[TemplateVersion | None] = relationship(
+        TemplateVersion, foreign_keys=[template_version_id]
+    )
+    creator = relationship(User, foreign_keys=[created_by])
+
+    __table_args__ = (
+        Index("ix_document_snapshot_document", "document_id"),
+        Index("ix_document_snapshot_template", "tenant_id", "template_id"),
+    )
 
 
 class DocumentJobStatus(str, enum.Enum):
@@ -240,3 +295,103 @@ class DocumentGenerationJob(TenantBaseModel):
         Index("ix_document_job_pack_id", "tenant_id", "pack_id"),
     )
 
+
+class DocumentBatchStatus(str, enum.Enum):
+    """Batch processing status."""
+
+    PENDING = "pending"
+    RUNNING = "running"
+    DONE = "done"
+    FAILED = "failed"
+
+
+class DocumentBatchItemStatus(str, enum.Enum):
+    """Per-row batch status."""
+
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
+class DocumentBatchRun(TenantBaseModel):
+    """Tracks batch document generation."""
+
+    __tablename__ = "document_batch_run"
+
+    template_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("template.id", ondelete="RESTRICT"), nullable=False
+    )
+    template_version_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("templateversion.id", ondelete="RESTRICT"), nullable=False
+    )
+    company_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("company.id", ondelete="RESTRICT"), nullable=False
+    )
+    naming_pattern: Mapped[str | None] = mapped_column(String(255))
+    status: Mapped[DocumentBatchStatus] = mapped_column(
+        Enum(DocumentBatchStatus, name="documentbatchstatus"),
+        nullable=False,
+        default=DocumentBatchStatus.PENDING,
+    )
+    total: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    processed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    succeeded: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    failed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_report: Mapped[dict[str, Any]] = mapped_column(JSONBType, nullable=False, default=dict)
+    created_by: Mapped[str] = mapped_column(
+        String(36), ForeignKey("user.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(tz=timezone.utc),
+        nullable=False,
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    template = relationship(Template)
+    template_version = relationship(TemplateVersion)
+    company = relationship(Company)
+    creator = relationship(User, foreign_keys=[created_by])
+    items = relationship(
+        "DocumentBatchItem",
+        back_populates="batch",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        Index("ix_document_batch_run_tenant_created", "tenant_id", "created_at"),
+    )
+
+
+class DocumentBatchItem(TenantBaseModel):
+    """Row-level batch item."""
+
+    __tablename__ = "document_batch_item"
+
+    batch_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("document_batch_run.id", ondelete="CASCADE"), nullable=False
+    )
+    row_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONBType, nullable=False, default=dict)
+    person_id: Mapped[str | None] = mapped_column(String(36))
+    output_name: Mapped[str | None] = mapped_column(String(255))
+    pipeline_run_id: Mapped[str | None] = mapped_column(String(36))
+    document_id: Mapped[str | None] = mapped_column(String(36))
+    document_version_id: Mapped[str | None] = mapped_column(String(36))
+    status: Mapped[DocumentBatchItemStatus] = mapped_column(
+        Enum(DocumentBatchItemStatus, name="documentbatchitemstatus"),
+        nullable=False,
+        default=DocumentBatchItemStatus.PENDING,
+    )
+    error: Mapped[str | None] = mapped_column(String(255))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    batch = relationship("DocumentBatchRun", back_populates="items")
+
+    __table_args__ = (
+        Index("ix_document_batch_item_batch", "batch_id"),
+        Index("ix_document_batch_item_status", "tenant_id", "status"),
+    )

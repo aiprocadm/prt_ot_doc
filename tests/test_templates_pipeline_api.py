@@ -26,6 +26,16 @@ def _build_template() -> bytes:
     return buffer.getvalue()
 
 
+def _version_metadata_form() -> dict[str, str]:
+    return {
+        "document_type": "safety_doc",
+        "required_fields_schema": '{"type":"object","properties":{"name":{"type":"string"}}}',
+        "applicability_rules": "{}",
+        "output_types": '["docx","pdf"]',
+        "profile": "{}",
+    }
+
+
 @pytest.mark.anyio
 async def test_template_creation_and_pipeline_execution(
     async_client: AsyncClient, make_auth_headers
@@ -37,7 +47,12 @@ async def test_template_creation_and_pipeline_execution(
     response = await async_client.post(
         "/api/v1/templates",
         files={"file": ("greeting.docx", template_bytes, DOCX_CONTENT_TYPE)},
-        data={"name": "Greeting", "description": "Simple", "metadata": "{}"},
+        data={
+            "name": "Greeting",
+            "description": "Simple",
+            "metadata": "{}",
+            **_version_metadata_form(),
+        },
         headers=headers,
     )
     assert response.status_code == 201
@@ -114,7 +129,7 @@ async def test_template_metadata_validation(
     response = await async_client.post(
         "/api/v1/templates",
         files={"file": ("greeting.docx", template_bytes, DOCX_CONTENT_TYPE)},
-        data={"name": "Greeting", "metadata": "not-json"},
+        data={"name": "Greeting", "metadata": "not-json", **_version_metadata_form()},
         headers=headers,
     )
 
@@ -134,7 +149,7 @@ async def test_pipeline_rejects_non_string_replacements(
     create = await async_client.post(
         "/api/v1/templates",
         files={"file": ("greeting.docx", template_bytes, DOCX_CONTENT_TYPE)},
-        data={"name": "Greeting", "metadata": "{}"},
+        data={"name": "Greeting", "metadata": "{}", **_version_metadata_form()},
         headers=headers,
     )
     template_id = create.json()["id"]
@@ -168,7 +183,7 @@ async def test_template_creation_rejects_large_metadata(
     response = await async_client.post(
         "/api/v1/templates",
         files={"file": ("greeting.docx", template_bytes, DOCX_CONTENT_TYPE)},
-        data={"name": "Greeting", "metadata": large_metadata},
+        data={"name": "Greeting", "metadata": large_metadata, **_version_metadata_form()},
         headers=headers,
     )
 
@@ -182,6 +197,23 @@ async def test_template_creation_rejects_large_metadata(
 
 
 @pytest.mark.anyio
+async def test_template_creation_rejects_missing_version_metadata(
+    async_client: AsyncClient, make_auth_headers
+) -> None:
+    headers = {**dict(async_client.headers), **await make_auth_headers()}
+    template_bytes = _build_template()
+
+    response = await async_client.post(
+        "/api/v1/templates",
+        files={"file": ("greeting.docx", template_bytes, DOCX_CONTENT_TYPE)},
+        data={"name": "Greeting", "metadata": "{}"},
+        headers=headers,
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.anyio
 async def test_pipeline_rejects_context_value_exceeding_limit(
     async_client: AsyncClient, make_auth_headers
 ) -> None:
@@ -190,7 +222,7 @@ async def test_pipeline_rejects_context_value_exceeding_limit(
     create = await async_client.post(
         "/api/v1/templates",
         files={"file": ("greeting.docx", template_bytes, DOCX_CONTENT_TYPE)},
-        data={"name": "Greeting", "metadata": "{}"},
+        data={"name": "Greeting", "metadata": "{}", **_version_metadata_form()},
         headers=headers,
     )
     template_id = create.json()["id"]
@@ -225,7 +257,7 @@ async def test_pipeline_async_enqueue(
     create = await async_client.post(
         "/api/v1/templates",
         files={"file": ("greeting.docx", template_bytes, DOCX_CONTENT_TYPE)},
-        data={"name": "Greeting", "metadata": "{}"},
+        data={"name": "Greeting", "metadata": "{}", **_version_metadata_form()},
         headers=headers,
     )
     template_id = create.json()["id"]

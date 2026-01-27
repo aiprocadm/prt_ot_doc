@@ -95,13 +95,13 @@ async def test_document_status_transition_success(
 
     response = await async_client.patch(
         f"/api/v1/documents/{seeded['document_id']}/status",
-        json={"to": DocumentStatus.REVIEW.value},
+        json={"to": DocumentStatus.GENERATED.value},
         headers={"Authorization": f"Bearer {access_token}"},
     )
 
     assert response.status_code == 200
     body = response.json()
-    assert body["status"] == DocumentStatus.REVIEW.value
+    assert body["status"] == DocumentStatus.GENERATED.value
     assert body["id"] == seeded["document_id"]
 
     async with sessionmaker() as session:
@@ -110,7 +110,7 @@ async def test_document_status_transition_success(
                 select(Document).where(Document.id == seeded["document_id"])
             )
         ).scalar_one()
-        assert stored_document.status is DocumentStatus.REVIEW
+        assert stored_document.status is DocumentStatus.GENERATED
 
         audit_entries = (
             await session.execute(
@@ -128,13 +128,13 @@ async def test_document_status_transition_success(
         assert entry.object_id == seeded["document_id"]
         assert entry.details == {
             "from": DocumentStatus.DRAFT.value,
-            "to": DocumentStatus.REVIEW.value,
+            "to": DocumentStatus.GENERATED.value,
             "outcome": "success",
         }
         assert entry.changed_fields == {
             "status": {
                 "from": DocumentStatus.DRAFT.value,
-                "to": DocumentStatus.REVIEW.value,
+                "to": DocumentStatus.GENERATED.value,
             }
         }
 
@@ -219,7 +219,7 @@ async def test_document_status_transition_forbidden_for_unprivileged_role(
 
     response = await async_client.patch(
         f"/api/v1/documents/{seeded['document_id']}/status",
-        json={"to": DocumentStatus.REVIEW.value},
+        json={"to": DocumentStatus.GENERATED.value},
         headers={"Authorization": f"Bearer {access_token}"},
     )
 
@@ -247,7 +247,9 @@ async def test_document_status_sequential_flow(
     )
 
     for target_status in (
+        DocumentStatus.GENERATED,
         DocumentStatus.REVIEW,
+        DocumentStatus.APPROVED,
         DocumentStatus.SIGNED,
         DocumentStatus.ARCHIVED,
     ):
@@ -279,7 +281,9 @@ async def test_document_status_sequential_flow(
         ).scalars().all()
 
         assert [entry.details["to"] for entry in entries] == [
+            DocumentStatus.GENERATED.value,
             DocumentStatus.REVIEW.value,
+            DocumentStatus.APPROVED.value,
             DocumentStatus.SIGNED.value,
             DocumentStatus.ARCHIVED.value,
         ]

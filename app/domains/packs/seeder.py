@@ -16,7 +16,7 @@ from app.domains.packs.definitions import (
 )
 from app.models.models import DocumentPack, DocumentPackItem, Template
 from app.repository import create_template
-from app.schemas.template import TemplateCreate
+from app.schemas.template import TemplateCreate, TemplateVersionMetadata
 from app.services.file_storage import FileStorageService
 
 __all__ = ["ensure_default_packs", "ensure_pack_by_code"]
@@ -46,6 +46,13 @@ async def _ensure_template(
             "category": template_spec.category,
         },
     )
+    version_metadata = TemplateVersionMetadata(
+        document_type=template_spec.category or template_spec.code,
+        required_fields_schema={"type": "object", "properties": {}, "additionalProperties": True},
+        applicability_rules={},
+        output_types=["docx", "pdf"],
+        profile={},
+    )
 
     version = await create_template(
         session,
@@ -53,6 +60,7 @@ async def _ensure_template(
         payload,
         storage_key=key,
         checksum=checksum,
+        version_metadata=version_metadata,
         tenant_slug=tenant_slug,
     )
     template = await session.get(Template, version.template_id)
@@ -196,4 +204,3 @@ async def ensure_pack_by_code(
     )
     pack = (await session.execute(stmt)).scalar_one()
     return pack
-

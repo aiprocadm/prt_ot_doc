@@ -43,6 +43,14 @@ async def get_tenant_record(
     return tenant
 
 
+async def require_tenant_slug(
+    tenant_slug: str | None = Header(
+        default=None, validation_alias=AliasChoices(TENANT_HEADER, "x-tenant-slug")
+    )
+) -> None:
+    tenant_required(tenant_slug)
+
+
 async def get_session(tenant: Tenant = Depends(get_tenant_record)) -> AsyncIterator[AsyncSession]:
     """Provide an async database session scoped to the current tenant."""
 

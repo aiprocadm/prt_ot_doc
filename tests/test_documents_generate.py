@@ -11,8 +11,15 @@ from sqlalchemy import select
 
 from app.core.config import get_settings
 from app.domains.files import s3
-from app.models.document import Document as DocumentModel, DocumentVersion
-from app.models.models import TemplateVersion
+from app.models.document import (
+    Document as DocumentModel,
+    DocumentBatchItem,
+    DocumentBatchRun,
+    DocumentBatchStatus,
+    DocumentSnapshot,
+    DocumentVersion,
+)
+from app.models.models import Company, TemplateVersion
 from app.models.models import PipelineRun, PipelineRunStatus, RoleEnum
 from app.tasks import celery_app
 import app.tasks as task_module
@@ -124,7 +131,15 @@ async def test_document_generation_flow(
     response = await async_client.post(
         "/api/v1/templates",
         files={"file": ("greeting.docx", template_bytes, DOCX_CONTENT_TYPE)},
-        data={"name": "Greeting", "metadata": "{}"},
+        data={
+            "name": "Greeting",
+            "metadata": "{}",
+            "document_type": "greeting",
+            "required_fields_schema": '{"type":"object","properties":{"name":{"type":"string"}}}',
+            "applicability_rules": "{}",
+            "output_types": '["docx","pdf"]',
+            "profile": "{}",
+        },
         headers=auth_headers,
     )
     assert response.status_code == 201
@@ -186,6 +201,20 @@ async def test_document_generation_flow(
     assert run.result_metadata.get("payload_hash")
     assert run.context == payload["data"]
 
+    async with sessionmaker() as session:
+        snapshot = await session.get(DocumentSnapshot, version.snapshot_id)
+        assert snapshot is not None
+        assert snapshot.company_snapshot["name"] == "ACME Corp"
+
+        company = await session.get(Company, company_id)
+        assert company is not None
+        company.name = "ACME Updated"
+        await session.commit()
+
+        refreshed = await session.get(DocumentSnapshot, version.snapshot_id)
+        assert refreshed is not None
+        assert refreshed.company_snapshot["name"] == "ACME Corp"
+
     metadata = s3.head_object(key=document.storage_key)
     assert metadata is not None
     assert metadata["size"] > 0
@@ -238,6 +267,86 @@ async def test_document_generation_flow(
     )
     assert third.status_code == 202, third.text
     third_body = third.json()
+
+
+@pytest.mark.asyncio()
+@pytest.mark.usefixtures("aws")
+async def test_document_batch_generation_csv(
+    async_client: AsyncClient,
+    sessionmaker,
+    data_factory: TestDataFactory,
+) -> None:
+    template_bytes = _build_template_bytes()
+
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        user = await data_factory.create_user(
+            tenant=tenant,
+            email="batch@example.com",
+            role=RoleEnum.ADMIN,
+            password="secret123",
+            session=session,
+        )
+        company = await data_factory.create_company(
+            tenant=tenant,
+            name="Batch Corp",
+            session=session,
+        )
+        await session.commit()
+        company_id = company.id
+
+    login = await async_client.post(
+        "/api/v1/auth/login",
+        json={"email": "batch@example.com", "password": "secret123"},
+    )
+    token = login.json()["access_token"]
+    auth_headers = {"Authorization": f"Bearer {token}"}
+
+    response = await async_client.post(
+        "/api/v1/templates",
+        files={"file": ("greeting.docx", template_bytes, DOCX_CONTENT_TYPE)},
+        data={
+            "name": "Batch Greeting",
+            "metadata": "{}",
+            "document_type": "batch",
+            "required_fields_schema": '{"type":"object","properties":{"name":{"type":"string"}}}',
+            "applicability_rules": "{}",
+            "output_types": '["docx","pdf"]',
+            "profile": "{}",
+        },
+        headers=auth_headers,
+    )
+    template_payload = response.json()
+    template_version_id = template_payload["version_id"]
+
+    async with sessionmaker() as session:
+        template_version = await session.get(TemplateVersion, template_version_id)
+        assert template_version is not None
+        template_version_number = template_version.version
+
+    csv_payload = "name\nAlice\nBob\n".encode("utf-8")
+    batch_response = await async_client.post(
+        "/api/v1/documents/batch",
+        files={"file": ("batch.csv", csv_payload, "text/csv")},
+        data={
+            "template_code": "Batch Greeting",
+            "template_version": template_version_number,
+            "company_id": company_id,
+            "naming_pattern": "batch-{row_index}-{name}",
+        },
+        headers=auth_headers,
+    )
+
+    assert batch_response.status_code == 202, batch_response.text
+    batch_payload = batch_response.json()
+    batch_id = batch_payload["id"]
+
+    async with sessionmaker() as session:
+        batch = await session.get(DocumentBatchRun, batch_id)
+        assert batch is not None
+        assert batch.status in {DocumentBatchStatus.RUNNING, DocumentBatchStatus.DONE}
+        items = (await session.execute(select(DocumentBatchItem))).scalars().all()
+        assert len(items) == 2
     assert third_body["task_id"] != body["task_id"]
     assert third_body["status_url"].startswith("/api/v1/documents/tasks/")
 

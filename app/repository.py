@@ -16,7 +16,7 @@ from app.models.models import (
     Tenant,
 )
 from app.schemas.company import CompanyCreate
-from app.schemas.template import TemplateCreate
+from app.schemas.template import TemplateCreate, TemplateVersionMetadata
 
 
 def _assert_tenant_scope(session: AsyncSession, tenant_id: str | None) -> str:
@@ -231,6 +231,7 @@ async def create_template(
     *,
     storage_key: str,
     checksum: bytes,
+    version_metadata: TemplateVersionMetadata | None = None,
     template_id: str | None = None,
     tenant_slug: str | None = None,
 ) -> TemplateVersion:
@@ -258,6 +259,9 @@ async def create_template(
         template, version = existing
         _ensure_idempotent_match(template, version, effective_payload, checksum=checksum)
         return version
+
+    if version_metadata is None:
+        raise ValueError("template version metadata is required to publish template")
 
     async def _create() -> TemplateVersion:
         template = Template(
@@ -294,6 +298,11 @@ async def create_template(
             checksum=checksum,
             status=TemplateVersionStatus.ACTIVE,
             payload_key=storage_key,
+            document_type=version_metadata.document_type,
+            required_fields_schema=version_metadata.required_fields_schema,
+            applicability_rules=version_metadata.applicability_rules,
+            output_types=version_metadata.output_types,
+            profile=version_metadata.profile,
         )
         session.add(version)
         await session.flush()

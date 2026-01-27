@@ -18,7 +18,7 @@ from app.repository import (
     list_templates,
 )
 from app.schemas.company import CompanyCreate
-from app.schemas.template import TemplateCreate
+from app.schemas.template import TemplateCreate, TemplateVersionMetadata
 
 
 def _prepare_sqlite_metadata() -> None:
@@ -162,6 +162,13 @@ async def test_list_templates_scoped_by_tenant() -> None:
     engine, session_factory, tenant_a, tenant_b = await _setup_engine()
 
     payload = TemplateCreate(name="Safety Plan", description=None, metadata={})
+    version_metadata = TemplateVersionMetadata(
+        document_type="safety_plan",
+        required_fields_schema={"type": "object", "properties": {}},
+        applicability_rules={},
+        output_types=["docx", "pdf"],
+        profile={},
+    )
     checksum = b"checksum"
 
     async with session_factory() as session:
@@ -171,6 +178,7 @@ async def test_list_templates_scoped_by_tenant() -> None:
             payload,
             storage_key=f"{tenant_a.slug}/templates/template.docx",
             checksum=checksum,
+            version_metadata=version_metadata,
         )
         await session.commit()
 
@@ -191,6 +199,13 @@ async def test_get_template_helpers_and_idempotency() -> None:
     engine, session_factory, tenant_a, _ = await _setup_engine()
 
     payload = TemplateCreate(name="Safety Plan", description="Plan", metadata={"key": "value"})
+    version_metadata = TemplateVersionMetadata(
+        document_type="safety_plan",
+        required_fields_schema={"type": "object", "properties": {}},
+        applicability_rules={},
+        output_types=["docx", "pdf"],
+        profile={},
+    )
     checksum = b"checksum"
 
     async with session_factory() as session:
@@ -200,6 +215,7 @@ async def test_get_template_helpers_and_idempotency() -> None:
             payload,
             storage_key=f"{tenant_a.slug}/templates/template.docx",
             checksum=checksum,
+            version_metadata=version_metadata,
         )
         await session.commit()
 
@@ -220,6 +236,7 @@ async def test_get_template_helpers_and_idempotency() -> None:
             payload,
             storage_key=f"{tenant_a.slug}/templates/template.docx",
             checksum=checksum,
+            version_metadata=version_metadata,
         )
         assert reused.id == version.id
 
@@ -230,6 +247,7 @@ async def test_get_template_helpers_and_idempotency() -> None:
                 TemplateCreate(name=payload.name, description="Other", metadata={}),
                 storage_key=f"{tenant_a.slug}/templates/another.docx",
                 checksum=b"other",
+                version_metadata=version_metadata,
             )
 
     await engine.dispose()

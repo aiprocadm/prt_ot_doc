@@ -2,11 +2,23 @@
 
 from __future__ import annotations
 
+import csv
 import hashlib
 import json
+from io import StringIO
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    Form,
+    Header,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select
@@ -17,6 +29,12 @@ from app.core.payload_constraints import PayloadConstraintError, enforce_mapping
 from app.core.idempotency import compute_request_hash
 from app.core.tracing import get_trace_id
 from app.core.security import AccessContext, abac, rbac
+from app.models.document import (
+    DocumentBatchItem,
+    DocumentBatchItemStatus,
+    DocumentBatchRun,
+    DocumentBatchStatus,
+)
 from app.models.models import (
     Company,
     Person,
@@ -28,7 +46,7 @@ from app.models.models import (
     Tenant,
     User,
 )
-from app.schemas.document import DocumentRead, DocumentStatusUpdate
+from app.schemas.document import DocumentBatchRunRead, DocumentRead, DocumentStatusUpdate
 from app.schemas.task import TaskAcceptedResponse, TaskStatusResponse
 from app.services.audit import AuditService
 from app.services.documents import (
@@ -37,7 +55,7 @@ from app.services.documents import (
     InvalidStatusTransitionError,
 )
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
-from app.tasks import generate_document_task
+from app.tasks import generate_document_task, generate_document_batch_item_task
 
 router = APIRouter()
 
@@ -93,6 +111,46 @@ def _hash_payload(payload: dict[str, Any]) -> str:
     serialized = _serialize_payload(payload)
     digest = hashlib.sha256(serialized.encode("utf-8"))
     return digest.hexdigest()
+
+
+def _parse_csv_payload(file: UploadFile) -> list[dict[str, Any]]:
+    raw = file.file.read()
+    content = raw.decode("utf-8")
+    reader = csv.DictReader(StringIO(content))
+    return [dict(row) for row in reader if any(row.values())]
+
+
+def _parse_xlsx_payload(file: UploadFile) -> list[dict[str, Any]]:
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    raw = file.file.read()
+    workbook = load_workbook(BytesIO(raw), read_only=True)
+    sheet = workbook.active
+    rows = list(sheet.iter_rows(values_only=True))
+    if not rows:
+        return []
+    headers = [str(cell).strip() if cell is not None else "" for cell in rows[0]]
+    data_rows = []
+    for row in rows[1:]:
+        entry = {
+            header: value for header, value in zip(headers, row) if header
+        }
+        if any(value is not None and value != "" for value in entry.values()):
+            data_rows.append(entry)
+    return data_rows
+
+
+def _apply_naming_pattern(pattern: str | None, row: dict[str, Any], row_index: int) -> str | None:
+    if not pattern:
+        return None
+
+    class _SafeDict(dict):
+        def __missing__(self, key: str) -> str:
+            return ""
+
+    return pattern.format_map(_SafeDict(row_index=row_index, **row))
 
 def _extract_document_version_id(run: PipelineRun) -> str | None:
     metadata = run.result_metadata or {}
@@ -378,6 +436,174 @@ async def generate_document(
 
     response.status_code = status.HTTP_202_ACCEPTED
     return result
+
+
+@router.post(
+    "/batch",
+    response_model=DocumentBatchRunRead,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def generate_document_batch(
+    file: UploadFile,
+    request: Request,
+    template_code: str | None = Form(default=None),
+    template_id: str | None = Form(default=None),
+    template_version: int | None = Form(default=None),
+    company_id: str | None = Form(default=None),
+    naming_pattern: str | None = Form(default=None),
+    session: AsyncSession = SessionDep,
+    tenant: Tenant = TenantDep,
+    access: AccessContext = AccessDep,
+) -> DocumentBatchRunRead:
+    if template_version is None or not company_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "template_version and company_id required")
+
+    filename = (file.filename or "").lower()
+    if filename.endswith(".csv"):
+        rows = _parse_csv_payload(file)
+    elif filename.endswith(".xlsx"):
+        rows = _parse_xlsx_payload(file)
+    else:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Unsupported batch file type")
+
+    if not rows:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Batch file is empty")
+
+    template, template_version_row = await _fetch_template(
+        session,
+        tenant,
+        template_code=template_code,
+        template_id=template_id,
+        template_version=template_version,
+    )
+    company = await _ensure_company(session, tenant, company_id)
+    if access.role in {"client_admin", "client_user"}:
+        access.ensure_company_access(company.id, action="generate documents")
+
+    current_user: User = access.user
+    batch = DocumentBatchRun(
+        tenant_id=tenant.id,
+        template_id=template.id,
+        template_version_id=template_version_row.id,
+        company_id=company.id,
+        naming_pattern=naming_pattern,
+        status=DocumentBatchStatus.RUNNING,
+        total=len(rows),
+        processed=0,
+        succeeded=0,
+        failed=0,
+        created_by=current_user.id,
+        started_at=datetime.now(tz=timezone.utc),
+    )
+    session.add(batch)
+    await session.flush()
+
+    items: list[DocumentBatchItem] = []
+    for index, row in enumerate(rows, start=1):
+        row_payload = {k: v for k, v in row.items() if k not in {"person_id"}}
+        try:
+            enforce_mapping_constraints(row_payload, field="data")
+        except PayloadConstraintError as exc:
+            raise HTTPException(exc.status_code, str(exc)) from exc
+        person_id = row.get("person_id") if isinstance(row, dict) else None
+        person = await _ensure_person(session, person_id, company)
+        output_name = _apply_naming_pattern(naming_pattern, row_payload, index)
+        payload_hash = _hash_payload(row_payload)
+        run = PipelineRun(
+            tenant_id=tenant.id,
+            template_id=template.id,
+            template_version_id=template_version_row.id,
+            status=PipelineRunStatus.QUEUED,
+            context=dict(row_payload),
+            idempotency_key=f"batch-{batch.id}-{index}",
+            result_metadata={
+                "company_id": company.id,
+                "person_id": person.id if person else None,
+                "initiated_by": current_user.id,
+                "payload_hash": payload_hash,
+                "batch_id": batch.id,
+                "row_index": index,
+                "output_name": output_name,
+            },
+        )
+        session.add(run)
+        item = DocumentBatchItem(
+            tenant_id=tenant.id,
+            batch_id=batch.id,
+            row_index=index,
+            payload=row_payload,
+            person_id=person.id if person else None,
+            output_name=output_name,
+            pipeline_run_id=run.id,
+            status=DocumentBatchItemStatus.PENDING,
+        )
+        session.add(item)
+        items.append(item)
+
+    await session.commit()
+
+    trace_id = get_trace_id()
+    for item in items:
+        generate_document_batch_item_task.apply_async(
+            args=[batch.id, item.id],
+            kwargs={"tenant_slug": tenant.slug},
+            headers={"trace_id": trace_id},
+        )
+
+    return DocumentBatchRunRead(
+        id=batch.id,
+        status=batch.status.value,
+        total=batch.total,
+        processed=batch.processed,
+        succeeded=batch.succeeded,
+        failed=batch.failed,
+        items=[
+            {
+                "id": item.id,
+                "row_index": item.row_index,
+                "status": item.status.value,
+                "output_name": item.output_name,
+            }
+            for item in items
+        ],
+    )
+
+
+@router.get(
+    "/batch/{batch_id}",
+    response_model=DocumentBatchRunRead,
+)
+async def get_document_batch(
+    batch_id: str,
+    session: AsyncSession = SessionDep,
+    tenant: Tenant = TenantDep,
+    access: AccessContext = AccessDep,
+) -> DocumentBatchRunRead:
+    access.ensure_tenant_access(tenant.id, action="read document batch")
+    batch = await session.get(DocumentBatchRun, batch_id)
+    if batch is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Batch not found")
+    items = batch.items
+    return DocumentBatchRunRead(
+        id=batch.id,
+        status=batch.status.value,
+        total=batch.total,
+        processed=batch.processed,
+        succeeded=batch.succeeded,
+        failed=batch.failed,
+        items=[
+            {
+                "id": item.id,
+                "row_index": item.row_index,
+                "status": item.status.value,
+                "error": item.error,
+                "document_id": item.document_id,
+                "document_version_id": item.document_version_id,
+                "output_name": item.output_name,
+            }
+            for item in items
+        ],
+    )
 
 
 @router.get("/tasks/{task_id}", response_model=TaskStatusResponse)
