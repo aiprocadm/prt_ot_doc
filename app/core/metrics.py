@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import enum
 import inspect
 import logging
 import math
@@ -29,7 +30,41 @@ __all__ = [
     "reset_metrics",
     "render_metrics",
     "sanitize_label",
+    "PipelineStage",
+    "PipelineType",
+    "StageResult",
 ]
+
+
+class PipelineType(str, enum.Enum):
+    DOCUMENT = "document"
+    RISK = "risk"
+    PPE = "ppe"
+    TRAINING = "training"
+    UNKNOWN = "unknown"
+
+
+class PipelineStage(str, enum.Enum):
+    REQUEST_RECEIVED = "request_received"
+    VALIDATION_COMPLETED = "validation_completed"
+    DATA_PERSISTED = "data_persisted"
+    DOCX_GENERATED = "docx_generated"
+    PDF_CONVERTED = "pdf_converted"
+    STAMPED_QR_APPLIED = "stamped_qr_applied"
+    STORED_S3 = "stored_s3"
+    OUTBOX_ENQUEUED = "outbox_enqueued"
+    WEBHOOK_DISPATCHED = "webhook_dispatched"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    UNKNOWN = "unknown"
+
+
+class StageResult(str, enum.Enum):
+    STARTED = "started"
+    SUCCESS = "success"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+    FALLBACK = "fallback"
 
 
 @dataclass(slots=True)
@@ -38,12 +73,19 @@ class Metrics:
 
     registry: CollectorRegistry
     pipeline_runs_total: Counter
-    pipeline_stage_total: Counter
+    pipeline_requests_total: Counter
     pipeline_stage_duration_seconds: Histogram
+    pipeline_total_duration_seconds: Histogram
     pipeline_pdf_duration_seconds: Histogram
     pdf_libreoffice_duration_seconds: Histogram
     pdf_libreoffice_attempts_total: Counter
     pipeline_errors_total: Counter
+    pipeline_inflight: Gauge
+    documents_generated_total: Counter
+    documents_signed_total: Counter
+    risks_assessed_total: Counter
+    ppe_issued_total: Counter
+    trainings_completed_total: Counter
     celery_tasks_enqueued_total: Counter
     celery_task_duration_seconds: Histogram
     celery_tasks_in_progress: Gauge
@@ -71,14 +113,60 @@ class Metrics:
     def observe_pipeline_run(self, *, template_id: str, status: str) -> None:
         self.pipeline_runs_total.labels(template_id=template_id, status=status).inc()
 
-    def observe_pipeline_stage(self, *, stage: str, status: str, seconds: float) -> None:
+    def record_pipeline_stage_start(
+        self,
+        *,
+        pipeline: PipelineType,
+        stage: PipelineStage,
+    ) -> None:
+        pipeline_label = _normalize_pipeline(pipeline)
+        stage_label = _normalize_stage(stage)
+        self.pipeline_requests_total.labels(
+            pipeline=pipeline_label, stage=stage_label, result=StageResult.STARTED.value
+        ).inc()
+
+    def record_pipeline_stage_end(
+        self,
+        *,
+        pipeline: PipelineType,
+        stage: PipelineStage,
+        result: StageResult,
+        seconds: float,
+        error_class: str | None = None,
+    ) -> None:
         safe_seconds = seconds if seconds >= 0 else 0.0
-        normalized_stage = sanitize_label(stage)
-        normalized_status = sanitize_label(status)
-        self.pipeline_stage_total.labels(stage=normalized_stage, status=normalized_status).inc()
+        pipeline_label = _normalize_pipeline(pipeline)
+        stage_label = _normalize_stage(stage)
+        self.pipeline_requests_total.labels(
+            pipeline=pipeline_label, stage=stage_label, result=result.value
+        ).inc()
         self.pipeline_stage_duration_seconds.labels(
-            stage=normalized_stage, status=normalized_status
+            pipeline=pipeline_label, stage=stage_label
         ).observe(safe_seconds)
+        if error_class:
+            self.pipeline_errors_total.labels(
+                pipeline=pipeline_label,
+                stage=stage_label,
+                error_class=sanitize_label(error_class),
+            ).inc()
+
+    def observe_pipeline_total_duration(
+        self,
+        *,
+        pipeline: PipelineType,
+        seconds: float,
+    ) -> None:
+        safe_seconds = seconds if seconds >= 0 else 0.0
+        pipeline_label = _normalize_pipeline(pipeline)
+        self.pipeline_total_duration_seconds.labels(pipeline=pipeline_label).observe(safe_seconds)
+
+    def increment_pipeline_inflight(self, *, pipeline: PipelineType) -> None:
+        pipeline_label = _normalize_pipeline(pipeline)
+        self.pipeline_inflight.labels(pipeline=pipeline_label).inc()
+
+    def decrement_pipeline_inflight(self, *, pipeline: PipelineType) -> None:
+        pipeline_label = _normalize_pipeline(pipeline)
+        self.pipeline_inflight.labels(pipeline=pipeline_label).dec()
 
     def observe_pdf_duration(self, *, template_id: str, seconds: float) -> None:
         if seconds < 0:
@@ -93,9 +181,35 @@ class Metrics:
         )
         self.pdf_libreoffice_attempts_total.labels(status=normalized_status).inc()
 
-    def record_error(self, *, code: str) -> None:
-        normalized = sanitize_label(code)
-        self.pipeline_errors_total.labels(code=normalized).inc()
+    def record_pipeline_error(
+        self,
+        *,
+        pipeline: PipelineType,
+        stage: PipelineStage,
+        error_class: str,
+    ) -> None:
+        pipeline_label = _normalize_pipeline(pipeline)
+        stage_label = _normalize_stage(stage)
+        self.pipeline_errors_total.labels(
+            pipeline=pipeline_label,
+            stage=stage_label,
+            error_class=sanitize_label(error_class),
+        ).inc()
+
+    def record_document_generated(self) -> None:
+        self.documents_generated_total.inc()
+
+    def record_document_signed(self) -> None:
+        self.documents_signed_total.inc()
+
+    def record_risk_assessed(self) -> None:
+        self.risks_assessed_total.inc()
+
+    def record_ppe_issued(self) -> None:
+        self.ppe_issued_total.inc()
+
+    def record_training_completed(self) -> None:
+        self.trainings_completed_total.inc()
 
     def record_celery_enqueue(self, *, queue: str, task: str) -> None:
         self.celery_tasks_enqueued_total.labels(queue=queue, task=task).inc()
@@ -115,7 +229,11 @@ class Metrics:
         self.celery_task_duration_seconds.labels(queue=queue, task=task, status=status).observe(seconds)
         self.celery_tasks_in_progress.labels(queue=queue, task=task).dec()
         if error_code:
-            self.record_error(code=error_code)
+            self.pipeline_errors_total.labels(
+                pipeline=PipelineType.UNKNOWN.value,
+                stage=PipelineStage.UNKNOWN.value,
+                error_class=sanitize_label(error_code),
+            ).inc()
         percentile = self._celery_latency_tracker.observe(
             key=(queue, task, status), value=seconds
         )
@@ -247,16 +365,23 @@ def _build_metrics() -> Metrics:
         labelnames=("template_id", "status"),
         registry=registry,
     )
-    pipeline_stage_total = Counter(
-        "pipeline_stage_total",
-        "Pipeline stage executions grouped by stage and status.",
-        labelnames=("stage", "status"),
+    pipeline_requests_total = Counter(
+        "pipeline_requests_total",
+        "Pipeline stage requests grouped by pipeline, stage, and result.",
+        labelnames=("pipeline", "stage", "result"),
         registry=registry,
     )
     pipeline_stage_duration_seconds = Histogram(
         "pipeline_stage_duration_seconds",
-        "Pipeline stage duration in seconds grouped by stage and status.",
-        labelnames=("stage", "status"),
+        "Pipeline stage duration in seconds grouped by pipeline and stage.",
+        labelnames=("pipeline", "stage"),
+        registry=registry,
+        buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30),
+    )
+    pipeline_total_duration_seconds = Histogram(
+        "pipeline_total_duration_seconds",
+        "Total pipeline duration in seconds grouped by pipeline.",
+        labelnames=("pipeline",),
         registry=registry,
         buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30),
     )
@@ -282,8 +407,39 @@ def _build_metrics() -> Metrics:
     )
     pipeline_errors_total = Counter(
         "pipeline_errors_total",
-        "Pipeline error occurrences grouped by sanitized error code.",
-        labelnames=("code",),
+        "Pipeline error occurrences grouped by pipeline, stage, and class.",
+        labelnames=("pipeline", "stage", "error_class"),
+        registry=registry,
+    )
+    pipeline_inflight = Gauge(
+        "pipeline_inflight",
+        "Pipelines currently executing grouped by pipeline.",
+        labelnames=("pipeline",),
+        registry=registry,
+    )
+    documents_generated_total = Counter(
+        "documents_generated_total",
+        "Total documents generated.",
+        registry=registry,
+    )
+    documents_signed_total = Counter(
+        "documents_signed_total",
+        "Total documents signed.",
+        registry=registry,
+    )
+    risks_assessed_total = Counter(
+        "risks_assessed_total",
+        "Total risks assessed.",
+        registry=registry,
+    )
+    ppe_issued_total = Counter(
+        "ppe_issued_total",
+        "Total PPE issued.",
+        registry=registry,
+    )
+    trainings_completed_total = Counter(
+        "trainings_completed_total",
+        "Total trainings completed.",
         registry=registry,
     )
     celery_tasks_enqueued_total = Counter(
@@ -434,12 +590,19 @@ def _build_metrics() -> Metrics:
     return Metrics(
         registry=registry,
         pipeline_runs_total=pipeline_runs_total,
-        pipeline_stage_total=pipeline_stage_total,
+        pipeline_requests_total=pipeline_requests_total,
         pipeline_stage_duration_seconds=pipeline_stage_duration_seconds,
+        pipeline_total_duration_seconds=pipeline_total_duration_seconds,
         pipeline_pdf_duration_seconds=pipeline_pdf_duration_seconds,
         pdf_libreoffice_duration_seconds=pdf_libreoffice_duration_seconds,
         pdf_libreoffice_attempts_total=pdf_libreoffice_attempts_total,
         pipeline_errors_total=pipeline_errors_total,
+        pipeline_inflight=pipeline_inflight,
+        documents_generated_total=documents_generated_total,
+        documents_signed_total=documents_signed_total,
+        risks_assessed_total=risks_assessed_total,
+        ppe_issued_total=ppe_issued_total,
+        trainings_completed_total=trainings_completed_total,
         celery_tasks_enqueued_total=celery_tasks_enqueued_total,
         celery_task_duration_seconds=celery_task_duration_seconds,
         celery_tasks_in_progress=celery_tasks_in_progress,
@@ -555,6 +718,26 @@ def sanitize_label(value: str) -> str:
         collapsed = collapsed.replace("__", "_")
     collapsed = collapsed.strip("_")
     return collapsed or "unknown_error"
+
+
+_PIPELINE_VALUES: Final[set[str]] = {item.value for item in PipelineType}
+_STAGE_VALUES: Final[set[str]] = {item.value for item in PipelineStage}
+
+
+def _normalize_pipeline(pipeline: PipelineType | str) -> str:
+    if isinstance(pipeline, PipelineType):
+        return pipeline.value
+    if pipeline in _PIPELINE_VALUES:
+        return pipeline
+    return PipelineType.UNKNOWN.value
+
+
+def _normalize_stage(stage: PipelineStage | str) -> str:
+    if isinstance(stage, PipelineStage):
+        return stage.value
+    if stage in _STAGE_VALUES:
+        return stage
+    return PipelineStage.UNKNOWN.value
 
 
 logger = logging.getLogger(__name__)

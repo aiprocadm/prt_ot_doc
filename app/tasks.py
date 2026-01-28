@@ -17,7 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import get_settings
-from app.core.metrics import get_metrics
+from app.core.metrics import PipelineStage, PipelineType, StageResult, get_metrics
 from app.core.payload_constraints import normalize_output_basename
 from app.core.tenant import tenant_context
 from app.db import ensure_tenant_schema, session_scope
@@ -95,207 +95,262 @@ RETRYABLE_EXCEPTIONS: tuple[type[BaseException], ...] = (
 async def _generate_document_for_run(run_id: str, tenant_slug: str) -> tuple[str, str]:
     storage = FileStorageService.default()
     metrics = get_metrics()
+    pipeline_start = perf_counter()
+    metrics.increment_pipeline_inflight(pipeline=PipelineType.DOCUMENT)
     with tenant_context(tenant_slug):
         ensure_tenant_schema(tenant_slug)
         async with session_scope(tenant=tenant_slug) as session:
-            run = await session.get(PipelineRun, run_id)
-            if run is None:
-                raise ValueError("Pipeline run not found")
-
-            metadata = dict(run.result_metadata or {})
-            existing_document_id = metadata.get("document_id")
-            existing_version_id = metadata.get("document_version_id")
-            if run.status is PipelineRunStatus.DONE and existing_document_id:
-                return str(existing_document_id), str(existing_version_id or "")
-
-            company_id = metadata.get("company_id")
-            person_id = metadata.get("person_id")
-            initiated_by = metadata.get("initiated_by")
-
-            if not company_id or not initiated_by:
-                raise ValueError("Pipeline run metadata is incomplete")
-
-            template_version = await session.get(TemplateVersion, run.template_version_id)
-            if template_version is None:
-                raise ValueError("Template version not found")
-            if not template_version.payload_key:
-                raise ValueError("Template version payload is missing")
-
-            template = await session.get(Template, run.template_id)
-            if template is None:
-                raise ValueError("Template not found")
-
-            company = await session.get(Company, company_id)
-            if company is None:
-                raise ValueError("Company not found")
-
-            person = None
-            if person_id is not None:
-                person = await session.get(Person, person_id)
-                if person is None:
-                    raise ValueError("Person not found")
-                if person.company_id != company.id:
-                    raise ValueError("Person does not belong to company")
-
-            user = await session.get(User, initiated_by)
-            if user is None:
-                raise ValueError("Initiating user not found")
-
-            run.status = PipelineRunStatus.RUNNING
-            run.started_at = datetime.now(tz=timezone.utc)
-            run.error = None
-            await session.flush()
-
-            context_payload = dict(run.context or {})
-            template_bytes = storage.get(template_version.payload_key)
-            docx_start = perf_counter()
             try:
-                rendered = render_docx(template_bytes, context_payload)
-            except Exception:
-                metrics.observe_pipeline_stage(
-                    stage="generate_docx",
-                    status="error",
+                run = await session.get(PipelineRun, run_id)
+                if run is None:
+                    raise ValueError("Pipeline run not found")
+
+                metadata = dict(run.result_metadata or {})
+                existing_document_id = metadata.get("document_id")
+                existing_version_id = metadata.get("document_version_id")
+                if run.status is PipelineRunStatus.DONE and existing_document_id:
+                    return str(existing_document_id), str(existing_version_id or "")
+
+                company_id = metadata.get("company_id")
+                person_id = metadata.get("person_id")
+                initiated_by = metadata.get("initiated_by")
+
+                if not company_id or not initiated_by:
+                    raise ValueError("Pipeline run metadata is incomplete")
+
+                template_version = await session.get(TemplateVersion, run.template_version_id)
+                if template_version is None:
+                    raise ValueError("Template version not found")
+                if not template_version.payload_key:
+                    raise ValueError("Template version payload is missing")
+
+                template = await session.get(Template, run.template_id)
+                if template is None:
+                    raise ValueError("Template not found")
+
+                company = await session.get(Company, company_id)
+                if company is None:
+                    raise ValueError("Company not found")
+
+                person = None
+                if person_id is not None:
+                    person = await session.get(Person, person_id)
+                    if person is None:
+                        raise ValueError("Person not found")
+                    if person.company_id != company.id:
+                        raise ValueError("Person does not belong to company")
+
+                user = await session.get(User, initiated_by)
+                if user is None:
+                    raise ValueError("Initiating user not found")
+
+                run.status = PipelineRunStatus.RUNNING
+                run.started_at = datetime.now(tz=timezone.utc)
+                run.error = None
+                await session.flush()
+
+                context_payload = dict(run.context or {})
+                template_bytes = storage.get(template_version.payload_key)
+                docx_start = perf_counter()
+                metrics.record_pipeline_stage_start(
+                    pipeline=PipelineType.DOCUMENT,
+                    stage=PipelineStage.DOCX_GENERATED,
+                )
+                try:
+                    rendered = render_docx(template_bytes, context_payload)
+                except Exception as exc:
+                    metrics.record_pipeline_stage_end(
+                        pipeline=PipelineType.DOCUMENT,
+                        stage=PipelineStage.DOCX_GENERATED,
+                        result=StageResult.FAILED,
+                        seconds=perf_counter() - docx_start,
+                        error_class=exc.__class__.__name__,
+                    )
+                    raise
+                metrics.record_pipeline_stage_end(
+                    pipeline=PipelineType.DOCUMENT,
+                    stage=PipelineStage.DOCX_GENERATED,
+                    result=StageResult.SUCCESS,
                     seconds=perf_counter() - docx_start,
                 )
-                raise
-            metrics.observe_pipeline_stage(
-                stage="generate_docx",
-                status="success",
-                seconds=perf_counter() - docx_start,
-            )
 
-            now = datetime.now(tz=timezone.utc)
-            tenant_prefix = build_dated_prefix(tenant_slug, now=now)
-            document = Document(
-                tenant_id=run.tenant_id,
-                company_id=company.id,
-                person_id=person.id if person else None,
-                template_id=template.id,
-                template_version_id=template_version.id,
-                status=DocumentStatus.GENERATED,
-                created_by=user.id,
-            )
-            session.add(document)
-            await session.flush()
+                now = datetime.now(tz=timezone.utc)
+                tenant_prefix = build_dated_prefix(tenant_slug, now=now)
+                document = Document(
+                    tenant_id=run.tenant_id,
+                    company_id=company.id,
+                    person_id=person.id if person else None,
+                    template_id=template.id,
+                    template_version_id=template_version.id,
+                    status=DocumentStatus.GENERATED,
+                    created_by=user.id,
+                )
+                session.add(document)
+                await session.flush()
 
-            output_name = normalize_output_basename(metadata.get("output_name"))
-            filename = output_name or uuid4().hex
-            storage_key = f"{tenant_prefix}/documents/{document.id}/{filename}.docx"
-            upload_start = perf_counter()
-            try:
-                s3.put_object(data=rendered, mime=DOCX_MIME, key=storage_key)
-            except Exception:
-                metrics.observe_pipeline_stage(
-                    stage="upload_s3",
-                    status="error",
+                output_name = normalize_output_basename(metadata.get("output_name"))
+                filename = output_name or uuid4().hex
+                storage_key = f"{tenant_prefix}/documents/{document.id}/{filename}.docx"
+                upload_start = perf_counter()
+                metrics.record_pipeline_stage_start(
+                    pipeline=PipelineType.DOCUMENT,
+                    stage=PipelineStage.STORED_S3,
+                )
+                try:
+                    s3.put_object(data=rendered, mime=DOCX_MIME, key=storage_key)
+                except Exception as exc:
+                    metrics.record_pipeline_stage_end(
+                        pipeline=PipelineType.DOCUMENT,
+                        stage=PipelineStage.STORED_S3,
+                        result=StageResult.FAILED,
+                        seconds=perf_counter() - upload_start,
+                        error_class=exc.__class__.__name__,
+                    )
+                    raise
+                metrics.record_pipeline_stage_end(
+                    pipeline=PipelineType.DOCUMENT,
+                    stage=PipelineStage.STORED_S3,
+                    result=StageResult.SUCCESS,
                     seconds=perf_counter() - upload_start,
                 )
-                raise
-            metrics.observe_pipeline_stage(
-                stage="upload_s3",
-                status="success",
-                seconds=perf_counter() - upload_start,
-            )
-            document.storage_key = storage_key
+                document.storage_key = storage_key
 
-            integrity_hash = _sha256_bytes(rendered)
-            snapshot = DocumentSnapshot(
-                tenant_id=run.tenant_id,
-                document_id=document.id,
-                template_id=template.id,
-                template_version_id=template_version.id,
-                template_code=template.name,
-                template_version=template_version.version,
-                company_snapshot=_company_snapshot(company),
-                source_refs={
-                    "company_id": company.id,
-                    "person_id": person.id if person else None,
-                    "pipeline_run_id": run.id,
-                },
-                compliance_refs={},
-                render_log={
-                    "pipeline_run_id": run.id,
-                    "status": "generated",
-                    "generated_at": datetime.now(tz=timezone.utc).isoformat(),
-                },
-                integrity_hash=integrity_hash,
-                generated_at=datetime.now(tz=timezone.utc),
-                created_by=user.id,
-            )
-            session.add(snapshot)
-            await session.flush()
+                integrity_hash = _sha256_bytes(rendered)
+                snapshot = DocumentSnapshot(
+                    tenant_id=run.tenant_id,
+                    document_id=document.id,
+                    template_id=template.id,
+                    template_version_id=template_version.id,
+                    template_code=template.name,
+                    template_version=template_version.version,
+                    company_snapshot=_company_snapshot(company),
+                    source_refs={
+                        "company_id": company.id,
+                        "person_id": person.id if person else None,
+                        "pipeline_run_id": run.id,
+                    },
+                    compliance_refs={},
+                    render_log={
+                        "pipeline_run_id": run.id,
+                        "status": "generated",
+                        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+                    },
+                    integrity_hash=integrity_hash,
+                    generated_at=datetime.now(tz=timezone.utc),
+                    created_by=user.id,
+                )
+                session.add(snapshot)
+                await session.flush()
 
-            version = DocumentVersion(
-                document=document,
-                template_version=str(template_version.version),
-                data_json=context_payload,
-                file_key=storage_key,
-                template_version_id=template_version.id,
-                snapshot_id=snapshot.id,
-            )
-            session.add(version)
+                version = DocumentVersion(
+                    document=document,
+                    template_version=str(template_version.version),
+                    data_json=context_payload,
+                    file_key=storage_key,
+                    template_version_id=template_version.id,
+                    snapshot_id=snapshot.id,
+                )
+                session.add(version)
 
-            metadata["document_id"] = document.id
-            metadata["document_version_id"] = version.id
-            metadata["docx_storage_key"] = storage_key
+                metadata["document_id"] = document.id
+                metadata["document_version_id"] = version.id
+                metadata["docx_storage_key"] = storage_key
 
-            run.status = PipelineRunStatus.DONE
-            run.docx_storage_key = storage_key
-            run.result_metadata = metadata
-            run.outputs = {
-                **(run.outputs or {}),
-                "document_id": document.id,
-                "document_version_id": version.id,
-            }
-            run.finished_at = datetime.now(tz=timezone.utc)
-            metrics.observe_pipeline_stage(
-                stage="stamp",
-                status="skipped",
-                seconds=0.0,
-            )
-            outbox = OutboxService(session)
-            await outbox.enqueue(
-                tenant_id=run.tenant_id,
-                event_type=EventType.DOCUMENT_CREATED.value,
-                payload={
-                    "tenant_id": str(run.tenant_id),
-                    "actor_id": str(user.id),
-                    "occurred_at": document.created_at,
+                run.status = PipelineRunStatus.DONE
+                run.docx_storage_key = storage_key
+                run.result_metadata = metadata
+                run.outputs = {
+                    **(run.outputs or {}),
                     "document_id": document.id,
                     "document_version_id": version.id,
-                    "template_id": template.id,
-                    "template_version_id": template_version.id,
-                    "company_id": company.id,
-                    "person_id": person.id if person else None,
-                    "storage_key": storage_key,
-                    "status": document.status.value,
-                },
-            )
-            idempotency = IdempotencyService(
-                session=session,
-                tenant_id=str(run.tenant_id),
-                endpoint="documents.generate",
-            )
-            await idempotency.update_document_version_id(
-                key=run.idempotency_key,
-                document_version_id=version.id,
-            )
-            audit = AuditService(session)
-            await audit.log_event(
-                tenant_id=run.tenant_id,
-                action="render_done",
-                object_type="pipeline_run",
-                object_id=run.id,
-                user_id=initiated_by,
-                ip="system",
-                details={
-                    "status": "success",
-                    "document_id": document.id,
-                    "template_id": template.id,
-                },
-            )
-            await session.flush()
-            return str(document.id), str(version.id)
+                }
+                run.finished_at = datetime.now(tz=timezone.utc)
+                metrics.record_pipeline_stage_start(
+                    pipeline=PipelineType.DOCUMENT,
+                    stage=PipelineStage.STAMPED_QR_APPLIED,
+                )
+                metrics.record_pipeline_stage_end(
+                    pipeline=PipelineType.DOCUMENT,
+                    stage=PipelineStage.STAMPED_QR_APPLIED,
+                    result=StageResult.SKIPPED,
+                    seconds=0.0,
+                )
+                outbox = OutboxService(session)
+                await outbox.enqueue(
+                    tenant_id=run.tenant_id,
+                    event_type=EventType.DOCUMENT_CREATED.value,
+                    payload={
+                        "tenant_id": str(run.tenant_id),
+                        "actor_id": str(user.id),
+                        "occurred_at": document.created_at,
+                        "document_id": document.id,
+                        "document_version_id": version.id,
+                        "template_id": template.id,
+                        "template_version_id": template_version.id,
+                        "company_id": company.id,
+                        "person_id": person.id if person else None,
+                        "storage_key": storage_key,
+                        "status": document.status.value,
+                    },
+                )
+                idempotency = IdempotencyService(
+                    session=session,
+                    tenant_id=str(run.tenant_id),
+                    endpoint="documents.generate",
+                )
+                await idempotency.update_document_version_id(
+                    key=run.idempotency_key,
+                    document_version_id=version.id,
+                )
+                audit = AuditService(session)
+                await audit.log_event(
+                    tenant_id=run.tenant_id,
+                    action="render_done",
+                    object_type="pipeline_run",
+                    object_id=run.id,
+                    user_id=initiated_by,
+                    ip="system",
+                    details={
+                        "status": "success",
+                        "document_id": document.id,
+                        "template_id": template.id,
+                    },
+                )
+                await session.flush()
+                metrics.record_pipeline_stage_start(
+                    pipeline=PipelineType.DOCUMENT,
+                    stage=PipelineStage.COMPLETED,
+                )
+                metrics.record_pipeline_stage_end(
+                    pipeline=PipelineType.DOCUMENT,
+                    stage=PipelineStage.COMPLETED,
+                    result=StageResult.SUCCESS,
+                    seconds=0.0,
+                )
+                metrics.observe_pipeline_total_duration(
+                    pipeline=PipelineType.DOCUMENT,
+                    seconds=perf_counter() - pipeline_start,
+                )
+                return str(document.id), str(version.id)
+            except Exception as exc:
+                metrics.record_pipeline_stage_start(
+                    pipeline=PipelineType.DOCUMENT,
+                    stage=PipelineStage.FAILED,
+                )
+                metrics.record_pipeline_stage_end(
+                    pipeline=PipelineType.DOCUMENT,
+                    stage=PipelineStage.FAILED,
+                    result=StageResult.FAILED,
+                    seconds=0.0,
+                    error_class=exc.__class__.__name__,
+                )
+                metrics.observe_pipeline_total_duration(
+                    pipeline=PipelineType.DOCUMENT,
+                    seconds=perf_counter() - pipeline_start,
+                )
+                raise
+            finally:
+                metrics.decrement_pipeline_inflight(pipeline=PipelineType.DOCUMENT)
 
 
 def _company_snapshot(company: Company) -> dict[str, Any]:

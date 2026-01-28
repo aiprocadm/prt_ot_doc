@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
+from time import perf_counter
 from typing import Annotated, Any, Mapping
 from uuid import UUID
 
@@ -57,6 +58,7 @@ from app.core.payload_constraints import (
     enforce_mapping_constraints,
     normalize_output_basename,
 )
+from app.core.metrics import PipelineStage, PipelineType, StageResult, get_metrics
 from app.core.security import AccessContext, abac
 from app.core.tracing import get_trace_id
 from app.domains.files.utils import build_dated_prefix
@@ -677,28 +679,60 @@ async def run_pipeline(
 ) -> PipelineRunRead:
     """Execute document generation pipeline for the provided template."""
     tenant_slug = tenant.slug
-
-    template_stmt = select(Template).where(
-        Template.id == template_id,
-        Template.tenant_id == tenant_slug,
+    metrics = get_metrics()
+    metrics.record_pipeline_stage_start(
+        pipeline=PipelineType.DOCUMENT,
+        stage=PipelineStage.REQUEST_RECEIVED,
     )
-    template = (await session.execute(template_stmt)).scalar_one_or_none()
-    if not template:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Template not found")
+    metrics.record_pipeline_stage_end(
+        pipeline=PipelineType.DOCUMENT,
+        stage=PipelineStage.REQUEST_RECEIVED,
+        result=StageResult.SUCCESS,
+        seconds=0.0,
+    )
+    validation_start = perf_counter()
+    metrics.record_pipeline_stage_start(
+        pipeline=PipelineType.DOCUMENT,
+        stage=PipelineStage.VALIDATION_COMPLETED,
+    )
 
-    version_stmt = (
-        select(TemplateVersion)
-        .where(
-            TemplateVersion.template_id == template.id,
-            TemplateVersion.status == TemplateVersionStatus.ACTIVE,
+    try:
+        template_stmt = select(Template).where(
+            Template.id == template_id,
+            Template.tenant_id == tenant_slug,
         )
-        .order_by(TemplateVersion.version.desc())
-    )
-    template_version = (await session.execute(version_stmt)).scalar_one_or_none()
-    if not template_version:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Template has no active version")
+        template = (await session.execute(template_stmt)).scalar_one_or_none()
+        if not template:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Template not found")
 
-    normalized = await _resolve_pipeline_request(request, payload)
+        version_stmt = (
+            select(TemplateVersion)
+            .where(
+                TemplateVersion.template_id == template.id,
+                TemplateVersion.status == TemplateVersionStatus.ACTIVE,
+            )
+            .order_by(TemplateVersion.version.desc())
+        )
+        template_version = (await session.execute(version_stmt)).scalar_one_or_none()
+        if not template_version:
+            raise HTTPException(status.HTTP_409_CONFLICT, "Template has no active version")
+
+        normalized = await _resolve_pipeline_request(request, payload)
+    except Exception as exc:
+        metrics.record_pipeline_stage_end(
+            pipeline=PipelineType.DOCUMENT,
+            stage=PipelineStage.VALIDATION_COMPLETED,
+            result=StageResult.FAILED,
+            seconds=perf_counter() - validation_start,
+            error_class=exc.__class__.__name__,
+        )
+        raise
+    metrics.record_pipeline_stage_end(
+        pipeline=PipelineType.DOCUMENT,
+        stage=PipelineStage.VALIDATION_COMPLETED,
+        result=StageResult.SUCCESS,
+        seconds=perf_counter() - validation_start,
+    )
 
     service = PipelineService()
     run_mode = mode.lower()
