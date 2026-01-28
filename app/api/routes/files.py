@@ -1,13 +1,10 @@
-from app.models.file import FileScanStatus
 import hashlib
 import json
 import logging
-from datetime import datetime, timezone
-from io import BytesIO
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Annotated, Any, Collection, Final, Mapping
 from uuid import UUID
-from zipfile import ZipFile
 
 from fastapi import (
     APIRouter,
@@ -20,12 +17,11 @@ from fastapi import (
     UploadFile,
     status,
 )
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
-from starlette.background import BackgroundTask
+from app.core.metrics import get_metrics
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.config import get_settings
@@ -86,6 +82,7 @@ def _tenant_resource_id(tenant: Tenant = TENANT_DEPENDENCY) -> UUID | None:
 
 
 _FILE_UPLOAD_ROLES = ["admin", "employee"]
+_FILE_READ_ROLES = ["admin", "employee", "client_admin", "client_user"]
 
 AccessDep = Annotated[
     AccessContext,
@@ -94,6 +91,17 @@ AccessDep = Annotated[
             _tenant_resource_id,
             required_roles=_FILE_UPLOAD_ROLES,
             action="write",
+        )
+    ),
+]
+
+ReadAccessDep = Annotated[
+    AccessContext,
+    Depends(
+        abac(
+            _tenant_resource_id,
+            required_roles=_FILE_READ_ROLES,
+            action="read files",
         )
     ),
 ]
@@ -131,6 +139,19 @@ class FileUploadResponse(BaseModel):
         None,
         description="Presigned URL for downloading the uploaded object if available",
     )
+
+
+class FileDownloadResponse(BaseModel):
+    id: str = Field(..., description="Database identifier of the stored file")
+    storage_key: str = Field(..., description="Object storage key")
+    sha256: str = Field(..., min_length=64, max_length=64)
+    size: int = Field(..., ge=0)
+    mime: str = Field(...)
+    original_name: str | None = Field(None, description="Original filename from upload")
+    company_id: str | None = Field(None, description="Owning company identifier if provided")
+    pack_id: str | None = Field(None, description="Pack identifier this file belongs to")
+    url: str = Field(..., description="Presigned URL for downloading the file")
+    expires_at: datetime = Field(..., description="Timestamp when the presigned URL expires")
 
 
 def _ensure_allowed_mime(mime: str, allowed: Collection[str]) -> str:
@@ -274,6 +295,41 @@ def _response_from_record(
     )
 
 
+def _ensure_file_access(record: StoredFile, access: AccessContext) -> None:
+    if access.role in {"client_admin", "client_user"} and record.company_id:
+        access.ensure_company_access(record.company_id, action="read file")
+
+
+def _record_download_denied(reason: str) -> None:
+    settings = get_settings()
+    if not settings.enable_metrics:
+        return
+    metrics = get_metrics()
+    metrics.record_file_download_denied(reason=reason)
+
+
+def _record_presign_download(tenant_slug: str) -> None:
+    settings = get_settings()
+    if not settings.enable_metrics:
+        return
+    metrics = get_metrics()
+    metrics.record_file_presign_download(tenant=tenant_slug)
+
+
+def _build_presigned_download_url(record: StoredFile, *, expires_in: int) -> str:
+    filename = record.original_name or Path(record.storage_key).name
+    response_headers = {
+        "ResponseContentDisposition": f'attachment; filename="{filename}"',
+        "ResponseContentType": record.mime,
+    }
+    filtered_headers = {key: value for key, value in response_headers.items() if value}
+    return s3.generate_presigned_get_url(
+        record.storage_key,
+        expires_in=expires_in,
+        response_headers=filtered_headers,
+    )
+
+
 async def _persist_and_audit(
     *,
     request: Request,
@@ -365,7 +421,10 @@ async def _persist_and_audit(
     download_url: str | None = None
     if settings.s3_backend == "minio" and not record.is_quarantined:
         try:
-            download_url = s3.generate_presigned_get_url(key)
+            download_url = _build_presigned_download_url(
+                record,
+                expires_in=settings.presign_download_ttl_seconds,
+            )
         except s3.S3OperationError as exc:
             logger.warning(
                 "files.upload.presign_failed",
@@ -485,7 +544,7 @@ async def upload_file(
 async def get_file_details(
     file_id: str,
     tenant: TenantDep,
-    access: AccessDep,
+    access: ReadAccessDep,
     session: AsyncSession = Depends(get_session),
 ) -> FileUploadResponse:
     record = await session.get(StoredFile, file_id)
@@ -494,6 +553,7 @@ async def get_file_details(
             status.HTTP_404_NOT_FOUND,
             detail={"code": "not_found", "message": "File not found"},
         )
+    _ensure_file_access(record, access)
 
     settings = get_settings()
     download_url: str | None = None
@@ -523,7 +583,10 @@ async def get_file_details(
             )
 
         try:
-            download_url = s3.generate_presigned_get_url(record.storage_key)
+            download_url = _build_presigned_download_url(
+                record,
+                expires_in=settings.presign_download_ttl_seconds,
+            )
         except s3.S3OperationError as exc:
             logger.warning(
                 "files.detail.presign_failed",
@@ -536,6 +599,8 @@ async def get_file_details(
             raise _storage_http_exception(exc) from exc
 
     return _response_from_record(record, download_url=download_url)
+
+
 @router.post(
     "/upload-template",
     response_model=FileUploadResponse,
@@ -623,21 +688,30 @@ async def upload_template(
     )
 
 
-@router.get("/{file_id}/download")
+@router.get("/{file_id}/download", response_model=FileDownloadResponse)
 async def download_file(
     file_id: str,
+    request: Request,
     tenant: TenantDep,
-    access: AccessDep,
+    access: ReadAccessDep,
     session: AsyncSession = Depends(get_session),
-) -> StreamingResponse:
+) -> FileDownloadResponse:
     record = await session.get(StoredFile, file_id)
     if record is None or record.tenant_id != tenant.id:
+        _record_download_denied("not_found")
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
             detail={"code": "not_found", "message": "File not found"},
         )
 
+    try:
+        _ensure_file_access(record, access)
+    except HTTPException:
+        _record_download_denied("forbidden")
+        raise
+
     if record.is_quarantined or record.scan_status != FileScanStatus.CLEAN:
+        _record_download_denied("quarantined")
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             detail={
@@ -647,16 +721,33 @@ async def download_file(
             },
         )
 
+    settings = get_settings()
+    if settings.s3_backend != "minio":
+        _record_download_denied("storage_unavailable")
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "storage_unavailable",
+                "message": "Presigned downloads are unavailable for the configured storage backend",
+            },
+        )
+
     try:
         metadata = s3.head_object(key=record.storage_key)
     except s3.S3OperationError as exc:
         logger.warning(
             "files.download.head_failed",
-            extra={"tenant": tenant.slug, "storage_key": record.storage_key, **_sanitize_log_context(exc.context())},
+            extra={
+                "tenant": tenant.slug,
+                "storage_key": record.storage_key,
+                **_sanitize_log_context(exc.context()),
+            },
         )
+        _record_download_denied("storage_error")
         raise _storage_http_exception(exc) from exc
 
     if metadata is None:
+        _record_download_denied("storage_not_found")
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
             detail={
@@ -667,24 +758,66 @@ async def download_file(
             },
         )
 
-    stream_ctx = s3.stream_object(key=record.storage_key)
+    expires_in = settings.presign_download_ttl_seconds
     try:
-        stream = stream_ctx.__enter__()
+        url = _build_presigned_download_url(record, expires_in=expires_in)
     except s3.S3OperationError as exc:
+        logger.warning(
+            "files.download.presign_failed",
+            extra={
+                "tenant": tenant.slug,
+                "storage_key": record.storage_key,
+                **_sanitize_log_context(exc.context()),
+            },
+        )
+        _record_download_denied("presign_failed")
         raise _storage_http_exception(exc) from exc
 
-    filename = record.original_name or Path(record.storage_key).name
-    headers = {
-        "Content-Length": str(metadata.get("size") or record.size),
-        "Content-Disposition": f'attachment; filename="{filename}"',
-        "ETag": metadata.get("etag") or record.sha256,
-    }
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+    _record_presign_download(tenant.slug)
 
-    return StreamingResponse(
-        stream,
-        media_type=metadata.get("content_type") or record.mime,
-        headers=headers,
-        background=BackgroundTask(stream_ctx.__exit__, None, None, None),
+    logger.info(
+        "files.download.presigned",
+        extra={
+            "file_id": record.id,
+            "tenant_id": tenant.id,
+            "actor_id": getattr(access.user, "id", None),
+            "company_id": record.company_id,
+            "pack_id": record.pack_id,
+            "expires_in": expires_in,
+        },
     )
 
+    audit = AuditService(session)
+    ip = request.client.host if request.client else "unknown"
+    await audit.log_event(
+        tenant_id=str(tenant.id),
+        action="FileDownloadPresigned",
+        object_type="file",
+        object_id=record.id,
+        user_id=getattr(access.user, "id", None),
+        ip=ip,
+        details={
+            "storage_key": record.storage_key,
+            "sha256": record.sha256,
+            "size": record.size,
+            "mime": record.mime,
+            "company_id": record.company_id,
+            "pack_id": record.pack_id,
+            "expires_in": expires_in,
+        },
+    )
+    await session.commit()
 
+    return FileDownloadResponse(
+        id=record.id,
+        storage_key=StorageKey(record.storage_key),
+        sha256=record.sha256,
+        size=metadata.get("size") or record.size,
+        mime=metadata.get("content_type") or record.mime,
+        original_name=record.original_name,
+        company_id=record.company_id,
+        pack_id=record.pack_id,
+        url=url,
+        expires_at=expires_at,
+    )

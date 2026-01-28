@@ -294,20 +294,26 @@ def stream_object(*, key: str) -> Iterator[BinaryIO]:
 def generate_presigned_get_url(
     key: str,
     *,
+    bucket: str | None = None,
     expires_in: int = 3600,
+    response_headers: Mapping[str, str] | None = None,
 ) -> str | None:
     """Return a temporary download URL for the provided object key."""
 
     client = get_client()
     settings = get_settings()
+    bucket_name = bucket or settings.s3_bucket
+    params: dict[str, Any] = {"Bucket": bucket_name, "Key": key}
+    if response_headers:
+        params.update(response_headers)
 
     try:
         return client.generate_presigned_url(
             "get_object",
-            Params={"Bucket": settings.s3_bucket, "Key": key},
+            Params=params,
             ExpiresIn=expires_in,
         )
     except ClientError as exc:
         raise S3OperationError.from_client_error(
-            "generate_presigned_url", exc, bucket=settings.s3_bucket, key=key
+            "generate_presigned_url", exc, bucket=bucket_name, key=key
         ) from exc

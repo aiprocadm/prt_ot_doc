@@ -54,6 +54,8 @@ class Metrics:
     http_request_latency_p95_seconds: Gauge
     http_request_errors_total: Counter
     outbox_enqueued_total: Counter
+    files_presign_download_total: Counter
+    files_download_denied_total: Counter
     _http_latency_tracker: "LatencyTracker" = field(
         default_factory=lambda: LatencyTracker(), repr=False
     )
@@ -152,6 +154,12 @@ class Metrics:
 
     def record_outbox_enqueued(self, *, event_type: str) -> None:
         self.outbox_enqueued_total.labels(event_type=sanitize_label(event_type)).inc()
+
+    def record_file_presign_download(self, *, tenant: str) -> None:
+        self.files_presign_download_total.labels(tenant=sanitize_label(tenant)).inc()
+
+    def record_file_download_denied(self, *, reason: str) -> None:
+        self.files_download_denied_total.labels(reason=sanitize_label(reason)).inc()
 
 
 _METRICS: Metrics | None = None
@@ -269,6 +277,18 @@ def _build_metrics() -> Metrics:
         labelnames=("event_type",),
         registry=registry,
     )
+    files_presign_download_total = Counter(
+        "files_presign_download_total",
+        "Presigned file download URLs issued grouped by tenant.",
+        labelnames=("tenant",),
+        registry=registry,
+    )
+    files_download_denied_total = Counter(
+        "files_download_denied_total",
+        "Denied file download attempts grouped by reason.",
+        labelnames=("reason",),
+        registry=registry,
+    )
 
     return Metrics(
         registry=registry,
@@ -289,6 +309,8 @@ def _build_metrics() -> Metrics:
         http_request_latency_p95_seconds=http_request_latency_p95_seconds,
         http_request_errors_total=http_request_errors_total,
         outbox_enqueued_total=outbox_enqueued_total,
+        files_presign_download_total=files_presign_download_total,
+        files_download_denied_total=files_download_denied_total,
     )
 
 
