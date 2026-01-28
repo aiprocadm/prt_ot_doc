@@ -214,3 +214,35 @@ async def test_outbox_processor_avoids_double_send_with_in_progress(
     assert first_processed == 1
     assert processed == 0
     assert dispatcher.calls == 1
+
+
+@pytest.mark.anyio
+async def test_outbox_processor_retries_stale_in_progress_entries(sessionmaker) -> None:
+    async with sessionmaker() as session:
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
+        entry = Outbox(
+            tenant_id=tenant.id,
+            event_type="DocumentCreated",
+            destination="https://example.test/hooks",
+            payload={"document_id": "doc-stale"},
+            attempts=2,
+            status=OutboxStatus.IN_PROGRESS,
+            next_attempt_at=datetime.now(tz=timezone.utc) - timedelta(seconds=5),
+        )
+        session.add(entry)
+        await session.commit()
+        entry_id = entry.id
+
+    dispatcher = DummyDispatcher()
+    async with sessionmaker() as session:
+        processor = OutboxProcessor(session, dispatcher=dispatcher)
+        processed = await processor.process_once()
+
+    assert processed == 1
+    assert dispatcher.calls
+
+    async with sessionmaker() as session:
+        refreshed = await session.get(Outbox, entry_id)
+        assert refreshed is not None
+        assert refreshed.status == OutboxStatus.SENT
+        assert refreshed.attempts == 3

@@ -137,7 +137,7 @@ class OutboxProcessor:
         stmt: Select[tuple[Outbox]] = (
             select(Outbox)
             .where(
-                Outbox.status.in_([OutboxStatus.PENDING, OutboxStatus.FAILED]),
+                Outbox.status.in_([OutboxStatus.PENDING, OutboxStatus.FAILED, OutboxStatus.IN_PROGRESS]),
                 Outbox.next_attempt_at.is_not(None),
                 Outbox.next_attempt_at <= now,
             )
@@ -152,9 +152,11 @@ class OutboxProcessor:
             self.metrics.observe_outbox_dispatcher_duration(seconds=perf_counter() - start_loop)
             return 0
 
+        lease_until = now + timedelta(seconds=self.settings.outbox_in_progress_timeout_seconds)
         for entry in entries:
             entry.status = OutboxStatus.IN_PROGRESS
             entry.attempts += 1
+            entry.next_attempt_at = lease_until
 
         await self.session.commit()
 
