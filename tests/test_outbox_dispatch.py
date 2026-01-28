@@ -24,6 +24,7 @@ class DummyDispatcher:
         destination: str,
         headers: dict | None = None,
         idempotency_key: str | None = None,
+        session=None,
     ) -> None:
         self.calls.append(
             {

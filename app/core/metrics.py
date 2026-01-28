@@ -54,13 +54,8 @@ class Metrics:
     http_request_latency_p95_seconds: Gauge
     http_request_errors_total: Counter
     outbox_enqueued_total: Counter
-    outbox_sent_total: Counter
-    outbox_failed_total: Counter
-    outbox_dead_total: Counter
-    outbox_attempts_histogram: Histogram
-    outbox_dispatch_latency_seconds: Histogram
-    outbox_dispatcher_tick_total: Counter
-    outbox_dispatcher_loop_duration_seconds: Histogram
+    outbox_routed_total: Counter
+    outbox_no_destination_total: Counter
     _http_latency_tracker: "LatencyTracker" = field(
         default_factory=lambda: LatencyTracker(), repr=False
     )
@@ -216,6 +211,17 @@ class Metrics:
     def observe_outbox_dispatcher_duration(self, *, seconds: float) -> None:
         safe_seconds = seconds if seconds >= 0 else 0.0
         self.outbox_dispatcher_loop_duration_seconds.observe(safe_seconds)
+
+    def record_outbox_routed(self, *, event_type: str, destination: str) -> None:
+        self.outbox_routed_total.labels(
+            event_type=sanitize_label(event_type),
+            destination=sanitize_label(destination),
+        ).inc()
+
+    def record_outbox_no_destination(self, *, event_type: str) -> None:
+        self.outbox_no_destination_total.labels(
+            event_type=sanitize_label(event_type)
+        ).inc()
 
 
 _METRICS: Metrics | None = None
@@ -376,6 +382,18 @@ def _build_metrics() -> Metrics:
         registry=registry,
         buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30),
     )
+    outbox_routed_total = Counter(
+        "outbox_routed_total",
+        "Total outbox events routed grouped by event type and destination.",
+        labelnames=("event_type", "destination"),
+        registry=registry,
+    )
+    outbox_no_destination_total = Counter(
+        "outbox_no_destination_total",
+        "Total outbox events without a destination grouped by event type.",
+        labelnames=("event_type",),
+        registry=registry,
+    )
 
     return Metrics(
         registry=registry,
@@ -403,6 +421,8 @@ def _build_metrics() -> Metrics:
         outbox_dispatch_latency_seconds=outbox_dispatch_latency_seconds,
         outbox_dispatcher_tick_total=outbox_dispatcher_tick_total,
         outbox_dispatcher_loop_duration_seconds=outbox_dispatcher_loop_duration_seconds,
+        outbox_routed_total=outbox_routed_total,
+        outbox_no_destination_total=outbox_no_destination_total,
     )
 
 

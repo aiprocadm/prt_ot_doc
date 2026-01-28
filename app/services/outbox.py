@@ -210,6 +210,9 @@ class OutboxProcessor:
                 self.metrics.record_outbox_dead(
                     event_type=entry.event_type,
                     destination=entry.destination,
+                    tenant_id=entry.tenant_id,
+                    payload=dict(entry.payload or {}),
+                    session=self.session,
                 )
                 self.metrics.record_outbox_failed(
                     event_type=entry.event_type,

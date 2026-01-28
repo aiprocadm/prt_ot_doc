@@ -60,6 +60,7 @@ from app.models.models import (
     TrainingStatus,
     User,
     WarehousePPE,
+    WebhookSubscription,
 )
 from app.models.npa import NpaAct, NpaClause
 from app.models.risk import Risk, RiskAssessment, RiskControl, RiskHazard, RiskMatrixCell
@@ -129,4 +130,5 @@ __all__ = [
     "TrainingStatus",
     "User",
     "WarehousePPE",
+    "WebhookSubscription",
 ]
