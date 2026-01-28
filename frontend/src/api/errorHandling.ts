@@ -23,6 +23,11 @@ const redirectToLogin = () => {
 export const handleApiError = (error: ApiError, requestUrl?: string) => {
   const status = error.status ?? 0;
 
+  if (error.code === "TENANT_REQUIRED") {
+    toast.error("Выберите контур или организацию перед загрузкой данных.");
+    return;
+  }
+
   if (status === 401 && !isAuthPath(requestUrl)) {
     tokenStorage.clear();
     redirectToLogin();

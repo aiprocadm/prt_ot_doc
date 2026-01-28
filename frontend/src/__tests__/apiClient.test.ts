@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "@/api/client";
+import { appConfig } from "@/config/env";
 import { tenantStorage } from "@/api/tenantStorage";
 import { tokenStorage } from "@/api/tokenStorage";
 
@@ -22,7 +23,7 @@ describe("apiClient", () => {
     tenantStorage.setTenant({ slug: "severstroy", site: "Северный кластер" });
 
     const interceptor = apiClient.interceptors.request.handlers[0]?.fulfilled as (config: Record<string, unknown>) => Promise<unknown>;
-    const config = { headers: {}, url: "/documents" };
+    const config = { headers: {}, url: "/documents", baseURL: appConfig.apiBaseUrl };
     const result = (await interceptor(config)) as { headers: Record<string, string> };
 
     expect(result.headers.Authorization).toBe("Bearer access-token");
@@ -32,9 +33,23 @@ describe("apiClient", () => {
 
   it("blocks requests without tenant for protected routes", async () => {
     const interceptor = apiClient.interceptors.request.handlers[0]?.fulfilled as (config: Record<string, unknown>) => Promise<unknown>;
-    await expect(interceptor({ headers: {}, url: "/documents" })).rejects.toMatchObject({
+    await expect(interceptor({ headers: {}, url: "/documents", baseURL: appConfig.apiBaseUrl })).rejects.toMatchObject({
       code: "TENANT_REQUIRED"
     });
+  });
+
+  it("allows whitelisted routes without tenant", async () => {
+    const interceptor = apiClient.interceptors.request.handlers[0]?.fulfilled as (config: Record<string, unknown>) => Promise<unknown>;
+
+    const authResult = (await interceptor({ headers: {}, url: "/auth/login", baseURL: appConfig.apiBaseUrl })) as {
+      headers: Record<string, string>;
+    };
+    const healthResult = (await interceptor({ headers: {}, url: "/health", baseURL: appConfig.apiBaseUrl })) as {
+      headers: Record<string, string>;
+    };
+
+    expect(authResult.headers).toEqual({});
+    expect(healthResult.headers).toEqual({});
   });
 
   it("maps api errors from responses", async () => {
