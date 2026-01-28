@@ -4,7 +4,15 @@ import pytest
 from sqlalchemy import select
 
 from app.models.models import Outbox, Position, RiskMap, RoleEnum, Site, Tenant
-from app.models.risk import RiskAssessment, RiskHazard, RiskMatrixCell
+from app.models.risk import (
+    RiskActionPlan,
+    RiskActionPlanItem,
+    RiskAssessment,
+    RiskAssessmentItem,
+    RiskCard,
+    RiskHazard,
+    RiskMatrixCell,
+)
 
 
 @pytest.mark.anyio
@@ -102,14 +110,10 @@ async def test_risk_engine_flow(
     )
     assert assess_resp.status_code == 200, assess_resp.text
     assessment_body = assess_resp.json()
+    assessment_id = assessment_body["assessment_id"]
 
-    assert assessment_body["before"]["score"] == 9
-    assert assessment_body["after"]["score"] == 6
-    assert assessment_body["after"]["likelihood"] == 2
-    assert assessment_body["controls"] == ["harness"]
-    assert assessment_body["action_plan"]["hazard_code"] == "work_height"
-    assert assessment_body["action_plan"]["steps"][0]["code"] == "harness"
-    assert assessment_body["risk_card"]["hazard"]["code"] == "work_height"
+    assert assessment_body["risk_card_ids"]
+    assert assessment_body["action_plan_id"]
 
     risk_map_resp = await async_client.post(
         "/api/v1/risk/maps",
@@ -165,7 +169,7 @@ async def test_risk_engine_flow(
             await session.execute(
                 select(RiskAssessment).where(
                     RiskAssessment.tenant_id == tenant_id,
-                    RiskAssessment.id == assessment_body["id"],
+                    RiskAssessment.id == assessment_id,
                 )
             )
         ).scalar_one()
@@ -174,10 +178,45 @@ async def test_risk_engine_flow(
         assert assessment.created_by == "inspector-77"
         assert assessment.position_id == position_id
         assert assessment.place_id == site_id
-        assert assessment.action_plan
-        assert assessment.action_plan["hazard_code"] == "work_height"
-        assert assessment.risk_card
-        assert assessment.risk_card["hazard"]["title"] == "Работы на высоте"
+
+        assessment_items = (
+            await session.execute(
+                select(RiskAssessmentItem).where(
+                    RiskAssessmentItem.tenant_id == tenant_id,
+                    RiskAssessmentItem.assessment_id == assessment_id,
+                )
+            )
+        ).scalars().all()
+        assert len(assessment_items) == 1
+        assert assessment_items[0].score == 9
+
+        risk_card = (
+            await session.execute(
+                select(RiskCard).where(
+                    RiskCard.tenant_id == tenant_id,
+                    RiskCard.assessment_id == assessment_id,
+                )
+            )
+        ).scalar_one()
+        assert risk_card.summary["items"][0]["hazard_code"] == "work_height"
+
+        action_plan = (
+            await session.execute(
+                select(RiskActionPlan).where(
+                    RiskActionPlan.tenant_id == tenant_id,
+                    RiskActionPlan.assessment_id == assessment_id,
+                )
+            )
+        ).scalar_one()
+        plan_items = (
+            await session.execute(
+                select(RiskActionPlanItem).where(
+                    RiskActionPlanItem.tenant_id == tenant_id,
+                    RiskActionPlanItem.plan_id == action_plan.id,
+                )
+            )
+        ).scalars().all()
+        assert len(plan_items) == 1
 
         risk_map = (
             await session.execute(
@@ -200,4 +239,4 @@ async def test_risk_engine_flow(
             )
         ).scalar_one_or_none()
         assert outbox_entry is not None
-        assert outbox_entry.payload["risk_assessment_id"] == assessment_body["id"]
+        assert outbox_entry.payload["risk_assessment_id"] == assessment_id

@@ -54,6 +54,9 @@ class Metrics:
     http_request_latency_p95_seconds: Gauge
     http_request_errors_total: Counter
     outbox_enqueued_total: Counter
+    risk_assessment_total: Counter
+    risk_cards_created_total: Counter
+    action_plan_items_created_total: Counter
     _http_latency_tracker: "LatencyTracker" = field(
         default_factory=lambda: LatencyTracker(), repr=False
     )
@@ -269,6 +272,21 @@ def _build_metrics() -> Metrics:
         labelnames=("event_type",),
         registry=registry,
     )
+    risk_assessment_total = Counter(
+        "risk_assessment_total",
+        "Total risk assessments performed.",
+        registry=registry,
+    )
+    risk_cards_created_total = Counter(
+        "risk_cards_created_total",
+        "Total risk cards created.",
+        registry=registry,
+    )
+    action_plan_items_created_total = Counter(
+        "action_plan_items_created_total",
+        "Total action plan items created.",
+        registry=registry,
+    )
 
     return Metrics(
         registry=registry,
@@ -289,6 +307,9 @@ def _build_metrics() -> Metrics:
         http_request_latency_p95_seconds=http_request_latency_p95_seconds,
         http_request_errors_total=http_request_errors_total,
         outbox_enqueued_total=outbox_enqueued_total,
+        risk_assessment_total=risk_assessment_total,
+        risk_cards_created_total=risk_cards_created_total,
+        action_plan_items_created_total=action_plan_items_created_total,
     )
 
 
