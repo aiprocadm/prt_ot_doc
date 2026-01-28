@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Any
 
 import httpx
 
@@ -14,6 +15,22 @@ logger = logging.getLogger(__name__)
 
 class WebhookDispatchError(RuntimeError):
     """Raised when a webhook cannot be delivered successfully."""
+
+    def __init__(self, message: str, *, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+    @property
+    def error_class(self) -> str:
+        if self.status_code is None:
+            return "unknown"
+        if self.status_code >= 500:
+            return "http_5xx"
+        if self.status_code == 408:
+            return "http_408"
+        if self.status_code == 429:
+            return "http_429"
+        return "http_4xx"
 
 
 @dataclass(slots=True)
@@ -31,6 +48,9 @@ class WebhookDispatcher:
     ) -> None:
         self.settings = settings or get_settings()
         self.client = client
+
+    def resolve_destinations(self, event_type: str) -> list[str]:
+        return self._resolve_urls(event_type)
 
     def _resolve_urls(self, event_type: str) -> list[str]:
         if event_type == "DocumentCreated":
@@ -65,16 +85,11 @@ class WebhookDispatcher:
         *,
         event_type: str,
         tenant_id: str,
-        payload: dict,
+        payload: dict[str, Any],
+        destination: str,
+        headers: dict[str, Any] | None = None,
+        idempotency_key: str | None = None,
     ) -> None:
-        urls = self._resolve_urls(event_type)
-        if not urls:
-            logger.debug(
-                "webhook.skip",
-                extra={"event_type": event_type, "tenant_id": tenant_id},
-            )
-            return
-
         trace_id = get_trace_id()
         envelope = {
             "event_type": event_type,
@@ -82,28 +97,32 @@ class WebhookDispatcher:
             "sent_at": datetime.now(tz=timezone.utc).isoformat(),
             "payload": payload,
         }
-        headers = {"X-Correlation-ID": trace_id}
+        request_headers: dict[str, str] = {"X-Correlation-ID": trace_id}
+        if headers:
+            for key, value in headers.items():
+                request_headers[str(key)] = str(value)
         event_id = payload.get("event_id")
         if event_id:
-            headers["Idempotency-Key"] = str(event_id)
+            request_headers.setdefault("Idempotency-Key", str(event_id))
+        if idempotency_key:
+            request_headers["Idempotency-Key"] = str(idempotency_key)
 
         async with httpx.AsyncClient(
             timeout=self.settings.webhook_timeout_seconds
         ) if self.client is None else _null_async_context(self.client) as client:
-            for url in urls:
-                response = await client.post(url, json=envelope, headers=headers)
-                if response.status_code >= 300:
-                    message = f"Webhook {url} failed with status {response.status_code}"
-                    logger.warning(
-                        "webhook.failed",
-                        extra={
-                            "event_type": event_type,
-                            "tenant_id": tenant_id,
-                            "status": response.status_code,
-                            "url": url,
-                        },
-                    )
-                    raise WebhookDispatchError(message)
+            response = await client.post(destination, json=envelope, headers=request_headers)
+            if response.status_code >= 300:
+                message = f"Webhook {destination} failed with status {response.status_code}"
+                logger.warning(
+                    "webhook.failed",
+                    extra={
+                        "event_type": event_type,
+                        "tenant_id": tenant_id,
+                        "status": response.status_code,
+                        "url": destination,
+                    },
+                )
+                raise WebhookDispatchError(message, status_code=response.status_code)
 
 
 class _null_async_context:
