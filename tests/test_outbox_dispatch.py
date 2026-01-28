@@ -12,7 +12,14 @@ class DummyDispatcher:
     def __init__(self) -> None:
         self.calls: list[dict[str, object]] = []
 
-    async def dispatch(self, *, event_type: str, tenant_id: str, payload: dict) -> None:
+    async def dispatch(
+        self,
+        *,
+        event_type: str,
+        tenant_id: str,
+        payload: dict,
+        session=None,
+    ) -> None:
         self.calls.append(
             {"event_type": event_type, "tenant_id": tenant_id, "payload": payload}
         )

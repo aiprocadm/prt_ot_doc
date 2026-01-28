@@ -54,6 +54,8 @@ class Metrics:
     http_request_latency_p95_seconds: Gauge
     http_request_errors_total: Counter
     outbox_enqueued_total: Counter
+    outbox_routed_total: Counter
+    outbox_no_destination_total: Counter
     _http_latency_tracker: "LatencyTracker" = field(
         default_factory=lambda: LatencyTracker(), repr=False
     )
@@ -152,6 +154,17 @@ class Metrics:
 
     def record_outbox_enqueued(self, *, event_type: str) -> None:
         self.outbox_enqueued_total.labels(event_type=sanitize_label(event_type)).inc()
+
+    def record_outbox_routed(self, *, event_type: str, destination: str) -> None:
+        self.outbox_routed_total.labels(
+            event_type=sanitize_label(event_type),
+            destination=sanitize_label(destination),
+        ).inc()
+
+    def record_outbox_no_destination(self, *, event_type: str) -> None:
+        self.outbox_no_destination_total.labels(
+            event_type=sanitize_label(event_type)
+        ).inc()
 
 
 _METRICS: Metrics | None = None
@@ -269,6 +282,18 @@ def _build_metrics() -> Metrics:
         labelnames=("event_type",),
         registry=registry,
     )
+    outbox_routed_total = Counter(
+        "outbox_routed_total",
+        "Total outbox events routed grouped by event type and destination.",
+        labelnames=("event_type", "destination"),
+        registry=registry,
+    )
+    outbox_no_destination_total = Counter(
+        "outbox_no_destination_total",
+        "Total outbox events without a destination grouped by event type.",
+        labelnames=("event_type",),
+        registry=registry,
+    )
 
     return Metrics(
         registry=registry,
@@ -289,6 +314,8 @@ def _build_metrics() -> Metrics:
         http_request_latency_p95_seconds=http_request_latency_p95_seconds,
         http_request_errors_total=http_request_errors_total,
         outbox_enqueued_total=outbox_enqueued_total,
+        outbox_routed_total=outbox_routed_total,
+        outbox_no_destination_total=outbox_no_destination_total,
     )
 
 

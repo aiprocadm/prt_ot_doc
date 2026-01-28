@@ -89,6 +89,7 @@ __all__ = [
     "TrainingCertificate",
     "User",
     "WarehousePPE",
+    "WebhookSubscription",
 ]
 
 
@@ -110,6 +111,23 @@ class Tenant(SharedModel):
 
     __table_args__ = (
         UniqueConstraint("slug", name="uq_tenant_slug"),
+    )
+
+
+class WebhookSubscription(SharedModel):
+    __tablename__ = "webhook_subscription"
+
+    tenant_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("tenant.id"), nullable=True, index=True
+    )
+    event_type: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    headers: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    __table_args__ = (
+        Index("ix_webhook_subscription_event_type", "event_type"),
+        Index("ix_webhook_subscription_tenant_event", "tenant_id", "event_type"),
     )
 class User(TenantBaseModel, SoftDeleteMixin):
     email: Mapped[str] = mapped_column(String(320), nullable=False)
