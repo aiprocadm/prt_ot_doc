@@ -43,6 +43,7 @@ from app.api.routes import (
     inspections,
     journals,
     npa,
+    outbox_admin,
     packs,
     persons,
     ppe,
@@ -126,6 +127,7 @@ tenant_router.include_router(risk.router, tags=["risks"])
 tenant_router.include_router(sites.router, tags=["sites"])
 tenant_router.include_router(documents.router, prefix="/documents", tags=["documents"])
 tenant_router.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
+tenant_router.include_router(outbox_admin.router, prefix="/admin/outbox", tags=["outbox"])
 tenant_router.include_router(tenants.router)
 tenant_router.include_router(companies.router)
 tenant_router.include_router(persons.router)

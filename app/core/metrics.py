@@ -96,6 +96,11 @@ class Metrics:
     http_request_latency_p95_seconds: Gauge
     http_request_errors_total: Counter
     outbox_enqueued_total: Counter
+    risk_assessment_total: Counter
+    risk_cards_created_total: Counter
+    action_plan_items_created_total: Counter
+    files_presign_download_total: Counter
+    files_download_denied_total: Counter
     outbox_routed_total: Counter
     outbox_no_destination_total: Counter
     _http_latency_tracker: "LatencyTracker" = field(
@@ -270,8 +275,65 @@ class Metrics:
                 method=method_label, path=path_label, status=family
             ).inc()
 
-    def record_outbox_enqueued(self, *, event_type: str) -> None:
-        self.outbox_enqueued_total.labels(event_type=sanitize_label(event_type)).inc()
+    def record_outbox_enqueued(
+        self, *, event_type: str, destination: str, tenant_id: str
+    ) -> None:
+        self.outbox_enqueued_total.labels(
+            event_type=sanitize_label(event_type),
+            destination=sanitize_label(destination),
+            tenant=tenant_id,
+        ).inc()
+
+    def record_outbox_sent(self, *, event_type: str, destination: str) -> None:
+        self.outbox_sent_total.labels(
+            event_type=sanitize_label(event_type),
+            destination=sanitize_label(destination),
+        ).inc()
+
+    def record_outbox_failed(
+        self,
+        *,
+        event_type: str,
+        destination: str,
+        error_class: str,
+    ) -> None:
+        self.outbox_failed_total.labels(
+            event_type=sanitize_label(event_type),
+            destination=sanitize_label(destination),
+            error_class=sanitize_label(error_class),
+        ).inc()
+
+    def record_outbox_dead(self, *, event_type: str, destination: str) -> None:
+        self.outbox_dead_total.labels(
+            event_type=sanitize_label(event_type),
+            destination=sanitize_label(destination),
+        ).inc()
+
+    def observe_outbox_attempts(
+        self, *, event_type: str, destination: str, attempts: int
+    ) -> None:
+        safe_attempts = attempts if attempts >= 0 else 0
+        self.outbox_attempts_histogram.labels(
+            event_type=sanitize_label(event_type),
+            destination=sanitize_label(destination),
+        ).observe(safe_attempts)
+
+    def observe_outbox_dispatch_latency(
+        self, *, event_type: str, destination: str, seconds: float
+    ) -> None:
+        safe_seconds = seconds if seconds >= 0 else 0.0
+        self.outbox_dispatch_latency_seconds.labels(
+            event_type=sanitize_label(event_type),
+            destination=sanitize_label(destination),
+        ).observe(safe_seconds)
+
+    def record_outbox_dispatcher_tick(self, *, processed: int) -> None:
+        _ = processed
+        self.outbox_dispatcher_tick_total.inc()
+
+    def observe_outbox_dispatcher_duration(self, *, seconds: float) -> None:
+        safe_seconds = seconds if seconds >= 0 else 0.0
+        self.outbox_dispatcher_loop_duration_seconds.observe(safe_seconds)
 
     def record_outbox_routed(self, *, event_type: str, destination: str) -> None:
         self.outbox_routed_total.labels(
@@ -283,6 +345,12 @@ class Metrics:
         self.outbox_no_destination_total.labels(
             event_type=sanitize_label(event_type)
         ).inc()
+
+    def record_file_presign_download(self, *, tenant: str) -> None:
+        self.files_presign_download_total.labels(tenant=sanitize_label(tenant)).inc()
+
+    def record_file_download_denied(self, *, reason: str) -> None:
+        self.files_download_denied_total.labels(reason=sanitize_label(reason)).inc()
 
 
 _METRICS: Metrics | None = None
@@ -434,9 +502,52 @@ def _build_metrics() -> Metrics:
     )
     outbox_enqueued_total = Counter(
         "outbox_enqueued_total",
-        "Total outbox events enqueued grouped by event type.",
-        labelnames=("event_type",),
+        "Total outbox events enqueued grouped by event type, destination, and tenant.",
+        labelnames=("event_type", "destination", "tenant"),
         registry=registry,
+    )
+    outbox_sent_total = Counter(
+        "outbox_sent_total",
+        "Total outbox events sent grouped by event type and destination.",
+        labelnames=("event_type", "destination"),
+        registry=registry,
+    )
+    outbox_failed_total = Counter(
+        "outbox_failed_total",
+        "Total outbox events that failed grouped by event type, destination, and error class.",
+        labelnames=("event_type", "destination", "error_class"),
+        registry=registry,
+    )
+    outbox_dead_total = Counter(
+        "outbox_dead_total",
+        "Total outbox events moved to dead-letter grouped by event type and destination.",
+        labelnames=("event_type", "destination"),
+        registry=registry,
+    )
+    outbox_attempts_histogram = Histogram(
+        "outbox_attempts_histogram",
+        "Observed outbox attempt counts grouped by event type and destination.",
+        labelnames=("event_type", "destination"),
+        registry=registry,
+        buckets=(1, 2, 3, 5, 8, 13, 21),
+    )
+    outbox_dispatch_latency_seconds = Histogram(
+        "outbox_dispatch_latency_seconds",
+        "Outbox dispatch latency from enqueue to sent grouped by event type and destination.",
+        labelnames=("event_type", "destination"),
+        registry=registry,
+        buckets=(0.1, 0.5, 1, 2, 5, 10, 30, 60, 300, 600),
+    )
+    outbox_dispatcher_tick_total = Counter(
+        "dispatcher_tick_total",
+        "Total dispatcher ticks.",
+        registry=registry,
+    )
+    outbox_dispatcher_loop_duration_seconds = Histogram(
+        "dispatcher_loop_duration_seconds",
+        "Dispatcher loop duration in seconds.",
+        registry=registry,
+        buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30),
     )
     outbox_routed_total = Counter(
         "outbox_routed_total",
@@ -448,6 +559,31 @@ def _build_metrics() -> Metrics:
         "outbox_no_destination_total",
         "Total outbox events without a destination grouped by event type.",
         labelnames=("event_type",),
+        registry=registry,
+    )
+    risk_assessment_total = Counter(
+        "risk_assessment_total",
+        "Total risk assessments performed.",
+        registry=registry,
+    )
+    risk_cards_created_total = Counter(
+        "risk_cards_created_total",
+        "Total risk cards created.",
+        registry=registry,
+    )
+    action_plan_items_created_total = Counter(
+        "action_plan_items_created_total",
+        "Total action plan items created.",
+    files_presign_download_total = Counter(
+        "files_presign_download_total",
+        "Presigned file download URLs issued grouped by tenant.",
+        labelnames=("tenant",),
+        registry=registry,
+    )
+    files_download_denied_total = Counter(
+        "files_download_denied_total",
+        "Denied file download attempts grouped by reason.",
+        labelnames=("reason",),
         registry=registry,
     )
 
@@ -477,6 +613,18 @@ def _build_metrics() -> Metrics:
         http_request_latency_p95_seconds=http_request_latency_p95_seconds,
         http_request_errors_total=http_request_errors_total,
         outbox_enqueued_total=outbox_enqueued_total,
+        risk_assessment_total=risk_assessment_total,
+        risk_cards_created_total=risk_cards_created_total,
+        action_plan_items_created_total=action_plan_items_created_total,
+        files_presign_download_total=files_presign_download_total,
+        files_download_denied_total=files_download_denied_total,
+        outbox_sent_total=outbox_sent_total,
+        outbox_failed_total=outbox_failed_total,
+        outbox_dead_total=outbox_dead_total,
+        outbox_attempts_histogram=outbox_attempts_histogram,
+        outbox_dispatch_latency_seconds=outbox_dispatch_latency_seconds,
+        outbox_dispatcher_tick_total=outbox_dispatcher_tick_total,
+        outbox_dispatcher_loop_duration_seconds=outbox_dispatcher_loop_duration_seconds,
         outbox_routed_total=outbox_routed_total,
         outbox_no_destination_total=outbox_no_destination_total,
     )

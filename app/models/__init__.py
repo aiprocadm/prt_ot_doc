@@ -33,6 +33,7 @@ from app.models.models import (
     MedicalExam,
     NPABinding,
     Outbox,
+    OutboxStatus,
     PackagePreset,
     PackageProfile,
     Permit,
@@ -62,7 +63,17 @@ from app.models.models import (
     WebhookSubscription,
 )
 from app.models.npa import NpaAct, NpaClause
-from app.models.risk import Risk, RiskAssessment, RiskControl, RiskHazard, RiskMatrixCell
+from app.models.risk import (
+    Risk,
+    RiskActionPlan,
+    RiskActionPlanItem,
+    RiskAssessment,
+    RiskAssessmentItem,
+    RiskCard,
+    RiskControl,
+    RiskHazard,
+    RiskMatrixCell,
+)
 
 __all__ = [
     "Document",
@@ -97,6 +108,7 @@ __all__ = [
     "NpaAct",
     "NpaClause",
     "Outbox",
+    "OutboxStatus",
     "PackagePreset",
     "PackageProfile",
     "Person",
@@ -109,7 +121,11 @@ __all__ = [
     "PPENorm",
     "Permit",
     "Risk",
+    "RiskActionPlan",
+    "RiskActionPlanItem",
     "RiskAssessment",
+    "RiskAssessmentItem",
+    "RiskCard",
     "RiskControl",
     "RiskHazard",
     "RiskMatrixCell",

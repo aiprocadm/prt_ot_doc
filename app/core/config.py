@@ -286,6 +286,7 @@ class Settings(BaseSettings):
     s3_access_key: str = Field("prt_local_access", alias="S3_ACCESS_KEY")
     s3_secret_key: str = Field("prt_local_secret", alias="S3_SECRET_KEY")
     s3_secure: bool = Field(False, alias="S3_SECURE")
+    presign_download_ttl_seconds: int = Field(900, alias="PRESIGN_DOWNLOAD_TTL_SECONDS")
 
     secret_key: str = Field("change-me", alias="SECRET_KEY")
     jwt_issuer: str = Field("prt-ot-doc", alias="JWT_ISSUER")
@@ -319,6 +320,8 @@ class Settings(BaseSettings):
     celery_retry_backoff_max_seconds: int = Field(300, alias="CELERY_RETRY_BACKOFF_MAX_SECONDS")
     outbox_poll_interval: float = Field(5.0, alias="OUTBOX_POLL_INTERVAL")
     outbox_max_attempts: int = Field(10, alias="OUTBOX_MAX_ATTEMPTS")
+    outbox_retry_backoff_seconds: float = Field(5.0, alias="OUTBOX_RETRY_BACKOFF_SECONDS")
+    outbox_retry_backoff_max_seconds: float = Field(600.0, alias="OUTBOX_RETRY_BACKOFF_MAX_SECONDS")
     webhook_document_created_urls: CsvUrlList = Field(
         default_factory=list, alias="WEBHOOK_URLS_DOCUMENT_CREATED"
     )

@@ -139,6 +139,48 @@ def test_metrics_recording_celery_flow() -> None:
     assert error_labels["stage"] == PipelineStage.UNKNOWN.value
 
 
+def test_metrics_recording_outbox_flow() -> None:
+    metrics = metrics_module.get_metrics()
+
+    metrics.record_outbox_enqueued(
+        event_type="DocumentCreated",
+        destination="https://example.test/hooks",
+        tenant_id="tenant-1",
+    )
+    metrics.record_outbox_sent(event_type="DocumentCreated", destination="https://example.test/hooks")
+    metrics.record_outbox_failed(
+        event_type="DocumentCreated",
+        destination="https://example.test/hooks",
+        error_class="timeout",
+    )
+    metrics.record_outbox_dead(event_type="DocumentCreated", destination="https://example.test/hooks")
+    metrics.observe_outbox_attempts(
+        event_type="DocumentCreated",
+        destination="https://example.test/hooks",
+        attempts=2,
+    )
+    metrics.observe_outbox_dispatch_latency(
+        event_type="DocumentCreated",
+        destination="https://example.test/hooks",
+        seconds=1.5,
+    )
+    metrics.record_outbox_dispatcher_tick(processed=1)
+    metrics.observe_outbox_dispatcher_duration(seconds=0.2)
+
+    enqueued_samples = metrics.outbox_enqueued_total.collect()[0].samples
+    assert enqueued_samples[0].value == 1
+
+    sent_samples = metrics.outbox_sent_total.collect()[0].samples
+    assert sent_samples[0].value == 1
+
+    failed_samples = metrics.outbox_failed_total.collect()[0].samples
+    assert failed_samples[0].labels["error_class"] == "timeout"
+    assert failed_samples[0].value == 1
+
+    dead_samples = metrics.outbox_dead_total.collect()[0].samples
+    assert dead_samples[0].value == 1
+
+
 @pytest.mark.asyncio()
 async def test_render_metrics_returns_payload() -> None:
     payload, content_type = await metrics_module.render_metrics()
