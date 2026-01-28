@@ -20,6 +20,32 @@ module.exports = {
   },
   rules: {
     "react/react-in-jsx-scope": "off",
-    "react/prop-types": "off"
-  }
+    "react/prop-types": "off",
+    "no-restricted-globals": [
+      "error",
+      {
+        name: "fetch",
+        message: "Use apiClient from @/api/client to enforce tenant scoping."
+      }
+    ],
+    "no-restricted-imports": [
+      "error",
+      {
+        paths: [
+          {
+            name: "axios",
+            message: "Use apiClient from @/api/client instead of raw axios."
+          }
+        ]
+      }
+    ]
+  },
+  overrides: [
+    {
+      files: ["src/api/client.ts"],
+      rules: {
+        "no-restricted-imports": "off"
+      }
+    }
+  ]
 };

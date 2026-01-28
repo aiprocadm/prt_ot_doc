@@ -21,6 +21,7 @@ describe("TenantGate", () => {
     );
 
     expect(screen.getByText("Выберите контур")).toBeInTheDocument();
+    expect(screen.queryByText("Контент")).not.toBeInTheDocument();
 
     const user = userEvent.setup();
     await act(async () => {

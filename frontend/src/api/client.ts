@@ -11,6 +11,33 @@ const API_BASE_URL = appConfig.apiBaseUrl;
 let isRefreshing = false;
 let refreshPromise: Promise<string | null> | null = null;
 const subscribers: Array<(token: string | null) => void> = [];
+const TENANT_WHITELIST = [/\/v1\/auth(\/|$)/, /\/v1\/health(\/|$)/];
+
+const combineUrl = (baseURL: string, url: string) => {
+  if (!baseURL) return url;
+  if (!url) return baseURL;
+  return `${baseURL.replace(/\/+$/, "")}/${url.replace(/^\/+/, "")}`;
+};
+
+const resolveRequestPath = (url: string, baseURL?: string) => {
+  const combined = combineUrl(baseURL ?? "", url);
+  if (combined.startsWith("http://") || combined.startsWith("https://")) {
+    try {
+      return new URL(combined).pathname;
+    } catch {
+      return combined;
+    }
+  }
+  if (combined.startsWith("/")) return combined;
+  if (!combined) return "";
+  return `/${combined}`;
+};
+
+const isTenantRequiredPath = (path: string) => {
+  const isV1 = /\/v1(\/|$)/.test(path);
+  if (!isV1) return false;
+  return !TENANT_WHITELIST.some((pattern) => pattern.test(path));
+};
 
 const notifySubscribers = (token: string | null) => {
   subscribers.splice(0, subscribers.length).forEach((cb) => cb(token));
@@ -66,19 +93,22 @@ apiClient.interceptors.request.use((config) => {
   const tenant = tenantStorage.getTenant();
   config.headers = config.headers ?? {};
   const requestUrl = config.url ?? "";
-  const requiresTenant = !requestUrl.includes("/auth/");
+  const requestPath = resolveRequestPath(requestUrl, config.baseURL ?? API_BASE_URL);
+  const requiresTenant = isTenantRequiredPath(requestPath);
   if (!tenant && requiresTenant) {
-    return Promise.reject({
+    const error = {
       status: 0,
       code: "TENANT_REQUIRED",
       message: "Выберите контур перед выполнением запроса.",
-      details: { url: requestUrl }
-    } satisfies ApiError);
+      details: { url: requestUrl, path: requestPath }
+    } satisfies ApiError;
+    handleApiError(error, requestUrl);
+    return Promise.reject(error);
   }
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
-  if (tenant) {
+  if (tenant && requiresTenant) {
     config.headers["X-Tenant"] = tenant.slug;
     if (tenant.site) {
       config.headers["X-Site"] = tenant.site;
