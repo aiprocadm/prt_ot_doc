@@ -3,6 +3,8 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 
+import { PERMISSIONS } from "@/permissions/permissions";
+import { useAuthStore } from "@/stores/auth";
 const listMock = vi.fn();
 const downloadMock = vi.fn();
 const refreshStatusMock = vi.fn();
@@ -47,6 +49,21 @@ import DocumentsPage from "@/pages/documents/DocumentsPage";
 
 describe("DocumentsPage", () => {
   it("loads documents list and opens document card", async () => {
+    useAuthStore.setState({
+      user: {
+        id: "user-10",
+        created_at: "2024-01-01",
+        updated_at: "2024-01-02",
+        email: "user@example.com",
+        full_name: "User",
+        roles: ["ot_specialist"],
+        permissions: [PERMISSIONS.DOCUMENT_VIEW, PERMISSIONS.DOCUMENT_EXPORT, PERMISSIONS.DOCUMENT_SIGN]
+      },
+      loading: false,
+      error: null,
+      isAuthenticated: true,
+      initialized: true
+    });
     render(
       <MemoryRouter>
         <DocumentsPage />

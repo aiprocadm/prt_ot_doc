@@ -4,6 +4,13 @@ export interface UserDto extends BaseEntityDto {
   email: string;
   full_name: string;
   roles: string[];
+  permissions?: string[];
+  attributes?: {
+    tenant_id?: string;
+    company_ids?: string[];
+    site_ids?: string[];
+    is_admin?: boolean;
+  };
   last_login_at?: string;
 }
 

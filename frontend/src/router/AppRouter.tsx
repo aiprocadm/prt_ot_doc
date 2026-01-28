@@ -3,6 +3,8 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { AuthLayout } from "@/layouts/AuthLayout";
 import { MainLayout } from "@/layouts/MainLayout";
+import { AccessDeniedPage } from "@/pages/access/AccessDeniedPage";
+import { PERMISSIONS } from "@/permissions/permissions";
 import { ProtectedRoute } from "@/router/ProtectedRoute";
 import { useAuthStore } from "@/stores/auth";
 
@@ -50,31 +52,82 @@ const AppRouter = () => {
           <Route element={<ProtectedRoute />}>
             <Route element={<MainLayout />}>
               <Route index element={<Navigate to="/dashboard" replace />} />
-              <Route path="/dashboard" element={<DashboardPage />} />
-              <Route path="/companies" element={<CompaniesPage />} />
-              <Route path="/persons" element={<PersonsPage />} />
-              <Route path="/templates" element={<TemplatesPage />} />
-              <Route path="/packs" element={<PacksPage />} />
-              <Route path="/documents" element={<DocumentsPage />} />
-              <Route path="/files" element={<FilesPage />} />
-              <Route path="/tasks" element={<TasksPage />} />
-              <Route path="/risk" element={<RiskPage />} />
-              <Route path="/activities" element={<ActivitiesPage />} />
-              <Route path="/ppe" element={<PpePage />} />
-              <Route path="/training" element={<TrainingPage />} />
-              <Route path="/medical" element={<MedicalPage />} />
-              <Route path="/incidents" element={<IncidentsPage />} />
-              <Route path="/inspections" element={<InspectionsPage />} />
-              <Route path="/audit-prep" element={<AuditPrepPage />} />
-              <Route path="/fire-safety" element={<FireSafetyPage />} />
-              <Route path="/fire-training" element={<FireTrainingPage />} />
-              <Route path="/fire-inspections" element={<FireInspectionsPage />} />
-              <Route path="/reference" element={<ReferencePage />} />
-              <Route path="/contractors" element={<ContractorsPage />} />
-              <Route path="/admin" element={<AdminPage />} />
-              <Route path="/npa" element={<NpaPage />} />
-              <Route path="/audit" element={<AuditPage />} />
-              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/no-access" element={<AccessDeniedPage />} />
+              <Route element={<ProtectedRoute permission={PERMISSIONS.DASHBOARD_VIEW} />}>
+                <Route path="/dashboard" element={<DashboardPage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.COMPANY_VIEW} />}>
+                <Route path="/companies" element={<CompaniesPage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.PERSON_VIEW} />}>
+                <Route path="/persons" element={<PersonsPage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.TEMPLATE_VIEW} />}>
+                <Route path="/templates" element={<TemplatesPage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.PACK_VIEW} />}>
+                <Route path="/packs" element={<PacksPage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.DOCUMENT_VIEW} />}>
+                <Route path="/documents" element={<DocumentsPage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.FILE_VIEW} />}>
+                <Route path="/files" element={<FilesPage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.TASK_VIEW} />}>
+                <Route path="/tasks" element={<TasksPage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.RISK_VIEW} />}>
+                <Route path="/risk" element={<RiskPage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.ACTIVITY_VIEW} />}>
+                <Route path="/activities" element={<ActivitiesPage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.PPE_VIEW} />}>
+                <Route path="/ppe" element={<PpePage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.TRAINING_VIEW} />}>
+                <Route path="/training" element={<TrainingPage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.MEDICAL_VIEW} />}>
+                <Route path="/medical" element={<MedicalPage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.INCIDENT_VIEW} />}>
+                <Route path="/incidents" element={<IncidentsPage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.INSPECTION_VIEW} />}>
+                <Route path="/inspections" element={<InspectionsPage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.AUDIT_PREP_VIEW} />}>
+                <Route path="/audit-prep" element={<AuditPrepPage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.FIRE_SAFETY_VIEW} />}>
+                <Route path="/fire-safety" element={<FireSafetyPage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.FIRE_TRAINING_VIEW} />}>
+                <Route path="/fire-training" element={<FireTrainingPage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.FIRE_INSPECTIONS_VIEW} />}>
+                <Route path="/fire-inspections" element={<FireInspectionsPage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.REFERENCE_VIEW} />}>
+                <Route path="/reference" element={<ReferencePage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.CONTRACTOR_VIEW} />}>
+                <Route path="/contractors" element={<ContractorsPage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.ADMIN_MANAGE_ROLES} />}>
+                <Route path="/admin" element={<AdminPage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.NPA_VIEW} />}>
+                <Route path="/npa" element={<NpaPage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.AUDIT_VIEW} />}>
+                <Route path="/audit" element={<AuditPage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_VIEW} />}>
+                <Route path="/settings" element={<SettingsPage />} />
+              </Route>
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/companies" replace />} />

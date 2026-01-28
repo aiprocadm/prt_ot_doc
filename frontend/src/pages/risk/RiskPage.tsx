@@ -4,15 +4,26 @@ import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RiskAssessmentForm } from "@/features/risk/RiskAssessmentForm";
 import { RiskAssessmentsTable } from "@/features/risk/RiskAssessmentsTable";
+import { AccessDeniedPage } from "@/pages/access/AccessDeniedPage";
+import { PERMISSIONS } from "@/permissions/permissions";
+import { useAbility } from "@/permissions/useAbility";
 import { useRiskStore } from "@/stores/risk";
 
 const RiskPage = () => {
   const { listHazards, listAssessments, hazards } = useRiskStore();
+  const { can } = useAbility();
+  const canView = can(PERMISSIONS.RISK_VIEW);
 
   useEffect(() => {
-    listHazards();
-    listAssessments();
-  }, [listAssessments, listHazards]);
+    if (canView) {
+      listHazards();
+      listAssessments();
+    }
+  }, [canView, listAssessments, listHazards]);
+
+  if (!canView) {
+    return <AccessDeniedPage />;
+  }
 
   return (
     <div className="space-y-6">

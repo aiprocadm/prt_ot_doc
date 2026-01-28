@@ -2,7 +2,8 @@ import { type ColumnDef } from "@tanstack/react-table";
 import { useMemo } from "react";
 
 import { DataTable } from "@/components/common/DataTable";
-import { Button } from "@/components/ui/button";
+import { ActionButton } from "@/components/permissions/ActionButton";
+import { PERMISSIONS } from "@/permissions/permissions";
 import { useRiskStore } from "@/stores/risk";
 import type { RiskAssessmentDto } from "@/types/dto/risk";
 import { formatDate } from "@/utils/datetime";
@@ -42,16 +43,19 @@ export const RiskAssessmentsTable = () => {
         id: "export",
         header: "Экспорт",
         cell: ({ row }) => (
-          <Button
+          <ActionButton
+            permission={PERMISSIONS.RISK_EXPORT}
+            resource={{ status: row.original.status, company_id: row.original.company_id }}
             variant="ghost"
             size="sm"
+            disabledReason="Экспорт доступен после утверждения расчёта"
             onClick={async () => {
               const blob = await exportAssessment(row.original.id);
               downloadBlob(blob, `risk-${row.original.id}.pdf`);
             }}
           >
             Скачать
-          </Button>
+          </ActionButton>
         )
       }
     ],
