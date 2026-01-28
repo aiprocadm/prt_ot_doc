@@ -771,11 +771,13 @@ class IdempotencyKey(TenantBaseModel):
 class RiskMethodology(TenantBaseModel):
     """Risk calculation methodology including severity/likelihood scales."""
 
+    code: Mapped[str] = mapped_column(String(64), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     definition: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "name", name="uq_risk_methodology_name"),
+        UniqueConstraint("tenant_id", "code", name="uq_risk_methodology_code"),
     )
 
 

@@ -5,6 +5,7 @@ from typing import Literal, cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.models import RiskMethodology
 from app.models.risk import RiskAssessment, RiskMatrixCell
@@ -130,9 +131,13 @@ async def recalc_risk_map(
     severities = _scale_values(definition, "severity_scale")
     likelihoods = _scale_values(definition, "likelihood_scale")
 
-    stmt = select(RiskAssessment).where(
-        RiskAssessment.tenant_id == tenant_id,
-        RiskAssessment.company_id == company_id,
+    stmt = (
+        select(RiskAssessment)
+        .where(
+            RiskAssessment.tenant_id == tenant_id,
+            RiskAssessment.company_id == company_id,
+        )
+        .options(selectinload(RiskAssessment.items))
     )
     if site_id:
         stmt = stmt.where(RiskAssessment.place_id == site_id)
@@ -142,10 +147,17 @@ async def recalc_risk_map(
         stmt = stmt.where(RiskAssessment.document_pack_id == document_pack_id)
 
     assessments = (await session.execute(stmt)).scalars().all()
-    counts: dict[tuple[int, int], list[RiskAssessment]] = defaultdict(list)
+    counts: dict[tuple[int, int], list[dict[str, str]]] = defaultdict(list)
     for assessment in assessments:
+        items = list(assessment.items or [])
+        if items:
+            for item in items:
+                counts[(item.severity, item.probability)].append(
+                    {"hazard_id": item.hazard_id, "assessment_id": assessment.id}
+                )
+            continue
         counts[(assessment.severity_after, assessment.likelihood_after)].append(
-            assessment
+            {"hazard_id": assessment.hazard_id, "assessment_id": assessment.id}
         )
 
     matrix_cells: list[dict[str, object]] = []
@@ -153,13 +165,6 @@ async def recalc_risk_map(
         for likelihood in likelihoods:
             score, band = await score_band(session, tenant_id, severity, likelihood)
             cell_assessments = counts.get((severity, likelihood), [])
-            hazards = [
-                {
-                    "hazard_id": assessment.hazard_id,
-                    "assessment_id": assessment.id,
-                }
-                for assessment in cell_assessments
-            ]
             matrix_cells.append(
                 {
                     "severity": severity,
@@ -167,7 +172,7 @@ async def recalc_risk_map(
                     "score": score,
                     "band": band,
                     "count": len(cell_assessments),
-                    "assessments": hazards,
+                    "assessments": cell_assessments,
                 }
             )
 
