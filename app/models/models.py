@@ -52,6 +52,7 @@ __all__ = [
     "InspectionStatus",
     "InspectionResult",
     "Outbox",
+    "OutboxStatus",
     "PackagePreset",
     "PackageProfile",
     "Site",
@@ -89,6 +90,7 @@ __all__ = [
     "TrainingCertificate",
     "User",
     "WarehousePPE",
+    "WebhookSubscription",
 ]
 
 
@@ -110,6 +112,23 @@ class Tenant(SharedModel):
 
     __table_args__ = (
         UniqueConstraint("slug", name="uq_tenant_slug"),
+    )
+
+
+class WebhookSubscription(SharedModel):
+    __tablename__ = "webhook_subscription"
+
+    tenant_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("tenant.id"), nullable=True, index=True
+    )
+    event_type: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    headers: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    __table_args__ = (
+        Index("ix_webhook_subscription_event_type", "event_type"),
+        Index("ix_webhook_subscription_tenant_event", "tenant_id", "event_type"),
     )
 class User(TenantBaseModel, SoftDeleteMixin):
     email: Mapped[str] = mapped_column(String(320), nullable=False)
@@ -1220,15 +1239,38 @@ class Equipment(TenantBaseModel):
     asset: Mapped[Asset] = relationship(backref="equipment")
 
 
+class OutboxStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    IN_PROGRESS = "IN_PROGRESS"
+    SENT = "SENT"
+    FAILED = "FAILED"
+    DEAD = "DEAD"
+
+
 class Outbox(TenantBaseModel):
     event_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    destination: Mapped[str] = mapped_column(String(512), nullable=False)
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-    dedupe_key: Mapped[str | None] = mapped_column(String(128))
-    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    headers: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(128))
+    status: Mapped[OutboxStatus] = mapped_column(
+        Enum(OutboxStatus),
+        nullable=False,
+        default=OutboxStatus.PENDING,
+    )
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    last_error: Mapped[str | None] = mapped_column(String(512))
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
-        Index("ix_outbox_processed_at", "processed_at"),
-        UniqueConstraint("tenant_id", "event_type", "dedupe_key", name="uq_outbox_dedupe"),
+        Index("ix_outbox_status_next_attempt", "status", "next_attempt_at"),
+        Index("ix_outbox_event_type", "event_type"),
+        Index("ix_outbox_idempotency_key", "idempotency_key"),
+        UniqueConstraint(
+            "tenant_id",
+            "destination",
+            "idempotency_key",
+            name="uq_outbox_idempotency",
+        ),
     )

@@ -41,7 +41,9 @@ async def test_pack_download_presigned_redirect(
 
     captured: dict[str, object] = {}
 
-    def fake_presign(key: str, *, expires_in: int = 3600) -> str:
+    def fake_presign(
+        key: str, *, expires_in: int = 3600, bucket: str | None = None, response_headers=None
+    ) -> str:
         captured["key"] = key
         captured["expires_in"] = expires_in
         return "https://example.com/presigned"
