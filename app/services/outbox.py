@@ -13,6 +13,7 @@ from time import perf_counter
 from app.core.config import get_settings
 from app.core.metrics import get_metrics
 from app.models.models import Outbox
+from app.services.events import dedupe_key_for, normalize_payload, resolve_event_type
 from app.services.webhooks import WebhookDispatcher
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,7 @@ class OutboxService:
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
+        self.metrics = get_metrics()
 
     async def enqueue(
         self,
@@ -30,18 +32,51 @@ class OutboxService:
         tenant_id: str,
         event_type: str,
         payload: Mapping[str, Any],
+        dedupe_key: str | None = None,
     ) -> Outbox:
+        resolved = resolve_event_type(event_type)
+        payload_model, normalized_payload = normalize_payload(
+            event_type=resolved,
+            payload=payload,
+            tenant_id=tenant_id,
+        )
+        key = dedupe_key or dedupe_key_for(resolved, payload_model)
+        if key:
+            existing = await self._find_existing(
+                tenant_id=tenant_id,
+                event_type=resolved.value,
+                dedupe_key=key,
+            )
+            if existing:
+                return existing
         entry = Outbox(
             tenant_id=tenant_id,
-            event_type=event_type,
-            payload=dict(payload),
+            event_type=resolved.value,
+            payload=normalized_payload,
+            dedupe_key=key,
         )
         self.session.add(entry)
         await self.session.flush()
         if entry.payload.get("event_id") is None:
             entry.payload = {**entry.payload, "event_id": entry.id}
             await self.session.flush()
+        self.metrics.record_outbox_enqueued(event_type=entry.event_type)
         return entry
+
+    async def _find_existing(
+        self,
+        *,
+        tenant_id: str,
+        event_type: str,
+        dedupe_key: str,
+    ) -> Outbox | None:
+        stmt = select(Outbox).where(
+            Outbox.tenant_id == tenant_id,
+            Outbox.event_type == event_type,
+            Outbox.dedupe_key == dedupe_key,
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
 
 
 class OutboxProcessor:

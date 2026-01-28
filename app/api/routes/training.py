@@ -41,6 +41,7 @@ from app.schemas.training import (
     TrainingSessionCreate,
     TrainingSessionRead,
 )
+from app.services.events import EventType
 from app.services.outbox import OutboxService
 
 router = APIRouter(prefix="/training", tags=["training"])
@@ -229,6 +230,7 @@ async def assign_plan(
             person_id=payload.person_id,
             due_date=payload.due_date,
             is_mandatory=payload.is_mandatory,
+            actor_id=access.user.id if access else None,
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
@@ -272,15 +274,17 @@ async def create_session(
         outbox = OutboxService(session)
         await outbox.enqueue(
             tenant_id=str(tenant.id),
-            event_type="TrainingCompleted",
+            event_type=EventType.TRAINING_COMPLETED.value,
             payload={
+                "tenant_id": str(tenant.id),
+                "actor_id": access.user.id if access else None,
+                "occurred_at": record.completed_at or datetime.now(tz=timezone.utc),
+                "training_event_id": record.id,
                 "session_id": record.id,
                 "person_id": record.person_id,
                 "course_id": record.course_id,
                 "plan_id": record.plan_id,
-                "completed_at": record.completed_at.isoformat()
-                if record.completed_at
-                else None,
+                "completed_at": record.completed_at,
                 "status": record.status.value,
                 "score": record.score,
             },

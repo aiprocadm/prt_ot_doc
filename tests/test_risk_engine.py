@@ -200,3 +200,4 @@ async def test_risk_engine_flow(
             )
         ).scalar_one_or_none()
         assert outbox_entry is not None
+        assert outbox_entry.payload["risk_assessment_id"] == assessment_body["id"]

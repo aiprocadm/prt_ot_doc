@@ -23,6 +23,7 @@ from app.schemas.ppe import (
     PPEItemRead,
     PPEItemUpdate,
 )
+from app.services.events import EventType
 from app.services.outbox import OutboxService
 
 router = APIRouter(prefix="/ppe", tags=["ppe"])
@@ -211,14 +212,17 @@ async def create_issue(
     outbox = OutboxService(session)
     await outbox.enqueue(
         tenant_id=str(tenant.id),
-        event_type="PPEIssued",
+        event_type=EventType.PPE_ISSUED.value,
         payload={
-            "issue_id": issue.id,
+            "tenant_id": str(tenant.id),
+            "actor_id": access.user.id if access else None,
+            "occurred_at": issue.issued_at,
+            "ppe_issue_id": issue.id,
             "person_id": issue.person_id,
             "item_id": issue.item_id,
             "quantity": issue.quantity,
-            "issued_at": issue.issued_at.isoformat(),
-            "expires_at": issue.expires_at.isoformat() if issue.expires_at else None,
+            "issued_at": issue.issued_at,
+            "expires_at": issue.expires_at,
             "status": issue.status.value,
         },
     )
@@ -240,6 +244,7 @@ async def update_issue(
     access: ManagerAccess,
 ) -> PPEIssueRead:
     issue = await _get_issue(session, tenant, issue_id)
+    previous_status = issue.status
     updates = payload.model_dump(exclude_unset=True)
     for field, value in updates.items():
         setattr(issue, field, value)
@@ -247,4 +252,21 @@ async def update_issue(
         issue.returned_at = datetime.now(timezone.utc)
     await session.flush()
     await session.refresh(issue)
+    if previous_status != PPEIssueStatus.RETURNED and issue.status == PPEIssueStatus.RETURNED:
+        outbox = OutboxService(session)
+        await outbox.enqueue(
+            tenant_id=str(tenant.id),
+            event_type=EventType.PPE_RETURNED.value,
+            payload={
+                "tenant_id": str(tenant.id),
+                "actor_id": access.user.id if access else None,
+                "occurred_at": issue.returned_at or datetime.now(timezone.utc),
+                "ppe_issue_id": issue.id,
+                "person_id": issue.person_id,
+                "item_id": issue.item_id,
+                "quantity": issue.quantity,
+                "returned_at": issue.returned_at or datetime.now(timezone.utc),
+                "status": issue.status.value,
+            },
+        )
     return _issue_schema(issue)

@@ -319,11 +319,20 @@ class Settings(BaseSettings):
     celery_retry_backoff_max_seconds: int = Field(300, alias="CELERY_RETRY_BACKOFF_MAX_SECONDS")
     outbox_poll_interval: float = Field(5.0, alias="OUTBOX_POLL_INTERVAL")
     outbox_max_attempts: int = Field(10, alias="OUTBOX_MAX_ATTEMPTS")
+    webhook_document_created_urls: CsvUrlList = Field(
+        default_factory=list, alias="WEBHOOK_URLS_DOCUMENT_CREATED"
+    )
     webhook_document_generated_urls: CsvUrlList = Field(
         default_factory=list, alias="WEBHOOK_URLS_DOCUMENT_GENERATED"
     )
+    webhook_document_signed_urls: CsvUrlList = Field(
+        default_factory=list, alias="WEBHOOK_URLS_DOCUMENT_SIGNED"
+    )
     webhook_signed_urls: CsvUrlList = Field(
         default_factory=list, alias="WEBHOOK_URLS_SIGNED"
+    )
+    webhook_document_exported_urls: CsvUrlList = Field(
+        default_factory=list, alias="WEBHOOK_URLS_DOCUMENT_EXPORTED"
     )
     webhook_exported_urls: CsvUrlList = Field(
         default_factory=list, alias="WEBHOOK_URLS_EXPORTED"
@@ -334,8 +343,14 @@ class Settings(BaseSettings):
     webhook_ppe_issued_urls: CsvUrlList = Field(
         default_factory=list, alias="WEBHOOK_URLS_PPE_ISSUED"
     )
+    webhook_ppe_returned_urls: CsvUrlList = Field(
+        default_factory=list, alias="WEBHOOK_URLS_PPE_RETURNED"
+    )
     webhook_training_completed_urls: CsvUrlList = Field(
         default_factory=list, alias="WEBHOOK_URLS_TRAINING_COMPLETED"
+    )
+    webhook_training_assigned_urls: CsvUrlList = Field(
+        default_factory=list, alias="WEBHOOK_URLS_TRAINING_ASSIGNED"
     )
     webhook_timeout_seconds: float = Field(10.0, alias="WEBHOOK_TIMEOUT_SECONDS")
     log_level: str = Field("INFO", alias="LOG_LEVEL")

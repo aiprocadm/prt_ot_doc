@@ -31,6 +31,7 @@ from app.models.risk import (
 )
 from app.schemas.risk import RiskListResponse
 from app.services.risk import RiskService
+from app.services.events import EventType
 from app.services.outbox import OutboxService
 
 router = APIRouter(tags=["risks"])
@@ -709,9 +710,12 @@ async def assess(
     outbox = OutboxService(session)
     await outbox.enqueue(
         tenant_id=tenant_id,
-        event_type="RiskAssessed",
+        event_type=EventType.RISK_ASSESSED.value,
         payload={
-            "assessment_id": assessment.id,
+            "tenant_id": tenant_id,
+            "actor_id": created_by,
+            "occurred_at": assessment.created_at,
+            "risk_assessment_id": assessment.id,
             "hazard_code": hazard.code,
             "company_id": payload.company_id,
             "place_id": payload.place_id,
