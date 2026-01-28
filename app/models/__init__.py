@@ -33,6 +33,7 @@ from app.models.models import (
     MedicalExam,
     NPABinding,
     Outbox,
+    OutboxStatus,
     PackagePreset,
     PackageProfile,
     Permit,
@@ -59,6 +60,7 @@ from app.models.models import (
     TrainingStatus,
     User,
     WarehousePPE,
+    WebhookSubscription,
 )
 from app.models.npa import NpaAct, NpaClause
 from app.models.risk import Risk, RiskAssessment, RiskControl, RiskHazard, RiskMatrixCell
@@ -96,6 +98,7 @@ __all__ = [
     "NpaAct",
     "NpaClause",
     "Outbox",
+    "OutboxStatus",
     "PackagePreset",
     "PackageProfile",
     "Person",
@@ -127,4 +130,5 @@ __all__ = [
     "TrainingStatus",
     "User",
     "WarehousePPE",
+    "WebhookSubscription",
 ]

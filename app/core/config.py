@@ -320,6 +320,8 @@ class Settings(BaseSettings):
     celery_retry_backoff_max_seconds: int = Field(300, alias="CELERY_RETRY_BACKOFF_MAX_SECONDS")
     outbox_poll_interval: float = Field(5.0, alias="OUTBOX_POLL_INTERVAL")
     outbox_max_attempts: int = Field(10, alias="OUTBOX_MAX_ATTEMPTS")
+    outbox_retry_backoff_seconds: float = Field(5.0, alias="OUTBOX_RETRY_BACKOFF_SECONDS")
+    outbox_retry_backoff_max_seconds: float = Field(600.0, alias="OUTBOX_RETRY_BACKOFF_MAX_SECONDS")
     webhook_document_created_urls: CsvUrlList = Field(
         default_factory=list, alias="WEBHOOK_URLS_DOCUMENT_CREATED"
     )

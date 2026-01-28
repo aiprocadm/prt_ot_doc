@@ -34,11 +34,13 @@ async def test_outbox_enqueue_is_idempotent(
             tenant_id=str(tenant.id),
             event_type="DocumentCreated",
             payload=payload,
+            destination="https://example.test/hooks",
         )
         await outbox.enqueue(
             tenant_id=str(tenant.id),
             event_type="DocumentCreated",
             payload=payload,
+            destination="https://example.test/hooks",
         )
         await session.commit()
 
@@ -78,6 +80,7 @@ async def test_outbox_enqueue_rolls_back_with_transaction(
             tenant_id=str(tenant.id),
             event_type="DocumentCreated",
             payload=payload,
+            destination="https://example.test/hooks",
         )
         await session.rollback()
 
@@ -87,7 +90,7 @@ async def test_outbox_enqueue_rolls_back_with_transaction(
                 select(Outbox).where(
                     Outbox.tenant_id == str(tenant.id),
                     Outbox.event_type == "DocumentCreated",
-                    Outbox.dedupe_key == "doc-rollback:ver-rollback",
+                    Outbox.idempotency_key == "doc-rollback:ver-rollback",
                 )
             )
         ).scalar_one_or_none()

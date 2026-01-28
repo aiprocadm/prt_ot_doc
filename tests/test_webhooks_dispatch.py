@@ -23,10 +23,13 @@ async def test_webhook_dispatcher_sends_exported_event(monkeypatch: pytest.Monke
     transport = httpx.MockTransport(handler)
     async with httpx.AsyncClient(transport=transport) as client:
         dispatcher = WebhookDispatcher(settings=get_settings(), client=client)
+        destinations = dispatcher.resolve_destinations("DocumentExported")
+        assert destinations
         await dispatcher.dispatch(
             event_type="DocumentExported",
             tenant_id="tenant-1",
             payload={"event_id": "evt-1", "zip_storage_key": "s3/key"},
+            destination=destinations[0],
         )
 
     assert len(requests) == 1
