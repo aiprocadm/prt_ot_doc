@@ -130,6 +130,7 @@ class OutboxProcessor:
                     event_type=entry.event_type,
                     tenant_id=entry.tenant_id,
                     payload=dict(entry.payload or {}),
+                    session=self.session,
                 )
             except Exception as exc:
                 entry.last_error = str(exc)
