@@ -22,6 +22,8 @@ from app.models.models import (
     TrainingSessionStatus,
 )
 from app.models.file import File
+from app.services.events import EventType
+from app.services.outbox import OutboxService
 
 
 @dataclass(slots=True)
@@ -85,6 +87,7 @@ async def assign_training_plan(
     person_id: str | None = None,
     due_date: date | None = None,
     is_mandatory: bool = True,
+    actor_id: str | None = None,
 ) -> TrainingPlan:
     """Create a training plan for a person or position within a company."""
 
@@ -119,6 +122,25 @@ async def assign_training_plan(
     session.add(plan)
     await session.flush()
     await session.refresh(plan)
+    outbox = OutboxService(session)
+    await outbox.enqueue(
+        tenant_id=tenant_id,
+        event_type=EventType.TRAINING_ASSIGNED.value,
+        payload={
+            "tenant_id": tenant_id,
+            "actor_id": actor_id,
+            "occurred_at": plan.assigned_at,
+            "training_event_id": plan.id,
+            "plan_id": plan.id,
+            "company_id": plan.company_id,
+            "course_id": plan.course_id,
+            "position_id": plan.position_id,
+            "person_id": plan.person_id,
+            "due_date": plan.due_date,
+            "is_mandatory": plan.is_mandatory,
+            "assigned_at": plan.assigned_at,
+        },
+    )
     return plan
 
 

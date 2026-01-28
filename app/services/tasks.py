@@ -27,6 +27,7 @@ from app.models.models import (
 )
 from app.schemas.pack import PackGenerateRequest
 from app.services.audit import AuditService
+from app.services.events import EventType
 from app.services.outbox import OutboxService
 from app.services.celery_app import celery_app
 from app.services.celery_app import settings as celery_settings
@@ -478,6 +479,7 @@ async def _generate_pack_coroutine(
                     person_index.get(doc.person_id) if doc.person_id else None
                 ),
                 "basename": doc.basename,
+                "document_version_id": doc.document_version_id,
                 "docx_storage_key": doc.docx_storage_key,
                 "pdf_storage_key": doc.pdf_storage_key,
                 "docx_zip_path": doc.docx_zip_path,
@@ -503,8 +505,11 @@ async def _generate_pack_coroutine(
         outbox = OutboxService(session)
         await outbox.enqueue(
             tenant_id=str(company.tenant_id),
-            event_type="Exported",
+            event_type=EventType.DOCUMENT_EXPORTED.value,
             payload={
+                "tenant_id": str(company.tenant_id),
+                "actor_id": None,
+                "occurred_at": datetime.now(tz=timezone.utc),
                 "pack_id": pack.id,
                 "pack_code": pack.code,
                 "zip_storage_key": export_result.zip_storage_key,

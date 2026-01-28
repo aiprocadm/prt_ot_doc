@@ -50,6 +50,7 @@ from app.services.audit import AuditService
 from app.services.celery_app import celery_app
 from app.services.file_storage import FileStorageService
 from app.services.idempotency import IdempotencyService
+from app.services.events import EventType
 from app.services.outbox import OutboxProcessor, OutboxService
 
 settings = get_settings()
@@ -255,8 +256,11 @@ async def _generate_document_for_run(run_id: str, tenant_slug: str) -> tuple[str
             outbox = OutboxService(session)
             await outbox.enqueue(
                 tenant_id=run.tenant_id,
-                event_type="DocumentGenerated",
+                event_type=EventType.DOCUMENT_CREATED.value,
                 payload={
+                    "tenant_id": str(run.tenant_id),
+                    "actor_id": str(user.id),
+                    "occurred_at": document.created_at,
                     "document_id": document.id,
                     "document_version_id": version.id,
                     "template_id": template.id,
@@ -264,6 +268,7 @@ async def _generate_document_for_run(run_id: str, tenant_slug: str) -> tuple[str
                     "company_id": company.id,
                     "person_id": person.id if person else None,
                     "storage_key": storage_key,
+                    "status": document.status.value,
                 },
             )
             idempotency = IdempotencyService(

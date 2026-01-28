@@ -75,6 +75,7 @@ class ExportDocument:
     version: int
     person_id: str | None
     person_label: str | None
+    document_version_id: str | None
     docx_storage_key: str | None
     pdf_storage_key: str | None
 
@@ -87,6 +88,7 @@ class ExportedDocument:
     template_name: str
     person_id: str | None
     basename: str
+    document_version_id: str | None
     docx_storage_key: str | None
     pdf_storage_key: str | None
     docx_zip_path: str | None
@@ -178,6 +180,7 @@ class PackageExportService:
                         template_name=descriptor.template_name,
                         person_id=descriptor.person_id,
                         basename=basename,
+                        document_version_id=descriptor.document_version_id,
                         docx_storage_key=descriptor.docx_storage_key,
                         pdf_storage_key=descriptor.pdf_storage_key,
                         docx_zip_path=docx_path,

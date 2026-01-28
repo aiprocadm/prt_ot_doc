@@ -11,7 +11,7 @@ from app.services.webhooks import WebhookDispatcher
 
 @pytest.mark.anyio
 async def test_webhook_dispatcher_sends_exported_event(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("WEBHOOK_URLS_EXPORTED", "https://example.test/hooks/exported")
+    monkeypatch.setenv("WEBHOOK_URLS_DOCUMENT_EXPORTED", "https://example.test/hooks/exported")
     get_settings.cache_clear()  # type: ignore[attr-defined]
 
     requests: list[httpx.Request] = []
@@ -24,14 +24,14 @@ async def test_webhook_dispatcher_sends_exported_event(monkeypatch: pytest.Monke
     async with httpx.AsyncClient(transport=transport) as client:
         dispatcher = WebhookDispatcher(settings=get_settings(), client=client)
         await dispatcher.dispatch(
-            event_type="Exported",
+            event_type="DocumentExported",
             tenant_id="tenant-1",
             payload={"event_id": "evt-1", "zip_storage_key": "s3/key"},
         )
 
     assert len(requests) == 1
     body = json.loads(requests[0].content.decode("utf-8"))
-    assert body["event_type"] == "Exported"
+    assert body["event_type"] == "DocumentExported"
     assert body["tenant_id"] == "tenant-1"
     assert requests[0].headers.get("Idempotency-Key") == "evt-1"
 

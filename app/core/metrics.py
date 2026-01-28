@@ -53,6 +53,7 @@ class Metrics:
     http_request_latency_seconds: Histogram
     http_request_latency_p95_seconds: Gauge
     http_request_errors_total: Counter
+    outbox_enqueued_total: Counter
     _http_latency_tracker: "LatencyTracker" = field(
         default_factory=lambda: LatencyTracker(), repr=False
     )
@@ -148,6 +149,9 @@ class Metrics:
             self.http_request_errors_total.labels(
                 method=method_label, path=path_label, status=family
             ).inc()
+
+    def record_outbox_enqueued(self, *, event_type: str) -> None:
+        self.outbox_enqueued_total.labels(event_type=sanitize_label(event_type)).inc()
 
 
 _METRICS: Metrics | None = None
@@ -259,6 +263,12 @@ def _build_metrics() -> Metrics:
         labelnames=("method", "path", "status"),
         registry=registry,
     )
+    outbox_enqueued_total = Counter(
+        "outbox_enqueued_total",
+        "Total outbox events enqueued grouped by event type.",
+        labelnames=("event_type",),
+        registry=registry,
+    )
 
     return Metrics(
         registry=registry,
@@ -278,6 +288,7 @@ def _build_metrics() -> Metrics:
         http_request_latency_seconds=http_request_latency_seconds,
         http_request_latency_p95_seconds=http_request_latency_p95_seconds,
         http_request_errors_total=http_request_errors_total,
+        outbox_enqueued_total=outbox_enqueued_total,
     )
 
 

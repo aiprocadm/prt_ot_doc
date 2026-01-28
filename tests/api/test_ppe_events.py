@@ -44,4 +44,49 @@ async def test_ppe_issue_emits_outbox(
             )
         ).scalar_one_or_none()
         assert outbox_entry is not None
-        assert outbox_entry.payload["issue_id"] == issue_id
+        assert outbox_entry.payload["ppe_issue_id"] == issue_id
+
+
+@pytest.mark.asyncio
+async def test_ppe_return_emits_outbox(
+    async_client, make_auth_headers, sessionmaker, data_factory: TestDataFactory
+) -> None:
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        company = await data_factory.create_company(tenant=tenant, session=session)
+        person = await data_factory.create_person(tenant=tenant, company=company, session=session)
+        tenant_id = str(tenant.id)
+
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+
+    item_payload = {"name": "Boots", "code": "PPE-BOOT", "category": "feet"}
+    item_response = await async_client.post(
+        "/api/v1/ppe/items", json=item_payload, headers=headers
+    )
+    assert item_response.status_code == status.HTTP_201_CREATED
+    item_id = item_response.json()["id"]
+
+    issue_payload = {"person_id": person.id, "item_id": item_id, "quantity": 1}
+    issue_response = await async_client.post(
+        "/api/v1/ppe/issues", json=issue_payload, headers=headers
+    )
+    assert issue_response.status_code == status.HTTP_201_CREATED
+    issue_id = issue_response.json()["id"]
+
+    update_payload = {"status": "returned"}
+    update_response = await async_client.patch(
+        f"/api/v1/ppe/issues/{issue_id}", json=update_payload, headers=headers
+    )
+    assert update_response.status_code == status.HTTP_200_OK
+
+    async with sessionmaker() as session:
+        outbox_entry = (
+            await session.execute(
+                select(Outbox).where(
+                    Outbox.tenant_id == tenant_id,
+                    Outbox.event_type == "PPEReturned",
+                )
+            )
+        ).scalar_one_or_none()
+        assert outbox_entry is not None
+        assert outbox_entry.payload["ppe_issue_id"] == issue_id

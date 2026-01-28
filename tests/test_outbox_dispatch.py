@@ -26,7 +26,7 @@ async def test_outbox_processor_dispatches_entries(sessionmaker) -> None:
         tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         entry = Outbox(
             tenant_id=tenant.id,
-            event_type="DocumentGenerated",
+            event_type="DocumentCreated",
             payload={"document_id": "doc-1"},
         )
         session.add(entry)
@@ -40,7 +40,7 @@ async def test_outbox_processor_dispatches_entries(sessionmaker) -> None:
 
     assert processed == 1
     assert dispatcher.calls
-    assert dispatcher.calls[0]["event_type"] == "DocumentGenerated"
+    assert dispatcher.calls[0]["event_type"] == "DocumentCreated"
 
     async with sessionmaker() as session:
         refreshed = await session.get(Outbox, entry_id)
@@ -56,7 +56,7 @@ async def test_outbox_processor_retries_failed_entries(sessionmaker) -> None:
         tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         entry = Outbox(
             tenant_id=tenant.id,
-            event_type="Signed",
+            event_type="DocumentSigned",
             payload={"document_id": "doc-2", "fail": True},
         )
         session.add(entry)
@@ -90,7 +90,7 @@ async def test_outbox_processor_discards_after_max_attempts(
         tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
         entry = Outbox(
             tenant_id=tenant.id,
-            event_type="DocumentGenerated",
+            event_type="DocumentCreated",
             payload={"document_id": "doc-3"},
             attempts=1,
         )

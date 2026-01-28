@@ -33,18 +33,31 @@ class WebhookDispatcher:
         self.client = client
 
     def _resolve_urls(self, event_type: str) -> list[str]:
-        if event_type == "DocumentGenerated":
-            return list(self.settings.webhook_document_generated_urls)
-        if event_type == "Signed":
-            return list(self.settings.webhook_signed_urls)
-        if event_type == "Exported":
-            return list(self.settings.webhook_exported_urls)
+        if event_type == "DocumentCreated":
+            return list(
+                self.settings.webhook_document_created_urls
+                or self.settings.webhook_document_generated_urls
+            )
+        if event_type == "DocumentSigned":
+            return list(
+                self.settings.webhook_document_signed_urls
+                or self.settings.webhook_signed_urls
+            )
+        if event_type == "DocumentExported":
+            return list(
+                self.settings.webhook_document_exported_urls
+                or self.settings.webhook_exported_urls
+            )
         if event_type == "RiskAssessed":
             return list(self.settings.webhook_risk_assessed_urls)
         if event_type == "PPEIssued":
             return list(self.settings.webhook_ppe_issued_urls)
+        if event_type == "PPEReturned":
+            return list(self.settings.webhook_ppe_returned_urls)
         if event_type == "TrainingCompleted":
             return list(self.settings.webhook_training_completed_urls)
+        if event_type == "TrainingAssigned":
+            return list(self.settings.webhook_training_assigned_urls)
         return []
 
     async def dispatch(

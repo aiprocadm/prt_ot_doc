@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.document import Document, DocumentStatus, DocumentVersion
 from app.services.audit import AuditService
+from app.services.events import EventType
 from app.services.outbox import OutboxService
 
 
@@ -203,6 +204,7 @@ class DocumentWorkflowService:
         )
 
         if outcome == "success" and new_status is DocumentStatus.SIGNED:
+            version_id = await self._get_latest_version_id(document.id)
             await audit_service.log_event(
                 tenant_id=document.tenant_id,
                 action="sign",
@@ -217,13 +219,32 @@ class DocumentWorkflowService:
             outbox = OutboxService(self.session)
             await outbox.enqueue(
                 tenant_id=document.tenant_id,
-                event_type="Signed",
+                event_type=EventType.DOCUMENT_SIGNED.value,
                 payload={
+                    "tenant_id": str(document.tenant_id),
+                    "actor_id": actor_id,
+                    "occurred_at": datetime.now(tz=timezone.utc),
                     "document_id": document.id,
+                    "document_version_id": version_id,
                     "status": new_status.value,
-                    "signed_at": datetime.now(tz=timezone.utc).isoformat(),
+                    "signed_at": datetime.now(tz=timezone.utc),
+                    "signed_file_id": document.signed_file_id,
                 },
             )
+
+    async def _get_latest_version_id(self, document_id: str) -> str:
+        stmt = (
+            select(DocumentVersion.id)
+            .where(DocumentVersion.document_id == document_id)
+            .order_by(DocumentVersion.created_at.desc())
+            .limit(1)
+        )
+        version_id = (await self.session.execute(stmt)).scalar_one_or_none()
+        if version_id is None:
+            raise DocumentWorkflowError(
+                f"Document version missing for document '{document_id}'"
+            )
+        return str(version_id)
 
 
 @event.listens_for(DocumentVersion, "before_update", propagate=True)

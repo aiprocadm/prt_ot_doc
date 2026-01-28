@@ -74,6 +74,17 @@ async def test_training_api_flow(async_client, make_auth_headers, sessionmaker, 
     training_session = training_session_response.json()
 
     async with sessionmaker() as session:
+        assigned_entry = (
+            await session.execute(
+                select(Outbox).where(
+                    Outbox.tenant_id == tenant_id,
+                    Outbox.event_type == "TrainingAssigned",
+                )
+            )
+        ).scalar_one_or_none()
+        assert assigned_entry is not None
+        assert assigned_entry.payload["training_event_id"] == plan["id"]
+
         outbox_entry = (
             await session.execute(
                 select(Outbox).where(
@@ -83,7 +94,7 @@ async def test_training_api_flow(async_client, make_auth_headers, sessionmaker, 
             )
         ).scalar_one_or_none()
         assert outbox_entry is not None
-        assert outbox_entry.payload["session_id"] == training_session["id"]
+        assert outbox_entry.payload["training_event_id"] == training_session["id"]
 
     certificate_payload = {
         "person_id": person.id,
