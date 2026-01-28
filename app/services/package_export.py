@@ -11,7 +11,7 @@ from time import perf_counter
 from typing import Callable, Iterable, Sequence
 
 from app.core.config import get_settings
-from app.core.metrics import get_metrics
+from app.core.metrics import PipelineStage, PipelineType, StageResult, get_metrics
 from app.domains.files.utils import build_dated_prefix
 from app.domains.files import s3
 from app.services.file_storage import FileStorageService
@@ -207,20 +207,27 @@ class PackageExportService:
         storage_key = self._truncate_storage_key(raw_key)
         metrics = get_metrics()
         upload_start = perf_counter()
+        metrics.record_pipeline_stage_start(
+            pipeline=PipelineType.DOCUMENT,
+            stage=PipelineStage.STORED_S3,
+        )
         try:
             self._storage.put(
                 storage_key, archive_bytes, content_type=self.ZIP_CONTENT_TYPE
             )
-        except Exception:
-            metrics.observe_pipeline_stage(
-                stage="upload_s3",
-                status="error",
+        except Exception as exc:
+            metrics.record_pipeline_stage_end(
+                pipeline=PipelineType.DOCUMENT,
+                stage=PipelineStage.STORED_S3,
+                result=StageResult.FAILED,
                 seconds=perf_counter() - upload_start,
+                error_class=exc.__class__.__name__,
             )
             raise
-        metrics.observe_pipeline_stage(
-            stage="upload_s3",
-            status="success",
+        metrics.record_pipeline_stage_end(
+            pipeline=PipelineType.DOCUMENT,
+            stage=PipelineStage.STORED_S3,
+            result=StageResult.SUCCESS,
             seconds=perf_counter() - upload_start,
         )
         settings = get_settings()

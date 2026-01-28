@@ -11,12 +11,29 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from time import perf_counter
 
 from app.core.config import get_settings
-from app.core.metrics import get_metrics
+from app.core.metrics import PipelineStage, PipelineType, StageResult, get_metrics
 from app.models.models import Outbox
-from app.services.events import dedupe_key_for, normalize_payload, resolve_event_type
+from app.services.events import EventType, dedupe_key_for, normalize_payload, resolve_event_type
 from app.services.webhooks import WebhookDispatcher
 
 logger = logging.getLogger(__name__)
+
+
+def _pipeline_for_event(event_type: str) -> PipelineType:
+    resolved = resolve_event_type(event_type)
+    if resolved in {
+        EventType.DOCUMENT_CREATED,
+        EventType.DOCUMENT_SIGNED,
+        EventType.DOCUMENT_EXPORTED,
+    }:
+        return PipelineType.DOCUMENT
+    if resolved is EventType.RISK_ASSESSED:
+        return PipelineType.RISK
+    if resolved in {EventType.PPE_ISSUED, EventType.PPE_RETURNED}:
+        return PipelineType.PPE
+    if resolved in {EventType.TRAINING_ASSIGNED, EventType.TRAINING_COMPLETED}:
+        return PipelineType.TRAINING
+    return PipelineType.UNKNOWN
 
 
 class OutboxService:
@@ -35,32 +52,71 @@ class OutboxService:
         dedupe_key: str | None = None,
     ) -> Outbox:
         resolved = resolve_event_type(event_type)
-        payload_model, normalized_payload = normalize_payload(
-            event_type=resolved,
-            payload=payload,
-            tenant_id=tenant_id,
+        stage_start = perf_counter()
+        pipeline = _pipeline_for_event(resolved.value)
+        self.metrics.record_pipeline_stage_start(
+            pipeline=pipeline,
+            stage=PipelineStage.OUTBOX_ENQUEUED,
         )
-        key = dedupe_key or dedupe_key_for(resolved, payload_model)
-        if key:
-            existing = await self._find_existing(
+        created = False
+        try:
+            payload_model, normalized_payload = normalize_payload(
+                event_type=resolved,
+                payload=payload,
                 tenant_id=tenant_id,
-                event_type=resolved.value,
-                dedupe_key=key,
             )
-            if existing:
-                return existing
-        entry = Outbox(
-            tenant_id=tenant_id,
-            event_type=resolved.value,
-            payload=normalized_payload,
-            dedupe_key=key,
-        )
-        self.session.add(entry)
-        await self.session.flush()
-        if entry.payload.get("event_id") is None:
-            entry.payload = {**entry.payload, "event_id": entry.id}
-            await self.session.flush()
+            key = dedupe_key or dedupe_key_for(resolved, payload_model)
+            entry: Outbox | None = None
+            if key:
+                existing = await self._find_existing(
+                    tenant_id=tenant_id,
+                    event_type=resolved.value,
+                    dedupe_key=key,
+                )
+                if existing:
+                    entry = existing
+            if entry is None:
+                entry = Outbox(
+                    tenant_id=tenant_id,
+                    event_type=resolved.value,
+                    payload=normalized_payload,
+                    dedupe_key=key,
+                )
+                self.session.add(entry)
+                await self.session.flush()
+                if entry.payload.get("event_id") is None:
+                    entry.payload = {**entry.payload, "event_id": entry.id}
+                    await self.session.flush()
+                created = True
+        except Exception as exc:
+            self.metrics.record_pipeline_stage_end(
+                pipeline=pipeline,
+                stage=PipelineStage.OUTBOX_ENQUEUED,
+                result=StageResult.FAILED,
+                seconds=perf_counter() - stage_start,
+                error_class=exc.__class__.__name__,
+            )
+            raise
+
+        if created:
+            if resolved is EventType.DOCUMENT_CREATED:
+                self.metrics.record_document_generated()
+            elif resolved is EventType.DOCUMENT_SIGNED:
+                self.metrics.record_document_signed()
+            elif resolved is EventType.RISK_ASSESSED:
+                self.metrics.record_risk_assessed()
+            elif resolved is EventType.PPE_ISSUED:
+                self.metrics.record_ppe_issued()
+            elif resolved is EventType.TRAINING_COMPLETED:
+                self.metrics.record_training_completed()
+
         self.metrics.record_outbox_enqueued(event_type=entry.event_type)
+        self.metrics.record_pipeline_stage_end(
+            pipeline=pipeline,
+            stage=PipelineStage.OUTBOX_ENQUEUED,
+            result=StageResult.SUCCESS,
+            seconds=perf_counter() - stage_start,
+        )
         return entry
 
     async def _find_existing(
@@ -124,8 +180,13 @@ class OutboxProcessor:
                     },
                 )
                 continue
-            start = perf_counter()
             try:
+                pipeline = _pipeline_for_event(entry.event_type)
+                stage_start = perf_counter()
+                self.metrics.record_pipeline_stage_start(
+                    pipeline=pipeline,
+                    stage=PipelineStage.WEBHOOK_DISPATCHED,
+                )
                 await self.dispatcher.dispatch(
                     event_type=entry.event_type,
                     tenant_id=entry.tenant_id,
@@ -134,11 +195,12 @@ class OutboxProcessor:
                 )
             except Exception as exc:
                 entry.last_error = str(exc)
-                duration = perf_counter() - start
-                self.metrics.observe_pipeline_stage(
-                    stage="webhook_dispatch",
-                    status="error",
-                    seconds=duration,
+                self.metrics.record_pipeline_stage_end(
+                    pipeline=pipeline,
+                    stage=PipelineStage.WEBHOOK_DISPATCHED,
+                    result=StageResult.FAILED,
+                    seconds=perf_counter() - stage_start,
+                    error_class=exc.__class__.__name__,
                 )
                 logger.warning(
                     "outbox.dispatch_failed",
@@ -151,11 +213,11 @@ class OutboxProcessor:
                 continue
             entry.processed_at = datetime.now(tz=timezone.utc)
             entry.last_error = None
-            duration = perf_counter() - start
-            self.metrics.observe_pipeline_stage(
-                stage="webhook_dispatch",
-                status="success",
-                seconds=duration,
+            self.metrics.record_pipeline_stage_end(
+                pipeline=pipeline,
+                stage=PipelineStage.WEBHOOK_DISPATCHED,
+                result=StageResult.SUCCESS,
+                seconds=perf_counter() - stage_start,
             )
             processed += 1
         if entries:

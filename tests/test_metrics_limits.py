@@ -52,6 +52,9 @@ async def test_metrics_endpoint_reports_http_latency_and_errors(async_client, ap
     assert 'path="/health"' in metrics_payload
     assert "http_request_errors_total" in metrics_payload
     assert 'status="4xx"' in metrics_payload
+    assert "pipeline_requests_total" in metrics_payload
+    assert "pipeline_stage_duration_seconds" in metrics_payload
+    assert "pipeline_total_duration_seconds" in metrics_payload
     assert "celery_task_latency_p95_seconds" in metrics_payload
     assert 'celery_queue_depth{queue="default"}' in metrics_payload
     assert 'celery_queue_depth{queue="default"} 3.0' in metrics_payload

@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app.core.metrics import PipelineStage, PipelineType, StageResult
 from app.core.tenant import tenant_context
 from app.db import Base, SharedBase
 from app.models.models import (
@@ -86,8 +87,48 @@ class FakeMetrics:
     def observe_pipeline_run(self, *, template_id: str, status: str) -> None:
         self.pipeline_statuses.append((template_id, status))
 
-    def record_error(self, *, code: str) -> None:
-        self.errors.append(code)
+    def record_pipeline_stage_start(
+        self,
+        *,
+        pipeline: PipelineType,
+        stage: PipelineStage,
+    ) -> None:
+        return None
+
+    def record_pipeline_stage_end(
+        self,
+        *,
+        pipeline: PipelineType,
+        stage: PipelineStage,
+        result: StageResult,
+        seconds: float,
+        error_class: str | None = None,
+    ) -> None:
+        if result is StageResult.FAILED and error_class:
+            self.errors.append(error_class)
+
+    def record_pipeline_error(
+        self,
+        *,
+        pipeline: PipelineType,
+        stage: PipelineStage,
+        error_class: str,
+    ) -> None:
+        self.errors.append(error_class)
+
+    def observe_pipeline_total_duration(
+        self,
+        *,
+        pipeline: PipelineType,
+        seconds: float,
+    ) -> None:
+        return None
+
+    def increment_pipeline_inflight(self, *, pipeline: PipelineType) -> None:
+        return None
+
+    def decrement_pipeline_inflight(self, *, pipeline: PipelineType) -> None:
+        return None
 
     def observe_pdf_duration(self, *, template_id: str, seconds: float) -> None:
         self.pdf_durations.append((template_id, seconds))

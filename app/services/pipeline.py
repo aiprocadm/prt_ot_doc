@@ -25,7 +25,14 @@ from app.services.pdf import (
     PdfConversionResult,
     PdfConverter,
 )
-from app.core.metrics import Metrics, get_metrics, sanitize_label
+from app.core.metrics import (
+    Metrics,
+    PipelineStage,
+    PipelineType,
+    StageResult,
+    get_metrics,
+    sanitize_label,
+)
 from app.core.tenant import get_current_tenant
 from app.domains.files.utils import build_dated_prefix
 
@@ -168,52 +175,74 @@ class PipelineService:
     ) -> tuple[PipelineRun, bool]:
         """Ensure a ``PipelineRun`` exists without executing heavy work."""
 
-        (
-            tenant_identifier,
-            _normalized_output_basename,
-            _replacements_map,
-            request_metadata,
-        ) = self._prepare_parameters(
-            session=session,
-            template=template,
-            template_version=template_version,
-            context=context,
-            replacements=replacements,
-            header_text=header_text,
-            footer_text=footer_text,
-            output_basename=output_basename,
-            tenant_id=tenant_id,
+        stage_start = perf_counter()
+        self.metrics.record_pipeline_stage_start(
+            pipeline=PipelineType.DOCUMENT,
+            stage=PipelineStage.DATA_PERSISTED,
         )
+        try:
+            (
+                tenant_identifier,
+                _normalized_output_basename,
+                _replacements_map,
+                request_metadata,
+            ) = self._prepare_parameters(
+                session=session,
+                template=template,
+                template_version=template_version,
+                context=context,
+                replacements=replacements,
+                header_text=header_text,
+                footer_text=footer_text,
+                output_basename=output_basename,
+                tenant_id=tenant_id,
+            )
 
-        run, created = await self._get_or_create_pending_run(
-            session,
-            tenant_id=tenant_identifier,
-            idempotency_key=idempotency_key,
-            template_id=template.id,
-            template_version_id=template_version.id,
-            payload=context,
-            defaults={"result_metadata": {"request": request_metadata}},
+            run, created = await self._get_or_create_pending_run(
+                session,
+                tenant_id=tenant_identifier,
+                idempotency_key=idempotency_key,
+                template_id=template.id,
+                template_version_id=template_version.id,
+                payload=context,
+                defaults={"result_metadata": {"request": request_metadata}},
+            )
+
+            metadata = dict(run.result_metadata or {})
+            existing_request = metadata.get("request")
+            if existing_request and existing_request != request_metadata:
+                raise ValueError("Idempotency key collision for different pipeline options")
+            if not existing_request:
+                metadata["request"] = request_metadata
+            run.result_metadata = metadata
+
+            if created:
+                run.status = PipelineRunStatus.QUEUED
+                run.outputs = None
+                run.docx_storage_key = None
+                run.pdf_storage_key = None
+                run.result_s3_key = None
+                run.error = None
+                run.started_at = None
+                run.finished_at = None
+
+            await session.flush()
+        except Exception as exc:
+            self.metrics.record_pipeline_stage_end(
+                pipeline=PipelineType.DOCUMENT,
+                stage=PipelineStage.DATA_PERSISTED,
+                result=StageResult.FAILED,
+                seconds=perf_counter() - stage_start,
+                error_class=exc.__class__.__name__,
+            )
+            raise
+
+        self.metrics.record_pipeline_stage_end(
+            pipeline=PipelineType.DOCUMENT,
+            stage=PipelineStage.DATA_PERSISTED,
+            result=StageResult.SUCCESS,
+            seconds=perf_counter() - stage_start,
         )
-
-        metadata = dict(run.result_metadata or {})
-        existing_request = metadata.get("request")
-        if existing_request and existing_request != request_metadata:
-            raise ValueError("Idempotency key collision for different pipeline options")
-        if not existing_request:
-            metadata["request"] = request_metadata
-        run.result_metadata = metadata
-
-        if created:
-            run.status = PipelineRunStatus.QUEUED
-            run.outputs = None
-            run.docx_storage_key = None
-            run.pdf_storage_key = None
-            run.result_s3_key = None
-            run.error = None
-            run.started_at = None
-            run.finished_at = None
-
-        await session.flush()
         return run, created
 
     @staticmethod
@@ -318,14 +347,35 @@ class PipelineService:
             tenant_id=tenant_id,
         )
 
-        run, created = await self._get_or_create_pending_run(
-            session,
-            tenant_id=tenant_identifier,
-            idempotency_key=idempotency_key,
-            template_id=template.id,
-            template_version_id=template_version.id,
-            payload=context,
-            defaults={"result_metadata": {"request": request_metadata}},
+        persist_start = perf_counter()
+        self.metrics.record_pipeline_stage_start(
+            pipeline=PipelineType.DOCUMENT,
+            stage=PipelineStage.DATA_PERSISTED,
+        )
+        try:
+            run, created = await self._get_or_create_pending_run(
+                session,
+                tenant_id=tenant_identifier,
+                idempotency_key=idempotency_key,
+                template_id=template.id,
+                template_version_id=template_version.id,
+                payload=context,
+                defaults={"result_metadata": {"request": request_metadata}},
+            )
+        except Exception as exc:
+            self.metrics.record_pipeline_stage_end(
+                pipeline=PipelineType.DOCUMENT,
+                stage=PipelineStage.DATA_PERSISTED,
+                result=StageResult.FAILED,
+                seconds=perf_counter() - persist_start,
+                error_class=exc.__class__.__name__,
+            )
+            raise
+        self.metrics.record_pipeline_stage_end(
+            pipeline=PipelineType.DOCUMENT,
+            stage=PipelineStage.DATA_PERSISTED,
+            result=StageResult.SUCCESS,
+            seconds=perf_counter() - persist_start,
         )
 
         metadata = dict(run.result_metadata or {})
@@ -362,6 +412,7 @@ class PipelineService:
 
         tenant = get_current_tenant()
         pipeline_start = perf_counter()
+        self.metrics.increment_pipeline_inflight(pipeline=PipelineType.DOCUMENT)
         logger.info(
             "Pipeline job started",
             extra={
@@ -437,6 +488,20 @@ class PipelineService:
                         "duration_seconds": perf_counter() - pipeline_start,
                     },
                 )
+                self.metrics.record_pipeline_stage_start(
+                    pipeline=PipelineType.DOCUMENT,
+                    stage=PipelineStage.COMPLETED,
+                )
+                self.metrics.record_pipeline_stage_end(
+                    pipeline=PipelineType.DOCUMENT,
+                    stage=PipelineStage.COMPLETED,
+                    result=StageResult.SUCCESS,
+                    seconds=0.0,
+                )
+                self.metrics.observe_pipeline_total_duration(
+                    pipeline=PipelineType.DOCUMENT,
+                    seconds=perf_counter() - pipeline_start,
+                )
                 return run
             data_stage_start = datetime.now(tz=timezone.utc)
             if not template_version.payload_key:
@@ -453,14 +518,20 @@ class PipelineService:
             await session.flush()
 
             docx_start = perf_counter()
+            self.metrics.record_pipeline_stage_start(
+                pipeline=PipelineType.DOCUMENT,
+                stage=PipelineStage.DOCX_GENERATED,
+            )
             render_started = datetime.now(tz=timezone.utc)
             try:
                 rendered = DocxService.render_template(src, context)
-            except Exception:
-                self.metrics.observe_pipeline_stage(
-                    stage="generate_docx",
-                    status="error",
+            except Exception as exc:
+                self.metrics.record_pipeline_stage_end(
+                    pipeline=PipelineType.DOCUMENT,
+                    stage=PipelineStage.DOCX_GENERATED,
+                    result=StageResult.FAILED,
                     seconds=perf_counter() - docx_start,
+                    error_class=exc.__class__.__name__,
                 )
                 outputs = self._record_stage(
                     outputs,
@@ -472,9 +543,10 @@ class PipelineService:
                 run.outputs = outputs
                 await session.flush()
                 raise
-            self.metrics.observe_pipeline_stage(
-                stage="generate_docx",
-                status="success",
+            self.metrics.record_pipeline_stage_end(
+                pipeline=PipelineType.DOCUMENT,
+                stage=PipelineStage.DOCX_GENERATED,
+                result=StageResult.SUCCESS,
                 seconds=perf_counter() - docx_start,
             )
             outputs = self._record_stage(
@@ -542,20 +614,27 @@ class PipelineService:
             unique_suffix = uuid.uuid4().hex
             docx_key = f"{prefix}/outputs/{out_base}-{unique_suffix}.docx"
             upload_start = perf_counter()
+            self.metrics.record_pipeline_stage_start(
+                pipeline=PipelineType.DOCUMENT,
+                stage=PipelineStage.STORED_S3,
+            )
             try:
                 self.storage.put(
                     docx_key, docx_bytes, content_type=self.DOCX_CONTENT_TYPE
                 )
-            except Exception:
-                self.metrics.observe_pipeline_stage(
-                    stage="upload_s3",
-                    status="error",
+            except Exception as exc:
+                self.metrics.record_pipeline_stage_end(
+                    pipeline=PipelineType.DOCUMENT,
+                    stage=PipelineStage.STORED_S3,
+                    result=StageResult.FAILED,
                     seconds=perf_counter() - upload_start,
+                    error_class=exc.__class__.__name__,
                 )
                 raise
-            self.metrics.observe_pipeline_stage(
-                stage="upload_s3",
-                status="success",
+            self.metrics.record_pipeline_stage_end(
+                pipeline=PipelineType.DOCUMENT,
+                stage=PipelineStage.STORED_S3,
+                result=StageResult.SUCCESS,
                 seconds=perf_counter() - upload_start,
             )
 
@@ -569,19 +648,25 @@ class PipelineService:
                 p_out_dir = temp_dir / "out"
                 p_in.write_bytes(docx_bytes)
                 pdf_start = perf_counter()
+                self.metrics.record_pipeline_stage_start(
+                    pipeline=PipelineType.DOCUMENT,
+                    stage=PipelineStage.PDF_CONVERTED,
+                )
                 try:
                     conversion: PdfConversionResult = self.pdf.convert(p_in, p_out_dir)
                 except PdfConversionError as exc:
                     pdf_duration = perf_counter() - pdf_start
-                    self.metrics.observe_pipeline_stage(
-                        stage="convert_pdf",
-                        status="error",
+                    pdf_error_raw = str(exc) or "pdf_conversion_failed"
+                    pdf_error = sanitize_label(pdf_error_raw)
+                    self.metrics.record_pipeline_stage_end(
+                        pipeline=PipelineType.DOCUMENT,
+                        stage=PipelineStage.PDF_CONVERTED,
+                        result=StageResult.FAILED,
                         seconds=pdf_duration,
+                        error_class=pdf_error,
                     )
                     pdf_bytes = MINI_PDF_BYTES
                     pdf_fallback = True
-                    pdf_error_raw = str(exc) or "pdf_conversion_failed"
-                    pdf_error = sanitize_label(pdf_error_raw)
                     logger.warning(
                         "PDF conversion failed; using fallback PDF",
                         extra={
@@ -592,19 +677,20 @@ class PipelineService:
                             "error_code": pdf_error,
                         },
                     )
-                    self.metrics.record_error(code=pdf_error)
                 except RuntimeError as exc:
                     logger.exception("LibreOffice PDF conversion failed")
                     pdf_bytes = MINI_PDF_BYTES
                     pdf_fallback = True
                     pdf_duration = perf_counter() - pdf_start
-                    self.metrics.observe_pipeline_stage(
-                        stage="convert_pdf",
-                        status="error",
-                        seconds=pdf_duration,
-                    )
                     pdf_error_raw = str(exc) or "pdf_conversion_failed"
                     pdf_error = sanitize_label(pdf_error_raw)
+                    self.metrics.record_pipeline_stage_end(
+                        pipeline=PipelineType.DOCUMENT,
+                        stage=PipelineStage.PDF_CONVERTED,
+                        result=StageResult.FAILED,
+                        seconds=pdf_duration,
+                        error_class=pdf_error,
+                    )
                     logger.warning(
                         "PDF conversion failed; using fallback PDF",
                         extra={
@@ -615,17 +701,21 @@ class PipelineService:
                             "error_code": pdf_error,
                         },
                     )
-                    self.metrics.record_error(code=pdf_error)
                 else:
                     pdf_duration = perf_counter() - pdf_start
                     pdf_bytes = conversion.path.read_bytes()
                     pdf_fallback = conversion.fallback_used
                     if conversion.error_code:
                         pdf_error = sanitize_label(conversion.error_code)
-                        self.metrics.record_error(code=pdf_error)
-                    self.metrics.observe_pipeline_stage(
-                        stage="convert_pdf",
-                        status="fallback" if pdf_fallback else "success",
+                        self.metrics.record_pipeline_error(
+                            pipeline=PipelineType.DOCUMENT,
+                            stage=PipelineStage.PDF_CONVERTED,
+                            error_class=pdf_error,
+                        )
+                    self.metrics.record_pipeline_stage_end(
+                        pipeline=PipelineType.DOCUMENT,
+                        stage=PipelineStage.PDF_CONVERTED,
+                        result=StageResult.FALLBACK if pdf_fallback else StageResult.SUCCESS,
                         seconds=pdf_duration,
                     )
                 finally:
@@ -646,15 +736,21 @@ class PipelineService:
             pdf_key = f"{prefix}/outputs/{out_base}-{unique_suffix}.pdf"
             upload_start = perf_counter()
             store_started = datetime.now(tz=timezone.utc)
+            self.metrics.record_pipeline_stage_start(
+                pipeline=PipelineType.DOCUMENT,
+                stage=PipelineStage.STORED_S3,
+            )
             try:
                 self.storage.put(
                     pdf_key, pdf_bytes, content_type="application/pdf"
                 )
-            except Exception:
-                self.metrics.observe_pipeline_stage(
-                    stage="upload_s3",
-                    status="error",
+            except Exception as exc:
+                self.metrics.record_pipeline_stage_end(
+                    pipeline=PipelineType.DOCUMENT,
+                    stage=PipelineStage.STORED_S3,
+                    result=StageResult.FAILED,
                     seconds=perf_counter() - upload_start,
+                    error_class=exc.__class__.__name__,
                 )
                 outputs = self._record_stage(
                     outputs,
@@ -666,14 +762,20 @@ class PipelineService:
                 run.outputs = outputs
                 await session.flush()
                 raise
-            self.metrics.observe_pipeline_stage(
-                stage="upload_s3",
-                status="success",
+            self.metrics.record_pipeline_stage_end(
+                pipeline=PipelineType.DOCUMENT,
+                stage=PipelineStage.STORED_S3,
+                result=StageResult.SUCCESS,
                 seconds=perf_counter() - upload_start,
             )
-            self.metrics.observe_pipeline_stage(
-                stage="stamp",
-                status="skipped",
+            self.metrics.record_pipeline_stage_start(
+                pipeline=PipelineType.DOCUMENT,
+                stage=PipelineStage.STAMPED_QR_APPLIED,
+            )
+            self.metrics.record_pipeline_stage_end(
+                pipeline=PipelineType.DOCUMENT,
+                stage=PipelineStage.STAMPED_QR_APPLIED,
+                result=StageResult.SKIPPED,
                 seconds=0.0,
             )
             outputs["docx_storage_key"] = docx_key
@@ -737,6 +839,20 @@ class PipelineService:
                     "duration_seconds": perf_counter() - pipeline_start,
                 },
             )
+            self.metrics.record_pipeline_stage_start(
+                pipeline=PipelineType.DOCUMENT,
+                stage=PipelineStage.COMPLETED,
+            )
+            self.metrics.record_pipeline_stage_end(
+                pipeline=PipelineType.DOCUMENT,
+                stage=PipelineStage.COMPLETED,
+                result=StageResult.SUCCESS,
+                seconds=0.0,
+            )
+            self.metrics.observe_pipeline_total_duration(
+                pipeline=PipelineType.DOCUMENT,
+                seconds=perf_counter() - pipeline_start,
+            )
             return run
         except Exception as exc:
             logger.exception(
@@ -765,5 +881,21 @@ class PipelineService:
             self.metrics.observe_pipeline_run(
                 template_id=template.id, status=PipelineRunStatus.ERROR.value
             )
-            self.metrics.record_error(code=metrics_code)
+            self.metrics.record_pipeline_stage_start(
+                pipeline=PipelineType.DOCUMENT,
+                stage=PipelineStage.FAILED,
+            )
+            self.metrics.record_pipeline_stage_end(
+                pipeline=PipelineType.DOCUMENT,
+                stage=PipelineStage.FAILED,
+                result=StageResult.FAILED,
+                seconds=0.0,
+                error_class=metrics_code,
+            )
+            self.metrics.observe_pipeline_total_duration(
+                pipeline=PipelineType.DOCUMENT,
+                seconds=perf_counter() - pipeline_start,
+            )
             raise
+        finally:
+            self.metrics.decrement_pipeline_inflight(pipeline=PipelineType.DOCUMENT)

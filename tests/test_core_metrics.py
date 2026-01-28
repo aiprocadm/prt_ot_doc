@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from app.core import metrics as metrics_module
+from app.core.metrics import PipelineStage, PipelineType, StageResult
 
 
 @pytest.fixture(autouse=True)
@@ -22,12 +23,58 @@ def test_metrics_recording_pipeline_and_errors() -> None:
     metrics = metrics_module.get_metrics()
     metrics.observe_pipeline_run(template_id="tpl", status="success")
     metrics.observe_pipeline_run(template_id="tpl", status="failure")
+    metrics.record_pipeline_stage_start(
+        pipeline=PipelineType.DOCUMENT,
+        stage=PipelineStage.DOCX_GENERATED,
+    )
+    metrics.record_pipeline_stage_end(
+        pipeline=PipelineType.DOCUMENT,
+        stage=PipelineStage.DOCX_GENERATED,
+        result=StageResult.SUCCESS,
+        seconds=-1,
+    )
+    metrics.record_pipeline_stage_start(
+        pipeline=PipelineType.DOCUMENT,
+        stage=PipelineStage.PDF_CONVERTED,
+    )
+    metrics.record_pipeline_stage_end(
+        pipeline=PipelineType.DOCUMENT,
+        stage=PipelineStage.PDF_CONVERTED,
+        result=StageResult.FAILED,
+        seconds=1.2,
+        error_class="ValueError",
+    )
+    metrics.observe_pipeline_total_duration(pipeline=PipelineType.DOCUMENT, seconds=-1)
     metrics.observe_pdf_duration(template_id="tpl", seconds=-1)
     metrics.observe_pdf_libreoffice(seconds=-5, status=" Timeout ")
-    metrics.record_error(code="ValueError")
 
     samples = metrics.pipeline_runs_total.collect()[0].samples
     assert {sample.labels["status"] for sample in samples} == {"success", "failure"}
+
+    requests_samples = metrics.pipeline_requests_total.collect()[0].samples
+    request_results = {sample.labels["result"] for sample in requests_samples}
+    assert StageResult.STARTED.value in request_results
+    assert StageResult.SUCCESS.value in request_results
+    assert StageResult.FAILED.value in request_results
+
+    stage_histogram = metrics.pipeline_stage_duration_seconds.collect()[0]
+    stage_sum = next(
+        sample
+        for sample in stage_histogram.samples
+        if sample.name.endswith("_sum")
+        and sample.labels["pipeline"] == PipelineType.DOCUMENT.value
+        and sample.labels["stage"] == PipelineStage.DOCX_GENERATED.value
+    )
+    assert stage_sum.value == pytest.approx(0.0)
+
+    total_histogram = metrics.pipeline_total_duration_seconds.collect()[0]
+    total_sum = next(
+        sample
+        for sample in total_histogram.samples
+        if sample.name.endswith("_sum")
+        and sample.labels["pipeline"] == PipelineType.DOCUMENT.value
+    )
+    assert total_sum.value == pytest.approx(0.0)
 
     histogram = metrics.pipeline_pdf_duration_seconds.collect()[0]
     sum_sample = next(
@@ -49,7 +96,9 @@ def test_metrics_recording_pipeline_and_errors() -> None:
     assert attempt_samples[0].value == 1.0
 
     error_samples = metrics.pipeline_errors_total.collect()[0].samples
-    assert error_samples[0].labels["code"] == "valueerror"
+    assert error_samples[0].labels["error_class"] == "valueerror"
+    assert error_samples[0].labels["pipeline"] == PipelineType.DOCUMENT.value
+    assert error_samples[0].labels["stage"] == PipelineStage.PDF_CONVERTED.value
 
 
 def test_metrics_recording_celery_flow() -> None:
@@ -85,7 +134,9 @@ def test_metrics_recording_celery_flow() -> None:
     assert latency_samples[0].value == pytest.approx(0.0)
 
     error_labels = metrics.pipeline_errors_total.collect()[0].samples[0].labels
-    assert error_labels["code"] == "taskerror"
+    assert error_labels["error_class"] == "taskerror"
+    assert error_labels["pipeline"] == PipelineType.UNKNOWN.value
+    assert error_labels["stage"] == PipelineStage.UNKNOWN.value
 
 
 @pytest.mark.asyncio()
