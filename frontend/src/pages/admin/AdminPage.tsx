@@ -1,6 +1,9 @@
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AccessDeniedPage } from "@/pages/access/AccessDeniedPage";
+import { PERMISSIONS } from "@/permissions/permissions";
+import { useAbility } from "@/permissions/useAbility";
 
 const adminBlocks = [
   { title: "Роли и права", description: "RBAC/ABAC матрица, атрибуты, маскирование ПДн." },
@@ -10,23 +13,31 @@ const adminBlocks = [
   { title: "Интеграции", description: "SSO, ЭДО, КЭП/УКЭП, МЧД, внешние справочники." }
 ];
 
-const AdminPage = () => (
-  <div className="space-y-6">
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Администрирование" }]} />
-      <Button>Создать правило доступа</Button>
+const AdminPage = () => {
+  const { can } = useAbility();
+
+  if (!can(PERMISSIONS.ADMIN_MANAGE_ROLES)) {
+    return <AccessDeniedPage />;
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Администрирование" }]} />
+        <Button>Создать правило доступа</Button>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        {adminBlocks.map((block) => (
+          <Card key={block.title}>
+            <CardHeader>
+              <CardTitle className="text-sm font-semibold">{block.title}</CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">{block.description}</CardContent>
+          </Card>
+        ))}
+      </div>
     </div>
-    <div className="grid gap-4 md:grid-cols-2">
-      {adminBlocks.map((block) => (
-        <Card key={block.title}>
-          <CardHeader>
-            <CardTitle className="text-sm font-semibold">{block.title}</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">{block.description}</CardContent>
-        </Card>
-      ))}
-    </div>
-  </div>
-);
+  );
+};
 
 export default AdminPage;

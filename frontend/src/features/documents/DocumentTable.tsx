@@ -4,7 +4,8 @@ import { useMemo } from "react";
 
 import { DataTable } from "@/components/common/DataTable";
 import { StatusBadge } from "@/components/common/StatusBadge";
-import { Button } from "@/components/ui/button";
+import { ActionButton } from "@/components/permissions/ActionButton";
+import { PERMISSIONS } from "@/permissions/permissions";
 import { useDocumentsStore } from "@/stores/documents";
 import type { DocumentDto } from "@/types/dto/documents";
 import { formatDate } from "@/utils/datetime";
@@ -52,9 +53,12 @@ export const DocumentTable = ({ onSelect }: DocumentTableProps) => {
         id: "download",
         header: "Скачать",
         cell: ({ row }) => (
-          <Button
+          <ActionButton
+            permission={PERMISSIONS.DOCUMENT_EXPORT}
+            resource={{ status: row.original.status, company_id: row.original.company?.id }}
             variant="ghost"
             size="icon"
+            disabledReason="Экспорт доступен после готовности документа"
             onClick={async () => {
               const blob = await download(row.original.id);
               downloadBlob(blob, `${row.original.name}.pdf`);
@@ -62,7 +66,7 @@ export const DocumentTable = ({ onSelect }: DocumentTableProps) => {
             aria-label="Скачать"
           >
             <Download className="h-4 w-4" />
-          </Button>
+          </ActionButton>
         )
       }
     ],

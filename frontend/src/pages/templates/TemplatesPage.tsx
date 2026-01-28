@@ -6,16 +6,30 @@ import { Card, CardContent } from "@/components/ui/card";
 import { TemplateDetails } from "@/features/templates/TemplateDetails";
 import { TemplateFormDialog } from "@/features/templates/TemplateFormDialog";
 import { TemplateTable } from "@/features/templates/TemplateTable";
+import { AccessDeniedPage } from "@/pages/access/AccessDeniedPage";
+import { PERMISSIONS } from "@/permissions/permissions";
+import { useAbility } from "@/permissions/useAbility";
 import { useTemplatesStore } from "@/stores/templates";
 import type { TemplateDto } from "@/types/dto/templates";
 
 const TemplatesPage = () => {
   const { list } = useTemplatesStore();
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateDto | null>(null);
+  const { can } = useAbility();
+  const canView = can(PERMISSIONS.TEMPLATE_VIEW);
+  const canCreate = can(PERMISSIONS.TEMPLATE_CREATE);
+  const canEdit = can(PERMISSIONS.TEMPLATE_EDIT);
+  const readOnly = !canCreate && !canEdit;
 
   useEffect(() => {
-    list();
-  }, [list]);
+    if (canView) {
+      list();
+    }
+  }, [canView, list]);
+
+  if (!canView) {
+    return <AccessDeniedPage />;
+  }
 
   return (
     <div className="space-y-6">
@@ -23,13 +37,20 @@ const TemplatesPage = () => {
         <Breadcrumb items={[{ label: "Главная", to: "/" }, { label: "Шаблоны" }]} />
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">Шаблоны</h1>
-          <TemplateFormDialog
-            trigger={<Button>Добавить</Button>}
-            onSubmitted={(template) => {
-              setSelectedTemplate(template);
-              list();
-            }}
-          />
+          <div className="flex items-center gap-2">
+            {readOnly && (
+              <span className="rounded-full border border-dashed px-3 py-1 text-xs text-muted-foreground">Только просмотр</span>
+            )}
+            {canCreate && (
+              <TemplateFormDialog
+                trigger={<Button>Добавить</Button>}
+                onSubmitted={(template) => {
+                  setSelectedTemplate(template);
+                  list();
+                }}
+              />
+            )}
+          </div>
         </div>
       </div>
       <Card>

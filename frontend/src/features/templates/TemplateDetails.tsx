@@ -2,9 +2,10 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { ActionButton } from "@/components/permissions/ActionButton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PERMISSIONS } from "@/permissions/permissions";
 import { useTemplatesStore } from "@/stores/templates";
 import type { TemplateDto } from "@/types/dto/templates";
 import { formatDate } from "@/utils/datetime";
@@ -47,18 +48,21 @@ export const TemplateDetails = ({ template }: { template: TemplateDto }) => {
                 <div key={version.id} className="flex items-center justify-between rounded-md border p-3">
                   <div>
                     <div className="font-medium">Версия {version.version}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {formatDate(version.created_at)} • {version.status}
-                    </div>
+                  <div className="text-xs text-muted-foreground">
+                    {formatDate(version.created_at)} • {version.status}
                   </div>
-                  <Button
+                </div>
+                  <ActionButton
+                    permission={PERMISSIONS.TEMPLATE_ACTIVATE}
+                    resource={{ template: { current_version: template.current_version }, version }}
                     variant={template.current_version?.id === version.id ? "secondary" : "outline"}
                     size="sm"
                     disabled={template.current_version?.id === version.id || isActivating}
+                    disabledReason="Версию можно активировать только если она опубликована и не используется"
                     onClick={() => handleActivate(version.id)}
                   >
                     {template.current_version?.id === version.id ? "Текущая" : "Активировать"}
-                  </Button>
+                  </ActionButton>
                 </div>
               ))
             ) : (

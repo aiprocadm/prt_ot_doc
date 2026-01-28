@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
+import { ActionButton } from "@/components/permissions/ActionButton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PERMISSIONS } from "@/permissions/permissions";
+import { useAbility } from "@/permissions/useAbility";
 import { useDocumentsStore } from "@/stores/documents";
 import type { DocumentDto } from "@/types/dto/documents";
 import { formatDate } from "@/utils/datetime";
@@ -12,6 +14,11 @@ import { downloadBlob } from "@/utils/download";
 export const DocumentPreview = ({ document }: { document: DocumentDto }) => {
   const { refreshStatus, download } = useDocumentsStore();
   const [current, setCurrent] = useState(document);
+  const { can } = useAbility();
+  const resource = {
+    status: current.status,
+    company_id: current.company?.id
+  };
 
   useEffect(() => {
     setCurrent(document);
@@ -40,13 +47,31 @@ export const DocumentPreview = ({ document }: { document: DocumentDto }) => {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleRefresh}>
+          <ActionButton
+            permission={PERMISSIONS.DOCUMENT_SIGN}
+            resource={resource}
+            variant="outline"
+            disabledReason="Подписание возможно после готовности документа"
+            onClick={handleRefresh}
+          >
             Обновить статус
-          </Button>
-          <Button onClick={handleDownload}>Скачать</Button>
+          </ActionButton>
+          <ActionButton
+            permission={PERMISSIONS.DOCUMENT_EXPORT}
+            resource={resource}
+            disabledReason="Экспорт доступен после готовности документа"
+            onClick={handleDownload}
+          >
+            Скачать
+          </ActionButton>
         </div>
       </CardHeader>
       <CardContent>
+        {!can(PERMISSIONS.DOCUMENT_SIGN, resource) && (
+          <div className="mb-3 rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
+            Режим только для чтения
+          </div>
+        )}
         <Tabs defaultValue="preview" className="space-y-4">
           <TabsList>
             <TabsTrigger value="preview">Предпросмотр</TabsTrigger>
