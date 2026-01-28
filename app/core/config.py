@@ -286,6 +286,7 @@ class Settings(BaseSettings):
     s3_access_key: str = Field("prt_local_access", alias="S3_ACCESS_KEY")
     s3_secret_key: str = Field("prt_local_secret", alias="S3_SECRET_KEY")
     s3_secure: bool = Field(False, alias="S3_SECURE")
+    presign_download_ttl_seconds: int = Field(900, alias="PRESIGN_DOWNLOAD_TTL_SECONDS")
 
     secret_key: str = Field("change-me", alias="SECRET_KEY")
     jwt_issuer: str = Field("prt-ot-doc", alias="JWT_ISSUER")

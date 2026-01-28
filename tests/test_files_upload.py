@@ -17,6 +17,7 @@ from app.api.routes.files import MAX_UPLOAD_BYTES
 from app.core.config import get_settings
 from app.domains.files import s3
 from app.models.file import File as StoredFile, FileKind, FileScanStatus
+from app.models.models import AuditLog, RoleEnum
 from app.services.clamav import (
     ClamAVScanOutcome,
     ClamAVVerdict,
@@ -36,6 +37,7 @@ def _configure_s3(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("S3_SECRET_KEY", "test-secret")
     monkeypatch.setenv("S3_BUCKET", "test-bucket")
     monkeypatch.setenv("S3_SECURE", "false")
+    monkeypatch.setenv("PRESIGN_DOWNLOAD_TTL_SECONDS", "600")
     monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
     monkeypatch.setenv("MAX_REQUEST_BODY_BYTES", str(32_000_000))
     monkeypatch.setenv("REQUEST_TIMEOUT_SECONDS", "60")
@@ -53,7 +55,9 @@ def _configure_s3(monkeypatch: pytest.MonkeyPatch) -> None:
     s3.reset_client_cache()
     monkeypatch.setattr(
         "app.domains.files.s3.generate_presigned_get_url",
-        lambda key, *, expires_in=3600: f"https://example.com/download/{key}",
+        lambda key, *, expires_in=3600, bucket=None, response_headers=None: (
+            f"https://example.com/download/{key}?expires_in={expires_in}"
+        ),
     )
     yield
     reset_quarantine_publisher()
@@ -164,7 +168,9 @@ async def test_upload_file_happy_path(async_client, make_auth_headers, sessionma
     detail = detail_response.json()
     assert detail["quarantined"] is False
     assert detail["scan_status"] == FileScanStatus.CLEAN.value
-    assert detail["download_url"] == f"https://example.com/download/{body['storage_key']}"
+    assert detail["download_url"] == (
+        f"https://example.com/download/{body['storage_key']}?expires_in=600"
+    )
 
 
 @pytest.mark.anyio
@@ -369,7 +375,9 @@ async def test_upload_template_adds_metadata(async_client, make_auth_headers, se
 
 @pytest.mark.anyio
 @pytest.mark.usefixtures("aws")
-async def test_download_endpoint_streams_file(async_client, make_auth_headers, sessionmaker) -> None:
+async def test_download_endpoint_returns_presigned_url(
+    async_client, make_auth_headers, sessionmaker
+) -> None:
     payload = b"downloadable"
     headers = {**dict(async_client.headers), **await make_auth_headers()}
 
@@ -391,8 +399,84 @@ async def test_download_endpoint_streams_file(async_client, make_auth_headers, s
 
     download = await async_client.get(f"/api/v1/files/{body['id']}/download", headers=headers)
     assert download.status_code == 200
-    assert download.headers["content-disposition"].startswith("attachment;")
-    assert download.content == payload
+    data = download.json()
+    assert data["id"] == body["id"]
+    assert data["url"] == f"https://example.com/download/{body['storage_key']}?expires_in=600"
+    expires_at = datetime.fromisoformat(data["expires_at"])
+    assert expires_at.tzinfo is not None
+    assert expires_at > datetime.now(timezone.utc)
+
+    async with sessionmaker() as session:
+        entry = await session.scalar(
+            select(AuditLog).where(
+                AuditLog.action == "FileDownloadPresigned",
+                AuditLog.object_type == "file",
+                AuditLog.object_id == body["id"],
+            )
+        )
+        assert entry is not None
+
+
+@pytest.mark.anyio
+@pytest.mark.usefixtures("aws")
+async def test_download_denies_cross_tenant(async_client, make_auth_headers, sessionmaker) -> None:
+    payload = b"tenant-check"
+    headers = {**dict(async_client.headers), **await make_auth_headers()}
+
+    upload = await async_client.post(
+        "/api/v1/files/upload",
+        files={"file": ("note.txt", payload, "text/plain")},
+        headers=headers,
+    )
+    body = upload.json()
+    publisher = get_quarantine_publisher()
+    message = publisher.drain()[0]
+
+    class _CleanScanner:
+        def scan_stream(self, stream: BinaryIO) -> ClamAVScanOutcome:
+            stream.read()
+            return ClamAVScanOutcome(status=ClamAVVerdict.CLEAN, signature=None, raw="OK")
+
+    await process_scan_request(message, scanner=_CleanScanner(), session_factory=sessionmaker)
+
+    bad_headers = {**headers, "x-tenant": "acme"}
+    download = await async_client.get(f"/api/v1/files/{body['id']}/download", headers=bad_headers)
+    assert download.status_code == 403
+
+
+@pytest.mark.anyio
+@pytest.mark.usefixtures("aws")
+async def test_download_denies_company_mismatch(
+    async_client, make_auth_headers, sessionmaker, data_factory
+) -> None:
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        company_a = await data_factory.create_company(tenant=tenant, name="Alpha Co", session=session)
+        company_b = await data_factory.create_company(tenant=tenant, name="Beta Co", session=session)
+        await session.commit()
+
+    payload = b"company-check"
+    admin_headers = {**dict(async_client.headers), **await make_auth_headers(RoleEnum.ADMIN)}
+    upload = await async_client.post(
+        "/api/v1/files/upload",
+        files={"file": ("note.txt", payload, "text/plain")},
+        data={"company_id": company_a.id},
+        headers=admin_headers,
+    )
+    body = upload.json()
+    publisher = get_quarantine_publisher()
+    message = publisher.drain()[0]
+
+    class _CleanScanner:
+        def scan_stream(self, stream: BinaryIO) -> ClamAVScanOutcome:
+            stream.read()
+            return ClamAVScanOutcome(status=ClamAVVerdict.CLEAN, signature=None, raw="OK")
+
+    await process_scan_request(message, scanner=_CleanScanner(), session_factory=sessionmaker)
+
+    client_headers = {**dict(async_client.headers), **await make_auth_headers(RoleEnum.CLIENT_USER, company_id=company_b.id)}
+    download = await async_client.get(f"/api/v1/files/{body['id']}/download", headers=client_headers)
+    assert download.status_code == 403
 
 
 @pytest.mark.anyio
