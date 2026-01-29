@@ -10,7 +10,7 @@
 
 ## Интерфейсы
 
-Все интерфейсы расположены в `app/services/integrations/interfaces.py` и используют тип `IntegrationStatus` для нормализованного статуса операции.
+Все интерфейсы расположены в `backend/app/services/integrations/interfaces.py` и используют тип `IntegrationStatus` для нормализованного статуса операции.
 
 ### 1С (`BaseAccountingIntegration`)
 - `export_document(payload: dict) -> IntegrationStatus` — отправить документ в 1С.
@@ -45,7 +45,7 @@
 
 ## Фабрики и DI
 
-Фабрики находятся в `app/services/integrations/factory.py` и кэшируют экземпляры интеграций:
+Фабрики находятся в `backend/app/services/integrations/factory.py` и кэшируют экземпляры интеграций:
 - `get_accounting_integration()` — 1С.
 - `get_edo_integration()` — ЭДО/ЭП.
 - `get_frdo_integration()` — ФРДО.

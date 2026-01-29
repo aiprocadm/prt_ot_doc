@@ -28,13 +28,13 @@
 5. По завершении фиксируется транзакция, Celery job публикуется в нужную очередь, ответ возвращается в формате `Envelope`.
 
 ### 1.3 Component responsibilities
-- `app/api` — HTTP-слой, аутентификация, авторизация (RBAC/ABAC), маппинг DTO.
-- `app/domains/*` — предметные сервисы (companies, people, templates, ppe, inspections, incidents, risk, npa, packs, documents).
-- `app/services` — инфраструктурные обвязки: Celery, MinIO, ClamAV, LibreOffice pool, idempotency, webhooks.
-- `app/repository.py` — единая точка доступа к транзакциям, Unit of Work + outbox.
-- `app/models` — SQLAlchemy ORM (см. ERD в `docs/erd.puml`).
-- `app/tasks.py` + `worker/` — Celery entrypoints для генерации документов, паков, экспорта, синхронизации интеграций.
-- `app/core` — конфигурация, логирование, трассировка, security helpers.
+- `backend/app/api` — HTTP-слой, аутентификация, авторизация (RBAC/ABAC), маппинг DTO.
+- `backend/app/domains/*` — предметные сервисы (companies, people, templates, ppe, inspections, incidents, risk, npa, packs, documents).
+- `backend/app/services` — инфраструктурные обвязки: Celery, MinIO, ClamAV, LibreOffice pool, idempotency, webhooks.
+- `backend/app/repository.py` — единая точка доступа к транзакциям, Unit of Work + outbox.
+- `backend/app/models` — SQLAlchemy ORM (см. ERD в `docs/erd.puml`).
+- `backend/app/tasks.py` + `worker/` — Celery entrypoints для генерации документов, паков, экспорта, синхронизации интеграций.
+- `backend/app/core` — конфигурация, логирование, трассировка, security helpers.
 
 ### 1.4 Integrations & flows
 - **Документы.** DOCX шаблоны в MinIO → рендеринг LibreOffice → PDF + ZIP → подписи webhooks.

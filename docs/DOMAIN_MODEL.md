@@ -1,7 +1,7 @@
 # Domain model reference
 
 Документ описывает фактическое состояние ORM (SQLAlchemy) и миграций Alembic.
-Все ссылки и ограничения собраны из `app/models/*` и `app/migrations/versions/*`.
+Все ссылки и ограничения собраны из `backend/app/models/*` и `backend/app/migrations/versions/*`.
 
 ## Общие договорённости
 - **TenantBaseModel** — каждая tenant-aware таблица содержит `id` (UUIDv4),
@@ -381,7 +381,7 @@
 | `methodology_id`, `matrix` (json), `recalculated_at`. Описывает фактическую карту рисков.
 
 ### RiskHazard (`risk_hazards`)
-Shared-like tenant таблица (см. `app/models/risk.py`): `code`, `title`, `module`, `description`, `document_file_id` (FK→file). Индекс `tenant_id+code` уникален. Связи m2m с `Position` и `Workplace` через таблицы `position_hazard` и `workplace_hazard`, в линках хранится опциональный файл-доказательство для конкретной увязки.
+Shared-like tenant таблица (см. `backend/app/models/risk.py`): `code`, `title`, `module`, `description`, `document_file_id` (FK→file). Индекс `tenant_id+code` уникален. Связи m2m с `Position` и `Workplace` через таблицы `position_hazard` и `workplace_hazard`, в линках хранится опциональный файл-доказательство для конкретной увязки.
 
 ### RiskControl (`risk_controls`)
 Аналогично hazards: `code`, `title`, `type`, `description`.
@@ -421,12 +421,12 @@ Shared-like tenant таблица (см. `app/models/risk.py`): `code`, `title`,
 
 ## Известные расхождения моделей и Pydantic-схем
 1. **Person** — модель содержит `phone`, `email`, `birth_date`, `employment_status`,
-   `current_ppe`, однако `app/schemas/person.py::PersonRead` публикует только
+   `current_ppe`, однако `backend/app/schemas/person.py::PersonRead` публикует только
    базовые паспортные поля. *TODO: расширить `PersonRead` минимум `phone`,
    `email`, `employment_status`, чтобы API отражало фактические данные.*
 2. **Document** — ORM хранит `site_id`, `template_version_id`, `file_id`,
    `signed_file_id`, `content_sha256`, `job_id`, но `DocumentRead`
-   (в `app/schemas/document.py`) возвращает лишь `company_id`, `template_id`,
+   (в `backend/app/schemas/document.py`) возвращает лишь `company_id`, `template_id`,
    `person_id`, `status`, `storage_key`. *TODO: дополнить схему, иначе API теряет
    важные ссылки (подписанный файл, площадка, шаблонная версия).* 
 3. **DocumentPack** — в API (`PackListItem`) отсутствуют поля `module` и

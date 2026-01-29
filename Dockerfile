@@ -22,7 +22,7 @@ COPY requirements.txt ./
 RUN python -m pip install --upgrade pip \
     && pip install -r requirements.txt
 
-COPY app ./app
+COPY backend/app ./backend/app
 COPY scripts ./scripts
 COPY sitecustomize.py ./sitecustomize.py
 
@@ -31,7 +31,7 @@ RUN useradd --create-home --shell /bin/bash appuser \
 
 USER appuser
 
-ENV PYTHONPATH=/srv/app
+ENV PYTHONPATH=/srv/app/backend
 
 ENTRYPOINT ["/srv/app/scripts/docker-entrypoint.sh"]
 

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ "${RUN_MIGRATIONS:-true}" == "true" ]]; then
-  python -m alembic -c app/migrations/alembic.ini upgrade head
+  python -m alembic -c backend/app/migrations/alembic.ini upgrade head
 fi
 
 exec "$@"

@@ -1,10 +1,10 @@
 # Repo quick facts and debts
 
-- FastAPI backend present with modular layout under `app/` (api, core, db, domains, models, schemas, services).
-- Multi-tenant DB session implemented in `app/db/session.py` with optional per-tenant schemas; async SQLAlchemy 2.x used.
+- FastAPI backend present with modular layout under `backend/app/` (api, core, db, domains, models, schemas, services).
+- Multi-tenant DB session implemented in `backend/app/db/session.py` with optional per-tenant schemas; async SQLAlchemy 2.x used.
 - Alembic configured; at least two migration scripts exist (`20240408_0001...`, `20240709_0002...`).
 - Dockerfile and docker-compose exist; compose spins Postgres, Redis, MinIO, backend, frontend, and a reverse proxy.
-- Celery worker scaffolding present (`app/tasks.py`, `app/worker.py`) with Redis broker configured via settings.
+- Celery worker scaffolding present (`backend/app/tasks.py`, `backend/app/worker.py`) with Redis broker configured via settings.
 - Settings managed via pydantic-settings; JWT config fields (issuer, audience, algorithm, TTL) are defined.
 - Domain stubs exist: `templating/renderer.py`, `replace/engine.py`, `files/document.py`, `packs/service.py`, `npa/compliance.py`; они минимальны и требуют доработки.
 - API v1 router реализует базовые эндпоинты (tenants, companies, employees, templates, docx helpers, pipeline execution); остальной контракт в `docs/openapi.yaml` пока не реализован.

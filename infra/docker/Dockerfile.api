@@ -19,7 +19,7 @@ RUN apt-get update \
 RUN pip install --no-cache-dir "poetry==2.1.4"
 COPY pyproject.toml poetry.lock* ./
 RUN poetry config virtualenvs.create false && poetry install --with dev --no-root
-COPY app ./app
+COPY backend/app ./backend/app
 COPY sitecustomize.py ./sitecustomize.py
 
 RUN useradd --create-home --shell /bin/bash appuser \
@@ -28,7 +28,7 @@ RUN useradd --create-home --shell /bin/bash appuser \
 USER appuser
 
 ENV PATH="/srv/app/.venv/bin:$POETRY_HOME/bin:$PATH" \
-    PYTHONPATH=/srv/app
+    PYTHONPATH=/srv/app/backend
 
 EXPOSE 8000
 

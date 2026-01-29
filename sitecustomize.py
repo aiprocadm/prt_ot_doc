@@ -28,7 +28,7 @@ def _ensure_workspace_symlinks() -> None:
     """Expose the repository layout under common ``/workspace*`` prefixes."""
 
     repo_root = Path(__file__).resolve().parent
-    target_app = repo_root / "app"
+    target_app = repo_root / "backend" / "app"
     if not target_app.exists():  # pragma: no cover - defensive safeguard
         return
 
@@ -70,8 +70,9 @@ def _ensure_workspace_symlinks() -> None:
         except OSError:  # pragma: no cover - permissions edge cases
             continue
 
-    if str(repo_root) not in sys.path:
-        sys.path.insert(0, str(repo_root))
+    backend_root = repo_root / "backend"
+    if str(backend_root) not in sys.path:
+        sys.path.insert(0, str(backend_root))
 
 
 def _patch_spec_from_file_location() -> None:
@@ -86,7 +87,7 @@ def _patch_spec_from_file_location() -> None:
         return
 
     repo_root = Path(__file__).resolve().parent
-    app_root = repo_root / "app"
+    app_root = repo_root / "backend" / "app"
 
     if not app_root.exists():
         return

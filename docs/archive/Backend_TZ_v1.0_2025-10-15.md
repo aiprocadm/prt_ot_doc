@@ -21,11 +21,11 @@
 ## 1) Архитектура
 **Выбор.** Монолит с модульной архитектурой внутри (FastAPI + SQLAlchemy + Celery). Причина: быстрее MVP, проще транзакции и общие миграции. Позже выделяем тяжелые домены (LMS, генерация отчётов) в сервисы.
 **Компоненты.**
-- API слой: `app/api` (версии v1).
-- Домены: `app/domains/*` (templating, packs, replace, files, npa, sign, audit, billing).
-- Модель/ORM: `app/models`.
-- Доступ к БД: `app/db/session.py`.
-- Очереди: `app/tasks.py` + Celery worker.
+- API слой: `backend/app/api` (версии v1).
+- Домены: `backend/app/domains/*` (templating, packs, replace, files, npa, sign, audit, billing).
+- Модель/ORM: `backend/app/models`.
+- Доступ к БД: `backend/app/db/session.py`.
+- Очереди: `backend/app/tasks.py` + Celery worker.
 **Потоки данных.**
 Загрузка входных данных → валидация → доменная логика → БД → постановка задач генерации → готовые файлы в MinIO → ссылки в API.
 **Асинхронность.** Celery + Redis: генерация документов, массовая рассылка, отчёты, импорт НПА.
