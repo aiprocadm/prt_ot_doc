@@ -34,9 +34,11 @@ async def test_validation_error_uses_unified_payload(app_with_handlers: FastAPI)
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
     body = response.json()
     assert body["code"] == "validation_error"
+    assert body["error_code"] == "validation_error"
     assert body["message"] == "Request validation failed"
     assert isinstance(body["details"].get("errors"), list)
     assert response.headers[TRACE_HEADER] == body["trace_id"]
+    assert body["request_id"] == body["trace_id"]
 
 
 @pytest.mark.anyio
@@ -48,10 +50,12 @@ async def test_forbidden_error_uses_unified_payload(app_with_handlers: FastAPI) 
     assert response.status_code == status.HTTP_403_FORBIDDEN
     body = response.json()
     assert body["code"] == "forbidden"
+    assert body["error_code"] == "forbidden"
     assert body["message"] == "Access denied"
     assert body["details"] == {}
     assert body["trace_id"]
     assert response.headers[TRACE_HEADER] == body["trace_id"]
+    assert body["request_id"] == body["trace_id"]
 
 
 @pytest.mark.anyio
@@ -63,10 +67,12 @@ async def test_internal_error_uses_unified_payload(app_with_handlers: FastAPI) -
     assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
     body = response.json()
     assert body["code"] == "internal"
+    assert body["error_code"] == "internal"
     assert body["message"] == "Internal Server Error"
     assert body["details"] == {}
     assert body["trace_id"]
     assert response.headers[TRACE_HEADER] == body["trace_id"]
+    assert body["request_id"] == body["trace_id"]
 
 
 @pytest.mark.anyio
@@ -78,7 +84,9 @@ async def test_not_found_error_uses_unified_payload(app_with_handlers: FastAPI) 
     assert response.status_code == status.HTTP_404_NOT_FOUND
     body = response.json()
     assert body["code"] == "not_found"
+    assert body["error_code"] == "not_found"
     assert body["message"] == "Not Found"
     assert body["details"] == {}
     assert body["trace_id"]
     assert response.headers[TRACE_HEADER] == body["trace_id"]
+    assert body["request_id"] == body["trace_id"]

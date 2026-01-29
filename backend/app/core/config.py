@@ -377,6 +377,9 @@ class Settings(BaseSettings):
     rate_limit_storage_uri: str = Field("memory://", alias="RATE_LIMIT_STORAGE_URI")
     rate_limit_login_per_identity: str = Field("5/minute", alias="RATE_LIMIT_LOGIN_PER_IDENTITY")
     rate_limit_upload_per_tenant: str = Field("10/minute", alias="RATE_LIMIT_UPLOAD_PER_TENANT")
+    rate_limit_generate_per_tenant: str = Field(
+        "20/minute", alias="RATE_LIMIT_GENERATE_PER_TENANT"
+    )
 
     use_1c_integration: bool = Field(False, alias="USE_1C_INTEGRATION")
     use_edo_integration: bool = Field(False, alias="USE_EDO_INTEGRATION")
@@ -389,6 +392,12 @@ class Settings(BaseSettings):
         alias="MAX_UPLOAD_SIZE",
         validation_alias=AliasChoices("MAX_UPLOAD_SIZE", "MAX_UPLOAD_BYTES"),
     )
+    document_payload_max_bytes: int = Field(
+        JSON_MAX_DEFAULT,
+        alias="DOCUMENT_PAYLOAD_MAX_BYTES",
+    )
+    document_batch_max_rows: int = Field(500, alias="DOCUMENT_BATCH_MAX_ROWS")
+    idempotency_ttl_days: int = Field(30, alias="IDEMPOTENCY_TTL_DAYS")
     file_allowed_mime: CsvMimeList = Field(
         default_factory=lambda: list(DEFAULT_ALLOWED_FILE_MIME),
         alias="FILE_ALLOWED_MIME",
@@ -485,6 +494,9 @@ class Settings(BaseSettings):
         "pdf_libreoffice_timeout_seconds",
         "pdf_libreoffice_max_attempts",
         "pdf_worker_concurrency",
+        "document_payload_max_bytes",
+        "document_batch_max_rows",
+        "idempotency_ttl_days",
     )
     @classmethod
     def _validate_positive_sizes(cls, value: int, info: ValidationInfo) -> int:
@@ -548,6 +560,30 @@ class Settings(BaseSettings):
         )
         self.jwt_private_key_pem = DEV_PRIVATE_KEY
         self.jwt_public_key_pem = DEV_PUBLIC_KEY
+        return self
+
+    @model_validator(mode="after")
+    def _ensure_production_secrets(self) -> Settings:
+        if self.app_env != "production":
+            return self
+
+        missing: list[str] = []
+        if not self.secret_key or self.secret_key == "change-me":
+            missing.append("SECRET_KEY")
+        if self.postgres_password == "change_me":
+            missing.append("POSTGRES_PASSWORD")
+        if self.s3_access_key == "prt_local_access":
+            missing.append("S3_ACCESS_KEY")
+        if self.s3_secret_key == "prt_local_secret":
+            missing.append("S3_SECRET_KEY")
+        if self.s3_backend == "memory":
+            missing.append("S3_BACKEND")
+
+        if missing:
+            raise SettingsError(
+                "Production configuration must override defaults: "
+                + ", ".join(missing)
+            )
         return self
 
     @property

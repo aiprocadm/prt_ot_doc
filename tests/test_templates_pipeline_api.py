@@ -26,6 +26,15 @@ def _build_template() -> bytes:
     return buffer.getvalue()
 
 
+def _build_alt_template() -> bytes:
+    doc = Document()
+    doc.add_paragraph("Hello {{ name }}!")
+    doc.add_paragraph("Version two")
+    buffer = BytesIO()
+    doc.save(buffer)
+    return buffer.getvalue()
+
+
 def _version_metadata_form() -> dict[str, str]:
     return {
         "document_type": "safety_doc",
@@ -193,6 +202,35 @@ async def test_template_creation_rejects_large_metadata(
     assert body["message"] == (
         f"metadata payload cannot exceed {MAX_METADATA_JSON_BYTES} bytes"
     )
+    assert body["trace_id"]
+
+
+@pytest.mark.anyio
+async def test_template_creation_conflict_when_checksum_changes(
+    async_client: AsyncClient, make_auth_headers
+) -> None:
+    headers = {**dict(async_client.headers), **await make_auth_headers()}
+    template_bytes = _build_template()
+
+    response = await async_client.post(
+        "/api/v1/templates",
+        files={"file": ("greeting.docx", template_bytes, DOCX_CONTENT_TYPE)},
+        data={"name": "Greeting", "metadata": "{}", **_version_metadata_form()},
+        headers=headers,
+    )
+    assert response.status_code == 201
+
+    conflict_response = await async_client.post(
+        "/api/v1/templates",
+        files={"file": ("greeting-v2.docx", _build_alt_template(), DOCX_CONTENT_TYPE)},
+        data={"name": "Greeting", "metadata": "{}", **_version_metadata_form()},
+        headers=headers,
+    )
+
+    assert conflict_response.status_code == 409
+    body = conflict_response.json()
+    assert body["code"] == "http_409"
+    assert body["message"] == "Template with this name already exists"
     assert body["trace_id"]
 
 
