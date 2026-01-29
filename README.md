@@ -56,7 +56,7 @@ tests/               # тесты бэкенда
 Архитектурные детали: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Публичный контракт API: [docs/openapi.yaml](docs/openapi.yaml) и снапшот [docs/openapi_snapshot_v01.json](docs/openapi_snapshot_v01.json).
 
 ## Требования
-- Python 3.12.6 (зафиксирован в `.python-version`)
+- Python 3.12.12 (зафиксирован в `.python-version`)
 - Poetry 1.8.3 (опционально, для `make`/Poetry-процессов)
 - Docker и Docker Compose v2
 - Node.js 20 (для фронтенда)
@@ -95,7 +95,7 @@ tests/               # тесты бэкенда
 Последовательность от клона до первого успешного запуска.
 
 ```bash
-# 0. Предустановите Python 3.12.6, Node.js 20, Docker, Docker Compose v2
+# 0. Предустановите Python 3.12.12, Node.js 20, Docker, Docker Compose v2
 
 # 1. Клонируйте проект
 git clone <repo-url>
@@ -256,7 +256,7 @@ docker compose down -v
 
 ## CI/CD
 GitHub Actions [`ci.yml`](.github/workflows/ci.yml) выполняет:
-1. Установку Python 3.12.6 и Poetry с кешированием зависимостей.
+1. Установку Python 3.12.12 и Poetry с кешированием зависимостей.
 2. Запуск Postgres/MinIO как сервисов Actions.
 3. `make install`, миграции Alembic и ожидание готовности сервисов.
 4. `make lint`, `make test`, `make contract`.

@@ -949,7 +949,6 @@ async def assess(
         score_before=score_before,
         band_before=band_before,
         controls=controls_json,
-        action_plan=None,
         risk_card=None,
         severity_after=severity_after,
         likelihood_after=likelihood_after,

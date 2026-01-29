@@ -173,9 +173,15 @@ def reset_client_cache() -> None:
 
 def ensure_bucket() -> None:
     """Ensure the configured bucket exists."""
+    settings = get_settings()
+    if settings.s3_backend != "minio":
+        logger.info(
+            "files.s3.bucket.skipped",
+            extra={"bucket": settings.s3_bucket, "backend": settings.s3_backend},
+        )
+        return
 
     client = get_client()
-    settings = get_settings()
     bucket = settings.s3_bucket
 
     try:

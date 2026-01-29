@@ -3,7 +3,7 @@ from pathlib import Path
 from types import ModuleType, SimpleNamespace
 import sys
 
-APP_ROOT = Path(__file__).resolve().parents[2] / "app"
+APP_ROOT = Path(__file__).resolve().parents[2] / "backend" / "app"
 
 
 def _load_s3_module(settings: SimpleNamespace):

@@ -34,6 +34,7 @@ def _configure_storage(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("S3_ACCESS_KEY", "test-access")
     monkeypatch.setenv("S3_SECRET_KEY", "test-secret")
     monkeypatch.setenv("S3_BUCKET", "test-bucket")
+    monkeypatch.setenv("S3_BACKEND", "minio")
     monkeypatch.setenv("S3_SECURE", "false")
     get_settings.cache_clear()  # type: ignore[attr-defined]
     s3.reset_client_cache()

@@ -246,7 +246,7 @@ class TestDataFactory:
     ) -> Any:
         if session is not None:
             session.add(instance)
-            await session.flush()
+            await session.commit()
             await session.refresh(instance)
             return instance
 
@@ -264,7 +264,7 @@ class TestDataFactory:
     ) -> Sequence[Any]:
         if session is not None:
             session.add_all(instances)
-            await session.flush()
+            await session.commit()
             for instance in instances:
                 await session.refresh(instance)
             return instances

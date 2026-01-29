@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from app.models.models import PPEIssueStatus, PPEItemCategory
 from app.schemas.base import BaseSchema
@@ -19,6 +19,13 @@ class PPEItemCreate(BaseSchema):
     default_wear_days: int = Field(default=365, ge=1)
     metadata_json: dict[str, Any] = Field(default_factory=dict)
 
+    @field_validator("category", mode="before")
+    @classmethod
+    def _normalize_category(cls, value: Any) -> Any:
+        if isinstance(value, str) and value.lower() == "feet":
+            return PPEItemCategory.FOOTWEAR
+        return value
+
 
 class PPEItemUpdate(BaseSchema):
     name: str | None = None
@@ -27,6 +34,13 @@ class PPEItemUpdate(BaseSchema):
     description: str | None = None
     default_wear_days: int | None = Field(default=None, ge=1)
     metadata_json: dict[str, Any] | None = None
+
+    @field_validator("category", mode="before")
+    @classmethod
+    def _normalize_category(cls, value: Any) -> Any:
+        if isinstance(value, str) and value.lower() == "feet":
+            return PPEItemCategory.FOOTWEAR
+        return value
 
 
 class PPEItemRead(BaseSchema):
@@ -80,4 +94,3 @@ class PPEIssueRead(BaseSchema):
 class PPEIssuePage(BaseSchema):
     items: list[PPEIssueRead]
     total: int
-

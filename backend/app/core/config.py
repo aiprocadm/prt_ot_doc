@@ -358,6 +358,14 @@ class Settings(BaseSettings):
     webhook_timeout_seconds: float = Field(10.0, alias="WEBHOOK_TIMEOUT_SECONDS")
     log_level: str = Field("INFO", alias="LOG_LEVEL")
     log_json: bool = Field(True, alias="LOG_JSON")
+
+    @classmethod
+    def model_validate(cls, obj: object, **kwargs) -> "Settings":  # type: ignore[override]
+        if isinstance(obj, dict):
+            data = dict(obj)
+            data.setdefault("APP_ENV", cls.model_fields["app_env"].default)
+            return super().model_validate(data, **kwargs)
+        return super().model_validate(obj, **kwargs)
     rate_limit_enabled: bool = Field(True, alias="RATE_LIMIT_ENABLED")
     rate_limit_storage_uri: str = Field("memory://", alias="RATE_LIMIT_STORAGE_URI")
     rate_limit_login_per_identity: str = Field("5/minute", alias="RATE_LIMIT_LOGIN_PER_IDENTITY")

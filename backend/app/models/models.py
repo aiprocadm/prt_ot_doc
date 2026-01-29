@@ -127,7 +127,6 @@ class WebhookSubscription(SharedModel):
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     __table_args__ = (
-        Index("ix_webhook_subscription_event_type", "event_type"),
         Index("ix_webhook_subscription_tenant_event", "tenant_id", "event_type"),
     )
 class User(TenantBaseModel, SoftDeleteMixin):
@@ -609,6 +608,10 @@ class TemplateVersion(TenantBaseModel):
     profile: Mapped[dict[str, Any] | None] = mapped_column(JSON)
 
     template: Mapped[Template] = relationship(backref="versions")
+
+    __mapper_args__ = {
+        "version_id_generator": False,
+    }
 
     __table_args__ = (
         UniqueConstraint("template_id", "version", name="uq_template_version"),
