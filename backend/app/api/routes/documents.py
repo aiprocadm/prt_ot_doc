@@ -663,6 +663,15 @@ async def update_document_status(
 ) -> DocumentRead:
     access.ensure_tenant_access(tenant.id, action="manage document status")
     service = DocumentWorkflowService(session=session)
+    document = await service.get_document(document_id=document_id, tenant_id=str(tenant.id))
+    access.ensure_abac(
+        action="manage document status",
+        document_id=document.id,
+        document_status=document.status.value if hasattr(document.status, "value") else str(document.status),
+        document_owner_id=document.created_by,
+        site_id=document.site_id,
+        site_company_id=document.company_id,
+    )
     actor_id = getattr(access.user, "id", None)
     ip = request.client.host if request.client else "unknown"
     user_agent = request.headers.get("user-agent")

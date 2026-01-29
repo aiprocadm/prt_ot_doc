@@ -17,6 +17,8 @@ class EventType(str, enum.Enum):
     PPE_RETURNED = "PPEReturned"
     TRAINING_COMPLETED = "TrainingCompleted"
     TRAINING_ASSIGNED = "TrainingAssigned"
+    TASK_DUE_SOON = "TaskDueSoon"
+    TASK_OVERDUE = "TaskOverdue"
 
 
 class BaseEventPayload(BaseModel):
@@ -127,6 +129,16 @@ class TrainingCompletedPayload(BaseEventPayload):
     score: int | None = None
 
 
+class TaskDuePayload(BaseEventPayload):
+    task_id: str
+    title: str
+    due_at: datetime | None = None
+    assignee_id: str | None = None
+    status: str
+    priority: str
+    overdue: bool = False
+
+
 _PAYLOADS: dict[EventType, type[BaseEventPayload]] = {
     EventType.DOCUMENT_CREATED: DocumentCreatedPayload,
     EventType.DOCUMENT_GENERATED: DocumentGeneratedPayload,
@@ -137,6 +149,8 @@ _PAYLOADS: dict[EventType, type[BaseEventPayload]] = {
     EventType.PPE_RETURNED: PPEReturnedPayload,
     EventType.TRAINING_COMPLETED: TrainingCompletedPayload,
     EventType.TRAINING_ASSIGNED: TrainingAssignedPayload,
+    EventType.TASK_DUE_SOON: TaskDuePayload,
+    EventType.TASK_OVERDUE: TaskDuePayload,
 }
 
 
@@ -179,4 +193,6 @@ def dedupe_key_for(event_type: EventType, payload: BaseEventPayload) -> str:
         return payload.training_event_id
     if isinstance(payload, TrainingAssignedPayload):
         return payload.training_event_id
+    if isinstance(payload, TaskDuePayload):
+        return payload.task_id
     raise ValueError(f"Unsupported event payload for {event_type.value}")

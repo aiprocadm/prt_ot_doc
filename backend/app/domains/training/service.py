@@ -23,6 +23,7 @@ from app.models.models import (
 )
 from app.models.file import File
 from app.services.events import EventType
+from app.services.obligations import create_training_task
 from app.services.outbox import OutboxService
 
 
@@ -122,6 +123,13 @@ async def assign_training_plan(
     session.add(plan)
     await session.flush()
     await session.refresh(plan)
+    await create_training_task(
+        session,
+        tenant_id=tenant_id,
+        plan=plan,
+        course=course,
+        actor_id=actor_id,
+    )
     outbox = OutboxService(session)
     await outbox.enqueue(
         tenant_id=tenant_id,

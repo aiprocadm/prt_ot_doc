@@ -5,6 +5,7 @@ import logging
 from typing import Optional
 
 from celery import Celery, signals
+from celery.schedules import crontab
 from kombu import Queue
 
 from app.core.config import get_settings
@@ -43,6 +44,13 @@ celery_app.conf.update(
     task_soft_time_limit=settings.celery.task_soft_time_limit,
     task_time_limit=settings.celery.task_time_limit,
 )
+
+celery_app.conf.beat_schedule = {
+    "tasks-reminders-daily": {
+        "task": "tasks.reminders.dispatch",
+        "schedule": crontab(hour=2, minute=0),
+    }
+}
 
 celery_app.conf.task_queues = (
     Queue(default_queue, routing_key=default_queue),

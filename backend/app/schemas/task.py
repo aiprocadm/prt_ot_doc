@@ -1,6 +1,7 @@
 """Pydantic schemas describing asynchronous task state."""
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from pydantic import Field
@@ -41,3 +42,52 @@ class TaskStatusResponse(BaseSchema):
     result: dict[str, Any] | None = Field(
         default=None, description="Structured payload returned by the task on success"
     )
+
+
+class TaskRead(BaseSchema):
+    id: str
+    title: str
+    description: str | None = None
+    entity_type: str | None = None
+    entity_id: str | None = None
+    due_at: datetime | None = None
+    status: str
+    assignee_id: str | None = None
+    created_by: str | None = None
+    priority: str
+    next_remind_at: datetime | None = None
+    reminder_channel: str | None = None
+    completed_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+    overdue: bool = False
+
+
+class TaskCreate(BaseSchema):
+    title: str = Field(..., min_length=1, max_length=255)
+    description: str | None = None
+    entity_type: str | None = Field(default=None, max_length=64)
+    entity_id: str | None = Field(default=None, max_length=36)
+    due_at: datetime | None = None
+    assignee_id: str | None = Field(default=None, max_length=36)
+    priority: str | None = Field(default=None)
+
+
+class TaskUpdate(BaseSchema):
+    title: str | None = Field(default=None, max_length=255)
+    description: str | None = None
+    due_at: datetime | None = None
+    status: str | None = None
+    assignee_id: str | None = Field(default=None, max_length=36)
+    priority: str | None = None
+
+
+class TaskPagination(BaseSchema):
+    page: int
+    page_size: int
+    total: int
+
+
+class TaskListResponse(BaseSchema):
+    items: list[TaskRead]
+    pagination: TaskPagination

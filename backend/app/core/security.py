@@ -15,6 +15,7 @@ from jose import JWTError, jwt
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_session
 from app.core.request_context import set_current_user_id
@@ -238,6 +239,103 @@ class AccessContext:
                 detail=f"Company mismatch for {action}",
             )
 
+    def ensure_site_access(
+        self,
+        site_id: str | None,
+        site_company_id: str | None = None,
+        *,
+        action: str = "access site resource",
+    ) -> None:
+        if site_id is None:
+            return
+
+        allowed_sites = self._normalize_claim_list("site_ids", "site_id")
+        if allowed_sites and str(site_id) not in allowed_sites:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                detail=f"Site scope mismatch for {action}",
+            )
+
+        if site_company_id and self.company_id and str(site_company_id) != str(self.company_id):
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                detail=f"Company mismatch for {action}",
+            )
+
+    def ensure_document_access(
+        self,
+        *,
+        document_id: str | None,
+        status_value: str | None,
+        owner_id: str | None,
+        action: str = "access document",
+    ) -> None:
+        if document_id is None:
+            return
+
+        allowed_docs = self._normalize_claim_list("document_ids", "document_id")
+        if allowed_docs and str(document_id) not in allowed_docs:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                detail=f"Document scope mismatch for {action}",
+            )
+
+        if status_value and status_value.lower() == "draft":
+            privileged = {"owner", "admin", "ot_pb_lead", "ot_specialist", "line_manager"}
+            role_set = {value.lower() for value in self.to_auth_context().roles}
+            if owner_id and str(owner_id) == str(self.user.id):
+                return
+            if not role_set.intersection(privileged):
+                raise HTTPException(
+                    status.HTTP_403_FORBIDDEN,
+                    detail=f"Draft documents are restricted for {action}",
+                )
+
+    def ensure_risk_access(
+        self,
+        *,
+        risk_level: str | None,
+        action: str = "access risk data",
+    ) -> None:
+        if not risk_level:
+            return
+        normalized = str(risk_level).lower()
+        if normalized in {"high", "crit", "critical"}:
+            privileged = {"owner", "admin", "ot_pb_lead", "ot_specialist", "pb_engineer"}
+            role_set = {value.lower() for value in self.to_auth_context().roles}
+            if not role_set.intersection(privileged):
+                raise HTTPException(
+                    status.HTTP_403_FORBIDDEN,
+                    detail=f"Risk level access denied for {action}",
+                )
+
+    def ensure_abac(self, *, action: str = "access", **attributes: Any) -> None:
+        self.ensure_site_access(
+            attributes.get("site_id"),
+            attributes.get("site_company_id"),
+            action=action,
+        )
+        self.ensure_document_access(
+            document_id=attributes.get("document_id"),
+            status_value=attributes.get("document_status"),
+            owner_id=attributes.get("document_owner_id"),
+            action=action,
+        )
+        self.ensure_risk_access(
+            risk_level=attributes.get("risk_level"),
+            action=action,
+        )
+
+    def _normalize_claim_list(self, list_key: str, single_key: str) -> set[str]:
+        values: set[str] = set()
+        list_values = self.claims.get(list_key)
+        if isinstance(list_values, Iterable) and not isinstance(list_values, (str, bytes)):
+            values.update(str(item) for item in list_values if item)
+        single_value = self.claims.get(single_key)
+        if single_value:
+            values.add(str(single_value))
+        return values
+
     def to_auth_context(self) -> "AuthContext":
         """Convert the access context into a serializable auth context."""
 
@@ -265,6 +363,7 @@ class AccessContext:
 
         normalized_role = str(self.role).lower()
         roles.append(normalized_role)
+        roles.extend(self._assigned_roles())
 
         deduplicated_roles = list(dict.fromkeys(roles))
 
@@ -274,6 +373,15 @@ class AccessContext:
             roles=deduplicated_roles,
             company_id=self.company_id,
         )
+
+    def _assigned_roles(self) -> list[str]:
+        roles: list[str] = []
+        for assigned in getattr(self.user, "roles", []):
+            try:
+                roles.append(str(assigned.role.value).lower())
+            except AttributeError:
+                continue
+        return roles
 
 
 class AuthContext(BaseModel):
@@ -346,7 +454,9 @@ def rbac(required_roles: list[str] | None = None) -> Callable[..., Any]:
                 detail="Tenant scope mismatch",
             )
 
-        result = await session.execute(select(User).where(User.id == subject))
+        result = await session.execute(
+            select(User).options(selectinload(User.roles)).where(User.id == subject)
+        )
         user = result.scalar_one_or_none()
         if user is None or not user.is_active:
             raise _auth_error()
@@ -380,7 +490,16 @@ def rbac(required_roles: list[str] | None = None) -> Callable[..., Any]:
                     detail="Company assignment mismatch",
                 )
 
-        if normalized_roles and token_role not in normalized_roles:
+        role_candidates: set[str] = {token_role} if token_role else set()
+        token_roles = payload.get("roles")
+        if isinstance(token_roles, Iterable) and not isinstance(token_roles, (str, bytes)):
+            role_candidates.update(str(role).lower() for role in token_roles if role)
+        role_candidates.add(user.role.value.lower())
+        role_candidates.update(
+            str(role.role.value).lower() for role in getattr(user, "roles", []) if role
+        )
+
+        if normalized_roles and not role_candidates.intersection(normalized_roles):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Insufficient role",
@@ -388,6 +507,7 @@ def rbac(required_roles: list[str] | None = None) -> Callable[..., Any]:
 
         session.info["current_user_id"] = user.id
         session.info["current_user_role"] = user.role.value
+        session.info["current_user_roles"] = sorted(role_candidates)
         session.info["token_payload"] = dict(payload)
         session.info["token_tenant_id"] = str(token_tenant_id) if token_tenant_id else None
         session.info["token_tenant_slug"] = token_tenant_slug
@@ -453,6 +573,7 @@ def abac(
     *,
     required_roles: list[str] | None = None,
     action: str = "access",
+    resource_context: Callable[..., Mapping[str, Any]] | Mapping[str, Any] | None = None,
 ) -> Callable[..., Any]:
     """Return a dependency enforcing tenant-based ABAC checks for a resource."""
 
@@ -465,12 +586,27 @@ def abac(
         async def tenant_dependency() -> UUID | str | None:  # pragma: no cover - trivial
             return resource_tenant_id
 
+    if resource_context is None:
+
+        async def resource_dependency() -> Mapping[str, Any]:  # pragma: no cover - trivial
+            return {}
+
+    elif callable(resource_context):
+        resource_dependency = resource_context
+    else:
+
+        async def resource_dependency() -> Mapping[str, Any]:  # pragma: no cover - trivial
+            return resource_context
+
     async def dependency(
         request: Request,
         tenant_id: UUID | str | None = Depends(tenant_dependency),
+        resource_attributes: Mapping[str, Any] = Depends(resource_dependency),
         access: AccessContext = base_access,
     ) -> AccessContext:
         access.ensure_tenant_access(tenant_id, action=action)
+        if resource_attributes:
+            access.ensure_abac(action=action, **dict(resource_attributes))
         if tenant_id is not None:
             request.state.rate_limit_tenant_id = str(tenant_id)
         return access

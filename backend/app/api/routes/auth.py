@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.rate_limit import ip_subject_key, limiter, login_per_identity
@@ -89,7 +90,9 @@ async def login(
     getattr(request.state, "rate_limit_subject", None)
     _ = response.headers
     result = await session.execute(
-        select(User).where(
+        select(User)
+        .options(selectinload(User.roles))
+        .where(
             func.lower(User.email) == normalized_email,
             User.tenant_id == tenant.id,
         )
@@ -106,7 +109,8 @@ async def login(
     user.last_login_at = datetime.now(timezone.utc)
     await session.commit()
 
-    additional_claims: dict[str, Any] = {"tenant_id": user.tenant_id}
+    role_values = _collect_user_roles(user)
+    additional_claims: dict[str, Any] = {"tenant_id": user.tenant_id, "roles": role_values}
     if user.company_id:
         additional_claims["company_id"] = str(user.company_id)
     access_token = issue_access_token(
@@ -166,13 +170,15 @@ async def refresh_tokens(
         raise _invalid_refresh_token()
 
     result = await session.execute(
-        select(User).where(User.id == subject, User.tenant_id == tenant.id)
+        select(User).options(selectinload(User.roles)).where(
+            User.id == subject, User.tenant_id == tenant.id
+        )
     )
     user = result.scalar_one_or_none()
     if user is None or not user.is_active:
         raise _invalid_refresh_token()
 
-    additional_claims = {"tenant_id": user.tenant_id}
+    additional_claims = {"tenant_id": user.tenant_id, "roles": _collect_user_roles(user)}
     if user.company_id:
         additional_claims["company_id"] = str(user.company_id)
     access_token = issue_access_token(
@@ -195,3 +201,9 @@ async def admin_ping(access: AccessContext = Depends(rbac(["admin"]))):
     """Simple guard-protected endpoint used to validate RBAC wiring."""
 
     return AdminPingResponse(status="ok", user_id=access.user.id)
+
+
+def _collect_user_roles(user: User) -> list[str]:
+    roles = [user.role.value]
+    roles.extend(role.role.value for role in getattr(user, "roles", []))
+    return list(dict.fromkeys(role.lower() for role in roles if role))

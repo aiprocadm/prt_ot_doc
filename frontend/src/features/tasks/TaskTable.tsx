@@ -20,9 +20,9 @@ export const TaskTable = () => {
   const columns = useMemo<ColumnDef<TaskDto>[]>(
     () => [
       {
-        accessorKey: "kind",
-        header: "Тип",
-        cell: ({ row }) => row.original.kind
+        accessorKey: "title",
+        header: "Задача",
+        cell: ({ row }) => row.original.title
       },
       {
         accessorKey: "status",
@@ -30,9 +30,14 @@ export const TaskTable = () => {
         cell: ({ row }) => <StatusBadge status={row.original.status} />
       },
       {
-        accessorKey: "progress",
-        header: "Прогресс",
-        cell: ({ row }) => `${row.original.progress}%`
+        accessorKey: "priority",
+        header: "Приоритет",
+        cell: ({ row }) => row.original.priority
+      },
+      {
+        accessorKey: "due_at",
+        header: "Срок",
+        cell: ({ row }) => (row.original.due_at ? formatDate(row.original.due_at) : "—")
       },
       {
         accessorKey: "updated_at",
@@ -59,7 +64,7 @@ export const TaskTable = () => {
         setPageSize(size);
         list();
       }}
-      caption="Задачи генерации"
+      caption="Задачи и обязательства"
     />
   );
 };

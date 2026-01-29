@@ -1,17 +1,26 @@
 import type { BaseEntityDto } from "./common";
 
-export type TaskStatus = "queued" | "in_progress" | "completed" | "failed" | "cancelled";
+export type TaskStatus = "open" | "in_progress" | "done" | "cancelled";
+export type TaskPriority = "low" | "medium" | "high" | "critical";
 
 export interface TaskDto extends BaseEntityDto {
-  kind: string;
+  title: string;
+  description?: string | null;
+  entity_type?: string | null;
+  entity_id?: string | null;
+  due_at?: string | null;
   status: TaskStatus;
-  progress: number;
-  payload?: Record<string, unknown>;
-  result?: Record<string, unknown>;
-  error?: string | null;
+  assignee_id?: string | null;
+  created_by?: string | null;
+  priority: TaskPriority;
+  next_remind_at?: string | null;
+  reminder_channel?: string | null;
+  completed_at?: string | null;
+  overdue?: boolean;
 }
 
 export interface TaskFiltersDto {
   status?: TaskStatus;
-  kind?: string;
+  overdue?: boolean;
+  assignee?: string;
 }

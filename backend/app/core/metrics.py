@@ -41,6 +41,7 @@ class PipelineType(str, enum.Enum):
     RISK = "risk"
     PPE = "ppe"
     TRAINING = "training"
+    TASKS = "tasks"
     UNKNOWN = "unknown"
 
 
