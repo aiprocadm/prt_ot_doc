@@ -92,43 +92,24 @@ class OutboxService:
                     tenant_id=tenant_id,
                     session=self.session,
                 )
+            created: list[Outbox] = []
+            now = datetime.now(tz=timezone.utc)
             if not destinations:
                 logger.warning(
                     "outbox.skip_no_destination",
                     extra={"tenant_id": tenant_id, "event_type": resolved.value},
                 )
                 self.metrics.record_outbox_no_destination(event_type=resolved.value)
-                self.metrics.record_pipeline_stage_end(
-                    pipeline=pipeline,
-                    stage=PipelineStage.OUTBOX_ENQUEUED,
-                    result=StageResult.SUCCESS,
-                    seconds=perf_counter() - stage_start,
-                )
-                return []
-
-            created: list[Outbox] = []
-            now = datetime.now(tz=timezone.utc)
-            for target in destinations:
-                merged_headers = self._merge_headers(target.headers, headers)
-                existing = None
-                if key:
-                    existing = await self._find_existing(
-                        tenant_id=tenant_id,
-                        destination=target.url,
-                        idempotency_key=key,
-                    )
-                if existing:
-                    created.append(existing)
-                    continue
                 entry = Outbox(
                     tenant_id=tenant_id,
                     event_type=resolved.value,
-                    destination=target.url,
+                    destination="noop://local",
                     payload=normalized_payload,
-                    headers=merged_headers,
+                    headers=None,
                     idempotency_key=key,
-                    status=OutboxStatus.PENDING,
-                    next_attempt_at=now,
+                    status=OutboxStatus.SENT,
+                    next_attempt_at=None,
+                    sent_at=now,
                 )
                 self.session.add(entry)
                 await self.session.flush()
@@ -136,11 +117,40 @@ class OutboxService:
                     entry.payload = {**entry.payload, "event_id": entry.id}
                     await self.session.flush()
                 created.append(entry)
-                self.metrics.record_outbox_enqueued(
-                    event_type=entry.event_type,
-                    destination=entry.destination,
-                    tenant_id=entry.tenant_id,
-                )
+            else:
+                for target in destinations:
+                    merged_headers = self._merge_headers(target.headers, headers)
+                    existing = None
+                    if key:
+                        existing = await self._find_existing(
+                            tenant_id=tenant_id,
+                            destination=target.url,
+                            idempotency_key=key,
+                        )
+                    if existing:
+                        created.append(existing)
+                        continue
+                    entry = Outbox(
+                        tenant_id=tenant_id,
+                        event_type=resolved.value,
+                        destination=target.url,
+                        payload=normalized_payload,
+                        headers=merged_headers,
+                        idempotency_key=key,
+                        status=OutboxStatus.PENDING,
+                        next_attempt_at=now,
+                    )
+                    self.session.add(entry)
+                    await self.session.flush()
+                    if entry.payload.get("event_id") is None:
+                        entry.payload = {**entry.payload, "event_id": entry.id}
+                        await self.session.flush()
+                    created.append(entry)
+                    self.metrics.record_outbox_enqueued(
+                        event_type=entry.event_type,
+                        destination=entry.destination,
+                        tenant_id=entry.tenant_id,
+                    )
         except Exception as exc:
             self.metrics.record_pipeline_stage_end(
                 pipeline=pipeline,

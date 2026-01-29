@@ -96,6 +96,13 @@ class Metrics:
     http_request_latency_p95_seconds: Gauge
     http_request_errors_total: Counter
     outbox_enqueued_total: Counter
+    outbox_sent_total: Counter
+    outbox_failed_total: Counter
+    outbox_dead_total: Counter
+    outbox_attempts_histogram: Histogram
+    outbox_dispatch_latency_seconds: Histogram
+    outbox_dispatcher_tick_total: Counter
+    outbox_dispatcher_loop_duration_seconds: Histogram
     risk_assessment_total: Counter
     risk_cards_created_total: Counter
     action_plan_items_created_total: Counter
@@ -574,6 +581,8 @@ def _build_metrics() -> Metrics:
     action_plan_items_created_total = Counter(
         "action_plan_items_created_total",
         "Total action plan items created.",
+        registry=registry,
+    )
     files_presign_download_total = Counter(
         "files_presign_download_total",
         "Presigned file download URLs issued grouped by tenant.",

@@ -9,18 +9,19 @@ os.environ.setdefault("APP_NAME", "TestService")
 os.environ.setdefault("APP_TRUSTED_HOSTS", "localhost,127.0.0.1,testserver")
 os.environ.setdefault("DEFAULT_LOCALE", "en-US")
 os.environ.setdefault("LIBREOFFICE_BIN", sys.executable)
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+_SQLITE_TEST_DB = "sqlite+aiosqlite:///file::memory:?cache=shared&uri=true"
+os.environ.setdefault("DATABASE_URL", _SQLITE_TEST_DB)
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 os.environ.setdefault("REDIS_RESULT_URL", "redis://localhost:6379/15")
 os.environ.setdefault("S3_ENDPOINT", "http://localhost:9000")
 
 import pytest
 import pytest_asyncio
-from fastapi import Header, HTTPException, status
+from fastapi import HTTPException, Request, status
 from httpx import ASGITransport, AsyncClient
-from pydantic import AliasChoices
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
 
 from app.api import create_app
 from app.api.dependencies import get_session, get_tenant_record
@@ -71,7 +72,12 @@ async def app_fixture():
     os.environ.setdefault("POSTGRES_DB", "test")
 
     _prepare_sqlite_metadata()
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
+    engine = create_async_engine(
+        _SQLITE_TEST_DB,
+        future=True,
+        connect_args={"uri": True},
+        poolclass=StaticPool,
+    )
     async with engine.begin() as conn:
         await conn.run_sync(SharedBase.metadata.create_all)
         await conn.run_sync(Base.metadata.create_all)
@@ -119,11 +125,8 @@ async def app_fixture():
 
     app.state.redis_client = _StubRedisClient()
 
-    async def override_tenant_record(
-        tenant_slug: str | None = Header(
-            default=None, validation_alias=AliasChoices(TENANT_HEADER, "x-tenant-slug")
-        )
-    ) -> Tenant:
+    async def override_tenant_record(request: Request) -> Tenant:
+        tenant_slug = request.headers.get(TENANT_HEADER) or request.headers.get("x-tenant-slug")
         info = tenant_required(tenant_slug)
         async with TestSession() as session:
             tenant = (

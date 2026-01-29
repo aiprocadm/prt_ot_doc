@@ -4,8 +4,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import AsyncIterator
 
-from fastapi import Depends, HTTPException, status, Header
-from pydantic import AliasChoices
+from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,15 +24,17 @@ from app.services.integrations import (
 )
 
 
-async def get_tenant_record(
-    tenant_slug: str | None = Header(
-        default=None, validation_alias=AliasChoices(TENANT_HEADER, "x-tenant-slug")
-    )
-) -> Tenant:
-    if tenant_slug is not None:
-        info = tenant_required(tenant_slug)
-    else:
-        info = get_current_tenant()
+def _resolve_tenant_slug(request: Request) -> str | None:
+    for header_name in (TENANT_HEADER, "x-tenant-slug"):
+        value = request.headers.get(header_name)
+        if value:
+            return value
+    return None
+
+
+async def get_tenant_record(request: Request) -> Tenant:
+    tenant_slug = _resolve_tenant_slug(request)
+    info = tenant_required(tenant_slug) if tenant_slug is not None else get_current_tenant()
     async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as session:
         result = await session.execute(select(Tenant).where(Tenant.slug == info.slug))
         tenant = result.scalar_one_or_none()
@@ -43,12 +44,8 @@ async def get_tenant_record(
     return tenant
 
 
-async def require_tenant_slug(
-    tenant_slug: str | None = Header(
-        default=None, validation_alias=AliasChoices(TENANT_HEADER, "x-tenant-slug")
-    )
-) -> None:
-    tenant_required(tenant_slug)
+async def require_tenant_slug(request: Request) -> None:
+    tenant_required(_resolve_tenant_slug(request))
 
 
 async def get_session(tenant: Tenant = Depends(get_tenant_record)) -> AsyncIterator[AsyncSession]:

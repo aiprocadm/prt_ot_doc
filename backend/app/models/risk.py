@@ -195,7 +195,6 @@ class RiskAssessment(TenantBase):
     score_before: Mapped[int] = mapped_column(Integer, nullable=False)
     band_before: Mapped[str] = mapped_column(String(16), nullable=False)
     controls: Mapped[str | None] = mapped_column(Text, nullable=True)
-    action_plan: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     risk_card: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     severity_after: Mapped[int] = mapped_column(Integer, nullable=False)
     likelihood_after: Mapped[int] = mapped_column(Integer, nullable=False)

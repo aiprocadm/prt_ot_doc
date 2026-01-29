@@ -39,7 +39,7 @@ class WebhookDispatchError(RuntimeError):
         return "http_4xx"
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, init=False)
 class WebhookDispatcher:
     """Dispatch webhook events to configured endpoints."""
 

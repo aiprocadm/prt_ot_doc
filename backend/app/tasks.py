@@ -251,6 +251,7 @@ async def _generate_document_for_run(run_id: str, tenant_slug: str) -> tuple[str
                     snapshot_id=snapshot.id,
                 )
                 session.add(version)
+                await session.flush()
 
                 metadata["document_id"] = document.id
                 metadata["document_version_id"] = version.id

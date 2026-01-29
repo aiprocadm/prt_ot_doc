@@ -159,11 +159,14 @@ class PackGenerationPipeline:
                 output_basename=None,
                 tenant_id=tenant_slug,
             )
-            outputs = dict(run.outputs or {})
-            metadata = dict(run.result_metadata or {})
-            document_version_id = outputs.get("document_version_id") or metadata.get(
-                "document_version_id"
-            ) or run.id
+            outputs = dict(getattr(run, "outputs", None) or {})
+            metadata = dict(getattr(run, "result_metadata", None) or {})
+            document_version_id = (
+                outputs.get("document_version_id")
+                or metadata.get("document_version_id")
+                or getattr(run, "id", None)
+                or spec.run_key
+            )
             if include_docx and not run.docx_storage_key:
                 raise RuntimeError("DOCX output missing for generated document")
             if include_pdf and not run.pdf_storage_key:
