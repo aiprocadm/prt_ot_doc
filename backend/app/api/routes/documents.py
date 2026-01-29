@@ -95,8 +95,8 @@ class DocGenerateRequest(BaseModel):
 
     @model_validator(mode="after")
     def _ensure_identifier(self) -> "DocGenerateRequest":
-        if not self.template_code and not self.template_id:
-            raise ValueError("Either template_id or template_code must be provided")
+        if not self.template_code:
+            raise ValueError("template_code is required to select a template")
         if self.template_version is None:
             raise ValueError("template_version is required to select a template")
         return self
@@ -168,27 +168,23 @@ async def _fetch_template(
     template_version: int | None = None,
 ) -> tuple[Template, TemplateVersion]:
     tenant_slug = tenant.slug
-    filters: list[Any] = [
-        Template.tenant_id == tenant_slug,
-        TemplateVersion.tenant_id == tenant_slug,
-        TemplateVersion.status == TemplateVersionStatus.ACTIVE,
-    ]
-    if template_id:
-        filters.append(Template.id == template_id)
-    if template_code:
-        filters.append(Template.name == template_code)
-    if template_version is not None:
-        filters.append(TemplateVersion.version == template_version)
-    if len(filters) == 2:
+    if not template_code:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            "template_id or template_code must be provided",
+            "template_code is required for template selection",
         )
     if template_version is None:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             "template_version is required for template selection",
         )
+    filters: list[Any] = [
+        Template.tenant_id == tenant_slug,
+        TemplateVersion.tenant_id == tenant_slug,
+        TemplateVersion.status == TemplateVersionStatus.ACTIVE,
+        Template.name == template_code,
+        TemplateVersion.version == template_version,
+    ]
 
     stmt = (
         select(Template, TemplateVersion)
@@ -199,7 +195,13 @@ async def _fetch_template(
     row = (await session.execute(stmt)).first()
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Template not found")
-    return row
+    template, version = row
+    if template_id and template.id != template_id:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "template_id does not match template_code selection",
+        )
+    return template, version
 
 
 async def _ensure_company(session: AsyncSession, tenant: Tenant, company_id: str) -> Company:
@@ -456,8 +458,11 @@ async def generate_document_batch(
     tenant: Tenant = TenantDep,
     access: AccessContext = AccessDep,
 ) -> DocumentBatchRunRead:
-    if template_version is None or not company_id:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "template_version and company_id required")
+    if template_version is None or not company_id or not template_code:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "template_code, template_version and company_id required",
+        )
 
     filename = (file.filename or "").lower()
     if filename.endswith(".csv"):

@@ -294,6 +294,24 @@ async def _generate_document_for_run(run_id: str, tenant_slug: str) -> tuple[str
                         "status": document.status.value,
                     },
                 )
+                await outbox.enqueue(
+                    tenant_id=run.tenant_id,
+                    event_type=EventType.DOCUMENT_GENERATED.value,
+                    idempotency_key=f"{document.id}:{version.id}:generated",
+                    payload={
+                        "tenant_id": str(run.tenant_id),
+                        "actor_id": str(user.id),
+                        "occurred_at": document.created_at,
+                        "document_id": document.id,
+                        "document_version_id": version.id,
+                        "template_id": template.id,
+                        "template_version_id": template_version.id,
+                        "company_id": company.id,
+                        "person_id": person.id if person else None,
+                        "storage_key": storage_key,
+                        "status": document.status.value,
+                    },
+                )
                 idempotency = IdempotencyService(
                     session=session,
                     tenant_id=str(run.tenant_id),
