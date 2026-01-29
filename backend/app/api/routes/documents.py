@@ -28,6 +28,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.payload_constraints import PayloadConstraintError, enforce_mapping_constraints
 from app.core.idempotency import compute_request_hash
+from app.core.rate_limit import generate_per_tenant, ip_tenant_key, limiter
+from app.core.config import get_settings
 from app.core.tracing import get_trace_id
 from app.core.security import AccessContext, abac, rbac
 from app.models.document import (
@@ -112,6 +114,16 @@ def _hash_payload(payload: dict[str, Any]) -> str:
     serialized = _serialize_payload(payload)
     digest = hashlib.sha256(serialized.encode("utf-8"))
     return digest.hexdigest()
+
+
+def _ensure_payload_size(payload: dict[str, Any], *, limit: int, field: str) -> None:
+    serialized = _serialize_payload(payload)
+    size = len(serialized.encode("utf-8"))
+    if size > limit:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            f"{field} payload cannot exceed {limit} bytes",
+        )
 
 
 def _parse_csv_payload(file: UploadFile) -> list[dict[str, Any]]:
@@ -293,6 +305,7 @@ async def _resolve_run(
     response_model=TaskAcceptedResponse,
     status_code=status.HTTP_202_ACCEPTED,
 )
+@limiter.limit(lambda: generate_per_tenant(), key_func=ip_tenant_key)
 async def generate_document(
     payload: DocGenerateRequest,
     request: Request,
@@ -302,8 +315,10 @@ async def generate_document(
     tenant: Tenant = TenantDep,
     access: AccessContext = AccessDep,
 ) -> TaskAcceptedResponse:
+    settings = get_settings()
     try:
         enforce_mapping_constraints(payload.data, field="data")
+        _ensure_payload_size(payload.data, limit=settings.document_payload_max_bytes, field="data")
     except PayloadConstraintError as exc:
         raise HTTPException(exc.status_code, str(exc)) from exc
 
@@ -446,6 +461,7 @@ async def generate_document(
     response_model=DocumentBatchRunRead,
     status_code=status.HTTP_202_ACCEPTED,
 )
+@limiter.limit(lambda: generate_per_tenant(), key_func=ip_tenant_key)
 async def generate_document_batch(
     file: UploadFile,
     request: Request,
@@ -458,6 +474,7 @@ async def generate_document_batch(
     tenant: Tenant = TenantDep,
     access: AccessContext = AccessDep,
 ) -> DocumentBatchRunRead:
+    settings = get_settings()
     if template_version is None or not company_id or not template_code:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
@@ -474,6 +491,11 @@ async def generate_document_batch(
 
     if not rows:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Batch file is empty")
+    if len(rows) > settings.document_batch_max_rows:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            f"Batch cannot exceed {settings.document_batch_max_rows} documents",
+        )
 
     template, template_version_row = await _fetch_template(
         session,
@@ -509,6 +531,11 @@ async def generate_document_batch(
         row_payload = {k: v for k, v in row.items() if k not in {"person_id"}}
         try:
             enforce_mapping_constraints(row_payload, field="data")
+            _ensure_payload_size(
+                row_payload,
+                limit=settings.document_payload_max_bytes,
+                field="data",
+            )
         except PayloadConstraintError as exc:
             raise HTTPException(exc.status_code, str(exc)) from exc
         person_id = row.get("person_id") if isinstance(row, dict) else None

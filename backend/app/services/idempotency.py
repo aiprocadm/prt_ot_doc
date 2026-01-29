@@ -7,7 +7,8 @@ from typing import Any, TypeVar
 
 from fastapi import HTTPException, Response, status
 from pydantic import BaseModel
-from sqlalchemy import Select, select
+from sqlalchemy import Select, delete, select
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -186,3 +187,21 @@ class IdempotencyService:
         status_code = record.status_code or status.HTTP_200_OK
         record.result_json = {"status_code": int(status_code), "body": body}
         await self.session.flush()
+
+
+async def cleanup_idempotency_keys(
+    *,
+    session: AsyncSession,
+    ttl_days: int,
+) -> int:
+    """Remove completed idempotency records older than the configured TTL."""
+
+    cutoff = datetime.now(tz=timezone.utc) - timedelta(days=ttl_days)
+    stmt = (
+        delete(IdempotencyKey)
+        .where(IdempotencyKey.updated_at < cutoff)
+        .where(IdempotencyKey.status.in_([IdempotencyStatus.SUCCEEDED, IdempotencyStatus.FAILED]))
+    )
+    result = await session.execute(stmt)
+    await session.flush()
+    return int(result.rowcount or 0)

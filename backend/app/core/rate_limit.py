@@ -81,6 +81,7 @@ limiter.enabled = _settings.rate_limit_enabled
 _rate_values = {
     "login_per_identity": _settings.rate_limit_login_per_identity,
     "upload_per_tenant": _settings.rate_limit_upload_per_tenant,
+    "generate_per_tenant": _settings.rate_limit_generate_per_tenant,
 }
 
 
@@ -93,6 +94,7 @@ def configure_rate_limiter(settings: Settings | None = None) -> None:
         {
             "login_per_identity": current.rate_limit_login_per_identity,
             "upload_per_tenant": current.rate_limit_upload_per_tenant,
+            "generate_per_tenant": current.rate_limit_generate_per_tenant,
         }
     )
 
@@ -127,6 +129,10 @@ def upload_per_tenant() -> str:
     return _rate_values["upload_per_tenant"]
 
 
+def generate_per_tenant() -> str:
+    return _rate_values["generate_per_tenant"]
+
+
 __all__ = [
     "RateLimitExceeded",
     "SlowAPIMiddleware",
@@ -135,6 +141,7 @@ __all__ = [
     "ip_tenant_key",
     "login_per_identity",
     "upload_per_tenant",
+    "generate_per_tenant",
     "limiter",
     "_rate_limit_exceeded_handler",
 ]

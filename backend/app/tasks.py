@@ -49,7 +49,7 @@ from app.schemas.template import TemplateCreate, TemplateVersionMetadata
 from app.services.audit import AuditService
 from app.services.celery_app import celery_app
 from app.services.file_storage import FileStorageService
-from app.services.idempotency import IdempotencyService
+from app.services.idempotency import IdempotencyService, cleanup_idempotency_keys
 from app.services.events import EventType
 from app.services.obligations import process_task_reminders
 from app.services.outbox import OutboxProcessor, OutboxService
@@ -572,6 +572,64 @@ def dispatch_task_reminders() -> int:
             error_code=str(exc) or exc.__class__.__name__,
         )
         logger.exception("dispatch_task_reminders failed", exc_info=exc)
+        raise
+
+    duration = perf_counter() - started
+    metrics.record_celery_execution(
+        queue=queue,
+        task=task_name,
+        status="succeeded",
+        seconds=duration,
+    )
+    return result
+
+
+@celery_app.task(
+    name="idempotency.cleanup",
+    autoretry_for=RETRYABLE_EXCEPTIONS,
+    retry_backoff=settings.celery.retry_backoff_seconds,
+    retry_backoff_max=settings.celery.retry_backoff_max_seconds,
+    retry_jitter=True,
+    retry_kwargs={"max_retries": settings.celery.task_max_retries},
+)
+def cleanup_idempotency_keys_task() -> int:
+    """Purge stale idempotency records according to the configured TTL."""
+
+    async def _run() -> int:
+        async with AsyncSessionLocal(tenant=settings.default_tenant_slug) as session:
+            tenants = list(
+                (await session.execute(select(Tenant).where(Tenant.is_active.is_(True))))
+                .scalars()
+                .all()
+            )
+        total_removed = 0
+        for tenant in tenants:
+            with tenant_context(tenant.slug):
+                ensure_tenant_schema(tenant.slug)
+                async with session_scope(tenant=tenant.slug) as tenant_session:
+                    total_removed += await cleanup_idempotency_keys(
+                        session=tenant_session,
+                        ttl_days=settings.idempotency_ttl_days,
+                    )
+        return total_removed
+
+    metrics = get_metrics()
+    queue = celery_app.conf.task_default_queue or "default"
+    task_name = "idempotency.cleanup"
+    metrics.record_celery_enqueue(queue=queue, task=task_name)
+    started = perf_counter()
+    try:
+        result = _run_coroutine(_run())
+    except Exception as exc:  # pragma: no cover - surfaced by Celery in production
+        duration = perf_counter() - started
+        metrics.record_celery_execution(
+            queue=queue,
+            task=task_name,
+            status="failed",
+            seconds=duration,
+            error_code=str(exc) or exc.__class__.__name__,
+        )
+        logger.exception("cleanup_idempotency_keys_task failed", exc_info=exc)
         raise
 
     duration = perf_counter() - started

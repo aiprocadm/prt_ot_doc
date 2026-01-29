@@ -162,7 +162,20 @@ class ObservabilityMiddleware:
         trace_id: str,
         detail: str,
     ) -> None:
-        payload = json.dumps({"detail": detail, "trace_id": trace_id}).encode("utf-8")
+        code = self._error_code_for_status(status_code)
+        details: dict[str, int] | dict[str, str] = {}
+        if status_code == status.HTTP_413_REQUEST_ENTITY_TOO_LARGE:
+            details = {"limit": self._max_body_bytes}
+        payload = json.dumps(
+            {
+                "code": code,
+                "error_code": code,
+                "message": detail,
+                "details": details,
+                "trace_id": trace_id,
+                "request_id": trace_id,
+            }
+        ).encode("utf-8")
         headers = [
             (b"content-type", b"application/json"),
             (b"content-length", str(len(payload)).encode("latin-1")),
@@ -182,6 +195,16 @@ class ObservabilityMiddleware:
                 "more_body": False,
             }
         )
+
+    @staticmethod
+    def _error_code_for_status(status_code: int) -> str:
+        if status_code == status.HTTP_413_REQUEST_ENTITY_TOO_LARGE:
+            return "payload_too_large"
+        if status_code == status.HTTP_504_GATEWAY_TIMEOUT:
+            return "request_timeout"
+        if status.HTTP_400_BAD_REQUEST <= status_code < status.HTTP_500_INTERNAL_SERVER_ERROR:
+            return f"http_{status_code}"
+        return "internal"
 
     @staticmethod
     def _store_trace_in_scope(scope: Scope, trace_id: str) -> None:

@@ -36,8 +36,10 @@ class ErrorPayload:
     def to_dict(self) -> dict[str, Any]:
         payload = {
             "code": self.code,
+            "error_code": self.code,
             "message": self.message,
             "trace_id": self.trace_id,
+            "request_id": self.trace_id,
         }
         if self.details:
             payload["details"] = dict(self.details)
