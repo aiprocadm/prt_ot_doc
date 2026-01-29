@@ -1,4 +1,4 @@
-.PHONY: install lint format test contract run build clean up down migrate dev env
+.PHONY: install lint format test contract run build clean up down migrate dev env frontend-install lint-frontend format-frontend test-frontend
 
 LINT_PATHS=backend/app tests scripts
 
@@ -11,13 +11,28 @@ install:
 lint:
 	poetry run ruff check --no-fix $(LINT_PATHS)
 	poetry run black --check $(LINT_PATHS)
+	$(MAKE) lint-frontend
 
 format:
 	poetry run ruff check --fix $(LINT_PATHS)
 	poetry run black $(LINT_PATHS)
+	$(MAKE) format-frontend
 
 test:
 	poetry run pytest
+	$(MAKE) test-frontend
+
+frontend-install:
+	cd frontend && npm install
+
+lint-frontend: frontend-install
+	cd frontend && npm run lint
+
+format-frontend: frontend-install
+	cd frontend && npm run format:write
+
+test-frontend: frontend-install
+	cd frontend && npm run test
 
 contract:
 	poetry run pytest -m contract

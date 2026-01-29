@@ -12,6 +12,8 @@ from typing import Any, Mapping, Sequence
 from .config import get_settings
 from .i18n import get_runtime_timezone
 from .task_context import get_task_id
+from .request_context import get_current_user_id
+from .tenant import get_current_tenant
 from .tracing import get_trace_id
 
 _SENSITIVE_KEYS = {
@@ -46,10 +48,13 @@ _RESERVED_LOG_RECORD_FIELDS = {
     "process",
     "processName",
     "relativeCreated",
+    "request_id",
     "stack_info",
     "thread",
     "threadName",
+    "tenant_id",
     "trace_id",
+    "user_id",
     "celery_task_id",
 }
 _REDACTED = "***"
@@ -108,6 +113,9 @@ class RequestContextFilter(logging.Filter):
 
     def filter(self, record: logging.LogRecord) -> bool:  # noqa: D401
         record.trace_id = get_trace_id()
+        record.request_id = get_trace_id()
+        record.tenant_id = get_current_tenant().slug
+        record.user_id = get_current_user_id()
         record.celery_task_id = get_task_id()
         return True
 
@@ -120,13 +128,21 @@ class JsonFormatter(logging.Formatter):
         timestamp = datetime.fromtimestamp(record.created, tz=tz).isoformat()
         trace_id = getattr(record, "trace_id", get_trace_id())
 
+        request_id = getattr(record, "request_id", trace_id)
+        tenant_id = getattr(record, "tenant_id", None)
+        user_id = getattr(record, "user_id", None)
         message: dict[str, Any] = {
             "timestamp": timestamp,
             "level": record.levelname,
             "logger": record.name,
             "message": _scrub_value(record.getMessage()),
+            "request_id": request_id,
             "trace_id": trace_id,
         }
+        if tenant_id is not None:
+            message["tenant_id"] = tenant_id
+        if user_id is not None:
+            message["user_id"] = user_id
 
         task_id = getattr(record, "celery_task_id", None)
         if task_id:
