@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class EventType(str, enum.Enum):
     DOCUMENT_CREATED = "DocumentCreated"
+    DOCUMENT_GENERATED = "DocumentGenerated"
     DOCUMENT_SIGNED = "DocumentSigned"
     DOCUMENT_EXPORTED = "DocumentExported"
     RISK_ASSESSED = "RiskAssessed"
@@ -36,6 +37,10 @@ class DocumentCreatedPayload(BaseEventPayload):
     person_id: str | None = None
     storage_key: str | None = None
     status: str
+
+
+class DocumentGeneratedPayload(DocumentCreatedPayload):
+    pass
 
 
 class DocumentSignedPayload(BaseEventPayload):
@@ -124,6 +129,7 @@ class TrainingCompletedPayload(BaseEventPayload):
 
 _PAYLOADS: dict[EventType, type[BaseEventPayload]] = {
     EventType.DOCUMENT_CREATED: DocumentCreatedPayload,
+    EventType.DOCUMENT_GENERATED: DocumentGeneratedPayload,
     EventType.DOCUMENT_SIGNED: DocumentSignedPayload,
     EventType.DOCUMENT_EXPORTED: DocumentExportedPayload,
     EventType.RISK_ASSESSED: RiskAssessedPayload,

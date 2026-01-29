@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import pytest
 from sqlalchemy import select
 
-from app.models.models import Outbox
+from app.models.models import Outbox, WebhookSubscription
 from app.services.outbox import OutboxService
 from tests.utils.factories import TestDataFactory
 
@@ -95,3 +95,53 @@ async def test_outbox_enqueue_rolls_back_with_transaction(
             )
         ).scalar_one_or_none()
         assert entry is None
+
+
+@pytest.mark.asyncio
+async def test_outbox_enqueue_applies_subscription_headers(
+    sessionmaker, data_factory: TestDataFactory
+) -> None:
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        session.add(
+            WebhookSubscription(
+                tenant_id=str(tenant.id),
+                event_type="DocumentCreated",
+                url="https://example.test/hooks",
+                headers={"X-Webhook-Secret": "shh"},
+                enabled=True,
+            )
+        )
+        await session.commit()
+        outbox = OutboxService(session)
+        payload = {
+            "tenant_id": str(tenant.id),
+            "actor_id": "tester",
+            "occurred_at": datetime.now(tz=timezone.utc),
+            "document_id": "doc-headers",
+            "document_version_id": "ver-headers",
+            "template_id": "tmpl-headers",
+            "template_version_id": "tmpl-ver-headers",
+            "company_id": "comp-headers",
+            "person_id": None,
+            "storage_key": "s3/key-headers",
+            "status": "generated",
+        }
+        await outbox.enqueue(
+            tenant_id=str(tenant.id),
+            event_type="DocumentCreated",
+            payload=payload,
+        )
+        await session.commit()
+
+    async with sessionmaker() as session:
+        entry = (
+            await session.execute(
+                select(Outbox).where(
+                    Outbox.tenant_id == str(tenant.id),
+                    Outbox.event_type == "DocumentCreated",
+                    Outbox.destination == "https://example.test/hooks",
+                )
+            )
+        ).scalar_one()
+        assert entry.headers == {"X-Webhook-Secret": "shh"}
