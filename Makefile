@@ -1,6 +1,9 @@
-.PHONY: install lint format test contract run build clean up down migrate
+.PHONY: install lint format test contract run build clean up down migrate dev env
 
 LINT_PATHS=backend/app tests scripts
+
+env:
+	@test -f .env || cp .env.example .env
 
 install:
 	poetry install --with dev --no-interaction
@@ -32,8 +35,11 @@ clean:
 	rm -rf .pytest_cache .mypy_cache .ruff_cache .coverage
 	find . -type d -name '__pycache__' -exec rm -rf {} +
 
-up:
+up: env
 	docker compose up -d --build
+
+dev: env
+	docker compose up --build
 
 down:
 	docker compose down -v

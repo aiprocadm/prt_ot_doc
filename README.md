@@ -10,6 +10,12 @@
 ## Quick start
 ```bash
 cp .env.example .env
+make dev
+```
+
+Manual alternative (services + API only):
+```bash
+cp .env.example .env
 docker compose up -d db redis minio
 PYTHONPATH=backend python -m alembic -c backend/app/migrations/alembic.ini upgrade head
 PYTHONPATH=backend uvicorn app.main:app --host 0.0.0.0 --port 8000
@@ -241,7 +247,7 @@ npm run dev  # http://localhost:5173
 ## Docker Compose
 ```bash
 cp .env.example .env
-docker compose up --build
+make dev
 
 # API доступен на localhost:8000
 curl -s http://127.0.0.1:8000/health | jq
@@ -265,6 +271,8 @@ docker compose down -v
 | `make clean` | Очистка кешей и артефактов |
 | `make up` | `docker compose up -d --build` |
 | `make down` | `docker compose down -v` |
+| `make env` | Создать `.env` из `.env.example`, если файла ещё нет |
+| `make dev` | Каноничный dev-режим: поднять весь стек через Docker Compose |
 
 ## Тесты и качество
 - `make lint` — ruff + black.

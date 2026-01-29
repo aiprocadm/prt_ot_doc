@@ -4,7 +4,7 @@ services:
   db:
     image: postgres:16-alpine
     env_file:
-      - .env.example
+      - .env
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-documents}
       POSTGRES_USER: ${POSTGRES_USER:-app}
@@ -36,7 +36,7 @@ services:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     env_file:
-      - .env.example
+      - .env
     environment:
       MINIO_ROOT_USER: ${S3_ACCESS_KEY:?S3_ACCESS_KEY is required}
       MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:?S3_SECRET_KEY is required}
@@ -55,7 +55,7 @@ services:
   minio-setup:
     image: minio/mc:latest
     env_file:
-      - .env.example
+      - .env
     depends_on:
       minio:
         condition: service_healthy
@@ -90,7 +90,7 @@ services:
       context: .
       dockerfile: Dockerfile
     env_file:
-      - .env.example
+      - .env
     depends_on:
       db:
         condition: service_healthy
@@ -116,7 +116,7 @@ services:
       context: .
       dockerfile: Dockerfile
     env_file:
-      - .env.example
+      - .env
     depends_on:
       backend:
         condition: service_healthy
@@ -144,7 +144,7 @@ services:
       context: .
       dockerfile: Dockerfile
     env_file:
-      - .env.example
+      - .env
     depends_on:
       backend:
         condition: service_healthy
@@ -172,7 +172,7 @@ services:
       context: .
       dockerfile: infra/docker/Dockerfile.frontend
     env_file:
-      - .env.example
+      - .env
     depends_on:
       backend:
         condition: service_healthy
