@@ -10,6 +10,7 @@ const downloadMock = vi.fn();
 const refreshStatusMock = vi.fn();
 const setPageMock = vi.fn();
 const setPageSizeMock = vi.fn();
+const setFiltersMock = vi.fn();
 
 const mockDocument = {
   id: "doc-1",
@@ -35,10 +36,12 @@ vi.mock("@/stores/documents", () => ({
   useDocumentsStore: () => ({
     items: [mockDocument],
     item: null,
+    filters: {},
     pagination: { page: 1, page_size: 10, total: 1 },
     list: listMock,
     setPage: setPageMock,
     setPageSize: setPageSizeMock,
+    setFilters: setFiltersMock,
     download: downloadMock,
     refreshStatus: refreshStatusMock,
     loading: false

@@ -3,11 +3,12 @@ import { Download } from "lucide-react";
 import { useMemo } from "react";
 
 import { DataTable } from "@/components/common/DataTable";
+import { FilterField } from "@/components/common/FilterField";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { ActionButton } from "@/components/permissions/ActionButton";
 import { PERMISSIONS } from "@/permissions/permissions";
 import { useDocumentsStore } from "@/stores/documents";
-import type { DocumentDto } from "@/types/dto/documents";
+import type { DocumentDto, DocumentStatus } from "@/types/dto/documents";
 import { formatDate } from "@/utils/datetime";
 import { downloadBlob } from "@/utils/download";
 
@@ -15,8 +16,16 @@ interface DocumentTableProps {
   onSelect: (document: DocumentDto) => void;
 }
 
+const STATUS_OPTIONS = [
+  { value: "", label: "Все статусы" },
+  { value: "draft", label: "Черновик" },
+  { value: "generating", label: "Генерация" },
+  { value: "ready", label: "Готов" },
+  { value: "error", label: "Ошибка" }
+];
+
 export const DocumentTable = ({ onSelect }: DocumentTableProps) => {
-  const { items, pagination, setPage, setPageSize, list, download, loading } = useDocumentsStore();
+  const { items, pagination, setPage, setPageSize, list, download, loading, filters, setFilters } = useDocumentsStore();
 
   const columns = useMemo<ColumnDef<DocumentDto>[]>(
     () => [
@@ -73,6 +82,16 @@ export const DocumentTable = ({ onSelect }: DocumentTableProps) => {
     [download, onSelect]
   );
 
+  const handleSearchChange = (value: string) => {
+    setFilters({ search: value || undefined });
+    list({ search: value || undefined });
+  };
+
+  const handleStatusChange = (value: string) => {
+    setFilters({ status: (value || undefined) as DocumentStatus | undefined });
+    list({ status: (value || undefined) as DocumentStatus | undefined });
+  };
+
   return (
     <DataTable
       columns={columns}
@@ -90,6 +109,25 @@ export const DocumentTable = ({ onSelect }: DocumentTableProps) => {
         list();
       }}
       caption="Документы"
+      searchPlaceholder="Поиск по названию"
+      onSearchChange={handleSearchChange}
+      renderToolbar={
+        <FilterField label="Статус" htmlFor="document-status">
+          <select
+            id="document-status"
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+            value={filters.status ?? ""}
+            onChange={(event) => handleStatusChange(event.target.value)}
+          >
+            {STATUS_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </FilterField>
+      }
+      emptyMessage="Документы не найдены. Попробуйте изменить фильтры или поиск."
     />
   );
 };

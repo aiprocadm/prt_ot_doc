@@ -49,7 +49,12 @@ export const TaskTable = () => {
       {
         accessorKey: "due_at",
         header: "Срок",
-        cell: ({ row }) => (row.original.due_at ? formatDate(row.original.due_at) : "—")
+        cell: ({ row }) => (
+          <div className="flex flex-col">
+            <span>{row.original.due_at ? formatDate(row.original.due_at) : "—"}</span>
+            {row.original.overdue && <span className="text-xs text-destructive">Просрочено</span>}
+          </div>
+        )
       },
       {
         accessorKey: "updated_at",
