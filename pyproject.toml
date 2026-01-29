@@ -79,6 +79,7 @@ markers = [
     "contract: OpenAPI contract validation tests",
 ]
 pythonpath = [
+    "backend",
     ".",
 ]
 filterwarnings = [
@@ -107,7 +108,7 @@ target-version = ["py312"]
 [tool.mypy]
 python_version = "3.12"
 ignore_missing_imports = true
-files = ["app/services", "app/schemas"]
+files = ["backend/app/services", "backend/app/schemas"]
 warn_unused_ignores = true
 
 [[tool.mypy.overrides]]

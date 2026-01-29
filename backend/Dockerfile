@@ -15,11 +15,11 @@ COPY pyproject.toml poetry.lock* ./
 RUN poetry config virtualenvs.create false \
     && poetry install --with dev --no-root
 
-COPY app /app/app
+COPY backend/app /app/backend/app
 COPY scripts /app/scripts
 COPY sitecustomize.py /app/sitecustomize.py
 
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app/backend
 
 ENTRYPOINT ["/app/scripts/docker-entrypoint.sh"]
 

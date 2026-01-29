@@ -25,11 +25,11 @@
 ## 1) Архитектура
 - **Выбор архитектуры.** Берём модульный монолит на FastAPI. Почему так: единая транзакция для сложных сценариев, меньше накладных расходов на DevOps, проще миграции между схемами. Отдельно выделяем Celery worker для тяжёлых задач.
 - **Компоненты.**
-  - API слой (`app/api`): маршруты v1, валидация, маппинг ролей.
-  - Службы домена (`app/services` и `app/domains/*`): бизнес-правила.
-  - Слой данных (`app/models`, `app/repository`): SQLAlchemy 2.0 ORM.
-  - Фоновые задачи (`app/tasks.py`, `worker/`): генерация пакетов, уведомления, интеграции.
-  - Интеграции (`app/services/integrations`): клиенты 1С/ФРДО/ЕИСОТ, webhooks.
+  - API слой (`backend/app/api`): маршруты v1, валидация, маппинг ролей.
+  - Службы домена (`backend/app/services` и `backend/app/domains/*`): бизнес-правила.
+  - Слой данных (`backend/app/models`, `backend/app/repository`): SQLAlchemy 2.0 ORM.
+  - Фоновые задачи (`backend/app/tasks.py`, `worker/`): генерация пакетов, уведомления, интеграции.
+  - Интеграции (`backend/app/services/integrations`): клиенты 1С/ФРДО/ЕИСОТ, webhooks.
 - **Диаграмма компонентов (PlantUML).**
 ```plantuml
 @startuml
@@ -212,7 +212,7 @@ curl -X POST https://api.example.com/api/v1/incidents \
 ## 11) Миграция существующего кода
 - **Что переиспользуем.** Текущие модули FastAPI, конфиги, Celery, модели (Tenant, User, Template, PipelineRun). Настройки MinIO, Redis.
 - **Что рефакторим.**
-  - `app/domains` — привести к новым сущностям, убрать заглушки (например, `PackAssembler`).
+  - `backend/app/domains` — привести к новым сущностям, убрать заглушки (например, `PackAssembler`).
   - ORM модели дополнить таблицами из ERD (Document, Checklist...).
   - API v1 — синхронизировать с новым openapi.
   - Alembic — добавить недостающие миграции.

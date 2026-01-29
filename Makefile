@@ -1,6 +1,6 @@
 .PHONY: install lint format test contract run build clean up down migrate
 
-LINT_PATHS=app tests scripts
+LINT_PATHS=backend/app tests scripts
 
 install:
 	poetry install --with dev --no-interaction
@@ -20,10 +20,10 @@ contract:
 	poetry run pytest -m contract
 
 run:
-	poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000
+	PYTHONPATH=backend poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 migrate:
-	poetry run alembic -c app/migrations/alembic.ini upgrade head
+	PYTHONPATH=backend poetry run alembic -c backend/app/migrations/alembic.ini upgrade head
 
 build:
 	poetry build

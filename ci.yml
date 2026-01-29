@@ -114,7 +114,7 @@ jobs:
           PY
 
       - name: Run migrations
-        run: poetry run alembic -c app/migrations/alembic.ini upgrade head
+        run: PYTHONPATH=backend poetry run alembic -c backend/app/migrations/alembic.ini upgrade head
 
       - name: Lint
         run: make lint

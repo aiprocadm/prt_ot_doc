@@ -21,8 +21,8 @@
 16. [Полезные ссылки](#полезные-ссылки)
 
 ## Архитектура
-- **Backend** (`app/`) — REST API на FastAPI, доменные сервисы, Alembic-миграции, интеграции.
-- **Worker** (`app/tasks.py`, `app/worker.py`) — Celery-очереди `default`, `notifications`, `pdf` для асинхронной генерации документов.
+- **Backend** (`backend/app/`) — REST API на FastAPI, доменные сервисы, Alembic-миграции, интеграции.
+- **Worker** (`backend/app/tasks.py`, `backend/app/worker.py`) — Celery-очереди `default`, `notifications`, `pdf` для асинхронной генерации документов.
 - **Object storage** — MinIO/S3 для шаблонов и итоговых документов.
 - **Очередь** — Redis как брокер и хранилище результатов Celery.
 - **Frontend** (`frontend/`) — Vite + React SPA (Zustand, API-клиент).
@@ -32,7 +32,8 @@
 Чтобы новичку было проще разобраться, код разделён на бэкенд и фронтенд, а инфраструктура и документация вынесены отдельно.
 
 ```
-app/                 # FastAPI приложение, Celery, Alembic, бизнес-логика
+backend/             # Backend-код и Dockerfile
+  app/               # FastAPI приложение, Celery, Alembic, бизнес-логика
   api/               # маршруты, зависимости, error handlers
   core/              # конфигурация, безопасность, метрики
   db/                # сессии, базы, база моделей
@@ -113,11 +114,11 @@ pip install -r requirements-dev.txt
 docker compose up -d db redis minio
 
 # 5. Примените миграции и запустите тесты
-python -m alembic -c app/migrations/alembic.ini upgrade head
+PYTHONPATH=backend python -m alembic -c backend/app/migrations/alembic.ini upgrade head
 pytest
 
 # 6. Запустите API
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+PYTHONPATH=backend uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 # 7. Запустите фронтенд
 cd frontend
@@ -193,7 +194,7 @@ Copy-Item .env.example .env
 ## Локальный запуск
 ### Backend (uvicorn)
 ```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+PYTHONPATH=backend uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 # Healthchecks
 curl -s http://127.0.0.1:8000/health | jq
