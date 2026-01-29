@@ -4,6 +4,12 @@ from .base import BaseSchema
 from .common import Paginated, PipelineRunRead, TemplatePage, TemplateRead
 from .company import CompanyCreate, CompanyPage, CompanyRead, CompanyUpdate
 from .document import DocumentRead, DocumentStatusUpdate
+from .attestations import (
+    AttestationCreate,
+    AttestationPage,
+    AttestationRead,
+    AttestationUpdate,
+)
 from .incidents import (
     IncidentCreate,
     IncidentLogCreate,
@@ -44,6 +50,12 @@ from .training import (
     TrainingSessionCreate,
     TrainingSessionRead,
 )
+from .prescriptions import (
+    PrescriptionCreate,
+    PrescriptionPage,
+    PrescriptionRead,
+    PrescriptionUpdate,
+)
 
 __all__ = [
     "BaseSchema",
@@ -54,6 +66,10 @@ __all__ = [
     "TemplateCreate",
     "DocumentRead",
     "DocumentStatusUpdate",
+    "AttestationCreate",
+    "AttestationRead",
+    "AttestationUpdate",
+    "AttestationPage",
     "IncidentCreate",
     "IncidentRead",
     "IncidentUpdate",
@@ -66,6 +82,10 @@ __all__ = [
     "InspectionResultCreate",
     "InspectionResultRead",
     "InspectionPage",
+    "PrescriptionCreate",
+    "PrescriptionRead",
+    "PrescriptionUpdate",
+    "PrescriptionPage",
     "CompanyCreate",
     "CompanyRead",
     "CompanyPage",

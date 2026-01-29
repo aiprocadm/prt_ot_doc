@@ -23,4 +23,5 @@ export interface TaskFiltersDto {
   status?: TaskStatus;
   overdue?: boolean;
   assignee?: string;
+  type?: string;
 }

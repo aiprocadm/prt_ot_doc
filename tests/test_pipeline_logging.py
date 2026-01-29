@@ -155,6 +155,82 @@ async def test_pipeline_logs_start_and_success(
 
 
 @pytest.mark.asyncio()
+async def test_pipeline_skips_qr_and_watermark_when_disabled(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch_docx(monkeypatch)
+    tenant = (
+        await session.execute(select(Tenant).where(Tenant.slug == "acme"))
+    ).scalar_one()
+    template, version = await _prepare_template(session, tenant)
+    service = PipelineService(pdf_converter=_FakePdfConverter())
+    service._settings.doc_pipeline_enable_qr = False
+    service._settings.doc_pipeline_enable_watermark = False
+
+    with tenant_context("acme"):
+        run = await service.run(
+            session,
+            tenant_id=tenant.id,
+            template=template,
+            template_version=version,
+            context={"name": "Olga"},
+            replacements=None,
+            header_text=None,
+            footer_text=None,
+            idempotency_key="job-qr-skip",
+            output_basename="report",
+        )
+
+    stages = run.outputs.get("stages", {})
+    assert stages["qr_code"]["status"] == "skipped"
+    assert stages["watermark"]["status"] == "skipped"
+
+
+@pytest.mark.asyncio()
+async def test_pipeline_qr_watermark_failure_fallback(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch_docx(monkeypatch)
+    tenant = (
+        await session.execute(select(Tenant).where(Tenant.slug == "beta"))
+    ).scalar_one()
+    template, version = await _prepare_template(session, tenant)
+    service = PipelineService(pdf_converter=_FakePdfConverter())
+    service._settings.doc_pipeline_enable_qr = True
+    service._settings.doc_pipeline_enable_watermark = True
+
+    def _qr(pdf_bytes: bytes, payload: str) -> bytes:
+        _ = payload
+        return pdf_bytes
+
+    def _watermark(pdf_bytes: bytes, text: str) -> bytes:
+        _ = text
+        raise RuntimeError("watermark_failed")
+
+    monkeypatch.setattr(service, "_apply_qr_code_to_pdf", _qr)
+    monkeypatch.setattr(service, "_apply_watermark_to_pdf", _watermark)
+
+    with tenant_context("beta"):
+        run = await service.run(
+            session,
+            tenant_id=tenant.id,
+            template=template,
+            template_version=version,
+            context={"name": "Ivan"},
+            replacements=None,
+            header_text=None,
+            footer_text=None,
+            idempotency_key="job-qr-fail",
+            output_basename="report",
+        )
+
+    assert run.status == PipelineRunStatus.DONE
+    stages = run.outputs.get("stages", {})
+    assert stages["qr_code"]["status"] == "success"
+    assert stages["watermark"]["status"] == "error"
+
+
+@pytest.mark.asyncio()
 async def test_pipeline_logs_pdf_timeout_fallback(
     session: AsyncSession, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
 ) -> None:

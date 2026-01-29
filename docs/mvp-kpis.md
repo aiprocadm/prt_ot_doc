@@ -31,3 +31,9 @@
 2. Добавить результаты расследования и меры `/api/v1/incidents/{id}/actions`.
 3. Сгенерировать отчёт `/api/v1/incidents/{id}/report`.
 4. Убедиться, что webhook событие доставлено (outbox log).
+
+## P1: обязательства по инспекциям и аттестациям
+1. Создать инспекцию через `/api/v1/inspections` с датой `scheduled_at`.
+2. Создать аттестацию через `/api/v1/attestations` с датой `expires_at`.
+3. Проверить, что в `/api/v1/tasks?type=inspection` и `/api/v1/tasks?type=attestation` появились задачи.
+4. Дождаться запуска `tasks.reminders.dispatch` и проверить `outbox` на события `TaskDueSoon`/`TaskOverdue`.

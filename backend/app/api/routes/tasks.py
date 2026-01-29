@@ -1,11 +1,11 @@
 """Task endpoints for pipeline status and obligations."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from uuid import UUID
 
 from celery.result import AsyncResult
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +22,8 @@ from app.schemas.task import (
     TaskUpdate,
 )
 from app.services.celery_app import celery_app
+from app.services.audit import AuditService
+from app.services.obligations import next_task_reminder
 
 router = APIRouter()
 
@@ -37,7 +39,7 @@ TaskAccess = Depends(
     abac(_tenant_resource_id, required_roles=["admin"], action="inspect tasks")
 )
 
-_TASK_READ_ROLES = ["admin", "owner", "line_manager", "hr"]
+_TASK_READ_ROLES = ["admin", "owner", "line_manager", "hr", "worker"]
 _TASK_WRITE_ROLES = ["admin", "owner", "line_manager", "hr"]
 
 
@@ -167,10 +169,11 @@ def _task_read(task: Task, now: datetime) -> TaskRead:
 async def list_tasks(
     tenant: Tenant = TenantDep,
     session: AsyncSession = SessionDep,
-    _: AccessContext = TaskReadAccess,
+    access: AccessContext = TaskReadAccess,
     status_value: str | None = Query(default=None, alias="status"),
     overdue: bool | None = Query(default=None),
     assignee: str | None = Query(default=None, alias="assignee"),
+    task_type: str | None = Query(default=None, alias="type"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
 ) -> TaskListResponse:
@@ -180,6 +183,10 @@ async def list_tasks(
         stmt = stmt.where(Task.status == status_filter)
     if assignee:
         stmt = stmt.where(Task.assignee_id == assignee)
+    if task_type:
+        stmt = stmt.where(Task.entity_type == task_type)
+    if access.user.role.value == "worker":
+        stmt = stmt.where(Task.assignee_id == access.user.id)
     now = datetime.now(timezone.utc)
     if overdue is True:
         stmt = stmt.where(
@@ -206,6 +213,7 @@ async def list_tasks(
 
 @router.post("", response_model=TaskRead, status_code=status.HTTP_201_CREATED)
 async def create_task(
+    request: Request,
     payload: TaskCreate,
     tenant: Tenant = TenantDep,
     session: AsyncSession = SessionDep,
@@ -223,10 +231,19 @@ async def create_task(
         created_by=getattr(access.user, "id", None),
         priority=priority,
     )
-    if task.due_at:
-        reminder_time = task.due_at - timedelta(days=2)
-        task.next_remind_at = reminder_time if reminder_time > datetime.now(timezone.utc) else task.due_at
+    task.next_remind_at = await next_task_reminder(session, due_at=task.due_at)
     session.add(task)
+    audit = AuditService(session)
+    ip = request.client.host if request.client else "unknown"
+    await audit.log_event(
+        tenant_id=str(tenant.id),
+        action="create",
+        object_type="task",
+        object_id=task.id,
+        user_id=getattr(access.user, "id", None),
+        ip=ip,
+        details={"entity_type": task.entity_type, "entity_id": task.entity_id},
+    )
     await session.commit()
     await session.refresh(task)
     return _task_read(task, datetime.now(timezone.utc))
@@ -234,6 +251,7 @@ async def create_task(
 
 @router.patch("/{task_id}", response_model=TaskRead)
 async def update_task(
+    request: Request,
     task_id: str,
     payload: TaskUpdate,
     tenant: Tenant = TenantDep,
@@ -260,9 +278,18 @@ async def update_task(
     for key, value in updates.items():
         setattr(task, key, value)
 
-    if task.due_at:
-        reminder_time = task.due_at - timedelta(days=2)
-        task.next_remind_at = reminder_time if reminder_time > datetime.now(timezone.utc) else task.due_at
+    task.next_remind_at = await next_task_reminder(session, due_at=task.due_at)
+    audit = AuditService(session)
+    ip = request.client.host if request.client else "unknown"
+    await audit.log_event(
+        tenant_id=str(tenant.id),
+        action="update",
+        object_type="task",
+        object_id=task.id,
+        user_id=getattr(access.user, "id", None),
+        ip=ip,
+        details={"status": task.status.value, "priority": task.priority.value},
+    )
     await session.commit()
     await session.refresh(task)
     return _task_read(task, datetime.now(timezone.utc))
