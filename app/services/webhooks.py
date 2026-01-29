@@ -67,12 +67,25 @@ class WebhookDispatcher:
         tenant_id: str,
         session: AsyncSession,
     ) -> list[str]:
-        destinations = await self._resolve_destinations(
+        destinations = await self.resolve_destinations_with_headers(
             event_type=event_type,
             tenant_id=tenant_id,
             session=session,
         )
         return [destination.url for destination in destinations]
+
+    async def resolve_destinations_with_headers(
+        self,
+        *,
+        event_type: str,
+        tenant_id: str,
+        session: AsyncSession,
+    ) -> list[WebhookDestination]:
+        return await self._resolve_destinations(
+            event_type=event_type,
+            tenant_id=tenant_id,
+            session=session,
+        )
 
     def _resolve_urls(self, event_type: str) -> list[str]:
         urls_by_event: dict[str, Iterable[str]] = {

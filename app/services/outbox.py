@@ -16,7 +16,11 @@ from app.core.config import get_settings
 from app.core.metrics import PipelineStage, PipelineType, StageResult, get_metrics
 from app.models.models import Outbox, OutboxStatus
 from app.services.events import EventType, dedupe_key_for, normalize_payload, resolve_event_type
-from app.services.webhooks import WebhookDispatchError, WebhookDispatcher
+from app.services.webhooks import (
+    WebhookDestination,
+    WebhookDispatchError,
+    WebhookDispatcher,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +29,7 @@ def _pipeline_for_event(event_type: str) -> PipelineType:
     resolved = resolve_event_type(event_type)
     if resolved in {
         EventType.DOCUMENT_CREATED,
+        EventType.DOCUMENT_GENERATED,
         EventType.DOCUMENT_SIGNED,
         EventType.DOCUMENT_EXPORTED,
     }:
@@ -80,15 +85,15 @@ class OutboxService:
             )
             key = idempotency_key or dedupe_key_for(resolved, payload_model)
             if destination:
-                destinations = [destination]
+                destinations = [WebhookDestination(url=destination, headers={})]
             else:
-                destinations = await self.dispatcher.resolve_destinations_for_tenant(
+                destinations = await self.dispatcher.resolve_destinations_with_headers(
                     event_type=resolved.value,
                     tenant_id=tenant_id,
                     session=self.session,
                 )
             if not destinations:
-                logger.debug(
+                logger.warning(
                     "outbox.skip_no_destination",
                     extra={"tenant_id": tenant_id, "event_type": resolved.value},
                 )
@@ -104,11 +109,12 @@ class OutboxService:
             created: list[Outbox] = []
             now = datetime.now(tz=timezone.utc)
             for target in destinations:
+                merged_headers = self._merge_headers(target.headers, headers)
                 existing = None
                 if key:
                     existing = await self._find_existing(
                         tenant_id=tenant_id,
-                        destination=target,
+                        destination=target.url,
                         idempotency_key=key,
                     )
                 if existing:
@@ -117,9 +123,9 @@ class OutboxService:
                 entry = Outbox(
                     tenant_id=tenant_id,
                     event_type=resolved.value,
-                    destination=target,
+                    destination=target.url,
                     payload=normalized_payload,
-                    headers=dict(headers) if headers else None,
+                    headers=merged_headers,
                     idempotency_key=key,
                     status=OutboxStatus.PENDING,
                     next_attempt_at=now,
@@ -146,7 +152,7 @@ class OutboxService:
             raise
 
         if created:
-            if resolved is EventType.DOCUMENT_CREATED:
+            if resolved in {EventType.DOCUMENT_CREATED, EventType.DOCUMENT_GENERATED}:
                 self.metrics.record_document_generated()
             elif resolved is EventType.DOCUMENT_SIGNED:
                 self.metrics.record_document_signed()
@@ -164,6 +170,22 @@ class OutboxService:
             seconds=perf_counter() - stage_start,
         )
         return created
+
+    @staticmethod
+    def _stringify_headers(headers: Mapping[str, Any] | None) -> dict[str, str]:
+        if not headers:
+            return {}
+        return {str(key): str(value) for key, value in headers.items()}
+
+    def _merge_headers(
+        self,
+        destination_headers: dict[str, str],
+        extra_headers: Mapping[str, Any] | None,
+    ) -> dict[str, str] | None:
+        merged: dict[str, str] = {**destination_headers}
+        if extra_headers:
+            merged.update(self._stringify_headers(extra_headers))
+        return merged or None
 
     async def _find_existing(
         self,
