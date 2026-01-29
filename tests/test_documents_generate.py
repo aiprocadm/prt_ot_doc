@@ -19,7 +19,7 @@ from app.models.document import (
     DocumentSnapshot,
     DocumentVersion,
 )
-from app.models.models import Company, TemplateVersion
+from app.models.models import Company, Outbox, TemplateVersion
 from app.models.models import PipelineRun, PipelineRunStatus, RoleEnum
 from app.tasks import celery_app
 import app.tasks as task_module
@@ -145,7 +145,6 @@ async def test_document_generation_flow(
     )
     assert response.status_code == 201
     template_payload = response.json()
-    template_id = template_payload["id"]
     template_version_id = template_payload["version_id"]
 
     async with sessionmaker() as session:
@@ -177,14 +176,21 @@ async def test_document_generation_flow(
         documents = (await session.execute(select(DocumentModel))).scalars().all()
         versions = (await session.execute(select(DocumentVersion))).scalars().all()
         runs = (await session.execute(select(PipelineRun))).scalars().all()
+        outbox_events = (
+            await session.execute(
+                select(Outbox).where(Outbox.event_type == "DocumentGenerated")
+            )
+        ).scalars().all()
 
     assert len(documents) == 1
     assert len(versions) == 1
     assert len(runs) == 1
+    assert len(outbox_events) == 1
 
     document = documents[0]
     version = versions[0]
     run = runs[0]
+    outbox_event = outbox_events[0]
 
     assert document.company_id == company_id
     assert document.person_id == person_id
@@ -201,6 +207,7 @@ async def test_document_generation_flow(
     assert run.result_metadata.get("person_id") == person_id
     assert run.result_metadata.get("payload_hash")
     assert run.context == payload["data"]
+    assert outbox_event.payload["document_version_id"] == version.id
 
     async with sessionmaker() as session:
         snapshot = await session.get(DocumentSnapshot, version.snapshot_id)
@@ -252,10 +259,10 @@ async def test_document_generation_flow(
     assert status_payload["document_id"] == document.id
     assert status_payload["error"] is None
 
-    # A new idempotency key with template_id should trigger a separate pipeline run.
+    # A new idempotency key with template_code should trigger a separate pipeline run.
     id_headers = {"Idempotency-Key": "demo-key-by-id", **auth_headers}
     payload_by_id = {
-        "template_id": template_id,
+        "template_code": "Greeting",
         "template_version": template_version_number,
         "company_id": company_id,
         "data": {"name": "Galaxy"},
