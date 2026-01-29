@@ -142,8 +142,10 @@ DEFAULT_ALLOWED_HOSTS: Final[list[str]] = ["localhost", "127.0.0.1", "::1", "tes
 DEFAULT_ALLOWED_ORIGINS: Final[list[str]] = [
     "http://localhost",
     "http://localhost:5173",
+    "http://localhost:8080",
     "http://127.0.0.1",
     "http://127.0.0.1:5173",
+    "http://127.0.0.1:8080",
 ]
 
 DEFAULT_ALLOWED_FILE_MIME: Final[list[str]] = [
