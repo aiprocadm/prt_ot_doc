@@ -2,6 +2,25 @@
 
 Платформа генерации документов по охране труда (ОТ), промышленной безопасности (ПБ), экологии и смежным направлениям. Репозиторий включает FastAPI-бэкенд, Celery-воркеры, PostgreSQL, Redis, MinIO/S3, фронтенд на React/Vite и Docker-инфраструктуру для локального запуска и CI.
 
+## Быстрые ссылки
+- **ТЗ платформы:** [docs/spec/TZ.md](docs/spec/TZ.md)
+- **Индекс документации:** [docs/README.md](docs/README.md)
+- **Архитектура:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+
+## Quick start
+```bash
+cp .env.example .env
+docker compose up -d db redis minio
+PYTHONPATH=backend python -m alembic -c backend/app/migrations/alembic.ini upgrade head
+PYTHONPATH=backend uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+## Test commands
+```bash
+make test
+make lint
+```
+
 ## Оглавление
 1. [Архитектура](#архитектура)
 2. [Структура репозитория](#структура-репозитория)
