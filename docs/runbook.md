@@ -80,6 +80,7 @@ npm run dev
 ### Backend тесты
 ```bash
 make test
+pytest --collect-only
 ```
 
 ### Линт и форматирование
@@ -95,6 +96,11 @@ npm run lint
 npm run test
 npm run build
 ```
+
+### VS Code Testing (Codespaces)
+Если используется Codespaces, панель Testing должна автоматически обнаружить `pytest`
+через `.vscode/settings.json`. При проблемах убедитесь, что виртуальное окружение
+создано и `requirements-dev.txt` установлены.
 
 ## Диагностика
 - Healthchecks: `http://localhost:8000/health` и `http://localhost:8000/ready`.

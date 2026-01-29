@@ -23,27 +23,31 @@
 
 ## Phase 1 — Compliance matrix (SPEC ↔ CODE)
 
-| TZ Requirement | Current Implementation (files/modules) | Status | Severity | Fix Plan |
+| SPEC requirement | Current implementation (files/modules) | Status | Severity | Fix plan |
 | --- | --- | --- | --- | --- |
-| A) Product positioning (Saby+Kontur, RiskProf/OTOR/KOT, ERP core + modules) | Domain modules and docs exist across risks/PPE/training/incidents/pack generation; public docs in `docs/` and `README.md`. | Partial | P2 | Keep in docs/marketing copy; no code changes required. |
-| B) Multi-tenant isolation with `X-Tenant` on /v1 business routes | Tenant middleware and tenant-aware DB sessions enforce tenant header and schema usage. | OK | P0 | None. |
-| B) Roles list (owner, OT/PB lead, OT specialist, PB engineer, ecologist, HR, lawyer, accountant, line manager, worker, contractor inspector, admin) | Role enum covers required roles in `backend/app/models/models.py`. | OK | P1 | None. |
-| B) RBAC + ABAC attributes (company_id, site_id, document_id, status, risk_level) | RBAC/ABAC checks in `backend/app/core/security.py` and route-level guards. | OK | P1 | None. |
-| B) Immutable audit log | AuditLog model prevents update/delete via SQLAlchemy events in `backend/app/models/models.py`; AuditService in `backend/app/services/audit.py`. | OK | P0 | None. |
-| C) Core entities (counterparty, contract, order, invoice/act, site, department, workplace, position, employee) | Models and routes exist for companies/contractors, contracts, orders, invoices, sites, departments, workplaces, positions, people. | OK | P1 | None. |
-| D) DOCX templates with placeholders | Template workflow in `backend/app/api/v1/router.py` and pipeline/services. | OK | P0 | None. |
-| D) Strict template versioning + deletion guard (409 if referenced) | Version selection enforced in `backend/app/api/routes/documents.py`; deletion guard in `backend/app/api/v1/router.py`. | OK | P0 | None. |
-| D) DOCX→PDF pipeline + stamps/QR/watermarks | DOCX→PDF in `backend/app/services/pipeline.py`; stamp placeholders used in pack context. | Partial | P2 | Consider explicit QR/watermark pipeline stage if required. |
-| E) Obligations/deadlines engine | Tasks/reminders in `backend/app/services/obligations.py` + task routes. | Partial | P1 | Expand coverage to inspections/attestations when needed. |
-| F) Risks module (hazards base + risk cards + action plan) | Risk dictionaries, assessment, cards, and action plans in `backend/app/api/routes/risk.py` + domains. | OK | P0 | None. |
-| F) PPE (norms + issuance logs) | PPE routes/services in `backend/app/api/routes/ppe.py`. | OK | P1 | None. |
-| F) Training/briefings (programs, journals, certs) | Training routes + services in `backend/app/api/routes/training.py` and domain services. | OK | P1 | None. |
-| F) Incidents/inspections/prescriptions scaffolding | Incidents service exists; inspections/prescriptions are not fully modeled. | Partial | P2 | Add scaffolding if product roadmap requires. |
-| G) Idempotency for critical endpoints | Idempotency service and `Idempotency-Key` handling in document generation + packs. | OK | P0 | None. |
-| G) Outbox + dispatcher + retries + dead-letter + metrics | Outbox models, processor, dispatcher task, and metrics in `backend/app/services/outbox.py` + `backend/app/tasks.py`. | OK | P0 | None. |
-| G) Webhooks with routing from config + per-tenant override | Webhook subscriptions + config-based routing in `backend/app/services/webhooks.py`. | OK | P0 | None. |
-| G) Events emitted for DocumentGenerated/Signed/Exported/RiskAssessed/PPEIssued/TrainingCompleted | Event enqueues in tasks/routes/services: documents, risk, PPE, training, export. | OK | P0 | None. |
-| H) DevX: app runs end-to-end; tests discoverable in Codespaces | README + devcontainer guidance; `pytest` setup in `.vscode/settings.json` and `tests/`. | OK | P0 | None. |
+| Product positioning (ERP‑core + отраслевые модули RiskProf/OTOR/KOT) | Документация и доменные модули в `docs/`, `backend/app/domains`, `frontend/src`. | Partial | P2 | Уточнять маркетинговое описание по мере развития. |
+| Core: пользователи/роли/доступы | JWT + RBAC/ABAC в `backend/app/core/security.py`, роли в моделях. | OK | P0 | None. |
+| Core: организации и оргструктура | Модели и роуты компаний/филиалов/подразделений/площадок. | OK | P1 | None. |
+| Core: мастер‑данные/справочники | Реестр NPA/risks/PPE dictionaries в доменных сервисах. | OK | P1 | None. |
+| Core: сотрудники (обучение/медосмотры/СИЗ/риски) | Доменные модули training/medical/ppe/risk. | OK | P1 | None. |
+| Core: документы (template→instance→version→signatures→protocols) | Шаблоны/версии/пайплайны в `documents` и `pipeline`. | Partial | P1 | Документировать статус подписаний/протоколов. |
+| Core: сроки/обязательства/напоминания | `services/obligations.py` + tasks reminders. | Partial | P1 | Расширить охват на проверки/аттестации по запросу. |
+| Core: события/уведомления | Outbox + webhook сервисы в `services/outbox.py`, `services/webhooks.py`. | OK | P0 | None. |
+| Core: аудит (append‑only) | `AuditLog` + блокировка UPDATE/DELETE и `AuditService`. | OK | P0 | None. |
+| API + интеграции (outbox/webhooks) | Outbox dispatcher, retries, DLQ, metrics. | OK | P0 | None. |
+| Multi‑tenancy: tenant header + DB isolation | Tenant middleware + tenant‑scoped sessions. | OK | P0 | None. |
+| /v1 бизнес‑роут без X‑Tenant → 400 | Принудительный guard в middleware + tests. | OK | P0 | None. |
+| RBAC + ABAC атрибуты (company/site/document/status/risk) | `AccessContext` и политики в security. | OK | P1 | None. |
+| Идемпотентность критичных операций | `IdempotencyService` + headers in documents/packs/risk. | OK | P0 | None. |
+| Документы: строгий выбор (template_code, version) + delete 409 | Валидация в documents routes + guards on version delete. | OK | P0 | None. |
+| DOCX→PDF + штампы/QR/водяные знаки | DOCX→PDF pipeline; QR/watermark как optional stage. | Partial | P2 | Добавить этапы при необходимости продукта. |
+| Риски: методики и детерминированные карты/планы | Risk engine + dictionaries in `risk` domain. | OK | P0 | None. |
+| СИЗ: нормы/журналы выдачи/возврата | PPE routes + journal endpoints. | OK | P1 | None. |
+| Обучение/инструктажи | Training programs/sessions/results + журналы. | OK | P1 | None. |
+| Инциденты/проверки/предписания | Incidents OK; inspections/prescriptions частично. | Partial | P2 | Роадмап, если требуется MVP. |
+| Outbox → webhook delivery ≤60s | Retry policy + worker scheduling. | OK | P0 | None. |
+| Frontend: X‑Tenant injection + блокировка без контекста | API client + tenant store in `frontend/src`. | OK | P0 | None. |
+| DevX: запуск в Codespaces + pytest discovery | `.devcontainer`, `.vscode/settings.json`, Makefile targets. | OK | P0 | None. |
 
 ## Phase 1 — Prioritized gap list
 
@@ -54,9 +58,15 @@
   - Add explicit QR/watermark pipeline stage if mandated by UX/spec.
   - Add inspection/prescription scaffolding for incident workflows.
 
-## Security & isolation risks
+## Security & Tenant Isolation Risks
 - Tenant isolation relies on `X-Tenant` + token scope checks; ensure all new routes remain behind middleware and tenant-aware DB sessions.
 - Audit log immutability is enforced via SQLAlchemy events; avoid direct SQL UPDATE/DELETE bypasses.
+
+## Runability Risks
+- None observed for current devcontainer + compose flow; ensure `.env` is created from `.env.example` before startup.
+
+## Test Discovery Risks
+- None observed: `pytest` configuration is present and `.vscode/settings.json` enables VS Code Testing discovery.
 
 ## Phase 2 — P0 fixes implemented
 
