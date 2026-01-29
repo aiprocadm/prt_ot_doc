@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session
+from app.core.request_context import set_current_user_id
 from app.core.tenant import set_current_tenant
 from app.core.config import Settings, get_settings
 from app.models.models import ApiKey, User
@@ -398,6 +399,7 @@ def rbac(required_roles: list[str] | None = None) -> Callable[..., Any]:
         request.state.current_user_id = user.id
         request.state.current_user_company_id = session.info["current_user_company_id"]
         request.state.rate_limit_subject = user.id
+        set_current_user_id(str(user.id))
 
         access_context = AccessContext(
             user=user,
@@ -434,6 +436,7 @@ async def api_key_auth(
     request.state.api_key = record
     request.state.rate_limit_subject = f"api-key:{record.key_prefix}"
     request.state.rate_limit_tenant_id = str(record.tenant_id)
+    set_current_user_id(f"api-key:{record.id}")
 
     auth_context = AuthContext(
         sub=f"api_key:{record.id}",

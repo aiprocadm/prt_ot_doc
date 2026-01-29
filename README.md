@@ -262,9 +262,12 @@ docker compose down -v
 | Команда | Назначение |
 | --- | --- |
 | `make install` | `poetry install --with dev --no-interaction` |
-| `make lint` | `ruff` + `black --check` для `app`, `tests`, `scripts` |
-| `make format` | автофикс ruff/black |
-| `make test` | Pytest (unit + интеграционные) |
+| `make lint` | `ruff` + `black --check` для `app`, `tests`, `scripts` + ESLint для frontend |
+| `make format` | автофикс ruff/black + prettier |
+| `make test` | Pytest (unit + интеграционные) + Vitest (frontend) |
+| `make lint-frontend` | ESLint для frontend |
+| `make format-frontend` | Prettier для frontend |
+| `make test-frontend` | Vitest для frontend |
 | `make contract` | `pytest -m contract` (OpenAPI-валидации) |
 | `make run` | Uvicorn локального API |
 | `make build` | Сборка poetry-пакета |

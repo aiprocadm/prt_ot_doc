@@ -1,3 +1,4 @@
+import MockAdapter from "axios-mock-adapter";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "@/api/client";
@@ -65,5 +66,15 @@ describe("apiClient", () => {
       code: "CONFLICT",
       message: "Conflict"
     });
+  });
+
+  it("calls the backend health endpoint", async () => {
+    const mock = new MockAdapter(apiClient);
+    mock.onGet("/health").reply(200, { status: "ok" });
+
+    const response = await apiClient.get("/health");
+
+    expect(response.data).toEqual({ status: "ok" });
+    mock.restore();
   });
 });

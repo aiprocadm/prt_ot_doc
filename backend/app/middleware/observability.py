@@ -13,6 +13,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.core.config import Settings
 from app.core.metrics import get_metrics
+from app.core.request_context import reset_current_user_id, set_current_user_id
 from app.core.tracing import reset_trace_id, set_trace_id
 
 
@@ -39,7 +40,8 @@ class ObservabilityMiddleware:
         headers = Headers(scope=scope)
         trace_header_value = headers.get(self._trace_header)
         trace_id = self._select_trace_id(trace_header_value)
-        token = set_trace_id(trace_id)
+        trace_token = set_trace_id(trace_id)
+        user_token = set_current_user_id(None)
         self._store_trace_in_scope(scope, trace_id)
         method = scope.get("method", "GET").upper()
         path = scope.get("path", "/")
@@ -114,7 +116,8 @@ class ObservabilityMiddleware:
                     status_code=status_code,
                     duration_seconds=duration,
                 )
-            reset_trace_id(token)
+            reset_trace_id(trace_token)
+            reset_current_user_id(user_token)
 
     def _should_reject_by_header(self, headers: Headers) -> bool:
         content_length = headers.get("content-length")
