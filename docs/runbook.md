@@ -41,6 +41,15 @@ celery -A app.services.celery_app.celery_app worker \
 celery -A app.services.celery_app.celery_app beat --loglevel INFO
 ```
 
+### Обязательства и напоминания
+1. Убедитесь, что запущен `celery beat` (задача `tasks.reminders.dispatch` выполняется ежедневно).
+2. Настройте окна напоминаний на уровне tenant:
+   - поле `tenant.settings.obligations.reminder_days` (например `[30, 14, 7]`).
+3. Для проверки вручную:
+   - создайте инспекцию/аттестацию с датой в ближайшие дни;
+   - дождитесь выполнения `tasks.reminders.dispatch`;
+   - проверьте `outbox` на события `TaskDueSoon`/`TaskOverdue`.
+
 ### Frontend
 ```bash
 cd frontend

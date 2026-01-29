@@ -84,3 +84,4 @@ Not required for this pass.
 - **KPI-3**: Request a template by `(template_code, version)` and attempt to delete a version referenced by a document; expect `409`.
 - **KPI-4**: Trigger a document generation or PPE issuance and confirm outbox entry is dispatched and webhook delivered within 60s.
 - **KPI-5**: Run a risk assessment and confirm deterministic risk cards/action plan from dictionaries.
+- **P1**: Создать инспекцию и аттестацию, убедиться в появлении задач в `/api/v1/tasks` и в отправке `TaskDueSoon/TaskOverdue` через outbox.

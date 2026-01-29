@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.payload_constraints import (
     enforce_mapping_constraints,
     normalize_output_basename,
@@ -122,6 +123,35 @@ class PipelineService:
         self.storage = storage or FileStorageService.default()
         self.pdf = pdf_converter or PdfConverter()
         self.metrics = metrics or get_metrics()
+        self._settings = get_settings()
+
+    def _qr_payload(self, run: PipelineRun) -> str:
+        metadata = dict(run.result_metadata or {})
+        request_meta = metadata.get("request") or {}
+        document_version_id = request_meta.get("document_version_id")
+        return str(document_version_id or run.id)
+
+    def _apply_qr_code_to_pdf(self, pdf_bytes: bytes, payload: str) -> bytes:
+        """Placeholder QR-code stage. Replace with real QR stamping when available."""
+        _ = payload
+        with tempfile.TemporaryDirectory() as td:
+            temp_dir = Path(td)
+            input_path = temp_dir / "input.pdf"
+            output_path = temp_dir / "output.pdf"
+            input_path.write_bytes(pdf_bytes)
+            output_path.write_bytes(pdf_bytes)
+            return output_path.read_bytes()
+
+    def _apply_watermark_to_pdf(self, pdf_bytes: bytes, text: str) -> bytes:
+        """Placeholder watermark stage. Replace with real watermarking when available."""
+        _ = text
+        with tempfile.TemporaryDirectory() as td:
+            temp_dir = Path(td)
+            input_path = temp_dir / "input.pdf"
+            output_path = temp_dir / "output.pdf"
+            input_path.write_bytes(pdf_bytes)
+            output_path.write_bytes(pdf_bytes)
+            return output_path.read_bytes()
 
     @staticmethod
     def _init_outputs(run: PipelineRun) -> dict[str, Any]:
@@ -731,6 +761,125 @@ class PipelineService:
                 finished_at=datetime.now(tz=timezone.utc),
                 details={"pdf_fallback": pdf_fallback},
             )
+            qr_started = datetime.now(tz=timezone.utc)
+            if self._settings.doc_pipeline_enable_qr:
+                self.metrics.record_pipeline_stage_start(
+                    pipeline=PipelineType.DOCUMENT,
+                    stage=PipelineStage.QR_CODE_APPLIED,
+                )
+                try:
+                    pdf_bytes = self._apply_qr_code_to_pdf(pdf_bytes, self._qr_payload(run))
+                except Exception as exc:  # pragma: no cover - defensive fallback
+                    self.metrics.record_pipeline_stage_end(
+                        pipeline=PipelineType.DOCUMENT,
+                        stage=PipelineStage.QR_CODE_APPLIED,
+                        result=StageResult.FAILED,
+                        seconds=0.0,
+                        error_class=exc.__class__.__name__,
+                    )
+                    outputs = self._record_stage(
+                        outputs,
+                        stage="qr_code",
+                        status="error",
+                        started_at=qr_started,
+                        finished_at=datetime.now(tz=timezone.utc),
+                        details={"error": exc.__class__.__name__},
+                    )
+                else:
+                    self.metrics.record_pipeline_stage_end(
+                        pipeline=PipelineType.DOCUMENT,
+                        stage=PipelineStage.QR_CODE_APPLIED,
+                        result=StageResult.SUCCESS,
+                        seconds=0.0,
+                    )
+                    outputs = self._record_stage(
+                        outputs,
+                        stage="qr_code",
+                        status="success",
+                        started_at=qr_started,
+                        finished_at=datetime.now(tz=timezone.utc),
+                        details={"payload": self._qr_payload(run)},
+                    )
+            else:
+                self.metrics.record_pipeline_stage_start(
+                    pipeline=PipelineType.DOCUMENT,
+                    stage=PipelineStage.QR_CODE_APPLIED,
+                )
+                self.metrics.record_pipeline_stage_end(
+                    pipeline=PipelineType.DOCUMENT,
+                    stage=PipelineStage.QR_CODE_APPLIED,
+                    result=StageResult.SKIPPED,
+                    seconds=0.0,
+                )
+                outputs = self._record_stage(
+                    outputs,
+                    stage="qr_code",
+                    status="skipped",
+                    started_at=qr_started,
+                    finished_at=datetime.now(tz=timezone.utc),
+                    details={"reason": "disabled"},
+                )
+
+            watermark_started = datetime.now(tz=timezone.utc)
+            if self._settings.doc_pipeline_enable_watermark:
+                self.metrics.record_pipeline_stage_start(
+                    pipeline=PipelineType.DOCUMENT,
+                    stage=PipelineStage.WATERMARK_APPLIED,
+                )
+                try:
+                    pdf_bytes = self._apply_watermark_to_pdf(
+                        pdf_bytes, self._settings.doc_pipeline_watermark_text
+                    )
+                except Exception as exc:  # pragma: no cover - defensive fallback
+                    self.metrics.record_pipeline_stage_end(
+                        pipeline=PipelineType.DOCUMENT,
+                        stage=PipelineStage.WATERMARK_APPLIED,
+                        result=StageResult.FAILED,
+                        seconds=0.0,
+                        error_class=exc.__class__.__name__,
+                    )
+                    outputs = self._record_stage(
+                        outputs,
+                        stage="watermark",
+                        status="error",
+                        started_at=watermark_started,
+                        finished_at=datetime.now(tz=timezone.utc),
+                        details={"error": exc.__class__.__name__},
+                    )
+                else:
+                    self.metrics.record_pipeline_stage_end(
+                        pipeline=PipelineType.DOCUMENT,
+                        stage=PipelineStage.WATERMARK_APPLIED,
+                        result=StageResult.SUCCESS,
+                        seconds=0.0,
+                    )
+                    outputs = self._record_stage(
+                        outputs,
+                        stage="watermark",
+                        status="success",
+                        started_at=watermark_started,
+                        finished_at=datetime.now(tz=timezone.utc),
+                        details={"text": self._settings.doc_pipeline_watermark_text},
+                    )
+            else:
+                self.metrics.record_pipeline_stage_start(
+                    pipeline=PipelineType.DOCUMENT,
+                    stage=PipelineStage.WATERMARK_APPLIED,
+                )
+                self.metrics.record_pipeline_stage_end(
+                    pipeline=PipelineType.DOCUMENT,
+                    stage=PipelineStage.WATERMARK_APPLIED,
+                    result=StageResult.SKIPPED,
+                    seconds=0.0,
+                )
+                outputs = self._record_stage(
+                    outputs,
+                    stage="watermark",
+                    status="skipped",
+                    started_at=watermark_started,
+                    finished_at=datetime.now(tz=timezone.utc),
+                    details={"reason": "disabled"},
+                )
             run.outputs = outputs
             await session.flush()
             pdf_key = f"{prefix}/outputs/{out_base}-{unique_suffix}.pdf"

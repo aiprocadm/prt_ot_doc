@@ -12,6 +12,7 @@ from app.models.models import (
     IncidentStatus,
     IncidentType,
     InspectionStatus,
+    InspectionType,
 )
 from app.schemas.base import BaseSchema
 
@@ -86,6 +87,9 @@ class IncidentLogRead(BaseSchema):
 class InspectionCreate(BaseSchema):
     company_id: str = Field(min_length=1, max_length=36)
     site_id: str | None = Field(default=None, min_length=1, max_length=36)
+    inspection_type: InspectionType = InspectionType.INTERNAL
+    responsible_id: str | None = Field(default=None, min_length=1, max_length=36)
+    recurrence_rule: str | None = Field(default=None, max_length=128)
     authority: str = Field(min_length=1, max_length=255)
     purpose: str | None = Field(default=None, max_length=255)
     scheduled_at: date | None = None
@@ -96,6 +100,9 @@ class InspectionCreate(BaseSchema):
 class InspectionUpdate(BaseSchema):
     company_id: str | None = Field(default=None, min_length=1, max_length=36)
     site_id: str | None = Field(default=None, min_length=1, max_length=36)
+    inspection_type: InspectionType | None = None
+    responsible_id: str | None = Field(default=None, min_length=1, max_length=36)
+    recurrence_rule: str | None = Field(default=None, max_length=128)
     authority: str | None = Field(default=None, max_length=255)
     purpose: str | None = Field(default=None, max_length=255)
     scheduled_at: date | None = None
@@ -128,6 +135,9 @@ class InspectionRead(BaseSchema):
     id: str
     company_id: str
     site_id: str | None
+    inspection_type: InspectionType
+    responsible_id: str | None
+    recurrence_rule: str | None
     authority: str
     purpose: str | None
     scheduled_at: date | None

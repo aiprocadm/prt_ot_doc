@@ -311,6 +311,11 @@ class Settings(BaseSettings):
     )
     pdf_worker_queue: str = Field("pdf", alias="PDF_WORKER_QUEUE")
     pdf_worker_concurrency: int = Field(2, alias="PDF_WORKER_CONCURRENCY")
+    doc_pipeline_enable_qr: bool = Field(False, alias="DOC_PIPELINE_ENABLE_QR")
+    doc_pipeline_enable_watermark: bool = Field(False, alias="DOC_PIPELINE_ENABLE_WATERMARK")
+    doc_pipeline_watermark_text: str = Field(
+        "CONFIDENTIAL", alias="DOC_PIPELINE_WATERMARK_TEXT"
+    )
 
     redis_url: str = Field("redis://localhost:6379/0", alias="REDIS_URL")
     redis_result_url_env: str | None = Field(None, alias="REDIS_RESULT_URL")

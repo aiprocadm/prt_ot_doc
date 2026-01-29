@@ -8,6 +8,13 @@ import { useTasksStore } from "@/stores/tasks";
 import type { TaskDto } from "@/types/dto/tasks";
 import { formatDate } from "@/utils/datetime";
 
+const TYPE_LABELS: Record<string, string> = {
+  training_plan: "Обучение",
+  medical_requirement: "Медосмотры",
+  inspection: "Инспекции",
+  attestation: "Аттестации"
+};
+
 export const TaskTable = () => {
   const { items, pagination, list, setPage, setPageSize, loading } = useTasksStore();
 
@@ -28,6 +35,11 @@ export const TaskTable = () => {
         accessorKey: "status",
         header: "Статус",
         cell: ({ row }) => <StatusBadge status={row.original.status} />
+      },
+      {
+        accessorKey: "entity_type",
+        header: "Тип",
+        cell: ({ row }) => TYPE_LABELS[row.original.entity_type ?? ""] ?? row.original.entity_type ?? "—"
       },
       {
         accessorKey: "priority",

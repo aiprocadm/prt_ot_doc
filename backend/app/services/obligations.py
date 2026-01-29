@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta, timezone
+from typing import Iterable
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.obligations import Task, TaskPriority, TaskReminderChannel, TaskStatus
-from app.models.models import TrainingCourse, TrainingPlan
+from app.models.models import Attestation, Inspection, Tenant, TrainingCourse, TrainingPlan
 from app.services.events import EventType
 from app.services.outbox import OutboxService
 
@@ -23,12 +24,77 @@ def _due_datetime(value: date | datetime | None) -> datetime | None:
     return datetime.combine(value, time(hour=23, minute=59), tzinfo=timezone.utc)
 
 
-def _next_reminder(due_at: datetime | None, *, lead_days: int = 2) -> datetime | None:
+DEFAULT_REMINDER_DAYS = (30, 14, 7, 2)
+
+
+def _normalize_reminder_days(values: Iterable[int] | None) -> list[int]:
+    if not values:
+        return list(DEFAULT_REMINDER_DAYS)
+    normalized: list[int] = []
+    for value in values:
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            continue
+        if parsed <= 0:
+            continue
+        if parsed not in normalized:
+            normalized.append(parsed)
+    return normalized or list(DEFAULT_REMINDER_DAYS)
+
+
+def _next_reminder(
+    due_at: datetime | None,
+    *,
+    reminder_days: Iterable[int] | None = None,
+    now: datetime | None = None,
+) -> datetime | None:
     if due_at is None:
         return None
-    reminder = due_at - timedelta(days=lead_days)
-    now = datetime.now(timezone.utc)
-    return reminder if reminder > now else due_at
+    now = now or datetime.now(timezone.utc)
+    if due_at <= now:
+        return now
+    offsets = _normalize_reminder_days(reminder_days)
+    candidates = [due_at - timedelta(days=days) for days in offsets]
+    candidates.append(due_at)
+    upcoming = [candidate for candidate in candidates if candidate > now]
+    if not upcoming:
+        return due_at
+    return min(upcoming)
+
+
+def _next_reminder_after_send(
+    due_at: datetime | None,
+    *,
+    reminder_days: Iterable[int] | None = None,
+    now: datetime,
+) -> datetime | None:
+    if due_at is None:
+        return None
+    if due_at <= now:
+        return now + timedelta(days=1)
+    return _next_reminder(due_at, reminder_days=reminder_days, now=now)
+
+
+async def _get_reminder_days(session: AsyncSession) -> list[int]:
+    tenant_slug = session.info.get("tenant")
+    if not tenant_slug:
+        return list(DEFAULT_REMINDER_DAYS)
+    stmt = select(Tenant).where(Tenant.slug == tenant_slug)
+    tenant = (await session.execute(stmt)).scalar_one_or_none()
+    settings = tenant.settings if tenant and isinstance(tenant.settings, dict) else {}
+    obligations = settings.get("obligations") if isinstance(settings, dict) else {}
+    reminder_days = None
+    if isinstance(obligations, dict):
+        reminder_days = obligations.get("reminder_days")
+    return _normalize_reminder_days(reminder_days)
+
+
+async def next_task_reminder(
+    session: AsyncSession, *, due_at: datetime | None
+) -> datetime | None:
+    reminder_days = await _get_reminder_days(session)
+    return _next_reminder(due_at, reminder_days=reminder_days)
 
 
 async def create_training_task(
@@ -40,6 +106,7 @@ async def create_training_task(
     actor_id: str | None,
 ) -> Task:
     due_at = _due_datetime(plan.due_date)
+    reminder_days = await _get_reminder_days(session)
     task = Task(
         tenant_id=tenant_id,
         title=f"Complete training: {course.title}",
@@ -52,7 +119,7 @@ async def create_training_task(
         created_by=actor_id,
         priority=TaskPriority.MEDIUM,
         reminder_channel=TaskReminderChannel.IN_APP,
-        next_remind_at=_next_reminder(due_at),
+        next_remind_at=_next_reminder(due_at, reminder_days=reminder_days),
     )
     session.add(task)
     await session.flush()
@@ -68,6 +135,7 @@ async def create_medical_task(
     actor_id: str | None,
 ) -> Task:
     due_at = _due_datetime(due_date)
+    reminder_days = await _get_reminder_days(session)
     task = Task(
         tenant_id=tenant_id,
         title="Medical exam required",
@@ -80,9 +148,84 @@ async def create_medical_task(
         created_by=actor_id,
         priority=TaskPriority.HIGH,
         reminder_channel=TaskReminderChannel.IN_APP,
-        next_remind_at=_next_reminder(due_at),
+        next_remind_at=_next_reminder(due_at, reminder_days=reminder_days),
     )
     session.add(task)
+    await session.flush()
+    return task
+
+
+async def upsert_inspection_task(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    inspection: Inspection,
+    actor_id: str | None,
+) -> Task:
+    reminder_days = await _get_reminder_days(session)
+    due_at = _due_datetime(inspection.scheduled_at)
+    stmt = select(Task).where(
+        Task.tenant_id == tenant_id,
+        Task.entity_type == "inspection",
+        Task.entity_id == inspection.id,
+    )
+    task = (await session.execute(stmt)).scalar_one_or_none()
+    if task is None:
+        task = Task(
+            tenant_id=tenant_id,
+            title=f"Inspection due: {inspection.authority}",
+            description=inspection.purpose,
+            entity_type="inspection",
+            entity_id=inspection.id,
+            status=TaskStatus.OPEN,
+            created_by=actor_id,
+            priority=TaskPriority.HIGH,
+            reminder_channel=TaskReminderChannel.IN_APP,
+        )
+        session.add(task)
+
+    task.title = f"Inspection due: {inspection.authority}"
+    task.description = inspection.purpose
+    task.due_at = due_at
+    task.assignee_id = inspection.responsible_id
+    task.next_remind_at = _next_reminder(due_at, reminder_days=reminder_days)
+    await session.flush()
+    return task
+
+
+async def upsert_attestation_task(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    attestation: Attestation,
+    actor_id: str | None,
+) -> Task:
+    reminder_days = await _get_reminder_days(session)
+    due_at = _due_datetime(attestation.expires_at)
+    stmt = select(Task).where(
+        Task.tenant_id == tenant_id,
+        Task.entity_type == "attestation",
+        Task.entity_id == attestation.id,
+    )
+    task = (await session.execute(stmt)).scalar_one_or_none()
+    if task is None:
+        task = Task(
+            tenant_id=tenant_id,
+            title=f"Attestation renewal: {attestation.name}",
+            description="Employee attestation renewal required.",
+            entity_type="attestation",
+            entity_id=attestation.id,
+            status=TaskStatus.OPEN,
+            created_by=actor_id,
+            priority=TaskPriority.MEDIUM,
+            reminder_channel=TaskReminderChannel.IN_APP,
+        )
+        session.add(task)
+
+    task.title = f"Attestation renewal: {attestation.name}"
+    task.due_at = due_at
+    task.assignee_id = attestation.responsible_id
+    task.next_remind_at = _next_reminder(due_at, reminder_days=reminder_days)
     await session.flush()
     return task
 
@@ -91,9 +234,9 @@ async def process_task_reminders(
     session: AsyncSession,
     *,
     now: datetime | None = None,
-    lead_days: int = 2,
 ) -> int:
     now = now or datetime.now(timezone.utc)
+    reminder_days = await _get_reminder_days(session)
     stmt = (
         select(Task)
         .where(
@@ -131,7 +274,11 @@ async def process_task_reminders(
                 "overdue": overdue,
             },
         )
-        task.next_remind_at = now + timedelta(days=1)
+        task.next_remind_at = _next_reminder_after_send(
+            task.due_at,
+            reminder_days=reminder_days,
+            now=now,
+        )
         processed += 1
 
     await session.flush()

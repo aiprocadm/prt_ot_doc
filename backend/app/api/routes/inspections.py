@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, abac
 from app.domains.incidents import add_inspection_result, register_inspection, update_inspection
-from app.models.models import Inspection, InspectionResult, InspectionStatus, Tenant
+from app.models.models import Inspection, InspectionResult, InspectionStatus, InspectionType, Tenant, User
 from app.schemas.incidents import (
     InspectionCreate,
     InspectionPage,
@@ -19,6 +19,8 @@ from app.schemas.incidents import (
     InspectionResultRead,
     InspectionUpdate,
 )
+from app.services.audit import AuditService
+from app.services.obligations import upsert_inspection_task
 
 router = APIRouter(tags=["inspections"])
 
@@ -53,6 +55,9 @@ def _serialize_inspection(inspection: Inspection) -> InspectionRead:
         "id": inspection.id,
         "company_id": inspection.company_id,
         "site_id": inspection.site_id,
+        "inspection_type": inspection.inspection_type,
+        "responsible_id": inspection.responsible_id,
+        "recurrence_rule": inspection.recurrence_rule,
         "authority": inspection.authority,
         "purpose": inspection.purpose,
         "scheduled_at": inspection.scheduled_at,
@@ -85,6 +90,8 @@ async def list_inspections(
     company_id: str | None = Query(default=None, min_length=1, max_length=36),
     site_id: str | None = Query(default=None, min_length=1, max_length=36),
     status_filter: InspectionStatus | None = Query(default=None),
+    inspection_type: InspectionType | None = Query(default=None),
+    responsible_id: str | None = Query(default=None, min_length=1, max_length=36),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> InspectionPage:
@@ -97,6 +104,10 @@ async def list_inspections(
         stmt = stmt.where(Inspection.site_id == site_id)
     if status_filter:
         stmt = stmt.where(Inspection.status == status_filter)
+    if inspection_type:
+        stmt = stmt.where(Inspection.inspection_type == inspection_type)
+    if responsible_id:
+        stmt = stmt.where(Inspection.responsible_id == responsible_id)
 
     total_stmt = select(func.count()).select_from(stmt.subquery())
     stmt = stmt.order_by(Inspection.scheduled_at.desc().nullslast(), Inspection.created_at.desc()).offset(offset).limit(limit)
@@ -107,17 +118,30 @@ async def list_inspections(
 
 @router.post("/inspections", response_model=InspectionRead, status_code=status.HTTP_201_CREATED)
 async def create_inspection(
+    request: Request,
     payload: InspectionCreate,
     tenant: TenantDep,
     session: SessionDep,
-    _: EditorAccess,
+    access: EditorAccess,
 ) -> InspectionRead:
+    if payload.responsible_id:
+        stmt = select(User).where(
+            User.id == payload.responsible_id,
+            User.tenant_id == tenant.id,
+            User.deleted_at.is_(None),
+        )
+        user = (await session.execute(stmt)).scalar_one_or_none()
+        if user is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Responsible user not found")
     try:
         inspection = await register_inspection(
             session,
             tenant_id=str(tenant.id),
             company_id=payload.company_id,
             site_id=payload.site_id,
+            inspection_type=payload.inspection_type,
+            responsible_id=payload.responsible_id,
+            recurrence_rule=payload.recurrence_rule,
             authority=payload.authority,
             purpose=payload.purpose,
             scheduled_at=payload.scheduled_at,
@@ -126,6 +150,26 @@ async def create_inspection(
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    await upsert_inspection_task(
+        session,
+        tenant_id=str(tenant.id),
+        inspection=inspection,
+        actor_id=getattr(access.user, "id", None),
+    )
+    audit = AuditService(session)
+    ip = request.client.host if request.client else "unknown"
+    await audit.log_event(
+        tenant_id=str(tenant.id),
+        action="create",
+        object_type="inspection",
+        object_id=inspection.id,
+        user_id=getattr(access.user, "id", None),
+        ip=ip,
+        details={"scheduled_at": inspection.scheduled_at, "status": inspection.status.value},
+    )
+    await session.commit()
+    await session.refresh(inspection)
 
     return _serialize_inspection(inspection)
 
@@ -143,14 +187,24 @@ async def get_inspection(
 
 @router.patch("/inspections/{inspection_id}", response_model=InspectionRead)
 async def patch_inspection(
+    request: Request,
     inspection_id: str,
     payload: InspectionUpdate,
     tenant: TenantDep,
     session: SessionDep,
-    _: EditorAccess,
+    access: EditorAccess,
 ) -> InspectionRead:
     inspection = await _get_inspection(session, tenant, inspection_id)
     updates = payload.model_dump(exclude_unset=True)
+    if updates.get("responsible_id"):
+        stmt = select(User).where(
+            User.id == updates["responsible_id"],
+            User.tenant_id == tenant.id,
+            User.deleted_at.is_(None),
+        )
+        user = (await session.execute(stmt)).scalar_one_or_none()
+        if user is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Responsible user not found")
     try:
         updated = await update_inspection(
             session,
@@ -160,6 +214,25 @@ async def patch_inspection(
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    await upsert_inspection_task(
+        session,
+        tenant_id=str(tenant.id),
+        inspection=updated,
+        actor_id=getattr(access.user, "id", None),
+    )
+    audit = AuditService(session)
+    ip = request.client.host if request.client else "unknown"
+    await audit.log_event(
+        tenant_id=str(tenant.id),
+        action="update",
+        object_type="inspection",
+        object_id=updated.id,
+        user_id=getattr(access.user, "id", None),
+        ip=ip,
+        details={"status": updated.status.value},
+    )
+    await session.commit()
+    await session.refresh(updated)
     return _serialize_inspection(updated)
 
 
@@ -169,11 +242,12 @@ async def patch_inspection(
     status_code=status.HTTP_201_CREATED,
 )
 async def add_inspection_result_entry(
+    request: Request,
     inspection_id: str,
     payload: InspectionResultCreate,
     tenant: TenantDep,
     session: SessionDep,
-    _: EditorAccess,
+    access: EditorAccess,
 ) -> InspectionResultRead:
     inspection = await _get_inspection(session, tenant, inspection_id)
     try:
@@ -189,6 +263,19 @@ async def add_inspection_result_entry(
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    audit = AuditService(session)
+    ip = request.client.host if request.client else "unknown"
+    await audit.log_event(
+        tenant_id=str(tenant.id),
+        action="create",
+        object_type="inspection_result",
+        object_id=result.id,
+        user_id=getattr(access.user, "id", None),
+        ip=ip,
+        details={"inspection_id": inspection.id},
+    )
+    await session.commit()
+    await session.refresh(result)
     return InspectionResultRead.model_validate(result)
 
 

@@ -23,6 +23,7 @@ from app.models.models import (
     Inspection,
     InspectionResult,
     InspectionStatus,
+    InspectionType,
     Person,
     Site,
 )
@@ -215,6 +216,9 @@ async def register_inspection(
     company_id: str,
     authority: str,
     site_id: str | None = None,
+    inspection_type: InspectionType | None = None,
+    responsible_id: str | None = None,
+    recurrence_rule: str | None = None,
     purpose: str | None = None,
     scheduled_at: date | None = None,
     status: InspectionStatus = InspectionStatus.PLANNED,
@@ -231,6 +235,9 @@ async def register_inspection(
         tenant_id=tenant_id,
         company_id=company.id,
         site_id=site.id if site else None,
+        inspection_type=inspection_type or InspectionType.INTERNAL,
+        responsible_id=responsible_id,
+        recurrence_rule=recurrence_rule,
         authority=authority,
         purpose=purpose,
         scheduled_at=scheduled_at,
@@ -263,7 +270,18 @@ async def update_inspection(
                 raise ValueError("Site does not belong to the specified company")
             inspection.site_id = site.id
 
-    for key in {"authority", "purpose", "scheduled_at", "status", "started_at", "finished_at", "result_summary"}:
+    for key in {
+        "inspection_type",
+        "responsible_id",
+        "recurrence_rule",
+        "authority",
+        "purpose",
+        "scheduled_at",
+        "status",
+        "started_at",
+        "finished_at",
+        "result_summary",
+    }:
         if key in updates:
             setattr(inspection, key, updates[key])
 

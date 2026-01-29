@@ -51,6 +51,8 @@ class PipelineStage(str, enum.Enum):
     DATA_PERSISTED = "data_persisted"
     DOCX_GENERATED = "docx_generated"
     PDF_CONVERTED = "pdf_converted"
+    QR_CODE_APPLIED = "qr_code_applied"
+    WATERMARK_APPLIED = "watermark_applied"
     STAMPED_QR_APPLIED = "stamped_qr_applied"
     STORED_S3 = "stored_s3"
     OUTBOX_ENQUEUED = "outbox_enqueued"
