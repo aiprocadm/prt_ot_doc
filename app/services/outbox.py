@@ -14,12 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.metrics import PipelineStage, PipelineType, StageResult, get_metrics
-from app.models.models import Outbox
-from app.services.events import EventType, dedupe_key_for, normalize_payload, resolve_event_type
-from app.services.webhooks import WebhookDispatcher
-from app.core.metrics import get_metrics
 from app.models.models import Outbox, OutboxStatus
-from app.services.events import dedupe_key_for, normalize_payload, resolve_event_type
+from app.services.events import EventType, dedupe_key_for, normalize_payload, resolve_event_type
 from app.services.webhooks import WebhookDispatchError, WebhookDispatcher
 
 logger = logging.getLogger(__name__)
@@ -40,6 +36,8 @@ def _pipeline_for_event(event_type: str) -> PipelineType:
     if resolved in {EventType.TRAINING_ASSIGNED, EventType.TRAINING_COMPLETED}:
         return PipelineType.TRAINING
     return PipelineType.UNKNOWN
+
+
 @dataclass(frozen=True, slots=True)
 class DispatchResult:
     status: OutboxStatus
@@ -51,7 +49,12 @@ class DispatchResult:
 class OutboxService:
     """Create outbox entries for outbound delivery."""
 
-    def __init__(self, session: AsyncSession, *, dispatcher: WebhookDispatcher | None = None) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        *,
+        dispatcher: WebhookDispatcher | None = None,
+    ) -> None:
         self.session = session
         self.metrics = get_metrics()
         self.dispatcher = dispatcher or WebhookDispatcher()
@@ -67,42 +70,71 @@ class OutboxService:
         idempotency_key: str | None = None,
     ) -> list[Outbox]:
         resolved = resolve_event_type(event_type)
-        stage_start = perf_counter()
         pipeline = _pipeline_for_event(resolved.value)
-        self.metrics.record_pipeline_stage_start(
-            pipeline=pipeline,
-            stage=PipelineStage.OUTBOX_ENQUEUED,
-        )
-        created = False
+        stage_start = perf_counter()
         try:
             payload_model, normalized_payload = normalize_payload(
                 event_type=resolved,
                 payload=payload,
                 tenant_id=tenant_id,
             )
-            key = dedupe_key or dedupe_key_for(resolved, payload_model)
-            entry: Outbox | None = None
-            if key:
-                existing = await self._find_existing(
-                    tenant_id=tenant_id,
+            key = idempotency_key or dedupe_key_for(resolved, payload_model)
+            if destination:
+                destinations = [destination]
+            else:
+                destinations = await self.dispatcher.resolve_destinations_for_tenant(
                     event_type=resolved.value,
-                    dedupe_key=key,
+                    tenant_id=tenant_id,
+                    session=self.session,
                 )
+            if not destinations:
+                logger.debug(
+                    "outbox.skip_no_destination",
+                    extra={"tenant_id": tenant_id, "event_type": resolved.value},
+                )
+                self.metrics.record_outbox_no_destination(event_type=resolved.value)
+                self.metrics.record_pipeline_stage_end(
+                    pipeline=pipeline,
+                    stage=PipelineStage.OUTBOX_ENQUEUED,
+                    result=StageResult.SUCCESS,
+                    seconds=perf_counter() - stage_start,
+                )
+                return []
+
+            created: list[Outbox] = []
+            now = datetime.now(tz=timezone.utc)
+            for target in destinations:
+                existing = None
+                if key:
+                    existing = await self._find_existing(
+                        tenant_id=tenant_id,
+                        destination=target,
+                        idempotency_key=key,
+                    )
                 if existing:
-                    entry = existing
-            if entry is None:
+                    created.append(existing)
+                    continue
                 entry = Outbox(
                     tenant_id=tenant_id,
                     event_type=resolved.value,
+                    destination=target,
                     payload=normalized_payload,
-                    dedupe_key=key,
+                    headers=dict(headers) if headers else None,
+                    idempotency_key=key,
+                    status=OutboxStatus.PENDING,
+                    next_attempt_at=now,
                 )
                 self.session.add(entry)
                 await self.session.flush()
                 if entry.payload.get("event_id") is None:
                     entry.payload = {**entry.payload, "event_id": entry.id}
                     await self.session.flush()
-                created = True
+                created.append(entry)
+                self.metrics.record_outbox_enqueued(
+                    event_type=entry.event_type,
+                    destination=entry.destination,
+                    tenant_id=entry.tenant_id,
+                )
         except Exception as exc:
             self.metrics.record_pipeline_stage_end(
                 pipeline=pipeline,
@@ -125,57 +157,12 @@ class OutboxService:
             elif resolved is EventType.TRAINING_COMPLETED:
                 self.metrics.record_training_completed()
 
-        self.metrics.record_outbox_enqueued(event_type=entry.event_type)
         self.metrics.record_pipeline_stage_end(
             pipeline=pipeline,
             stage=PipelineStage.OUTBOX_ENQUEUED,
             result=StageResult.SUCCESS,
             seconds=perf_counter() - stage_start,
         )
-        return entry
-        key = idempotency_key or dedupe_key_for(resolved, payload_model)
-        destinations = [destination] if destination else self.dispatcher.resolve_destinations(resolved.value)
-        if not destinations:
-            logger.debug(
-                "outbox.skip_no_destination",
-                extra={"tenant_id": tenant_id, "event_type": resolved.value},
-            )
-            return []
-
-        created: list[Outbox] = []
-        now = datetime.now(tz=timezone.utc)
-        for target in destinations:
-            existing = None
-            if key:
-                existing = await self._find_existing(
-                    tenant_id=tenant_id,
-                    destination=target,
-                    idempotency_key=key,
-                )
-            if existing:
-                created.append(existing)
-                continue
-            entry = Outbox(
-                tenant_id=tenant_id,
-                event_type=resolved.value,
-                destination=target,
-                payload=normalized_payload,
-                headers=dict(headers) if headers else None,
-                idempotency_key=key,
-                status=OutboxStatus.PENDING,
-                next_attempt_at=now,
-            )
-            self.session.add(entry)
-            await self.session.flush()
-            if entry.payload.get("event_id") is None:
-                entry.payload = {**entry.payload, "event_id": entry.id}
-                await self.session.flush()
-            created.append(entry)
-            self.metrics.record_outbox_enqueued(
-                event_type=entry.event_type,
-                destination=entry.destination,
-                tenant_id=entry.tenant_id,
-            )
         return created
 
     async def _find_existing(
@@ -252,14 +239,21 @@ class OutboxProcessor:
                     error_class="max_attempts_exceeded",
                 )
                 continue
+
             self.metrics.observe_outbox_attempts(
                 event_type=entry.event_type,
                 destination=entry.destination,
                 attempts=entry.attempts,
             )
-            attempt_start = perf_counter()
+            pipeline = _pipeline_for_event(entry.event_type)
+            stage_start = perf_counter()
+            self.metrics.record_pipeline_stage_start(
+                pipeline=pipeline,
+                stage=PipelineStage.WEBHOOK_DISPATCHED,
+            )
             result = await self._dispatch_entry(entry)
-            duration = perf_counter() - attempt_start
+            duration = perf_counter() - stage_start
+
             if result.status == OutboxStatus.SENT:
                 await self._mark_sent(entry)
                 processed += 1
@@ -272,6 +266,12 @@ class OutboxProcessor:
                     event_type=entry.event_type,
                     destination=entry.destination,
                     seconds=latency.total_seconds(),
+                )
+                self.metrics.record_pipeline_stage_end(
+                    pipeline=pipeline,
+                    stage=PipelineStage.WEBHOOK_DISPATCHED,
+                    result=StageResult.SUCCESS,
+                    seconds=duration,
                 )
                 logger.info(
                     "outbox.dispatch_attempt",
@@ -286,50 +286,12 @@ class OutboxProcessor:
                     },
                 )
                 continue
-            try:
-                pipeline = _pipeline_for_event(entry.event_type)
-                stage_start = perf_counter()
-                self.metrics.record_pipeline_stage_start(
-                    pipeline=pipeline,
-                    stage=PipelineStage.WEBHOOK_DISPATCHED,
-                )
-                await self.dispatcher.dispatch(
-            elif result.status == OutboxStatus.DEAD:
+
+            if result.status == OutboxStatus.DEAD:
                 await self._mark_dead(entry, result)
                 self.metrics.record_outbox_dead(
                     event_type=entry.event_type,
                     destination=entry.destination,
-                    tenant_id=entry.tenant_id,
-                    payload=dict(entry.payload or {}),
-                    session=self.session,
-                )
-            except Exception as exc:
-                entry.last_error = str(exc)
-                self.metrics.record_pipeline_stage_end(
-                    pipeline=pipeline,
-                    stage=PipelineStage.WEBHOOK_DISPATCHED,
-                    result=StageResult.FAILED,
-                    seconds=perf_counter() - stage_start,
-                    error_class=exc.__class__.__name__,
-                self.metrics.record_outbox_failed(
-                    event_type=entry.event_type,
-                    destination=entry.destination,
-                    error_class=result.error_class or "permanent",
-                )
-                logger.warning(
-                    "outbox.dispatch_attempt",
-                    extra={
-                        "outbox_id": entry.id,
-                        "tenant_id": entry.tenant_id,
-                        "event_type": entry.event_type,
-                        "destination": entry.destination,
-                        "attempt": entry.attempts,
-                        "status": "dead",
-                        "error": result.error_message,
-                        "error_class": result.error_class,
-                        "status_code": result.status_code,
-                        "duration_seconds": duration,
-                    },
                 )
             else:
                 await self._mark_failed(entry, result)
@@ -338,35 +300,34 @@ class OutboxProcessor:
                     destination=entry.destination,
                     error_class=result.error_class or "unknown",
                 )
-                logger.warning(
-                    "outbox.dispatch_attempt",
-                    extra={
-                        "outbox_id": entry.id,
-                        "tenant_id": entry.tenant_id,
-                        "event_type": entry.event_type,
-                        "destination": entry.destination,
-                        "attempt": entry.attempts,
-                        "status": "failed",
-                        "error": result.error_message,
-                        "error_class": result.error_class,
-                        "status_code": result.status_code,
-                        "duration_seconds": duration,
-                    },
-                )
-                continue
-            entry.processed_at = datetime.now(tz=timezone.utc)
-            entry.last_error = None
+
             self.metrics.record_pipeline_stage_end(
                 pipeline=pipeline,
                 stage=PipelineStage.WEBHOOK_DISPATCHED,
-                result=StageResult.SUCCESS,
-                seconds=perf_counter() - stage_start,
+                result=StageResult.FAILED,
+                seconds=duration,
+                error_class=result.error_class or "unknown",
             )
-            processed += 1
+
+            logger.warning(
+                "outbox.dispatch_attempt",
+                extra={
+                    "outbox_id": entry.id,
+                    "tenant_id": entry.tenant_id,
+                    "event_type": entry.event_type,
+                    "destination": entry.destination,
+                    "attempt": entry.attempts,
+                    "status": result.status.value,
+                    "error": result.error_message,
+                    "error_class": result.error_class,
+                    "status_code": result.status_code,
+                    "duration_seconds": duration,
+                },
+            )
+
         if entries:
             await self.session.commit()
 
-        await self.session.commit()
         self.metrics.record_outbox_dispatcher_tick(processed=processed)
         self.metrics.observe_outbox_dispatcher_duration(seconds=perf_counter() - start_loop)
         return processed
@@ -380,6 +341,7 @@ class OutboxProcessor:
                 destination=entry.destination,
                 headers=entry.headers or {},
                 idempotency_key=entry.idempotency_key,
+                session=self.session,
             )
         except WebhookDispatchError as exc:
             classification = self._classify_http_error(exc.status_code)
@@ -401,7 +363,7 @@ class OutboxProcessor:
                 error_class="connection",
                 error_message=str(exc),
             )
-        except Exception as exc:
+        except Exception as exc:  # pragma: no cover - defensive
             logger.exception(
                 "outbox.dispatch_unhandled",
                 extra={"outbox_id": entry.id, "event_type": entry.event_type},
@@ -439,7 +401,13 @@ class OutboxProcessor:
         entry.next_attempt_at = self._compute_next_attempt(entry.attempts)
         entry.last_error = self._error_payload(result)
 
-    async def _mark_dead(self, entry: Outbox, result: DispatchResult | None = None, *, reason: str | None = None) -> None:
+    async def _mark_dead(
+        self,
+        entry: Outbox,
+        result: DispatchResult | None = None,
+        *,
+        reason: str | None = None,
+    ) -> None:
         entry.status = OutboxStatus.DEAD
         entry.next_attempt_at = None
         payload = self._error_payload(result) if result else None

@@ -60,6 +60,20 @@ class WebhookDispatcher:
     def resolve_destinations(self, event_type: str) -> list[str]:
         return self._resolve_urls(event_type)
 
+    async def resolve_destinations_for_tenant(
+        self,
+        *,
+        event_type: str,
+        tenant_id: str,
+        session: AsyncSession,
+    ) -> list[str]:
+        destinations = await self._resolve_destinations(
+            event_type=event_type,
+            tenant_id=tenant_id,
+            session=session,
+        )
+        return [destination.url for destination in destinations]
+
     def _resolve_urls(self, event_type: str) -> list[str]:
         urls_by_event: dict[str, Iterable[str]] = {
             "DocumentCreated": (
@@ -181,18 +195,19 @@ class WebhookDispatcher:
         event_type: str,
         tenant_id: str,
         payload: dict[str, Any],
-        destination: str,
+        destination: str | None = None,
         headers: dict[str, Any] | None = None,
         idempotency_key: str | None = None,
-    ) -> None:
-        payload: dict,
         session: AsyncSession | None = None,
     ) -> None:
-        destinations = await self._resolve_destinations(
-            event_type=event_type,
-            tenant_id=tenant_id,
-            session=session,
-        )
+        if destination:
+            destinations = [WebhookDestination(url=destination, headers={})]
+        else:
+            destinations = await self._resolve_destinations(
+                event_type=event_type,
+                tenant_id=tenant_id,
+                session=session,
+            )
         if not destinations:
             logger.warning(
                 "webhook.skip",
@@ -218,36 +233,17 @@ class WebhookDispatcher:
         if idempotency_key:
             request_headers["Idempotency-Key"] = str(idempotency_key)
 
-        failures: list[str] = []
+        failures: list[tuple[str, int]] = []
         async with httpx.AsyncClient(
             timeout=self.settings.webhook_timeout_seconds
         ) if self.client is None else _null_async_context(self.client) as client:
-            response = await client.post(destination, json=envelope, headers=request_headers)
-            if response.status_code >= 300:
-                message = f"Webhook {destination} failed with status {response.status_code}"
-                logger.warning(
-                    "webhook.failed",
-                    extra={
-                        "event_type": event_type,
-                        "tenant_id": tenant_id,
-                        "status": response.status_code,
-                        "url": destination,
-                    },
-                )
-                raise WebhookDispatchError(message, status_code=response.status_code)
             for destination in destinations:
-                self.metrics.record_outbox_routed(
-                    event_type=event_type, destination=destination.url
-                )
-                request_headers = {**headers, **destination.headers}
+                merged_headers = {**request_headers, **destination.headers}
                 response = await client.post(
-                    destination.url, json=envelope, headers=request_headers
+                    destination.url, json=envelope, headers=merged_headers
                 )
                 if response.status_code >= 300:
-                    message = (
-                        f"Webhook {destination.url} failed with status {response.status_code}"
-                    )
-                    failures.append(message)
+                    failures.append((destination.url, response.status_code))
                     logger.warning(
                         "webhook.failed",
                         extra={
@@ -257,8 +253,17 @@ class WebhookDispatcher:
                             "url": destination.url,
                         },
                     )
+                    continue
+                self.metrics.record_outbox_routed(
+                    event_type=event_type, destination=destination.url
+                )
+
         if failures:
-            raise WebhookDispatchError("; ".join(failures))
+            message = "; ".join(
+                f"Webhook {url} failed with status {status}"
+                for url, status in failures
+            )
+            raise WebhookDispatchError(message, status_code=failures[0][1])
 
 
 @dataclass(slots=True)
