@@ -20,7 +20,7 @@ from app.config import get_settings
 from app.core.metrics import PipelineStage, PipelineType, StageResult, get_metrics
 from app.core.payload_constraints import normalize_output_basename
 from app.core.tenant import tenant_context
-from app.db import ensure_tenant_schema, session_scope
+from app.db import AsyncSessionLocal, ensure_tenant_schema, session_scope
 from app.domains.files import s3
 from app.domains.files.utils import build_dated_prefix
 from app.domains.templating.renderer import render_docx
@@ -51,6 +51,7 @@ from app.services.celery_app import celery_app
 from app.services.file_storage import FileStorageService
 from app.services.idempotency import IdempotencyService
 from app.services.events import EventType
+from app.services.obligations import process_task_reminders
 from app.services.outbox import OutboxProcessor, OutboxService
 
 settings = get_settings()
@@ -516,6 +517,61 @@ def dispatch_outbox_task(tenant_slug: str) -> int:
             error_code=str(exc) or exc.__class__.__name__,
         )
         logger.exception("dispatch_outbox_task failed", exc_info=exc)
+        raise
+
+    duration = perf_counter() - started
+    metrics.record_celery_execution(
+        queue=queue,
+        task=task_name,
+        status="succeeded",
+        seconds=duration,
+    )
+    return result
+
+
+@celery_app.task(
+    name="tasks.reminders.dispatch",
+    autoretry_for=RETRYABLE_EXCEPTIONS,
+    retry_backoff=settings.celery.retry_backoff_seconds,
+    retry_backoff_max=settings.celery.retry_backoff_max_seconds,
+    retry_jitter=True,
+    retry_kwargs={"max_retries": settings.celery.task_max_retries},
+)
+def dispatch_task_reminders() -> int:
+    """Process reminder notifications for all active tenants."""
+
+    async def _run() -> int:
+        async with AsyncSessionLocal(tenant=settings.default_tenant_slug) as session:
+            tenants = list(
+                (await session.execute(select(Tenant).where(Tenant.is_active.is_(True))))
+                .scalars()
+                .all()
+            )
+        processed = 0
+        for tenant in tenants:
+            with tenant_context(tenant.slug):
+                ensure_tenant_schema(tenant.slug)
+                async with session_scope(tenant=tenant.slug) as tenant_session:
+                    processed += await process_task_reminders(tenant_session)
+        return processed
+
+    metrics = get_metrics()
+    queue = celery_app.conf.task_default_queue or "default"
+    task_name = "tasks.reminders.dispatch"
+    metrics.record_celery_enqueue(queue=queue, task=task_name)
+    started = perf_counter()
+    try:
+        result = _run_coroutine(_run())
+    except Exception as exc:  # pragma: no cover - surfaced by Celery in production
+        duration = perf_counter() - started
+        metrics.record_celery_execution(
+            queue=queue,
+            task=task_name,
+            status="failed",
+            seconds=duration,
+            error_code=str(exc) or exc.__class__.__name__,
+        )
+        logger.exception("dispatch_task_reminders failed", exc_info=exc)
         raise
 
     duration = perf_counter() - started

@@ -40,6 +40,8 @@ def _pipeline_for_event(event_type: str) -> PipelineType:
         return PipelineType.PPE
     if resolved in {EventType.TRAINING_ASSIGNED, EventType.TRAINING_COMPLETED}:
         return PipelineType.TRAINING
+    if resolved in {EventType.TASK_DUE_SOON, EventType.TASK_OVERDUE}:
+        return PipelineType.TASKS
     return PipelineType.UNKNOWN
 
 

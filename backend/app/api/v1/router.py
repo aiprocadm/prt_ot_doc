@@ -34,15 +34,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record, require_tenant_slug
 from app.api.routes import (
+    admin_users,
     audit,
     auth,
     companies,
+    contracts,
+    departments,
     documents,
     files,
     incidents,
     inspections,
+    invoices,
     journals,
+    medical,
     npa,
+    orders,
     outbox_admin,
     packs,
     persons,
@@ -116,12 +122,18 @@ tenant_router = APIRouter(dependencies=[Depends(require_tenant_slug)])
 
 router.include_router(auth.router, prefix="/auth", tags=["auth"])
 tenant_router.include_router(audit.router, prefix="/audit", tags=["audit"])
+tenant_router.include_router(admin_users.router, tags=["admin-users"])
 tenant_router.include_router(files.router, prefix="/files", tags=["files"])
 tenant_router.include_router(packs.router, prefix="/packs", tags=["packs"])
 tenant_router.include_router(incidents.router, tags=["incidents"])
 tenant_router.include_router(inspections.router, tags=["inspections"])
+tenant_router.include_router(departments.router, tags=["departments"])
+tenant_router.include_router(contracts.router, tags=["contracts"])
+tenant_router.include_router(orders.router, tags=["orders"])
+tenant_router.include_router(invoices.router, tags=["invoices"])
 tenant_router.include_router(npa.router, tags=["npa"])
 tenant_router.include_router(ppe.router, tags=["ppe"])
+tenant_router.include_router(medical.router, tags=["medical"])
 tenant_router.include_router(journals.router, tags=["journals"])
 tenant_router.include_router(risk.router, tags=["risks"])
 tenant_router.include_router(sites.router, tags=["sites"])

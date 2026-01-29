@@ -12,7 +12,7 @@ from fastapi.responses import Response
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.api.error_handlers import register_exception_handlers
-from app.api.routes import health
+from app.api.routes import health, ws_stub
 from app.api.v1.router import router as v1_router
 from app.core.config import Settings, SettingsError, bootstrap
 from app.core.idempotency import idempotency_dependency, store_idempotent_response
@@ -133,6 +133,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
     app.include_router(health.router)
+    app.include_router(ws_stub.router)
     _register_metrics_endpoint(app, settings)
     _register_idempotency_middleware(app)
 

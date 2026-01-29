@@ -37,6 +37,8 @@ celery -A app.services.celery_app.celery_app worker \
 
 celery -A app.services.celery_app.celery_app worker \
   --queues pdf --loglevel INFO
+
+celery -A app.services.celery_app.celery_app beat --loglevel INFO
 ```
 
 ### Frontend
@@ -70,9 +72,11 @@ npm run build
 ## Диагностика
 - Healthchecks: `http://localhost:8000/health` и `http://localhost:8000/ready`.
 - Метрики: `http://localhost:8000/metrics` (если включены).
+- WS stub: `http://localhost:8000/ws/v1/events` (HTTP 501, WebSocket будет в P2).
 - Логи Docker: `docker compose logs -f`.
 
 ## Типовые проблемы
 - **Frontend не стартует**: убедитесь, что `VITE_API_BASE_URL` указывает на доступный backend (например, `http://localhost:8000/api`).
 - **Ошибки миграций**: проверьте доступность базы (`docker compose ps`) и переменные `POSTGRES_*` в `.env`.
 - **Очереди зависли**: проверьте Redis (`docker compose logs redis`) и значения `WORKER_QUEUES`/`PDF_WORKER_QUEUE`.
+- **Напоминания по задачам не шлются**: убедитесь, что запущен `celery beat` (задача `tasks.reminders.dispatch` запускается ежедневно).

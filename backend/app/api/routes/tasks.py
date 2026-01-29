@@ -1,17 +1,26 @@
-"""Generic task inspection endpoints."""
+"""Task endpoints for pipeline status and obligations."""
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from celery.result import AsyncResult
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, abac
+from app.models.obligations import Task, TaskPriority, TaskStatus
 from app.models.models import PipelineRun, Tenant
-from app.schemas.task import TaskStatusResponse
+from app.schemas.task import (
+    TaskCreate,
+    TaskListResponse,
+    TaskPagination,
+    TaskRead,
+    TaskStatusResponse,
+    TaskUpdate,
+)
 from app.services.celery_app import celery_app
 
 router = APIRouter()
@@ -26,6 +35,17 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | N
 
 TaskAccess = Depends(
     abac(_tenant_resource_id, required_roles=["admin"], action="inspect tasks")
+)
+
+_TASK_READ_ROLES = ["admin", "owner", "line_manager", "hr"]
+_TASK_WRITE_ROLES = ["admin", "owner", "line_manager", "hr"]
+
+
+TaskReadAccess = Depends(
+    abac(_tenant_resource_id, required_roles=_TASK_READ_ROLES, action="read tasks")
+)
+TaskWriteAccess = Depends(
+    abac(_tenant_resource_id, required_roles=_TASK_WRITE_ROLES, action="manage tasks")
 )
 
 
@@ -106,3 +126,143 @@ async def get_task_status(
         metadata=metadata or None,
         result=result_payload,
     )
+
+
+def _normalize_task_status(value: str | None) -> TaskStatus | None:
+    if value is None:
+        return None
+    try:
+        return TaskStatus(str(value).lower())
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Unsupported task status") from exc
+
+
+def _normalize_task_priority(value: str | None) -> TaskPriority | None:
+    if value is None:
+        return None
+    try:
+        return TaskPriority(str(value).lower())
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Unsupported task priority") from exc
+
+
+def _task_is_overdue(task: Task, now: datetime) -> bool:
+    if task.due_at is None:
+        return False
+    if task.status in {TaskStatus.DONE, TaskStatus.CANCELLED}:
+        return False
+    return task.due_at < now
+
+
+def _task_read(task: Task, now: datetime) -> TaskRead:
+    return TaskRead.model_validate(
+        {
+            **TaskRead.model_validate(task).model_dump(),
+            "overdue": _task_is_overdue(task, now),
+        }
+    )
+
+
+@router.get("", response_model=TaskListResponse)
+async def list_tasks(
+    tenant: Tenant = TenantDep,
+    session: AsyncSession = SessionDep,
+    _: AccessContext = TaskReadAccess,
+    status_value: str | None = Query(default=None, alias="status"),
+    overdue: bool | None = Query(default=None),
+    assignee: str | None = Query(default=None, alias="assignee"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+) -> TaskListResponse:
+    stmt = select(Task).where(Task.tenant_id == tenant.id)
+    status_filter = _normalize_task_status(status_value)
+    if status_filter:
+        stmt = stmt.where(Task.status == status_filter)
+    if assignee:
+        stmt = stmt.where(Task.assignee_id == assignee)
+    now = datetime.now(timezone.utc)
+    if overdue is True:
+        stmt = stmt.where(
+            Task.due_at.is_not(None),
+            Task.due_at < now,
+            Task.status.in_([TaskStatus.OPEN, TaskStatus.IN_PROGRESS]),
+        )
+    elif overdue is False:
+        stmt = stmt.where(
+            Task.status.in_([TaskStatus.OPEN, TaskStatus.IN_PROGRESS]),
+        )
+
+    total_stmt = select(func.count()).select_from(stmt.subquery())
+    stmt = stmt.order_by(Task.due_at.asc().nulls_last(), Task.created_at.desc())
+    stmt = stmt.offset((page - 1) * page_size).limit(page_size)
+    tasks = list((await session.execute(stmt)).scalars().all())
+    total = await session.scalar(total_stmt)
+    items = [_task_read(task, now) for task in tasks]
+    return TaskListResponse(
+        items=items,
+        pagination=TaskPagination(page=page, page_size=page_size, total=int(total or 0)),
+    )
+
+
+@router.post("", response_model=TaskRead, status_code=status.HTTP_201_CREATED)
+async def create_task(
+    payload: TaskCreate,
+    tenant: Tenant = TenantDep,
+    session: AsyncSession = SessionDep,
+    access: AccessContext = TaskWriteAccess,
+) -> TaskRead:
+    priority = _normalize_task_priority(payload.priority) or TaskPriority.MEDIUM
+    task = Task(
+        tenant_id=str(tenant.id),
+        title=payload.title,
+        description=payload.description,
+        entity_type=payload.entity_type,
+        entity_id=payload.entity_id,
+        due_at=payload.due_at,
+        assignee_id=payload.assignee_id,
+        created_by=getattr(access.user, "id", None),
+        priority=priority,
+    )
+    if task.due_at:
+        reminder_time = task.due_at - timedelta(days=2)
+        task.next_remind_at = reminder_time if reminder_time > datetime.now(timezone.utc) else task.due_at
+    session.add(task)
+    await session.commit()
+    await session.refresh(task)
+    return _task_read(task, datetime.now(timezone.utc))
+
+
+@router.patch("/{task_id}", response_model=TaskRead)
+async def update_task(
+    task_id: str,
+    payload: TaskUpdate,
+    tenant: Tenant = TenantDep,
+    session: AsyncSession = SessionDep,
+    _: AccessContext = TaskWriteAccess,
+) -> TaskRead:
+    stmt = select(Task).where(Task.id == task_id, Task.tenant_id == tenant.id)
+    task = (await session.execute(stmt)).scalar_one_or_none()
+    if task is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Task not found")
+
+    updates = payload.model_dump(exclude_unset=True)
+    status_value = _normalize_task_status(updates.pop("status", None))
+    if status_value is not None:
+        task.status = status_value
+        if status_value == TaskStatus.DONE:
+            task.completed_at = datetime.now(timezone.utc)
+        else:
+            task.completed_at = None
+    priority_value = _normalize_task_priority(updates.pop("priority", None))
+    if priority_value is not None:
+        task.priority = priority_value
+
+    for key, value in updates.items():
+        setattr(task, key, value)
+
+    if task.due_at:
+        reminder_time = task.due_at - timedelta(days=2)
+        task.next_remind_at = reminder_time if reminder_time > datetime.now(timezone.utc) else task.due_at
+    await session.commit()
+    await session.refresh(task)
+    return _task_read(task, datetime.now(timezone.utc))

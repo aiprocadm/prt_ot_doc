@@ -89,6 +89,7 @@ __all__ = [
     "TrainingSessionStatus",
     "TrainingCertificate",
     "User",
+    "UserRole",
     "WarehousePPE",
     "WebhookSubscription",
 ]
@@ -97,7 +98,18 @@ __all__ = [
 class RoleEnum(str, enum.Enum):
     """Supported access roles within a tenant."""
 
+    OWNER = "owner"
     ADMIN = "admin"
+    OT_PB_LEAD = "ot_pb_lead"
+    OT_SPECIALIST = "ot_specialist"
+    PB_ENGINEER = "pb_engineer"
+    ECOLOGIST = "ecologist"
+    HR = "hr"
+    LAWYER = "lawyer"
+    ACCOUNTANT = "accountant"
+    LINE_MANAGER = "line_manager"
+    WORKER = "worker"
+    CONTRACTOR_INSPECTOR = "contractor_inspector"
     EMPLOYEE = "employee"
     CLIENT_ADMIN = "client_admin"
     CLIENT_USER = "client_user"
@@ -143,10 +155,32 @@ class User(TenantBaseModel, SoftDeleteMixin):
     company: Mapped[Company | None] = relationship(
         "Company", backref="users", lazy="joined"
     )
+    roles: Mapped[list["UserRole"]] = relationship(
+        "UserRole",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
 
     __table_args__ = (
         Index("ix_user_email", "tenant_id", "email", unique=True),
         Index("ix_user_company", "tenant_id", "company_id"),
+    )
+
+
+class UserRole(TenantBaseModel):
+    __tablename__ = "user_role"
+
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    role: Mapped[RoleEnum] = mapped_column(Enum(RoleEnum), nullable=False)
+
+    user: Mapped[User] = relationship("User", back_populates="roles")
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "user_id", "role", name="uq_user_role"),
+        Index("ix_user_role_user", "tenant_id", "user_id"),
     )
 
 

@@ -10,6 +10,7 @@
 | --- | --- | --- | --- | --- |
 | **Tenant & Auth** | `models.py::Tenant`, `User`, `ApiKey` | `tenant.py::TenantRead/TenantPage` | `api/routes/auth.py`, `api/v1/router.py` (`/tenants`) | `services/auth.py`, `services/api_keys.py`, `core/security.py` |
 | **Компании и площадки** | `models.py::Company`, `Site`, `Position` | `company.py::CompanyCreate/Read/Page` | `api/v1/router.py` (`/companies`, `/sites`), вспомогательные проверки в `api/routes/packs.py` | `repository.py::create_company/list_companies`, `domains/packs/context.py` |
+| **Подразделения и финансы** | `finance.py::Department`, `Contract`, `Order`, `Invoice` | `department.py`, `contract.py`, `order.py`, `invoice.py` | `api/routes/departments.py`, `contracts.py`, `orders.py`, `invoices.py` | Доступ через `core/security.py` (RBAC+ABAC), связки с документами |
 | **Персонал** | `models.py::Person`, `EmploymentStatus`, `PlanTask` | `person.py::PersonPage`, `task.py::PlanTaskRead` | `api/v1/router.py` (`/employees`), контекст для `documents`/`packs` | `repository.py::list_persons`, `services/tasks.py` |
 | **Шаблоны** | `models.py::Template`, `TemplateVersion`, `TemplateVersionStatus` | `template.py::TemplateCreate`, `common.py::TemplatePage` | `api/v1/router.py` (`/templates`, загрузка DOCX) | `services/docx.py`, `services/file_storage.py`, `services/pipeline.py` |
 | **Документы** | `document.py::Document`, `DocumentVersion`, `DocumentGenerationJob` | `document.py::DocumentRead`, `DocumentStatusUpdate` | `api/routes/documents.py` | `services/documents.py`, `services/docx.py`, `services/pdf.py`, `services/idempotency.py`, `services/tasks.py` |
@@ -18,16 +19,18 @@
 | **Риски** | `risk.py::Risk`, `RiskHazard`, `RiskControl`, `RiskAssessment`, `RiskMatrixCell` | `risk.py::RiskListResponse`, input-модели в `api/routes/risk.py` | `api/routes/risk.py` | `services/risk.py`, `domains/risk/score_band.py` |
 | **НПА** | `npa.py::NpaAct`, `NpaClause` | `npa.py::NpaActRead`, `NpaActListResponse` | `api/routes/npa.py` | `domains/npa/*` (загрузчики, миграции) |
 | **Пайплайны/задачи** | `models.py::PipelineRun`, `PipelineRunStatus`, `Outbox` | `common.py::PipelineRunRead`, `task.py::TaskStatusResponse` | `api/routes/tasks.py`, части `api/routes/documents.py`, `api/routes/packs.py` | `services/tasks.py`, `services/pipeline.py`, `services/outbox.py`, `services/celery_app.py` |
+| **Дедлайны/обязательства** | `obligations.py::Task` | `task.py::TaskRead/TaskListResponse` | `api/routes/tasks.py`, `api/routes/medical.py` | `services/obligations.py`, `tasks.reminders.dispatch` |
 | **Аудит** | `models.py::AuditLog`, `JournalEntry` | Inline `AuditLogEntry`/`AuditLogHistory` (`api/routes/audit.py`) | `api/routes/audit.py`, аудит в `files.py`, `documents.py`, `packs.py` | `services/audit.py`, `domains/audit/*` |
 
 ### Детализация доменов
-- **Tenant/Auth**: зависимости `backend/app/api/dependencies.py` инжектируют `AsyncSession` и выбранный `Tenant`. RBAC/ABAC (`backend/app/core/security.py`) проверяет роли (`admin`, `employee`, `client_admin`, `client_user`). `services/auth.py` управляет паролями, JWT (`issue_access_token/refresh_token`).
+- **Tenant/Auth**: зависимости `backend/app/api/dependencies.py` инжектируют `AsyncSession` и выбранный `Tenant`. RBAC/ABAC (`backend/app/core/security.py`) проверяет роли (`owner`, `admin`, `ot_pb_lead`, `ot_specialist`, `pb_engineer`, `ecologist`, `hr`, `lawyer`, `accountant`, `line_manager`, `worker`, `contractor_inspector`, `employee`, `client_admin`, `client_user`) и объектные атрибуты (tenant/company/site/document/risk). `services/auth.py` управляет паролями, JWT (`issue_access_token/refresh_token`).
 - **Документы**: `/api/v1/documents` принимает `DocGenerateRequest`, валидирует шаблон/компанию/персону, контролирует ограничения payload (`core/payload_constraints.py`), рассчитывает `idempotency_key` (`core/idempotency.py`, `services/idempotency.py`) и запускает пайплайн через `tasks.generate_document_task`. `DocumentWorkflowService` в `services/documents.py` управляет статусами и аудитом.
 - **Пакеты**: `api/routes/packs.py` аггрегирует данные компаний, площадок, сотрудников, медосмотров (`MedicalExam`), тренингов (`Training`) и генерирует документы пачками. Контекст формируется в `domains/packs/context.py`, экспорт упаковывается `PackageExportService` и сохраняется через `FileStorageService`.
 - **Файлы**: `api/routes/files.py` применяет rate limit (`core/rate_limit.py`), определяет MIME (`domains/files/utils.py`), пишет метаданные `File`, инициирует ClamAV-сканирование (`services/clamav.py`) и логирует аудит (`AuditService`). Загрузка/выгрузка работает поверх `domains/files/s3.py` и `services/storage.py`.
 - **Риски**: эндпоинты `/api/v1/risk/...` управляют словарями опасностей/мер, матрицами риска и оценками (`RiskAssessment`). `RiskService` рассчитывает уровни и отчёт по площадке, а модуль `domains/risk/score_band.py` определяет цветовые диапазоны.
 - **НПА**: `/api/v1/npa` читает `NpaAct` вместе с `NpaClause` (selectinload). Эти данные используются шаблонами/пакетами, но не изменяются через API.
 - **Пайплайны/задачи**: `PipelineService` связывает шаблоны, DocxTPL и конверсию в PDF, пишет `PipelineRun`. Celery-таски (`services/tasks.py`) мониторятся через `/api/v1/tasks/{id}` с агрегацией статуса Celery + `PipelineRun`. Idempotency и `PipelineRun` позволяют безопасно повторять генерацию.
+- **Дедлайны/обязательства**: `services/obligations.py` создаёт задачи по событию назначения обучения/медтребования, планирует напоминания и отправляет `TaskDueSoon`/`TaskOverdue` через outbox. Ежедневный Celery beat (`tasks.reminders.dispatch`) агрегирует напоминания по арендам.
 - **Аудит**: `AuditService` сохраняет каждое критичное действие (загрузка файлов, смена статуса документа, запуск пакета). Запрос `/api/v1/audit` отдаёт историю по объекту.
 
 ## Логическая схема
@@ -39,6 +42,11 @@
 6. **Files ↔ ClamAV**: загрузки хранятся в MinIO (`domains/files/s3.py`), пока не пройдут ClamAV. `File.scan_status` обновляется задачами и определяет доступность скачивания.
 7. **Audit**: `AuditLog` связывает `Tenant`, `User`, тип объекта и IP. Любая бизнес-операция вызывает `AuditService.log_event`.
 8. **Idempotency/Outbox**: `DocumentGenerationJob.idempotency_key` и `services/idempotency.py` предотвращают дубликаты, `services/outbox.py` обеспечивает доставку событий (например, оповещения о генерации) в другие системы.
+9. **Обязательства**: `Task` хранит дедлайны по обучению/медосмотрам; worker ежедневно проверяет просрочки и шлёт события outbox.
+
+## RBAC/ABAC enforcement points
+- `core/security.py::rbac` проверяет роль/список ролей пользователя и токена; `core/security.py::abac` валидирует атрибуты (tenant/company/site/document/risk).【F:backend/app/core/security.py†L317-L548】
+- Основные маршруты с RBAC/ABAC: `/api/v1/documents/{id}/status`, `/api/v1/tasks`, `/api/v1/contracts`, `/api/v1/invoices`, `/api/v1/risk/risks`. 
 
 ## Слои приложения
 ### API (`backend/app/api`)

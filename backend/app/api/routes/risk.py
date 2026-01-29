@@ -16,7 +16,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.idempotency import compute_request_hash
-from app.core.security import AccessContext, AuthContext, get_auth_ctx, rbac
+from app.core.security import AccessContext, AuthContext, abac, get_auth_ctx, rbac
 from app.core.metrics import get_metrics
 from app.domains.risk import recalc_risk_map, rebuild_matrix_from_methodology, score_band
 from app.models.models import (
@@ -56,6 +56,18 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 EditorAccess = Annotated[AccessContext, Depends(rbac(["admin"]))]
 AdminAccess = Annotated[AccessContext, Depends(rbac(["admin"]))]
+
+_RISK_READ_ROLES = ["admin", "owner", "ot_specialist", "ot_pb_lead", "pb_engineer", "line_manager"]
+
+
+def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
+    return getattr(tenant, "id", None)
+
+
+RiskReadAccess = Annotated[
+    AccessContext,
+    Depends(abac(_tenant_resource_id, required_roles=_RISK_READ_ROLES, action="read risks")),
+]
 
 
 async def _get_tenant_entity(
@@ -122,6 +134,19 @@ def _band_from_definition(definition: dict[str, object], score: int) -> str:
     if score <= 16:
         return "high"
     return "crit"
+
+
+def _risk_level_filter(level: str) -> tuple[int | None, int | None]:
+    normalized = level.lower()
+    if normalized == "low":
+        return (None, 4)
+    if normalized in {"med", "medium"}:
+        return (5, 9)
+    if normalized == "high":
+        return (10, 16)
+    if normalized in {"crit", "critical"}:
+        return (17, None)
+    raise ValueError("Unsupported risk level")
 
 
 async def _get_or_create_default_methodology(
@@ -1324,14 +1349,36 @@ async def list_risks(
     session: SessionDep,
     tenant: TenantDep,
     site_id: str | None = Query(default=None, alias="site_id"),
+    risk_level: str | None = Query(default=None, alias="risk_level"),
+    access: RiskReadAccess,
 ) -> RiskListResponse:
     if site_id:
         try:
             await RiskService.ensure_site_belongs_to_tenant(session, tenant, site_id)
         except LookupError as exc:
             raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+        if site_id:
+            site = await session.get(Site, site_id)
+            if site is not None:
+                access.ensure_site_access(site_id, site.company_id, action="read risks")
+
+    if risk_level:
+        access.ensure_risk_access(risk_level=risk_level, action="read risks")
 
     risks, report = await RiskService.list_by_site(session, tenant, site_id)
+    if risk_level:
+        try:
+            minimum, maximum = _risk_level_filter(risk_level)
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        filtered: list[Risk] = []
+        for risk in risks:
+            if minimum is not None and risk.level < minimum:
+                continue
+            if maximum is not None and risk.level > maximum:
+                continue
+            filtered.append(risk)
+        risks = filtered
     return RiskListResponse.from_entities(risks, report)
 
 

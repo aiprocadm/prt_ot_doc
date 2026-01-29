@@ -12,6 +12,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym, validat
 from sqlalchemy.types import JSON
 
 from app.models.base import TenantBaseModel
+from app.models.finance import Contract, Department, Invoice, Order
 from app.models.models import Company, DocumentPack, Person, Site, Template, TemplateVersion, User
 from app.models.file import File
 
@@ -41,6 +42,18 @@ class Document(TenantBaseModel):
     )
     site_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("site.id", ondelete="SET NULL"), nullable=True
+    )
+    department_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("department.id", ondelete="SET NULL"), nullable=True
+    )
+    contract_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("contract.id", ondelete="SET NULL"), nullable=True
+    )
+    order_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("order.id", ondelete="SET NULL"), nullable=True
+    )
+    invoice_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("invoice.id", ondelete="SET NULL"), nullable=True
     )
     template_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("template.id", ondelete="RESTRICT"), nullable=False
@@ -76,6 +89,10 @@ class Document(TenantBaseModel):
     company = relationship("Company", backref="documents")
     person = relationship("Person", backref="documents")
     site = relationship("Site", backref="documents")
+    department: Mapped[Department | None] = relationship("Department", backref="documents")
+    contract: Mapped[Contract | None] = relationship("Contract", backref="documents")
+    order: Mapped[Order | None] = relationship("Order", backref="documents")
+    invoice: Mapped[Invoice | None] = relationship("Invoice", backref="documents")
     template = relationship("Template", backref="documents")
     template_version = relationship("TemplateVersion", backref="documents")
     creator = relationship("User", backref="documents_created", foreign_keys=[created_by])

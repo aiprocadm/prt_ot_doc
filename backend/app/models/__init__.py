@@ -12,7 +12,17 @@ from app.models.document import (
     DocumentStatus,
     DocumentVersion,
 )
+from app.models.finance import (
+    Contract,
+    ContractStatus,
+    Department,
+    Invoice,
+    InvoiceStatus,
+    Order,
+    OrderStatus,
+)
 from app.models.file import File
+from app.models.obligations import Task, TaskPriority, TaskReminderChannel, TaskStatus
 from app.models.models import (
     NPA,
     ApiKey,
@@ -59,6 +69,7 @@ from app.models.models import (
     TrainingSessionStatus,
     TrainingStatus,
     User,
+    UserRole,
     WarehousePPE,
     WebhookSubscription,
 )
@@ -91,6 +102,9 @@ __all__ = [
     "AuditLog",
     "ApiKey",
     "Company",
+    "Contract",
+    "ContractStatus",
+    "Department",
     "DocumentPack",
     "DocumentPackItem",
     "Equipment",
@@ -114,12 +128,16 @@ __all__ = [
     "Person",
     "PipelineRun",
     "PlanTask",
+    "Invoice",
+    "InvoiceStatus",
     "Inspection",
     "InspectionResult",
     "InspectionStatus",
     "PPEIssue",
     "PPENorm",
     "Permit",
+    "Order",
+    "OrderStatus",
     "Risk",
     "RiskActionPlan",
     "RiskActionPlanItem",
@@ -132,6 +150,10 @@ __all__ = [
     "RiskMap",
     "RiskMethodology",
     "Site",
+    "Task",
+    "TaskPriority",
+    "TaskReminderChannel",
+    "TaskStatus",
     "Template",
     "TemplateVersion",
     "Tenant",
@@ -143,6 +165,7 @@ __all__ = [
     "TrainingSessionStatus",
     "TrainingStatus",
     "User",
+    "UserRole",
     "WarehousePPE",
     "WebhookSubscription",
 ]
