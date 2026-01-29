@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { Breadcrumb } from "@/components/ui/breadcrumb";
+import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { DocumentPreview } from "@/features/documents/DocumentPreview";
 import { DocumentTable } from "@/features/documents/DocumentTable";
@@ -11,10 +12,18 @@ import { useDocumentsStore } from "@/stores/documents";
 import type { DocumentDto } from "@/types/dto/documents";
 
 const DocumentsPage = () => {
-  const { list } = useDocumentsStore();
+  const { list, items, pagination, loading } = useDocumentsStore();
   const [selectedDocument, setSelectedDocument] = useState<DocumentDto | null>(null);
   const { can } = useAbility();
   const canView = can(PERMISSIONS.DOCUMENT_VIEW);
+
+  const statusCounts = items.reduce(
+    (acc, document) => {
+      acc[document.status] = (acc[document.status] ?? 0) + 1;
+      return acc;
+    },
+    {} as Record<DocumentDto["status"], number>
+  );
 
   useEffect(() => {
     if (canView) {
@@ -29,6 +38,21 @@ const DocumentsPage = () => {
   return (
     <div className="space-y-6">
       <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Документы" }]} />
+      <RegistryPageHeader
+        title="Документы"
+        description="Все корпоративные документы, шаблоны и версии с контролем статуса и компании."
+        actions={
+          <span className="text-sm text-muted-foreground">
+            {loading ? "Обновление списка…" : "Данные актуальны"}
+          </span>
+        }
+        stats={[
+          { label: "Всего документов", value: pagination.total },
+          { label: "Готовые (на странице)", value: statusCounts.ready ?? 0 },
+          { label: "Черновики (на странице)", value: statusCounts.draft ?? 0 },
+          { label: "Ошибки (на странице)", value: statusCounts.error ?? 0 }
+        ]}
+      />
       <Card>
         <CardContent className="py-6">
           <DocumentTable onSelect={setSelectedDocument} />

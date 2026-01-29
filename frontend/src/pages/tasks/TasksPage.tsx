@@ -1,8 +1,11 @@
-import { useEffect } from "react";
+import { addDays, endOfDay, isWithinInterval, startOfDay } from "date-fns";
+import { useEffect, useMemo } from "react";
 
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { FilterField } from "@/components/common/FilterField";
+import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { TaskTable } from "@/features/tasks/TaskTable";
 import { useTasksStore } from "@/stores/tasks";
 
@@ -21,11 +24,32 @@ const DUE_FILTER_OPTIONS = [
 ];
 
 const TasksPage = () => {
-  const { list, loading, filters, setFilters } = useTasksStore();
+  const { list, loading, filters, setFilters, items, pagination } = useTasksStore();
 
   useEffect(() => {
     list();
   }, [list]);
+
+  const stats = useMemo(() => {
+    const now = new Date();
+    const todayStart = startOfDay(now);
+    const todayEnd = endOfDay(now);
+    const weekEnd = endOfDay(addDays(now, 7));
+
+    let overdueCount = 0;
+    let todayCount = 0;
+    let weekCount = 0;
+
+    items.forEach((task) => {
+      if (!task.due_at) return;
+      const dueAt = new Date(task.due_at);
+      if (task.overdue) overdueCount += 1;
+      if (isWithinInterval(dueAt, { start: todayStart, end: todayEnd })) todayCount += 1;
+      if (isWithinInterval(dueAt, { start: todayStart, end: weekEnd })) weekCount += 1;
+    });
+
+    return { overdueCount, todayCount, weekCount };
+  }, [items]);
 
   const handleTypeChange = (value: string) => {
     setFilters({ type: value || undefined });
@@ -40,19 +64,41 @@ const TasksPage = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Задачи" }]} />
-        <Button variant="outline" onClick={() => list()} disabled={loading}>
-          Обновить
-        </Button>
-      </div>
+      <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Задачи" }]} />
+      <RegistryPageHeader
+        title="Задачи и обязательства"
+        description="Контроль сроков, статусов и исполнителей по обязательствам."
+        actions={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setFilters({ type: undefined, overdue: undefined });
+                list({ type: undefined, overdue: undefined });
+              }}
+              disabled={loading}
+            >
+              Сбросить фильтры
+            </Button>
+            <Button variant="default" onClick={() => list()} disabled={loading}>
+              Обновить
+            </Button>
+          </>
+        }
+        stats={[
+          { label: "Всего задач", value: pagination.total },
+          { label: "Просрочено (на странице)", value: stats.overdueCount },
+          { label: "Сегодня (на странице)", value: stats.todayCount },
+          { label: "На 7 дней (на странице)", value: stats.weekCount }
+        ]}
+      />
       <Card>
         <CardContent className="py-6">
           <div className="mb-4 flex flex-wrap gap-4">
-            <label className="flex flex-col gap-1 text-sm text-muted-foreground">
-              Тип
+            <FilterField label="Тип" htmlFor="task-type">
               <select
-                className="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+                id="task-type"
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground"
                 value={filters.type ?? ""}
                 onChange={(event) => handleTypeChange(event.target.value)}
               >
@@ -62,11 +108,11 @@ const TasksPage = () => {
                   </option>
                 ))}
               </select>
-            </label>
-            <label className="flex flex-col gap-1 text-sm text-muted-foreground">
-              Срок
+            </FilterField>
+            <FilterField label="Срок" htmlFor="task-due">
               <select
-                className="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+                id="task-due"
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground"
                 value={filters.overdue === true ? "overdue" : filters.overdue === false ? "upcoming" : "all"}
                 onChange={(event) => handleDueFilterChange(event.target.value)}
               >
@@ -76,7 +122,7 @@ const TasksPage = () => {
                   </option>
                 ))}
               </select>
-            </label>
+            </FilterField>
           </div>
           <TaskTable />
         </CardContent>
