@@ -171,6 +171,7 @@ async def list_tasks(
     session: AsyncSession = SessionDep,
     access: AccessContext = TaskReadAccess,
     status_value: str | None = Query(default=None, alias="status"),
+    priority_value: str | None = Query(default=None, alias="priority"),
     overdue: bool | None = Query(default=None),
     assignee: str | None = Query(default=None, alias="assignee"),
     task_type: str | None = Query(default=None, alias="type"),
@@ -181,6 +182,9 @@ async def list_tasks(
     status_filter = _normalize_task_status(status_value)
     if status_filter:
         stmt = stmt.where(Task.status == status_filter)
+    priority_filter = _normalize_task_priority(priority_value)
+    if priority_filter:
+        stmt = stmt.where(Task.priority == priority_filter)
     if assignee:
         stmt = stmt.where(Task.assignee_id == assignee)
     if task_type:

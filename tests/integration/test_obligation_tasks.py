@@ -134,3 +134,30 @@ async def test_overdue_filter(async_client, sessionmaker, data_factory, make_aut
     assert response.status_code == 200
     items = response.json()["items"]
     assert any(item["id"] == task.id for item in items)
+
+
+@pytest.mark.anyio
+async def test_priority_filter(async_client, sessionmaker, data_factory, make_auth_headers):
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        critical_task = Task(
+            tenant_id=tenant.id,
+            title="Critical task",
+            status=TaskStatus.OPEN,
+            priority=TaskPriority.CRITICAL,
+        )
+        low_task = Task(
+            tenant_id=tenant.id,
+            title="Low task",
+            status=TaskStatus.OPEN,
+            priority=TaskPriority.LOW,
+        )
+        session.add_all([critical_task, low_task])
+        await session.commit()
+
+    response = await async_client.get("/api/v1/tasks?priority=critical", headers=headers)
+    assert response.status_code == 200
+    items = response.json()["items"]
+    assert any(item["id"] == critical_task.id for item in items)
+    assert all(item["id"] != low_task.id for item in items)

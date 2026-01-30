@@ -40,6 +40,7 @@ from app.api.routes import (
     auth,
     companies,
     contracts,
+    dashboard,
     departments,
     documents,
     files,
@@ -135,6 +136,7 @@ tenant_router.include_router(prescriptions.router, tags=["prescriptions"])
 tenant_router.include_router(obligations.router, tags=["obligations"])
 tenant_router.include_router(departments.router, tags=["departments"])
 tenant_router.include_router(contracts.router, tags=["contracts"])
+tenant_router.include_router(dashboard.router, tags=["dashboard"])
 tenant_router.include_router(orders.router, tags=["orders"])
 tenant_router.include_router(invoices.router, tags=["invoices"])
 tenant_router.include_router(npa.router, tags=["npa"])

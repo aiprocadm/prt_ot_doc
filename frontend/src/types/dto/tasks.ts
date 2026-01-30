@@ -24,4 +24,5 @@ export interface TaskFiltersDto {
   overdue?: boolean;
   assignee?: string;
   type?: string;
+  priority?: TaskPriority;
 }
