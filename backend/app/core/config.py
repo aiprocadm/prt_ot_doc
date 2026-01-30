@@ -256,6 +256,7 @@ class Settings(BaseSettings):
     app_env: Literal["development", "staging", "production", "test"] = Field(
         "development", alias="APP_ENV"
     )
+    app_run_mode: Literal["docker", "dockerless"] = Field("docker", alias="APP_RUN_MODE")
     debug: bool = Field(False, alias="APP_DEBUG")
 
     api_prefix: str = Field("/api", alias="API_PREFIX")
@@ -282,7 +283,11 @@ class Settings(BaseSettings):
     default_tenant_slug: str = Field("public", alias="DEFAULT_TENANT_SLUG")
     shared_schema: str = Field("public", alias="SHARED_SCHEMA")
 
-    s3_backend: Literal["memory", "minio"] = Field("memory", alias="S3_BACKEND")
+    storage_backend: Literal["local", "s3", "memory"] = Field(
+        "memory", alias="STORAGE_BACKEND"
+    )
+    storage_root: str = Field("./.local_storage", alias="STORAGE_ROOT")
+    s3_backend: Literal["memory", "minio", "local"] = Field("memory", alias="S3_BACKEND")
     s3_endpoint: str = Field("http://minio:9000", alias="S3_ENDPOINT")
     s3_bucket: str = Field("documents", alias="S3_BUCKET")
     s3_access_key: str = Field("prt_local_access", alias="S3_ACCESS_KEY")
@@ -325,6 +330,7 @@ class Settings(BaseSettings):
     celery_task_max_retries: int = Field(5, alias="CELERY_TASK_MAX_RETRIES")
     celery_retry_backoff_seconds: int = Field(5, alias="CELERY_RETRY_BACKOFF_SECONDS")
     celery_retry_backoff_max_seconds: int = Field(300, alias="CELERY_RETRY_BACKOFF_MAX_SECONDS")
+    celery_eager: bool = Field(False, alias="CELERY_EAGER")
     outbox_poll_interval: float = Field(5.0, alias="OUTBOX_POLL_INTERVAL")
     outbox_max_attempts: int = Field(10, alias="OUTBOX_MAX_ATTEMPTS")
     outbox_retry_backoff_seconds: float = Field(5.0, alias="OUTBOX_RETRY_BACKOFF_SECONDS")
@@ -373,6 +379,7 @@ class Settings(BaseSettings):
             data.setdefault("APP_ENV", cls.model_fields["app_env"].default)
             return super().model_validate(data, **kwargs)
         return super().model_validate(obj, **kwargs)
+
     rate_limit_enabled: bool = Field(True, alias="RATE_LIMIT_ENABLED")
     rate_limit_storage_uri: str = Field("memory://", alias="RATE_LIMIT_STORAGE_URI")
     rate_limit_login_per_identity: str = Field("5/minute", alias="RATE_LIMIT_LOGIN_PER_IDENTITY")
@@ -538,6 +545,14 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
+    def _apply_storage_backend(self) -> "Settings":
+        if self.storage_backend == "local" and self.s3_backend == "memory":
+            self.s3_backend = "local"
+        elif self.storage_backend == "s3" and self.s3_backend == "memory":
+            self.s3_backend = "minio"
+        return self
+
+    @model_validator(mode="after")
     def _ensure_jwt_keys(self) -> Settings:
         private_key = self.jwt_private_key_pem.strip()
         public_key = self.jwt_public_key_pem.strip()
@@ -686,6 +701,20 @@ class Settings(BaseSettings):
         """Return Celery result backend URL, defaulting to the broker URL."""
 
         return self.redis_result_url_env or self.redis_url
+
+    @property
+    def storage_root_path(self) -> Path:
+        """Return normalized storage root path for local storage backends."""
+
+        return Path(self.storage_root).expanduser().resolve()
+
+    @property
+    def redis_enabled(self) -> bool:
+        """Return True when Redis-backed features should be used."""
+
+        if self.app_run_mode == "dockerless" or self.celery_eager:
+            return False
+        return not self.redis_url.startswith("memory://")
 
 
 @lru_cache

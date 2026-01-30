@@ -10,6 +10,11 @@
 ## Quick start
 ```bash
 cp .env.example .env
+make dev:lite
+```
+
+Docker mode (если Docker доступен):
+```bash
 make dev
 ```
 
@@ -87,32 +92,31 @@ tests/               # тесты бэкенда
 - Node.js 20 (для фронтенда)
 
 ## Run in GitHub Codespaces
-В репозитории настроен devcontainer с зависимостями, сервисами и автоконфигурацией тестов.
+В репозитории настроен devcontainer, который по умолчанию готовит dockerless-режим и не требует Docker.
 
-1. **Создайте Codespace из репозитория.** Devcontainer автоматически поднимет PostgreSQL, Redis, MinIO, ClamAV и LibreOffice.
+1. **Создайте Codespace из репозитория.**
 2. **Дождитесь выполнения postCreateCommand.** Он:
-   - копирует `.env.example` в `.env`;
+   - копирует `.env.example` в `.env` и включает dockerless-настройки;
    - устанавливает Poetry-зависимости (runtime + dev);
-   - создаёт локальный виртуальныйenv `.venv`.
-3. **Запустите API:**
+   - устанавливает frontend-зависимости.
+3. **Запустите dockerless-режим (backend + frontend):**
 
    ```bash
-   make run
+   make dev:lite
    ```
 
-4. **Запустите frontend (опционально):**
+4. **Запустите тесты из CLI (dockerless):**
 
    ```bash
-   cd frontend
-   npm install
-   npm run dev
+   make test:lite
    ```
 
-5. **Запустите тесты из CLI:**
+Если Docker доступен в Codespaces (или локально), можно использовать docker-режим:
 
-   ```bash
-   make test
-   ```
+```bash
+make dev
+make test
+```
 
 6. **Тесты в VS Code:** панель Testing автоматически обнаружит `pytest` благодаря настройкам `.vscode/settings.json`.
 
@@ -268,6 +272,8 @@ docker compose down -v
 | `make lint-frontend` | ESLint для frontend |
 | `make format-frontend` | Prettier для frontend |
 | `make test-frontend` | Vitest для frontend |
+| `make dev:lite` | Каноничный dockerless-режим (backend + frontend) |
+| `make test:lite` | Тесты в dockerless-режиме |
 | `make contract` | `pytest -m contract` (OpenAPI-валидации) |
 | `make run` | Uvicorn локального API |
 | `make build` | Сборка poetry-пакета |
@@ -302,6 +308,7 @@ GitHub Actions [`ci.yml`](.github/workflows/ci.yml) выполняет:
 | `LIBREOFFICE_BIN` не найден | Убедитесь, что LibreOffice установлен и путь указан в `.env`. Для dev используйте контейнер `libreoffice`. |
 | Celery-задачи висят | Проверьте доступность Redis и совпадение `WORKER_QUEUES` / `PDF_WORKER_QUEUE`. |
 | Ошибки подключения к MinIO | Проверьте `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` и что сервис запущен (`docker compose logs minio`). |
+| Docker недоступен в Codespaces | Ошибка `docker: command not found` / `make dev` → `docker: No such file or directory` (категория: Docker CLI/daemon отсутствуют). Используйте `make dev:lite` (dockerless) вместо `make dev`. |
 | 403 на API-запросы | Проверьте JWT issuer/audience и корректность ключей. |
 
 ## API-примеры

@@ -761,6 +761,10 @@ async def _refresh_celery_queue_depth(
     *,
     redis_client: Any | None,
 ) -> None:
+    if not settings.redis_enabled:
+        for queue in settings.celery.worker_queues or ("default",):
+            metrics.set_celery_queue_depth(queue=queue, depth=0)
+        return
     queues: Iterable[str] = settings.celery.worker_queues or ("default",)
     client = redis_client
     should_close = False

@@ -109,6 +109,20 @@ class FileStorageService:
         with self._lock:
             return self._data[normalized_key].content
 
+    def head(self, key: str) -> dict[str, object] | None:
+        """Return metadata for a stored blob, if present."""
+
+        normalized_key = self._normalize_key(key)
+        with self._lock:
+            blob = self._data.get(normalized_key)
+            if blob is None:
+                return None
+            return {
+                "key": normalized_key,
+                "size": len(blob.content),
+                "content_type": blob.content_type,
+            }
+
     def has(self, key: str) -> bool:
         """Check whether key exists."""
 

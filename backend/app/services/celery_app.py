@@ -34,6 +34,8 @@ celery_app.conf.update(
     accept_content=["json"],
     task_acks_late=True,
     worker_max_tasks_per_child=100,
+    task_always_eager=settings.celery_eager,
+    task_eager_propagates=settings.celery_eager,
     broker_transport_options={
         "visibility_timeout": max(settings.celery.task_time_limit * 2, 600)
     },

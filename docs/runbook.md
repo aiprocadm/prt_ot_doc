@@ -1,5 +1,51 @@
 # Runbook
 
+## Выбор режима запуска
+
+Проект поддерживает два режима:
+
+### Dockerless (fallback)
+Используется, когда Docker недоступен (например, в Codespaces без прав на Docker socket).
+
+```bash
+make dev:lite
+make test:lite
+```
+
+Что включено:
+- SQLite (`dev.db`) вместо PostgreSQL.
+- Локальное хранилище файлов (`./.local_storage`) вместо MinIO/S3.
+- Celery в eager-режиме (`CELERY_EAGER=true`), задачи выполняются синхронно.
+
+### Docker
+Если Docker доступен, используйте стандартный режим:
+
+```bash
+make dev
+make test
+```
+
+## Ограничения dockerless-режима
+- Нет реального Redis (очереди/metrics); задачам Celery назначен eager-режим.
+- Presigned URL для скачивания недоступны (требуется MinIO/S3).
+- Антивирусные проверки ClamAV не выполняются (используется in-memory очередь).
+- Хранилище файлов локальное, без S3-совместимого API.
+
+## Сброс локального состояния (dockerless)
+```bash
+rm -f dev.db
+rm -rf ./.local_storage
+```
+
+## Known Codespaces Docker limitation
+В Codespaces Docker CLI может отсутствовать или быть недоступен:
+```
+docker: command not found
+make dev → docker: No such file or directory
+```
+Категория: Docker daemon/CLI отсутствуют в окружении Codespaces без привилегий.
+Используйте `make dev:lite` вместо `make dev`.
+
 ## Локальный запуск
 
 ### Подготовка
@@ -13,6 +59,11 @@ pip install -r requirements-dev.txt
 ### Одной командой
 ```bash
 make dev
+```
+
+Dockerless вариант:
+```bash
+make dev:lite
 ```
 
 ### Остановка
@@ -80,6 +131,7 @@ npm run dev
 ### Backend тесты
 ```bash
 make test
+make test:lite
 pytest --collect-only
 ```
 

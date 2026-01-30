@@ -1,6 +1,9 @@
-.PHONY: install lint format test contract run build clean up down migrate dev env frontend-install lint-frontend format-frontend test-frontend
+.PHONY: install lint format test contract run build clean up down migrate dev env frontend-install lint-frontend format-frontend test-frontend dev-lite test-lite dev-nodocker test-nodocker check-docker dev\\:lite test\\:lite
 
 LINT_PATHS=backend/app tests scripts
+
+check-docker:
+	@./scripts/check_docker.sh
 
 env:
 	@test -f .env || cp .env.example .env
@@ -21,6 +24,13 @@ format:
 test:
 	poetry run pytest
 	$(MAKE) test-frontend
+
+test-lite:
+	@./scripts/test_lite.sh
+
+test-nodocker: test-lite
+
+test\:lite: test-lite
 
 frontend-install:
 	cd frontend && npm install
@@ -50,11 +60,18 @@ clean:
 	rm -rf .pytest_cache .mypy_cache .ruff_cache .coverage
 	find . -type d -name '__pycache__' -exec rm -rf {} +
 
-up: env
+up: env check-docker
 	docker compose up -d --build
 
-dev: env
+dev: env check-docker
 	docker compose up --build
+
+dev-lite:
+	@./scripts/dev_lite.sh
+
+dev-nodocker: dev-lite
+
+dev\:lite: dev-lite
 
 down:
 	docker compose down -v

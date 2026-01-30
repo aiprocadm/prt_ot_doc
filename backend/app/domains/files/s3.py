@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from functools import lru_cache
 from http import HTTPStatus
+from io import BytesIO
+from pathlib import Path
 from typing import Any, BinaryIO, Iterator, Mapping
 from urllib.parse import urlparse
 
@@ -15,6 +19,8 @@ from botocore.config import Config as BotoConfig
 from botocore.exceptions import ClientError
 
 from app.core.config import get_settings
+from app.services.file_storage import FileStorageService as MemoryStorageService
+from app.services.storage import FileStorageError, FileStorageService as LocalStorageService
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +35,8 @@ __all__ = [
     "reset_client_cache",
     "generate_presigned_get_url",
 ]
+
+_LOCAL_METADATA_SUFFIX = ".meta.json"
 
 
 _STATUS_OVERRIDES: Mapping[str, int] = {
@@ -134,9 +142,19 @@ def _resolve_endpoint(endpoint: str, *, secure: bool) -> tuple[str | None, bool]
     return endpoint, secure
 
 
+def _using_local_backend() -> bool:
+    return get_settings().s3_backend == "local"
+
+
+def _using_memory_backend() -> bool:
+    return get_settings().s3_backend == "memory"
+
+
 @lru_cache(maxsize=1)
 def _get_client() -> BaseClient:
     settings = get_settings()
+    if settings.s3_backend != "minio":
+        raise RuntimeError("S3 client is only available when S3_BACKEND is 'minio'")
     endpoint, secure = _resolve_endpoint(settings.s3_endpoint, secure=settings.s3_secure)
 
     logger.debug(
@@ -158,6 +176,33 @@ def _get_client() -> BaseClient:
     )
 
 
+@lru_cache(maxsize=1)
+def _get_local_storage() -> LocalStorageService:
+    settings = get_settings()
+    storage = LocalStorageService(settings.storage_root_path)
+    storage.ensure_ready()
+    return storage
+
+
+def _local_metadata_path(storage: LocalStorageService, key: str) -> Path:
+    path = storage.resolve_path(key)
+    return path.with_name(f"{path.name}{_LOCAL_METADATA_SUFFIX}")
+
+
+def _write_local_metadata(storage: LocalStorageService, key: str, *, mime: str) -> None:
+    metadata = {"content_type": mime}
+    path = _local_metadata_path(storage, key)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(metadata), encoding="utf-8")
+
+
+def _read_local_metadata(storage: LocalStorageService, key: str) -> dict[str, Any]:
+    path = _local_metadata_path(storage, key)
+    if not path.exists():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 def get_client() -> BaseClient:
     """Expose cached S3 client."""
 
@@ -168,13 +213,26 @@ def reset_client_cache() -> None:
     """Clear cached S3 client and reload settings on next access."""
 
     _get_client.cache_clear()
+    _get_local_storage.cache_clear()
     get_settings.cache_clear()  # type: ignore[attr-defined]
 
 
 def ensure_bucket() -> None:
     """Ensure the configured bucket exists."""
     settings = get_settings()
-    if settings.s3_backend != "minio":
+    if settings.s3_backend == "local":
+        storage = _get_local_storage()
+        storage.ensure_ready()
+        logger.info(
+            "files.local.storage.ready",
+            extra={"root": str(settings.storage_root_path)},
+        )
+        return
+    if settings.s3_backend == "memory":
+        logger.info(
+            "files.memory.storage.ready",
+            extra={"backend": settings.s3_backend},
+        )
         logger.info(
             "files.s3.bucket.skipped",
             extra={"bucket": settings.s3_bucket, "backend": settings.s3_backend},
@@ -201,8 +259,36 @@ def put_object(*, data: bytes, mime: str, key: str) -> str:
     if not isinstance(data, (bytes, bytearray)):
         raise TypeError("data must be bytes-like")
 
-    client = get_client()
     settings = get_settings()
+    if _using_memory_backend():
+        storage = MemoryStorageService.default()
+        storage.put(key, data, content_type=mime)
+        logger.info(
+            "files.memory.object.stored",
+            extra={"key": key, "content_type": mime, "size": len(data)},
+        )
+        return ""
+    if _using_local_backend():
+        storage = _get_local_storage()
+        try:
+            storage.upload(key=key, data=BytesIO(data), content_type=mime)
+            _write_local_metadata(storage, key, mime=mime)
+        except FileStorageError as exc:
+            raise S3OperationError(
+                operation="put_object",
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+                code="LocalStorageError",
+                message=str(exc),
+                bucket=settings.s3_bucket,
+                key=key,
+            ) from exc
+        logger.info(
+            "files.local.object.stored",
+            extra={"key": key, "content_type": mime, "size": len(data)},
+        )
+        return ""
+
+    client = get_client()
 
     try:
         response = client.put_object(
@@ -236,8 +322,40 @@ def put_object(*, data: bytes, mime: str, key: str) -> str:
 def head_object(*, key: str) -> dict[str, Any] | None:
     """Fetch object metadata if key exists."""
 
-    client = get_client()
     settings = get_settings()
+    if _using_memory_backend():
+        storage = MemoryStorageService.default()
+        blob = storage.head(key)
+        if blob is None:
+            return None
+        return {
+            "bucket": settings.s3_bucket,
+            "key": key,
+            "content_type": blob["content_type"],
+            "size": blob["size"],
+            "etag": "",
+            "last_modified": None,
+        }
+    if _using_local_backend():
+        storage = _get_local_storage()
+        try:
+            path = storage.resolve_path(key)
+        except FileStorageError:
+            return None
+        if not path.exists():
+            return None
+        metadata = _read_local_metadata(storage, key)
+        stat = path.stat()
+        return {
+            "bucket": settings.s3_bucket,
+            "key": key,
+            "content_type": metadata.get("content_type"),
+            "size": stat.st_size,
+            "etag": "",
+            "last_modified": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
+        }
+
+    client = get_client()
 
     try:
         response = client.head_object(Bucket=settings.s3_bucket, Key=key)
@@ -263,8 +381,54 @@ def head_object(*, key: str) -> dict[str, Any] | None:
 def stream_object(*, key: str) -> Iterator[BinaryIO]:
     """Yield a streaming body for the provided key, closing it afterwards."""
 
-    client = get_client()
     settings = get_settings()
+    if _using_memory_backend():
+        storage = MemoryStorageService.default()
+        if not storage.has(key):
+            raise S3OperationError(
+                operation="get_object",
+                status_code=HTTPStatus.NOT_FOUND,
+                code="NoSuchKey",
+                message="Object not found",
+                bucket=settings.s3_bucket,
+                key=key,
+            )
+        stream = BytesIO(storage.get(key))
+        try:
+            yield stream
+        finally:
+            stream.close()
+        return
+    if _using_local_backend():
+        storage = _get_local_storage()
+        try:
+            path = storage.resolve_path(key)
+        except FileStorageError as exc:
+            raise S3OperationError(
+                operation="get_object",
+                status_code=HTTPStatus.NOT_FOUND,
+                code="NoSuchKey",
+                message=str(exc),
+                bucket=settings.s3_bucket,
+                key=key,
+            ) from exc
+        if not path.exists():
+            raise S3OperationError(
+                operation="get_object",
+                status_code=HTTPStatus.NOT_FOUND,
+                code="NoSuchKey",
+                message="Object not found",
+                bucket=settings.s3_bucket,
+                key=key,
+            )
+        stream = path.open("rb")
+        try:
+            yield stream
+        finally:
+            stream.close()
+        return
+
+    client = get_client()
 
     try:
         response = client.get_object(Bucket=settings.s3_bucket, Key=key)
@@ -306,8 +470,17 @@ def generate_presigned_get_url(
 ) -> str | None:
     """Return a temporary download URL for the provided object key."""
 
-    client = get_client()
     settings = get_settings()
+    if settings.s3_backend != "minio":
+        raise S3OperationError(
+            operation="presign_get",
+            status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+            code="PresignUnavailable",
+            message="Presigned URLs are only supported for the minio backend",
+            bucket=settings.s3_bucket,
+            key=key,
+        )
+    client = get_client()
     bucket_name = bucket or settings.s3_bucket
     params: dict[str, Any] = {"Bucket": bucket_name, "Key": key}
     if response_headers:

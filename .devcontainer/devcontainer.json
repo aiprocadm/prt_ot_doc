@@ -7,14 +7,6 @@
   "service": "devcontainer",
   "workspaceFolder": "/workspaces/prt_ot_doc",
   "shutdownAction": "stopCompose",
-  "runServices": [
-    "db",
-    "redis",
-    "minio",
-    "minio-setup",
-    "clamav",
-    "libreoffice"
-  ],
   "containerEnv": {
     "POETRY_VIRTUALENVS_IN_PROJECT": "true",
     "POETRY_NO_INTERACTION": "1"

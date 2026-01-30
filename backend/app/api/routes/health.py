@@ -69,6 +69,8 @@ async def _check_postgres(request: Request) -> bool:
 
 
 async def _check_redis(request: Request, settings: Settings) -> bool:
+    if not settings.redis_enabled:
+        return True
     try:
         await _ping_redis(request.app, settings)
     except Exception:  # noqa: BLE001 - defensive logging
@@ -84,12 +86,15 @@ async def ready(request: Request) -> JSONResponse:
     settings = _resolve_settings(request)
     postgres_ok = await _check_postgres(request)
     redis_ok = await _check_redis(request, settings)
+    redis_skipped = not settings.redis_enabled
     ok = postgres_ok and redis_ok
     payload = {
         "status": "ok" if ok else "degraded",
         "postgres": postgres_ok,
         "redis": redis_ok,
     }
+    if redis_skipped:
+        payload["redis_skipped"] = True
     status_code = status.HTTP_200_OK if ok else status.HTTP_503_SERVICE_UNAVAILABLE
     return JSONResponse(status_code=status_code, content=payload)
 
