@@ -9,9 +9,3 @@ services:
     env_file:
       - ../.env.example
     command: sleep infinity
-    depends_on:
-      - db
-      - redis
-      - minio
-      - clamav
-      - libreoffice

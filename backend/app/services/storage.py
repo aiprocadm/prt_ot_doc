@@ -124,6 +124,30 @@ class FileStorageService:
             raise FileStorageError("Object key must include a filename")
         return normalized
 
+    def resolve_path(self, key: str) -> Path:
+        """Resolve a storage key to an absolute path under the root."""
+
+        normalized = self._normalize_key(key)
+        return self._root / normalized
+
+    def read(self, key: str) -> bytes:
+        """Read object bytes from storage."""
+
+        path = self.resolve_path(key)
+        try:
+            return path.read_bytes()
+        except OSError as exc:  # pragma: no cover - defensive branch
+            raise FileStorageError(f"Unable to read object {key}") from exc
+
+    def open(self, key: str) -> BinaryIO:
+        """Open a read-only stream for the object key."""
+
+        path = self.resolve_path(key)
+        try:
+            return path.open("rb")
+        except OSError as exc:  # pragma: no cover - defensive branch
+            raise FileStorageError(f"Unable to open object {key}") from exc
+
     def ensure_ready(self) -> None:
         """Create the storage root if it does not yet exist."""
 
