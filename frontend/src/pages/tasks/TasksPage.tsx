@@ -1,5 +1,6 @@
 import { addDays, endOfDay, isWithinInterval, startOfDay } from "date-fns";
 import { useEffect, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
@@ -23,12 +24,27 @@ const DUE_FILTER_OPTIONS = [
   { value: "overdue", label: "Просроченные" }
 ];
 
+const PRIORITY_OPTIONS = [
+  { value: "", label: "Все приоритеты" },
+  { value: "low", label: "Низкий" },
+  { value: "medium", label: "Средний" },
+  { value: "high", label: "Высокий" },
+  { value: "critical", label: "Критичный" }
+];
+
 const TasksPage = () => {
   const { list, loading, filters, setFilters, items, pagination } = useTasksStore();
+  const [searchParams] = useSearchParams();
 
   useEffect(() => {
-    list();
-  }, [list]);
+    const type = searchParams.get("type") ?? undefined;
+    const overdueParam = searchParams.get("overdue");
+    const overdue =
+      overdueParam === "true" ? true : overdueParam === "false" ? false : undefined;
+    const priority = searchParams.get("priority") ?? undefined;
+    setFilters({ type, overdue, priority });
+    list({ type, overdue, priority });
+  }, [list, searchParams, setFilters]);
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -60,6 +76,11 @@ const TasksPage = () => {
     const overdue = value === "overdue" ? true : value === "upcoming" ? false : undefined;
     setFilters({ overdue });
     list({ overdue });
+  };
+
+  const handlePriorityChange = (value: string) => {
+    setFilters({ priority: value || undefined });
+    list({ priority: value || undefined });
   };
 
   return (
@@ -117,6 +138,20 @@ const TasksPage = () => {
                 onChange={(event) => handleDueFilterChange(event.target.value)}
               >
                 {DUE_FILTER_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </FilterField>
+            <FilterField label="Приоритет" htmlFor="task-priority">
+              <select
+                id="task-priority"
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                value={filters.priority ?? ""}
+                onChange={(event) => handlePriorityChange(event.target.value)}
+              >
+                {PRIORITY_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>

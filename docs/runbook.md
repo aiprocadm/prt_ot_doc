@@ -97,6 +97,18 @@ npm run test
 npm run build
 ```
 
+### Сквозные проверки (E2E smoke)
+```bash
+curl -H "x-tenant: <tenant>" -H "Authorization: Bearer <token>" \
+  "http://localhost:8000/api/v1/dashboard/summary"
+
+curl -H "x-tenant: <tenant>" -H "Authorization: Bearer <token>" \
+  "http://localhost:8000/api/v1/tasks?overdue=true"
+
+curl -H "x-tenant: <tenant>" -H "Authorization: Bearer <token>" \
+  "http://localhost:8000/api/v1/tasks?priority=critical"
+```
+
 ### VS Code Testing (Codespaces)
 Если используется Codespaces, панель Testing должна автоматически обнаружить `pytest`
 через `.vscode/settings.json`. При проблемах убедитесь, что виртуальное окружение
@@ -108,6 +120,7 @@ npm run build
 - WS stub: `http://localhost:8000/ws/v1/events` (HTTP 501, WebSocket будет в P2).
 - Логи Docker: `docker compose logs -f`.
 - Структура логов и метрик: см. `docs/ops/observability.md`.
+- Дашборд: используйте `GET /dashboard/summary` для проверки агрегатов и ролей доступа.
 
 ## Ручное воспроизведение outbox
 1. Найдите застрявшую запись:
