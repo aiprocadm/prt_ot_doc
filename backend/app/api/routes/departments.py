@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -122,14 +122,20 @@ async def update_department(
     return DepartmentRead.model_validate(department)
 
 
-@router.delete("/departments/{department_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/departments/{department_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+    response_model=None,
+)
 async def delete_department(
     department_id: str,
     tenant: TenantDep,
     session: SessionDep,
     _: DepartmentAccess,
-) -> None:
+) -> Response:
     department = await _get_department(session, tenant, department_id)
     if department.deleted_at is None:
         department.deleted_at = datetime.now(timezone.utc)
     await session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

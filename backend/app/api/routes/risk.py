@@ -1348,9 +1348,9 @@ async def list_action_plans(
 async def list_risks(
     session: SessionDep,
     tenant: TenantDep,
+    access: RiskReadAccess,
     site_id: str | None = Query(default=None, alias="site_id"),
     risk_level: str | None = Query(default=None, alias="risk_level"),
-    access: RiskReadAccess,
 ) -> RiskListResponse:
     if site_id:
         try:

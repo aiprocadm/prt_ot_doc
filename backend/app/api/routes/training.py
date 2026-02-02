@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -199,17 +199,22 @@ async def update_course(
     return TrainingCourseRead.model_validate(course)
 
 
-@router.delete("/courses/{course_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/courses/{course_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+    response_model=None,
+)
 async def delete_course(
     course_id: str,
     tenant: TenantDep,
     session: SessionDep,
     access: ManagerAccess,
-):
+) -> Response:
     course = await _get_course(session, tenant, course_id)
     course.deleted_at = datetime.now(tz=timezone.utc)
     await session.flush()
-    return None
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/plans", response_model=TrainingPlanRead, status_code=status.HTTP_201_CREATED)

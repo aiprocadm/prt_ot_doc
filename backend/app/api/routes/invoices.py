@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -171,14 +171,20 @@ async def update_invoice(
     return InvoiceRead.model_validate(invoice)
 
 
-@router.delete("/invoices/{invoice_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/invoices/{invoice_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+    response_model=None,
+)
 async def delete_invoice(
     invoice_id: str,
     tenant: TenantDep,
     session: SessionDep,
     _: FinanceAccess,
-) -> None:
+) -> Response:
     invoice = await _get_invoice(session, tenant, invoice_id)
     if invoice.deleted_at is None:
         invoice.deleted_at = datetime.now(timezone.utc)
     await session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
