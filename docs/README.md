@@ -4,6 +4,7 @@
 - **ТЗ платформы:** [docs/spec/TZ.md](spec/TZ.md)
 - **Карта соответствия спецификации:** [docs/spec/mapping.md](spec/mapping.md)
 - **Runbook:** [docs/runbook.md](runbook.md)
+- **Stability Discovery Report:** [docs/stability_discovery_report.md](stability_discovery_report.md)
 - **MVP KPI проверки:** [docs/mvp-kpis.md](mvp-kpis.md)
 - **Архитектура:** [docs/ARCHITECTURE.md](ARCHITECTURE.md)
 - **OpenAPI контракт:** [docs/openapi.yaml](openapi.yaml)
