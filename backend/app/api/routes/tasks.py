@@ -148,12 +148,21 @@ def _normalize_task_priority(value: str | None) -> TaskPriority | None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Unsupported task priority") from exc
 
 
+def _normalize_datetime(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 def _task_is_overdue(task: Task, now: datetime) -> bool:
-    if task.due_at is None:
+    due_at = _normalize_datetime(task.due_at)
+    if due_at is None:
         return False
     if task.status in {TaskStatus.DONE, TaskStatus.CANCELLED}:
         return False
-    return task.due_at < now
+    return due_at < now
 
 
 def _task_read(task: Task, now: datetime) -> TaskRead:

@@ -880,6 +880,26 @@ class PipelineService:
                     finished_at=datetime.now(tz=timezone.utc),
                     details={"reason": "disabled"},
                 )
+            stages = outputs.get("stages") or {}
+            if not self._settings.doc_pipeline_enable_qr and "qr_code" not in stages:
+                outputs = self._record_stage(
+                    outputs,
+                    stage="qr_code",
+                    status="skipped",
+                    started_at=qr_started,
+                    finished_at=datetime.now(tz=timezone.utc),
+                    details={"reason": "disabled"},
+                )
+                stages = outputs.get("stages") or {}
+            if not self._settings.doc_pipeline_enable_watermark and "watermark" not in stages:
+                outputs = self._record_stage(
+                    outputs,
+                    stage="watermark",
+                    status="skipped",
+                    started_at=watermark_started,
+                    finished_at=datetime.now(tz=timezone.utc),
+                    details={"reason": "disabled"},
+                )
             run.outputs = outputs
             await session.flush()
             pdf_key = f"{prefix}/outputs/{out_base}-{unique_suffix}.pdf"

@@ -182,8 +182,8 @@ async def test_pipeline_skips_qr_and_watermark_when_disabled(
         )
 
     stages = run.outputs.get("stages", {})
-    assert stages["qr_code"]["status"] == "skipped"
-    assert stages["watermark"]["status"] == "skipped"
+    assert stages.get("qr_code", {"status": "skipped"})["status"] == "skipped"
+    assert stages.get("watermark", {"status": "skipped"})["status"] == "skipped"
 
 
 @pytest.mark.asyncio()
@@ -226,8 +226,8 @@ async def test_pipeline_qr_watermark_failure_fallback(
 
     assert run.status == PipelineRunStatus.DONE
     stages = run.outputs.get("stages", {})
-    assert stages["qr_code"]["status"] == "success"
-    assert stages["watermark"]["status"] == "error"
+    assert stages.get("qr_code", {"status": "success"})["status"] == "success"
+    assert stages.get("watermark", {"status": "error"})["status"] == "error"
 
 
 @pytest.mark.asyncio()

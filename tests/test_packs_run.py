@@ -32,7 +32,7 @@ async def _prepare_pack_environment(
     session,
     *,
     tenant_slug: str = "test",
-    pack_code: str = "OT_ENTER_SITE",
+    pack_code: str = "TEST_PACK",
     persons_count: int = 1,
     items_count: int = 1,
     training_valid: bool = True,
@@ -162,6 +162,7 @@ async def _prepare_pack_environment(
             payload_key=f"templates/test-{index}.docx",
         )
         session.add(version)
+        await session.flush()
 
         item = DocumentPackItem(
             tenant_id=tenant.slug,
@@ -359,8 +360,7 @@ async def test_pack_run_requirements_validation(
 
     assert response.status_code == 409
     body = response.json()
-    assert body["code"] == "http_409"
-    assert body["details"]["code"] == "requirements_not_met"
+    assert body["code"] == "requirements_not_met"
     assert body["details"]["details"] == [
         {
             "person_id": data.persons[0].id,

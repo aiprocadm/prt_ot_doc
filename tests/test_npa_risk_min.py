@@ -60,7 +60,8 @@ async def test_risk_service_calculation_bounds() -> None:
 
 
 @pytest.mark.anyio
-async def test_risk_endpoint_returns_report(async_client, sessionmaker):
+async def test_risk_endpoint_returns_report(async_client, sessionmaker, make_auth_headers):
+    headers = await make_auth_headers()
     async with sessionmaker() as session:
         tenant = (
             await session.execute(select(Tenant).where(Tenant.slug == "test"))
@@ -119,7 +120,7 @@ async def test_risk_endpoint_returns_report(async_client, sessionmaker):
 
         await session.commit()
 
-    response = await async_client.get(f"/api/v1/risks?site_id={site.id}")
+    response = await async_client.get(f"/api/v1/risks?site_id={site.id}", headers=headers)
     assert response.status_code == 200
     payload = response.json()
 
@@ -128,11 +129,11 @@ async def test_risk_endpoint_returns_report(async_client, sessionmaker):
     assert payload["report"]["highest_level"] == 12
     assert payload["report"]["distribution"] == {"10": 1, "12": 1}
 
-    response_all = await async_client.get("/api/v1/risks")
+    response_all = await async_client.get("/api/v1/risks", headers=headers)
     assert response_all.status_code == 200
     payload_all = response_all.json()
     assert len(payload_all["items"]) == 3
     assert payload_all["report"]["total"] == 3
 
-    not_found = await async_client.get("/api/v1/risks?site_id=does-not-exist")
+    not_found = await async_client.get("/api/v1/risks?site_id=does-not-exist", headers=headers)
     assert not_found.status_code == 404

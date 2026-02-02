@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import random
 from dataclasses import dataclass
@@ -23,6 +24,14 @@ from app.services.webhooks import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_datetime(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 def _pipeline_for_event(event_type: str) -> PipelineType:
@@ -295,7 +304,9 @@ class OutboxProcessor:
                     event_type=entry.event_type,
                     destination=entry.destination,
                 )
-                latency = (entry.sent_at or datetime.now(tz=timezone.utc)) - entry.created_at
+                created_at = _normalize_datetime(entry.created_at) or datetime.now(tz=timezone.utc)
+                sent_at = _normalize_datetime(entry.sent_at) or datetime.now(tz=timezone.utc)
+                latency = sent_at - created_at
                 self.metrics.observe_outbox_dispatch_latency(
                     event_type=entry.event_type,
                     destination=entry.destination,
@@ -368,15 +379,20 @@ class OutboxProcessor:
 
     async def _dispatch_entry(self, entry: Outbox) -> DispatchResult:
         try:
-            await self.dispatcher.dispatch(
-                event_type=entry.event_type,
-                tenant_id=entry.tenant_id,
-                payload=dict(entry.payload or {}),
-                destination=entry.destination,
-                headers=entry.headers or {},
-                idempotency_key=entry.idempotency_key,
-                session=self.session,
-            )
+            dispatch_kwargs = {
+                "event_type": entry.event_type,
+                "tenant_id": entry.tenant_id,
+                "payload": dict(entry.payload or {}),
+                "destination": entry.destination,
+                "headers": entry.headers or {},
+                "idempotency_key": entry.idempotency_key,
+            }
+            signature = inspect.signature(self.dispatcher.dispatch)
+            if "session" in signature.parameters or any(
+                param.kind == param.VAR_KEYWORD for param in signature.parameters.values()
+            ):
+                dispatch_kwargs["session"] = self.session
+            await self.dispatcher.dispatch(**dispatch_kwargs)
         except WebhookDispatchError as exc:
             classification = self._classify_http_error(exc.status_code)
             return DispatchResult(
