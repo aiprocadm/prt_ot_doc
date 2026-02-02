@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from enum import Enum
 from typing import Any, Mapping
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +11,22 @@ from app.core.tracing import get_trace_id
 from app.models.models import AuditLog
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_value(value: Any) -> Any:
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, Mapping):
+        return {key: _normalize_value(val) for key, val in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_normalize_value(item) for item in value]
+    return value
+
+
+def _normalize_payload(payload: Mapping[str, Any] | None) -> dict[str, Any]:
+    return {key: _normalize_value(val) for key, val in (payload or {}).items()}
 
 
 class AuditService:
@@ -36,7 +53,7 @@ class AuditService:
     ) -> AuditLog:
         """Create and persist a new audit log entry."""
 
-        payload = dict(details or {})
+        payload = _normalize_payload(details)
         entry = AuditLog(
             tenant_id=tenant_id,
             user_id=user_id,
@@ -47,7 +64,7 @@ class AuditService:
             request_id=request_id or get_trace_id(),
             session_id=session_id,
             user_agent=user_agent,
-            changed_fields=dict(changed_fields or {}),
+            changed_fields=_normalize_payload(changed_fields),
             when=when or datetime.now(tz=timezone.utc),
             details=payload,
         )

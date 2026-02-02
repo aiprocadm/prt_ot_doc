@@ -81,8 +81,8 @@ class FileStorageService:
         normalized = "/".join(segments)
         if not normalized:
             raise ValueError("Storage key must not be empty after normalization")
-        if len(normalized) > 128:
-            raise ValueError("Storage key length must be less than or equal to 128 characters")
+        if len(normalized) > 512:
+            raise ValueError("Storage key length must be less than or equal to 512 characters")
         return normalized
 
     @classmethod

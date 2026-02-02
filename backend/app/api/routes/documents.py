@@ -463,6 +463,7 @@ async def generate_document(
 async def generate_document_batch(
     file: UploadFile,
     request: Request,
+    response: Response,
     template_code: str | None = Form(default=None),
     template_id: str | None = Form(default=None),
     template_version: int | None = Form(default=None),
@@ -558,6 +559,7 @@ async def generate_document_batch(
             },
         )
         session.add(run)
+        await session.flush()
         item = DocumentBatchItem(
             tenant_id=tenant.id,
             batch_id=batch.id,

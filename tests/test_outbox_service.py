@@ -16,6 +16,7 @@ async def test_outbox_enqueue_is_idempotent(
 ) -> None:
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
+        tenant_id = str(tenant.id)
         outbox = OutboxService(session)
         payload = {
             "tenant_id": str(tenant.id),
@@ -62,9 +63,10 @@ async def test_outbox_enqueue_rolls_back_with_transaction(
 ) -> None:
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
+        tenant_id = str(tenant.id)
         outbox = OutboxService(session)
         payload = {
-            "tenant_id": str(tenant.id),
+            "tenant_id": tenant_id,
             "actor_id": "tester",
             "occurred_at": datetime.now(tz=timezone.utc),
             "document_id": "doc-rollback",
@@ -77,7 +79,7 @@ async def test_outbox_enqueue_rolls_back_with_transaction(
             "status": "generated",
         }
         await outbox.enqueue(
-            tenant_id=str(tenant.id),
+            tenant_id=tenant_id,
             event_type="DocumentCreated",
             payload=payload,
             destination="https://example.test/hooks",
@@ -88,7 +90,7 @@ async def test_outbox_enqueue_rolls_back_with_transaction(
         entry = (
             await session.execute(
                 select(Outbox).where(
-                    Outbox.tenant_id == str(tenant.id),
+                    Outbox.tenant_id == tenant_id,
                     Outbox.event_type == "DocumentCreated",
                     Outbox.idempotency_key == "doc-rollback:ver-rollback",
                 )

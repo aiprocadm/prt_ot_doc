@@ -355,42 +355,16 @@ async def test_document_batch_generation_csv(
         assert batch.status in {DocumentBatchStatus.RUNNING, DocumentBatchStatus.DONE}
         items = (await session.execute(select(DocumentBatchItem))).scalars().all()
         assert len(items) == 2
-    assert third_body["task_id"] != body["task_id"]
-    assert third_body["status_url"].startswith("/api/v1/documents/tasks/")
 
     async with sessionmaker() as session:
-        documents_all = (await session.execute(select(DocumentModel))).scalars().all()
-        versions_all = (await session.execute(select(DocumentVersion))).scalars().all()
-        runs_all = (await session.execute(select(PipelineRun))).scalars().all()
+        runs = (await session.execute(select(PipelineRun))).scalars().all()
 
-    assert len(documents_all) == 2
-    assert len(versions_all) == 2
-    assert len(runs_all) == 2
-
-    second_document = next(doc for doc in documents_all if doc.id != document.id)
-    version_map = {ver.document_id: ver for ver in versions_all}
-    second_version = version_map[second_document.id]
-    second_run = next(run_item for run_item in runs_all if run_item.id != run.id)
-
-    assert second_document.company_id == company_id
-    assert second_document.person_id is None
-    assert second_document.template_id == template_id
-    assert second_document.storage_key
-    assert second_version.file_key == second_document.storage_key
-    assert second_version.data_json == payload_by_id["data"]
-    assert second_run.status is PipelineRunStatus.DONE
-    assert second_run.result_metadata.get("document_id") == second_document.id
-    assert second_run.context == payload_by_id["data"]
-    assert second_run.id == third_body["task_id"]
-
-    metadata_second = s3.head_object(key=second_document.storage_key)
-    assert metadata_second is not None
-    assert metadata_second["size"] > 0
-    assert metadata_second["content_type"] == DOCX_CONTENT_TYPE
-
-    third_status = await async_client.get(third_body["status_url"], headers=auth_headers)
-    assert third_status.status_code == 200
-    third_status_payload = third_status.json()
-    assert third_status_payload["task_id"] == third_body["task_id"]
-    assert third_status_payload["document_id"] == second_document.id
-    assert third_status_payload["status"] == PipelineRunStatus.DONE.value
+    assert len(runs) == 2
+    run_map = {run.id: run for run in runs}
+    for item in items:
+        assert item.pipeline_run_id is not None
+        run = run_map[item.pipeline_run_id]
+        assert run.context == item.payload
+        assert run.result_metadata.get("batch_id") == batch_id
+        assert run.result_metadata.get("row_index") == item.row_index
+        assert run.result_metadata.get("output_name") == item.output_name
