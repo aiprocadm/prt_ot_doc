@@ -2,44 +2,39 @@
 
 Legend: **OK** / **Partial** / **Missing**; severity: **P0** (must-fix), **P1**, **P2**.
 
-| Requirement | Implementation (files/modules/endpoints) | Status | Severity | Fix plan |
+| Requirement | Implementation (files/modules/endpoints) | Status | Severity | Plan/Fix |
 |---|---|---:|---:|---|
-| A) Core + vertical modular architecture | `backend/app/api/*`, `backend/app/domains/*`, `frontend/src/pages/*`, `docs/architecture/*` | OK | - | - |
-| B) Multi-tenant required on business `/v1` routes | `backend/app/middleware/tenant.py`, `backend/app/core/tenant.py`, test `tests/test_tenant_header_required.py` | OK | - | - |
-| B) Frontend always injects `X-Tenant` and blocks calls without tenant context | `frontend/src/api/client.ts`, tests `frontend/src/__tests__/apiClient.test.ts`, `frontend/src/__tests__/TenantGate.test.tsx` | OK | - | - |
-| C) RBAC+ABAC and domain constraints | `backend/app/core/security.py`, tests `tests/unit/test_abac_policies.py`, `tests/test_rbac_abac.py` | Partial | P1 | Expand object-level ABAC checks across all update flows (`status`, `risk_level`, `site_id`, `document_id`). |
-| D) Append-only audit log + immutable API | `backend/app/services/audit.py`, `backend/app/api/routes/audit.py`, `tests/test_audit_log_immutability.py` | OK | - | - |
-| E) Core entities (counterparty/contracts/orders/invoices/org structure/workplace/person) | APIs in `backend/app/api/routes/*`, models in `backend/app/models/*` | Partial | P1 | Continue strengthening cross-entity linkage in ERP workflows. |
-| F) Template strict versioning (`template_code`,`version`) + delete guard 409 | Document/template routes + tests `tests/test_documents_generate.py`, `tests/test_template_delete.py` | OK | - | - |
-| F) DOCX→PDF pipeline + stamps/watermark/QR | `backend/app/services/docx.py`, `pdf.py`, `pipeline.py` | Partial | P2 | Keep MVP pipeline; add production-grade stamping/QR renderer later. |
-| G) Idempotency-Key for critical operations | `backend/app/core/idempotency.py`, `backend/app/services/idempotency.py`, document/risk tests | OK | - | - |
-| G) Outbox pattern with retries/backoff/dead-letter/metrics | `backend/app/services/outbox.py`, tests `tests/test_outbox_dispatch.py`, `tests/test_outbox_service.py` | OK | - | - |
-| G) Required webhooks + routing (global + tenant override) | `backend/app/services/webhooks.py`, `WebhookSubscription` model, tests `tests/test_webhook_routing.py`, `tests/test_webhooks_dispatch.py` | OK | - | - |
-| H) Risk module deterministic results + action plan | `backend/app/domains/risk/*`, `backend/app/api/routes/risk.py`, tests `tests/test_risk_assessment_kpi5.py`, `tests/test_risk_engine.py` | OK | - | - |
-| H) PPE / Training / Medical / Incidents / Inspections MVP contour | domain routes/services/tests under `backend/app/api/routes/` and `tests/api/` | Partial | P1 | Align state machines and ABAC parity across modules. |
-| I) Unified obligations/tasks + reminders + overdue reporting | `backend/app/services/obligations.py`, `tasks.py`, `backend/app/api/routes/obligations.py`, tests `tests/integration/test_obligation_tasks.py` | OK | - | - |
-| J) Codespaces runability + dockerless mode + test discovery | `.devcontainer/*`, scripts in `scripts/`, `.vscode/settings.json`, `pyproject.toml` pytest config | OK | - | - |
+| A) Единое Core + модульные вертикали | Backend routers/domains (`backend/app/api`, `backend/app/domains`), frontend module pages (`frontend/src/pages`) | OK | - | - |
+| B) Multi-tenant: `/v1` business routes require `X-Tenant` | `backend/app/middleware/tenant.py`, `backend/app/core/tenant.py`, `tests/test_tenant_header_required.py` | OK | - | - |
+| B) Frontend tenant-context enforcement | `frontend/src/api/client.ts`, `frontend/src/components/tenant/TenantGate.tsx`, tests in `frontend/src/__tests__` | OK | - | - |
+| C) RBAC + ABAC (company/site/document/status/risk_level) | `backend/app/core/security.py`, ABAC tests in `tests/unit/test_abac_policies.py` | Partial | P1 | Expand ABAC checks for all mutation paths and all listed attributes. |
+| D) Audit append-only + immutable | `backend/app/services/audit.py`, `backend/app/api/routes/audit.py`, `tests/test_audit_log_immutability.py` | OK | - | - |
+| E) Core entities (контрагент/договор/заказ/счет/акт/оргструктура/сотрудник) | APIs and models under `backend/app/api/routes/*`, `backend/app/models/*` | Partial | P1 | Continue normalization and tighter lifecycle coverage where only CRUD skeleton exists. |
+| F) Template strict versioning + delete guard 409 | `backend/app/api/routes/documents.py`, `tests/test_documents_generate.py`, `tests/test_template_delete.py` | OK | - | - |
+| F) DOCX→PDF + watermark/QR/stamps | `backend/app/services/docx.py`, `backend/app/services/pdf.py`, pipeline tests | Partial | P2 | Keep MVP output; advanced stamping/QR can be expanded later. |
+| G) Idempotency-Key for critical operations | `backend/app/core/idempotency.py`, `backend/app/services/idempotency.py`, documents tests | OK | - | - |
+| G) Outbox: tx write + dispatcher + retries/backoff + dead-letter + metrics | `backend/app/services/outbox.py`, `tests/test_outbox_dispatch.py`, `tests/test_outbox_service.py` | OK | - | - |
+| G) Webhooks routing: global + per-tenant overrides | `backend/app/services/webhooks.py`, webhook tests `tests/test_webhook_routing.py`, `tests/test_webhooks_dispatch.py` | OK | - | - |
+| H) Domain contours (Risks/PPE/Training/Medical/Incidents/Inspections) | domain routes in `backend/app/api/routes/`, API/integration tests under `tests/api`/`tests/integration` | Partial | P1 | Keep expanding parity for validation/state-machine coverage. |
+| I) Unified obligations/tasks + reminders/overdue | `backend/app/services/obligations.py`, `backend/app/services/tasks.py`, obligations APIs/tests | OK | - | - |
+| J) Codespaces runability + dockerless + test discovery | `.devcontainer/*`, Make/scripts, `.vscode/settings.json`, docs runbook/README | OK | - | Updated quick-start install commands to include both runtime and dev dependencies. |
 
-## Summary counts
+## Summary (current cycle)
 - **OK:** 10
 - **Partial:** 4
 - **Missing:** 0
-- **P0 gaps:** 0
-- **P1 gaps:** 3
-- **P2 gaps:** 1
-
-## P0 fixes implemented in this cycle
-- No new functional P0 gaps were detected during re-audit; mandatory KPI paths remained green.
-- `pytest` discovery stability was hardened by setting explicit `asyncio_default_fixture_loop_scope = "function"` in `pyproject.toml` to remove runtime ambiguity in Codespaces test discovery.
+- **P0:** 0 open
+- **P1:** 3 open
+- **P2:** 1 open
 
 ## Security & Tenant Isolation Risks
-- Residual **P1** risk: ABAC coverage breadth is not yet uniform on every less-used object mutation path.
-- Tenant header/token mismatch remains hard-failed (`403`) and business `/v1` routes still reject missing `X-Tenant` (`400`).
+- **P1:** ABAC attribute coverage is strong but not yet uniformly enforced across every low-frequency mutation route.
+- Tenant mismatch and missing tenant header protections are covered and tested.
 
 ## Runability Risks (Codespaces)
-- Dockerless workflow is stable (`make dev:lite`, `make test:lite`).
-- Frontend tests emit non-blocking warnings (React Router future flags / `act(...)`) but complete successfully.
+- Primary risk was incomplete dependency install if only dev requirements are installed in ad-hoc setup.
+- **Fix applied:** docs now require `pip install -r requirements.txt -r requirements-dev.txt` in quick-start/runbook.
 
 ## Test Discovery Risks
-- Backend discovery is green (`pytest --collect-only -q`) after explicit async fixture loop scope pin.
-- VS Code testing panel remains aligned with `.vscode/settings.json` runner configuration.
+- `pytest --collect-only -q` is green after installing full dependency set.
+- VS Code panel integration remains configured via `.vscode/settings.json` + `vscode_pytest.py`.
