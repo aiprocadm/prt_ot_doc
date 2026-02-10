@@ -6,6 +6,7 @@
 - **ТЗ платформы:** [docs/spec/TZ.md](docs/spec/TZ.md)
 - **Индекс документации:** [docs/README.md](docs/README.md)
 - **Архитектура:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- **Codespaces Runbook:** [docs/runbook-codespaces.md](docs/runbook-codespaces.md)
 
 ## Quick start
 ```bash

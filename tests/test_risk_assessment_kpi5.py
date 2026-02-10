@@ -208,4 +208,4 @@ async def test_risk_assessment_versioning_and_tenant_isolation(
         f"/api/v1/risk/assessments/{first_resp.json()['assessment_id']}",
         headers=other_tenant_headers,
     )
-    assert not_found.status_code == 404
+    assert not_found.status_code == 403

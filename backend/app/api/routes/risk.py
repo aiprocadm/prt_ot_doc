@@ -1128,17 +1128,38 @@ async def assess(
             "actor_id": created_by,
             "occurred_at": assessment.created_at,
             "risk_assessment_id": assessment.id,
-            "risk_card_id": risk_card.id,
-            "action_plan_id": action_plan.id,
+            "hazard_code": first_hazard.code,
             "company_id": payload.company_id,
             "place_id": payload.place_id,
-            "workplace_id": payload.workplace_id,
             "position_id": payload.position_id,
-            "employee_id": payload.employee_id,
             "document_pack_id": payload.document_pack_id,
-            "methodology_id": str(methodology.id),
-            "methodology_version": methodology.version,
-            "items": item_payloads,
+            "before": {
+                "severity": severity_before,
+                "likelihood": likelihood_before,
+                "score": score_before,
+                "band": band_before,
+            },
+            "after": {
+                "severity": severity_after,
+                "likelihood": likelihood_after,
+                "score": score_after,
+                "band": band_after,
+            },
+            "controls": control_steps,
+            "action_plan": {
+                "id": action_plan.id,
+                "risk_card_ids": [risk_card.id],
+                "items": [
+                    {
+                        "id": plan_item.id,
+                        "hazard_id": plan_item.hazard_id,
+                        "measure_text": plan_item.measure_text,
+                        "due_date": plan_item.due_date,
+                        "status": plan_item.status,
+                    }
+                    for plan_item in plan_items
+                ],
+            },
         },
     )
 
