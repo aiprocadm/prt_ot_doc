@@ -11,6 +11,8 @@
 ## Quick start
 ```bash
 cp .env.example .env
+pip install -r requirements-dev.txt
+cd frontend && npm ci && cd ..
 make dev:lite
 ```
 
@@ -29,8 +31,9 @@ PYTHONPATH=backend uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 ## Test commands
 ```bash
-make test
-make lint
+pytest --collect-only -q
+make test:lite
+cd frontend && npm run test -- --run src/__tests__/apiClient.test.ts src/__tests__/TenantGate.test.tsx src/__tests__/DocumentsPage.test.tsx src/__tests__/TasksPage.test.tsx
 ```
 
 ## Оглавление

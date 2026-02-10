@@ -3,6 +3,8 @@
 ## Quick start
 ```bash
 cp .env.example .env
+pip install -r requirements-dev.txt
+cd frontend && npm ci && cd ..
 make dev:lite
 ```
 
@@ -16,7 +18,7 @@ curl -s http://127.0.0.1:8000/ready
 ```bash
 pytest --collect-only -q
 make test:lite
-cd frontend && npm run test -- --run
+cd frontend && npm run test -- --run src/__tests__/apiClient.test.ts src/__tests__/TenantGate.test.tsx src/__tests__/DocumentsPage.test.tsx src/__tests__/TasksPage.test.tsx
 ```
 
 ## VS Code Testing panel
