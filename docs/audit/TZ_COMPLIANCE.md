@@ -14,4 +14,4 @@
 | KPI-4 outbox→webhook (dev mock) | Partial | P1 | Поведение покрыто функционально, явный SLA ≤60s стоит усилить отдельным time-bound тестом. |
 | KPI-5 deterministic risk output | OK | P0 | `tests/test_risk_assessment_kpi5.py`. |
 | Frontend newbie robustness | OK | P1 | Есть tenant gate, обработка `TENANT_REQUIRED`, smoke-тесты app/login/API client. |
-| Repo hygiene | Partial | P2 | `.env.pilot.example` перенесён в `docs/examples`; `proxy/` и migration compose отмечены как optional в документации. |
+| Repo hygiene | OK | P2 | Пилотный env-шаблон оформлен как `docs/examples/.env.pilot.example`; `proxy/` и migration compose отмечены как optional в документации. |

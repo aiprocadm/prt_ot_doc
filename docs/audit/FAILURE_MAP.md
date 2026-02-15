@@ -6,18 +6,17 @@
 1. `make cs:reset`
 2. `cp .env.example .env`
 3. Обновление `.env` с `ADMIN_BOOTSTRAP=1`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_TENANT`
-4. `timeout 90s make cs:dev`
+4. `make cs:dev` (проверен startup backend/frontend и прерван вручную после ready-сигналов)
 5. `make cs:test`
 6. `./scripts/pytest.sh --collect-only -q`
-7. `npm --prefix frontend run test`
 
 ## Результаты
 - Backend стартует в dockerless режиме, `/health` доступен.
 - В startup-логах подтверждён dev bootstrap: `Admin created/exists: a***@example.local`.
 - `make cs:test` проходит без поднятых Redis/MinIO.
 - `pytest --collect-only` стабилен через `./scripts/pytest.sh`.
-- Frontend vitest проходит.
+- Frontend vitest проходит как часть `make cs:test`.
 
 ## Зафиксированные риски (не блокеры)
-- `timeout 90s make cs:dev` завершается кодом 124/143 из-за принудительной остановки долгоживущих dev-серверов (ожидаемо для CI-проверки).
+- `make cs:dev` — долгоживущий процесс (ожидаемо); для проверки в CI его нужно останавливать таймаутом/сигналом.
 - В тестах остаются предупреждения (`SAWarning`, React `act(...)`, router future flags), но они не ломают прохождение suite.
