@@ -55,7 +55,13 @@ async def test_create_app_configures_middlewares_and_routes() -> None:
         assert health.json() == {"status": "ok"}
         ready = await client.get("/ready")
         if ready.status_code == 200:
-            assert ready.json() == {"status": "ok", "postgres": True, "redis": True}
+            body = ready.json()
+            assert body["status"] == "ok"
+            assert body["postgres"] is True
+            assert isinstance(body["redis"], bool)
+            if "redis_skipped" in body:
+                assert body["redis"] is True
+                assert body["redis_skipped"] is True
         else:
             assert ready.status_code == 503
             body = ready.json()

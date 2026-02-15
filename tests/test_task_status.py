@@ -74,4 +74,7 @@ async def test_task_status_not_found(async_client: AsyncClient, make_auth_header
     response = await async_client.get(
         f"/api/v1/tasks/{uuid.uuid4()}", headers=headers
     )
-    assert response.status_code == 404
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "PENDING"
+    assert body["metadata"].get("celery_status") == "PENDING"

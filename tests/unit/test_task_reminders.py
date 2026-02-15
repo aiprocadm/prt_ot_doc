@@ -60,7 +60,7 @@ async def test_task_reminder_overdue_and_schedule(sessionmaker, data_factory):
         ).scalars().all()
         assert outbox
         await session.refresh(task)
-        assert task.next_remind_at == now + timedelta(days=1)
+        assert task.next_remind_at == (now + timedelta(days=1)).replace(tzinfo=None)
 
 
 @pytest.mark.anyio
@@ -86,4 +86,4 @@ async def test_task_reminder_uses_tenant_windows(sessionmaker, data_factory):
         processed = await process_task_reminders(session, now=now)
         assert processed == 1
         await session.refresh(task)
-        assert task.next_remind_at == due_at - timedelta(days=5)
+        assert task.next_remind_at == (due_at - timedelta(days=5)).replace(tzinfo=None)
