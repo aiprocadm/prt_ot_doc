@@ -84,7 +84,7 @@ docker compose up -d db redis minio
 
 ### Миграции
 ```bash
-PYTHONPATH=backend python -m alembic -c backend/app/migrations/alembic.ini upgrade head
+PYTHONPATH=backend python -m alembic -c backend/app/migrations/alembic.ini upgrade heads
 ```
 
 ### Backend

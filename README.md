@@ -16,6 +16,8 @@ cd frontend && npm ci && cd ..
 make dev:lite
 ```
 
+> `make dev:lite` запускает dockerless-режим (SQLite + local storage + eager tasks) и пересоздаёт локальный `dev.db` для детерминированного старта в Codespaces.
+
 Docker mode (если Docker доступен):
 ```bash
 make dev
@@ -25,7 +27,7 @@ Manual alternative (services + API only):
 ```bash
 cp .env.example .env
 docker compose up -d db redis minio
-PYTHONPATH=backend python -m alembic -c backend/app/migrations/alembic.ini upgrade head
+PYTHONPATH=backend python -m alembic -c backend/app/migrations/alembic.ini upgrade heads
 PYTHONPATH=backend uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
@@ -160,7 +162,7 @@ pip install -r requirements.txt -r requirements-dev.txt
 docker compose up -d db redis minio
 
 # 5. Примените миграции и запустите тесты
-PYTHONPATH=backend python -m alembic -c backend/app/migrations/alembic.ini upgrade head
+PYTHONPATH=backend python -m alembic -c backend/app/migrations/alembic.ini upgrade heads
 pytest
 
 # 6. Запустите API

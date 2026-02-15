@@ -1,40 +1,51 @@
-# TZ Compliance Matrix (A–J)
+# TZ Compliance Matrix (Full Spec 1–13)
 
-Legend: **OK** / **Partial** / **Missing**; severity: **P0** (must-fix), **P1**, **P2**.
+Legend: **OK** / **Partial** / **Missing**. Severity: **P0** (must-fix now), **P1**, **P2**.
 
-| Requirement | Implementation (files/modules/endpoints) | Status | Severity | Plan/Fix |
-|---|---|---:|---:|---|
-| A) Единое Core + модульные вертикали | Backend routers/domains (`backend/app/api`, `backend/app/domains`), frontend module pages (`frontend/src/pages`) | OK | - | - |
-| B) Multi-tenant: `/v1` business routes require `X-Tenant` | `backend/app/middleware/tenant.py`, `backend/app/core/tenant.py`, `tests/test_tenant_header_required.py` | OK | - | - |
-| B) Frontend tenant-context enforcement | `frontend/src/api/client.ts`, `frontend/src/components/tenant/TenantGate.tsx`, tests in `frontend/src/__tests__` | OK | - | - |
-| C) RBAC + ABAC (company/site/document/status/risk_level) | `backend/app/core/security.py`, ABAC tests in `tests/unit/test_abac_policies.py` | Partial | P1 | Expand ABAC checks for all mutation paths and all listed attributes. |
-| D) Audit append-only + immutable | `backend/app/services/audit.py`, `backend/app/api/routes/audit.py`, `tests/test_audit_log_immutability.py` | OK | - | - |
-| E) Core entities (контрагент/договор/заказ/счет/акт/оргструктура/сотрудник) | APIs and models under `backend/app/api/routes/*`, `backend/app/models/*` | Partial | P1 | Continue normalization and tighter lifecycle coverage where only CRUD skeleton exists. |
-| F) Template strict versioning + delete guard 409 | `backend/app/api/routes/documents.py`, `tests/test_documents_generate.py`, `tests/test_template_delete.py` | OK | - | - |
-| F) DOCX→PDF + watermark/QR/stamps | `backend/app/services/docx.py`, `backend/app/services/pdf.py`, pipeline tests | Partial | P2 | Keep MVP output; advanced stamping/QR can be expanded later. |
-| G) Idempotency-Key for critical operations | `backend/app/core/idempotency.py`, `backend/app/services/idempotency.py`, documents tests | OK | - | - |
-| G) Outbox: tx write + dispatcher + retries/backoff + dead-letter + metrics | `backend/app/services/outbox.py`, `tests/test_outbox_dispatch.py`, `tests/test_outbox_service.py` | OK | - | - |
-| G) Webhooks routing: global + per-tenant overrides | `backend/app/services/webhooks.py`, webhook tests `tests/test_webhook_routing.py`, `tests/test_webhooks_dispatch.py` | OK | - | - |
-| H) Domain contours (Risks/PPE/Training/Medical/Incidents/Inspections) | domain routes in `backend/app/api/routes/`, API/integration tests under `tests/api`/`tests/integration` | Partial | P1 | Keep expanding parity for validation/state-machine coverage. |
-| I) Unified obligations/tasks + reminders/overdue | `backend/app/services/obligations.py`, `backend/app/services/tasks.py`, obligations APIs/tests | OK | - | - |
-| J) Codespaces runability + dockerless + test discovery | `.devcontainer/*`, Make/scripts, `.vscode/settings.json`, docs runbook/README | OK | - | Updated quick-start install commands to include both runtime and dev dependencies. |
+## Failure Map (diagnostic pass)
+- `pytest --collect-only -q` initially failed with `ModuleNotFoundError: pytest_asyncio` when only runtime deps were installed; fixed by explicit `requirements.txt + requirements-dev.txt` install flow in runbooks.
+- Dockerless bootstrap with `alembic upgrade head` failed because repo has multiple Alembic heads; fixed by upgrading via `heads`.
+- Dockerless bootstrap with SQLite migrations failed (`JSONB` types in initial migration). For Codespaces lite mode, startup now relies on metadata bootstrap path (DB file reset) rather than Alembic against SQLite.
+- Existing local `dev.db` schema drift can break startup (missing columns, e.g. `company.kpp`); fixed by deterministic DB reset in `scripts/dev_lite.sh`.
 
-## Summary (current cycle)
-- **OK:** 10
-- **Partial:** 4
-- **Missing:** 0
-- **P0:** 0 open
-- **P1:** 3 open
-- **P2:** 1 open
+## Matrix
+
+| # | Requirement | Where in code | Status | Severity | Fix plan |
+|---|---|---|---|---|---|
+| 1 | Multitenancy and strict isolation (`X-Tenant` on business routes, tenant-scoped DB) | `backend/app/middleware/tenant.py`, `backend/app/core/tenant.py`, `backend/app/api/dependencies.py`, `frontend/src/api/client.ts`, tests `tests/test_tenant_header_required.py`, `frontend/src/__tests__/apiClient.test.ts` | OK | - | Keep coverage for new routes. |
+| 2 | Roles and access (RBAC + ABAC by company/site/document/status/risk_level) | `backend/app/core/security.py`, `backend/app/services/auth.py`, `frontend/src/permissions/*`, tests `tests/test_rbac_abac.py`, `tests/unit/test_abac_policies.py` | Partial | P1 | Extend ABAC checks for more mutation paths and domain resources. |
+| 3 | Append-only audit log (no update/delete) | `backend/app/services/audit.py`, `backend/app/api/routes/audit.py`, tests `tests/test_audit_log_immutability.py`, `tests/test_audit_log_api.py` | OK | - | Keep immutable API shape and migration guards. |
+| 4 | Core entities (counterparties/contracts/orders/invoices/org/person/workplace) | `backend/app/models/*`, routers `contracts.py`, `orders.py`, `invoices.py`, `companies.py`, `persons.py`, `departments.py`, `sites.py` | Partial | P1 | Fill lifecycle/business validations where CRUD-only. |
+| 5 | Documents/templates/versioning (`template_code+version`, delete referenced -> 409, pipeline) | `backend/app/api/routes/documents.py`, `backend/app/services/documents.py`, `backend/app/services/pipeline.py`, tests `tests/test_documents_generate.py`, `tests/test_template_delete.py` | OK | - | Continue hardening conversion extras (QR/watermark) under flags. |
+| 6 | EDI/signature status model (MVP internal contour acceptable) | `backend/app/domains/sign/signer.py`, `backend/app/services/events.py`, document/outbox events in document services/tests | Partial | P2 | Expand protocol detail and external provider adapters gradually. |
+| 7 | Risks: methodologies, deterministic cards + action plans | `backend/app/services/risk.py`, `backend/app/domains/risk/calc.py`, routes `risk.py`, tests `tests/test_risk_assessment_kpi5.py` | OK | - | Keep deterministic fixtures and idempotency coverage. |
+| 8 | PPE norms/issues/returns/journal | routes `backend/app/api/routes/ppe.py`, domain `backend/app/domains/ppe/service.py`, tests `tests/api/test_ppe_api.py` | Partial | P1 | Add deeper stock/accounting validations and reminders. |
+| 9 | Training/instruction journals | routes `backend/app/api/routes/training.py`, `journals.py`, domain `backend/app/domains/training/service.py`, tests `tests/api/test_training_api.py` | Partial | P1 | Add richer protocol/certificate lifecycle checks. |
+| 10 | Incidents/inspections/prescriptions non-empty modules | routes `incidents.py`, `inspections.py`, `prescriptions.py`, tests `tests/api/test_incidents_api.py`, `tests/integration/test_prescriptions_api.py` | Partial | P2 | Expand workflows from registry skeletons. |
+| 11 | Obligations/tasks/reminders/overdue control | `backend/app/services/obligations.py`, `backend/app/services/tasks.py`, routes `obligations.py`, `tasks.py`, tests `tests/integration/test_obligation_tasks.py`, `tests/unit/test_task_reminders.py` | OK | - | Continue auto-creation expansion per domain events. |
+| 12 | Integrations: Idempotency-Key, outbox retries/backoff/dead-letter/metrics, webhooks routing global + tenant | `backend/app/core/idempotency.py`, `backend/app/services/idempotency.py`, `backend/app/services/outbox.py`, `backend/app/services/webhooks.py`, tests `tests/test_idempotency.py`, `tests/test_outbox_dispatch.py`, `tests/test_webhook_routing.py`, `tests/test_webhooks_dispatch.py` | OK | - | Keep SLA checks and retry metrics visible in runbook. |
+| 13 | DevX/quality: Codespaces open→run, dockerless fallback, test discovery, docs truth source, CI checks only | `.devcontainer/*`, `scripts/dev_lite.sh`, `scripts/test_lite.sh`, `.vscode/settings.json`, `Makefile`, `.github/workflows/ci.yml`, `docs/runbook-codespaces.md`, `README.md` | OK | - | Keep CI in `.github/workflows`, avoid auto-fix actions. |
 
 ## Security & Tenant Isolation Risks
-- **P1:** ABAC attribute coverage is strong but not yet uniformly enforced across every low-frequency mutation route.
-- Tenant mismatch and missing tenant header protections are covered and tested.
+- **P1:** ABAC policies are present but still uneven across some low-frequency mutation endpoints.
+- **P1:** Tenant mismatch protections are strong on API/middleware, but every new endpoint must keep tenant-scoped repository filters by default.
 
-## Runability Risks (Codespaces)
-- Primary risk was incomplete dependency install if only dev requirements are installed in ad-hoc setup.
-- **Fix applied:** docs now require `pip install -r requirements.txt -r requirements-dev.txt` in quick-start/runbook.
+## DevX Risks (Codespaces)
+- **Resolved P0:** multiple Alembic heads made default `upgrade head` non-deterministic.
+- **Resolved P0:** SQLite + Alembic mismatch (`JSONB`) broke dockerless setup; runbook/scripts rely on dockerless metadata bootstrap path for local lite mode.
 
 ## Test Discovery Risks
-- `pytest --collect-only -q` is green after installing full dependency set.
-- VS Code panel integration remains configured via `.vscode/settings.json` + `vscode_pytest.py`.
+- **Resolved P0:** missing dev dependencies causes immediate collection failure (`pytest_asyncio`).
+- VS Code Python testing discovery is configured (`.vscode/settings.json` + `vscode_pytest.py`) and CLI collection works.
+
+## Docs Consistency Risks
+- **Resolved P1:** CI file moved to `.github/workflows/ci.yml` so GitHub Actions discovers it.
+- **Resolved P1:** migration command references normalized from `upgrade head` to `upgrade heads` where Alembic is used.
+
+## Summary
+- **OK:** 6
+- **Partial:** 6
+- **Missing:** 0
+- **Open P0:** 0
+- **Open P1:** 5
+- **Open P2:** 2
