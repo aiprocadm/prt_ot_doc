@@ -1,6 +1,13 @@
-.PHONY: install install-pip install-poetry lint format test contract run build clean up down migrate dev env frontend-install lint-frontend format-frontend test-frontend dev-lite test-lite dev-nodocker test-nodocker check-docker
+.PHONY: install install-pip lint format test contract run clean up down migrate dev env frontend-install lint-frontend format-frontend test-frontend dev-lite test-lite dev-nodocker test-nodocker check-docker cs\:dev cs\:test cs\:reset
 
 LINT_PATHS=backend/app tests scripts
+VENV_BIN=.venv/bin
+PYTHON=$(VENV_BIN)/python
+PYTEST=$(VENV_BIN)/pytest
+RUFF=$(VENV_BIN)/ruff
+BLACK=$(VENV_BIN)/black
+UVICORN=$(VENV_BIN)/uvicorn
+ALEMBIC=$(VENV_BIN)/alembic
 
 check-docker:
 	@./scripts/check_docker.sh
@@ -12,23 +19,21 @@ install: install-pip
 
 install-pip:
 	python -m venv .venv
-	. .venv/bin/activate && python -m pip install --upgrade pip && python -m pip install -r requirements.txt -r requirements-dev.txt
-
-install-poetry:
-	poetry install --with dev --no-interaction
+	$(PYTHON) -m pip install --upgrade pip
+	$(PYTHON) -m pip install -r requirements.txt -r requirements-dev.txt
 
 lint:
-	poetry run ruff check --no-fix $(LINT_PATHS)
-	poetry run black --check $(LINT_PATHS)
+	$(RUFF) check --no-fix $(LINT_PATHS)
+	$(BLACK) --check $(LINT_PATHS)
 	$(MAKE) lint-frontend
 
 format:
-	poetry run ruff check --fix $(LINT_PATHS)
-	poetry run black $(LINT_PATHS)
+	$(RUFF) check --fix $(LINT_PATHS)
+	$(BLACK) $(LINT_PATHS)
 	$(MAKE) format-frontend
 
 test:
-	poetry run pytest
+	$(PYTEST)
 	$(MAKE) test-frontend
 
 test-lite:
@@ -51,16 +56,13 @@ test-frontend: frontend-install
 	cd frontend && npm run test
 
 contract:
-	poetry run pytest -m contract
+	$(PYTEST) -m contract
 
 run:
-	PYTHONPATH=backend poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000
+	PYTHONPATH=backend $(UVICORN) app.main:app --host 0.0.0.0 --port 8000
 
 migrate:
-	PYTHONPATH=backend poetry run alembic -c backend/app/migrations/alembic.ini upgrade heads
-
-build:
-	poetry build
+	PYTHONPATH=backend $(ALEMBIC) -c backend/app/migrations/alembic.ini upgrade heads
 
 clean:
 	rm -rf .pytest_cache .mypy_cache .ruff_cache .coverage
@@ -78,6 +80,16 @@ dev-lite:
 dev-nodocker: dev-lite
 
 dev\:lite: dev-lite
+
+cs\:dev: dev-lite
+
+cs\:test: test-lite
+
+cs\:reset:
+	rm -f dev.db
+	rm -rf .local_storage
+	rm -rf frontend/coverage
+	@echo "Codespaces local state reset complete (dev.db, .local_storage, frontend/coverage)."
 
 down:
 	docker compose down -v

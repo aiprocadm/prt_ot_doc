@@ -13,5 +13,4 @@ RUN apt-get update \
         pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-RUN python -m pip install --upgrade pip \
-    && pip install poetry
+RUN python -m pip install --upgrade pip

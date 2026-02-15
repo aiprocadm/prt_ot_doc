@@ -1,44 +1,36 @@
 # Testing guide
 
-## Backend suites
+## Быстрый путь для Codespaces
+```bash
+make cs:test
+```
+
+## Backend
 
 ### Discovery (CLI + VS Code)
 ```bash
 pytest --collect-only -q
 ```
-Pytest discovery включает оба каталога:
+
+Pytest discovery включает:
 - `tests/`
 - `integration_tests/`
 
-### Full backend
+### Полный backend suite
 ```bash
 pytest
 ```
 
-### Dockerless regression suite
+### KPI regression (KPI-1..KPI-5)
 ```bash
-make test:lite
+pytest tests/test_idempotency.py tests/test_tenant_header_required.py tests/test_template_delete.py tests/test_outbox_dispatch.py tests/test_risk_assessment_kpi5.py
 ```
 
-### KPI-focused checks
+## Frontend
 ```bash
-pytest tests/test_idempotency.py tests/test_tenant_header_required.py tests/test_template_delete.py tests/test_risk_assessment_kpi5.py
+npm --prefix frontend run test
 ```
 
-## Frontend suites
-```bash
-cd frontend
-npm ci
-npm run test
-```
-
-CI-команда фронтенда:
-```bash
-npm run ci
-```
-
-## All tests (manual)
-```bash
-pytest
-cd frontend && npm run test
-```
+## VS Code Testing panel
+- Python: включён `pytest`, аргументы discovery `tests integration_tests`.
+- Frontend: расширение Vitest Explorer обнаруживает тесты из `frontend/src/**`.
