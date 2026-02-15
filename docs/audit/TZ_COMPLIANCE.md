@@ -7,6 +7,8 @@ Legend: **OK** / **Partial** / **Missing**. Severity: **P0** (must-fix now), **P
 - Dockerless bootstrap with `alembic upgrade head` failed because repo has multiple Alembic heads; fixed by upgrading via `heads`.
 - Dockerless bootstrap with SQLite migrations failed (`JSONB` types in initial migration). For Codespaces lite mode, startup now relies on metadata bootstrap path (DB file reset) rather than Alembic against SQLite.
 - Existing local `dev.db` schema drift can break startup (missing columns, e.g. `company.kpp`); fixed by deterministic DB reset in `scripts/dev_lite.sh`.
+- Direct backend smoke call must target `/health` (not `/api/v1/health`), because service probes are mounted outside `/api/v1` in `backend/app/api/routes/health.py`.
+- Direct KPI test execution without `APP_ENV=test` and in-memory Redis variables can fail with Redis DNS errors; documented deterministic test env (`REDIS_URL=memory://`, `REDIS_RESULT_URL=cache+memory://`, `RATE_LIMIT_STORAGE_URI=memory://`).
 
 ## Matrix
 
@@ -49,3 +51,19 @@ Legend: **OK** / **Partial** / **Missing**. Severity: **P0** (must-fix now), **P
 - **Open P0:** 0
 - **Open P1:** 5
 - **Open P2:** 2
+
+## Prioritized change list (post-audit)
+
+### P0 (must keep green)
+- No open P0 gaps after current verification pass (`make test:lite`, `pytest --collect-only -q`, frontend vitest run).
+
+### P1 (next iteration)
+- **Backend:** broaden ABAC enforcement to all mutation endpoints (especially registry update/delete paths still operating as role-only checks).
+- **Backend:** deepen PPE/training workflow states (protocol lifecycle, stock reconciliation, stricter due-date automations).
+- **Frontend:** expose richer obligation overdue analytics and tenant-aware filters for registry-heavy pages.
+- **DevX:** reduce duplicate dependency bootstrap in `scripts/dev_lite.sh`/`scripts/test_lite.sh` (cache/pinning optimization for Codespaces cold starts).
+- **Tests/CI:** convert recurring React `act(...)` warnings into explicit async UI waits to lower noisy CI logs.
+
+### P2 (deferred enhancements)
+- Expand EDI/signature protocol detail beyond MVP internal contour.
+- Extend inspections/prescriptions registry skeletons to full investigation workflows and richer reporting forms.
