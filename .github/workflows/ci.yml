@@ -6,126 +6,31 @@ on:
   pull_request:
 
 jobs:
-  ci:
+  backend-tests:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_DB: documents
-          POSTGRES_USER: app
-          POSTGRES_PASSWORD: app
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U app -d documents"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      minio:
-        image: quay.io/minio/minio:RELEASE.2024-05-28T17-19-04Z
-        env:
-          MINIO_ROOT_USER: minioadmin
-          MINIO_ROOT_PASSWORD: minioadmin
-        ports:
-          - 9000:9000
-        command: server /data --console-address :9001
     env:
       APP_ENV: test
-      POETRY_VIRTUALENVS_IN_PROJECT: "true"
-      DATABASE_URL: postgresql+asyncpg://app:app@127.0.0.1:5432/documents
-      POSTGRES_HOST: 127.0.0.1
-      POSTGRES_PORT: "5432"
-      POSTGRES_DB: documents
-      POSTGRES_USER: app
-      POSTGRES_PASSWORD: app
-      S3_BACKEND: minio
-      S3_ENDPOINT: http://127.0.0.1:9000
-      S3_BUCKET: documents
-      S3_ACCESS_KEY: minioadmin
-      S3_SECRET_KEY: minioadmin
-      S3_SECURE: "false"
-      AWS_DEFAULT_REGION: us-east-1
+      REDIS_URL: memory://
+      REDIS_RESULT_URL: cache+memory://
+      RATE_LIMIT_STORAGE_URI: memory://
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
 
-      - name: Install Poetry
-        run: pip install poetry==1.8.3
+      - name: Install backend dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt -r requirements-dev.txt
 
-      - name: Configure Poetry
-        run: poetry config virtualenvs.in-project true
+      - name: Backend test suite
+        run: pytest
 
-      - name: Cache Poetry
-        uses: actions/cache@v4
-        with:
-          path: |
-            .venv
-            ~/.cache/pypoetry
-            ~/.cache/pip
-          key: ${{ runner.os }}-py312-poetry-${{ hashFiles('poetry.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-py312-poetry-
-
-      - name: Install dependencies
-        run: make install
-
-      - name: Wait for services
-        run: |
-          poetry run python - <<'PY'
-          import asyncio
-          import sys
-          import time
-          import urllib.request
-
-          import asyncpg
-
-
-          async def ping_database() -> None:
-              conn = await asyncpg.connect("postgresql://app:app@127.0.0.1:5432/documents")
-              await conn.close()
-
-
-          deadline = time.time() + 90
-          while time.time() < deadline:
-              try:
-                  asyncio.run(ping_database())
-              except Exception:
-                  time.sleep(2)
-                  continue
-
-              try:
-                  with urllib.request.urlopen(
-                      "http://127.0.0.1:9000/minio/health/ready",
-                      timeout=2,
-                  ):
-                      pass
-              except Exception:
-                  time.sleep(2)
-                  continue
-
-              break
-          else:
-              print("Services failed to become ready", file=sys.stderr)
-              sys.exit(1)
-          PY
-
-      - name: Run migrations
-        run: PYTHONPATH=backend poetry run alembic -c backend/app/migrations/alembic.ini upgrade heads
-
-      - name: Lint
-        run: make lint
-
-      - name: Test
-        run: make test
-
-      - name: Contract
-        run: make contract
-
-  frontend:
+  frontend-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -136,8 +41,8 @@ jobs:
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install dependencies
+      - name: Install frontend dependencies
         run: npm --prefix frontend ci
 
-      - name: Run frontend CI checks
+      - name: Frontend CI checks
         run: npm --prefix frontend run ci

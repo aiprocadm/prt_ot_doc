@@ -1,23 +1,16 @@
 {
-  "name": "prt-ot-doc",
-  "dockerComposeFile": [
-    "../docker-compose.yml",
-    "docker-compose.yml"
-  ],
-  "service": "devcontainer",
+  "name": "prt-ot-doc (dockerless)",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  },
   "workspaceFolder": "/workspaces/prt_ot_doc",
-  "shutdownAction": "stopCompose",
   "containerEnv": {
     "POETRY_VIRTUALENVS_IN_PROJECT": "true",
     "POETRY_NO_INTERACTION": "1"
   },
   "postCreateCommand": ".devcontainer/post-create.sh",
-  "forwardPorts": [
-    8000,
-    5173,
-    9000,
-    9001
-  ],
+  "forwardPorts": [8000, 5173],
   "customizations": {
     "vscode": {
       "extensions": [
@@ -25,19 +18,22 @@
         "ms-python.vscode-pylance",
         "ms-python.black-formatter",
         "charliermarsh.ruff",
-        "ms-azuretools.vscode-docker"
+        "vitest.explorer"
       ],
       "settings": {
         "python.defaultInterpreterPath": "/workspaces/prt_ot_doc/.venv/bin/python",
         "python.testing.pytestEnabled": true,
         "python.testing.unittestEnabled": false,
         "python.testing.pytestArgs": [
-          "tests"
+          "tests",
+          "integration_tests"
         ],
         "python.envFile": "${workspaceFolder}/.env",
         "python.analysis.extraPaths": [
           "${workspaceFolder}"
         ],
+        "vitest.enable": true,
+        "testing.automaticallyOpenPeekView": "never",
         "ruff.enable": true,
         "editor.formatOnSave": true,
         "editor.defaultFormatter": "ms-python.black-formatter"

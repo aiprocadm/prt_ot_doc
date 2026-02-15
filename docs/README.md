@@ -1,18 +1,18 @@
 # Документация
 
 ## Индекс
-- **ТЗ платформы:** [docs/spec/TZ.md](spec/TZ.md)
-- **Карта соответствия спецификации:** [docs/spec/mapping.md](spec/mapping.md)
-- **Runbook:** [docs/runbook.md](runbook.md)
-- **Stability Discovery Report:** [docs/stability_discovery_report.md](stability_discovery_report.md)
-- **MVP KPI проверки:** [docs/mvp-kpis.md](mvp-kpis.md)
-- **Архитектура:** [docs/ARCHITECTURE.md](ARCHITECTURE.md)
-- **OpenAPI контракт:** [docs/openapi.yaml](openapi.yaml)
-- **ERD (PlantUML):** [docs/erd.puml](erd.puml)
-- **Отчёт соответствия спецификации:** [docs/spec_compliance_report.md](spec_compliance_report.md)
+- **ТЗ платформы:** [spec/TZ.md](spec/TZ.md)
+- **Runbook Codespaces:** [runbook-codespaces.md](runbook-codespaces.md)
+- **Testing guide:** [testing.md](testing.md)
+- **Архитектура:** [ARCHITECTURE.md](ARCHITECTURE.md)
+- **OpenAPI контракт:** [openapi.yaml](openapi.yaml)
+- **Аудит соответствия ТЗ:** [audit/TZ_COMPLIANCE.md](audit/TZ_COMPLIANCE.md)
+- **Карта архитектуры (audit):** [audit/ARCHITECTURE_MAP.md](audit/ARCHITECTURE_MAP.md)
+- **Failure map:** [audit/FAILURE_MAP.md](audit/FAILURE_MAP.md)
+- **Repo hygiene:** [audit/REPO_HYGIENE.md](audit/REPO_HYGIENE.md)
 
 ## Ключевые инженерные документы
 - [Интеграции](INTEGRATIONS.md)
 - [Модель предметной области](DOMAIN_MODEL.md)
-- [Аудит фронтенда](../FRONTEND_AUDIT.md)
+- [Аудит фронтенда (historical)](audit/FRONTEND_AUDIT.md)
 - [Roadmap](NEXT_FEATURES.md)

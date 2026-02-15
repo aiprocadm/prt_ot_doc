@@ -1,62 +1,56 @@
 # Runbook: GitHub Codespaces (dockerless-first)
 
-## Quick start
+## 1) Open → install → run
 ```bash
 cp .env.example .env
-pip install -r requirements.txt -r requirements-dev.txt
+make install
 cd frontend && npm ci && cd ..
 make dev:lite
 ```
 
-## Health checks
+`make dev:lite` включает dockerless-профиль:
+- `APP_RUN_MODE=dockerless`
+- SQLite (`dev.db`)
+- local storage (`.local_storage/`)
+- eager tasks (`CELERY_EAGER=true`)
+
+## 2) Проверка, что backend/frontend поднялись
 ```bash
 curl -s http://127.0.0.1:8000/health
 curl -s http://127.0.0.1:8000/ready
 ```
+- Backend: `http://localhost:8000`
+- Frontend: `http://localhost:5173`
 
-## Tests
+## 3) Dev admin login (без хранения секретов)
+1. В `.env` задайте собственные значения:
+   ```env
+   ADMIN_BOOTSTRAP=1
+   ADMIN_EMAIL=admin@example.local
+   ADMIN_PASSWORD=<your-password>
+   ADMIN_TENANT=demo
+   ```
+2. Запустите `make dev:lite`.
+3. В логах API проверьте сообщение `Admin created/exists: ...`.
+4. Откройте `http://localhost:5173/auth/login`.
+5. Введите `email/password/tenant` из env.
+
+Если `ADMIN_PASSWORD` пустой, bootstrap будет пропущен с предупреждением `admin.bootstrap.skipped`.
+
+## 4) Тесты
 ```bash
 pytest --collect-only -q
 make test:lite
-cd frontend && npm run test -- --run src/__tests__/apiClient.test.ts src/__tests__/TenantGate.test.tsx src/__tests__/DocumentsPage.test.tsx src/__tests__/TasksPage.test.tsx
+cd frontend && npm run test
 ```
 
-## VS Code Testing panel
-- Python tests are auto-discovered via `.vscode/settings.json` + `vscode_pytest.py`.
-- Frontend tests run with `vitest` from `frontend` workspace.
+## 5) VS Code Testing panel
+- Python: `python.testing.pytestArgs = ["tests", "integration_tests"]`.
+- Frontend: Vitest Explorer extension + `npm run test`.
 
-## If Docker is available
+## 6) Docker mode (optional)
+Если в окружении доступен Docker daemon:
 ```bash
 make dev
 make test
 ```
-
-## Notes
-- Dockerless mode uses local storage and local process topology prepared by scripts in `scripts/`.
-- Tenant header (`X-Tenant`) is mandatory for business `/api/v1/*` routes.
-
-## Вход в админку (dev-only, без секретов в репозитории)
-1. Скопируйте env-шаблон и задайте свои значения:
-   ```bash
-   cp .env.example .env
-   # укажите собственный пароль, не коммитьте его
-   export ADMIN_BOOTSTRAP=1
-   export ADMIN_EMAIL=admin@example.local
-   export ADMIN_PASSWORD='<your-strong-password>'
-   export ADMIN_TENANT=demo
-   ```
-2. Запустите стек (`make dev:lite` или `make dev`). На старте API в `development/test` автоматически создаст admin-пользователя, если его нет.
-3. Откройте UI (обычно `http://localhost:5173/auth/login`).
-4. На форме логина введите:
-   - Email: значение `ADMIN_EMAIL`
-   - Password: значение `ADMIN_PASSWORD`
-   - Tenant: `ADMIN_TENANT` (или выбранный tenant в UI)
-5. Проверка после входа: откройте `/admin`, затем `/documents` (или Users/Organizations, если включены в меню).
-
-> Безопасность: bootstrap работает только для `APP_ENV=development|test`; в production создание через env блокируется.
-
-
-## Failure map (latest diagnostics)
-- `alembic upgrade head` in this repo can fail because migrations have multiple heads; use `upgrade heads` in docker/postgres flows.
-- Dockerless (`make dev:lite`) uses SQLite + local storage + eager tasks and resets local SQLite file for deterministic startup in fresh Codespaces.
-- If tests are not collected, reinstall both runtime and dev dependencies: `pip install -r requirements.txt -r requirements-dev.txt`.
