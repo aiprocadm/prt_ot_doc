@@ -1,57 +1,40 @@
 # ARCHITECTURE_MAP
 
-## Backend (entrypoints, routing, middleware)
-- Runtime entrypoint: `backend/app/main.py` (`app.main:app`).
-- App factory + lifespan/bootstrap: `backend/app/api/app.py`.
-- API v1 aggregation: `backend/app/api/v1/router.py`.
-- Middleware chain in app factory:
-  - `TenantMiddleware` (`backend/app/middleware/tenant.py`)
-  - idempotency middleware (`_register_idempotency_middleware` in `backend/app/api/app.py`)
-  - SlowAPI/rate limiting (`backend/app/core/rate_limit.py`)
-  - observability/metrics (`backend/app/middleware/observability.py`, `backend/app/core/metrics.py`)
+## Backend
+- Entrypoint: `backend/app/main.py` (`app.main:app`).
+- App factory + lifespan: `backend/app/api/app.py` (`create_app`, `_create_lifespan`).
+- Middleware chain: tenant (`backend/app/middleware/tenant.py`), idempotency (`app/api/app.py`), rate-limit (`backend/app/core/rate_limit.py`), observability (`backend/app/middleware/observability.py`).
+- DB/session: `backend/app/db/session.py` (`configure_engine`, `session_scope`, dispose).
+- Alembic: `backend/app/migrations/*`.
 
-## Multi-tenant enforcement / isolation
-- `X-Tenant` validation and 400 behavior: `backend/app/middleware/tenant.py`, `backend/app/core/tenant.py`.
-- Tenant-aware DB access via session scope and tenant schema mechanics: `backend/app/db/session.py`, `backend/app/db/__init__.py`.
-- Frontend transport-level tenant header injection: `frontend/src/api/client.ts`, local tenant state in `frontend/src/stores/tenant.ts`.
+## Документы / pipeline
+- DOCX/PDF сервисы: `backend/app/services/docx.py`, `backend/app/services/pdf.py`, `backend/app/services/pipeline.py`.
+- Основные API маршруты документов: `backend/app/api/routes/documents.py`, `backend/app/api/routes/templates.py`.
+- KPI тесты по идемпотентности/шаблонам: `tests/test_idempotency.py`, `tests/test_template_delete.py`.
 
-## RBAC + ABAC
-- AuthN/AuthZ dependencies and role checks: `backend/app/core/security.py`, `backend/app/api/dependencies.py`.
-- ABAC policy tests: `tests/unit/test_abac_policies.py`, `tests/test_rbac_abac.py`.
-- Role model/enum (owner/admin/specialists/etc.): `backend/app/models/models.py`.
+## Outbox / webhooks / tasks
+- Outbox dispatcher + retries/dead-letter: `backend/app/services/outbox.py`.
+- Webhooks routing/dispatch: `backend/app/services/webhooks.py`.
+- Task orchestration: `backend/app/services/tasks.py`.
+- Проверки: `tests/test_outbox_dispatch.py`, `tests/test_webhook_routing.py`.
 
-## Audit (append-only)
-- Audit model: `AuditLog` + update/delete guards in `backend/app/models/models.py`.
-- Audit service + API usage: `backend/app/services/audit.py`, `backend/app/api/routes/audit.py`.
-- Immutability tests: `tests/test_audit_log_immutability.py`, `tests/test_audit_log_api.py`.
+## Dev bootstrap
+- Bootstrap admin: `backend/app/services/dev_bootstrap.py`.
+- Вызов на старте приложения: `backend/app/api/app.py` (lifespan, `await bootstrap_admin_user(settings)`).
 
-## Documents/templates/versions + idempotency
-- Document endpoints and generation flow: `backend/app/api/routes/documents.py`, `backend/app/api/v1/router.py`.
-- Strict `(template_code, version)` and delete guard behavior validated by tests: `tests/test_template_delete.py`, `tests/test_documents_generate.py`.
-- Idempotency storage + constraints: `IdempotencyKey` model in `backend/app/models/models.py`, service in `backend/app/services/idempotency.py`.
+## Frontend
+- Vite proxy `/api` → backend: `frontend/vite.config.ts`.
+- Runtime env: `frontend/src/config/env.ts`.
+- API client + tenant header guard: `frontend/src/api/client.ts`.
+- Tenant UX gate: `frontend/src/components/tenant/TenantGate.tsx`.
 
-## Outbox + dispatcher + retries/dead-letter + metrics
-- Outbox model/status/indexes: `backend/app/models/models.py`.
-- Dispatcher/retry/backoff/dead-letter: `backend/app/services/outbox.py`.
-- Webhook dispatch orchestration + timeout/retry outcomes: `backend/app/services/webhooks.py`.
-- Coverage: `tests/test_outbox_dispatch.py`, `tests/test_webhooks_dispatch.py`, `tests/test_webhook_routing.py`.
-
-## Webhooks routing (global + per-tenant override)
-- Global URL sets in settings: `backend/app/core/config.py`.
-- Per-tenant subscriptions/override handling: `backend/app/services/webhooks.py`, `WebhookSubscription` model in `backend/app/models/models.py`.
-
-## Obligations/tasks/deadlines
-- Deadline generation and reminder processing: `backend/app/services/obligations.py`.
-- Task service/state transitions: `backend/app/services/tasks.py`, routes in `backend/app/api/routes/tasks.py`.
-- Integration coverage: `tests/integration/test_obligation_tasks.py`, `tests/unit/test_task_reminders.py`.
-
-## Frontend map
-- API client, auth headers, error handling: `frontend/src/api/client.ts`, `frontend/src/api/errorHandling.ts`.
-- Tenant gate/context behavior: `frontend/src/components/tenant/TenantGate.tsx`, `frontend/src/stores/tenant.ts`.
-- Auth/login flow: `frontend/src/pages/auth/LoginPage.tsx`, `frontend/src/stores/auth.ts`.
-- Key pages: documents, tasks, dashboard in `frontend/src/pages/**`.
+## DevX scripts
+- Dev start: `scripts/dev_lite.sh`.
+- Test run: `scripts/test_lite.sh`.
+- Env tuning: `scripts/configure_dockerless_env.sh`, `scripts/dockerless_env.sh`.
+- Pytest wrapper: `scripts/pytest.sh`.
 
 ## Tests & discovery
-- Backend pytest config (`testpaths`: `tests`, `integration_tests`): `pyproject.toml`.
-- VS Code pytest discovery args: `.vscode/settings.json`.
-- Frontend vitest: `frontend/vitest.config.ts`, `frontend/src/__tests__/**`.
+- Backend testpaths: `tests`, `integration_tests` (`pyproject.toml`, `.vscode/settings.json`).
+- Discovery defaults: `test_env_defaults.py`, `sitecustomize.py`, `vscode_pytest.py`.
+- KPI coverage: `tests/test_idempotency.py`, `tests/test_tenant_header_required.py`, `tests/test_template_delete.py`, `tests/test_outbox_dispatch.py`, `tests/test_risk_assessment_kpi5.py`.

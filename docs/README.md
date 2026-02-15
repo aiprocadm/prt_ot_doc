@@ -16,3 +16,10 @@
 - [Модель предметной области](DOMAIN_MODEL.md)
 - [Аудит фронтенда (historical)](audit/FRONTEND_AUDIT.md)
 - [Roadmap](NEXT_FEATURES.md)
+
+
+## Примеры окружений
+- Пилотный профиль окружения: [`examples/.env.pilot.example`](examples/.env.pilot.example)
+
+## Infra (optional для Codespaces)
+- `proxy/` и `infra/docker-compose.migration.yml` используются для compose/deploy сценариев и не обязательны для dockerless `make cs:dev`.

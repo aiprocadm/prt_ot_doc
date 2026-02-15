@@ -35,10 +35,11 @@ KEEP_DB=1 make cs:dev
 ## 5) Тесты
 ```bash
 make cs:test
-source .venv/bin/activate && pytest --collect-only -q
+./scripts/pytest.sh --collect-only -q
 ```
 
 ## 6) FAQ
+- **`pytest` падает с ModuleNotFoundError:** используйте `./scripts/pytest.sh ...` или `make cs:test`, а не системный `pytest`.
 - **Порт не открывается:** проверьте, что backend отвечает по `/health`, затем откройте forwarded port 5173.
 - **Не могу войти:** проверьте `ADMIN_PASSWORD` (не `__SET_ME__`) и `APP_ENV=development|test`.
 - **tenant_required (400):** для `/api/v1/*` укажите `X-Tenant`; в UI сначала выберите tenant.

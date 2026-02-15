@@ -5,17 +5,19 @@
 make cs:test
 ```
 
-## 2) Pytest discovery (без Redis/MinIO)
+## 2) Pytest без сюрпризов
 ```bash
-source .venv/bin/activate && pytest --collect-only -q
+./scripts/pytest.sh --collect-only -q
+./scripts/pytest.sh tests/test_idempotency.py -q
 ```
 
-Discovery должен быть green без поднятых внешних сервисов.
-Для этого используются in-memory/local defaults из `test_env_defaults.py` (через `sitecustomize.py` и `vscode_pytest.py`).
+`./scripts/pytest.sh` гарантирует запуск внутри `.venv` и автоматически ставит зависимости при первом запуске.
+
+> Не запускайте `pytest` напрямую из системного Python. В Codespaces это часто приводит к `ModuleNotFoundError` (например, `pytest_asyncio`).
 
 ## 3) KPI regression suite (MVP KPI-1..KPI-5)
 ```bash
-source .venv/bin/activate && pytest \
+./scripts/pytest.sh \
   tests/test_idempotency.py \
   tests/test_tenant_header_required.py \
   tests/test_template_delete.py \
@@ -36,14 +38,10 @@ npm --prefix frontend run test
   - Vitest Explorer
   - tests from `frontend/src/**`
 
-## 6) Если discovery пустой
-1. Проверьте interpreter в VS Code: `.venv/bin/python`.
-2. Выполните `make install`.
-3. Запустите `source .venv/bin/activate && pytest --collect-only -q`.
-4. Если всё ещё пусто — перезапустите Testing panel (Reload Window).
+## 6) Почему discovery стабильный без Redis/MinIO
+- `tests/conftest.py` задаёт безопасные дефолты (`memory://`, `cache+memory://`, local storage endpoint).
+- `test_env_defaults.py` — единый источник test-defaults для discovery.
+- `sitecustomize.py` применяет defaults максимально рано и добавляет workspace-совместимые shim'ы.
+- `vscode_pytest.py` использует тот же `apply_test_env_defaults()` внутри VS Code Testing.
 
-
-## 7) Почему нужны `sitecustomize.py` и `vscode_pytest.py`
-- `sitecustomize.py` применяет test-defaults максимально рано (до импортов приложения) и добавляет workspace-совместимые shim'ы для discovery в Codespaces.
-- `vscode_pytest.py` — минимальный плагин для VS Code Python Testing, который гарантирует те же test-defaults при запуске из панели Testing.
-- Оба файла используют единый источник значений `test_env_defaults.py` (memory/local, без Redis/MinIO как обязательных зависимостей).
+Итог: discovery/pytest не требуют Redis/MinIO по умолчанию.
