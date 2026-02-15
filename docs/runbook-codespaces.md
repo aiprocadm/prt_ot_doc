@@ -27,7 +27,7 @@ curl -s http://127.0.0.1:8000/ready
    ```env
    ADMIN_BOOTSTRAP=1
    ADMIN_EMAIL=admin@example.local
-   ADMIN_PASSWORD=<your-password>
+   ADMIN_PASSWORD=<set-your-own-password>
    ADMIN_TENANT=demo
    ```
 2. Выполните `make cs:dev`.
@@ -37,7 +37,7 @@ curl -s http://127.0.0.1:8000/ready
 
 Если вход не проходит:
 - проверьте что `APP_ENV=development` или `test`;
-- проверьте что `ADMIN_PASSWORD` не пустой;
+- проверьте что `ADMIN_PASSWORD` задан и не равен `__SET_ME__`;
 - удалите локальное состояние: `make cs:reset` и запустите `make cs:dev` снова.
 
 ## 4) Тесты

@@ -20,7 +20,7 @@ curl -s http://127.0.0.1:8000/ready
 1. Укажите в `.env` свои значения:
    - `ADMIN_BOOTSTRAP=1`
    - `ADMIN_EMAIL=admin@example.local`
-   - `ADMIN_PASSWORD=<your-password>`
+   - `ADMIN_PASSWORD=<set-your-own-password>`
    - `ADMIN_TENANT=demo`
 2. Запустите `make cs:dev`.
 3. В логах backend дождитесь `Admin created/exists`.
