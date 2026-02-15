@@ -8,8 +8,8 @@
 Используется, когда Docker недоступен (например, в Codespaces без прав на Docker socket).
 
 ```bash
-make dev:lite
-make test:lite
+make cs:dev
+make cs:test
 ```
 
 Что включено:
@@ -44,7 +44,7 @@ docker: command not found
 make dev → docker: No such file or directory
 ```
 Категория: Docker daemon/CLI отсутствуют в окружении Codespaces без привилегий.
-Используйте `make dev:lite` вместо `make dev`.
+Используйте `make cs:dev` вместо `make dev`.
 
 ## Локальный запуск
 
@@ -63,7 +63,7 @@ make dev
 
 Dockerless вариант:
 ```bash
-make dev:lite
+make cs:dev
 ```
 
 ### Остановка
@@ -131,7 +131,7 @@ npm run dev
 ### Backend тесты
 ```bash
 make test
-make test:lite
+make cs:test
 pytest --collect-only
 ```
 
