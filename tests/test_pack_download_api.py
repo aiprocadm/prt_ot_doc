@@ -6,7 +6,9 @@ from app.services.file_storage import FileStorageService
 
 
 @pytest.mark.anyio
-async def test_pack_download_stream(async_client: AsyncClient, make_auth_headers) -> None:
+async def test_pack_download_stream(async_client: AsyncClient, make_auth_headers, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("S3_BACKEND", "local")
+    get_settings.cache_clear()  # type: ignore[attr-defined]
     storage = FileStorageService.default()
     key = "test/packages/demo/archive.zip"
     payload = b"PK\x03\x04demo"
@@ -24,6 +26,9 @@ async def test_pack_download_stream(async_client: AsyncClient, make_auth_headers
     assert response.headers["content-disposition"].endswith('archive.zip"')
     assert response.headers["content-length"] == str(len(payload))
     assert response.content == payload
+
+    monkeypatch.delenv("S3_BACKEND", raising=False)
+    get_settings.cache_clear()  # type: ignore[attr-defined]
 
 
 @pytest.mark.anyio

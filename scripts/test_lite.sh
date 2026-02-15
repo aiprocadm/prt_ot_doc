@@ -25,7 +25,7 @@ python -m pip install -r requirements.txt -r requirements-dev.txt
 unset APP_RUN_MODE DATABASE_URL ENABLE_METRICS
 export APP_ENV=test
 export REDIS_URL=memory://
-export REDIS_RESULT_URL=memory://
+export REDIS_RESULT_URL=cache+memory://
 export RATE_LIMIT_STORAGE_URI=memory://
 
 pytest

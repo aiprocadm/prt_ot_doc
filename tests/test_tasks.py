@@ -55,6 +55,13 @@ def test_register_template_task(monkeypatch) -> None:
         checksum_hex="00" * 32,
         description="Demo template",
         metadata={"category": "demo"},
+        version_metadata={
+            "document_type": "instruction",
+            "required_fields_schema": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]},
+            "applicability_rules": {},
+            "output_types": ["docx"],
+            "profile": {},
+        },
     )
 
     async def fetch():

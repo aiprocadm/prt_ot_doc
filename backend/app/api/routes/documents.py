@@ -3,6 +3,7 @@
 import csv
 import hashlib
 import json
+import logging
 from datetime import datetime, timezone
 from io import StringIO
 from typing import Annotated, Any
@@ -56,9 +57,18 @@ from app.services.documents import (
     InvalidStatusTransitionError,
 )
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
-from app.tasks import generate_document_task, generate_document_batch_item_task
+from app.tasks import celery_app, generate_document_task, generate_document_batch_item_task
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+def _dispatch_celery_task(task, *, args: list[str], kwargs: dict[str, str], task_id: str | None = None, headers: dict[str, str] | None = None) -> None:
+    if celery_app.conf.task_always_eager:
+        task.apply(args=args, kwargs=kwargs, task_id=task_id, headers=headers)
+        return
+    task.apply_async(args=args, kwargs=kwargs, task_id=task_id, headers=headers)
+
 
 SessionDep = Depends(get_session)
 TenantDep = Depends(get_tenant_record)
@@ -433,13 +443,15 @@ async def generate_document(
     if created_run:
         try:
             trace_id = get_trace_id()
-            generate_document_task.apply_async(
+            _dispatch_celery_task(
+                generate_document_task,
                 args=[run.id],
                 kwargs={"tenant_slug": tenant.slug},
                 task_id=run.id,
                 headers={"trace_id": trace_id},
             )
         except Exception as exc:  # pragma: no cover - defensive logging
+            logger.exception("documents.generate.dispatch_failed", exc_info=exc)
             stored = await idempotency.get(key=normalized_key)
             if stored is not None:
                 await idempotency.store_failure(
@@ -577,7 +589,8 @@ async def generate_document_batch(
 
     trace_id = get_trace_id()
     for item in items:
-        generate_document_batch_item_task.apply_async(
+        _dispatch_celery_task(
+            generate_document_batch_item_task,
             args=[batch.id, item.id],
             kwargs={"tenant_slug": tenant.slug},
             headers={"trace_id": trace_id},
