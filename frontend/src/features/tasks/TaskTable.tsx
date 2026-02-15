@@ -1,9 +1,12 @@
 import { type ColumnDef } from "@tanstack/react-table";
+import { CheckCheck } from "lucide-react";
 import { useEffect, useMemo } from "react";
 
-import { DataTable } from "@/components/common/DataTable";
+import { RegistryTable } from "@/components/common/RegistryTable";
 import { StatusBadge } from "@/components/common/StatusBadge";
+import { ActionButton } from "@/components/permissions/ActionButton";
 import { usePolling } from "@/hooks/usePolling";
+import { PERMISSIONS } from "@/permissions/permissions";
 import { useTasksStore } from "@/stores/tasks";
 import type { TaskDto } from "@/types/dto/tasks";
 import { formatDate } from "@/utils/datetime";
@@ -16,7 +19,7 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 export const TaskTable = () => {
-  const { items, pagination, list, setPage, setPageSize, loading } = useTasksStore();
+  const { items, pagination, list, setPage, setPageSize, loading, patchTask } = useTasksStore();
 
   useEffect(() => {
     list();
@@ -57,16 +60,26 @@ export const TaskTable = () => {
         )
       },
       {
-        accessorKey: "updated_at",
-        header: "Обновлено",
-        cell: ({ row }) => formatDate(row.original.updated_at)
+        id: "actions",
+        header: "Действия",
+        cell: ({ row }) => (
+          <ActionButton
+            permission={PERMISSIONS.TASK_VIEW}
+            variant="ghost"
+            size="icon"
+            title="Закрыть"
+            onClick={() => patchTask(row.original.id, { status: "done" })}
+          >
+            <CheckCheck className="h-4 w-4" />
+          </ActionButton>
+        )
       }
     ],
-    []
+    [patchTask]
   );
 
   return (
-    <DataTable
+    <RegistryTable
       columns={columns}
       data={items}
       isLoading={loading}

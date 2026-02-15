@@ -4,9 +4,11 @@ import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { DocumentPreview } from "@/features/documents/DocumentPreview";
+import { DocumentCreateWizard } from "@/features/documents/DocumentCreateWizard";
 import { DocumentTable } from "@/features/documents/DocumentTable";
 import { AccessDeniedPage } from "@/pages/access/AccessDeniedPage";
 import { PERMISSIONS } from "@/permissions/permissions";
+import { PermissionGate } from "@/components/permissions/PermissionGate";
 import { useAbility } from "@/permissions/useAbility";
 import { useDocumentsStore } from "@/stores/documents";
 import type { DocumentDto } from "@/types/dto/documents";
@@ -53,6 +55,9 @@ const DocumentsPage = () => {
           { label: "Ошибки (на странице)", value: statusCounts.error ?? 0 }
         ]}
       />
+      <PermissionGate permission={PERMISSIONS.DOCUMENT_CREATE}>
+        <DocumentCreateWizard />
+      </PermissionGate>
       <Card>
         <CardContent className="py-6">
           <DocumentTable onSelect={setSelectedDocument} />

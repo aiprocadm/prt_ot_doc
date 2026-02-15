@@ -15,6 +15,14 @@
     --app-space-5: 20px;
     --app-space-6: 24px;
     --app-space-8: 32px;
+    --app-space-10: 40px;
+    --app-z-dropdown: 1100;
+    --app-z-overlay: 1200;
+    --app-z-modal: 1300;
+    --app-text-xs: 12px;
+    --app-text-sm: 14px;
+    --app-text-md: 16px;
+    --app-text-lg: 20px;
     --app-status-success: 142 71% 45%;
     --app-status-warning: 42 96% 52%;
     --app-status-danger: 0 75% 55%;

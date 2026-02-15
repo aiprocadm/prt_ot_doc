@@ -15,7 +15,10 @@ vi.mock("@/stores/tasks", () => ({
     filters: {},
     setFilters: setFiltersMock,
     items: [],
-    pagination: { page: 1, page_size: 10, total: 0 }
+    pagination: { page: 1, page_size: 10, total: 0 },
+    setPage: vi.fn(),
+    setPageSize: vi.fn(),
+    patchTask: vi.fn()
   })
 }));
 
