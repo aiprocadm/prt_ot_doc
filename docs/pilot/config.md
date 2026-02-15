@@ -1,6 +1,6 @@
 # Pilot configuration profile
 
-Этот документ описывает, как применять `.env.pilot.example` для пилотного запуска.
+Этот документ описывает, как применять `docs/examples/.env.pilot.example` для пилотного запуска.
 
 ## Цели профиля
 
@@ -10,7 +10,7 @@
 
 ## Как использовать
 
-1. Скопируйте `.env.pilot.example` в `.env` (или в секреты окружения деплоя).
+1. Скопируйте `docs/examples/.env.pilot.example` в `.env` (или в секреты окружения деплоя).
 2. Заполните реальные значения для:
    - `DATABASE_URL`, `POSTGRES_*`.
    - `S3_*`.
@@ -30,7 +30,7 @@
 
 ## Примеры webhook-настроек
 
-В `.env.pilot.example` заданы примеры:
+В `docs/examples/.env.pilot.example` заданы примеры:
 - `WEBHOOK_URLS_DOCUMENT_*` — события документов.
 - `WEBHOOK_URLS_TRAINING_*` — события обучения.
 

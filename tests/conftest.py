@@ -11,9 +11,10 @@ os.environ.setdefault("DEFAULT_LOCALE", "en-US")
 os.environ.setdefault("LIBREOFFICE_BIN", sys.executable)
 _SQLITE_TEST_DB = "sqlite+aiosqlite:///file::memory:?cache=shared&uri=true"
 os.environ.setdefault("DATABASE_URL", _SQLITE_TEST_DB)
-os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
-os.environ.setdefault("REDIS_RESULT_URL", "redis://localhost:6379/15")
-os.environ.setdefault("S3_ENDPOINT", "http://localhost:9000")
+os.environ.setdefault("REDIS_URL", "memory://")
+os.environ.setdefault("REDIS_RESULT_URL", "cache+memory://")
+os.environ.setdefault("RATE_LIMIT_STORAGE_URI", "memory://")
+os.environ.setdefault("S3_ENDPOINT", "http://localhost")
 
 import pytest
 import pytest_asyncio
