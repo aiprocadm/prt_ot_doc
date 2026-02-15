@@ -11,7 +11,7 @@
 ## Quick start
 ```bash
 cp .env.example .env
-pip install -r requirements-dev.txt
+pip install -r requirements.txt -r requirements-dev.txt
 cd frontend && npm ci && cd ..
 make dev:lite
 ```
@@ -141,7 +141,7 @@ source .venv/bin/activate  # Windows PowerShell: .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 
 # 3. Установите зависимости (runtime + dev)
-pip install -r requirements-dev.txt
+pip install -r requirements.txt -r requirements-dev.txt
 
 # 4. Поднимите инфраструктуру
 docker compose up -d db redis minio

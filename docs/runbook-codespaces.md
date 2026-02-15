@@ -3,7 +3,7 @@
 ## Quick start
 ```bash
 cp .env.example .env
-pip install -r requirements-dev.txt
+pip install -r requirements.txt -r requirements-dev.txt
 cd frontend && npm ci && cd ..
 make dev:lite
 ```
