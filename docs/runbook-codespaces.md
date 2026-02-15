@@ -54,3 +54,9 @@ make test
 5. Проверка после входа: откройте `/admin`, затем `/documents` (или Users/Organizations, если включены в меню).
 
 > Безопасность: bootstrap работает только для `APP_ENV=development|test`; в production создание через env блокируется.
+
+
+## Failure map (latest diagnostics)
+- `alembic upgrade head` in this repo can fail because migrations have multiple heads; use `upgrade heads` in docker/postgres flows.
+- Dockerless (`make dev:lite`) uses SQLite + local storage + eager tasks and resets local SQLite file for deterministic startup in fresh Codespaces.
+- If tests are not collected, reinstall both runtime and dev dependencies: `pip install -r requirements.txt -r requirements-dev.txt`.

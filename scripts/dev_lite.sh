@@ -18,7 +18,10 @@ python -m pip install -r requirements.txt -r requirements-dev.txt
 
 source ./scripts/dockerless_env.sh
 
-PYTHONPATH=backend python -m alembic -c backend/app/migrations/alembic.ini upgrade head
+if [[ "${DATABASE_URL}" == sqlite+aiosqlite:///./* ]]; then
+  SQLITE_PATH="${DATABASE_URL#sqlite+aiosqlite:///./}"
+  rm -f "$SQLITE_PATH"
+fi
 
 echo ""
 echo "Dockerless mode enabled"

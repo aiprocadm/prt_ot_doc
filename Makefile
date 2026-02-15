@@ -1,4 +1,4 @@
-.PHONY: install lint format test contract run build clean up down migrate dev env frontend-install lint-frontend format-frontend test-frontend dev-lite test-lite dev-nodocker test-nodocker check-docker dev\\:lite test\\:lite
+.PHONY: install lint format test contract run build clean up down migrate dev env frontend-install lint-frontend format-frontend test-frontend dev-lite test-lite dev-nodocker test-nodocker check-docker
 
 LINT_PATHS=backend/app tests scripts
 
@@ -51,7 +51,7 @@ run:
 	PYTHONPATH=backend poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 migrate:
-	PYTHONPATH=backend poetry run alembic -c backend/app/migrations/alembic.ini upgrade head
+	PYTHONPATH=backend poetry run alembic -c backend/app/migrations/alembic.ini upgrade heads
 
 build:
 	poetry build

@@ -9,7 +9,7 @@
 1. Создайте пустую базу данных.
 2. Запустите миграции:
    ```bash
-   PYTHONPATH=backend python -m alembic -c backend/app/migrations/alembic.ini upgrade head
+   PYTHONPATH=backend python -m alembic -c backend/app/migrations/alembic.ini upgrade heads
    ```
 3. Убедитесь, что сервис стартует и `/health` отвечает `200`.
 
