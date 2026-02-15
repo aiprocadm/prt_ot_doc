@@ -2,36 +2,48 @@
 
 Платформа управления документами и процессами ОТ/ПБ/ПромБез: FastAPI backend, React/Vite frontend, dockerless-режим для Codespaces и docker-compose для полного локального контура.
 
-## Quick start (Codespaces, open → run)
+## Quick start (Codespaces: open → run)
+1) Откройте Codespace.
+2) Выполните 3 команды:
 ```bash
 cp .env.example .env
 make install
-npm --prefix frontend ci
 make cs:dev
 ```
-
-Проверка:
+3) В отдельном терминале установите frontend зависимости (один раз):
 ```bash
-curl -s http://127.0.0.1:8000/health
-curl -s http://127.0.0.1:8000/ready
+npm --prefix frontend ci
+```
+4) Откройте URL:
+- Frontend: `http://localhost:5173`
+- Backend health: `http://localhost:8000/health`
+
+## Dev login (без секретов в git)
+В `.env` задайте локальные значения:
+```env
+ADMIN_BOOTSTRAP=1
+ADMIN_EMAIL=admin@example.local
+ADMIN_PASSWORD=<set-your-own-password>
+ADMIN_TENANT=demo
 ```
 
-## Dev admin login
-1. Укажите в `.env` свои значения:
-   - `ADMIN_BOOTSTRAP=1`
-   - `ADMIN_EMAIL=admin@example.local`
-   - `ADMIN_PASSWORD=<set-your-own-password>`
-   - `ADMIN_TENANT=demo`
-2. Запустите `make cs:dev`.
-3. В логах backend дождитесь `Admin created/exists`.
-4. Откройте `http://localhost:5173/auth/login` и войдите по `tenant/email/password`.
+Далее:
+1. Запустите `make cs:dev`.
+2. В логах backend дождитесь `Admin created/exists`.
+3. Откройте `http://localhost:5173/auth/login` и войдите как `tenant/email/password`.
 
-> Секреты не хранятся в репозитории; bootstrap работает только при `APP_ENV=development|test`.
+> Bootstrap админа работает только при `APP_ENV=development|test`.
 
-## Testing
-- CLI: `make cs:test`
-- Pytest discovery: `pytest --collect-only -q`
-- VS Code Testing panel: Python + Vitest Explorer (см. `docs/testing.md`).
+## Tests
+```bash
+make cs:test
+source .venv/bin/activate && pytest --collect-only -q
+```
+
+## Dependency policy (single source of truth)
+- Основной workflow: `pip` + `requirements.txt` + `requirements-dev.txt`.
+- `pyproject.toml` используется только для конфигов инструментов (`pytest`, `ruff`, `black`, `mypy`).
+- Poetry workflow удалён из onboarding-пути для новичка.
 
 ## Source of truth
 - ТЗ платформы: [docs/spec/TZ.md](docs/spec/TZ.md)

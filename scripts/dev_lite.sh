@@ -33,7 +33,11 @@ source ./scripts/dockerless_env.sh
 
 if [[ "${DATABASE_URL}" == sqlite+aiosqlite:///./* ]]; then
   SQLITE_PATH="${DATABASE_URL#sqlite+aiosqlite:///./}"
-  rm -f "$SQLITE_PATH"
+  if [[ "${KEEP_DB:-0}" == "1" ]]; then
+    echo "KEEP_DB=1 -> preserving existing sqlite database at $SQLITE_PATH"
+  else
+    rm -f "$SQLITE_PATH"
+  fi
 fi
 
 echo ""
@@ -49,6 +53,19 @@ echo ""
 
 PYTHONPATH=backend uvicorn app.main:app --host 0.0.0.0 --port 8000 &
 BACK_PID=$!
+
+BACKEND_READY=0
+for _ in $(seq 1 60); do
+  if curl -fsS "http://127.0.0.1:8000/health" >/dev/null 2>&1; then
+    echo "Backend ready: http://127.0.0.1:8000/health"
+    BACKEND_READY=1
+    break
+  fi
+  sleep 1
+done
+if [[ "$BACKEND_READY" != "1" ]]; then
+  echo "Backend health check timed out (continuing; inspect backend logs)."
+fi
 
 (cd frontend && npm run dev -- --host 0.0.0.0 --port 5173) &
 FRONT_PID=$!

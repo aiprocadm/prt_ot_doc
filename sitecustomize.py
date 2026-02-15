@@ -7,21 +7,12 @@ import sys
 from pathlib import Path
 from types import ModuleType
 
+from test_env_defaults import apply_test_env_defaults
+
 # Set test environment variables BEFORE any imports
 # This ensures app code reads correct configuration during test discovery
-if "pytest" in sys.modules or "pytest" in sys.argv[0] if sys.argv else False:
-    os.environ.setdefault("APP_NAME", "TestService")
-    os.environ.setdefault("APP_TRUSTED_HOSTS", "localhost,127.0.0.1,testserver")
-    os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
-    os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
-    os.environ.setdefault("REDIS_RESULT_URL", "redis://localhost:6379/15")
-    os.environ.setdefault("S3_ENDPOINT", "http://localhost:9000")
-    os.environ.setdefault("S3_BUCKET", "test-bucket")
-    os.environ.setdefault("S3_ACCESS_KEY", "test")
-    os.environ.setdefault("S3_SECRET_KEY", "test")
-    os.environ.setdefault("DEFAULT_LOCALE", "en-US")
-    os.environ.setdefault("APP_ENV", "test")
-    os.environ.setdefault("LIBREOFFICE_BIN", sys.executable)
+if "pytest" in sys.modules or (bool(sys.argv) and "pytest" in sys.argv[0]):
+    apply_test_env_defaults()
 
 
 def _ensure_workspace_symlinks() -> None:

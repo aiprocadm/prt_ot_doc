@@ -1,29 +1,38 @@
 # FAILURE_MAP
 
-## Audit run timestamp
-- 2026-02-15
+## Fail-first run (as newcomer)
+Date: 2026-02-15
 
-## Executed "newcomer" flow
-1. `cp .env.example .env`
-2. `make install`
-3. `npm --prefix frontend ci`
-4. `pytest --collect-only -q`
-5. `make cs:test`
+Executed commands:
+1. `make cs:reset`
+2. `cp .env.example .env`
+3. `make install`
+4. `npm --prefix frontend ci`
+5. `pytest --collect-only -q`
+6. `source .venv/bin/activate && pytest --collect-only -q`
+7. `make cs:test`
+8. `timeout 40s make cs:dev`
 
-## Failures / warnings found
+## Observed failures and risks
 
-### P0 (fixed in this pass)
-1. `pytest --collect-only -q` падал в чистом окружении из-за попытки подключения к `redis://redis:6379` при инициализации rate limit storage.
-   - **Fix:** default `RATE_LIMIT_STORAGE_URI` in `.env.example` changed to `memory://` (dockerless-safe).
+### P0-1: `pytest` command from global shell may fail in clean Codespaces
+- Symptom: `pytest --collect-only -q` failed with `ModuleNotFoundError: No module named 'pytest_asyncio'`.
+- Root cause: dependencies are installed inside `.venv`, but plain shell `pytest` resolved to host/global interpreter.
+- Mitigation: docs now require `source .venv/bin/activate && pytest --collect-only -q` for CLI discovery.
 
-2. Makefile был фактически poetry-centric (`poetry run ...`), при том что CI/devcontainer используют pip requirements.
-   - **Fix:** Makefile переведён на `.venv/bin/*` pip workflow + добавлены команды `cs:dev`, `cs:test`, `cs:reset`.
+### P0-2: Test defaults referenced external infra endpoints
+- Risk: `sitecustomize.py` + `vscode_pytest.py` had Redis/MinIO-like defaults (`redis://...`, `http://localhost:9000`) which can produce flaky discovery behavior.
+- Fix: centralized in-memory/local defaults in `test_env_defaults.py` and reused in both bootstrap files.
 
-### P1 (non-blocking)
-- `npm ci` выводит deprecation/security warnings для транзитивных frontend зависимостей.
-- Устранено: lite-скрипты теперь используют stamp-файлы (`.venv/.requirements.stamp`, `frontend/.npm-ci.stamp`) и не переустанавливают зависимости без изменений lock/requirements.
+### P1-1: `dev_lite.sh` always deleted sqlite db
+- Symptom: every `make cs:dev` reset local state (`dev.db`) unconditionally.
+- Fix: `KEEP_DB=1 make cs:dev` now preserves DB.
 
-## Validation outcome
-- Health endpoints `/health` и `/ready` доступны в dockerless режиме.
-- Pytest discovery проходит без внешнего Redis.
-- Frontend tests выполняются через `npm --prefix frontend run test`.
+### P1-2: Poetry/pip dual sources of dependency truth
+- Symptom: repo contained both `poetry.lock` and `requirements*.txt`, while Makefile/CI/dev scripts are pip-based.
+- Fix: kept single onboarding path (pip + requirements), removed Poetry lock and Poetry sections from onboarding metadata.
+
+## Validation after fixes
+- `source .venv/bin/activate && pytest --collect-only -q` → passes.
+- `make cs:test` → backend + frontend tests pass.
+- `make cs:dev` starts backend/frontend, prints backend readiness and `Admin created/exists` with dev bootstrap.
