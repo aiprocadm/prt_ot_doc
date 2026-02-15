@@ -12,6 +12,7 @@ interface TasksState extends PaginatedState<TaskDto, TaskFiltersDto> {
   setFilters: (filters: Partial<TaskFiltersDto>) => void;
   setPage: (page: number) => void;
   setPageSize: (size: number) => void;
+  patchTask: (id: string, payload: Partial<Pick<TaskDto, "status" | "assignee_id" | "due_at">>) => Promise<TaskDto | null>;
   updateTask: (task: TaskDto) => void;
   reset: () => void;
 }
@@ -80,6 +81,18 @@ export const useTasksStore = create<TasksState>()(
           const index = state.items.findIndex((task) => task.id === id);
           if (index >= 0) state.items[index] = data;
         });
+        return data;
+      } catch (error) {
+        set((state) => {
+          state.error = error as ApiError;
+        });
+        return null;
+      }
+    },
+    patchTask: async (id, payload) => {
+      try {
+        const { data } = await apiClient.patch<TaskDto>(`/tasks/${id}`, payload);
+        get().updateTask(data);
         return data;
       } catch (error) {
         set((state) => {

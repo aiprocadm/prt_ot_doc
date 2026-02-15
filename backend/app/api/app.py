@@ -26,6 +26,7 @@ from app.core.rate_limit import (
 )
 from app.domains.files import s3
 from app.db.session import dispose_engine
+from app.services.dev_bootstrap import bootstrap_admin_user
 from app.middleware.observability import ObservabilityMiddleware
 from app.middleware.tenant import TenantMiddleware
 
@@ -75,6 +76,7 @@ def _create_lifespan(settings: Settings) -> Callable[[FastAPI], AsyncIterator[No
         )
         try:
             s3.ensure_bucket()
+            await bootstrap_admin_user(settings)
         except Exception:  # pragma: no cover - infrastructure guard
             logger.exception("app.startup.s3-bucket-init-failed")
             raise

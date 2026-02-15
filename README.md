@@ -29,6 +29,19 @@ PYTHONPATH=backend python -m alembic -c backend/app/migrations/alembic.ini upgra
 PYTHONPATH=backend uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
+
+## Admin login for dev
+1. `cp .env.example .env`
+2. Установите **свои** значения в `.env` (не коммитьте секреты):
+   - `ADMIN_BOOTSTRAP=1`
+   - `ADMIN_EMAIL=admin@example.local`
+   - `ADMIN_PASSWORD=<your-password>`
+   - `ADMIN_TENANT=demo`
+3. Запустите `make dev:lite` (или `make dev`).
+4. Войдите в `/auth/login` с `ADMIN_EMAIL`/`ADMIN_PASSWORD` и tenant `ADMIN_TENANT`.
+
+Bootstrap создаёт пользователя только в `development/test` и пишет в лог: `Admin created/exists: <email>`.
+
 ## Test commands
 ```bash
 pytest --collect-only -q

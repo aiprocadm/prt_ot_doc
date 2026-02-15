@@ -8,5 +8,7 @@
   "python.envFile": "${workspaceFolder}/.env",
   "python.analysis.extraPaths": [
     "${workspaceFolder}"
-  ]
+  ],
+  "vitest.enable": true,
+  "testing.automaticallyOpenPeekView": "never"
 }

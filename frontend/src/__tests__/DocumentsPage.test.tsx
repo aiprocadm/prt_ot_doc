@@ -44,8 +44,14 @@ vi.mock("@/stores/documents", () => ({
     setFilters: setFiltersMock,
     download: downloadMock,
     refreshStatus: refreshStatusMock,
+    generateDocument: vi.fn(),
+    getGenerationStatus: vi.fn(),
     loading: false
   })
+}));
+
+vi.mock("@/stores/companies", () => ({
+  useCompaniesStore: () => ({ items: [], list: vi.fn().mockResolvedValue(undefined) })
 }));
 
 import DocumentsPage from "@/pages/documents/DocumentsPage";
@@ -60,7 +66,7 @@ describe("DocumentsPage", () => {
         email: "user@example.com",
         full_name: "User",
         roles: ["ot_specialist"],
-        permissions: [PERMISSIONS.DOCUMENT_VIEW, PERMISSIONS.DOCUMENT_EXPORT, PERMISSIONS.DOCUMENT_SIGN]
+        permissions: [PERMISSIONS.DOCUMENT_VIEW, PERMISSIONS.DOCUMENT_EXPORT, PERMISSIONS.DOCUMENT_SIGN, PERMISSIONS.DOCUMENT_CREATE]
       },
       loading: false,
       error: null,

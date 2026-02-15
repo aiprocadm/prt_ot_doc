@@ -2,7 +2,7 @@ import { type ColumnDef } from "@tanstack/react-table";
 import { Download } from "lucide-react";
 import { useMemo } from "react";
 
-import { DataTable } from "@/components/common/DataTable";
+import { RegistryTable } from "@/components/common/RegistryTable";
 import { FilterField } from "@/components/common/FilterField";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { ActionButton } from "@/components/permissions/ActionButton";
@@ -93,7 +93,7 @@ export const DocumentTable = ({ onSelect }: DocumentTableProps) => {
   };
 
   return (
-    <DataTable
+    <RegistryTable
       columns={columns}
       data={items}
       isLoading={loading}
