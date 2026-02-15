@@ -1,53 +1,36 @@
-# Architecture Map (backend + frontend + infra)
+# ARCHITECTURE_MAP
 
-## Runtime contours
+## Entry points
+- Backend app factory and lifespan: `backend/app/api/app.py`.
+- API bootstrap entry: `backend/app/main.py`.
+- API v1 router composition: `backend/app/api/v1/router.py`.
+- Frontend app/router: `frontend/src/main.tsx`, `frontend/src/router/AppRouter.tsx`.
 
-### Backend (FastAPI)
-- Entry: `backend/app/main.py` → `backend/app/api/app.py#create_app`.
-- API composition: `backend/app/api/v1/router.py` mounts business routers under `/api/v1`.
-- Tenant enforcement chain:
-  - HTTP middleware: `backend/app/middleware/tenant.py`
-  - tenant context/dependencies: `backend/app/core/tenant.py`, `backend/app/api/dependencies.py`
-- Domain services: `backend/app/services/*` + `backend/app/domains/*`.
-- Persistence: SQLAlchemy models under `backend/app/models/*`, async engine/session in `backend/app/db/session.py`.
+## Tenant isolation / auth / policies
+- Tenant middleware and required header enforcement: `backend/app/middleware/tenant.py`, `backend/app/core/tenant.py`.
+- Auth and RBAC/ABAC dependencies: `backend/app/core/security.py`, `backend/app/api/dependencies.py`.
+- Frontend tenant guard and header injection: `frontend/src/components/tenant/TenantGate.tsx`, `frontend/src/api/client.ts`.
 
-### Async/events
-- Celery tasks: `backend/app/tasks.py`, worker bootstrap `backend/app/worker.py`.
-- Outbox dispatcher/retries/dead-letter/metrics: `backend/app/services/outbox.py`.
-- Webhook routing and per-tenant override: `backend/app/services/webhooks.py`.
-- Idempotency guard for command routes: `backend/app/core/idempotency.py` + middleware registration in app factory.
+## Audit and immutable logs
+- Audit API and models: `backend/app/api/v1/audit.py`, `backend/app/models/models.py`.
+- Immutability checks covered by tests: `tests/test_audit_log_immutability.py`.
 
-### Frontend (React/Vite)
-- Entry: `frontend/src/main.tsx`.
-- Router and protected pages: `frontend/src/router/AppRouter.tsx`, `frontend/src/router/ProtectedRoute.tsx`.
-- Tenant guard:
-  - API interceptor: `frontend/src/api/client.ts`
-  - tenant gate UI: `frontend/src/components/tenant/TenantGate.tsx`
-  - store: `frontend/src/stores/tenant.ts`
-- Role/permission UI controls: `frontend/src/components/permissions/*`, `frontend/src/permissions/*`.
+## Idempotency / documents / versioning
+- Idempotency core and document pipeline: `backend/app/core/idempotency.py`, `backend/app/services/pipeline.py`, `backend/app/api/v1/documents.py`.
+- Template/version rules and delete guardrails: `backend/app/api/v1/router.py`, `tests/test_template_delete.py`.
 
-### Infra/DevX
-- Codespaces: `.devcontainer/devcontainer.json`, `.devcontainer/post-create.sh`.
-- Dockerless scripts: `scripts/dev_lite.sh`, `scripts/test_lite.sh`, `scripts/dockerless_env.sh`.
-- Docker mode: `docker-compose.yml` + `Makefile` (`make dev`, `make test`).
-- CI: `.github/workflows/ci.yml`.
+## Outbox / webhooks / retries
+- Outbox service and dispatcher: `backend/app/services/outbox.py`.
+- Webhook routing with tenant override: `backend/app/services/webhooks.py`.
+- Event coverage tests: `tests/test_outbox_dispatch.py`, `tests/test_webhooks_dispatch.py`, `tests/test_webhook_routing.py`.
 
-## Critical flow map
-1. **Document generation**
-   - `POST /api/v1/documents/generate`
-   - checks: tenant header + idempotency key
-   - pipeline service creates document/version and emits outbox events
-   - outbox dispatcher sends webhooks (`DocumentGenerated`, etc.)
-2. **Risk assessment**
-   - `POST /api/v1/risk/assess`
-   - deterministic calc (`domains/risk/calc.py`) + creates risk cards/action plan
-   - event recorded for integration/webhook path
-3. **Dev admin bootstrap**
-   - startup hook (`api/app.py` lifespan) invokes `services/dev_bootstrap.py`
-   - active only in `development/test` and only with env switch
+## Domain contours (MVP)
+- Risk: `backend/app/domains/risk/*`, `tests/test_risk_assessment_kpi5.py`.
+- PPE: `backend/app/api/v1/ppe.py`, `tests/api/test_ppe_api.py`.
+- Training: `backend/app/api/v1/training.py`, `tests/api/test_training_api.py`.
+- Obligations/tasks: `backend/app/api/v1/obligations.py`, `backend/app/api/v1/tasks.py`, `tests/integration/test_obligation_tasks.py`.
 
-## Verified commands used in this audit cycle
-- `pytest --collect-only -q`
-- `cd frontend && npm test`
-- `./scripts/configure_dockerless_env.sh .env`
-- `source ./scripts/dockerless_env.sh && PYTHONPATH=backend uvicorn app.main:app --host 127.0.0.1 --port 8000`
+## Infra / DevX
+- Dockerless scripts: `scripts/dev_lite.sh`, `scripts/test_lite.sh`, `scripts/configure_dockerless_env.sh`.
+- Devcontainer (dockerless-first): `.devcontainer/devcontainer.json`, `.devcontainer/post-create.sh`.
+- CI workflow: `.github/workflows/ci.yml`.

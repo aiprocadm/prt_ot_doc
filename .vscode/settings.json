@@ -3,7 +3,8 @@
   "python.testing.pytestEnabled": true,
   "python.testing.unittestEnabled": false,
   "python.testing.pytestArgs": [
-    "tests"
+    "tests",
+    "integration_tests"
   ],
   "python.envFile": "${workspaceFolder}/.env",
   "python.analysis.extraPaths": [
