@@ -10,13 +10,11 @@ cp .env.example .env
 make install
 make cs:dev
 ```
-3) В отдельном терминале установите frontend зависимости (один раз):
-```bash
-npm --prefix frontend ci
-```
-4) Откройте URL:
+3) Откройте URL:
 - Frontend: `http://localhost:5173`
 - Backend health: `http://localhost:8000/health`
+
+`make cs:dev` уже выполняет `npm ci` и поднимает backend+frontend.
 
 ## Dev login (без секретов в git)
 В `.env` задайте локальные значения:

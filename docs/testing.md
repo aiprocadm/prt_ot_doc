@@ -41,3 +41,9 @@ npm --prefix frontend run test
 2. Выполните `make install`.
 3. Запустите `source .venv/bin/activate && pytest --collect-only -q`.
 4. Если всё ещё пусто — перезапустите Testing panel (Reload Window).
+
+
+## 7) Почему нужны `sitecustomize.py` и `vscode_pytest.py`
+- `sitecustomize.py` применяет test-defaults максимально рано (до импортов приложения) и добавляет workspace-совместимые shim'ы для discovery в Codespaces.
+- `vscode_pytest.py` — минимальный плагин для VS Code Python Testing, который гарантирует те же test-defaults при запуске из панели Testing.
+- Оба файла используют единый источник значений `test_env_defaults.py` (memory/local, без Redis/MinIO как обязательных зависимостей).
