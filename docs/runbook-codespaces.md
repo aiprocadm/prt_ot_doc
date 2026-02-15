@@ -8,49 +8,44 @@ npm --prefix frontend ci
 make cs:dev
 ```
 
-`make cs:dev` (alias `make dev:lite`) включает dockerless-профиль:
-- SQLite (`dev.db`)
-- local storage (`.local_storage/`)
-- eager tasks (`CELERY_EAGER=true`)
-- in-memory rate limit storage (`RATE_LIMIT_STORAGE_URI=memory://`)
+Ожидаемый вывод `make cs:dev`:
+- `Dockerless mode enabled`
+- `Backend ready: http://127.0.0.1:8000/health`
+- URL backend/frontend
 
-## 2) Проверка что всё поднялось
+## 2) Проверка готовности
 ```bash
 curl -s http://127.0.0.1:8000/health
 curl -s http://127.0.0.1:8000/ready
 ```
-- Backend: `http://localhost:8000`
-- Frontend: `http://localhost:5173`
 
-## 3) Вход в админку (dev)
-1. В `.env` задайте:
-   ```env
-   ADMIN_BOOTSTRAP=1
-   ADMIN_EMAIL=admin@example.local
-   ADMIN_PASSWORD=<set-your-own-password>
-   ADMIN_TENANT=demo
-   ```
-2. Выполните `make cs:dev`.
-3. В логах backend должна быть строка `Admin created/exists`.
-4. Откройте `http://localhost:5173/auth/login`.
-5. Введите `tenant/email/password` из `.env`.
+## 3) Логин в dev
+1. В `.env` задайте `ADMIN_BOOTSTRAP=1`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_TENANT`.
+2. Запустите `make cs:dev`.
+3. Проверьте лог `Admin created/exists`.
+4. Откройте `http://localhost:5173/auth/login` и введите `tenant/email/password`.
 
-Если вход не проходит:
-- проверьте что `APP_ENV=development` или `test`;
-- проверьте что `ADMIN_PASSWORD` задан и не равен `__SET_ME__`;
-- удалите локальное состояние: `make cs:reset` и запустите `make cs:dev` снова.
+## 4) KEEP_DB для повторных запусков
+По умолчанию `scripts/dev_lite.sh` сбрасывает `dev.db` для чистого старта.
 
-## 4) Тесты
+Чтобы сохранить данные между перезапусками:
 ```bash
-pytest --collect-only -q
-make cs:test
+KEEP_DB=1 make cs:dev
 ```
 
-## 5) VS Code Testing panel
-- Python discovery: `tests/` + `integration_tests/`.
-- Frontend discovery: Vitest Explorer + `npm run test`.
+## 5) Тесты
+```bash
+make cs:test
+source .venv/bin/activate && pytest --collect-only -q
+```
 
-## 6) Сброс локального состояния
+## 6) FAQ
+- **Порт не открывается:** проверьте, что backend отвечает по `/health`, затем откройте forwarded port 5173.
+- **Не могу войти:** проверьте `ADMIN_PASSWORD` (не `__SET_ME__`) и `APP_ENV=development|test`.
+- **tenant_required (400):** для `/api/v1/*` укажите `X-Tenant`; в UI сначала выберите tenant.
+- **node_modules ошибки:** выполните `npm --prefix frontend ci` повторно.
+
+## 7) Reset
 ```bash
 make cs:reset
 ```
