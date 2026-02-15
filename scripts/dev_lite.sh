@@ -11,10 +11,23 @@ if [ ! -d ".venv" ]; then
 fi
 
 source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt -r requirements-dev.txt
 
-(cd frontend && npm ci)
+REQ_STAMP=".venv/.requirements.stamp"
+if [ ! -f "$REQ_STAMP" ] || [ requirements.txt -nt "$REQ_STAMP" ] || [ requirements-dev.txt -nt "$REQ_STAMP" ]; then
+  python -m pip install --upgrade pip
+  python -m pip install -r requirements.txt -r requirements-dev.txt
+  touch "$REQ_STAMP"
+else
+  echo "Python dependencies are up to date (.venv)."
+fi
+
+FRONTEND_STAMP="frontend/.npm-ci.stamp"
+if [ ! -d "frontend/node_modules" ] || [ ! -f "$FRONTEND_STAMP" ] || [ frontend/package-lock.json -nt "$FRONTEND_STAMP" ]; then
+  (cd frontend && npm ci)
+  touch "$FRONTEND_STAMP"
+else
+  echo "Frontend dependencies are up to date (frontend/node_modules)."
+fi
 
 source ./scripts/dockerless_env.sh
 

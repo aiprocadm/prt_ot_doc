@@ -21,7 +21,7 @@
 
 ### P1 (non-blocking)
 - `npm ci` выводит deprecation/security warnings для транзитивных frontend зависимостей.
-- `make cs:test` и `make cs:dev` выполняют повторную установку зависимостей в lite-скриптах, что замедляет cold start.
+- Устранено: lite-скрипты теперь используют stamp-файлы (`.venv/.requirements.stamp`, `frontend/.npm-ci.stamp`) и не переустанавливают зависимости без изменений lock/requirements.
 
 ## Validation outcome
 - Health endpoints `/health` и `/ready` доступны в dockerless режиме.

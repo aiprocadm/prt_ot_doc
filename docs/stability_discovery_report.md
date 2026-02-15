@@ -39,14 +39,14 @@ Docker Compose provisions:
 - Dockerless defaults are applied by `scripts/configure_dockerless_env.sh` and `scripts/dockerless_env.sh`.
 
 ## Canonical run commands (as documented)
-- **Dockerless**: `make dev:lite` (backend + frontend, SQLite + local storage) and `make test:lite`.
+- **Dockerless**: `make cs:dev` (backend + frontend, SQLite + local storage) and `make cs:test`.
 - **Docker**: `make dev` and `make test`.
 - **Manual**: `uvicorn app.main:app` for backend, `npm run dev` for frontend.
 
 ## Current launch blockers (based on repo inspection)
-- **Docker**: requires Docker daemon/CLI and the services listed above; if Docker is unavailable, `make dev` will not work and `make dev:lite` is required.
+- **Docker**: requires Docker daemon/CLI and the services listed above; if Docker is unavailable, `make dev` will not work and `make cs:dev` is required.
 - **Dockerless**: requires Python 3.12 + Node 20 installed locally; dependency install is handled by `scripts/dev_lite.sh`.
 
 ## Gaps & next verification steps
-- Execute `make dev:lite` in a clean Codespaces environment to validate end-to-end startup.
-- Run `pytest --collect-only` and `make test:lite` to confirm test discovery and dockerless test stability.
+- Execute `make cs:dev` in a clean Codespaces environment to validate end-to-end startup.
+- Run `pytest --collect-only` and `make cs:test` to confirm test discovery and dockerless test stability.
