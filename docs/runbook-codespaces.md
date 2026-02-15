@@ -4,7 +4,6 @@
 ```bash
 cp .env.example .env
 make install
-npm --prefix frontend ci
 make cs:dev
 ```
 
@@ -43,7 +42,7 @@ source .venv/bin/activate && pytest --collect-only -q
 - **Порт не открывается:** проверьте, что backend отвечает по `/health`, затем откройте forwarded port 5173.
 - **Не могу войти:** проверьте `ADMIN_PASSWORD` (не `__SET_ME__`) и `APP_ENV=development|test`.
 - **tenant_required (400):** для `/api/v1/*` укажите `X-Tenant`; в UI сначала выберите tenant.
-- **node_modules ошибки:** выполните `npm --prefix frontend ci` повторно.
+- **node_modules ошибки:** выполните `make cs:dev` повторно (скрипт сам делает `npm ci`) или отдельно `npm --prefix frontend ci`.
 
 ## 7) Reset
 ```bash

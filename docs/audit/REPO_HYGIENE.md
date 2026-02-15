@@ -16,3 +16,9 @@
 - `docs/audit/*` — результаты проверок и GAP-листы.
 - `docs/runbook-codespaces.md` + `docs/testing.md` — оперативные run/test инструкции.
 - `scripts/*` — только DevX/bootstrap/utility.
+
+
+## Служебные каталоги и файлы
+- `proxy/` — nginx-конфиги для compose/deployment сценариев; для Codespaces dockerless не обязателен, но оставлен как infra-артефакт.
+- `integration_tests/` — отдельный testpath для интеграционных проверок (виден в VS Code Testing panel через `python.testing.pytestArgs`).
+- `sitecustomize.py` и `vscode_pytest.py` — оставлены осознанно для стабильной discovery в Codespaces и VS Code; источник env-defaults единый: `test_env_defaults.py`.
