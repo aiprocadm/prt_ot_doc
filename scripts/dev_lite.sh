@@ -14,7 +14,7 @@ source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt -r requirements-dev.txt
 
-(cd frontend && npm install)
+(cd frontend && npm ci)
 
 source ./scripts/dockerless_env.sh
 
