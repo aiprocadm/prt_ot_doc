@@ -2,6 +2,7 @@
 
 ## Индекс
 - **ТЗ платформы:** [spec/TZ.md](spec/TZ.md)
+- **Design spec (source of truth):** [spec/PLATFORM_DESIGN.md](spec/PLATFORM_DESIGN.md)
 - **Runbook Codespaces:** [runbook-codespaces.md](runbook-codespaces.md)
 - **Testing guide:** [testing.md](testing.md)
 - **Архитектура:** [ARCHITECTURE.md](ARCHITECTURE.md)

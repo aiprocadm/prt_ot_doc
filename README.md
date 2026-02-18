@@ -44,6 +44,7 @@ make test
 
 ## Source of truth
 - ТЗ платформы: [docs/spec/TZ.md](docs/spec/TZ.md)
+- Design spec (source of truth): [docs/spec/PLATFORM_DESIGN.md](docs/spec/PLATFORM_DESIGN.md)
 - Runbook для Codespaces: [docs/runbook-codespaces.md](docs/runbook-codespaces.md)
 - Гайд по тестам: [docs/testing.md](docs/testing.md)
 - Матрица соответствия: [docs/audit/TZ_COMPLIANCE.md](docs/audit/TZ_COMPLIANCE.md)
