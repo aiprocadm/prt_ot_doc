@@ -2,22 +2,22 @@
 
 Платформа управления документами и процессами ОТ/ПБ/ПромБез: FastAPI backend, React/Vite frontend, dockerless-режим для Codespaces и docker-compose для полного локального контура.
 
-## Quick start (Codespaces: open → run)
-1) Откройте Codespace.
-2) Выполните команды:
+## Quick start (Codespaces)
 ```bash
+make cs:reset
 cp .env.example .env
-make install
+# в .env задайте ADMIN_BOOTSTRAP=1 и ADMIN_EMAIL/ADMIN_PASSWORD/ADMIN_TENANT
 make cs:dev
+make cs:test
 ```
-3) Откройте URL:
+
+После старта:
 - Frontend: `http://localhost:5173`
 - Backend health: `http://localhost:8000/health`
-
-`make cs:dev` уже выполняет `npm ci` и поднимает backend+frontend.
+- Ready probe: `http://localhost:8000/readyz`
 
 ## Dev login (без секретов в git)
-В `.env` задайте только локальные dev-значения:
+Используйте значения **из локального `.env`**:
 ```env
 ADMIN_BOOTSTRAP=1
 ADMIN_EMAIL=admin@example.local
@@ -25,27 +25,18 @@ ADMIN_PASSWORD=ChangeMe123!
 ADMIN_TENANT=demo
 ```
 
-Далее:
-1. Запустите `make cs:dev`.
-2. В логах backend дождитесь `Admin created/exists: ...`.
-3. Откройте `http://localhost:5173/auth/login` и войдите как `tenant/email/password`.
-
-> Bootstrap админа работает только при `APP_ENV=development|test`.
+Bootstrap админа активен только для `APP_ENV=development|test`.
 
 ## Tests
-Используйте только эти команды:
 ```bash
 make cs:test
-make test
 ./scripts/pytest.sh --collect-only -q
+npm --prefix frontend test
 ```
 
-Не запускайте `pytest` напрямую из системного Python: без `.venv` возможны ошибки вида `ModuleNotFoundError: pytest_asyncio`.
-
 ## Source of truth
-- ТЗ платформы: [docs/spec/TZ.md](docs/spec/TZ.md)
-- Design spec (source of truth): [docs/spec/PLATFORM_DESIGN.md](docs/spec/PLATFORM_DESIGN.md)
+- Единое полное ТЗ: [docs/spec/TZ_FULL_UNIFIED.md](docs/spec/TZ_FULL_UNIFIED.md)
+- Матрица покрытия ТЗ: [docs/audit/TZ_COVERAGE_MATRIX.md](docs/audit/TZ_COVERAGE_MATRIX.md)
+- Baseline verification: [docs/audit/BASELINE_VERIFICATION.md](docs/audit/BASELINE_VERIFICATION.md)
 - Runbook для Codespaces: [docs/runbook-codespaces.md](docs/runbook-codespaces.md)
 - Гайд по тестам: [docs/testing.md](docs/testing.md)
-- Матрица соответствия: [docs/audit/TZ_COMPLIANCE.md](docs/audit/TZ_COMPLIANCE.md)
-- Карта архитектуры: [docs/audit/ARCHITECTURE_MAP.md](docs/audit/ARCHITECTURE_MAP.md)
