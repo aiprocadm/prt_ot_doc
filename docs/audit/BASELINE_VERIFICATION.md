@@ -24,7 +24,7 @@ cp .env.example .env
 ```bash
 make cs:dev
 ```
-Результат: backend и frontend запускаются.
+Результат: backend и frontend запускаются (`http://localhost:8000`, `http://localhost:5173`).
 
 Наблюдения (не блокеры):
 - предупреждение про отсутствие `soffice` (LibreOffice) в локальном окружении;
@@ -37,14 +37,14 @@ make cs:dev
 make cs:test
 ```
 Результат: успешно.
-- Backend: `285 passed, 1 skipped`.
+- Backend + integration: `287 passed, 1 skipped`.
 - Frontend: `23 passed` test files, `44 passed` tests.
 
 ### 5) Pytest discovery
 ```bash
-./scripts/pytest.sh --collect-only -q
+. .venv/bin/activate && pytest --collect-only
 ```
-Результат: успешно, обнаружены тесты в `tests/` и `integration_tests/`.
+Результат: успешно, обнаружено `288` тестов в `tests/` и `integration_tests/`.
 
 ### 6) Frontend tests (direct)
 ```bash
@@ -52,11 +52,15 @@ npm --prefix frontend test
 ```
 Результат: успешно (`23 passed`, `44 passed`).
 
-## Что было исправлено
-- Добавлены и обновлены документы source-of-truth:
-  - `docs/spec/TZ_FULL_UNIFIED.md`
-  - `docs/audit/TZ_COVERAGE_MATRIX.md`
-- README и docs индекс приведены к единой точке входа для новичка.
+## Что сломалось и как починили
+Критичных падений baseline не выявлено.
+
+Найдены предупреждения среды:
+- `soffice` не установлен в контейнере (PDF fallback активируется согласно dev-контракту);
+- отсутствует locale `ru-RU`;
+- предупреждения React testing (`act(...)`) и React Router future flags.
+
+Это не блокирует запуск/тесты в текущем MVP, но зафиксировано как техдолг для стабилизации CI/dev UX.
 
 ## Повторяемость
 Сценарий `make cs:reset` → `cp .env.example .env` → `make cs:dev` → `make cs:test` воспроизводим в чистом Codespace.
