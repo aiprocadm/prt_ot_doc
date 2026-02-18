@@ -2,7 +2,7 @@
 
 Дата: 2026-02-18
 
-## Команды discovery
+## Команды baseline (dockerless / Codespaces)
 
 ### 1) Reset
 ```bash
@@ -14,19 +14,25 @@ make cs:reset
 ```bash
 cp .env.example .env
 ```
-Дополнительно в `.env` для dev-login:
+Для dev-login в `.env`:
 - `ADMIN_BOOTSTRAP=1`
-- `ADMIN_EMAIL=admin@example.local`
-- `ADMIN_PASSWORD=ChangeMe123!`
-- `ADMIN_TENANT=demo`
+- `ADMIN_EMAIL=<ваш локальный email>`
+- `ADMIN_PASSWORD=<ваш локальный пароль>`
+- `ADMIN_TENANT=<tenant>`
 
-### 3) Dockerless run
+### 3) Startup (fail-first)
 ```bash
 make cs:dev
 ```
-Результат: успешно, backend health поднят, frontend vite поднят, dev admin bootstrap выполнен.
+Результат: backend и frontend запускаются.
 
-### 4) Full test suite
+Наблюдения (не блокеры):
+- предупреждение про отсутствие `soffice` (LibreOffice) в локальном окружении;
+- предупреждение про недоступную locale `ru-RU`;
+- SQLAlchemy relationship overlap warnings;
+- npm предупреждения по deprecated пакетам.
+
+### 4) Full tests
 ```bash
 make cs:test
 ```
@@ -38,14 +44,19 @@ make cs:test
 ```bash
 ./scripts/pytest.sh --collect-only -q
 ```
-Результат: успешно, тесты обнаружены для `tests/` и `integration_tests/`.
+Результат: успешно, обнаружены тесты в `tests/` и `integration_tests/`.
 
-### 6) Frontend tests directly
+### 6) Frontend tests (direct)
 ```bash
 npm --prefix frontend test
 ```
 Результат: успешно (`23 passed`, `44 passed`).
 
-## Вывод baseline
-- Dockerless сценарий `open → run → login → tests` воспроизводим.
-- KPI-ориентированные backend тесты (idempotency/tenant/outbox/risk/template guards/audit immutability) присутствуют и исполняются в составе `make cs:test`.
+## Что было исправлено
+- Добавлены и обновлены документы source-of-truth:
+  - `docs/spec/TZ_FULL_UNIFIED.md`
+  - `docs/audit/TZ_COVERAGE_MATRIX.md`
+- README и docs индекс приведены к единой точке входа для новичка.
+
+## Повторяемость
+Сценарий `make cs:reset` → `cp .env.example .env` → `make cs:dev` → `make cs:test` воспроизводим в чистом Codespace.
