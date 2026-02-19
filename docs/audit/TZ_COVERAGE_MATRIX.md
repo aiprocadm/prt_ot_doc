@@ -18,6 +18,9 @@
 | TZ-12.1/B4 | Idempotency keys replay/conflict | idempotency service + guarded endpoints | `idempotency_keys` | n/a | n/a | generation retry UX | `tests/test_idempotency.py`, `tests/test_services_idempotency_unit.py`, `tests/test_documents_generate.py` | OK | P0 | Keep deterministic request hash |
 | TZ-12.2 | Required events emitted | document/risk/ppe/training services | outbox table | dispatcher | DocumentGenerated, RiskAssessed, PPEIssued, etc. | status indicators | `tests/api/test_document_events.py`, `tests/api/test_ppe_events.py`, `tests/test_outbox_service.py` | OK | P0 | Add explicit Signed/Exported contract tests |
 | TZ-12.3/B5 | Outbox retries/dead-letter/metrics | outbox dispatcher/webhook routing | outbox_events/status | dispatcher worker | webhook routing global+tenant | admin integrations view | `tests/test_outbox_dispatch.py`, `tests/test_webhook_routing.py`, `tests/test_webhooks_dispatch.py` | OK | P0 | Continue poison-queue observability |
+| TZ-9.3 | Incident/Inspection events + prescriptions deadlines | incidents/inspections/prescriptions routes + obligations service | incident/inspection/prescription/task tables | n/a | internal events TODO | incidents/inspections screens | `tests/api/test_incidents_api.py`, `tests/api/test_inspections_api.py`, `tests/integration/test_obligation_tasks.py` | Partial | P1 | Add `IncidentCreated` / `InspectionCreated` outbox in next increment |
+| TZ-10.2/E | Unified obligations list/close API | `backend/app/api/routes/obligations.py` | task table | reminder worker existing | n/a | task views (reports/dashboard links) | `tests/integration/test_obligation_tasks.py`, `tests/api/test_obligations_api.py` | Partial | P1 | Add dedicated `/obligations` UI page and site-native filter |
+| TZ-14.1 | KPI reports endpoint | `backend/app/api/routes/reports.py` (`GET /reports/kpi`) | on-the-fly aggregates | n/a | n/a | `frontend/src/pages/reports/ReportsPage.tsx` | `tests/api/test_reports_api.py` | OK | P1 | Expand KPI cards and drill-down filters |
 | TZ-F1 | Feature-based frontend layout | n/a | n/a | n/a | n/a | `frontend/src/features/*`, pages/widgets/shared | smoke route tests | OK | P1 | Keep features as source-of-truth |
 | TZ-F2 | MVP screens (login/dashboard/docs/risk/ppe/training/incidents/admin) | related API endpoints | n/a | n/a | n/a | pages for listed domains | `frontend/src/__tests__/LoginPageSmoke.test.tsx`, `DashboardPage.test.tsx`, `DocumentsPage.test.tsx`, `PersonsPage.test.tsx` | Partial | P1 | Client cabinet polishing in v1.1 |
 | TZ-F3 | UX components diff/timeline/filter/RBAC guard/bulk | n/a | n/a | n/a | n/a | DataTable, guards, document preview/timeline | `ProtectedRoute.test.tsx`, `DocumentsPage.test.tsx` | Partial | P1 | Add dedicated diff/timeline unit tests |
@@ -30,3 +33,8 @@
 - **P0:** mostly **OK**, with explicit partials on PDF font-embed strict check and replace shapes/textboxes coverage.
 - **P1:** core domains **OK**, some UX/client-cabinet depth kept as staged enhancements.
 - **P2:** non-blocking improvements remain backlog (v1.1/v1.2).
+
+
+## TODO / Partial markers
+- **Briefings module**: отдельные API/UI/события пока не реализованы (Partial относительно расширенного TZ §8).
+- **Incident/Inspection outbox events**: планируется добавить `IncidentCreated`, `InspectionCreated`.
