@@ -97,6 +97,7 @@ __all__ = [
     "UserRole",
     "WarehousePPE",
     "WebhookSubscription",
+    "WebhookDelivery",
     "ApprovalRoute",
     "ApprovalRequest",
     "ApprovalDecision",
@@ -154,6 +155,7 @@ class WebhookSubscription(SharedModel):
     event_type: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     url: Mapped[str] = mapped_column(String(2048), nullable=False)
     headers: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    secret: Mapped[str | None] = mapped_column(String(512), nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     __table_args__ = (
@@ -1676,4 +1678,21 @@ class Outbox(TenantBaseModel):
             "idempotency_key",
             name="uq_outbox_idempotency",
         ),
+    )
+
+
+class WebhookDelivery(TenantBaseModel):
+    __tablename__ = "webhook_delivery"
+
+    subscription_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    event_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    last_status_code: Mapped[int | None] = mapped_column(Integer)
+    last_error: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        UniqueConstraint("subscription_id", "event_id", name="uq_webhook_delivery_subscription_event"),
+        Index("ix_webhook_delivery_lookup", "tenant_id", "subscription_id", "event_id"),
     )

@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.metrics import PipelineStage, PipelineType, StageResult, get_metrics
-from app.models.models import Outbox, OutboxStatus
+from app.models.models import Outbox, OutboxStatus, WebhookDelivery
 from app.services.events import EventType, dedupe_key_for, normalize_payload, resolve_event_type
 from app.services.webhooks import (
     WebhookDestination,
@@ -131,6 +131,8 @@ class OutboxService:
             else:
                 for target in destinations:
                     merged_headers = self._merge_headers(target.headers, headers)
+                    if target.subscription_id:
+                        merged_headers = {**(merged_headers or {}), "X-Webhook-Subscription-Id": target.subscription_id}
                     existing = None
                     if key:
                         existing = await self._find_existing(
@@ -270,6 +272,10 @@ class OutboxProcessor:
 
         processed = 0
         for entry in entries:
+            if await self._already_delivered(entry):
+                await self._mark_sent(entry)
+                processed += 1
+                continue
             if entry.attempts > self.settings.outbox_max_attempts:
                 await self._mark_dead(entry, reason="max_attempts_exceeded")
                 self.metrics.record_outbox_dead(
@@ -445,11 +451,13 @@ class OutboxProcessor:
         entry.sent_at = datetime.now(tz=timezone.utc)
         entry.next_attempt_at = None
         entry.last_error = None
+        await self._record_delivery(entry, success=True)
 
     async def _mark_failed(self, entry: Outbox, result: DispatchResult) -> None:
         entry.status = OutboxStatus.FAILED
         entry.next_attempt_at = self._compute_next_attempt(entry.attempts)
         entry.last_error = self._error_payload(result)
+        await self._record_delivery(entry, success=False, status_code=result.status_code, error=self._error_payload(result))
 
     async def _mark_dead(
         self,
@@ -476,3 +484,47 @@ class OutboxProcessor:
         if result.status_code is not None:
             payload["status_code"] = result.status_code
         return payload or None
+
+    async def _already_delivered(self, entry: Outbox) -> bool:
+        subscription_id = (entry.headers or {}).get("X-Webhook-Subscription-Id")
+        event_id = str((entry.payload or {}).get("event_id") or entry.id)
+        if not subscription_id:
+            return False
+        stmt = select(WebhookDelivery).where(
+            WebhookDelivery.subscription_id == subscription_id,
+            WebhookDelivery.event_id == event_id,
+            WebhookDelivery.status == "success",
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none() is not None
+
+    async def _record_delivery(
+        self,
+        entry: Outbox,
+        *,
+        success: bool,
+        status_code: int | None = None,
+        error: dict[str, Any] | None = None,
+    ) -> None:
+        subscription_id = (entry.headers or {}).get("X-Webhook-Subscription-Id")
+        event_id = str((entry.payload or {}).get("event_id") or entry.id)
+        if not subscription_id:
+            return
+        stmt = select(WebhookDelivery).where(
+            WebhookDelivery.subscription_id == subscription_id,
+            WebhookDelivery.event_id == event_id,
+        )
+        existing = (await self.session.execute(stmt)).scalar_one_or_none()
+        if existing is None:
+            existing = WebhookDelivery(
+                tenant_id=entry.tenant_id,
+                subscription_id=subscription_id,
+                event_id=event_id,
+            )
+            self.session.add(existing)
+        existing.status = "success" if success else "failed"
+        existing.attempts = entry.attempts
+        existing.last_status_code = status_code
+        existing.last_error = error
+        existing.delivered_at = datetime.now(tz=timezone.utc) if success else None
+
