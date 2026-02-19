@@ -1,163 +1,262 @@
-# Единое полное ТЗ (OT/PB/Промбез/ЭКО + ЭДО)
+# ЕДИНОЕ ПОЛНОЕ ТЗ (Unified)
 
-> Статус: **единый source of truth по требованиям** для текущего репозитория (консолидировано из полного ТЗ пользователя: §0–§32 + блоки B1..B5 / F1..F4).
-> 
-> Категории релизов: **MVP (обязательно)**, **v1.1 (важно)**, **v1.2 (позже)**, **v2.0 (позже)**.
+Источник: пользовательское единое ТЗ из задачи «ДОДЕЛАТЬ ПРОЕКТ ПО ЕДИНОМУ ПОЛНОМУ ТЗ + НАВЕСТИ ПОРЯДОК В РЕПОЗИТОРИИ (BACKEND/FRONTEND/TESTS/DOCS/DEVX)».
 
 ## Оглавление
-- [0. Цели и границы](#0-цели-и-границы)
-- [1. Платформенные требования](#1-платформенные-требования)
-  - [1.1 Tenant isolation](#11-tenant-isolation-mvp)
-  - [1.2 RBAC](#12-rbac-mvp)
-  - [1.3 ABAC](#13-abac-mvp)
-  - [1.4 Audit log](#14-audit-log-mvp)
-- [2. Шаблоны и версии](#2-шаблоны-и-версии-mvp)
-- [3. Документный pipeline и replace](#3-документный-pipeline-и-replace)
-- [4. KPI и acceptance](#4-kpi-и-acceptance-mvp)
-- [5. Эксплуатация и DevX](#5-эксплуатация-и-devx)
-- [6. Доменные модули MVP](#6-доменные-модули-mvp)
-- [7. Backend спецификация (B1..B5)](#7-backend-спецификация-b1b5)
-- [8. Frontend спецификация (F1..F4)](#8-frontend-спецификация-f1f4)
-- [9. Roadmap и отложенные требования](#9-roadmap-и-отложенные-требования)
-- [10. Контрольный список §0..§32](#10-контрольный-список-032)
+- [0) Обязательные артефакты в репозитории](#0-обязательные-артефакты-в-репозитории)
+- [1) Baseline проверка и fail-first отчёт](#1-baseline-проверка-и-fail-first-отчёт)
+- [2) P0: критические требования ТЗ](#2-p0-критические-требования-тз)
+- [3) P1: MVP домены и пакеты](#3-p1-mvp-домены-и-пакеты)
+- [4) Frontend: F1..F4](#4-frontend-f1f4)
+- [5) DevX для новичка + test discovery](#5-devx-для-новичка--test-discovery)
+- [6) Репозиторный hygiene](#6-репозиторный-hygiene)
+- [7) Критерии приёмки](#7-критерии-приёмки)
+- [Финальный отчёт в PR](#финальный-отчёт-в-pr)
 
-## 0. Цели и границы
-- Платформа охватывает OT/PB/Промбез/ЭКО процессы, документооборот и интеграции через API/events/webhooks. **(MVP)**
-- Решение должно запускаться и тестироваться в GitHub Codespaces без Docker как основной сценарий новичка. **(MVP)**
-- Полнота покрытия по требованиям проверяется через матрицу `docs/audit/TZ_COVERAGE_MATRIX.md`. **(MVP)**
+## 0) Обязательные артефакты в репозитории
 
-## 1. Платформенные требования
+### 0.1 Сохрани ТЗ в репо [MVP]
+- создать `docs/spec/TZ_FULL_UNIFIED.md` и перенести туда ТЗ пользователя (0–32 + Backend B1..B5 + Frontend F1..F4) без урезаний. [MVP]
+- добавить оглавление и якоря. [MVP]
+- пометить каждое требование тегом: [MVP] / [v1.1] / [v1.2] / [v2.0]. [MVP]
 
-### 1.1 Tenant isolation (MVP)
-- Любой бизнес-роут без `X-Tenant` возвращает `400`.
-- Middleware валидирует tenant и применяет schema search_path (schema-per-tenant).
-- Хранилище файлов изолируется tenant-префиксом/бакетом.
-- Очереди и лимиты минимум логически изолированы (`tenant_id` в payload + rate limits).
+### 0.2 Создай матрицу покрытия ТЗ [MVP]
+- `docs/audit/TZ_COVERAGE_MATRIX.md` с колонками:
+  - REQ-ID
+  - Требование
+  - Backend (модуль/файлы/эндпоинты)
+  - DB (таблицы/миграции)
+  - Jobs (Celery)
+  - Events (outbox/webhooks)
+  - Frontend (экраны/фичи)
+  - Tests
+  - Status (OK/Partial/Missing)
+  - Priority (P0/P1/P2)
+  - Plan
 
-### 1.2 RBAC (MVP)
-- Поддерживается полный каталог ролей, соответствующий ТЗ проекта.
-- Проверки прав обязательны на уровне API.
+### 0.3 Обнови README [MVP]
+- “Quick start (Codespaces)” — минимальный путь запуска. [MVP]
+- ссылки на `TZ_FULL_UNIFIED.md` и `TZ_COVERAGE_MATRIX.md`. [MVP]
+- “как зайти в систему для тестов” через env bootstrap без секретов. [MVP]
 
-### 1.3 ABAC (MVP)
-- Атрибуты политик: `company_id`, `site_id`, `document_id`, `status`, `risk_level`, `project_id`, `contractor_id`.
-- Политики применяются как на уровне доступа к endpoint, так и на уровне query-фильтров.
-- Используется единый интерфейс Policy Engine.
+### Acceptance 0 [MVP]
+- `docs/spec/TZ_FULL_UNIFIED.md` существует и полный.
+- `docs/audit/TZ_COVERAGE_MATRIX.md` заполнен минимум для MVP и критериев приёмки.
+- README содержит рабочий быстрый старт и ссылки.
 
-### 1.4 Audit log (MVP)
-- AuditLog append-only: запрещены `UPDATE/DELETE`.
-- Содержит who/when/ip/ua/correlation-id + field-level diff.
-- Аудит пишется атомарно с бизнес-операцией.
+## 1) Baseline проверка и fail-first отчёт
 
-## 2. Шаблоны и версии (MVP)
-- Выбор шаблона строгий по `(code, version)`.
-- Уникальность `(code, version)` обязательна.
-- Запрещено удаление версии, если она используется (`409`).
+### 1.1 В чистом Codespace выполнить [MVP]
+- `make cs:reset`
+- `cp .env.example .env`
+- `make cs:dev`
+- `make cs:test`
+- backend: `source .venv/bin/activate && pytest --collect-only -q`
+- frontend: `npm --prefix frontend test`
 
-## 3. Документный pipeline и replace
-- Модель job/шагов: `Template → Headers → Replace → PDF → (ZIP) → (EDO/Sign) → Archive`. **(MVP)**
-- Для каждого шага: `status`, `started_at`, `ended_at`, `attempts`, `error_code`, `error_payload`. **(MVP)**
-- Идемпотентность POST-операций через `idempotency_keys(tenant_id, key, endpoint, request_hash, response_payload, created_at)`. **(MVP)**
-  - одинаковый hash: вернуть прежний ответ;
-  - другой hash для того же key: `409`.
-- Replace engine:
-  - `dry-run` с отчётом попаданий (CSV/JSON) + diff preview;
-  - `apply` для body/tables/hdr/ftr;
-  - `rollback` batch;
-  - нормализация runs. **(MVP)**
-- Поддержка shapes/textboxes — **v1.1**, если не реализовано в текущем backend.
-- PDF conversion: production target — LibreOffice headless pool. **(MVP контракт)**
-- Проверка embedded fonts (кириллица) — **v1.1**, если инфраструктурно недоступно.
+### 1.2 Зафиксировать результаты [MVP]
+- `docs/audit/BASELINE_VERIFICATION.md` (что работает/не работает/ошибки/воспроизведение).
 
-## 4. KPI и acceptance (MVP)
-- Без `X-Tenant` → `400`.
-- Idempotency generate: повтор с тем же key возвращает тот же `document_version_id`.
-- Delete template in-use → `409`.
-- Webhook dispatch (mock receiver) ≤ 60s.
-- Risk deterministic (повторяемые расчеты).
+### Acceptance 1 [MVP]
+- документ с baseline и воспроизводимостью есть.
 
-## 5. Эксплуатация и DevX
-- Health endpoints:
-  - `/healthz` (liveness);
-  - `/readyz` (readiness, включая зависимости/stub). **(MVP)**
-- Codespaces runbook: reset → env → dev → login → tests. **(MVP)**
-- Bootstrap admin из env допустим только для development/test режимов. **(MVP)**
-- Никаких секретов в репозитории. **(MVP)**
+## 2) P0: критические требования ТЗ
 
-## 6. Доменные модули MVP
-- **Risk**: матрица `P×S`, справочники hazards/measures, карта рисков, план мер, deterministic KPI.
-- **PPE**: нормы, выдача/возврат, журнал, событие `PPEIssued`.
-- **Training/Briefings**: реестр, completion, событие `TrainingCompleted`, журналы инструктажей (минимум).
-- **Incidents**: регистрация, КД, контроль сроков.
-- **Inspections/Prescriptions**: минимум реестр, иначе roadmap v1.2 с согласованным скелетом.
+### 2.1 Мультиарендность / X-Tenant (TZ §1.1) [MVP]
+- любой бизнес-роут без `X-Tenant` → 400.
+- schema-per-tenant: middleware выставляет `search_path`.
+- tenant scope обязателен в репозиториях/ORM фильтрах.
+- файловая изоляция: S3 prefix `tenant/{tenant_id}/...`.
+- Тест: `tests/test_tenant_header_required.py` должен проходить.
 
-## 7. Backend спецификация (B1..B5)
+### 2.2 RBAC + ABAC и роли (TZ §1.2–1.3) [MVP]
+- роли: полный список из ТЗ в модели/справочнике.
+- ABAC атрибуты: company_id, site_id, document_id, status, risk_level, project_id, contractor_id.
+- единый policy engine и унификация проверок.
+- where-фильтры по scope (site/company).
+- Тест: минимум 2 allow/deny на разные домены.
 
-### B1. API и контракты (MVP)
-- FastAPI API с tenant-aware middleware, auth, policy checks, audit hooks.
-- Контрактные тесты и smoke health/readiness.
+### 2.3 Аудит immutable + field-level diff (TZ §1.4) [MVP]
+- AuditLog append-only (запрет UPDATE/DELETE на ORM + желательно DB).
+- who/when/ip/ua/correlation-id + field diff.
+- аудит атомарен с бизнес-операцией.
+- Тест: update/delete audit → ошибка; бизнес-операции пишут audit.
 
-### B2. Данные и миграции (MVP)
-- SQLAlchemy/Alembic схемы для доменов и служебных сущностей (idempotency/outbox/audit/pipeline).
+### 2.4 Идемпотентность (TZ §12.1, B4, §32) [MVP]
+- `idempotency_keys` с tenant_id, key, endpoint, request_hash, response_payload, created_at.
+- повтор запроса:
+  - одинаковый hash → тот же результат,
+  - другой hash → 409.
+- KPI-тест: повтор POST `/documents:generate` с тем же key возвращает тот же `document_version_id`.
 
-### B3. Pipeline и рендеринг (MVP)
-- Job orchestration, replace pipeline, pdf conversion contract, retries/errors.
+### 2.5 Templates strict (TZ §2, §3.1, §32) [MVP]
+- выбор строго по `(code, version)`.
+- уникальность `(code, version)`.
+- delete in-use → 409.
+- KPI-тест: delete guard 409.
 
-### B4. Domain services (MVP)
-- Risk/PPE/Training/Incidents бизнес-сервисы и события.
+### 2.6 Outbox + dispatcher + retries + poison queue + metrics (TZ §12.3, B5) [MVP]
+- `outbox_events`: status/attempts/next_retry_at/event_id/dedup.
+- dispatcher worker: retries/backoff, dead-letter после max_attempts, Prometheus метрики.
+- webhook routing: global + per-tenant subscriptions.
+- KPI-тест: мок-приёмник + доставку/ретраи.
 
-### B5. Outbox, delivery, observability (MVP)
-- `outbox_events`: delivery guarantees, retry/backoff, poison/dead-letter, dedupe.
-- Метрики Prometheus: delivered/failed/attempts/latency.
-- Webhooks routing: global + per-tenant subscriptions; payload содержит `event_id` + `correlation-id`.
-- HMAC подпись webhook — **v1.1** (контракт предусмотреть).
+### 2.7 Обязательные события (TZ §12.2) [MVP]
+- обязателен эмит:
+  - DocumentGenerated
+  - Signed
+  - Exported
+  - RiskAssessed
+  - PPEIssued
+  - TrainingCompleted
+- Тест минимум для 3 событий: запись в outbox + dispatch.
 
-## 8. Frontend спецификация (F1..F4)
+### 2.8 Pipeline шаги (TZ §0.2, §3.4, B3) [MVP]
+- этапы пайплайна как отдельные шаги со статусом/логом/ретраями.
+- модель `DocumentJob` + шаги: template → headers → replace → pdf → zip → (sign/edo) → archive.
+- timings, attempts, error_code/error_payload.
+- Тест: pipeline smoke + статусы шагов.
 
-### F1. Архитектура и tenant context (MVP)
-- Feature-based структура: `features/{documents,risk,ppe,training,incidents,admin}` + shared слои.
-- Tenant обязателен в state и в заголовке `X-Tenant`.
+### 2.9 Replace engine (TZ §3.3, §32) [MVP]
+- dry-run report (CSV/JSON).
+- diff preview (структура для UI).
+- apply меняет body/tables/hdr/ftr; shapes/textboxes допускается [v1.1], но явно.
+- backup + rollback обязателен.
+- KPI-тест: dry-run/apply/rollback.
 
-### F2. Экраны MVP
-- Login + Tenant selection
-- Dashboard (минимальные KPI/просрочки)
-- Documents (templates list + pipeline/job history)
-- Replace (upload map + dry-run report + apply/rollback)
-- Risks, PPE, Training, Incidents, Admin (минимально рабочие)
+### 2.10 PDF + встроенные шрифты (TZ §3.1, §32) [MVP]
+- LO headless pool для prod; dev fallback — feature flag.
+- встройка шрифтов (DejaVu/Noto Sans).
+- если не готово: явный TODO [v1.1] в матрице + skip-тест с причиной.
 
-### F3. Guards и авторизация (MVP)
-- RBAC/ABAC guard на маршрутах/действиях (минимум RBAC).
+## 3) P1: MVP домены и пакеты
 
-### F4. Тесты фронтенда (MVP)
-- Vitest smoke: app render, tenant required flows, routing key pages.
+### 3.1 Риски (TZ §6) [MVP]
+- PxS методика + hazards/measures.
+- risk map сотрудника/места/объекта.
+- план мер + контроль сроков.
+- deterministic output.
+- событие RiskAssessed → outbox.
 
-## 9. Roadmap и отложенные требования
-- **v1.1**: shapes/textboxes replacement, webhook HMAC signing, embedded fonts strict check.
-- **v1.2**: расширенные inspections/prescriptions сценарии.
-- **v2.0**: расширенный EDO/sign orchestration, enterprise integrations.
+### 3.2 СИЗ + склад (TZ §7) [MVP]/[v1.1]
+- нормы СИЗ + карточки + журнал выдачи/возврата. [MVP]
+- PPEIssued → outbox. [MVP]
+- склад (остатки/партии/сертификаты/инвентаризация) — skeleton. [v1.1]
 
-## 10. Контрольный список §0..§32
-> Ниже — унифицированная ссылка требований с привязкой к реализации и приоритету.
+### 3.3 Обучение/инструктажи (TZ §8) [MVP]
+- реестр программ/курсов/групп.
+- тесты/протоколы/удостоверения (через documents pipeline).
+- электронные журналы инструктажей (минимум).
+- TrainingCompleted → outbox.
 
-- §0: Общая архитектура и единый pipeline — **MVP**
-- §1: Tenant / RBAC / ABAC / Audit — **MVP**
-- §2: Template versioning — **MVP**
-- §3: Replace + PDF + pipeline steps — **MVP (+ v1.1 часть расширений)**
-- §4–§5: KPI/acceptance — **MVP**
-- §6–§9: Риски/СИЗ/обучение/инциденты — **MVP**
-- §10–§11: Эксплуатация/health/readiness — **MVP**
-- §12: Outbox + webhooks + retries — **MVP (+ HMAC v1.1)**
-- §13–§24: Интеграции, наблюдаемость, операции — **MVP/P1 по матрице покрытия**
-- §25: Frontend feature architecture — **MVP**
-- §26–§30: UX/flows/tests — **MVP/P1**
-- §31: Пакеты и доменные модули — **MVP**
-- §32: Ключевые acceptance критерии и guardrails — **MVP**
+### 3.4 Инциденты/проверки/предписания (TZ §9) [MVP]/[v1.2]
+- инциденты: регистрация + расследование + КД + сроки. [MVP]
+- проверки: план/чек-листы минимум. [MVP]
+- предписания skeleton. [v1.2]
+- пакет “подготовка к проверке” MVP skeleton. [MVP]
 
-Для точного статуса реализации см. матрицу покрытия: `docs/audit/TZ_COVERAGE_MATRIX.md`.
+### 3.5 Пакеты (§31) [MVP]
+- “Выход на объект”.
+- “Несчастный случай”.
+- “Подготовка к проверке”.
+- “Обучение”.
+- Тест: 1–2 интеграционных сценария + фикстуры.
 
+## 4) Frontend: F1..F4
 
-## 11. Трассировка требований по релизам
+### 4.1 Структура feature-based [MVP]
+- `/features`: documents, risk, ppe, training, incidents, admin, client-cabinet.
+- shared: api client, tenant context, auth, ui components, utils.
+- слои entities/widgets/pages/app.
 
-- **MVP (обяз.)**: §0–§12, §20.4, §25, §31, §32 + B1..B5, F1..F4 в части базовой работоспособности и тестируемости.
-- **v1.1 (важно)**: расширенный replace (shapes/textboxes), HMAC webhooks, strict embedded fonts check.
-- **v1.2 (позже)**: расширение inspections/prescriptions сценариев и UX.
-- **v2.0 (позже)**: расширенный EDO/sign orchestration и enterprise-интеграции.
+### 4.2 Обязательные экраны MVP [MVP]
+- Login + Tenant selection.
+- Dashboard KPI.
+- Documents: templates list, generation wizard, job timeline, replace dry-run/diff/apply/rollback.
+- Risks, PPE, Training, Incidents, Admin, Client cabinet v1.
+
+### 4.3 UX-компоненты (TZ §25.2) [MVP]
+- diff viewer.
+- job timeline.
+- поиск/фильтры.
+- RBAC guard для действий/маршрутов.
+- bulk actions (минимум).
+
+### 4.4 Front tests [MVP]
+- vitest smoke:
+  - app renders,
+  - tenant guard flows,
+  - key routes render without crash.
+
+## 5) DevX для новичка + test discovery
+
+### 5.1 Каноничные команды [MVP]
+- `make cs:reset`
+- `make cs:dev`
+- `make cs:test`
+
+### 5.2 Dev-вход без секретов [MVP]
+- bootstrap admin через env:
+  - `ADMIN_BOOTSTRAP=1`
+  - `ADMIN_EMAIL`
+  - `ADMIN_PASSWORD`
+  - `ADMIN_TENANT`
+- документация: где задать и как зайти.
+
+### 5.3 Test discovery [MVP]
+- VS Code видит pytest (Testing panel):
+  - interpreter = `.venv`
+  - корректные `pytestArgs`
+- при необходимости `scripts/pytest.sh`.
+
+## 6) Репозиторный hygiene
+
+### 6.1 Целевой порядок [MVP]
+- единый путь установки/запуска.
+- единый `.env.example` + docs.
+- объединённый “правдивый” runbook.
+- удаление мусора только после usage-check и зелёных тестов.
+
+### 6.2 Что обязательно описать [MVP]
+- `docs/repo-structure.md`.
+- `docs/troubleshooting.md`.
+
+### 6.3 CI/линтеры [MVP]/[v1.1]
+- ruff/black/mypy, eslint/tsc не ломают разработку. [MVP]
+- coverage gate core/domain/services ≥ 85%; если не достигнуто — план подъёма. [v1.1]
+
+## 7) Критерии приёмки
+
+В чистом Codespace:
+1. `make cs:reset` [MVP]
+2. `cp .env.example .env` + `ADMIN_BOOTSTRAP=1` [MVP]
+3. `make cs:dev` (backend+frontend) [MVP]
+4. В UI:
+   - documents:generate (idempotency),
+   - replace dry-run/apply/rollback,
+   - risk assessment (deterministic),
+   - PPE issue (PPEIssued),
+   - training completion (TrainingCompleted). [MVP]
+5. `make cs:test` зелёный [MVP]
+6. Тесты видны в VS Code Testing panel [MVP]
+7. docs/spec + docs/audit и ссылки в README [MVP]
+
+## Финальный отчёт в PR
+- Краткое резюме: сколько требований [MVP] OK/Partial/Missing. [MVP]
+- Список P0/P1/P2 и что сделано. [MVP]
+- Список изменённых файлов/директорий и почему. [MVP]
+- Команды запуска/тестов (как в README). [MVP]
+- Отложено на [v1.1]/[v1.2]/[v2.0] только реалистичное. [MVP]
+
+## Backend B1..B5 и Frontend F1..F4 (фиксация)
+- **B1**: tenant isolation + scoped access. [MVP]
+- **B2**: RBAC/ABAC policy enforcement. [MVP]
+- **B3**: document pipeline step orchestration. [MVP]
+- **B4**: idempotency keys and replay semantics. [MVP]
+- **B5**: outbox/webhooks delivery guarantees. [MVP]
+- **F1**: feature-based frontend structure. [MVP]
+- **F2**: обязательные MVP экраны. [MVP]
+- **F3**: UX components (diff/timeline/filter/guards). [MVP]
+- **F4**: frontend smoke tests. [MVP]
+
+> Примечание: по источнику задачи упоминаются ссылки на §0–32, но в предоставленном тексте детально раскрыты блоки 0–7 и B1..B5/F1..F4; именно они зафиксированы здесь без сокращения формулировок.
