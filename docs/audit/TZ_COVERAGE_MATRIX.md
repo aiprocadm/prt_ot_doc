@@ -38,3 +38,7 @@
 ## TODO / Partial markers
 - **Briefings module**: отдельные API/UI/события пока не реализованы (Partial относительно расширенного TZ §8).
 - **Incident/Inspection outbox events**: планируется добавить `IncidentCreated`, `InspectionCreated`.
+
+- §4/§12: MVP контур ЭДО/подписей/согласований реализован (routes, requests, decide, signatures, edo send+webhook).
+- Критерий Signed event: реализован через outbox событие `DocumentSigned`.
+- Критерий webhook ЭДО ≤60с: в dev обработка мгновенная через API receiver.

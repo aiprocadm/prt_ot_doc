@@ -37,6 +37,10 @@ const NpaPage = lazy(() => import("@/pages/npa/NpaPage"));
 const AuditPage = lazy(() => import("@/pages/audit/AuditPage"));
 const SettingsPage = lazy(() => import("@/pages/settings/SettingsPage"));
 const ReportsPage = lazy(() => import("@/pages/reports/ReportsPage"));
+const ApprovalsInboxPage = lazy(() => import("@/pages/approvals/ApprovalsInboxPage"));
+const ApprovalsOutboxPage = lazy(() => import("@/pages/approvals/ApprovalsOutboxPage"));
+const SignaturesPage = lazy(() => import("@/pages/signatures/SignaturesPage"));
+const EdoPage = lazy(() => import("@/pages/edo/EdoPage"));
 
 const AppRouter = () => {
   const initialize = useAuthStore((state) => state.initialize);
@@ -74,6 +78,12 @@ const AppRouter = () => {
               <Route element={<ProtectedRoute permission={PERMISSIONS.DOCUMENT_VIEW} />}>
                 <Route path="/documents" element={<DocumentsPage />} />
                 <Route path="/documents/wizard" element={<DocumentsWizardPage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.DOCUMENT_VIEW} />}>
+                <Route path="/approvals/inbox" element={<ApprovalsInboxPage />} />
+                <Route path="/approvals/outbox" element={<ApprovalsOutboxPage />} />
+                <Route path="/signatures" element={<SignaturesPage />} />
+                <Route path="/edo" element={<EdoPage />} />
               </Route>
               <Route element={<ProtectedRoute permission={PERMISSIONS.FILE_VIEW} />}>
                 <Route path="/files" element={<FilesPage />} />
