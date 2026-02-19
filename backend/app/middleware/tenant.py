@@ -2,13 +2,16 @@
 from __future__ import annotations
 
 from fastapi import HTTPException, status
+from sqlalchemy import select
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 from starlette.types import ASGIApp
 
 from app.core.security import verify_token
-from app.core.tenant import TENANT_HEADER, TENANT_HEADER_ALIASES, tenant_required
+from app.core.tenant import TENANT_HEADER_ALIASES, tenant_required
+from app.db.session import AsyncSessionLocal
+from app.models.models import Tenant
 
 
 class TenantMiddleware(BaseHTTPMiddleware):
@@ -30,6 +33,7 @@ class TenantMiddleware(BaseHTTPMiddleware):
             path in self._system_paths
             or (self._metrics_enabled and path == "/metrics")
             or path.startswith("/docs")
+            or path == "/openapi.json"
             or any(path.startswith(prefix) for prefix in self._public_prefixes)
         ):
             return await call_next(request)
@@ -63,5 +67,22 @@ class TenantMiddleware(BaseHTTPMiddleware):
                 "Tenant header does not match token scope",
             )
 
-        tenant_required(normalized_header)
+        info = tenant_required(normalized_header)
+        async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as session:
+            tenant = (
+                await session.execute(select(Tenant).where(Tenant.slug == info.slug))
+            ).scalar_one_or_none()
+        if tenant is None:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND,
+                detail={"code": "tenant_not_found", "type": "validation", "message": "Tenant not found"},
+            )
+        if not tenant.is_active:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                detail={"code": "tenant_inactive", "type": "validation", "message": "Tenant inactive"},
+            )
+        request.state.tenant_id = str(tenant.id)
+        request.state.tenant_slug = tenant.slug
+        request.state.tenant_schema = tenant.schema_name or f"tenant_{tenant.slug}"
         return await call_next(request)

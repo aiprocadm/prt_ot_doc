@@ -86,6 +86,8 @@ from app.models.models import (
     TemplateVersion,
     TemplateVersionStatus,
     Tenant,
+    TenantQuota,
+    TenantCounter,
 )
 from app.repository import (
     get_active_template_with_version,
@@ -217,6 +219,45 @@ class PipelineRunRequestData:
 
 MAX_TEMPLATE_SIZE_BYTES = 8 * 1024 * 1024
 MAX_METADATA_JSON_BYTES = 64 * 1024
+
+
+async def _enforce_tenant_generation_quota(session: AsyncSession, tenant: Tenant) -> None:
+    quota = (
+        await session.execute(select(TenantQuota).where(TenantQuota.tenant_id == tenant.id))
+    ).scalar_one_or_none()
+    if quota is None:
+        return
+    current_period = datetime.now(timezone.utc).strftime("%Y%m")
+    counter = (
+        await session.execute(
+            select(TenantCounter).where(
+                TenantCounter.tenant_id == tenant.id,
+                TenantCounter.yyyymm == current_period,
+            )
+        )
+    ).scalar_one_or_none()
+    running_jobs = await session.scalar(
+        select(func.count()).select_from(PipelineRun).where(
+            PipelineRun.tenant_id == tenant.slug,
+            PipelineRun.status.in_([PipelineRunStatus.QUEUED, PipelineRunStatus.RUNNING]),
+        )
+    )
+    if (running_jobs or 0) >= quota.max_parallel_jobs:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={"code": "quota_exceeded", "type": "validation", "message": "Tenant parallel jobs quota exceeded"},
+        )
+
+    current = counter.doc_generations if counter else 0
+    if current >= quota.max_doc_generations_per_month:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={"code": "quota_exceeded", "type": "validation", "message": "Tenant monthly generation quota exceeded"},
+        )
+    if counter is None:
+        counter = TenantCounter(tenant_id=tenant.id, yyyymm=current_period, doc_generations=0)
+        session.add(counter)
+    counter.doc_generations += 1
 
 
 def _tenant_scope(tenant: Tenant) -> tuple[str, ...]:
@@ -765,6 +806,8 @@ async def run_pipeline(
         result=StageResult.SUCCESS,
         seconds=perf_counter() - validation_start,
     )
+
+    await _enforce_tenant_generation_quota(session, tenant)
 
     service = PipelineService()
     run_mode = mode.lower()
