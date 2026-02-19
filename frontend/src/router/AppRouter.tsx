@@ -15,6 +15,7 @@ const PersonsPage = lazy(() => import("@/pages/persons/PersonsPage"));
 const TemplatesPage = lazy(() => import("@/pages/templates/TemplatesPage"));
 const PacksPage = lazy(() => import("@/pages/packs/PacksPage"));
 const DocumentsPage = lazy(() => import("@/pages/documents/DocumentsPage"));
+const DocumentsWizardPage = lazy(() => import("@/pages/documents/DocumentsWizardPage"));
 const FilesPage = lazy(() => import("@/pages/files/FilesPage"));
 const TasksPage = lazy(() => import("@/pages/tasks/TasksPage"));
 const RiskPage = lazy(() => import("@/pages/risk/RiskPage"));
@@ -31,6 +32,7 @@ const FireInspectionsPage = lazy(() => import("@/pages/fire-inspections/FireInsp
 const ReferencePage = lazy(() => import("@/pages/reference/ReferencePage"));
 const ContractorsPage = lazy(() => import("@/pages/contractors/ContractorsPage"));
 const AdminPage = lazy(() => import("@/pages/admin/AdminPage"));
+const OutboxPage = lazy(() => import("@/pages/admin/OutboxPage"));
 const NpaPage = lazy(() => import("@/pages/npa/NpaPage"));
 const AuditPage = lazy(() => import("@/pages/audit/AuditPage"));
 const SettingsPage = lazy(() => import("@/pages/settings/SettingsPage"));
@@ -70,6 +72,7 @@ const AppRouter = () => {
               </Route>
               <Route element={<ProtectedRoute permission={PERMISSIONS.DOCUMENT_VIEW} />}>
                 <Route path="/documents" element={<DocumentsPage />} />
+                <Route path="/documents/wizard" element={<DocumentsWizardPage />} />
               </Route>
               <Route element={<ProtectedRoute permission={PERMISSIONS.FILE_VIEW} />}>
                 <Route path="/files" element={<FilesPage />} />
@@ -118,6 +121,7 @@ const AppRouter = () => {
               </Route>
               <Route element={<ProtectedRoute permission={PERMISSIONS.ADMIN_MANAGE_ROLES} />}>
                 <Route path="/admin" element={<AdminPage />} />
+                <Route path="/admin/outbox" element={<OutboxPage />} />
               </Route>
               <Route element={<ProtectedRoute permission={PERMISSIONS.NPA_VIEW} />}>
                 <Route path="/npa" element={<NpaPage />} />
