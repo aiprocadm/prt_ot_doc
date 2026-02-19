@@ -1,4 +1,4 @@
-.PHONY: install install-pip lint format test contract run clean up down migrate dev env frontend-install lint-frontend format-frontend test-frontend dev-lite test-lite dev-nodocker test-nodocker check-docker cs\:dev cs\:test cs\:reset
+.PHONY: install install-pip lint format test contract run clean up down migrate dev env frontend-install lint-frontend format-frontend test-frontend dev-lite test-lite dev-nodocker test-nodocker check-docker demo cs\:dev cs\:test cs\:reset
 
 LINT_PATHS=backend/app tests scripts
 VENV_BIN=.venv/bin
@@ -93,3 +93,7 @@ cs\:reset:
 
 down:
 	docker compose down -v
+
+
+demo:
+	@echo "Demo bootstrap is enabled via .env (DEMO_BOOTSTRAP=1). Start app with make cs:dev."

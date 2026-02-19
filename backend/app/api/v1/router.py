@@ -48,6 +48,7 @@ from app.api.routes import (
     inspections,
     invoices,
     journals,
+    jobs,
     medical,
     npa,
     orders,
@@ -55,6 +56,7 @@ from app.api.routes import (
     packs,
     persons,
     prescriptions,
+    replace,
     obligations,
     ppe,
     risk,
@@ -146,12 +148,14 @@ tenant_router.include_router(journals.router, tags=["journals"])
 tenant_router.include_router(risk.router, tags=["risks"])
 tenant_router.include_router(sites.router, tags=["sites"])
 tenant_router.include_router(documents.router, prefix="/documents", tags=["documents"])
+tenant_router.include_router(jobs.router)
 tenant_router.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
 tenant_router.include_router(outbox_admin.router, prefix="/admin/outbox", tags=["outbox"])
 tenant_router.include_router(tenants.router)
 tenant_router.include_router(companies.router)
 tenant_router.include_router(persons.router)
 tenant_router.include_router(training.router, tags=["training"])
+tenant_router.include_router(replace.router)
 
 router.include_router(tenant_router)
 
