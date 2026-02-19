@@ -1,66 +1,65 @@
-# BASELINE VERIFICATION
+# Baseline verification (fail-first)
 
-Дата: 2026-02-18
+Дата прогона: 2026-02-18
+Среда: GitHub Codespaces / dockerless profile
 
-## Команды baseline (dockerless / Codespaces)
+## Выполненные команды
 
-### 1) Reset
-```bash
-make cs:reset
-```
-Результат: успешно, очищены `dev.db`, `.local_storage`, `frontend/coverage`.
+1. `make cs:reset`
+2. `cp .env.example .env`
+3. `make cs:dev`
+4. `make cs:test`
+5. `source .venv/bin/activate && pytest --collect-only -q`
+6. `npm --prefix frontend test`
 
-### 2) Environment
-```bash
-cp .env.example .env
-```
-Для dev-login в `.env`:
-- `ADMIN_BOOTSTRAP=1`
-- `ADMIN_EMAIL=<ваш локальный email>`
-- `ADMIN_PASSWORD=<ваш локальный пароль>`
-- `ADMIN_TENANT=<tenant>`
+## Результаты
 
-### 3) Startup (fail-first)
-```bash
-make cs:dev
-```
-Результат: backend и frontend запускаются (`http://localhost:8000`, `http://localhost:5173`).
+### 1) `make cs:reset`
+- Статус: **OK**
+- Очистка выполнена: `dev.db`, `.local_storage`, `frontend/coverage`.
 
-Наблюдения (не блокеры):
-- предупреждение про отсутствие `soffice` (LibreOffice) в локальном окружении;
-- предупреждение про недоступную locale `ru-RU`;
-- SQLAlchemy relationship overlap warnings;
-- npm предупреждения по deprecated пакетам.
+### 2) `cp .env.example .env`
+- Статус: **OK**
+- `.env` создан из шаблона.
 
-### 4) Full tests
-```bash
-make cs:test
-```
-Результат: успешно.
-- Backend + integration: `287 passed, 1 skipped`.
-- Frontend: `23 passed` test files, `44 passed` tests.
+### 3) `make cs:dev`
+- Статус: **OK** (после первичной установки зависимостей)
+- Поднялись сервисы:
+  - backend: `http://localhost:8000`
+  - frontend: `http://localhost:5173`
+- Наблюдения (не блокеры):
+  - предупреждение о отсутствии `soffice` (LibreOffice) в окружении;
+  - предупреждение про locale `ru-RU` недоступен;
+  - используются development JWT keys (ожидаемо для dev).
 
-### 5) Pytest discovery
-```bash
-. .venv/bin/activate && pytest --collect-only
-```
-Результат: успешно, обнаружено `288` тестов в `tests/` и `integration_tests/`.
+### 4) `make cs:test`
+- Статус: **OK**
+- Backend pytest: `287 passed, 1 skipped`.
+- Frontend vitest: `23 passed`, `44 passed`.
+- Наблюдения:
+  - много предупреждений deprecation/SAWarning/React act warnings;
+  - тесты при этом зелёные.
 
-### 6) Frontend tests (direct)
-```bash
-npm --prefix frontend test
-```
-Результат: успешно (`23 passed`, `44 passed`).
+### 5) `pytest --collect-only -q`
+- Статус: **OK**
+- Коллекция тестов стабильна, обнаружены backend/integration/unit/contract test suites.
 
-## Что сломалось и как починили
-Критичных падений baseline не выявлено.
+### 6) `npm --prefix frontend test`
+- Статус: **OK**
+- Vitest проходит полностью, покрытие формируется.
+- Наблюдения:
+  - предупреждения React Router future flags;
+  - предупреждения об `act(...)` в части компонентных тестов.
 
-Найдены предупреждения среды:
-- `soffice` не установлен в контейнере (PDF fallback активируется согласно dev-контракту);
-- отсутствует locale `ru-RU`;
-- предупреждения React testing (`act(...)`) и React Router future flags.
+## Fail-first фиксация
+- Критичных падений по baseline-командам не обнаружено.
+- Основные потенциальные риски для новичков:
+  1. долгий cold-start на первом `make cs:dev` из-за установки Python/Node deps;
+  2. отсутствие `soffice` в окружении (не блокирует текущий dev flow, но влияет на прод-паритет PDF пайплайна);
+  3. шум предупреждений в тестах затрудняет чтение логов.
 
-Это не блокирует запуск/тесты в текущем MVP, но зафиксировано как техдолг для стабилизации CI/dev UX.
-
-## Повторяемость
-Сценарий `make cs:reset` → `cp .env.example .env` → `make cs:dev` → `make cs:test` воспроизводим в чистом Codespace.
+## Воспроизведение
+- Выполнить команды в указанном порядке из раздела «Выполненные команды».
+- Для входа в UI указать в `.env`:
+  - `ADMIN_BOOTSTRAP=1`
+  - `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_TENANT`.
