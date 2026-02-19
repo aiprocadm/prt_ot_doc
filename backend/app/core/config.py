@@ -296,6 +296,7 @@ class Settings(BaseSettings):
     presign_download_ttl_seconds: int = Field(900, alias="PRESIGN_DOWNLOAD_TTL_SECONDS")
 
     secret_key: str = Field("change-me", alias="SECRET_KEY")
+    portal_token_salt: str = Field("portal-salt", alias="PORTAL_TOKEN_SALT")
 
     admin_bootstrap: bool = Field(False, alias="ADMIN_BOOTSTRAP")
     admin_email: str = Field("admin@example.local", alias="ADMIN_EMAIL")

@@ -795,6 +795,122 @@ class PipelineRun(TenantBaseModel):
     )
 
 
+class PackageRunStatus(str, enum.Enum):
+    DRAFT = "draft"
+    RUNNING = "running"
+    SUCCESS = "success"
+    FAILED = "failed"
+    CANCELED = "canceled"
+
+
+class PackageRequirementType(str, enum.Enum):
+    FILE = "file"
+    TEXT = "text"
+    TABLE = "table"
+
+
+class PackageRequirementStatus(str, enum.Enum):
+    MISSING = "missing"
+    PROVIDED = "provided"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class ClientRequestTicketStatus(str, enum.Enum):
+    OPEN = "open"
+    IN_PROGRESS = "in_progress"
+    RESOLVED = "resolved"
+    CLOSED = "closed"
+
+
+class ClientPackagePreset(TenantBaseModel, SoftDeleteMixin):
+    __tablename__ = "package_presets"
+
+    code: Mapped[str] = mapped_column(String(128), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    steps_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    required_inputs_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "code", name="uq_package_presets_code"),
+        Index("ix_package_presets_code", "tenant_id", "code"),
+    )
+
+
+class ClientPackageRun(TenantBaseModel, SoftDeleteMixin):
+    __tablename__ = "package_runs"
+
+    preset_id: Mapped[str] = mapped_column(ForeignKey("package_presets.id"), nullable=False, index=True)
+    initiated_by_user_id: Mapped[str | None] = mapped_column(ForeignKey("user.id"), nullable=True, index=True)
+    client_company_id: Mapped[str | None] = mapped_column(ForeignKey("company.id"), nullable=True, index=True)
+    status: Mapped[PackageRunStatus] = mapped_column(
+        Enum(PackageRunStatus), nullable=False, default=PackageRunStatus.DRAFT
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    output_zip_s3_key: Mapped[str | None] = mapped_column(String(512))
+    output_pdf_s3_key: Mapped[str | None] = mapped_column(String(512))
+    qc_report_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    error_payload_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+
+    preset: Mapped[ClientPackagePreset] = relationship(backref="runs")
+
+    __table_args__ = (
+        Index("ix_package_runs_status_updated", "tenant_id", "status", "updated_at"),
+    )
+
+
+class PackageRequirement(TenantBaseModel):
+    __tablename__ = "package_requirements"
+
+    package_run_id: Mapped[str] = mapped_column(ForeignKey("package_runs.id"), nullable=False, index=True)
+    key: Mapped[str] = mapped_column(String(128), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    type: Mapped[PackageRequirementType] = mapped_column(
+        Enum(PackageRequirementType), nullable=False, default=PackageRequirementType.FILE
+    )
+    status: Mapped[PackageRequirementStatus] = mapped_column(
+        Enum(PackageRequirementStatus), nullable=False, default=PackageRequirementStatus.MISSING
+    )
+    payload_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+
+
+class ClientPortalToken(TenantBaseModel):
+    __tablename__ = "client_portal_tokens"
+
+    token_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    package_run_id: Mapped[str] = mapped_column(ForeignKey("package_runs.id"), nullable=False, index=True)
+    scope_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        Index("ix_client_portal_tokens_expires_hash", "tenant_id", "expires_at", "token_hash"),
+    )
+
+
+class ClientRequestTicket(TenantBaseModel):
+    __tablename__ = "client_request_tickets"
+
+    package_run_id: Mapped[str] = mapped_column(ForeignKey("package_runs.id"), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[ClientRequestTicketStatus] = mapped_column(
+        Enum(ClientRequestTicketStatus), nullable=False, default=ClientRequestTicketStatus.OPEN
+    )
+    created_by: Mapped[str | None] = mapped_column(String(128))
+
+
+class PackageEvent(TenantBaseModel):
+    __tablename__ = "package_events"
+
+    package_run_id: Mapped[str] = mapped_column(ForeignKey("package_runs.id"), nullable=False, index=True)
+    type: Mapped[str] = mapped_column(String(128), nullable=False)
+    payload_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+
+
 class IdempotencyStatus(str, enum.Enum):
     PENDING = "pending"
     SUCCEEDED = "succeeded"

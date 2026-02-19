@@ -42,3 +42,6 @@
 - §4/§12: MVP контур ЭДО/подписей/согласований реализован (routes, requests, decide, signatures, edo send+webhook).
 - Критерий Signed event: реализован через outbox событие `DocumentSigned`.
 - Критерий webhook ЭДО ≤60с: в dev обработка мгновенная через API receiver.
+
+| TZ-19 | Клиентский кабинет: статусы/история/загрузки/запросы | `backend/app/api/routes/client_portal.py` | package_runs + tickets + events + tokens | package run stubs | package_run/ticket events (MVP) | `/portal/packages`, `/portal/packages/:id` (API ready) | `tests/test_client_portal_api.py` | Partial | P0 | Frontend portal pages in next iteration |
+| TZ-31.1-31.3 | Пакеты-пресеты: выход на объект / НС / проверка | `package_presets` + `scripts/seed_package_presets.py` | package presets/runs/requirements | package run stub pipeline | package_run.started | packages UI integration pending | `tests/test_client_portal_api.py` | Partial | P0 | Add real pipeline mapping and e2e download |
