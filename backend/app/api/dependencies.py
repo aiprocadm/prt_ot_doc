@@ -38,8 +38,10 @@ async def get_tenant_record(request: Request) -> Tenant:
     async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as session:
         result = await session.execute(select(Tenant).where(Tenant.slug == info.slug))
         tenant = result.scalar_one_or_none()
-        if tenant is None or not tenant.is_active:
+        if tenant is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found")
+        if not tenant.is_active:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Tenant inactive")
     ensure_tenant_schema(info.slug)
     return tenant
 

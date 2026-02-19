@@ -84,6 +84,8 @@ __all__ = [
     "Journal",
     "JournalEntry",
     "Tenant",
+    "TenantQuota",
+    "TenantCounter",
     "Template",
     "TemplateVersion",
     "Training",
@@ -135,15 +137,45 @@ class RoleEnum(str, enum.Enum):
 
 
 class Tenant(SharedModel):
+    code: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
     slug: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     contact_email: Mapped[str] = mapped_column(String(255), nullable=False)
+    parent_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=True)
+    kind: Mapped[str] = mapped_column(
+        Enum("customer", "branch", "contractor", name="tenantkind"),
+        nullable=False,
+        default="customer",
+    )
+    schema_name: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     settings: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
 
     __table_args__ = (
         UniqueConstraint("slug", name="uq_tenant_slug"),
+        UniqueConstraint("code", name="uq_tenants_code"),
+        Index("ix_tenants_parent_id", "parent_id"),
+        Index("ix_tenants_kind", "kind"),
     )
+
+
+class TenantQuota(SharedModel):
+    __tablename__ = "tenant_quotas"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=False, unique=True)
+    max_parallel_jobs: Mapped[int] = mapped_column(Integer, nullable=False, default=4)
+    max_doc_generations_per_month: Mapped[int] = mapped_column(Integer, nullable=False, default=5000)
+    max_storage_mb: Mapped[int] = mapped_column(Integer, nullable=False, default=10240)
+
+
+class TenantCounter(SharedModel):
+    __tablename__ = "tenant_counters"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=False, index=True)
+    yyyymm: Mapped[str] = mapped_column(String(6), nullable=False)
+    doc_generations: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    __table_args__ = (UniqueConstraint("tenant_id", "yyyymm", name="uq_tenant_counter_period"),)
 
 
 class WebhookSubscription(SharedModel):

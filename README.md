@@ -41,3 +41,18 @@ npm --prefix frontend test
 - Runbook для Codespaces: [docs/runbook-codespaces.md](docs/runbook-codespaces.md)
 - Demo walkthrough: [docs/runbook/DEMO_WALKTHROUGH.md](docs/runbook/DEMO_WALKTHROUGH.md)
 - Гайд по тестам: [docs/testing.md](docs/testing.md)
+
+## Multi-tenant bootstrap
+- Все бизнес-эндпойнты требуют заголовок `X-Tenant`.
+- Создать tenant:
+```bash
+python scripts/create_tenant.py <slug> "Tenant Name" owner@example.com
+```
+- Подготовить tenant-schema:
+```bash
+python scripts/migrate_tenant.py <slug>
+```
+- Тесты tenancy:
+```bash
+pytest -q tests/test_tenancy_enforcement.py
+```
