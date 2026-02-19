@@ -56,6 +56,7 @@ from app.api.routes import (
     packs,
     persons,
     prescriptions,
+    reports,
     replace,
     obligations,
     ppe,
@@ -156,6 +157,7 @@ tenant_router.include_router(companies.router)
 tenant_router.include_router(persons.router)
 tenant_router.include_router(training.router, tags=["training"])
 tenant_router.include_router(replace.router)
+tenant_router.include_router(reports.router, tags=["reports"])
 
 router.include_router(tenant_router)
 

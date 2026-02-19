@@ -36,6 +36,7 @@ const OutboxPage = lazy(() => import("@/pages/admin/OutboxPage"));
 const NpaPage = lazy(() => import("@/pages/npa/NpaPage"));
 const AuditPage = lazy(() => import("@/pages/audit/AuditPage"));
 const SettingsPage = lazy(() => import("@/pages/settings/SettingsPage"));
+const ReportsPage = lazy(() => import("@/pages/reports/ReportsPage"));
 
 const AppRouter = () => {
   const initialize = useAuthStore((state) => state.initialize);
@@ -131,6 +132,9 @@ const AppRouter = () => {
               </Route>
               <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_VIEW} />}>
                 <Route path="/settings" element={<SettingsPage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.REPORTS_VIEW} />}>
+                <Route path="/reports" element={<ReportsPage />} />
               </Route>
             </Route>
           </Route>
