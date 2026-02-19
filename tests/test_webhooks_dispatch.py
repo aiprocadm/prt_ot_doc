@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import hmac
 import json
+from hashlib import sha256
 
 import httpx
 import pytest
+from sqlalchemy import select
 
 from app.core.config import get_settings
+from app.models.models import Tenant, WebhookSubscription
 from app.services.webhooks import WebhookDispatcher
 
 
@@ -34,8 +38,47 @@ async def test_webhook_dispatcher_sends_exported_event(monkeypatch: pytest.Monke
 
     assert len(requests) == 1
     body = json.loads(requests[0].content.decode("utf-8"))
-    assert body["event_type"] == "DocumentExported"
-    assert body["tenant_id"] == "tenant-1"
+    assert body["type"] == "DocumentExported"
+    assert body["id"] == "evt-1"
     assert requests[0].headers.get("Idempotency-Key") == "evt-1"
 
     get_settings.cache_clear()  # type: ignore[attr-defined]
+
+
+@pytest.mark.anyio
+async def test_webhook_signature_is_valid(sessionmaker) -> None:
+    requests: list[httpx.Request] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(204)
+
+    async with sessionmaker() as session:
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
+        sub = WebhookSubscription(
+            tenant_id=tenant.id,
+            event_type="DocumentExported",
+            url="https://example.test/hooks/exported",
+            headers={},
+            secret="top-secret",
+            enabled=True,
+        )
+        session.add(sub)
+        await session.commit()
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        dispatcher = WebhookDispatcher(settings=get_settings(), client=client)
+        async with sessionmaker() as session:
+            await dispatcher.dispatch(
+                event_type="DocumentExported",
+                tenant_id=str(tenant.id),
+                payload={"event_id": "evt-1", "zip_storage_key": "s3/key"},
+                session=session,
+            )
+
+    assert len(requests) == 1
+    signature = requests[0].headers.get("X-Signature")
+    assert signature is not None
+    expected = hmac.new(b"top-secret", requests[0].content, sha256).hexdigest()
+    assert signature == f"sha256={expected}"

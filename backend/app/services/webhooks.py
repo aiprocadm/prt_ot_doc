@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import hmac
+import json
 import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from hashlib import sha256
 from typing import Any
 from urllib.parse import urlparse
 
@@ -178,6 +181,8 @@ class WebhookDispatcher:
                 WebhookDestination(
                     url=row.url,
                     headers={str(key): str(value) for key, value in (row.headers or {}).items()},
+                    subscription_id=row.id,
+                    secret=row.secret,
                 )
             )
         return destinations
@@ -230,18 +235,23 @@ class WebhookDispatcher:
             return
 
         trace_id = get_trace_id()
+        event_id = str(payload.get("event_id") or payload.get("id") or "")
         envelope = {
-            "event_type": event_type,
-            "tenant_id": tenant_id,
-            "sent_at": datetime.now(tz=timezone.utc).isoformat(),
+            "id": event_id,
+            "type": event_type,
+            "occurred_at": datetime.now(tz=timezone.utc).isoformat(),
             "payload": payload,
         }
-        request_headers: dict[str, str] = {"X-Correlation-ID": trace_id}
+        request_headers: dict[str, str] = {
+            "X-Correlation-Id": trace_id,
+            "X-Event-Type": event_type,
+            "X-Tenant": tenant_id,
+        }
         if headers:
             for key, value in headers.items():
                 request_headers[str(key)] = str(value)
-        event_id = payload.get("event_id")
         if event_id:
+            request_headers.setdefault("X-Event-Id", str(event_id))
             request_headers.setdefault("Idempotency-Key", str(event_id))
         if idempotency_key:
             request_headers["Idempotency-Key"] = str(idempotency_key)
@@ -252,9 +262,11 @@ class WebhookDispatcher:
         ) if self.client is None else _null_async_context(self.client) as client:
             for destination in destinations:
                 merged_headers = {**request_headers, **destination.headers}
-                response = await client.post(
-                    destination.url, json=envelope, headers=merged_headers
-                )
+                if destination.secret:
+                    body = json.dumps(envelope).encode("utf-8")
+                    signature = hmac.new(destination.secret.encode("utf-8"), body, sha256).hexdigest()
+                    merged_headers["X-Signature"] = f"sha256={signature}"
+                response = await client.post(destination.url, json=envelope, headers=merged_headers)
                 if response.status_code >= 300:
                     failures.append((destination.url, response.status_code))
                     logger.warning(
@@ -283,6 +295,8 @@ class WebhookDispatcher:
 class WebhookDestination:
     url: str
     headers: dict[str, str]
+    subscription_id: str | None = None
+    secret: str | None = None
 
 
 class _null_async_context:

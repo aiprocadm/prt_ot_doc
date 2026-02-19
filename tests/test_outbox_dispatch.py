@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy import select
 
 from app.core.config import get_settings
-from app.models.models import Outbox, OutboxStatus, Tenant
+from app.models.models import Outbox, OutboxStatus, Tenant, WebhookDelivery
 from app.services.outbox import OutboxProcessor
 
 
@@ -214,3 +214,37 @@ async def test_outbox_processor_avoids_double_send_with_in_progress(
     assert first_processed == 1
     assert processed == 0
     assert dispatcher.calls == 1
+
+
+@pytest.mark.anyio
+async def test_outbox_dedup_prevents_second_delivery(sessionmaker) -> None:
+    async with sessionmaker() as session:
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
+        entry = Outbox(
+            tenant_id=tenant.id,
+            event_type="DocumentCreated",
+            destination="https://example.test/hooks",
+            payload={"event_id": "evt-dedup", "document_id": "doc-9"},
+            headers={"X-Webhook-Subscription-Id": "sub-1"},
+            status=OutboxStatus.PENDING,
+            next_attempt_at=datetime.now(tz=timezone.utc) - timedelta(seconds=1),
+        )
+        session.add(entry)
+        session.add(
+            WebhookDelivery(
+                tenant_id=tenant.id,
+                subscription_id="sub-1",
+                event_id="evt-dedup",
+                status="success",
+                attempts=1,
+            )
+        )
+        await session.commit()
+
+    dispatcher = DummyDispatcher()
+    async with sessionmaker() as session:
+        processor = OutboxProcessor(session, dispatcher=dispatcher)
+        processed = await processor.process_once()
+
+    assert processed == 1
+    assert dispatcher.calls == []
