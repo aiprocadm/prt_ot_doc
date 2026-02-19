@@ -19,6 +19,11 @@ class EventType(str, enum.Enum):
     TRAINING_ASSIGNED = "TrainingAssigned"
     TASK_DUE_SOON = "TaskDueSoon"
     TASK_OVERDUE = "TaskOverdue"
+    APPROVAL_STARTED = "approval.started"
+    APPROVAL_DECISION_MADE = "approval.decision_made"
+    APPROVAL_COMPLETED = "approval.completed"
+    EDO_SENT = "edo.sent"
+    EDO_STATUS_CHANGED = "edo.status_changed"
 
 
 class BaseEventPayload(BaseModel):
@@ -129,6 +134,10 @@ class TrainingCompletedPayload(BaseEventPayload):
     score: int | None = None
 
 
+class InternalEventPayload(BaseEventPayload):
+    metadata: Mapping[str, Any] = Field(default_factory=dict)
+
+
 class TaskDuePayload(BaseEventPayload):
     task_id: str
     title: str
@@ -151,6 +160,11 @@ _PAYLOADS: dict[EventType, type[BaseEventPayload]] = {
     EventType.TRAINING_ASSIGNED: TrainingAssignedPayload,
     EventType.TASK_DUE_SOON: TaskDuePayload,
     EventType.TASK_OVERDUE: TaskDuePayload,
+    EventType.APPROVAL_STARTED: InternalEventPayload,
+    EventType.APPROVAL_DECISION_MADE: InternalEventPayload,
+    EventType.APPROVAL_COMPLETED: InternalEventPayload,
+    EventType.EDO_SENT: InternalEventPayload,
+    EventType.EDO_STATUS_CHANGED: InternalEventPayload,
 }
 
 
@@ -195,4 +209,6 @@ def dedupe_key_for(event_type: EventType, payload: BaseEventPayload) -> str:
         return payload.training_event_id
     if isinstance(payload, TaskDuePayload):
         return payload.task_id
+    if isinstance(payload, InternalEventPayload):
+        return payload.event_id or f"internal:{event_type.value}:{payload.occurred_at.isoformat()}"
     raise ValueError(f"Unsupported event payload for {event_type.value}")

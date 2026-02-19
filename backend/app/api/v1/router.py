@@ -43,6 +43,7 @@ from app.api.routes import (
     dashboard,
     departments,
     documents,
+    edo_workflow,
     files,
     incidents,
     inspections,
@@ -149,6 +150,7 @@ tenant_router.include_router(journals.router, tags=["journals"])
 tenant_router.include_router(risk.router, tags=["risks"])
 tenant_router.include_router(sites.router, tags=["sites"])
 tenant_router.include_router(documents.router, prefix="/documents", tags=["documents"])
+tenant_router.include_router(edo_workflow.router, tags=["edo-workflow"])
 tenant_router.include_router(jobs.router)
 tenant_router.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
 tenant_router.include_router(outbox_admin.router, prefix="/admin/outbox", tags=["outbox"])
