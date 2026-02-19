@@ -39,6 +39,7 @@ from app.api.routes import (
     audit,
     auth,
     companies,
+    client_portal,
     contracts,
     dashboard,
     departments,
@@ -134,6 +135,9 @@ tenant_router.include_router(admin_users.router, tags=["admin-users"])
 tenant_router.include_router(attestations.router, tags=["attestations"])
 tenant_router.include_router(files.router, prefix="/files", tags=["files"])
 tenant_router.include_router(packs.router, prefix="/packs", tags=["packs"])
+tenant_router.include_router(client_portal.presets_router)
+tenant_router.include_router(client_portal.internal_router)
+tenant_router.include_router(client_portal.router)
 tenant_router.include_router(incidents.router, tags=["incidents"])
 tenant_router.include_router(inspections.router, tags=["inspections"])
 tenant_router.include_router(prescriptions.router, tags=["prescriptions"])
