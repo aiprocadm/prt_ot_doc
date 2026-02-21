@@ -10,6 +10,7 @@ from app.models import (
     document,  # noqa: F401
     feature,  # noqa: F401
     file,  # noqa: F401
+    job_engine,  # noqa: F401
     models,  # noqa: F401
     npa,  # noqa: F401
     risk,  # noqa: F401

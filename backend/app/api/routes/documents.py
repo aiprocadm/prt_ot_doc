@@ -57,6 +57,7 @@ from app.services.documents import (
     InvalidStatusTransitionError,
 )
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
+from app.services.pipelines_orchestrator import DocumentPipelineOrchestrator
 from app.tasks import celery_app, generate_document_task, generate_document_batch_item_task
 
 router = APIRouter()
@@ -99,9 +100,13 @@ class DocGenerateRequest(BaseModel):
     template_code: str | None = Field(default=None, min_length=1, max_length=255)
     template_id: str | None = Field(default=None, min_length=1)
     template_version: int | None = Field(default=None, ge=1)
-    company_id: str = Field(..., min_length=1)
+    company_id: str | None = Field(default=None, min_length=1)
     person_id: str | None = Field(default=None)
     data: dict[str, Any] = Field(default_factory=dict)
+    pipeline_profile_id: str | None = Field(default=None)
+    input_source_id: str | None = Field(default=None)
+    inline_data: dict[str, Any] | None = Field(default=None)
+    options: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _ensure_identifier(self) -> "DocGenerateRequest":
@@ -109,6 +114,8 @@ class DocGenerateRequest(BaseModel):
             raise ValueError("template_code is required to select a template")
         if self.template_version is None:
             raise ValueError("template_version is required to select a template")
+        if self.inline_data is None and self.input_source_id is None and self.company_id is None:
+            raise ValueError("company_id required for legacy mode")
         return self
 
 def _serialize_payload(payload: dict[str, Any]) -> str:
@@ -351,6 +358,45 @@ async def generate_document(
 
     created_run = False
     try:
+        if payload.inline_data is not None or payload.input_source_id is not None:
+            orchestrator = DocumentPipelineOrchestrator(session)
+            engine_payload = {
+                "template_code": payload.template_code,
+                "template_version": payload.template_version,
+                "pipeline_profile_id": payload.pipeline_profile_id,
+                "input_source_id": payload.input_source_id,
+                "inline_data": payload.inline_data or {},
+                "options": payload.options or {},
+            }
+            request_hash = compute_request_hash({
+                "tenant_id": str(tenant.id),
+                "endpoint": "documents.generate",
+                **engine_payload,
+            })
+            if record.request_hash and record.request_hash != request_hash:
+                raise HTTPException(status.HTTP_409_CONFLICT, "idempotency_key_reuse_mismatch")
+            record.request_hash = request_hash
+            if created_record:
+                job = await orchestrator.start_document_job(
+                    tenant_id=str(tenant.id),
+                    created_by=getattr(access.user, "id", None),
+                    payload=engine_payload,
+                )
+                await orchestrator.run_job(job_id=job.id)
+                body = {
+                    "task_id": job.id,
+                    "job_id": job.id,
+                    "correlation_id": job.correlation_id,
+                    "status_url": f"/api/v1/jobs/{job.id}",
+                    "document_version_id": None,
+                }
+                await idempotency.store_success(record, status_code=status.HTTP_202_ACCEPTED, body=body)
+                await session.commit()
+                response.status_code = status.HTTP_202_ACCEPTED
+                return TaskAcceptedResponse(**body)
+            await session.commit()
+            return await idempotency.respond_from_store(record, model=TaskAcceptedResponse, response=response)
+
         payload_hash = _hash_payload(payload.data)
 
         template, template_version = await _fetch_template(
