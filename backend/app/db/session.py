@@ -219,6 +219,7 @@ async def _apply_search_path(session: AsyncSession) -> None:
 def AsyncSessionLocal(
     *,
     tenant: str | None = None,
+    schema_name: str | None = None,
     include_public: bool = True,
     create_schema: bool = True,
 ) -> AsyncSession:
@@ -227,7 +228,10 @@ def AsyncSessionLocal(
     ensure_shared_schema()
     slug = tenant or get_current_tenant().slug
     if _SUPPORTS_SCHEMAS:
-        if slug != _DEFAULT_TENANT_SLUG:
+        if schema_name:
+            schema = schema_name
+            slug = tenant or get_current_tenant().slug
+        elif slug != _DEFAULT_TENANT_SLUG:
             if create_schema:
                 ensure_tenant_schema(slug)
             schema = tenant_schema(slug)

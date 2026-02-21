@@ -16,6 +16,25 @@ settings = get_settings()
 
 logger = logging.getLogger(__name__)
 
+
+def tenant_queue_name(tenant_id: str) -> str:
+    return f"tenant.{tenant_id}"
+
+
+def route_task_by_tenant(name, args, kwargs, options, task=None, **kw):
+    tenant_id = None
+    if isinstance(kwargs, dict):
+        tenant_id = kwargs.get("tenant_id") or kwargs.get("tenant_slug")
+    headers = options.get("headers") if isinstance(options, dict) else None
+    if not tenant_id and isinstance(headers, dict):
+        tenant_id = headers.get("tenant_id")
+    if tenant_id:
+        queue = tenant_queue_name(str(tenant_id))
+        return {"queue": queue, "routing_key": queue}
+    if name in {"pipeline.run", "documents.generate"}:
+        raise ValueError("missing_tenant")
+    return None
+
 celery_app = Celery(
     settings.app_name,
     broker=settings.redis.broker_url,
@@ -59,12 +78,10 @@ celery_app.conf.task_queues = (
     Queue(pdf_queue, routing_key=pdf_queue),
 )
 
-celery_app.conf.task_routes = {
+celery_app.conf.task_routes = (route_task_by_tenant, {
     "app.tasks.*": {"queue": default_queue},
     "worker.tasks.*": {"queue": default_queue},
-    "pipeline.run": {"queue": pdf_queue},
-    "documents.generate": {"queue": pdf_queue},
-}
+})
 
 
 _TASK_CONTEXT_TOKENS: dict[str, tuple[contextvars.Token[Optional[str]], contextvars.Token[str]]] = {}
