@@ -509,7 +509,7 @@ async def upload_file(
     await assert_quota(session, tenant=tenant, kind="storage_bytes", delta=size)
     file_kind = kind or FileKind.DOCUMENT
     key = build_storage_key(
-        tenant_slug=str(tenant.id),
+        tenant_slug=str(getattr(tenant, "s3_prefix", None) or tenant.id),
         sha256_hex=sha256_hash,
         extension=extension,
         company_slug=company_id,
@@ -661,7 +661,7 @@ async def upload_template(
         metadata["company_id"] = company_id
 
     key = build_storage_key(
-        tenant_slug=str(tenant.id),
+        tenant_slug=str(getattr(tenant, "s3_prefix", None) or tenant.id),
         sha256_hex=sha256_hash,
         extension=extension,
         company_slug=company_id,
@@ -708,7 +708,7 @@ async def download_file(
             detail={"code": "not_found", "message": "File not found"},
         )
 
-    expected_prefix = f"tenants/{tenant.id}/"
+    expected_prefix = f"{getattr(tenant, 's3_prefix', None) or tenant.id}/"
     if not str(record.storage_key).startswith(expected_prefix):
         _record_download_denied("forbidden_prefix")
         raise HTTPException(

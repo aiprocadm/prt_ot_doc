@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.tenant import TENANT_HEADER, get_current_tenant, tenant_required
-from app.db.session import AsyncSessionLocal, ensure_tenant_schema
+from app.db.session import AsyncSessionLocal, ensure_tenant_schema, get_tenant_session
 from app.models.models import Tenant
 from app.services.file_storage import FileStorageService
 from app.services.integrations import (
@@ -56,7 +56,7 @@ async def require_tenant_slug(request: Request) -> None:
 async def get_session(tenant: Tenant = Depends(get_tenant_record)) -> AsyncIterator[AsyncSession]:
     """Provide an async database session scoped to the current tenant."""
 
-    async with AsyncSessionLocal(tenant=tenant.slug, schema_name=tenant.schema_name) as session:
+    async with get_tenant_session(tenant=tenant.slug, schema_name=tenant.schema_name) as session:
         info = getattr(session, "info", None)
         if info is None or not isinstance(info, dict):
             info = {}

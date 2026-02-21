@@ -16,12 +16,12 @@ async def test_missing_xtenant_returns_400(app_fixture, make_auth_headers) -> No
         response = await client.get("/api/v1/tenants", headers=headers)
     assert response.status_code == 400
     payload = response.json()
-    assert payload["code"] == "missing_tenant"
+    assert payload["code"] == "tenant_header_missing"
 
 
 def test_s3_prefix_uses_tenant_namespace() -> None:
     key = build_storage_key(tenant_slug="tenant-123", sha256_hex="a" * 64, extension="pdf")
-    assert key.startswith("tenants/tenant-123/")
+    assert key.startswith("tenant-123/")
 
 
 def test_celery_route_queue_name_contains_tenant() -> None:

@@ -87,6 +87,7 @@ __all__ = [
     "Tenant",
     "TenantQuota",
     "TenantCounter",
+    "TenantSettings",
     "Template",
     "TemplateVersion",
     "Training",
@@ -163,6 +164,7 @@ class Tenant(SharedModel):
         default="customer",
     )
     schema_name: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True)
+    s3_prefix: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     settings: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
 
@@ -181,6 +183,19 @@ class TenantQuota(SharedModel):
     max_parallel_jobs: Mapped[int] = mapped_column(Integer, nullable=False, default=4)
     max_doc_generations_per_month: Mapped[int] = mapped_column(Integer, nullable=False, default=5000)
     max_storage_mb: Mapped[int] = mapped_column(Integer, nullable=False, default=10240)
+    monthly_edo_outgoing: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    enforce_billing_gate: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
+class TenantSettings(SharedModel):
+    __tablename__ = "tenant_settings"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=False, unique=True)
+    schema_name: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    s3_prefix: Mapped[str] = mapped_column(String(255), nullable=False)
+    timezone: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    retention_policy: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    integration_keys: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
 
 
 class TenantCounter(SharedModel):

@@ -14,7 +14,7 @@ from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import abac, verify_token
 from app.core.tenant import tenant_schema
 from app.db.session import _create_tenant_schema
-from app.models.models import RoleEnum, Tenant, TenantQuota
+from app.models.models import RoleEnum, Tenant, TenantQuota, TenantSettings
 from app.repository import list_tenants
 from app.schemas.tenant import (
     TenantCreate,
@@ -91,15 +91,27 @@ async def create_tenant_endpoint(
         parent_id=payload.parent_id,
         kind=payload.kind,
         schema_name=schema_name,
+        s3_prefix="",
         is_active=True,
     )
     session.add(tenant)
+    await session.flush()
+    tenant.s3_prefix = tenant.id
+    session.add(
+        TenantSettings(
+            tenant_id=tenant.id,
+            schema_name=schema_name,
+            s3_prefix=tenant.id,
+        )
+    )
     session.add(
         TenantQuota(
             tenant_id=tenant.id,
             max_parallel_jobs=4,
             max_doc_generations_per_month=5000,
             max_storage_mb=10240,
+            monthly_edo_outgoing=0,
+            enforce_billing_gate=False,
         )
     )
     try:

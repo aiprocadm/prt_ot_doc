@@ -10,6 +10,7 @@ from app.db.session import (  # noqa: F401
     engine,
     ensure_tenant_schema,
     get_session,
+    get_tenant_session,
     session_scope,
 )
 
@@ -26,5 +27,6 @@ __all__ = [
     "engine",
     "ensure_tenant_schema",
     "get_session",
+    "get_tenant_session",
     "session_scope",
 ]
