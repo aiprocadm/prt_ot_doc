@@ -16,3 +16,22 @@ class UserRolesResponse(BaseModel):
     roles: list[str]
 
     model_config = ConfigDict(extra="forbid")
+
+
+class UserAttributesRequest(BaseModel):
+    company_ids: list[str] = Field(default_factory=list)
+    site_ids: list[str] = Field(default_factory=list)
+    project_ids: list[str] = Field(default_factory=list)
+    contractor_ids: list[str] = Field(default_factory=list)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class UserAttributesResponse(BaseModel):
+    user_id: str
+    company_ids: list[str] = Field(default_factory=list)
+    site_ids: list[str] = Field(default_factory=list)
+    project_ids: list[str] = Field(default_factory=list)
+    contractor_ids: list[str] = Field(default_factory=list)
+
+    model_config = ConfigDict(extra="forbid")

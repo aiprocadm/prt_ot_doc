@@ -52,6 +52,7 @@ class MeResponse(BaseModel):
     tenant_slug: str | None = None
     roles: list[str] = Field(default_factory=list)
     company_id: str | None = None
+    attributes: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class AdminPingResponse(BaseModel):
@@ -143,6 +144,12 @@ async def me(access: AccessContext = Depends(rbac())) -> MeResponse:
         tenant_slug=access.tenant_slug,
         roles=context.roles,
         company_id=access.company_id,
+        attributes={
+            "company_ids": [str(v) for v in access.claims.get("company_ids", [])],
+            "site_ids": [str(v) for v in access.claims.get("site_ids", [])],
+            "project_ids": [str(v) for v in access.claims.get("project_ids", [])],
+            "contractor_ids": [str(v) for v in access.claims.get("contractor_ids", [])],
+        },
     )
 
 @router.post("/refresh", response_model=TokenPair, status_code=status.HTTP_200_OK)
@@ -197,7 +204,7 @@ async def refresh_tokens(
 
 
 @router.get("/admin/ping", response_model=AdminPingResponse)
-async def admin_ping(access: AccessContext = Depends(rbac(["admin"]))):
+async def admin_ping(access: AccessContext = Depends(rbac(["admin", "owner"]))):
     """Simple guard-protected endpoint used to validate RBAC wiring."""
 
     return AdminPingResponse(status="ok", user_id=access.user.id)

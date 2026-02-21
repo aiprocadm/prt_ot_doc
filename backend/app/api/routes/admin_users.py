@@ -9,14 +9,19 @@ from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, rbac
-from app.models.models import RoleEnum, Tenant, User, UserRole
-from app.schemas.admin_user import UserRolesRequest, UserRolesResponse
+from app.models.models import RoleEnum, Tenant, User, UserAttribute, UserRole
+from app.schemas.admin_user import (
+    UserAttributesRequest,
+    UserAttributesResponse,
+    UserRolesRequest,
+    UserRolesResponse,
+)
 
 router = APIRouter()
 
 SessionDep = Depends(get_session)
 TenantDep = Depends(get_tenant_record)
-AdminAccess = Depends(rbac(["admin"]))
+AdminAccess = Depends(rbac(["admin", "owner"]))
 
 
 def _normalize_roles(roles: list[str]) -> list[RoleEnum]:
@@ -58,6 +63,7 @@ async def get_user_roles(
     return UserRolesResponse(user_id=user.id, roles=_collect_role_values(user))
 
 
+@router.patch("/admin/users/{user_id}/roles", response_model=UserRolesResponse)
 @router.post("/admin/users/{user_id}/roles", response_model=UserRolesResponse)
 async def assign_user_roles(
     user_id: str,
@@ -87,3 +93,46 @@ async def assign_user_roles(
     await session.commit()
     await session.refresh(user)
     return UserRolesResponse(user_id=user.id, roles=_collect_role_values(user))
+
+
+@router.patch("/admin/users/{user_id}/attributes", response_model=UserAttributesResponse)
+async def assign_user_attributes(
+    user_id: str,
+    payload: UserAttributesRequest,
+    session: AsyncSession = SessionDep,
+    tenant: Tenant = TenantDep,
+    _: AccessContext = AdminAccess,
+) -> UserAttributesResponse:
+    user = (
+        await session.execute(
+            select(User).where(User.id == user_id, User.tenant_id == tenant.id, User.deleted_at.is_(None))
+        )
+    ).scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+
+    attrs = (
+        await session.execute(
+            select(UserAttribute).where(
+                UserAttribute.user_id == user_id,
+                UserAttribute.tenant_id == tenant.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if attrs is None:
+        attrs = UserAttribute(tenant_id=tenant.id, user_id=user_id)
+        session.add(attrs)
+
+    attrs.company_ids = payload.company_ids
+    attrs.site_ids = payload.site_ids
+    attrs.project_ids = payload.project_ids
+    attrs.contractor_ids = payload.contractor_ids
+    await session.commit()
+    await session.refresh(attrs)
+    return UserAttributesResponse(
+        user_id=user_id,
+        company_ids=attrs.company_ids,
+        site_ids=attrs.site_ids,
+        project_ids=attrs.project_ids,
+        contractor_ids=attrs.contractor_ids,
+    )
