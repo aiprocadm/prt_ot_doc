@@ -14,4 +14,4 @@ async def test_missing_tenant_header_returns_400(app_fixture, make_auth_headers)
 
     assert response.status_code == 400
     payload = response.json()
-    assert payload["code"] == "tenant_required"
+    assert payload["code"] == "missing_tenant"

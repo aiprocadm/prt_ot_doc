@@ -1,14 +1,22 @@
-# Tenancy architecture
+# Tenancy Core
 
-- Header `X-Tenant` is mandatory for business routes; middleware validates tenant existence/active status.
-- DB isolation uses PostgreSQL schemas with `search_path = tenant_<slug>, public` for tenant requests.
-- Shared/public tables: `tenant`, `tenant_quotas`, `tenant_counters`, outbox/idempotency tables.
-- Tenant data tables remain in tenant schema via `TenantBase` metadata.
-- New tenant creation flow:
-  1. Insert row into `tenant`.
-  2. Create schema `tenant_<slug>`.
-  3. Apply tenant metadata tables via ORM bootstrap (`create_all`) and Alembic for shared tables.
-- Object storage isolation is prefix-based: `<tenant_slug>/<object_key>`; download presign verifies prefix ownership.
-- Quotas:
-  - `max_parallel_jobs` limits queued/running document jobs per tenant.
-  - `max_doc_generations_per_month` enforced by `tenant_counters` (`yyyymm`).
+- Все бизнес-роуты `/api/v1/**` (кроме auth/health/docs/openapi) требуют `X-Tenant`.
+- Поддерживается `X-Tenant` как `slug`, `code` или `UUID` tenant.
+- На каждый запрос tenant-контекст кладётся в `request.state` (id/slug/schema/quota).
+- DB использует schema-per-tenant через `search_path` (`<tenant_schema>, public`).
+
+## S3 isolation
+
+- Ключи файлов формируются в tenant namespace: `tenants/{tenant_id}/...`.
+- Доступ к signed URL проверяет принадлежность tenant-префиксу.
+
+## Celery isolation
+
+- Роутинг задач по tenant в очереди `tenant.{tenant_id}`.
+- Для бизнес-задач без tenant роутинг запрещён (`missing_tenant`).
+
+## Quotas
+
+- Проверки квот реализованы в `app/tenancy_quotas.py`.
+- На текущем этапе проверяются: `generations_month`, `jobs`, `storage_bytes`.
+- При превышении возвращается `429 quota_exceeded`.

@@ -65,6 +65,7 @@ from app.api.routes import (
     risk,
     sites,
     tasks,
+    tenancy,
     tenants,
     training,
 )
@@ -104,6 +105,7 @@ from app.services.docx import DocxService
 from app.services.file_storage import FileStorageService
 from app.services.pipeline import PipelineService
 from app.services.tasks import run_pipeline_task
+from app.tenancy_quotas import assert_quota
 
 DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 ATTACHMENT_HEADER = 'attachment; filename="{filename}"'
@@ -159,8 +161,10 @@ tenant_router.include_router(documents.router, prefix="/documents", tags=["docum
 tenant_router.include_router(edo_workflow.router, tags=["edo-workflow"])
 tenant_router.include_router(jobs.router)
 tenant_router.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
+tenant_router.include_router(tenancy.router)
 tenant_router.include_router(outbox_admin.router, prefix="/admin/outbox", tags=["outbox"])
 tenant_router.include_router(tenants.router)
+tenant_router.include_router(tenants.admin_router)
 tenant_router.include_router(companies.router)
 tenant_router.include_router(persons.router)
 tenant_router.include_router(training.router, tags=["training"])
@@ -222,6 +226,9 @@ MAX_METADATA_JSON_BYTES = 64 * 1024
 
 
 async def _enforce_tenant_generation_quota(session: AsyncSession, tenant: Tenant) -> None:
+    await assert_quota(session, tenant=tenant, kind="jobs", delta=1)
+    await assert_quota(session, tenant=tenant, kind="generations_month", delta=1)
+    return
     quota = (
         await session.execute(select(TenantQuota).where(TenantQuota.tenant_id == tenant.id))
     ).scalar_one_or_none()

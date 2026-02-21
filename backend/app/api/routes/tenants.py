@@ -25,6 +25,7 @@ from app.schemas.tenant import (
 )
 
 router = APIRouter(prefix="/tenants", tags=["tenants"])
+admin_router = APIRouter(prefix="/admin/tenants", tags=["admin-tenants"])
 _optional_bearer = HTTPBearer(auto_error=False)
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -61,6 +62,17 @@ async def list_tenants_endpoint(
 
     items, total = await list_tenants(session, tenant.slug, limit=limit, offset=offset)
     return TenantPage(items=items, total=total)
+
+
+@admin_router.get("", response_model=TenantPage)
+async def list_tenants_admin_endpoint(
+    session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> TenantPage:
+    return await list_tenants_endpoint(session, tenant, credentials, limit, offset)
 
 
 @router.post("", response_model=TenantRead, status_code=status.HTTP_201_CREATED)
@@ -101,6 +113,15 @@ async def create_tenant_endpoint(
     return TenantRead.model_validate(tenant)
 
 
+@admin_router.post("", response_model=TenantRead, status_code=status.HTTP_201_CREATED)
+async def create_tenant_admin_endpoint(
+    payload: TenantCreate,
+    session: SessionDep,
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+) -> TenantRead:
+    return await create_tenant_endpoint(payload, session, credentials)
+
+
 @router.get("/me")
 async def get_my_tenant_endpoint(
     session: SessionDep,
@@ -136,6 +157,17 @@ async def patch_tenant_quotas_endpoint(
     await session.commit()
     await session.refresh(quota)
     return TenantQuotaRead.model_validate(quota)
+
+
+@admin_router.patch("/{tenant_id}/quotas", response_model=TenantQuotaRead)
+async def patch_tenant_quotas_admin_endpoint(
+    tenant_id: str,
+    payload: TenantQuotaPatch,
+    session: SessionDep,
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+    access=Depends(abac(_tenant_resource_id, required_roles=_MANAGEMENT_ROLES, action="write")),
+) -> TenantQuotaRead:
+    return await patch_tenant_quotas_endpoint(tenant_id, payload, session, credentials, access)
 
 
 @router.get("/{tenant_id}", response_model=TenantRead)

@@ -33,6 +33,9 @@ def _resolve_tenant_slug(request: Request) -> str | None:
 
 
 async def get_tenant_record(request: Request) -> Tenant:
+    preloaded = getattr(request.state, "tenant_record", None)
+    if isinstance(preloaded, Tenant):
+        return preloaded
     tenant_slug = _resolve_tenant_slug(request)
     info = tenant_required(tenant_slug) if tenant_slug is not None else get_current_tenant()
     async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as session:
@@ -53,7 +56,7 @@ async def require_tenant_slug(request: Request) -> None:
 async def get_session(tenant: Tenant = Depends(get_tenant_record)) -> AsyncIterator[AsyncSession]:
     """Provide an async database session scoped to the current tenant."""
 
-    async with AsyncSessionLocal(tenant=tenant.slug) as session:
+    async with AsyncSessionLocal(tenant=tenant.slug, schema_name=tenant.schema_name) as session:
         info = getattr(session, "info", None)
         if info is None or not isinstance(info, dict):
             info = {}

@@ -1,8 +1,10 @@
 """FastAPI middleware for tenant extraction."""
 from __future__ import annotations
 
+from uuid import UUID
+
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
@@ -11,7 +13,7 @@ from starlette.types import ASGIApp
 from app.core.security import verify_token
 from app.core.tenant import TENANT_HEADER_ALIASES, tenant_required
 from app.db.session import AsyncSessionLocal
-from app.models.models import Tenant
+from app.models.models import Tenant, TenantQuota
 
 
 class TenantMiddleware(BaseHTTPMiddleware):
@@ -22,6 +24,14 @@ class TenantMiddleware(BaseHTTPMiddleware):
         self._metrics_enabled = metrics_enabled
         self._system_paths = {"/health", "/ready", "/healthz", "/readyz"}
         self._public_prefixes = ("/api/v1/auth", "/api/v1/public")
+
+    @staticmethod
+    def _is_uuid(value: str) -> bool:
+        try:
+            UUID(str(value))
+        except (ValueError, TypeError):
+            return False
+        return True
 
     async def dispatch(self, request: Request, call_next):  # type: ignore[override]
         path = request.url.path
@@ -43,6 +53,17 @@ class TenantMiddleware(BaseHTTPMiddleware):
             header_slug = request.headers.get(header_name)
             if header_slug:
                 break
+        if path.startswith("/api/v1/") and not header_slug:
+            correlation_id = getattr(request.state, "trace_id", "")
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "missing_tenant",
+                    "type": "tenancy",
+                    "message": "X-Tenant required",
+                    "correlation-id": correlation_id,
+                },
+            )
         if not header_slug:
             tenant_required(None)
         token_slug: str | None = None
@@ -69,9 +90,11 @@ class TenantMiddleware(BaseHTTPMiddleware):
 
         info = tenant_required(normalized_header)
         async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as session:
-            tenant = (
-                await session.execute(select(Tenant).where(Tenant.slug == info.slug))
-            ).scalar_one_or_none()
+            identifier = info.slug
+            filters = [Tenant.slug == identifier, Tenant.code == identifier]
+            if self._is_uuid(identifier):
+                filters.append(Tenant.id == identifier)
+            tenant = (await session.execute(select(Tenant).where(or_(*filters)))).scalar_one_or_none()
         if tenant is None:
             raise HTTPException(
                 status.HTTP_404_NOT_FOUND,
@@ -85,4 +108,11 @@ class TenantMiddleware(BaseHTTPMiddleware):
         request.state.tenant_id = str(tenant.id)
         request.state.tenant_slug = tenant.slug
         request.state.tenant_schema = tenant.schema_name or f"tenant_{tenant.slug}"
+        request.state.tenant_code = tenant.code
+        request.state.tenant_record = tenant
+        async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as session:
+            quota = (
+                await session.execute(select(TenantQuota).where(TenantQuota.tenant_id == tenant.id))
+            ).scalar_one_or_none()
+        request.state.tenant_quota = quota
         return await call_next(request)
