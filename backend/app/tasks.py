@@ -34,6 +34,7 @@ from app.models.document import (
     DocumentStatus,
     DocumentVersion,
 )
+from app.models.job_engine import OutboxEvent, OutboxEventStatus
 from app.models.models import (
     Company,
     Person,
@@ -816,3 +817,25 @@ async def _mark_batch_item_failed(
             batch.status = DocumentBatchStatus.FAILED
             batch.finished_at = datetime.now(tz=timezone.utc)
         await session.flush()
+
+
+@celery_app.task(name="dispatch_outbox_events")
+def dispatch_outbox_events(max_attempts: int = 3) -> int:
+    return _run_coroutine(_dispatch_outbox_events(max_attempts=max_attempts))
+
+
+async def _dispatch_outbox_events(*, max_attempts: int = 3) -> int:
+    processed = 0
+    async with session_scope(tenant="test") as session:
+        pending = (
+            await session.execute(select(OutboxEvent).where(OutboxEvent.status == OutboxEventStatus.PENDING.value))
+        ).scalars().all()
+        for event in pending:
+            event.attempts += 1
+            if event.attempts > max_attempts:
+                event.status = OutboxEventStatus.FAILED.value
+                continue
+            event.status = OutboxEventStatus.SENT.value
+            processed += 1
+        await session.flush()
+    return processed

@@ -13,6 +13,8 @@ class TaskAcceptedResponse(BaseSchema):
     """Response payload returned when background work is enqueued."""
 
     task_id: str = Field(..., description="Identifier of the scheduled task")
+    job_id: str | None = Field(default=None, description="Document job identifier")
+    correlation_id: str | None = Field(default=None, description="Correlation identifier")
     status_url: str = Field(..., description="URL to poll task status")
     document_version_id: str | None = Field(
         default=None,

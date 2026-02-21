@@ -4,10 +4,13 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.models.job_engine import DocumentArtifact, DocumentJob, DocumentJobStep
 from app.models.models import PipelineRun, PipelineRunStatus, Tenant
+from app.services.pipelines_orchestrator import DocumentPipelineOrchestrator
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -18,6 +21,7 @@ class JobStepRead(BaseModel):
     started_at: datetime | None = None
     finished_at: datetime | None = None
     error: str | None = None
+    retries_count: int = 0
 
 
 class JobRead(BaseModel):
@@ -26,7 +30,9 @@ class JobRead(BaseModel):
     started_at: datetime | None = None
     finished_at: datetime | None = None
     error: str | None = None
+    correlation_id: str | None = None
     steps: list[JobStepRead]
+    artifacts: list[dict] = []
 
 
 class JobArtifactsRead(BaseModel):
@@ -50,10 +56,6 @@ def _default_steps(run: PipelineRun) -> list[JobStepRead]:
         JobStepRead(name="apply_headers", status="done" if state == "done" else "skipped"),
         JobStepRead(name="replace", status="done" if state == "done" else "skipped"),
         JobStepRead(name="convert_pdf", status="done" if state == "done" else "pending"),
-        JobStepRead(name="build_zip", status="done" if state == "done" else "pending"),
-        JobStepRead(name="sign_stub", status="done" if state == "done" else "pending"),
-        JobStepRead(name="edo_stub", status="done" if state == "done" else "pending"),
-        JobStepRead(name="archive", status="done" if state == "done" else "pending"),
     ]
 
 
@@ -63,6 +65,35 @@ async def get_job(
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
 ) -> JobRead:
+    job = await session.get(DocumentJob, job_id)
+    if job is not None and str(job.tenant_id) == str(tenant.id):
+        steps = (
+            await session.execute(select(DocumentJobStep).where(DocumentJobStep.job_id == job.id))
+        ).scalars().all()
+        artifacts = (
+            await session.execute(select(DocumentArtifact).where(DocumentArtifact.job_id == job.id))
+        ).scalars().all()
+        return JobRead(
+            id=job.id,
+            status=str(job.status),
+            started_at=job.started_at,
+            finished_at=job.ended_at,
+            error=job.error_code,
+            correlation_id=job.correlation_id,
+            steps=[
+                JobStepRead(
+                    name=s.step_code,
+                    status=str(s.status),
+                    started_at=s.started_at,
+                    finished_at=s.ended_at,
+                    error=s.error_code,
+                    retries_count=s.attempts,
+                )
+                for s in steps
+            ],
+            artifacts=[{"step_code": a.step_code, "kind": a.kind, "sha256": a.sha256} for a in artifacts],
+        )
+
     run = await session.get(PipelineRun, job_id)
     if run is None or str(run.tenant_id) != str(tenant.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
@@ -75,6 +106,24 @@ async def get_job(
         error=run.error,
         steps=_default_steps(run),
     )
+
+
+@router.post("/{job_id}/retry", response_model=JobRead)
+async def retry_job(
+    job_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> JobRead:
+    job = await session.get(DocumentJob, job_id)
+    if job is None or str(job.tenant_id) != str(tenant.id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+    orchestrator = DocumentPipelineOrchestrator(session)
+    try:
+        await orchestrator.retry_job(job_id=job_id)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    await session.commit()
+    return await get_job(job_id=job_id, session=session, tenant=tenant)
 
 
 @router.get("/{job_id}/artifacts", response_model=JobArtifactsRead)
