@@ -21,7 +21,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
 
-from app.models.base import SharedModel, SoftDeleteMixin, TenantBaseModel
+from app.db.session import TenantBase
+from app.models.base import SharedModel, SoftDeleteMixin, TenantBaseModel, TimestampMixin, UUIDMixin, VersionedMixin
 from app.models.file import File
 
 if TYPE_CHECKING:  # pragma: no cover - used for type checkers only
@@ -98,6 +99,10 @@ __all__ = [
     "User",
     "UserRole",
     "UserAttribute",
+    "AuthzRole",
+    "AuthzPermission",
+    "AuthzRolePermission",
+    "AuthzUserRole",
     "WarehousePPE",
     "WebhookSubscription",
     "WebhookDelivery",
@@ -260,6 +265,66 @@ class UserAttribute(TenantBaseModel):
     __table_args__ = (
         UniqueConstraint("tenant_id", "user_id", name="uq_user_attribute"),
         Index("ix_user_attribute_user", "tenant_id", "user_id"),
+    )
+
+
+
+
+class AuthzBaseModel(TenantBase, TimestampMixin, VersionedMixin, UUIDMixin):
+    __abstract__ = True
+
+
+class AuthzRole(AuthzBaseModel):
+    __tablename__ = "authz_roles"
+
+    code: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+
+
+class AuthzPermission(AuthzBaseModel):
+    __tablename__ = "authz_permissions"
+
+    resource: Mapped[str] = mapped_column(String(128), nullable=False)
+    action: Mapped[str] = mapped_column(String(64), nullable=False)
+    code: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+
+    __table_args__ = (
+        UniqueConstraint("resource", "action", name="uq_authz_permission_resource_action"),
+    )
+
+
+class AuthzRolePermission(AuthzBaseModel):
+    __tablename__ = "authz_role_permissions"
+
+    role_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("authz_roles.id", ondelete="CASCADE"), nullable=False
+    )
+    permission_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("authz_permissions.id", ondelete="CASCADE"), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("role_id", "permission_id", name="pk_authz_role_permission"),
+    )
+
+
+class AuthzUserRole(AuthzBaseModel):
+    __tablename__ = "authz_user_roles"
+
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    role_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("authz_roles.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    scope_company_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    scope_site_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    scope_project_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    scope_contractor_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+    __table_args__ = (
+        Index("ix_authz_user_roles_user", "user_id"),
+        Index("ix_authz_user_roles_role", "role_id"),
     )
 
 
