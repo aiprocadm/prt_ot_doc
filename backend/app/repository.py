@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.tenant import get_current_tenant
+from app.core.rbac_abac import actor_from_claims, apply_abac_filters
 from app.models.models import (
     Company,
     Person,
@@ -106,7 +107,13 @@ async def create_company(
 
 
 async def list_companies(
-    session: AsyncSession, tenant_id: str, *, limit: int, offset: int
+    session: AsyncSession,
+    tenant_id: str,
+    *,
+    limit: int,
+    offset: int,
+    claims: dict[str, object] | None = None,
+    roles: list[str] | None = None,
 ) -> tuple[list[Company], int]:
     """Return companies for a tenant excluding soft-deleted rows."""
 
@@ -116,6 +123,9 @@ async def list_companies(
         Company.tenant_id == normalized_tenant,
         Company.deleted_at.is_(None),
     )
+    if claims is not None:
+        actor = actor_from_claims(claims, roles or [])
+        base = apply_abac_filters(base, actor, Company)
     stmt = base.order_by(Company.created_at.desc()).offset(offset).limit(limit)
     rows = (await session.execute(stmt)).scalars().all()
     total_stmt = select(func.count()).select_from(base.subquery())

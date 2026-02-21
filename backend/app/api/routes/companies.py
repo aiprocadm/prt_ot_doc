@@ -5,16 +5,18 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.rbac_abac import actor_from_claims, policy_forbidden
 from app.core.security import AccessContext, abac
 from app.models.models import Company, Tenant
 from app.repository import create_company, list_companies
 from app.schemas.company import CompanyCreate, CompanyPage, CompanyRead, CompanyUpdate
+from app.services.audit import AuditService, field_level_diff
 
 router = APIRouter(prefix="/companies", tags=["companies"])
 
@@ -22,7 +24,7 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 
 
-_defense_roles = ["admin"]
+_defense_roles = ["admin", "owner"]
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
@@ -130,12 +132,20 @@ async def list_companies_endpoint(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> CompanyPage:
-    companies, total = await list_companies(session, tenant.id, limit=limit, offset=offset)
+    companies, total = await list_companies(
+        session,
+        tenant.id,
+        limit=limit,
+        offset=offset,
+        claims=dict(access.claims),
+        roles=access.to_auth_context().roles,
+    )
     return CompanyPage(items=companies, total=total)
 
 
 @router.post("", response_model=CompanyRead, status_code=status.HTTP_201_CREATED)
 async def create_company_endpoint(
+    request: Request,
     payload: CompanyCreate,
     tenant: TenantDep,
     session: SessionDep,
@@ -143,6 +153,17 @@ async def create_company_endpoint(
 ) -> CompanyRead:
     try:
         company = await create_company(session, tenant.id, payload)
+        await AuditService(session).log_event(
+            tenant_id=str(tenant.id),
+            action="create",
+            object_type="Company",
+            object_id=company.id,
+            user_id=access.user.id,
+            ip=request.client.host if request.client else "unknown",
+            user_agent=request.headers.get("user-agent"),
+            changed_fields={"fields": {"id": {"before": None, "after": company.id}}},
+            details={"entity": "Company"},
+        )
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
@@ -160,11 +181,15 @@ async def get_company_endpoint(
     access: ManagerAccess,
 ) -> CompanyRead:
     company = await _get_company_or_404(session, tenant, company_id)
+    actor = actor_from_claims(dict(access.claims), access.to_auth_context().roles)
+    if actor.company_ids and company.id not in actor.company_ids:
+        raise policy_forbidden("Company scope mismatch for read companies")
     return CompanyRead.model_validate(company)
 
 
 @router.patch("/{company_id}", response_model=CompanyRead)
 async def update_company_endpoint(
+    request: Request,
     company_id: str,
     payload: CompanyUpdate,
     tenant: TenantDep,
@@ -172,8 +197,21 @@ async def update_company_endpoint(
     access: EditorAccess,
 ) -> CompanyRead:
     company = await _get_company_or_404(session, tenant, company_id)
+    before = CompanyRead.model_validate(company).model_dump()
     _apply_company_updates(company, payload)
     try:
+        after = CompanyRead.model_validate(company).model_dump()
+        await AuditService(session).log_event(
+            tenant_id=str(tenant.id),
+            action="update",
+            object_type="Company",
+            object_id=company.id,
+            user_id=access.user.id,
+            ip=request.client.host if request.client else "unknown",
+            user_agent=request.headers.get("user-agent"),
+            changed_fields=field_level_diff(before, after),
+            details={"entity": "Company"},
+        )
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
@@ -189,6 +227,7 @@ async def update_company_endpoint(
     response_model=None,
 )
 async def archive_company_endpoint(
+    request: Request,
     company_id: str,
     tenant: TenantDep,
     session: SessionDep,
@@ -196,6 +235,18 @@ async def archive_company_endpoint(
 ) -> None:
     company = await _get_company_or_404(session, tenant, company_id)
     if company.deleted_at is None:
+        before = {"deleted_at": None}
         company.deleted_at = datetime.now(timezone.utc)
+        await AuditService(session).log_event(
+            tenant_id=str(tenant.id),
+            action="delete",
+            object_type="Company",
+            object_id=company.id,
+            user_id=access.user.id,
+            ip=request.client.host if request.client else "unknown",
+            user_agent=request.headers.get("user-agent"),
+            changed_fields=field_level_diff(before, {"deleted_at": company.deleted_at}),
+            details={"entity": "Company", "soft": True},
+        )
     await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

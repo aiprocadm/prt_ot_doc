@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,7 +17,7 @@ router = APIRouter()
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
-AdminAccess = Annotated[AccessContext, Depends(rbac(["admin"]))]
+AdminAccess = Annotated[AccessContext, Depends(rbac(["admin", "owner"]))]
 
 
 class AuditLogEntry(BaseModel):
@@ -79,3 +81,53 @@ async def get_audit_history(
         for record in rows
     ]
     return AuditLogHistory(total=len(items), items=items)
+
+
+@router.get("/export")
+async def export_audit_history(
+    from_: str | None = Query(None, alias="from"),
+    to: str | None = Query(None),
+    entity: str | None = Query(None),
+    actor: str | None = Query(None),
+    fmt: str = Query("jsonl", pattern="^(jsonl|csv)$"),
+    *,
+    tenant: TenantDep,
+    _: AdminAccess,
+    session: SessionDep,
+) -> StreamingResponse:
+    stmt = select(AuditLog).where(AuditLog.tenant_id == tenant.id)
+    if entity:
+        stmt = stmt.where(AuditLog.object_type == entity)
+    if actor:
+        stmt = stmt.where(AuditLog.user_id == actor)
+    if from_:
+        stmt = stmt.where(AuditLog.when >= datetime.fromisoformat(from_))
+    if to:
+        stmt = stmt.where(AuditLog.when <= datetime.fromisoformat(to))
+    rows = (await session.execute(stmt.order_by(AuditLog.when.desc()))).scalars().all()
+
+    if fmt == "csv":
+        def _iter_csv():
+            yield "when,user_id,action,object_type,object_id,ip,request_id\n"
+            for row in rows:
+                yield f"{row.when.isoformat()},{row.user_id or ''},{row.action},{row.object_type},{row.object_id},{row.ip},{row.request_id or ''}\n"
+
+        return StreamingResponse(_iter_csv(), media_type="text/csv")
+
+    def _iter_jsonl():
+        import json
+
+        for row in rows:
+            payload = {
+                "when": row.when.isoformat(),
+                "user_id": row.user_id,
+                "action": row.action,
+                "entity_type": row.object_type,
+                "entity_id": row.object_id,
+                "ip": row.ip,
+                "request_id": row.request_id,
+                "changed_fields": row.changed_fields or {},
+            }
+            yield json.dumps(payload, ensure_ascii=False) + "\n"
+
+    return StreamingResponse(_iter_jsonl(), media_type="application/x-ndjson")

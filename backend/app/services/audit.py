@@ -29,6 +29,25 @@ def _normalize_payload(payload: Mapping[str, Any] | None) -> dict[str, Any]:
     return {key: _normalize_value(val) for key, val in (payload or {}).items()}
 
 
+def field_level_diff(
+    before: Mapping[str, Any],
+    after: Mapping[str, Any],
+    *,
+    exclude: set[str] | None = None,
+) -> dict[str, Any]:
+    excluded = {"updated_at", "created_at", "version", *(exclude or set())}
+    fields: dict[str, Any] = {}
+    keys = set(before.keys()).union(after.keys())
+    for key in keys:
+        if key in excluded:
+            continue
+        prev = _normalize_value(before.get(key))
+        nxt = _normalize_value(after.get(key))
+        if prev != nxt:
+            fields[key] = {"before": prev, "after": nxt}
+    return {"fields": fields}
+
+
 class AuditService:
     """Persist audit trail entries for security-sensitive actions."""
 

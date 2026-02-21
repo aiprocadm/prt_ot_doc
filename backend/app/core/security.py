@@ -21,6 +21,7 @@ from app.api.dependencies import get_session
 from app.core.request_context import set_current_user_id
 from app.core.tenant import set_current_tenant
 from app.core.config import Settings, get_settings
+from app.core.rbac_abac import actor_from_claims, policy_forbidden
 from app.models.models import ApiKey, User
 from app.services.api_keys import authenticate_api_key
 
@@ -222,22 +223,13 @@ class AccessContext:
         self, company_id: str | None, *, action: str = "access company resource"
     ) -> None:
         if company_id is None:
-            raise HTTPException(
-                status.HTTP_403_FORBIDDEN,
-                detail=f"Company assignment required for {action}",
-            )
+            raise policy_forbidden(f"Company assignment required for {action}")
 
         if self.company_id is None:
-            raise HTTPException(
-                status.HTTP_403_FORBIDDEN,
-                detail=f"User is not linked to a company for {action}",
-            )
+            raise policy_forbidden(f"User is not linked to a company for {action}")
 
         if str(company_id) != str(self.company_id):
-            raise HTTPException(
-                status.HTTP_403_FORBIDDEN,
-                detail=f"Company mismatch for {action}",
-            )
+            raise policy_forbidden(f"Company mismatch for {action}")
 
     def ensure_site_access(
         self,
@@ -251,16 +243,10 @@ class AccessContext:
 
         allowed_sites = self._normalize_claim_list("site_ids", "site_id")
         if allowed_sites and str(site_id) not in allowed_sites:
-            raise HTTPException(
-                status.HTTP_403_FORBIDDEN,
-                detail=f"Site scope mismatch for {action}",
-            )
+            raise policy_forbidden(f"Site scope mismatch for {action}")
 
         if site_company_id and self.company_id and str(site_company_id) != str(self.company_id):
-            raise HTTPException(
-                status.HTTP_403_FORBIDDEN,
-                detail=f"Company mismatch for {action}",
-            )
+            raise policy_forbidden(f"Company mismatch for {action}")
 
     def ensure_document_access(
         self,
@@ -275,10 +261,7 @@ class AccessContext:
 
         allowed_docs = self._normalize_claim_list("document_ids", "document_id")
         if allowed_docs and str(document_id) not in allowed_docs:
-            raise HTTPException(
-                status.HTTP_403_FORBIDDEN,
-                detail=f"Document scope mismatch for {action}",
-            )
+            raise policy_forbidden(f"Document scope mismatch for {action}")
 
         if status_value and status_value.lower() == "draft":
             privileged = {"owner", "admin", "ot_pb_lead", "ot_specialist", "line_manager"}
@@ -286,10 +269,7 @@ class AccessContext:
             if owner_id and str(owner_id) == str(self.user.id):
                 return
             if not role_set.intersection(privileged):
-                raise HTTPException(
-                    status.HTTP_403_FORBIDDEN,
-                    detail=f"Draft documents are restricted for {action}",
-                )
+                raise policy_forbidden(f"Draft documents are restricted for {action}")
 
     def ensure_risk_access(
         self,
@@ -304,12 +284,33 @@ class AccessContext:
             privileged = {"owner", "admin", "ot_pb_lead", "ot_specialist", "pb_engineer"}
             role_set = {value.lower() for value in self.to_auth_context().roles}
             if not role_set.intersection(privileged):
-                raise HTTPException(
-                    status.HTTP_403_FORBIDDEN,
-                    detail=f"Risk level access denied for {action}",
-                )
+                raise policy_forbidden(f"Risk level access denied for {action}")
 
     def ensure_abac(self, *, action: str = "access", **attributes: Any) -> None:
+        actor = actor_from_claims(dict(self.claims), self.to_auth_context().roles)
+        company_id = attributes.get("company_id")
+        if company_id and actor.company_ids and str(company_id) not in actor.company_ids:
+            raise policy_forbidden(f"Company scope mismatch for {action}")
+
+        project_id = attributes.get("project_id")
+        if project_id and actor.project_ids and str(project_id) not in actor.project_ids:
+            raise policy_forbidden(f"Project scope mismatch for {action}")
+
+        contractor_id = attributes.get("contractor_id")
+        if contractor_id and actor.contractor_ids and str(contractor_id) not in actor.contractor_ids:
+            raise policy_forbidden(f"Contractor scope mismatch for {action}")
+
+        status_value = str(attributes.get("status") or attributes.get("document_status") or "").lower()
+        role_set = {value.lower() for value in self.to_auth_context().roles}
+        if status_value in {"archived", "signed"} and "admin" not in role_set and "owner" not in role_set:
+            if "update" in action.lower() or "manage" in action.lower():
+                raise policy_forbidden(f"Status '{status_value}' is immutable for {action}")
+
+        if str(attributes.get("risk_level") or "").lower() == "high":
+            privileged = {"ot_head", "ot_pb_lead", "admin", "owner"}
+            if any(token in action.lower() for token in ("approve", "sign")) and not role_set.intersection(privileged):
+                raise policy_forbidden(f"High risk action denied for {action}")
+
         self.ensure_site_access(
             attributes.get("site_id"),
             attributes.get("site_company_id"),

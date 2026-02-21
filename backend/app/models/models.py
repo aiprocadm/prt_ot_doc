@@ -97,6 +97,7 @@ __all__ = [
     "TrainingCertificate",
     "User",
     "UserRole",
+    "UserAttribute",
     "WarehousePPE",
     "WebhookSubscription",
     "WebhookDelivery",
@@ -134,6 +135,15 @@ class RoleEnum(str, enum.Enum):
     EMPLOYEE = "employee"
     CLIENT_ADMIN = "client_admin"
     CLIENT_USER = "client_user"
+    OT_HEAD = "ot_head"
+    CLERK = "clerk"
+    TEACHER = "teacher"
+    STUDENT = "student"
+    MANAGER = "manager"
+    EXECUTOR = "executor"
+    CLIENT = "client"
+    AUDITOR_RO = "auditor_ro"
+    INSPECTOR_CONTRACTOR = "inspector_contractor"
 
 
 class Tenant(SharedModel):
@@ -233,6 +243,23 @@ class UserRole(TenantBaseModel):
     __table_args__ = (
         UniqueConstraint("tenant_id", "user_id", "role", name="uq_user_role"),
         Index("ix_user_role_user", "tenant_id", "user_id"),
+    )
+
+
+class UserAttribute(TenantBaseModel):
+    __tablename__ = "user_attribute"
+
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    company_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    site_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    project_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    contractor_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "user_id", name="uq_user_attribute"),
+        Index("ix_user_attribute_user", "tenant_id", "user_id"),
     )
 
 
