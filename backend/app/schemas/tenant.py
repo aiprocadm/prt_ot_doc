@@ -12,6 +12,8 @@ class TenantQuotaRead(BaseSchema):
     max_parallel_jobs: int
     max_doc_generations_per_month: int
     max_storage_mb: int
+    monthly_edo_outgoing: int
+    enforce_billing_gate: bool
 
 
 class TenantRead(BaseSchema):
@@ -44,3 +46,5 @@ class TenantQuotaPatch(BaseSchema):
     max_parallel_jobs: int | None = Field(default=None, ge=1)
     max_doc_generations_per_month: int | None = Field(default=None, ge=1)
     max_storage_mb: int | None = Field(default=None, ge=1)
+    monthly_edo_outgoing: int | None = Field(default=None, ge=0)
+    enforce_billing_gate: bool | None = None

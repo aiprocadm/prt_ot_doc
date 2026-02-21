@@ -13,7 +13,7 @@ from starlette.types import ASGIApp
 from app.core.security import verify_token
 from app.core.tenant import TENANT_HEADER_ALIASES, tenant_required
 from app.db.session import AsyncSessionLocal
-from app.models.models import Tenant, TenantQuota
+from app.models.models import Tenant, TenantQuota, TenantSettings
 
 
 class TenantMiddleware(BaseHTTPMiddleware):
@@ -58,9 +58,9 @@ class TenantMiddleware(BaseHTTPMiddleware):
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
                 detail={
-                    "code": "missing_tenant",
+                    "code": "tenant_header_missing",
                     "type": "tenancy",
-                    "message": "X-Tenant required",
+                    "message": "X-Tenant header is required",
                     "correlation-id": correlation_id,
                 },
             )
@@ -107,12 +107,17 @@ class TenantMiddleware(BaseHTTPMiddleware):
             )
         request.state.tenant_id = str(tenant.id)
         request.state.tenant_slug = tenant.slug
-        request.state.tenant_schema = tenant.schema_name or f"tenant_{tenant.slug}"
-        request.state.tenant_code = tenant.code
-        request.state.tenant_record = tenant
         async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as session:
+            settings = (
+                await session.execute(select(TenantSettings).where(TenantSettings.tenant_id == tenant.id))
+            ).scalar_one_or_none()
             quota = (
                 await session.execute(select(TenantQuota).where(TenantQuota.tenant_id == tenant.id))
             ).scalar_one_or_none()
+        request.state.tenant_schema = (settings.schema_name if settings else None) or tenant.schema_name or f"tenant_{tenant.slug}"
+        request.state.tenant_s3_prefix = (settings.s3_prefix if settings else None) or tenant.s3_prefix or str(tenant.id)
+        request.state.tenant_code = tenant.code
+        request.state.tenant_record = tenant
+        request.state.tenant_settings = settings
         request.state.tenant_quota = quota
         return await call_next(request)

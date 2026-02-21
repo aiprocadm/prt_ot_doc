@@ -271,6 +271,20 @@ async def get_session() -> AsyncIterator[AsyncSession]:
 SessionLocal = AsyncSessionLocal
 
 
+@asynccontextmanager
+async def get_tenant_session(*, tenant: str, schema_name: str | None = None) -> AsyncIterator[AsyncSession]:
+    """Return a tenant-bound session and enforce schema routing."""
+
+    async with AsyncSessionLocal(tenant=tenant, schema_name=schema_name) as session:
+        if _SEARCH_PATH_SUPPORTED:
+            schema = schema_name or tenant_schema(tenant)
+            try:
+                await session.execute(text(f'SET LOCAL search_path TO "{schema}", "{_SHARED_SCHEMA}"'))
+            except Exception:
+                await session.execute(text(f'SET search_path TO "{schema}", "{_SHARED_SCHEMA}"'))
+        yield session
+
+
 def configure_engine(
     *, database_url: str | None = None, echo: bool | None = None
 ) -> None:

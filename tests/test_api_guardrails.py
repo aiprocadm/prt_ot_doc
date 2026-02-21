@@ -15,9 +15,9 @@ async def test_missing_tenant_header_returns_structured_error(app_fixture) -> No
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     body = response.json()
-    assert body["code"] == "tenant_required"
-    assert body["error_code"] == "tenant_required"
-    assert body["message"] == "Tenant header is required"
+    assert body["code"] == "tenant_header_missing"
+    assert body["error_code"] == "tenant_header_missing"
+    assert body["message"] == "X-Tenant header is required"
     assert body["trace_id"]
     assert body["request_id"] == body["trace_id"]
 

@@ -121,8 +121,6 @@ def build_dated_prefix(
 
     current = now or dt.datetime.now(dt.timezone.utc)
     base = tenant_prefix_path(tenant_slug)
-    if not base.startswith("tenants/"):
-        base = f"tenants/{base}"
     return f"{base}/{current.year:04d}/{current.month:02d}"
 
 
@@ -141,8 +139,6 @@ def build_storage_key(
 
     current = now or dt.datetime.now(dt.timezone.utc)
     base = tenant_prefix_path(tenant_slug)
-    if not base.startswith("tenants/"):
-        base = f"tenants/{base}"
 
     segments: list[str] = [base]
     if company_slug:
