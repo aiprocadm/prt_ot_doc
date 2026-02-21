@@ -15,6 +15,7 @@ from app.db import ensure_tenant_schema, session_scope
 from app.models.models import Tenant
 from app.repository import create_template
 from app.schemas.template import TemplateCreate
+from app.services.authz_seed import seed_authz_catalog
 from app.services.file_storage import FileStorageService
 
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -71,6 +72,7 @@ async def run() -> None:
     storage = FileStorageService.default()
     with tenant_context(SEED_TENANT):
         async with session_scope(tenant=SEED_TENANT) as session:
+            await seed_authz_catalog(session)
             for template_data in SEED_TEMPLATES:
                 content_bytes = build_docx(template_data["content"])
                 storage_key = f"{SEED_TENANT}/templates/{template_data['name']}.docx"
