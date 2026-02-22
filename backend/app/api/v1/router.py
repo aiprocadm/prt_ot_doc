@@ -715,7 +715,7 @@ async def list_template_versions(template_id: str, session: SessionDep, tenant: 
 
 
 @router.get("/templates/by-code/{code}", response_model=dict)
-async def get_template_by_code_version(code: str, version: int = Query(..., ge=1), session: SessionDep = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), access: ManagerAccess = None) -> dict[str, object]:
+async def get_template_by_code_version(code: str, session: SessionDep, tenant: TenantDep, access: ManagerAccess, version: int = Query(..., ge=1)) -> dict[str, object]:
     row = await get_template_version_by_code(session, tenant_id=tenant.slug, code=code, version=version)
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Template not found")
