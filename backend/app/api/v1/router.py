@@ -59,7 +59,6 @@ from app.api.routes import (
     persons,
     prescriptions,
     reports,
-    replace,
     obligations,
     ppe,
     risk,
@@ -71,6 +70,7 @@ from app.api.routes import (
     webhooks,
 )
 from app.modules.headers import api as headers_api
+from app.modules.replace import api as replace_api
 from app.core.payload_constraints import (
     PayloadConstraintError,
     enforce_mapping_constraints,
@@ -174,7 +174,7 @@ tenant_router.include_router(tenants.admin_router)
 tenant_router.include_router(companies.router)
 tenant_router.include_router(persons.router)
 tenant_router.include_router(training.router, tags=["training"])
-tenant_router.include_router(replace.router)
+tenant_router.include_router(replace_api.router)
 tenant_router.include_router(reports.router, tags=["reports"])
 tenant_router.include_router(headers_api.router, tags=["layout-presets"])
 

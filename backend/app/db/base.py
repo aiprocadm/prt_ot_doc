@@ -15,6 +15,7 @@ from app.models import (
     npa,  # noqa: F401
     risk,  # noqa: F401
 )
+from app.modules.replace import models as replace_models  # noqa: F401
 
 Base = TenantBase
 
