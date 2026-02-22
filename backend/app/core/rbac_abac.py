@@ -326,6 +326,18 @@ SCOPED_RESOURCES = {
 
 
 class PolicyEngine:
+    def enforce(
+        self,
+        actor: ActorContext,
+        action: str,
+        resource: str,
+        obj: Any | None = None,
+        ctx: dict[str, Any] | None = None,
+    ) -> Decision:
+        """Unified policy entrypoint required by business guards."""
+
+        return self.can(actor=actor, action=action, resource=resource, obj=obj, ctx=ctx)
+
     def can(
         self,
         actor: ActorContext,
