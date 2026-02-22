@@ -14,7 +14,8 @@ from app.core.tenant import get_current_tenant
 from app.db.session import AsyncSessionLocal
 from app.models.models import IdempotencyKey, IdempotencyStatus
 
-SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+IDEMPOTENT_METHODS = {"POST", "PUT", "PATCH"}
+MAX_STORED_BODY_BYTES = 256 * 1024
 
 logger = logging.getLogger("app.idempotency")
 
@@ -42,7 +43,7 @@ async def idempotency_dependency(request: Request) -> Response | None:
     """Return a cached response if the same idempotent request was processed before."""
 
     method = request.method.upper()
-    if method in SAFE_METHODS:
+    if method not in IDEMPOTENT_METHODS:
         return None
     key = request.headers.get("Idempotency-Key")
     if key is None:
@@ -53,6 +54,12 @@ async def idempotency_dependency(request: Request) -> Response | None:
     digest.update(method.encode("utf-8"))
     digest.update(b"\x00")
     digest.update(request.url.path.encode("utf-8"))
+    digest.update(b"\x00")
+    digest.update(str(request.url.query).encode("utf-8"))
+    digest.update(b"\x00")
+    digest.update((request.headers.get("content-type") or "").encode("utf-8"))
+    digest.update(b"\x00")
+    digest.update(str(get_current_tenant().id).encode("utf-8"))
     digest.update(b"\x00")
     digest.update(body)
     fingerprint = digest.hexdigest()
@@ -66,6 +73,8 @@ async def idempotency_dependency(request: Request) -> Response | None:
                 select(IdempotencyKey)
                 .where(
                     IdempotencyKey.key == normalized_key,
+                    IdempotencyKey.tenant_id == str(tenant.id),
+                    IdempotencyKey.endpoint == request.url.path,
                     IdempotencyKey.method == method,
                     IdempotencyKey.path == request.url.path,
                 )
@@ -78,7 +87,7 @@ async def idempotency_dependency(request: Request) -> Response | None:
     if record is None:
         return None
     if record.request_hash and record.request_hash != fingerprint:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Idempotency key conflict")
+        raise HTTPException(status.HTTP_409_CONFLICT, {"code":"IDEMPOTENCY_CONFLICT","type":"idempotency","message":"Idempotency key conflict"})
     payload = None
     status_code = record.status_code or status.HTTP_200_OK
     if record.response_body:
@@ -116,6 +125,8 @@ async def store_idempotent_response(request: Request, response: Response) -> Non
                 select(IdempotencyKey)
                 .where(
                     IdempotencyKey.key == key,
+                    IdempotencyKey.tenant_id == str(tenant.id),
+                    IdempotencyKey.endpoint == request.url.path,
                     IdempotencyKey.method == request.method.upper(),
                     IdempotencyKey.path == request.url.path,
                 )
@@ -125,7 +136,7 @@ async def store_idempotent_response(request: Request, response: Response) -> Non
             if record is None:
                 return None
             if record.request_hash and record.request_hash != fingerprint:
-                raise HTTPException(status.HTTP_409_CONFLICT, "Idempotency key conflict")
+                raise HTTPException(status.HTTP_409_CONFLICT, {"code":"IDEMPOTENCY_CONFLICT","type":"idempotency","message":"Idempotency key conflict"})
 
             record.request_hash = fingerprint
             record.status = IdempotencyStatus.SUCCEEDED
@@ -136,8 +147,11 @@ async def store_idempotent_response(request: Request, response: Response) -> Non
                     body = response.body.decode("utf-8")
                 except Exception:
                     body = None
+            if body and len(body.encode("utf-8")) > MAX_STORED_BODY_BYTES:
+                raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, {"code":"RESOURCES_EXCEEDED","type":"resource","message":"Idempotent response body too large"})
             if body:
                 record.response_body = body
+            record.response_headers = {"Content-Type": getattr(response, "media_type", "application/json")}
             await session.commit()
     except Exception:  # pragma: no cover - best-effort persistence
         logger.debug("app.idempotency.store_failed", exc_info=True)
