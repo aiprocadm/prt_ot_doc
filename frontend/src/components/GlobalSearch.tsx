@@ -6,6 +6,18 @@ import { searchGlobal, type SearchItem } from "@/api/search";
 import { Input } from "@/components/ui/input";
 import { useDebounce } from "@/hooks/useDebounce";
 
+const toTabType = (entityType: string): string => {
+  const mapping: Record<string, string> = {
+    Document: "documents",
+    Person: "people",
+    Site: "sites",
+    Incident: "incidents",
+    Inspection: "inspections",
+    File: "files",
+  };
+  return mapping[entityType] ?? "documents";
+};
+
 export const GlobalSearch = () => {
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<SearchItem[]>([]);
@@ -30,7 +42,7 @@ export const GlobalSearch = () => {
       return;
     }
     searchGlobal(debounced)
-      .then((result) => setItems(result.items.slice(0, 8)))
+      .then((result) => setItems(result.items.slice(0, 10)))
       .catch(() => setItems([]));
   }, [debounced]);
 
@@ -54,9 +66,9 @@ export const GlobalSearch = () => {
           {items.map((item) => (
             <button
               type="button"
-              key={`${item.type}-${item.id}`}
+              key={`${item.entity_type}-${item.entity_id}`}
               className="block w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
-              onClick={() => navigate(`/search?q=${encodeURIComponent(query)}&type=${item.type}`)}
+              onClick={() => navigate(`/search?q=${encodeURIComponent(query)}&type=${toTabType(item.entity_type)}`)}
             >
               <div className="font-medium">{item.title}</div>
               {item.snippet ? <div className="text-xs text-muted-foreground">{item.snippet}</div> : null}

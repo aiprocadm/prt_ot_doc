@@ -3,6 +3,9 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from time import perf_counter
+
+import logging
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,10 +13,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.domains.files import s3
 from app.modules.files import av, extractors, storage
 from app.modules.files.models import AVStatus, DownloadLog, FileObject, FileTextIndex, FileVersion, FileVersionStatus, TextIndexStatus
+from sqlalchemy import select
 from app.tasks import index_file_content_job
 
 
 MAX_INDEX_BYTES = 25 * 1024 * 1024
+MAX_INDEX_CHARS = 500_000
+
+logger = logging.getLogger(__name__)
 
 
 async def create_upload_session(*, session: AsyncSession, tenant_id: str, payload, user_id: str | None) -> tuple[FileObject, FileVersion, str]:
@@ -82,8 +89,10 @@ async def complete_upload(*, session: AsyncSession, tenant_id: str, file_id: str
 
 
 async def index_file_content(*, session: AsyncSession, tenant_id: str, version: FileVersion, data: bytes) -> None:
+    started = perf_counter()
     if version.size > MAX_INDEX_BYTES:
         version.text_index_status = TextIndexStatus.skipped.value
+        logger.info("files.index_content.skipped_too_large", extra={"version_id": version.id, "size": version.size})
         return
     text = ""
     with NamedTemporaryFile(delete=True, suffix=Path(version.filename).suffix) as tmp:
@@ -99,17 +108,25 @@ async def index_file_content(*, session: AsyncSession, tenant_id: str, version: 
             return
     if not text:
         version.text_index_status = TextIndexStatus.skipped.value
+        logger.info("files.index_content.not_indexable", extra={"version_id": version.id, "mime": version.mime})
         return
+    truncated = False
+    if len(text) > MAX_INDEX_CHARS:
+        text = text[:MAX_INDEX_CHARS]
+        truncated = True
     version.text_index_status = TextIndexStatus.indexed.value
-    index = FileTextIndex(
-        tenant_id=tenant_id,
-        file_version_id=version.id,
-        raw_text=text,
-        excerpt=text[:400],
-        content_tsv=text,
-        lang="simple",
-    )
-    session.add(index)
+
+    existing = (await session.execute(select(FileTextIndex).where(FileTextIndex.file_version_id == version.id))).scalar_one_or_none()
+    if existing is None:
+        existing = FileTextIndex(tenant_id=tenant_id, file_version_id=version.id)
+        session.add(existing)
+
+    existing.raw_text = text
+    existing.excerpt = text[:400]
+    existing.content_tsv = text
+    existing.lang = "russian"
+
+    logger.info("files.index_content.done", extra={"version_id": version.id, "bytes": len(data), "duration_ms": int((perf_counter()-started)*1000), "extracted_chars": len(text), "truncated": truncated})
 
 
 async def index_file_version(session: AsyncSession, *, tenant_id: str, version_id: str) -> None:
@@ -117,8 +134,8 @@ async def index_file_version(session: AsyncSession, *, tenant_id: str, version_i
     if version is None or version.tenant_id != tenant_id or version.status != FileVersionStatus.ready.value:
         return
     if version.text_index_status == TextIndexStatus.indexed.value:
-        existing = await session.get(FileTextIndex, version_id)
-        if existing is not None and existing.file_version_id == version.id:
+        existing = (await session.execute(select(FileTextIndex).where(FileTextIndex.file_version_id == version.id))).scalar_one_or_none()
+        if existing is not None:
             return
     with s3.stream_object(key=version.s3_key) as body:
         data = body.read()
