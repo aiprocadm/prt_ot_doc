@@ -1254,6 +1254,33 @@ def _prevent_auditlog_delete(*_args, **_kwargs) -> None:
     raise RuntimeError("Audit logs are append-only")
 
 
+class SecurityAuditLog(TenantBaseModel):
+    """Authorization decision log (allow/deny) for RBAC+ABAC enforcement."""
+
+    when: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(tz=timezone.utc), nullable=False
+    )
+    user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    action: Mapped[str] = mapped_column(String(64), nullable=False)
+    resource_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    resource_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    decision: Mapped[str] = mapped_column(String(8), nullable=False)
+    reason_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    ip: Mapped[str] = mapped_column(String(64), nullable=False, default="unknown")
+    user_agent: Mapped[str | None] = mapped_column(String(256))
+    correlation_id: Mapped[str | None] = mapped_column(String(128))
+    details: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+
+    __table_args__ = (
+        Index("ix_security_auditlog_action", "action"),
+        Index("ix_security_auditlog_decision", "decision"),
+        Index("ix_security_auditlog_resource", "resource_type", "resource_id"),
+        Index("ix_security_auditlog_when", "when"),
+    )
+
+
 class WarehousePPE(TenantBaseModel):
     item_name: Mapped[str] = mapped_column(String(255), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
