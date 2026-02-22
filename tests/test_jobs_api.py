@@ -81,3 +81,26 @@ async def test_jobs_list_and_retry_step_endpoints(
             DocumentJobStatus.SUCCESS.value,
             DocumentJobStatus.FAILED.value,
         }
+
+
+@pytest.mark.anyio
+async def test_create_job_endpoint_with_idempotency(app_fixture, make_auth_headers, client) -> None:
+    headers = await make_auth_headers()
+
+    profile_payload = {
+        "code": "jobs_default_v1",
+        "name": "Jobs default",
+        "steps": [{"code": "render_docx", "required": True}],
+        "limits": {},
+        "is_active": True,
+    }
+    created = await client.post("/api/v1/pipelines/profiles", json=profile_payload, headers=headers)
+    assert created.status_code == 201
+    profile_id = created.json()["id"]
+
+    payload = {"profile_id": profile_id, "inputs": {"x": 1}, "options": {"run_async": True}}
+    resp1 = await client.post("/api/v1/jobs", json=payload, headers={**headers, "Idempotency-Key": "job-create-idem"})
+    assert resp1.status_code == 202
+    resp2 = await client.post("/api/v1/jobs", json=payload, headers={**headers, "Idempotency-Key": "job-create-idem"})
+    assert resp2.status_code == 202
+    assert resp1.json()["job_id"] == resp2.json()["job_id"]

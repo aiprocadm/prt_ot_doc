@@ -157,6 +157,8 @@ const AppRouter = () => {
               <Route element={<ProtectedRoute permission={PERMISSIONS.DOCUMENT_VIEW} />}>
                 <Route path="/pipelines/runs" element={<PipelineRunsPage />} />
                 <Route path="/pipelines/runs/:id" element={<PipelineRunDetailsPage />} />
+                <Route path="/jobs" element={<PipelineRunsPage />} />
+                <Route path="/jobs/:id" element={<PipelineRunDetailsPage />} />
               </Route>
             </Route>
           </Route>
