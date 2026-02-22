@@ -64,7 +64,7 @@ export const DocumentTable = ({ onSelect }: DocumentTableProps) => {
         cell: ({ row }) => (
           <ActionButton
             permission={PERMISSIONS.DOCUMENT_EXPORT}
-            resource={{ status: row.original.status, company_id: row.original.company?.id }}
+            abilityResource={{ status: row.original.status, company_id: row.original.company?.id }}
             variant="ghost"
             size="icon"
             disabledReason="Экспорт доступен после готовности документа"

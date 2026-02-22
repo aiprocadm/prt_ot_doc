@@ -4,6 +4,7 @@ import { apiClient } from "@/api/client";
 import { ErrorState } from "@/components/common/ErrorState";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type { ApiError } from "@/types/dto/common";
 
 type KpiPayload = {
   risks_high: number;
@@ -15,7 +16,7 @@ type KpiPayload = {
 
 const ReportsPage = () => {
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
   const [kpi, setKpi] = useState<KpiPayload | null>(null);
 
   const loadKpi = async () => {
@@ -25,7 +26,7 @@ const ReportsPage = () => {
       const { data } = await apiClient.get<KpiPayload>("/reports/kpi");
       setKpi(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Не удалось загрузить KPI");
+      setError((err as ApiError) ?? { message: "Не удалось загрузить KPI" });
     } finally {
       setLoading(false);
     }

@@ -2,7 +2,6 @@ import MockAdapter from "axios-mock-adapter";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "@/api/client";
-import { appConfig } from "@/config/env";
 import { tenantStorage } from "@/api/tenantStorage";
 import { tokenStorage } from "@/api/tokenStorage";
 
@@ -23,49 +22,64 @@ describe("apiClient", () => {
     tokenStorage.setTokens({ accessToken: "access-token", refreshToken: "refresh-token", expiresIn: 10 });
     tenantStorage.setTenant({ slug: "severstroy", site: "Северный кластер" });
 
-    const interceptor = apiClient.interceptors.request.handlers[0]?.fulfilled as (config: Record<string, unknown>) => Promise<unknown>;
-    const config = { headers: {}, url: "/documents", baseURL: appConfig.apiBaseUrl };
-    const result = (await interceptor(config)) as { headers: Record<string, string> };
+    const mock = new MockAdapter(apiClient);
+    mock.onGet("/documents").reply((config) => {
+      expect(config.headers?.Authorization).toBe("Bearer access-token");
+      expect(config.headers?.["X-Tenant"]).toBe("severstroy");
+      expect(config.headers?.["X-Site"]).toBe("Северный кластер");
+      return [200, {}];
+    });
 
-    expect(result.headers.Authorization).toBe("Bearer access-token");
-    expect(result.headers["X-Tenant"]).toBe("severstroy");
-    expect(result.headers["X-Site"]).toBe("Северный кластер");
+    await apiClient.get("/documents");
+    mock.restore();
   });
 
   it("blocks requests without tenant for protected routes", async () => {
-    const interceptor = apiClient.interceptors.request.handlers[0]?.fulfilled as (config: Record<string, unknown>) => Promise<unknown>;
-    await expect(interceptor({ headers: {}, url: "/documents", baseURL: appConfig.apiBaseUrl })).rejects.toMatchObject({
-      code: "TENANT_REQUIRED"
+    const mock = new MockAdapter(apiClient);
+    mock.onGet("/documents").reply(200, {});
+
+    await expect(apiClient.get("/documents")).rejects.toMatchObject({
+      status: 0,
+      message: "Выберите контур перед выполнением запроса."
     });
+
+    mock.restore();
   });
 
   it("allows whitelisted routes without tenant", async () => {
-    const interceptor = apiClient.interceptors.request.handlers[0]?.fulfilled as (config: Record<string, unknown>) => Promise<unknown>;
+    const mock = new MockAdapter(apiClient);
 
-    const authResult = (await interceptor({ headers: {}, url: "/auth/login", baseURL: appConfig.apiBaseUrl })) as {
-      headers: Record<string, string>;
-    };
-    const healthResult = (await interceptor({ headers: {}, url: "/health", baseURL: appConfig.apiBaseUrl })) as {
-      headers: Record<string, string>;
-    };
+    mock.onGet("/auth/login").reply((config) => {
+      expect(config.headers?.["X-Tenant"]).toBeUndefined();
+      expect(config.headers?.["X-Site"]).toBeUndefined();
+      return [200, {}];
+    });
 
-    expect(authResult.headers).toEqual({});
-    expect(healthResult.headers).toEqual({});
+    mock.onGet("/health").reply((config) => {
+      expect(config.headers?.["X-Tenant"]).toBeUndefined();
+      expect(config.headers?.["X-Site"]).toBeUndefined();
+      return [200, { status: "ok" }];
+    });
+
+    await apiClient.get("/auth/login");
+    await apiClient.get("/health");
+
+    mock.restore();
   });
 
   it("maps api errors from responses", async () => {
-    const responseInterceptor = apiClient.interceptors.response.handlers[0]?.rejected as (error: unknown) => Promise<unknown>;
-    await expect(
-      responseInterceptor({
-        response: { status: 409, data: { message: "Conflict", code: "CONFLICT" } },
-        message: "Request failed",
-        config: { url: "/documents" }
-      })
-    ).rejects.toMatchObject({
+    tenantStorage.setTenant({ slug: "severstroy", site: "Северный кластер" });
+
+    const mock = new MockAdapter(apiClient);
+    mock.onGet("/documents").reply(409, { message: "Conflict", code: "CONFLICT" });
+
+    await expect(apiClient.get("/documents")).rejects.toMatchObject({
       status: 409,
       code: "CONFLICT",
       message: "Conflict"
     });
+
+    mock.restore();
   });
 
   it("calls the backend health endpoint", async () => {

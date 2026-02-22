@@ -54,7 +54,7 @@ export const TemplateDetails = ({ template }: { template: TemplateDto }) => {
                 </div>
                   <ActionButton
                     permission={PERMISSIONS.TEMPLATE_ACTIVATE}
-                    resource={{ template: { current_version: template.current_version }, version }}
+                    abilityResource={{ template: { current_version: template.current_version }, version }}
                     variant={template.current_version?.id === version.id ? "secondary" : "outline"}
                     size="sm"
                     disabled={template.current_version?.id === version.id || isActivating}

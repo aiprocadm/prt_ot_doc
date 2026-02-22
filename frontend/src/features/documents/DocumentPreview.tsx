@@ -49,7 +49,7 @@ export const DocumentPreview = ({ document }: { document: DocumentDto }) => {
         <div className="flex gap-2">
           <ActionButton
             permission={PERMISSIONS.DOCUMENT_SIGN}
-            resource={resource}
+            abilityResource={resource}
             variant="outline"
             disabledReason="Подписание возможно после готовности документа"
             onClick={handleRefresh}
@@ -58,7 +58,7 @@ export const DocumentPreview = ({ document }: { document: DocumentDto }) => {
           </ActionButton>
           <ActionButton
             permission={PERMISSIONS.DOCUMENT_EXPORT}
-            resource={resource}
+            abilityResource={resource}
             disabledReason="Экспорт доступен после готовности документа"
             onClick={handleDownload}
           >

@@ -45,7 +45,7 @@ export const RiskAssessmentsTable = () => {
         cell: ({ row }) => (
           <ActionButton
             permission={PERMISSIONS.RISK_EXPORT}
-            resource={{ status: row.original.status, company_id: row.original.company_id }}
+            abilityResource={{ status: row.original.status, company_id: row.original.company_id }}
             variant="ghost"
             size="sm"
             disabledReason="Экспорт доступен после утверждения расчёта"
