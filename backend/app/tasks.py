@@ -1035,3 +1035,37 @@ def convert_pdf_job(*, tenant_id: str, input_file_id: str, pdf_run_id: str, opti
             return {"status": "failed", "attempts": attempts}
 
     return _run_coroutine(_run())
+
+
+@celery_app.task(name="files.index_content", bind=True, max_retries=3, default_retry_delay=30)
+def index_file_content_job(self, tenant_slug: str, version_id: str):
+    async def _run() -> dict[str, str]:
+        from app.modules.files.service import index_file_version
+
+        with tenant_context(tenant_slug):
+            ensure_tenant_schema(tenant_slug)
+            async with session_scope(tenant=tenant_slug) as session:
+                tenant_id = str(session.info.get("tenant_id") or "")
+                if not tenant_id:
+                    tenant = (await session.execute(select(Tenant).where(Tenant.slug == tenant_slug))).scalar_one_or_none()
+                    if tenant is None:
+                        return {"status": "tenant_missing"}
+                    tenant_id = str(tenant.id)
+                await index_file_version(session, tenant_id=tenant_id, version_id=version_id)
+                await session.flush()
+                outbox = OutboxService(session)
+                await outbox.enqueue(
+                    tenant_id=tenant_id,
+                    event_type=EventType.EDO_STATUS_CHANGED.value,
+                    payload={
+                        "tenant_id": tenant_id,
+                        "occurred_at": datetime.now(timezone.utc),
+                        "metadata": {"event": "FileIndexed", "version_id": version_id},
+                    },
+                )
+                return {"status": "ok", "version_id": version_id}
+
+    try:
+        return _run_coroutine(_run())
+    except RETRYABLE_EXCEPTIONS as exc:
+        raise self.retry(exc=exc)
