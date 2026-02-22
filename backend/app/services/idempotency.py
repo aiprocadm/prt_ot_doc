@@ -66,7 +66,7 @@ class IdempotencyService:
                 raise HTTPException(
                     status.HTTP_409_CONFLICT,
                     {
-                        "code": "IDEMPOTENCY_MISMATCH",
+                        "code": "IDEMPOTENCY_CONFLICT",
                         "type": "idempotency",
                         "message": "Idempotency key cannot be reused with a different request payload",
                     },
@@ -81,7 +81,7 @@ class IdempotencyService:
                 raise HTTPException(
                     status.HTTP_409_CONFLICT,
                     {
-                        "code": "IDEMPOTENCY_IN_PROGRESS",
+                        "code": "IDEMPOTENCY_CONFLICT",
                         "type": "idempotency",
                         "message": "Request with this Idempotency-Key is already in progress",
                     },
@@ -116,14 +116,17 @@ class IdempotencyService:
         *,
         status_code: int,
         body: dict[str, Any],
+        headers: dict[str, Any] | None = None,
     ) -> IdempotencyKey:
         record.last_seen_at = datetime.now(tz=timezone.utc)
         record.status = IdempotencyStatus.SUCCEEDED
         record.status_code = int(status_code)
         record.response_body = json.dumps(body, ensure_ascii=False)
+        record.response_headers = headers or record.response_headers or {}
         record.result_json = {
             "status_code": int(status_code),
             "body": body,
+            "headers": record.response_headers or {},
         }
         await self.session.flush()
         return record
@@ -134,6 +137,7 @@ class IdempotencyService:
         *,
         status_code: int,
         detail: Any,
+        headers: dict[str, Any] | None = None,
     ) -> IdempotencyKey:
         payload = detail
         if isinstance(detail, BaseModel):
@@ -146,9 +150,11 @@ class IdempotencyService:
         record.status = IdempotencyStatus.FAILED
         record.status_code = int(status_code)
         record.response_body = json.dumps(payload, ensure_ascii=False)
+        record.response_headers = headers or record.response_headers or {}
         record.result_json = {
             "status_code": int(status_code),
             "body": payload,
+            "headers": record.response_headers or {},
         }
         await self.session.flush()
         return record

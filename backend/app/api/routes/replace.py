@@ -113,13 +113,20 @@ def _require_tenant(request: Request) -> None:
 
 def _idem(key: str | None, req_hash: str) -> dict | None:
     if not key:
-        return None
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            {
+                "code": "IDEMPOTENCY_KEY_REQUIRED",
+                "type": "idempotency",
+                "message": "Idempotency-Key header is required",
+            },
+        )
     seen = _IDEMPOTENCY.get(key)
     if seen is None:
         return None
     old_hash, response = seen
     if old_hash != req_hash:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Idempotency-Key already used with different request payload")
+        raise HTTPException(status.HTTP_409_CONFLICT, {"code": "IDEMPOTENCY_CONFLICT", "type": "idempotency", "message": "Idempotency-Key already used with different request payload"})
     return response
 
 

@@ -20,21 +20,28 @@ MAX_STORED_BODY_BYTES = 256 * 1024
 logger = logging.getLogger("app.idempotency")
 
 __all__ = [
+    "canonical_json",
     "compute_request_hash",
     "idempotency_dependency",
     "store_idempotent_response",
 ]
 
 
-def compute_request_hash(payload: Any) -> str:
-    """Return a stable SHA-256 hash for JSON-serializable payloads."""
+def canonical_json(payload: Any) -> str:
+    """Serialize JSON payload in canonical deterministic form."""
 
     if hasattr(payload, "model_dump"):
         payload = payload.model_dump(mode="json", exclude_none=True)  # type: ignore[assignment]
     try:
-        normalized = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     except (TypeError, ValueError) as exc:
         raise ValueError("Payload must be JSON serializable") from exc
+
+
+def compute_request_hash(payload: Any) -> str:
+    """Return a stable SHA-256 hash for JSON-serializable payloads."""
+
+    normalized = canonical_json(payload)
     digest = hashlib.sha256(normalized.encode("utf-8"))
     return digest.hexdigest()
 
