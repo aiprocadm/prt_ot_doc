@@ -8,7 +8,8 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 
-from app.db.session import session_scope, tenant_context, ensure_tenant_schema
+from app.core.tenant import tenant_context
+from app.db.session import ensure_tenant_schema, session_scope
 from app.models.models import AuditExportJob, AuditLog
 from app.services.celery_app import celery_app
 from app.services.file_storage import FileStorageService
