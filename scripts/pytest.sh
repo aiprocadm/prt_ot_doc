@@ -17,4 +17,8 @@ if [ ! -f "$REQ_STAMP" ] || [ requirements.txt -nt "$REQ_STAMP" ] || [ requireme
   touch "$REQ_STAMP"
 fi
 
+if ! python -c "import pytest_asyncio" >/dev/null 2>&1; then
+  python -m pip install pytest-asyncio
+fi
+
 python -m pytest "$@"
