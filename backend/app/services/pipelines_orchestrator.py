@@ -179,6 +179,84 @@ class DocumentPipelineOrchestrator:
         await self.session.flush()
         return await self.run_job(job_id=job_id)
 
+    async def retry_step(self, *, job_id: str, step_code: str) -> DocumentJob:
+        job = await self.session.get(DocumentJob, job_id)
+        if job is None:
+            raise ValueError("job_not_found")
+
+        step = (
+            await self.session.execute(
+                select(DocumentJobStep).where(
+                    DocumentJobStep.job_id == job_id,
+                    DocumentJobStep.step_code == step_code,
+                )
+            )
+        ).scalar_one_or_none()
+        if step is None:
+            raise ValueError("step_not_found")
+
+        if step.status not in {JobStepStatus.FAILED.value, JobStepStatus.CANCELED.value}:
+            raise ValueError("step_not_retryable")
+
+        step.status = JobStepStatus.QUEUED.value
+        step.error_code = None
+        step.error_payload = None
+        step.ended_at = None
+
+        job.status = DocumentJobStatus.RUNNING.value
+        job.error_code = None
+        job.error_payload = None
+        job.ended_at = None
+        await self.session.flush()
+
+        try:
+            await self._run_step(job=job, step=step, fail_step=None)
+        except StepFailureError as exc:
+            step.status = JobStepStatus.FAILED.value
+            step.error_code = exc.code
+            step.error_payload = exc.payload
+            step.ended_at = datetime.now(tz=timezone.utc)
+            job.status = DocumentJobStatus.FAILED.value
+            job.error_code = exc.code
+            job.error_payload = exc.payload
+            job.ended_at = datetime.now(tz=timezone.utc)
+            await self.session.flush()
+            return job
+
+        remaining_failed = (
+            await self.session.execute(
+                select(DocumentJobStep).where(
+                    DocumentJobStep.job_id == job_id,
+                    DocumentJobStep.status == JobStepStatus.FAILED.value,
+                )
+            )
+        ).scalars().first()
+        if remaining_failed is None:
+            all_done = (
+                await self.session.execute(
+                    select(DocumentJobStep).where(
+                        DocumentJobStep.job_id == job_id,
+                        DocumentJobStep.status.in_(
+                            [
+                                JobStepStatus.SUCCESS.value,
+                                JobStepStatus.SKIPPED.value,
+                            ]
+                        ),
+                    )
+                )
+            ).scalars().all()
+            total_steps = (
+                await self.session.execute(
+                    select(DocumentJobStep).where(DocumentJobStep.job_id == job_id)
+                )
+            ).scalars().all()
+            if total_steps and len(all_done) == len(total_steps):
+                job.status = DocumentJobStatus.SUCCESS.value
+                job.ended_at = datetime.now(tz=timezone.utc)
+
+        await self.session.flush()
+        return job
+
     async def _run_step(self, *, job: DocumentJob, step: DocumentJobStep, fail_step: str | None) -> None:
         artifact_kind = self._artifact_kind(step.step_code)
         if step.status == JobStepStatus.SUCCESS.value:
