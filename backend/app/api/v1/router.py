@@ -35,6 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record, require_tenant_slug
 from app.api.routes import (
     admin_users,
+    approval_signing_v1,
     attestations,
     audit,
     auth,
@@ -169,6 +170,7 @@ tenant_router.include_router(risk.router, tags=["risks"])
 tenant_router.include_router(sites.router, tags=["sites"])
 tenant_router.include_router(documents.router, prefix="/documents", tags=["documents"])
 tenant_router.include_router(edo_workflow.router, tags=["edo-workflow"])
+tenant_router.include_router(approval_signing_v1.router, prefix="/v1", tags=["approval-signing-v1"])
 tenant_router.include_router(jobs.router)
 tenant_router.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
 tenant_router.include_router(tenancy.router)

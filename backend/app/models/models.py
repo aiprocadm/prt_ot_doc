@@ -1737,6 +1737,10 @@ class ApprovalRoute(TenantBaseModel, SoftDeleteMixin):
     rules_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    conditions: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    steps: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "code", "version", name="uq_approval_route_code_version"),
@@ -1824,6 +1828,121 @@ class EdoStatusHistory(TenantBaseModel):
     edo_message_id: Mapped[str] = mapped_column(ForeignKey("edo_messages.id", ondelete="CASCADE"), nullable=False, index=True)
     status: Mapped[EdoStatus] = mapped_column(Enum(EdoStatus), nullable=False)
     raw_payload_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+
+
+class ApprovalProcessStatus(str, enum.Enum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    CANCELED = "canceled"
+    EXPIRED = "expired"
+
+
+class ApprovalTaskStatus(str, enum.Enum):
+    OPEN = "open"
+    DONE = "done"
+    CANCELED = "canceled"
+    EXPIRED = "expired"
+
+
+class ApprovalProcess(TenantBaseModel):
+    __tablename__ = "approval_processes"
+
+    object_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    object_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    route_id: Mapped[str] = mapped_column(ForeignKey("approval_routes.id"), nullable=False, index=True)
+    status: Mapped[ApprovalProcessStatus] = mapped_column(Enum(ApprovalProcessStatus), nullable=False, default=ApprovalProcessStatus.PENDING)
+    current_step: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("user.id"), nullable=True, index=True)
+
+    __table_args__ = (
+        Index("ix_approval_processes_status", "tenant_id", "status"),
+        Index("ix_approval_processes_object", "tenant_id", "object_type", "object_id"),
+    )
+
+
+class ApprovalTask(TenantBaseModel):
+    __tablename__ = "approval_tasks"
+
+    process_id: Mapped[str] = mapped_column(ForeignKey("approval_processes.id", ondelete="CASCADE"), nullable=False, index=True)
+    step_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    assignee_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    assignee_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[ApprovalTaskStatus] = mapped_column(Enum(ApprovalTaskStatus), nullable=False, default=ApprovalTaskStatus.OPEN)
+    decision: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    comment: Mapped[str | None] = mapped_column(Text)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    delegated_from: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+    __table_args__ = (
+        Index("ix_approval_tasks_status", "tenant_id", "status"),
+        Index("ix_approval_tasks_assignee", "tenant_id", "assignee_type", "assignee_id"),
+    )
+
+
+class ApprovalDecisionLog(TenantBaseModel):
+    __tablename__ = "approval_decision_logs"
+
+    process_id: Mapped[str] = mapped_column(ForeignKey("approval_processes.id", ondelete="CASCADE"), nullable=False, index=True)
+    task_id: Mapped[str | None] = mapped_column(ForeignKey("approval_tasks.id", ondelete="SET NULL"), nullable=True, index=True)
+    step_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    actor_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    decision: Mapped[str] = mapped_column(String(16), nullable=False)
+    comment: Mapped[str | None] = mapped_column(Text)
+    ip: Mapped[str | None] = mapped_column(String(64))
+    user_agent: Mapped[str | None] = mapped_column(String(512))
+
+
+class SignatureRequestStatus(str, enum.Enum):
+    CREATED = "created"
+    REQUESTED = "requested"
+    SIGNED = "signed"
+    FAILED = "failed"
+
+
+class SignatureRequest(TenantBaseModel):
+    __tablename__ = "signature_requests"
+
+    object_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    object_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    provider: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[SignatureRequestStatus] = mapped_column(Enum(SignatureRequestStatus), nullable=False, default=SignatureRequestStatus.CREATED)
+    payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    result_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+
+    __table_args__ = (
+        Index("ix_signature_requests_status", "tenant_id", "status"),
+        Index("ix_signature_requests_object", "tenant_id", "object_type", "object_id"),
+    )
+
+
+class EdoEnvelopeStatus(str, enum.Enum):
+    QUEUED = "queued"
+    SENT = "sent"
+    DELIVERED = "delivered"
+    SIGNED = "signed"
+    REJECTED = "rejected"
+    FAILED = "failed"
+
+
+class EdoEnvelope(TenantBaseModel):
+    __tablename__ = "edo_envelopes"
+
+    object_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    object_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    provider: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[EdoEnvelopeStatus] = mapped_column(Enum(EdoEnvelopeStatus), nullable=False, default=EdoEnvelopeStatus.QUEUED)
+    external_id: Mapped[str | None] = mapped_column(String(255), index=True)
+    last_event_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        Index("ix_edo_envelopes_status", "tenant_id", "status"),
+        Index("ix_edo_envelopes_object", "tenant_id", "object_type", "object_id"),
+    )
 
 
 class Outbox(TenantBaseModel):
