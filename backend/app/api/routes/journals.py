@@ -150,7 +150,7 @@ async def update_journal(
     return _journal_schema(journal)
 
 
-@router.delete("/{journal_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{journal_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def delete_journal(
     journal_id: str, tenant: TenantDep, session: SessionDep, access: ManagerAccess
 ) -> None:
@@ -248,7 +248,7 @@ async def update_entry(
     return _entry_schema(entry)
 
 
-@router.delete("/entries/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/entries/{entry_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def delete_entry(entry_id: str, tenant: TenantDep, session: SessionDep, access: ManagerAccess) -> None:
     entry = await _get_entry(session, tenant, entry_id)
     if entry.deleted_at is None:

@@ -129,7 +129,7 @@ async def update_webhook(webhook_id: str, payload: WebhookEndpointIn, tenant: Te
     return _to_endpoint_out(row)
 
 
-@router.delete("/endpoints/{webhook_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/endpoints/{webhook_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def delete_webhook(webhook_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> None:
     row = await session.get(WebhookEndpoint, webhook_id)
     if row is None or row.tenant_id != tenant.id:

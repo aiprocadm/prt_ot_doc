@@ -198,6 +198,7 @@ async def update_contract(
 @router.delete(
     "/contracts/{contract_id}",
     status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
     response_class=Response,
 )
 async def delete_contract(
