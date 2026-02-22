@@ -66,6 +66,9 @@ jobs:
       - name: Prepare env
         run: cp .env.example .env
 
+      - name: Enable Redis memory overcommit
+        run: sudo sysctl -w vm.overcommit_memory=1
+
       - name: Build and up
         run: docker compose up -d --build
 
