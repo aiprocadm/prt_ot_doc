@@ -430,7 +430,14 @@ async def generate_document(
                 **engine_payload,
             })
             if record.request_hash and record.request_hash != request_hash:
-                raise HTTPException(status.HTTP_409_CONFLICT, "idempotency_key_reuse_mismatch")
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    {
+                        "code": "IDEMPOTENCY_MISMATCH",
+                        "type": "idempotency",
+                        "message": "Idempotency key cannot be reused with a different request payload",
+                    },
+                )
             record.request_hash = request_hash
             if created_record:
                 job = await orchestrator.start_document_job(
