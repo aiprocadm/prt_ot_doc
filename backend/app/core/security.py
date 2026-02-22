@@ -42,18 +42,28 @@ __all__ = [
 _bearer_scheme = HTTPBearer(auto_error=False)
 
 
-def _auth_error(detail: str = "Could not validate credentials") -> HTTPException:
+def _auth_error(detail: str = "auth_required") -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail=detail,
+        detail={
+            "code": "auth_required",
+            "type": "auth",
+            "message": detail,
+            "correlation-id": None,
+        },
         headers={"WWW-Authenticate": "Bearer"},
     )
 
 
-def _api_key_error(detail: str = "Invalid API key") -> HTTPException:
+def _api_key_error(detail: str = "auth_required") -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail=detail,
+        detail={
+            "code": "auth_required",
+            "type": "auth",
+            "message": detail,
+            "correlation-id": None,
+        },
         headers={"WWW-Authenticate": "ApiKey"},
     )
 

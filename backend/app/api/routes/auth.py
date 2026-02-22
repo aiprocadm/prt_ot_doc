@@ -5,14 +5,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
-
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.rate_limit import ip_subject_key, limiter, login_per_identity
+from app.core.rbac_abac import ROLE_PERMISSIONS
 from app.core.security import (
     AccessContext,
     issue_access_token,
@@ -22,6 +17,11 @@ from app.core.security import (
 )
 from app.models.models import Tenant, User
 from app.services.auth import verify_password
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 router = APIRouter()
 
@@ -53,6 +53,7 @@ class MeResponse(BaseModel):
     roles: list[str] = Field(default_factory=list)
     company_id: str | None = None
     attributes: dict[str, list[str]] = Field(default_factory=dict)
+    abilities: list[str] = Field(default_factory=list)
 
 
 class AdminPingResponse(BaseModel):
@@ -129,13 +130,14 @@ async def login(
     return TokenPair(access_token=access_token, refresh_token=refresh_token)
 
 
-
-
 @router.get("/me", response_model=MeResponse, status_code=status.HTTP_200_OK)
 async def me(access: AccessContext = Depends(rbac())) -> MeResponse:
     """Return basic profile information for the authenticated subject."""
 
     context = access.to_auth_context()
+    abilities = sorted(
+        {perm for role in context.roles for perm in ROLE_PERMISSIONS.get(role, set())}
+    )
     return MeResponse(
         sub=context.sub,
         email=access.user.email,
@@ -144,6 +146,7 @@ async def me(access: AccessContext = Depends(rbac())) -> MeResponse:
         tenant_slug=access.tenant_slug,
         roles=context.roles,
         company_id=access.company_id,
+        abilities=abilities,
         attributes={
             "company_ids": [str(v) for v in access.claims.get("company_ids", [])],
             "site_ids": [str(v) for v in access.claims.get("site_ids", [])],
@@ -151,6 +154,7 @@ async def me(access: AccessContext = Depends(rbac())) -> MeResponse:
             "contractor_ids": [str(v) for v in access.claims.get("contractor_ids", [])],
         },
     )
+
 
 @router.post("/refresh", response_model=TokenPair, status_code=status.HTTP_200_OK)
 async def refresh_tokens(
@@ -177,9 +181,9 @@ async def refresh_tokens(
         raise _invalid_refresh_token()
 
     result = await session.execute(
-        select(User).options(selectinload(User.roles)).where(
-            User.id == subject, User.tenant_id == tenant.id
-        )
+        select(User)
+        .options(selectinload(User.roles))
+        .where(User.id == subject, User.tenant_id == tenant.id)
     )
     user = result.scalar_one_or_none()
     if user is None or not user.is_active:

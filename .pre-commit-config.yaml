@@ -27,3 +27,10 @@ repos:
           - eslint-plugin-react@7.34.1
           - @typescript-eslint/parser@7.3.1
           - @typescript-eslint/eslint-plugin@7.3.1
+  - repo: local
+    hooks:
+      - id: no-raw-session-query
+        name: ban raw session.query in backend domain code
+        entry: python scripts/ci/check_scoped_queries.py
+        language: system
+        pass_filenames: false
