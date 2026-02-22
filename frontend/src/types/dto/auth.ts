@@ -33,3 +33,17 @@ export interface RefreshResponseDto {
   token_type: "bearer";
   expires_in: number;
 }
+
+
+export interface PermissionsResponseDto {
+  roles: string[];
+  permissions: string[];
+  abac_scopes: {
+    company_ids?: string[];
+    site_ids?: string[];
+    project_ids?: string[];
+    contractor_ids?: string[];
+    allowed_statuses?: string[];
+    max_risk_level?: number | null;
+  };
+}

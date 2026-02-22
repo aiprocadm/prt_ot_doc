@@ -5,7 +5,7 @@ import { tokenStorage } from "@/api/tokenStorage";
 import { tenantStorage } from "@/api/tenantStorage";
 import { resetTenantStores } from "@/stores/reset";
 import type { ApiError } from "@/types/dto/common";
-import type { LoginRequestDto, LoginResponseDto, RefreshResponseDto, UserDto } from "@/types/dto/auth";
+import type { LoginRequestDto, LoginResponseDto, PermissionsResponseDto, RefreshResponseDto, UserDto } from "@/types/dto/auth";
 
 interface AuthState {
   user: UserDto | null;
@@ -27,6 +27,26 @@ const persistTokens = (payload: { access_token: string; refresh_token: string; e
   });
 };
 
+
+
+const hydratePermissions = async (user: UserDto | null): Promise<UserDto | null> => {
+  if (!user) return user;
+  try {
+    const { data } = await apiClient.get<PermissionsResponseDto>("/auth/me/permissions");
+    return {
+      ...user,
+      roles: data.roles?.length ? data.roles : user.roles,
+      permissions: data.permissions,
+      attributes: {
+        ...(user.attributes ?? {}),
+        company_ids: data.abac_scopes?.company_ids ?? user.attributes?.company_ids,
+        site_ids: data.abac_scopes?.site_ids ?? user.attributes?.site_ids
+      }
+    };
+  } catch {
+    return user;
+  }
+};
 export const useAuthStore = createWithEqualityFn<AuthState>()(
   immer((set, get) => ({
     user: null,
@@ -53,7 +73,7 @@ export const useAuthStore = createWithEqualityFn<AuthState>()(
         let profileError: ApiError | null = null;
         try {
           const { data: profileResponse } = await apiClient.get<UserDto>("/auth/me");
-          profile = profileResponse;
+          profile = await hydratePermissions(profileResponse);
         } catch (error) {
           profileError = (error as ApiError) ?? null;
         }
@@ -81,8 +101,9 @@ export const useAuthStore = createWithEqualityFn<AuthState>()(
       try {
         const { data } = await apiClient.post<LoginResponseDto>("/auth/login", payload);
         persistTokens(data);
+        const enrichedUser = await hydratePermissions(data.user);
         set((state) => {
-          state.user = data.user;
+          state.user = enrichedUser;
           state.isAuthenticated = true;
           state.initialized = true;
         });
@@ -112,8 +133,9 @@ export const useAuthStore = createWithEqualityFn<AuthState>()(
       if (!get().user) {
         try {
           const { data: profile } = await apiClient.get<UserDto>("/auth/me");
+          const enriched = await hydratePermissions(profile);
           set((state) => {
-            state.user = profile;
+            state.user = enriched;
           });
         } catch (error) {
           set((state) => {

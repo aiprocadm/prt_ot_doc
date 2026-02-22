@@ -61,6 +61,12 @@ class AdminPingResponse(BaseModel):
     user_id: str
 
 
+class PermissionsResponse(BaseModel):
+    roles: list[str] = Field(default_factory=list)
+    permissions: list[str] = Field(default_factory=list)
+    abac_scopes: dict[str, list[str] | int | None] = Field(default_factory=dict)
+
+
 def _invalid_credentials() -> HTTPException:
     return HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid email or password")
 
@@ -152,6 +158,28 @@ async def me(access: AccessContext = Depends(rbac())) -> MeResponse:
             "site_ids": [str(v) for v in access.claims.get("site_ids", [])],
             "project_ids": [str(v) for v in access.claims.get("project_ids", [])],
             "contractor_ids": [str(v) for v in access.claims.get("contractor_ids", [])],
+        },
+    )
+
+
+
+
+@router.get("/me/permissions", response_model=PermissionsResponse, status_code=status.HTTP_200_OK)
+async def me_permissions(access: AccessContext = Depends(rbac())) -> PermissionsResponse:
+    """Return effective permission codes and ABAC scopes for the authenticated subject."""
+
+    context = access.to_auth_context()
+    permissions = sorted({perm.replace(":", ".") for role in context.roles for perm in ROLE_PERMISSIONS.get(role, set())})
+    return PermissionsResponse(
+        roles=context.roles,
+        permissions=permissions,
+        abac_scopes={
+            "company_ids": [str(v) for v in access.claims.get("company_ids", [])],
+            "site_ids": [str(v) for v in access.claims.get("site_ids", [])],
+            "project_ids": [str(v) for v in access.claims.get("project_ids", [])],
+            "contractor_ids": [str(v) for v in access.claims.get("contractor_ids", [])],
+            "allowed_statuses": [str(v) for v in access.claims.get("allowed_statuses", [])],
+            "max_risk_level": access.claims.get("max_risk_level"),
         },
     )
 

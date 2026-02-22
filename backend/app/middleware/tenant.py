@@ -58,10 +58,10 @@ class TenantMiddleware(BaseHTTPMiddleware):
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
                 detail={
-                    "code": "tenant_header_missing",
+                    "code": "tenant_required",
                     "type": "tenancy",
                     "message": "X-Tenant header is required",
-                    "correlation-id": correlation_id,
+                    "correlation_id": correlation_id,
                 },
             )
         if not header_slug:
@@ -103,7 +103,7 @@ class TenantMiddleware(BaseHTTPMiddleware):
         if not tenant.is_active:
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN,
-                detail={"code": "tenant_inactive", "type": "validation", "message": "Tenant inactive"},
+                detail={"code": "tenant_disabled", "type": "validation", "message": "Tenant disabled"},
             )
         request.state.tenant_id = str(tenant.id)
         request.state.tenant_slug = tenant.slug
