@@ -111,7 +111,7 @@ async def delete_profile(profile_id: str, session: AsyncSession = Depends(get_se
         raise HTTPException(status.HTTP_409_CONFLICT, "profile has active jobs")
     await repo.soft_delete(model=model)
     await session.commit()
-    return None
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/runs", response_model=PipelineRunAccepted, status_code=status.HTTP_202_ACCEPTED)

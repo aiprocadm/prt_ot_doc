@@ -87,7 +87,7 @@ async def delete_map(replace_map_id: str, session: AsyncSession = Depends(get_se
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Replace map not found")
     row.deleted_at = datetime.now(tz=timezone.utc)
     await session.commit()
-    return None
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 def _resolve_map_id(payload: ReplaceLaunchRequest, row: ReplaceMap | None) -> str:

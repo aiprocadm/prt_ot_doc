@@ -72,7 +72,7 @@ async def delete_layout_preset(preset_id: str, session: AsyncSession = Depends(g
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Preset not found")
     row.deleted_at = datetime.now(tz=timezone.utc)
     await session.commit()
-    return None
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/documents/{document_version_id}/apply-headers", response_model=ApplyHeadersAccepted)

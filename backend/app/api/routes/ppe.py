@@ -149,7 +149,7 @@ async def delete_item(
     if item.deleted_at is None:
         item.deleted_at = datetime.now(timezone.utc)
     await session.flush()
-    return None
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/issues", response_model=PPEIssuePage)

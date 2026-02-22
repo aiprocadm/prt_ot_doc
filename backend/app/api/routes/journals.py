@@ -158,7 +158,7 @@ async def delete_journal(
     if journal.deleted_at is None:
         journal.deleted_at = datetime.now(timezone.utc)
     await session.flush()
-    return None
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/{journal_id}/entries", response_model=JournalEntryPage)
@@ -254,7 +254,7 @@ async def delete_entry(entry_id: str, tenant: TenantDep, session: SessionDep, ac
     if entry.deleted_at is None:
         entry.deleted_at = datetime.now(timezone.utc)
     await session.flush()
-    return None
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/{journal_id}/export", response_model=dict)
