@@ -16,6 +16,7 @@ from app.models import (
     risk,  # noqa: F401
 )
 from app.modules.replace import models as replace_models  # noqa: F401
+from app.modules.pipelines import models as pipeline_models  # noqa: F401
 
 Base = TenantBase
 
