@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings, get_settings
 from app.core.metrics import Metrics, get_metrics
 from app.core.tracing import get_trace_id
-from app.models.models import WebhookSubscription
+from app.models.models import WebhookEndpoint
 
 logger = logging.getLogger(__name__)
 
@@ -127,24 +127,21 @@ class WebhookDispatcher:
         session: AsyncSession,
         event_type: str,
         tenant_id: str,
-    ) -> list[WebhookSubscription]:
-        base_stmt = select(WebhookSubscription).where(
-            WebhookSubscription.event_type == event_type,
-            WebhookSubscription.enabled.is_(True),
-        )
-        tenant_stmt = base_stmt.where(WebhookSubscription.tenant_id == tenant_id).order_by(
-            WebhookSubscription.created_at.asc()
+    ) -> list[WebhookEndpoint]:
+        base_stmt = select(WebhookEndpoint).where(WebhookEndpoint.is_enabled.is_(True))
+        tenant_stmt = base_stmt.where(WebhookEndpoint.tenant_id == tenant_id).order_by(
+            WebhookEndpoint.created_at.asc()
         )
         tenant_result = await session.execute(tenant_stmt)
         tenant_rows = tenant_result.scalars().all()
         if tenant_rows:
-            return tenant_rows
+            return [row for row in tenant_rows if event_type in (row.subscribed_events or [])]
 
-        global_stmt = base_stmt.where(WebhookSubscription.tenant_id.is_(None)).order_by(
-            WebhookSubscription.created_at.asc()
+        global_stmt = base_stmt.where(WebhookEndpoint.tenant_id.is_(None)).order_by(
+            WebhookEndpoint.created_at.asc()
         )
         global_result = await session.execute(global_stmt)
-        return global_result.scalars().all()
+        return [row for row in global_result.scalars().all() if event_type in (row.subscribed_events or [])]
 
     def _build_destinations_from_urls(
         self,
@@ -167,7 +164,7 @@ class WebhookDispatcher:
         self,
         *,
         event_type: str,
-        rows: Iterable[WebhookSubscription],
+        rows: Iterable[WebhookEndpoint],
     ) -> list[WebhookDestination]:
         destinations: list[WebhookDestination] = []
         for row in rows:
@@ -181,7 +178,7 @@ class WebhookDispatcher:
                 WebhookDestination(
                     url=row.url,
                     headers={str(key): str(value) for key, value in (row.headers or {}).items()},
-                    subscription_id=row.id,
+                    endpoint_id=row.id,
                     secret=row.secret,
                 )
             )
@@ -244,10 +241,12 @@ class WebhookDispatcher:
             "correlation_id": trace_id,
             "payload": payload,
         }
+        timestamp = datetime.now(tz=timezone.utc).isoformat()
         request_headers: dict[str, str] = {
             "X-Correlation-Id": trace_id,
             "X-Event-Type": event_type,
             "X-Tenant": tenant_id,
+            "X-Timestamp": timestamp,
         }
         if headers:
             for key, value in headers.items():
@@ -297,7 +296,7 @@ class WebhookDispatcher:
 class WebhookDestination:
     url: str
     headers: dict[str, str]
-    subscription_id: str | None = None
+    endpoint_id: str | None = None
     secret: str | None = None
 
 

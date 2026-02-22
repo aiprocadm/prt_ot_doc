@@ -133,8 +133,8 @@ class OutboxService:
             else:
                 for target in destinations:
                     merged_headers = self._merge_headers(target.headers, headers)
-                    if target.subscription_id:
-                        merged_headers = {**(merged_headers or {}), "X-Webhook-Subscription-Id": target.subscription_id}
+                    if target.endpoint_id:
+                        merged_headers = {**(merged_headers or {}), "X-Webhook-Endpoint-Id": target.endpoint_id}
                     existing = None
                     if key:
                         existing = await self._find_existing(
@@ -488,12 +488,12 @@ class OutboxProcessor:
         return payload or None
 
     async def _already_delivered(self, entry: Outbox) -> bool:
-        subscription_id = (entry.headers or {}).get("X-Webhook-Subscription-Id")
+        subscription_id = (entry.headers or {}).get("X-Webhook-Endpoint-Id")
         event_id = str((entry.payload or {}).get("event_id") or entry.id)
         if not subscription_id:
             return False
         stmt = select(WebhookDelivery).where(
-            WebhookDelivery.subscription_id == subscription_id,
+            WebhookDelivery.endpoint_id == subscription_id,
             WebhookDelivery.event_id == event_id,
             WebhookDelivery.status == "success",
         )
@@ -508,19 +508,19 @@ class OutboxProcessor:
         status_code: int | None = None,
         error: dict[str, Any] | None = None,
     ) -> None:
-        subscription_id = (entry.headers or {}).get("X-Webhook-Subscription-Id")
+        subscription_id = (entry.headers or {}).get("X-Webhook-Endpoint-Id")
         event_id = str((entry.payload or {}).get("event_id") or entry.id)
         if not subscription_id:
             return
         stmt = select(WebhookDelivery).where(
-            WebhookDelivery.subscription_id == subscription_id,
+            WebhookDelivery.endpoint_id == subscription_id,
             WebhookDelivery.event_id == event_id,
         )
         existing = (await self.session.execute(stmt)).scalar_one_or_none()
         if existing is None:
             existing = WebhookDelivery(
                 tenant_id=entry.tenant_id,
-                subscription_id=subscription_id,
+                endpoint_id=subscription_id,
                 event_id=event_id,
             )
             self.session.add(existing)

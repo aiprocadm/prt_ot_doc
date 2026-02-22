@@ -106,6 +106,7 @@ __all__ = [
     "AuthzUserRole",
     "WarehousePPE",
     "WebhookSubscription",
+    "WebhookEndpoint",
     "WebhookDelivery",
     "ApprovalRoute",
     "ApprovalRequest",
@@ -1077,9 +1078,11 @@ class IdempotencyKey(TenantBaseModel):
     path: Mapped[str | None] = mapped_column(String(512))
     method: Mapped[str | None] = mapped_column(String(16))
     status_code: Mapped[int | None] = mapped_column(Integer)
+    response_headers: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     response_body: Mapped[str | None] = mapped_column(Text)
     result_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "endpoint", "key", name="uq_idempotency_keys"),
@@ -1975,17 +1978,33 @@ class Outbox(TenantBaseModel):
 
 
 class WebhookDelivery(TenantBaseModel):
-    __tablename__ = "webhook_delivery"
+    __tablename__ = "webhook_deliveries"
 
-    subscription_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    endpoint_id: Mapped[str] = mapped_column(String(36), nullable=False)
     event_id: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
-    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_status_code: Mapped[int | None] = mapped_column(Integer)
+    last_response_body: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_error: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
-        UniqueConstraint("subscription_id", "event_id", name="uq_webhook_delivery_subscription_event"),
-        Index("ix_webhook_delivery_lookup", "tenant_id", "subscription_id", "event_id"),
+        UniqueConstraint("endpoint_id", "event_id", name="uq_webhook_delivery_endpoint_event"),
+        Index("ix_webhook_delivery_lookup", "tenant_id", "endpoint_id", "event_id"),
+    )
+
+
+class WebhookEndpoint(TenantBaseModel):
+    __tablename__ = "webhook_endpoints"
+
+    url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    secret: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    subscribed_events: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    headers: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+
+    __table_args__ = (
+        Index("ix_webhook_endpoint_tenant_enabled", "tenant_id", "is_enabled"),
     )
