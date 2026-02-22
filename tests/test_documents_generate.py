@@ -251,6 +251,8 @@ async def test_document_generation_flow(
         headers=headers,
     )
     assert conflict.status_code == 409
+    detail = conflict.json().get("detail", {})
+    assert detail.get("code") == "IDEMPOTENCY_MISMATCH"
     status_check = await async_client.get(body["status_url"], headers=headers)
     assert status_check.status_code == 200
     status_payload = status_check.json()

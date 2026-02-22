@@ -65,7 +65,11 @@ class IdempotencyService:
             if request_hash and existing.request_hash and existing.request_hash != request_hash:
                 raise HTTPException(
                     status.HTTP_409_CONFLICT,
-                    {"code": "idempotency_conflict", "type": "idempotency", "message": "Idempotency key conflict"},
+                    {
+                        "code": "IDEMPOTENCY_MISMATCH",
+                        "type": "idempotency",
+                        "message": "Idempotency key cannot be reused with a different request payload",
+                    },
                 )
             if request_hash and not existing.request_hash:
                 existing.request_hash = request_hash
@@ -73,6 +77,15 @@ class IdempotencyService:
                 existing.method = method
             if path and not existing.path:
                 existing.path = path
+            if existing.status is IdempotencyStatus.PENDING:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    {
+                        "code": "IDEMPOTENCY_IN_PROGRESS",
+                        "type": "idempotency",
+                        "message": "Request with this Idempotency-Key is already in progress",
+                    },
+                )
             return existing, False
 
         now = datetime.now(tz=timezone.utc)

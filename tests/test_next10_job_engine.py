@@ -30,6 +30,18 @@ async def test_idempotency_same_key_diff_hash_returns_409(sessionmaker) -> None:
         with pytest.raises(HTTPException) as exc:
             await idem.acquire(key="key-2", request_hash="hash-2")
         assert exc.value.status_code == 409
+        assert exc.value.detail["code"] == "IDEMPOTENCY_MISMATCH"
+
+
+@pytest.mark.anyio
+async def test_idempotency_in_progress_returns_409(sessionmaker) -> None:
+    async with sessionmaker() as session:
+        idem = IdempotencyService(session=session, tenant_id="tenant-1", endpoint="documents.generate")
+        await idem.acquire(key="key-pending", request_hash="hash-1")
+        with pytest.raises(HTTPException) as exc:
+            await idem.acquire(key="key-pending", request_hash="hash-1")
+        assert exc.value.status_code == 409
+        assert exc.value.detail["code"] == "IDEMPOTENCY_IN_PROGRESS"
 
 
 @pytest.mark.anyio
