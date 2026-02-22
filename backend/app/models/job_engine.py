@@ -46,20 +46,26 @@ class DocumentJob(TenantBaseModel):
         String(16), nullable=False, default=DocumentJobStatus.QUEUED.value
     )
     pipeline_profile_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    profile_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     preset_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     input_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     request_hash: Mapped[str] = mapped_column(String(128), nullable=False)
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    idempotency_key_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     template_code: Mapped[str] = mapped_column(String(255), nullable=False)
     template_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     correlation_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    input: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
+    output: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     result_document_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     cancel_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
     error_payload: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     steps: Mapped[list["DocumentJobStep"]] = relationship(
         "DocumentJobStep", back_populates="job", cascade="all, delete-orphan"
@@ -72,6 +78,7 @@ class DocumentJob(TenantBaseModel):
         Index("ix_document_jobs_tenant_idempotency", "tenant_id", "idempotency_key"),
         Index("ix_document_jobs_tenant_status_updated", "tenant_id", "status", "updated_at"),
         Index("ix_document_jobs_tenant_status", "tenant_id", "status"),
+        Index("ix_document_jobs_tenant_created", "tenant_id", "created_at"),
     )
 
 
@@ -82,18 +89,26 @@ class DocumentJobStep(TenantBaseModel):
         String(36), ForeignKey("document_jobs.id", ondelete="CASCADE"), nullable=False
     )
     step_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     status: Mapped[JobStepStatus] = mapped_column(String(16), nullable=False, default=JobStepStatus.QUEUED.value)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     input_ref: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
     output_ref: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
+    input: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
+    output: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
+    logs_file_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
     error_payload: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     job: Mapped[DocumentJob] = relationship("DocumentJob", back_populates="steps")
 
-    __table_args__ = (UniqueConstraint("job_id", "step_code", name="uq_document_job_step"),)
+    __table_args__ = (
+        UniqueConstraint("job_id", "step_code", name="uq_document_job_step"),
+        Index("ix_job_steps_tenant_job_order", "tenant_id", "job_id", "order"),
+    )
 
 
 class DocumentArtifact(TenantBaseModel):

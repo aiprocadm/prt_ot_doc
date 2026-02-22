@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,6 +37,8 @@ class JobEnvelopeRead(BaseModel):
     ended_at: datetime | None = None
     error_code: str | None = None
     error_payload: dict[str, Any] | None = None
+    profile_id: str | None = None
+    created_by: str | None = None
 
 
 class JobRead(BaseModel):
@@ -102,6 +105,9 @@ async def list_jobs(
     status_filter: str | None = Query(default=None, alias="status"),
     type_filter: str | None = Query(default=None, alias="type"),
     created_by: str | None = Query(default=None),
+    profile: str | None = Query(default=None),
+    created_from: datetime | None = Query(default=None),
+    created_to: datetime | None = Query(default=None),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
 ) -> JobListRead:
@@ -112,6 +118,12 @@ async def list_jobs(
         stmt = stmt.where(DocumentJob.kind == type_filter)
     if created_by:
         stmt = stmt.where(DocumentJob.created_by == created_by)
+    if profile:
+        stmt = stmt.where(DocumentJob.profile_id == profile)
+    if created_from:
+        stmt = stmt.where(DocumentJob.created_at >= created_from)
+    if created_to:
+        stmt = stmt.where(DocumentJob.created_at <= created_to)
     stmt = stmt.order_by(DocumentJob.updated_at.desc())
     rows = (await session.execute(stmt)).scalars().all()
     return JobListRead(
@@ -124,10 +136,39 @@ async def list_jobs(
                 ended_at=job.ended_at,
                 error_code=job.error_code,
                 error_payload=job.error_payload,
+                profile_id=job.profile_id or job.pipeline_profile_id,
+                created_by=job.created_by,
             )
             for job in rows
         ]
     )
+
+
+@router.get("/{job_id}/steps", response_model=list[JobStepRead])
+async def get_job_steps(
+    job_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> list[JobStepRead]:
+    rows = (
+        await session.execute(
+            select(DocumentJobStep).where(DocumentJobStep.job_id == job_id, DocumentJobStep.tenant_id == str(tenant.id)).order_by(DocumentJobStep.order.asc())
+        )
+    ).scalars().all()
+    return [
+        JobStepRead(
+            code=s.step_code,
+            status=str(s.status),
+            attempt=s.attempts,
+            started_at=s.started_at,
+            ended_at=s.ended_at,
+            input_ref=s.input or s.input_ref,
+            output_ref=s.output or s.output_ref,
+            error_code=s.error_code,
+            error_payload=s.error_payload,
+        )
+        for s in rows
+    ]
 
 
 @router.post("/{job_id}:cancel", response_model=JobRead)
@@ -186,3 +227,46 @@ async def retry_step(
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     await session.commit()
     return await get_job(job_id=job_id, session=session, tenant=tenant)
+
+
+class RestartRequest(BaseModel):
+    restart_from_order: int
+
+
+@router.post("/{job_id}/restart", response_model=JobRead)
+async def restart_job(
+    job_id: str,
+    payload: RestartRequest,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> JobRead:
+    job = await session.get(DocumentJob, job_id)
+    if job is None or str(job.tenant_id) != str(tenant.id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+    rows = (
+        await session.execute(select(DocumentJobStep).where(DocumentJobStep.job_id == job_id).order_by(DocumentJobStep.order.asc()))
+    ).scalars().all()
+    for step in rows:
+        if step.order >= payload.restart_from_order:
+            step.status = "queued"
+            step.started_at = None
+            step.ended_at = None
+            step.error_code = None
+            step.error_payload = None
+    job.status = "queued"
+    job.started_at = None
+    job.ended_at = None
+    await session.commit()
+    return await get_job(job_id=job_id, session=session, tenant=tenant)
+
+
+@router.get("/stream")
+async def stream_jobs(
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> StreamingResponse:
+    async def _events():
+        rows = (await session.execute(select(DocumentJob).where(DocumentJob.tenant_id == str(tenant.id)).order_by(DocumentJob.updated_at.desc()).limit(20))).scalars().all()
+        for job in rows:
+            yield f"event: JobStatusChanged\ndata: {{\"job_id\": \"{job.id}\", \"status\": \"{job.status}\"}}\n\n"
+    return StreamingResponse(_events(), media_type="text/event-stream")
