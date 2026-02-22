@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy import select
 
 from app.core.config import get_settings
-from app.models.models import Tenant, WebhookSubscription
+from app.models.models import Tenant, WebhookEndpoint
 from app.services.webhooks import WebhookDispatcher
 
 
@@ -55,15 +55,16 @@ async def test_webhook_signature_is_valid(sessionmaker) -> None:
 
     async with sessionmaker() as session:
         tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
-        sub = WebhookSubscription(
+        endpoint = WebhookEndpoint(
             tenant_id=tenant.id,
-            event_type="DocumentExported",
+            name="exported",
             url="https://example.test/hooks/exported",
             headers={},
             secret="top-secret",
-            enabled=True,
+            is_enabled=True,
+            subscribed_events=["DocumentExported"],
         )
-        session.add(sub)
+        session.add(endpoint)
         await session.commit()
 
     transport = httpx.MockTransport(handler)
@@ -78,7 +79,9 @@ async def test_webhook_signature_is_valid(sessionmaker) -> None:
             )
 
     assert len(requests) == 1
+    timestamp = requests[0].headers.get("X-Timestamp")
     signature = requests[0].headers.get("X-Signature")
     assert signature is not None
-    expected = hmac.new(b"top-secret", requests[0].content, sha256).hexdigest()
-    assert signature == f"sha256={expected}"
+    assert timestamp is not None
+    expected = hmac.new(b"top-secret", f"{timestamp}.".encode("utf-8") + requests[0].content, sha256).hexdigest()
+    assert signature == f"v1={expected}"

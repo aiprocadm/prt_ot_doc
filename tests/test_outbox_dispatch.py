@@ -233,7 +233,7 @@ async def test_outbox_dedup_prevents_second_delivery(sessionmaker) -> None:
         session.add(
             WebhookDelivery(
                 tenant_id=tenant.id,
-                subscription_id="sub-1",
+                endpoint_id="sub-1",
                 event_id="evt-dedup",
                 status="success",
                 attempts=1,
@@ -248,3 +248,28 @@ async def test_outbox_dedup_prevents_second_delivery(sessionmaker) -> None:
 
     assert processed == 1
     assert dispatcher.calls == []
+
+
+@pytest.mark.anyio
+async def test_classify_http_error_rules(sessionmaker) -> None:
+    async with sessionmaker() as session:
+        processor = OutboxProcessor(session)
+        assert processor._classify_http_error(500) == OutboxStatus.FAILED
+        assert processor._classify_http_error(429) == OutboxStatus.FAILED
+        assert processor._classify_http_error(408) == OutboxStatus.FAILED
+        assert processor._classify_http_error(404) == OutboxStatus.DEAD
+
+
+@pytest.mark.anyio
+async def test_backoff_is_bounded(sessionmaker, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OUTBOX_RETRY_BACKOFF_SECONDS", "1")
+    monkeypatch.setenv("OUTBOX_RETRY_BACKOFF_MAX_SECONDS", "2")
+    get_settings.cache_clear()  # type: ignore[attr-defined]
+
+    async with sessionmaker() as session:
+        processor = OutboxProcessor(session)
+        delta = (processor._compute_next_attempt(10) - datetime.now(tz=timezone.utc)).total_seconds()
+        assert delta <= 2.1
+        assert delta >= 0.9
+
+    get_settings.cache_clear()  # type: ignore[attr-defined]

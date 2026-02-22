@@ -1984,10 +1984,15 @@ class WebhookDelivery(TenantBaseModel):
     event_id: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    request_headers: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    response_headers: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_status_code: Mapped[int | None] = mapped_column(Integer)
     last_response_body: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_error: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
@@ -1999,10 +2004,12 @@ class WebhookDelivery(TenantBaseModel):
 class WebhookEndpoint(TenantBaseModel):
     __tablename__ = "webhook_endpoints"
 
+    name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     url: Mapped[str] = mapped_column(String(2048), nullable=False)
     secret: Mapped[str | None] = mapped_column(String(512), nullable=True)
     is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     subscribed_events: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    timeout_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=5000)
     headers: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     __table_args__ = (
