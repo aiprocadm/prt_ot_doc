@@ -41,16 +41,23 @@ class OutboxEventStatus(str, enum.Enum):
 class DocumentJob(TenantBaseModel):
     __tablename__ = "document_jobs"
 
+    kind: Mapped[str] = mapped_column(String(32), nullable=False, default="pipeline")
     status: Mapped[DocumentJobStatus] = mapped_column(
         String(16), nullable=False, default=DocumentJobStatus.QUEUED.value
     )
     pipeline_profile_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    preset_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    input_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
     template_code: Mapped[str] = mapped_column(String(255), nullable=False)
     template_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     correlation_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    result_document_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    cancel_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
     error_payload: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
 
@@ -62,6 +69,7 @@ class DocumentJob(TenantBaseModel):
     )
 
     __table_args__ = (
+        Index("ix_document_jobs_tenant_idempotency", "tenant_id", "idempotency_key"),
         Index("ix_document_jobs_tenant_status_updated", "tenant_id", "status", "updated_at"),
         Index("ix_document_jobs_tenant_status", "tenant_id", "status"),
     )
@@ -78,6 +86,8 @@ class DocumentJobStep(TenantBaseModel):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    input_ref: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
+    output_ref: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
     error_payload: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
 
@@ -118,4 +128,3 @@ class OutboxEvent(TenantBaseModel):
         UniqueConstraint("tenant_id", "event_id", name="uq_outbox_event_tenant_event"),
         Index("ix_outbox_events_status", "status"),
     )
-

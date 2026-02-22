@@ -40,6 +40,8 @@ async def test_job_steps_transition_success_path(sessionmaker) -> None:
             tenant_id="tenant-1",
             created_by=None,
             payload={"template_code": "T", "template_version": 1, "options": {"zip": True}},
+            idempotency_key="idem-1",
+            request_hash="hash-1",
         )
         await orchestrator.run_job(job_id=job.id)
         await session.commit()
@@ -56,6 +58,8 @@ async def test_step_failure_marks_job_failed_and_sets_error(sessionmaker) -> Non
             tenant_id="tenant-1",
             created_by=None,
             payload={"template_code": "T", "template_version": 1, "options": {}},
+            idempotency_key="idem-1",
+            request_hash="hash-1",
         )
         await orchestrator.run_job(job_id=job.id, fail_step="convert_pdf")
         await session.commit()
@@ -73,6 +77,8 @@ async def test_step_retry_does_not_duplicate_artifacts(sessionmaker) -> None:
             tenant_id="tenant-1",
             created_by=None,
             payload={"template_code": "T", "template_version": 1, "options": {"zip": True}},
+            idempotency_key="idem-1",
+            request_hash="hash-1",
         )
         await orchestrator.run_job(job_id=job.id, fail_step="convert_pdf")
         await orchestrator.retry_job(job_id=job.id)
@@ -89,7 +95,35 @@ async def test_outbox_created_on_success(sessionmaker) -> None:
             tenant_id="tenant-1",
             created_by=None,
             payload={"template_code": "T", "template_version": 1, "options": {}},
+            idempotency_key="idem-1",
+            request_hash="hash-1",
         )
         await orchestrator.run_job(job_id=job.id)
         events = (await session.execute(select(OutboxEvent).where(OutboxEvent.tenant_id == "tenant-1"))).scalars().all()
         assert any(e.event_type == "DocumentGenerated" for e in events)
+
+
+@pytest.mark.anyio
+async def test_request_hash_stable_for_sorted_keys() -> None:
+    from app.core.idempotency import compute_request_hash
+
+    left = {"b": 2, "a": {"z": 1, "x": 2}}
+    right = {"a": {"x": 2, "z": 1}, "b": 2}
+    assert compute_request_hash(left) == compute_request_hash(right)
+
+
+@pytest.mark.anyio
+async def test_cancel_sets_canceled_status(sessionmaker) -> None:
+    async with sessionmaker() as session:
+        orchestrator = DocumentPipelineOrchestrator(session)
+        job = await orchestrator.start_document_job(
+            tenant_id="tenant-1",
+            created_by=None,
+            payload={"template_code": "T", "template_version": 1, "options": {}},
+            idempotency_key="idem-1",
+            request_hash="hash-1",
+        )
+        await orchestrator.cancel_job(job_id=job.id)
+        refreshed = await session.get(DocumentJob, job.id)
+        assert refreshed is not None
+        assert refreshed.status == "canceled"
