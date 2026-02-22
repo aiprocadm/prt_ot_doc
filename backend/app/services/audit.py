@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import hashlib
+import re
 from datetime import date, datetime, timezone
 from enum import Enum
 from typing import Any, Mapping
@@ -8,9 +10,13 @@ from typing import Any, Mapping
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.tracing import get_trace_id
+from app.core.config import get_settings
 from app.models.models import AuditLog
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
+
+_PII_KEY_RE = re.compile(r"(email|phone|passport|snils|inn|birth|address)", re.IGNORECASE)
 
 
 def _normalize_value(value: Any) -> Any:
@@ -29,23 +35,74 @@ def _normalize_payload(payload: Mapping[str, Any] | None) -> dict[str, Any]:
     return {key: _normalize_value(val) for key, val in (payload or {}).items()}
 
 
+def _mask_value(value: Any) -> Any:
+    if value is None:
+        return None
+    text = str(value)
+    if "@" in text:
+        local, _, domain = text.partition("@")
+        return f"{(local[:1] or '*')}***@{domain}"
+    digits = "".join(ch for ch in text if ch.isdigit())
+    if len(digits) >= 4:
+        return f"****{digits[-2:]}"
+    return "***"
+
+
+def _flatten(data: Mapping[str, Any], prefix: str = "") -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in data.items():
+        path = f"{prefix}.{key}" if prefix else str(key)
+        if isinstance(value, Mapping):
+            result.update(_flatten(value, path))
+            continue
+        if isinstance(value, list):
+            result[path] = {"count": len(value)}
+            continue
+        result[path] = _normalize_value(value)
+    return result
+
+
 def field_level_diff(
-    before: Mapping[str, Any],
-    after: Mapping[str, Any],
+    before: Mapping[str, Any] | None,
+    after: Mapping[str, Any] | None,
     *,
     exclude: set[str] | None = None,
 ) -> dict[str, Any]:
     excluded = {"updated_at", "created_at", "version", *(exclude or set())}
-    fields: dict[str, Any] = {}
-    keys = set(before.keys()).union(after.keys())
+    changed: dict[str, Any] = {}
+    added: dict[str, Any] = {}
+    removed: dict[str, Any] = {}
+    masked: list[str] = []
+    before_flat = _flatten(_normalize_payload(before))
+    after_flat = _flatten(_normalize_payload(after))
+    keys = set(before_flat.keys()).union(after_flat.keys())
     for key in keys:
         if key in excluded:
             continue
-        prev = _normalize_value(before.get(key))
-        nxt = _normalize_value(after.get(key))
+        prev = before_flat.get(key)
+        nxt = after_flat.get(key)
         if prev != nxt:
-            fields[key] = {"before": prev, "after": nxt}
-    return {"fields": fields}
+            pii = bool(_PII_KEY_RE.search(key))
+            from_val = _mask_value(prev) if pii else prev
+            to_val = _mask_value(nxt) if pii else nxt
+            if pii:
+                masked.append(key)
+            if prev is None:
+                added[key] = {"to": to_val}
+            elif nxt is None:
+                removed[key] = {"from": from_val}
+            else:
+                changed[key] = {"from": from_val, "to": to_val}
+    return {"changed": changed, "added": added, "removed": removed, "masked": sorted(set(masked))}
+
+
+def compute_snapshot_hash(payload: Mapping[str, Any] | None) -> str | None:
+    if not payload:
+        return None
+    import json
+
+    raw = json.dumps(_normalize_payload(payload), sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 class AuditService:
@@ -69,9 +126,18 @@ class AuditService:
         changed_fields: Mapping[str, Any] | None = None,
         when: datetime | None = None,
         details: Mapping[str, Any] | None = None,
+        actor_type: str = "user",
+        actor_email: str | None = None,
+        parent_type: str | None = None,
+        parent_id: str | None = None,
+        before_hash: str | None = None,
+        after_hash: str | None = None,
     ) -> AuditLog:
         """Create and persist a new audit log entry."""
 
+        if not settings.audit_enabled:
+            logger.debug("audit.disabled")
+            return AuditLog(tenant_id=tenant_id, action=action, object_type=object_type, object_id=object_id, user_id=user_id, ip=ip or "unknown")
         payload = _normalize_payload(details)
         entry = AuditLog(
             tenant_id=tenant_id,
@@ -86,6 +152,12 @@ class AuditService:
             changed_fields=_normalize_payload(changed_fields),
             when=when or datetime.now(tz=timezone.utc),
             details=payload,
+            actor_type=actor_type,
+            actor_email=actor_email,
+            parent_type=parent_type,
+            parent_id=parent_id,
+            before_hash=before_hash,
+            after_hash=after_hash,
         )
         self.session.add(entry)
         await self.session.flush()
@@ -100,6 +172,59 @@ class AuditService:
             },
         )
         return entry
+
+
+    async def audit_create(self, *, tenant_id: str, entity_type: str, entity_id: str, after: Mapping[str, Any], meta: Mapping[str, Any] | None, actor: Mapping[str, Any]) -> AuditLog:
+        return await self.log_event(
+            tenant_id=tenant_id,
+            action="create",
+            object_type=entity_type,
+            object_id=entity_id,
+            user_id=actor.get("id"),
+            actor_email=actor.get("email"),
+            actor_type=str(actor.get("type", "user")),
+            ip=str(meta.get("ip", "unknown")) if meta else "unknown",
+            request_id=(meta or {}).get("correlation_id"),
+            user_agent=(meta or {}).get("user_agent"),
+            changed_fields=field_level_diff({}, after),
+            details={"meta": dict(meta or {})},
+            after_hash=compute_snapshot_hash(after),
+        )
+
+    async def audit_update(self, *, tenant_id: str, entity_type: str, entity_id: str, before: Mapping[str, Any], after: Mapping[str, Any], meta: Mapping[str, Any] | None, actor: Mapping[str, Any]) -> AuditLog:
+        return await self.log_event(
+            tenant_id=tenant_id,
+            action="update",
+            object_type=entity_type,
+            object_id=entity_id,
+            user_id=actor.get("id"),
+            actor_email=actor.get("email"),
+            actor_type=str(actor.get("type", "user")),
+            ip=str(meta.get("ip", "unknown")) if meta else "unknown",
+            request_id=(meta or {}).get("correlation_id"),
+            user_agent=(meta or {}).get("user_agent"),
+            changed_fields=field_level_diff(before, after),
+            details={"meta": dict(meta or {})},
+            before_hash=compute_snapshot_hash(before),
+            after_hash=compute_snapshot_hash(after),
+        )
+
+    async def audit_delete(self, *, tenant_id: str, entity_type: str, entity_id: str, before: Mapping[str, Any], meta: Mapping[str, Any] | None, actor: Mapping[str, Any]) -> AuditLog:
+        return await self.log_event(
+            tenant_id=tenant_id,
+            action="soft_delete",
+            object_type=entity_type,
+            object_id=entity_id,
+            user_id=actor.get("id"),
+            actor_email=actor.get("email"),
+            actor_type=str(actor.get("type", "user")),
+            ip=str(meta.get("ip", "unknown")) if meta else "unknown",
+            request_id=(meta or {}).get("correlation_id"),
+            user_agent=(meta or {}).get("user_agent"),
+            changed_fields=field_level_diff(before, {**dict(before), "deleted_at": datetime.now(tz=timezone.utc).isoformat()}),
+            details={"meta": dict(meta or {})},
+            before_hash=compute_snapshot_hash(before),
+        )
 
     async def log(
         self,
