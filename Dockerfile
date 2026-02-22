@@ -9,6 +9,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         bash \
+        man-db \
         curl \
         build-essential \
         libmagic1 \

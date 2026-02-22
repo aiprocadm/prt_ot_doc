@@ -6,7 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends bash curl build-essential libmagic1 libmagic-dev pkg-config \
+    && apt-get install -y --no-install-recommends bash man-db curl build-essential libmagic1 libmagic-dev pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir "poetry==2.1.4"
