@@ -1079,6 +1079,7 @@ class IdempotencyKey(TenantBaseModel):
     status_code: Mapped[int | None] = mapped_column(Integer)
     response_body: Mapped[str | None] = mapped_column(Text)
     result_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "endpoint", "key", name="uq_idempotency_keys"),

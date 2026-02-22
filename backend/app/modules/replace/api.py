@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from io import BytesIO
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, Response, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +17,7 @@ from app.modules.replace.engine_xml import replace_xml_parts
 from app.modules.replace.models import ReplaceMap, ReplaceRun, ReplaceRunStatus
 from app.modules.replace.repo import get_replace_map_by_code, get_replace_run, list_replace_maps
 from app.modules.replace.report import build_report, to_csv
+from app.core.idempotency import compute_request_hash
 from app.modules.replace.schemas import (
     ReplaceLaunchRequest,
     ReplaceLaunchResponse,
@@ -27,6 +28,7 @@ from app.modules.replace.schemas import (
     ReplaceRunRead,
 )
 from app.services.file_storage import FileStorageService
+from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 
 router = APIRouter()
 
@@ -93,7 +95,15 @@ def _resolve_map_id(payload: ReplaceLaunchRequest, row: ReplaceMap | None) -> st
     return row.id
 
 
-async def _launch(document_version_id: str, payload: ReplaceLaunchRequest, mode: str, session: AsyncSession, tenant: Tenant) -> ReplaceLaunchResponse:
+async def _launch(document_version_id: str, payload: ReplaceLaunchRequest, mode: str, session: AsyncSession, tenant: Tenant, request: Request, idempotency_key: str | None) -> ReplaceLaunchResponse:
+    endpoint = f"replace.{mode}"
+    idem = IdempotencyService(session=session, tenant_id=str(tenant.id), endpoint=endpoint)
+    idem_key = normalize_idempotency_key(idempotency_key)
+    req_hash = compute_request_hash({"document_version_id": document_version_id, "mode": mode, **payload.model_dump(mode="json")})
+    record, created = await idem.acquire(key=idem_key, request_hash=req_hash, method=request.method.upper(), path=request.url.path)
+    if not created:
+        return await idem.respond_from_store(record, model=ReplaceLaunchResponse)
+
     version = await session.get(DocumentVersion, document_version_id)
     if version is None or version.tenant_id != str(tenant.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Document version not found")
@@ -123,19 +133,22 @@ async def _launch(document_version_id: str, payload: ReplaceLaunchRequest, mode:
         storage.put(new_key, replaced, content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
         run.after_file_id = new_key
     session.add(run)
+    await session.flush()
+    response = ReplaceLaunchResponse(job_id=run.id, replace_run_id=run.id, status_url=f"/v1/replace-runs/{run.id}", new_document_version_id=run.after_file_id)
+    await idem.store_success(record, status_code=status.HTTP_200_OK, body=response.model_dump())
     await session.commit()
     await session.refresh(run)
-    return ReplaceLaunchResponse(job_id=run.id, replace_run_id=run.id, status_url=f"/v1/replace-runs/{run.id}", new_document_version_id=run.after_file_id)
+    return response
 
 
 @router.post("/documents/{document_version_id}/replace:dry-run", response_model=ReplaceLaunchResponse)
-async def replace_dry_run(document_version_id: str, payload: ReplaceLaunchRequest, _idempotency: str | None = Header(default=None, alias="Idempotency-Key"), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> ReplaceLaunchResponse:
-    return await _launch(document_version_id, payload, "dry_run", session, tenant)
+async def replace_dry_run(document_version_id: str, payload: ReplaceLaunchRequest, request: Request, _idempotency: str | None = Header(default=None, alias="Idempotency-Key"), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> ReplaceLaunchResponse:
+    return await _launch(document_version_id, payload, "dry_run", session, tenant, request, _idempotency)
 
 
 @router.post("/documents/{document_version_id}/replace:apply", response_model=ReplaceLaunchResponse)
-async def replace_apply(document_version_id: str, payload: ReplaceLaunchRequest, _idempotency: str | None = Header(default=None, alias="Idempotency-Key"), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> ReplaceLaunchResponse:
-    return await _launch(document_version_id, payload, "apply", session, tenant)
+async def replace_apply(document_version_id: str, payload: ReplaceLaunchRequest, request: Request, _idempotency: str | None = Header(default=None, alias="Idempotency-Key"), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> ReplaceLaunchResponse:
+    return await _launch(document_version_id, payload, "apply", session, tenant, request, _idempotency)
 
 
 @router.post("/replace-runs/{replace_run_id}/rollback", response_model=ReplaceLaunchResponse)

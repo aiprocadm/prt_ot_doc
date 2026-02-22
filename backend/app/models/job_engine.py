@@ -94,6 +94,8 @@ class DocumentJobStep(TenantBaseModel):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    inputs_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     input_ref: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
     output_ref: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
     input: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
@@ -127,6 +129,22 @@ class DocumentArtifact(TenantBaseModel):
 
     __table_args__ = (
         UniqueConstraint("job_id", "step_code", "kind", name="uq_document_artifact_step_kind"),
+    )
+
+
+class DocumentJobLog(TenantBaseModel):
+    __tablename__ = "job_logs"
+
+    job_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("document_jobs.id", ondelete="CASCADE"), nullable=False
+    )
+    step_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    level: Mapped[str] = mapped_column(String(16), nullable=False, default="info")
+    message: Mapped[str] = mapped_column(String(1024), nullable=False)
+    meta_json: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
+
+    __table_args__ = (
+        Index("ix_job_logs_tenant_job_created", "tenant_id", "job_id", "created_at"),
     )
 
 
