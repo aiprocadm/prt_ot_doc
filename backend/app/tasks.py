@@ -938,3 +938,100 @@ def apply_headers_job(*, job_id: str, tenant_slug: str) -> dict[str, str]:
                 return {"job_id": job.id, "document_version_id": new_version.id}
 
     return _run_coroutine(_run())
+
+
+@celery_app.task(name="app.tasks.convert_pdf_job")
+def convert_pdf_job(*, tenant_id: str, input_file_id: str, pdf_run_id: str, options: dict, correlation_id: str | None = None) -> dict[str, object]:
+    async def _run() -> dict[str, object]:
+        from datetime import datetime, timezone
+        from sqlalchemy import select
+
+        from app.models.file import File
+        from app.modules.pdf.convert import (
+            build_pdf_file,
+            convert_docx_bytes,
+            load_source_bytes,
+            map_failure,
+            persist_pdf,
+        )
+        from app.modules.pdf.models import PdfConversionRun, PdfRunStatus
+        from app.modules.pdf.service_pool import LibreOfficePool
+
+        timeout_s = int((options or {}).get("timeout_s") or 45)
+        pool = LibreOfficePool(workers=4)
+        attempts = 0
+        last_error: Exception | None = None
+
+        with tenant_context(tenant_id):
+            ensure_tenant_schema(tenant_id)
+            async with session_scope(tenant=tenant_id) as session:
+                run = await session.get(PdfConversionRun, pdf_run_id)
+                if run is None:
+                    return {"status": "missing_run"}
+                run.status = PdfRunStatus.RUNNING.value
+                run.started_at = datetime.now(timezone.utc)
+                await session.flush()
+
+            for _ in range(2):
+                attempts += 1
+                try:
+                    async with session_scope(tenant=tenant_id) as session:
+                        source = await session.get(File, input_file_id)
+                        run = await session.get(PdfConversionRun, pdf_run_id)
+                        if source is None or run is None:
+                            return {"status": "missing_input"}
+
+                        source_bytes = load_source_bytes(source)
+                        pdf_bytes, sha256_hex = convert_docx_bytes(source_bytes=source_bytes, timeout_s=timeout_s, pool=pool)
+
+                        existing = (
+                            await session.execute(
+                                select(File).where(
+                                    File.tenant_id == tenant_id,
+                                    File.sha256 == sha256_hex,
+                                    File.mime == "application/pdf",
+                                )
+                            )
+                        ).scalar_one_or_none()
+
+                        if existing is None:
+                            tenant_prefix = str(source.storage_key).split("/", 1)[0]
+                            key, _ = persist_pdf(
+                                tenant_prefix=tenant_prefix,
+                                source=source,
+                                pdf_bytes=pdf_bytes,
+                                sha256_hex=sha256_hex,
+                            )
+                            existing = build_pdf_file(
+                                tenant_id=tenant_id,
+                                key=key,
+                                sha256_hex=sha256_hex,
+                                size=len(pdf_bytes),
+                            )
+                            session.add(existing)
+                            await session.flush()
+
+                        run.output_file_id = existing.id
+                        run.attempts = attempts
+                        run.status = PdfRunStatus.SUCCESS.value
+                        run.ended_at = datetime.now(timezone.utc)
+                        run.error_code = None
+                        run.error_payload = {}
+                        await session.flush()
+                        return {"status": "success", "output_file_id": existing.id, "attempts": attempts}
+                except Exception as exc:  # noqa: BLE001
+                    last_error = exc
+                    logger.exception("pdf.convert.failed", extra={"attempt": attempts, "correlation_id": correlation_id})
+
+            async with session_scope(tenant=tenant_id) as session:
+                run = await session.get(PdfConversionRun, pdf_run_id)
+                if run is not None:
+                    run.attempts = attempts
+                    run.status = PdfRunStatus.FAILED.value
+                    run.ended_at = datetime.now(timezone.utc)
+                    run.error_code = map_failure(last_error) if last_error else "PDF_CONVERSION_FAILED"
+                    run.error_payload = {"error": str(last_error)[:500]} if last_error else {}
+                    await session.flush()
+            return {"status": "failed", "attempts": attempts}
+
+    return _run_coroutine(_run())
