@@ -772,13 +772,16 @@ class PPEIssue(TenantBaseModel, SoftDeleteMixin):
 
 
 class Template(TenantBaseModel):
+    code: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
     description: Mapped[str | None] = mapped_column(String(1024))
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     storage_key: Mapped[str | None] = mapped_column(String(512), nullable=True, index=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
-        UniqueConstraint("tenant_id", "name", name="uq_templates_tenant_name"),
+        UniqueConstraint("tenant_id", "code", name="uq_templates_tenant_code"),
     )
 
 
@@ -792,8 +795,12 @@ class TemplateVersion(TenantBaseModel):
     template_id: Mapped[str] = mapped_column(ForeignKey("template.id"), nullable=False, index=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     checksum: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[TemplateVersionStatus] = mapped_column(Enum(TemplateVersionStatus), nullable=False)
     payload_key: Mapped[str] = mapped_column(String(512), nullable=False)
+    file_id: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    placeholder_index: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
     document_type: Mapped[str | None] = mapped_column(String(255))
     required_fields_schema: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     applicability_rules: Mapped[dict[str, Any] | None] = mapped_column(JSON)
