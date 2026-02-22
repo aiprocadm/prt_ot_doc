@@ -18,6 +18,7 @@ from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import get_settings
 from app.core.tenant import get_current_tenant, tenant_schema
+from app.modules.tenancy.context import get_tenant_context
 
 _settings = get_settings()
 _DEFAULT_TENANT_SLUG = _settings.default_tenant_slug
@@ -213,7 +214,11 @@ async def _apply_search_path(session: AsyncSession) -> None:
     formatted = _format_search_path(search_path)
     if not _SEARCH_PATH_SUPPORTED:
         return
-    await session.execute(text(f"SET search_path TO {formatted}"))
+    await session.execute(text(f"SET LOCAL search_path TO {formatted}"))
+    ctx = get_tenant_context()
+    if ctx and ctx.correlation_id:
+        safe = ctx.correlation_id.replace("\"", "")
+        await session.execute(text(f"SET LOCAL application_name TO 'api:{safe}'"))
 
 
 def AsyncSessionLocal(
@@ -282,6 +287,10 @@ async def get_tenant_session(*, tenant: str, schema_name: str | None = None) -> 
                 await session.execute(text(f'SET LOCAL search_path TO "{schema}", "{_SHARED_SCHEMA}"'))
             except Exception:
                 await session.execute(text(f'SET search_path TO "{schema}", "{_SHARED_SCHEMA}"'))
+            ctx = get_tenant_context()
+            if ctx and ctx.correlation_id:
+                safe = ctx.correlation_id.replace("\"", "")
+                await session.execute(text(f"SET LOCAL application_name TO 'api:{safe}'"))
         yield session
 
 

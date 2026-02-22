@@ -1,7 +1,7 @@
-"""FastAPI middleware for tenant extraction."""
+"""FastAPI middleware for tenant extraction and context propagation."""
 from __future__ import annotations
 
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
 from sqlalchemy import or_, select
@@ -13,6 +13,7 @@ from starlette.types import ASGIApp
 from app.core.security import verify_token
 from app.core.tenant import TENANT_HEADER_ALIASES, tenant_required
 from app.db.session import AsyncSessionLocal
+from app.modules.tenancy.context import TenantContext, reset_tenant_context, set_tenant_context
 from app.models.models import Tenant, TenantQuota, TenantSettings
 
 
@@ -23,7 +24,7 @@ class TenantMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self._metrics_enabled = metrics_enabled
         self._system_paths = {"/health", "/ready", "/healthz", "/readyz"}
-        self._public_prefixes = ("/api/v1/auth", "/api/v1/public")
+        self._public_prefixes = ("/api/v1/auth", "/api/v1/public", "/api/v1/webhooks/incoming")
 
     @staticmethod
     def _is_uuid(value: str) -> bool:
@@ -48,19 +49,21 @@ class TenantMiddleware(BaseHTTPMiddleware):
         ):
             return await call_next(request)
 
+        correlation_id = request.headers.get("x-correlation-id") or getattr(request.state, "trace_id", None) or str(uuid4())
+        request.state.correlation_id = correlation_id
+
         header_slug = None
         for header_name in TENANT_HEADER_ALIASES:
             header_slug = request.headers.get(header_name)
             if header_slug:
                 break
         if path.startswith("/api/v1/") and not header_slug:
-            correlation_id = getattr(request.state, "trace_id", "")
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
                 detail={
                     "code": "TENANT_REQUIRED",
-                    "type": "tenancy",
-                    "message": "X-Tenant header is required",
+                    "type": "validation",
+                    "message": "X-Tenant header required",
                     "correlation_id": correlation_id,
                 },
             )
@@ -98,7 +101,7 @@ class TenantMiddleware(BaseHTTPMiddleware):
         if tenant is None:
             raise HTTPException(
                 status.HTTP_404_NOT_FOUND,
-                detail={"code": "TENANT_NOT_FOUND", "type": "validation", "message": "Tenant not found"},
+                detail={"code": "TENANT_NOT_FOUND", "type": "validation", "message": "Tenant not found", "correlation_id": correlation_id},
             )
         if not tenant.is_active:
             raise HTTPException(
@@ -120,4 +123,32 @@ class TenantMiddleware(BaseHTTPMiddleware):
         request.state.tenant_record = tenant
         request.state.tenant_settings = settings
         request.state.tenant_quota = quota
-        return await call_next(request)
+
+        roles_raw = request.headers.get("x-roles", "")
+        attrs_raw = request.headers.get("x-attributes", "")
+        attributes: dict[str, str] = {}
+        for chunk in attrs_raw.split(","):
+            chunk = chunk.strip()
+            if not chunk or "=" not in chunk:
+                continue
+            k, v = chunk.split("=", 1)
+            attributes[k.strip()] = v.strip()
+        ctx = TenantContext(
+            tenant_id=str(tenant.id),
+            slug=tenant.slug,
+            schema=request.state.tenant_schema,
+            s3_prefix=request.state.tenant_s3_prefix,
+            plan=((tenant.settings or {}).get("plan") if isinstance(tenant.settings, dict) else None) or "Free",
+            max_parallel_jobs=(quota.max_parallel_jobs if quota else None),
+            max_storage_mb=(quota.max_storage_mb if quota else None),
+            max_generations_per_month=(quota.max_doc_generations_per_month if quota else None),
+            correlation_id=correlation_id,
+            actor_id=request.headers.get("x-actor-id"),
+            roles=tuple([r.strip() for r in roles_raw.split(",") if r.strip()]),
+            attributes=attributes or None,
+        )
+        token = set_tenant_context(ctx)
+        try:
+            return await call_next(request)
+        finally:
+            reset_tenant_context(token)
