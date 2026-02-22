@@ -42,6 +42,8 @@ const ApprovalsInboxPage = lazy(() => import("@/pages/approvals/ApprovalsInboxPa
 const ApprovalsOutboxPage = lazy(() => import("@/pages/approvals/ApprovalsOutboxPage"));
 const SignaturesPage = lazy(() => import("@/pages/signatures/SignaturesPage"));
 const EdoPage = lazy(() => import("@/pages/edo/EdoPage"));
+const PipelineRunsPage = lazy(() => import("@/pages/PipelineRuns"));
+const PipelineRunDetailsPage = lazy(() => import("@/pages/PipelineRunDetails"));
 
 const AppRouter = () => {
   const initialize = useAuthStore((state) => state.initialize);
@@ -147,6 +149,10 @@ const AppRouter = () => {
               </Route>
               <Route element={<ProtectedRoute permission={PERMISSIONS.REPORTS_VIEW} />}>
                 <Route path="/reports" element={<ReportsPage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.DOCUMENT_VIEW} />}>
+                <Route path="/pipelines/runs" element={<PipelineRunsPage />} />
+                <Route path="/pipelines/runs/:id" element={<PipelineRunDetailsPage />} />
               </Route>
             </Route>
           </Route>

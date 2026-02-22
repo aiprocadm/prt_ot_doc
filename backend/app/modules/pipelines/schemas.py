@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -24,6 +25,8 @@ KNOWN_SCHEMAS = {
     "ArchiveParamsV1",
     "EdoParamsV1",
 }
+
+JobStatusLiteral = Literal["queued", "running", "success", "failed", "canceled"]
 
 
 class PipelineStepSchema(BaseModel):
@@ -73,20 +76,47 @@ class PipelineProfileRead(BaseModel):
 
 
 class PipelineRunRequest(BaseModel):
-    profile_code: str
-    input: dict[str, Any]
-    overrides: dict[str, Any] | None = None
+    profile_code: str | None = None
+    profile_id: str | None = None
+    inputs: dict[str, Any] = Field(default_factory=dict)
+    options: dict[str, Any] | None = None
+
+    @model_validator(mode="after")
+    def validate_profile_selector(self) -> "PipelineRunRequest":
+        if not self.profile_code and not self.profile_id:
+            raise ValueError("profile_code or profile_id is required")
+        return self
 
 
 class PipelineRunAccepted(BaseModel):
-    job_id: str
-    status_url: str
-    ws_channel: str
+    run_id: str
+    status: JobStatusLiteral
+    step_runs: list[dict[str, Any]]
+
+
+class PipelineStepRunRead(BaseModel):
+    step_run_id: str
+    run_id: str
+    step_code: str
+    status: str
+    attempt: int
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+    error_code: str | None = None
+    error_payload: dict[str, Any] | None = None
+
+
+class PipelineRunRead(BaseModel):
+    run_id: str
+    profile_id: str | None = None
+    status: JobStatusLiteral
+    inputs_json: dict[str, Any] | None = None
+    outputs_json: dict[str, Any] | None = None
+    created_by: str | None = None
+    correlation_id: str | None = None
+    step_runs: list[PipelineStepRunRead]
 
 
 class JobActionRequest(BaseModel):
     step_code: str | None = None
     restart_from_order: int | None = None
-
-
-JobStatusLiteral = Literal["queued", "running", "success", "failed", "canceled"]

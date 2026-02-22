@@ -29,6 +29,7 @@ const navGroups = [
       { label: "Согласования", to: "/approvals/inbox", icon: ClipboardCheck, permission: PERMISSIONS.DOCUMENT_VIEW },
       { label: "Подписи", to: "/signatures", icon: FileText, permission: PERMISSIONS.DOCUMENT_VIEW },
       { label: "ЭДО", to: "/edo", icon: Archive, permission: PERMISSIONS.DOCUMENT_VIEW },
+      { label: "Пайплайны", to: "/pipelines/runs", icon: Archive, permission: PERMISSIONS.DOCUMENT_VIEW },
       { label: "Отчёты", to: "/reports", icon: Archive, permission: PERMISSIONS.REPORTS_VIEW }
     ]
   },
