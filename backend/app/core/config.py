@@ -258,6 +258,7 @@ class Settings(BaseSettings):
     )
     app_run_mode: Literal["docker", "dockerless"] = Field("docker", alias="APP_RUN_MODE")
     debug: bool = Field(False, alias="APP_DEBUG")
+    audit_enabled: bool = Field(True, alias="AUDIT_ENABLED")
 
     api_prefix: str = Field("/api", alias="API_PREFIX")
     api_v1_prefix: str = Field("/api/v1", alias="API_V1_PREFIX")

@@ -9,6 +9,7 @@ from uuid import uuid4
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.audit import AuditService, field_level_diff
 from app.models.job_engine import (
     DocumentArtifact,
     DocumentJob,
@@ -96,8 +97,10 @@ class DocumentPipelineOrchestrator:
         if job.status == DocumentJobStatus.CANCELED.value:
             return job
 
+        prev_status = job.status
         job.status = DocumentJobStatus.RUNNING.value
         job.started_at = job.started_at or datetime.now(tz=timezone.utc)
+        await self._audit_status_change(job, prev_status, job.status)
         await self.session.flush()
         await self.advance_job(job_id=job_id, fail_step=fail_step)
         return job
@@ -121,18 +124,22 @@ class DocumentPipelineOrchestrator:
                 step.error_code = exc.code
                 step.error_payload = exc.payload
                 step.ended_at = datetime.now(tz=timezone.utc)
+                prev_status = job.status
                 job.status = DocumentJobStatus.FAILED.value
                 job.error_code = exc.code
                 job.error_payload = exc.payload
                 job.ended_at = datetime.now(tz=timezone.utc)
+                await self._audit_status_change(job, prev_status, job.status)
                 await self._log(job, "error", "step_failed", step.step_code, {"error_code": exc.code, "error_payload": exc.payload})
                 await self._emit_event(job=job, event_type="Failed", payload={"job_id": job.id, "error_code": job.error_code, "correlation_id": job.correlation_id})
                 await self.session.flush()
                 return job
 
+        prev_status = job.status
         job.status = DocumentJobStatus.SUCCESS.value
         job.ended_at = datetime.now(tz=timezone.utc)
         job.output = {"artifacts": await self._artifact_list(job.id)}
+        await self._audit_status_change(job, prev_status, job.status)
         await self._emit_event(job=job, event_type="DocumentGenerated", payload={"job_id": job.id, "artifacts": await self._artifact_list(job.id), "correlation_id": job.correlation_id})
         await self._log(job, "info", "job_success", None, {"artifacts": len(job.output.get("artifacts", []))})
         await self.session.flush()
@@ -259,6 +266,22 @@ class DocumentPipelineOrchestrator:
 
     async def _log(self, job: DocumentJob, level: str, message: str, step_code: str | None, meta: dict[str, Any] | None) -> None:
         self.session.add(DocumentJobLog(tenant_id=job.tenant_id, job_id=job.id, step_code=step_code, level=level, message=message, meta_json={**(meta or {}), "correlation_id": job.correlation_id}))
+
+    async def _audit_status_change(self, job: DocumentJob, before_status: str, after_status: str) -> None:
+        if before_status == after_status:
+            return
+        await AuditService(self.session).log_event(
+            tenant_id=job.tenant_id,
+            action="status_change",
+            object_type="DocumentJob",
+            object_id=job.id,
+            user_id=job.created_by,
+            actor_type="service" if not job.created_by else "user",
+            ip="system",
+            request_id=job.correlation_id,
+            changed_fields=field_level_diff({"status": before_status}, {"status": after_status}),
+            details={"correlation_id": job.correlation_id},
+        )
 
     @staticmethod
     def _artifact_kind(step_code: str) -> str | None:

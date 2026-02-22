@@ -29,6 +29,7 @@ from app.modules.replace.schemas import (
 )
 from app.services.file_storage import FileStorageService
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
+from app.services.audit import AuditService
 
 router = APIRouter()
 
@@ -136,6 +137,18 @@ async def _launch(document_version_id: str, payload: ReplaceLaunchRequest, mode:
     await session.flush()
     response = ReplaceLaunchResponse(job_id=run.id, replace_run_id=run.id, status_url=f"/v1/replace-runs/{run.id}", new_document_version_id=run.after_file_id)
     await idem.store_success(record, status_code=status.HTTP_200_OK, body=response.model_dump())
+    if mode == "apply":
+        await AuditService(session).log_event(
+            tenant_id=str(tenant.id),
+            action="replace_apply",
+            object_type="DocumentVersion",
+            object_id=version.id,
+            user_id=None,
+            ip=request.client.host if request.client else "unknown",
+            request_id=getattr(request.state, "trace_id", None),
+            changed_fields={"changed": {}, "added": {}, "removed": {}, "masked": []},
+            details={"replace_run_id": run.id, "new_file_key": run.after_file_id},
+        )
     await session.commit()
     await session.refresh(run)
     return response

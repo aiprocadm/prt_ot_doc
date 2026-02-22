@@ -113,8 +113,8 @@ async def test_audit_written_on_update_with_field_diff(
             )
         ).scalars().all()
         assert rows
-        assert rows[0].changed_fields["fields"]["name"]["before"] == "Audit Co"
-        assert rows[0].changed_fields["fields"]["name"]["after"] == "Audit Co Updated"
+        assert rows[0].changed_fields["changed"]["name"]["from"] == "Audit Co"
+        assert rows[0].changed_fields["changed"]["name"]["to"] == "Audit Co Updated"
 
 
 @pytest.mark.anyio("asyncio")
