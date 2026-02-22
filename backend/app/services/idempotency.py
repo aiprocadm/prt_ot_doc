@@ -61,6 +61,7 @@ class IdempotencyService:
     ) -> tuple[IdempotencyKey, bool]:
         existing = await self.get(key=key)
         if existing is not None:
+            existing.last_seen_at = datetime.now(tz=timezone.utc)
             if request_hash and existing.request_hash and existing.request_hash != request_hash:
                 raise HTTPException(
                     status.HTTP_409_CONFLICT,
@@ -74,6 +75,7 @@ class IdempotencyService:
                 existing.path = path
             return existing, False
 
+        now = datetime.now(tz=timezone.utc)
         record = IdempotencyKey(
             tenant_id=self.tenant_id,
             endpoint=self.endpoint,
@@ -82,6 +84,7 @@ class IdempotencyService:
             request_hash=request_hash,
             method=method,
             path=path,
+            last_seen_at=now,
         )
         self.session.add(record)
         try:
@@ -101,6 +104,7 @@ class IdempotencyService:
         status_code: int,
         body: dict[str, Any],
     ) -> IdempotencyKey:
+        record.last_seen_at = datetime.now(tz=timezone.utc)
         record.status = IdempotencyStatus.SUCCEEDED
         record.status_code = int(status_code)
         record.response_body = json.dumps(body, ensure_ascii=False)
@@ -125,6 +129,7 @@ class IdempotencyService:
             payload = detail
         else:
             payload = str(detail)
+        record.last_seen_at = datetime.now(tz=timezone.utc)
         record.status = IdempotencyStatus.FAILED
         record.status_code = int(status_code)
         record.response_body = json.dumps(payload, ensure_ascii=False)

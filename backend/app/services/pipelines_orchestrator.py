@@ -6,12 +6,13 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.job_engine import (
     DocumentArtifact,
     DocumentJob,
+    DocumentJobLog,
     DocumentJobStatus,
     DocumentJobStep,
     JobStepStatus,
@@ -19,7 +20,7 @@ from app.models.job_engine import (
 )
 
 MANDATORY_STEPS = ["render_docx", "apply_headers", "replace", "convert_pdf"]
-OPTIONAL_STEPS = ["build_zip", "send_edo", "archive"]
+OPTIONAL_STEPS = ["build_zip", "verify_signature", "send_edo", "archive"]
 RETRYABLE_STEPS = {"convert_pdf": 1, "send_edo": 3}
 
 
@@ -45,24 +46,19 @@ class DocumentPipelineOrchestrator:
         request_hash: str,
         correlation_id: str | None = None,
     ) -> DocumentJob:
-        profile_id = payload.get("pipeline_profile_id")
         options = payload.get("options") or {}
         optional_steps: list[str] = []
-        if options.get("zip"):
-            optional_steps.append("build_zip")
-        if options.get("edo"):
-            optional_steps.append("send_edo")
-        if options.get("archive"):
-            optional_steps.append("archive")
+        for code in OPTIONAL_STEPS:
+            opt_key = code.replace("verify_signature", "sign").replace("send_edo", "edo")
+            if options.get(opt_key) or options.get(code):
+                optional_steps.append(code)
 
-        input_sha256 = hashlib.sha256(
-            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        ).hexdigest()
+        input_sha256 = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
         job = DocumentJob(
             tenant_id=tenant_id,
             kind="pipeline",
             status=DocumentJobStatus.QUEUED.value,
-            pipeline_profile_id=profile_id,
+            pipeline_profile_id=payload.get("pipeline_profile_id"),
             preset_id=options.get("preset_id"),
             template_code=payload["template_code"],
             template_version=payload.get("template_version"),
@@ -71,20 +67,25 @@ class DocumentPipelineOrchestrator:
             idempotency_key=idempotency_key,
             correlation_id=correlation_id or str(uuid4()),
             created_by=created_by,
+            input=payload,
         )
         self.session.add(job)
         await self.session.flush()
 
-        for step in [*MANDATORY_STEPS, *optional_steps]:
+        for order, step in enumerate([*MANDATORY_STEPS, *optional_steps], start=1):
             self.session.add(
                 DocumentJobStep(
                     tenant_id=tenant_id,
                     job_id=job.id,
                     step_code=step,
+                    order=order,
                     status=JobStepStatus.QUEUED.value,
+                    max_attempts=RETRYABLE_STEPS.get(step, 0) + 1,
+                    inputs_hash=input_sha256,
                     input_ref={"job_id": job.id, "step": step, "input_sha256": input_sha256},
                 )
             )
+        await self._log(job, "info", "job_created", None, {"correlation_id": job.correlation_id})
         await self.session.flush()
         return job
 
@@ -92,64 +93,48 @@ class DocumentPipelineOrchestrator:
         job = await self.session.get(DocumentJob, job_id)
         if job is None:
             raise ValueError("job_not_found")
-
         if job.status == DocumentJobStatus.CANCELED.value:
             return job
 
         job.status = DocumentJobStatus.RUNNING.value
         job.started_at = job.started_at or datetime.now(tz=timezone.utc)
         await self.session.flush()
+        await self.advance_job(job_id=job_id, fail_step=fail_step)
+        return job
 
-        steps = (
-            await self.session.execute(
-                select(DocumentJobStep).where(DocumentJobStep.job_id == job.id).order_by(DocumentJobStep.created_at.asc())
-            )
-        ).scalars().all()
+    async def advance_job(self, *, job_id: str, fail_step: str | None = None) -> DocumentJob:
+        job = await self.session.get(DocumentJob, job_id)
+        if job is None:
+            raise ValueError("job_not_found")
 
-        for step in steps:
-            if job.cancel_requested_at:
-                step.status = JobStepStatus.SKIPPED.value
-                step.ended_at = datetime.now(tz=timezone.utc)
-                continue
+        while True:
+            if job.status == DocumentJobStatus.CANCELED.value or job.cancel_requested_at:
+                await self._cancel_queued_steps(job)
+                return job
+            step = await self._next_queued_step(job.id)
+            if step is None:
+                break
             try:
                 await self._run_step(job=job, step=step, fail_step=fail_step)
             except StepFailureError as exc:
-                max_retries = RETRYABLE_STEPS.get(step.step_code, 0)
-                if exc.retryable and step.attempts <= max_retries:
-                    step.status = JobStepStatus.QUEUED.value
-                    await self.session.flush()
-                    try:
-                        await self._run_step(job=job, step=step, fail_step=fail_step)
-                    except StepFailureError as retry_exc:
-                        step.status = JobStepStatus.FAILED.value
-                        step.error_code = retry_exc.code
-                        step.error_payload = retry_exc.payload
-                        step.ended_at = datetime.now(tz=timezone.utc)
-                        job.status = DocumentJobStatus.FAILED.value
-                        job.error_code = step.error_code
-                        job.error_payload = step.error_payload
-                        job.ended_at = datetime.now(tz=timezone.utc)
-                        await self._emit_event(job=job, event_type="Failed", payload={"job_id": job.id, "error_code": job.error_code, "correlation_id": job.correlation_id})
-                        await self.session.flush()
-                        return job
-                else:
-                    step.status = JobStepStatus.FAILED.value
-                    step.error_code = exc.code
-                    step.error_payload = exc.payload
-                    step.ended_at = datetime.now(tz=timezone.utc)
-                    job.status = DocumentJobStatus.FAILED.value
-                    job.error_code = step.error_code
-                    job.error_payload = step.error_payload
-                    job.ended_at = datetime.now(tz=timezone.utc)
-                    await self._emit_event(job=job, event_type="Failed", payload={"job_id": job.id, "error_code": job.error_code, "correlation_id": job.correlation_id})
-                    await self.session.flush()
-                    return job
+                step.status = JobStepStatus.FAILED.value
+                step.error_code = exc.code
+                step.error_payload = exc.payload
+                step.ended_at = datetime.now(tz=timezone.utc)
+                job.status = DocumentJobStatus.FAILED.value
+                job.error_code = exc.code
+                job.error_payload = exc.payload
+                job.ended_at = datetime.now(tz=timezone.utc)
+                await self._log(job, "error", "step_failed", step.step_code, {"error_code": exc.code, "error_payload": exc.payload})
+                await self._emit_event(job=job, event_type="Failed", payload={"job_id": job.id, "error_code": job.error_code, "correlation_id": job.correlation_id})
+                await self.session.flush()
+                return job
 
         job.status = DocumentJobStatus.SUCCESS.value
         job.ended_at = datetime.now(tz=timezone.utc)
+        job.output = {"artifacts": await self._artifact_list(job.id)}
         await self._emit_event(job=job, event_type="DocumentGenerated", payload={"job_id": job.id, "artifacts": await self._artifact_list(job.id), "correlation_id": job.correlation_id})
-        if any(s.step_code == "build_zip" for s in steps):
-            await self._emit_event(job=job, event_type="Exported", payload={"job_id": job.id, "artifacts": await self._artifact_list(job.id), "correlation_id": job.correlation_id})
+        await self._log(job, "info", "job_success", None, {"artifacts": len(job.output.get("artifacts", []))})
         await self.session.flush()
         return job
 
@@ -162,20 +147,34 @@ class DocumentPipelineOrchestrator:
         job.cancel_requested_at = datetime.now(tz=timezone.utc)
         job.status = DocumentJobStatus.CANCELED.value
         job.ended_at = datetime.now(tz=timezone.utc)
+        await self._cancel_queued_steps(job)
+        await self._log(job, "warning", "job_canceled", None, None)
         await self.session.flush()
         return job
 
-    async def retry_job(self, *, job_id: str) -> DocumentJob:
+    async def retry_job(self, *, job_id: str, retry_failed_only: bool = False) -> DocumentJob:
         job = await self.session.get(DocumentJob, job_id)
         if job is None:
             raise ValueError("job_not_found")
         if job.status not in {DocumentJobStatus.FAILED.value, DocumentJobStatus.CANCELED.value}:
             raise ValueError("job_not_retryable")
+
+        steps = (await self.session.execute(select(DocumentJobStep).where(DocumentJobStep.job_id == job_id).order_by(DocumentJobStep.order.asc()))).scalars().all()
+        for step in steps:
+            should_reset = step.status in {JobStepStatus.FAILED.value, JobStepStatus.CANCELED.value} if retry_failed_only else step.status != JobStepStatus.SUCCESS.value
+            if should_reset:
+                step.status = JobStepStatus.QUEUED.value
+                step.error_code = None
+                step.error_payload = None
+                step.ended_at = None
+                step.started_at = None
+
         job.status = DocumentJobStatus.QUEUED.value
         job.error_code = None
         job.error_payload = None
         job.ended_at = None
         job.cancel_requested_at = None
+        await self._log(job, "info", "job_retry", None, {"retry_failed_only": retry_failed_only})
         await self.session.flush()
         return await self.run_job(job_id=job_id)
 
@@ -183,18 +182,9 @@ class DocumentPipelineOrchestrator:
         job = await self.session.get(DocumentJob, job_id)
         if job is None:
             raise ValueError("job_not_found")
-
-        step = (
-            await self.session.execute(
-                select(DocumentJobStep).where(
-                    DocumentJobStep.job_id == job_id,
-                    DocumentJobStep.step_code == step_code,
-                )
-            )
-        ).scalar_one_or_none()
+        step = (await self.session.execute(select(DocumentJobStep).where(DocumentJobStep.job_id == job_id, DocumentJobStep.step_code == step_code))).scalar_one_or_none()
         if step is None:
             raise ValueError("step_not_found")
-
         if step.status not in {JobStepStatus.FAILED.value, JobStepStatus.CANCELED.value}:
             raise ValueError("step_not_retryable")
 
@@ -202,80 +192,40 @@ class DocumentPipelineOrchestrator:
         step.error_code = None
         step.error_payload = None
         step.ended_at = None
-
+        step.started_at = None
         job.status = DocumentJobStatus.RUNNING.value
         job.error_code = None
         job.error_payload = None
         job.ended_at = None
+        await self._log(job, "info", "step_rerun", step.step_code, None)
         await self.session.flush()
+        return await self.advance_job(job_id=job_id)
 
-        try:
-            await self._run_step(job=job, step=step, fail_step=None)
-        except StepFailureError as exc:
-            step.status = JobStepStatus.FAILED.value
-            step.error_code = exc.code
-            step.error_payload = exc.payload
-            step.ended_at = datetime.now(tz=timezone.utc)
-            job.status = DocumentJobStatus.FAILED.value
-            job.error_code = exc.code
-            job.error_payload = exc.payload
-            job.ended_at = datetime.now(tz=timezone.utc)
-            await self.session.flush()
-            return job
-
-        remaining_failed = (
-            await self.session.execute(
-                select(DocumentJobStep).where(
-                    DocumentJobStep.job_id == job_id,
-                    DocumentJobStep.status == JobStepStatus.FAILED.value,
-                )
-            )
-        ).scalars().first()
-        if remaining_failed is None:
-            all_done = (
-                await self.session.execute(
-                    select(DocumentJobStep).where(
-                        DocumentJobStep.job_id == job_id,
-                        DocumentJobStep.status.in_(
-                            [
-                                JobStepStatus.SUCCESS.value,
-                                JobStepStatus.SKIPPED.value,
-                            ]
-                        ),
-                    )
-                )
-            ).scalars().all()
-            total_steps = (
-                await self.session.execute(
-                    select(DocumentJobStep).where(DocumentJobStep.job_id == job_id)
-                )
-            ).scalars().all()
-            if total_steps and len(all_done) == len(total_steps):
-                job.status = DocumentJobStatus.SUCCESS.value
-                job.ended_at = datetime.now(tz=timezone.utc)
-
-        await self.session.flush()
-        return job
+    async def _next_queued_step(self, job_id: str) -> DocumentJobStep | None:
+        return (await self.session.execute(select(DocumentJobStep).where(DocumentJobStep.job_id == job_id, DocumentJobStep.status == JobStepStatus.QUEUED.value).order_by(DocumentJobStep.order.asc()))).scalars().first()
 
     async def _run_step(self, *, job: DocumentJob, step: DocumentJobStep, fail_step: str | None) -> None:
-        artifact_kind = self._artifact_kind(step.step_code)
-        if step.status == JobStepStatus.SUCCESS.value:
-            return
-        if artifact_kind and await self._artifact_exists(job.id, step.step_code, artifact_kind):
-            step.status = JobStepStatus.SUCCESS.value
-            step.started_at = step.started_at or datetime.now(tz=timezone.utc)
-            step.ended_at = datetime.now(tz=timezone.utc)
-            step.output_ref = {"kind": artifact_kind, "step": step.step_code}
-            return
-
-        step.status = JobStepStatus.RUNNING.value
-        step.attempts += 1
-        step.started_at = step.started_at or datetime.now(tz=timezone.utc)
-        await self.session.flush()
+        locked = await self.session.execute(
+            update(DocumentJobStep)
+            .where(DocumentJobStep.id == step.id, DocumentJobStep.status == JobStepStatus.QUEUED.value)
+            .values(status=JobStepStatus.RUNNING.value, attempts=DocumentJobStep.attempts + 1, started_at=datetime.now(tz=timezone.utc))
+        )
+        if (locked.rowcount or 0) == 0:
+            refreshed = await self.session.get(DocumentJobStep, step.id)
+            if refreshed and refreshed.status == JobStepStatus.SUCCESS.value:
+                return
+            raise StepFailureError("step_lock_conflict", {"step": step.step_code}, retryable=True)
+        await self.session.refresh(step)
+        await self._log(job, "info", "step_started", step.step_code, {"attempt": step.attempts})
 
         if fail_step and step.step_code == fail_step:
-            retryable = step.step_code in RETRYABLE_STEPS
-            raise StepFailureError("step_failed", {"step": step.step_code, "attempt": step.attempts}, retryable=retryable)
+            raise StepFailureError("step_failed", {"step": step.step_code, "attempt": step.attempts}, retryable=step.attempts < step.max_attempts)
+
+        artifact_kind = self._artifact_kind(step.step_code)
+        if artifact_kind and await self._artifact_exists(job.id, step.step_code, artifact_kind):
+            step.status = JobStepStatus.SUCCESS.value
+            step.ended_at = datetime.now(tz=timezone.utc)
+            return
 
         if artifact_kind:
             self.session.add(
@@ -294,39 +244,29 @@ class DocumentPipelineOrchestrator:
         step.error_code = None
         step.error_payload = None
         step.ended_at = datetime.now(tz=timezone.utc)
+        await self._log(job, "info", "step_success", step.step_code, None)
+
+    async def _cancel_queued_steps(self, job: DocumentJob) -> None:
+        steps = (await self.session.execute(select(DocumentJobStep).where(DocumentJobStep.job_id == job.id))).scalars().all()
+        now = datetime.now(tz=timezone.utc)
+        for step in steps:
+            if step.status == JobStepStatus.QUEUED.value:
+                step.status = JobStepStatus.CANCELED.value
+                step.ended_at = now
 
     async def _emit_event(self, *, job: DocumentJob, event_type: str, payload: dict[str, Any]) -> None:
-        self.session.add(
-            OutboxEvent(
-                tenant_id=job.tenant_id,
-                event_type=event_type,
-                event_id=str(uuid4()),
-                payload={**payload, "tenant_id": job.tenant_id},
-            )
-        )
+        self.session.add(OutboxEvent(tenant_id=job.tenant_id, event_type=event_type, event_id=str(uuid4()), payload={**payload, "tenant_id": job.tenant_id}))
+
+    async def _log(self, job: DocumentJob, level: str, message: str, step_code: str | None, meta: dict[str, Any] | None) -> None:
+        self.session.add(DocumentJobLog(tenant_id=job.tenant_id, job_id=job.id, step_code=step_code, level=level, message=message, meta_json={**(meta or {}), "correlation_id": job.correlation_id}))
 
     @staticmethod
     def _artifact_kind(step_code: str) -> str | None:
-        return {
-            "render_docx": "docx",
-            "convert_pdf": "pdf",
-            "build_zip": "zip",
-        }.get(step_code)
+        return {"render_docx": "docx", "convert_pdf": "pdf", "build_zip": "zip"}.get(step_code)
 
     async def _artifact_exists(self, job_id: str, step_code: str, kind: str) -> bool:
-        existing = (
-            await self.session.execute(
-                select(DocumentArtifact).where(
-                    DocumentArtifact.job_id == job_id,
-                    DocumentArtifact.step_code == step_code,
-                    DocumentArtifact.kind == kind,
-                )
-            )
-        ).scalar_one_or_none()
-        return existing is not None
+        return (await self.session.execute(select(DocumentArtifact).where(DocumentArtifact.job_id == job_id, DocumentArtifact.step_code == step_code, DocumentArtifact.kind == kind))).scalar_one_or_none() is not None
 
     async def _artifact_list(self, job_id: str) -> list[dict[str, Any]]:
-        artifacts = (
-            await self.session.execute(select(DocumentArtifact).where(DocumentArtifact.job_id == job_id))
-        ).scalars().all()
+        artifacts = (await self.session.execute(select(DocumentArtifact).where(DocumentArtifact.job_id == job_id))).scalars().all()
         return [{"step_code": a.step_code, "kind": a.kind, "sha256": a.sha256} for a in artifacts]
