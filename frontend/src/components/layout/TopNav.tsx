@@ -1,13 +1,13 @@
-import { Bell, CheckCircle2, ChevronDown, LogOut, Moon, Search, Settings, Sun } from "lucide-react";
+import { Bell, CheckCircle2, ChevronDown, LogOut, Moon, Settings, Sun } from "lucide-react";
 import { useMemo } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import { useTenantStore } from "@/stores/tenant";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuthStore } from "@/stores/auth";
+import { GlobalSearch } from "@/components/GlobalSearch";
 
 export const TopNav = () => {
   const { user, logout } = useAuthStore();
@@ -31,13 +31,7 @@ export const TopNav = () => {
           </div>
         </div>
         <div className="hidden flex-1 items-center justify-center px-4 lg:flex">
-          <div className="relative w-full max-w-xl">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input className="pl-9 pr-16" placeholder="Поиск по людям, объектам, документам и задачам" />
-            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
-              Ctrl + K
-            </span>
-          </div>
+          <GlobalSearch />
         </div>
         <div className="flex items-center gap-2">
           <DropdownMenu>

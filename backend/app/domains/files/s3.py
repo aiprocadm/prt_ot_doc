@@ -34,6 +34,7 @@ __all__ = [
     "get_client",
     "reset_client_cache",
     "generate_presigned_get_url",
+    "generate_presigned_put_url",
 ]
 
 _LOCAL_METADATA_SUFFIX = ".meta.json"
@@ -461,6 +462,43 @@ def stream_object(*, key: str) -> Iterator[BinaryIO]:
             )
 
 
+
+
+def generate_presigned_put_url(
+    key: str,
+    *,
+    bucket: str | None = None,
+    expires_in: int = 3600,
+    content_type: str | None = None,
+) -> str:
+    """Return a temporary upload URL for the provided object key."""
+
+    settings = get_settings()
+    if settings.s3_backend != "minio":
+        raise S3OperationError(
+            operation="presign_put",
+            status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+            code="PresignUnavailable",
+            message="Presigned URLs are only supported for the minio backend",
+            bucket=settings.s3_bucket,
+            key=key,
+        )
+    client = get_client()
+    bucket_name = bucket or settings.s3_bucket
+    params: dict[str, Any] = {"Bucket": bucket_name, "Key": key}
+    if content_type:
+        params["ContentType"] = content_type
+
+    try:
+        return client.generate_presigned_url(
+            "put_object",
+            Params=params,
+            ExpiresIn=expires_in,
+        )
+    except ClientError as exc:
+        raise S3OperationError.from_client_error(
+            "generate_presigned_url", exc, bucket=bucket_name, key=key
+        ) from exc
 def generate_presigned_get_url(
     key: str,
     *,
