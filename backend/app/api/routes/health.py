@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import logging
+import os
+import socket
 
 import redis.asyncio as redis_async
+from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
@@ -12,14 +15,13 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import Settings, get_settings
 from app.db.session import engine
+from app.domains.files import s3
 
 logger = logging.getLogger("app.api.health")
 router = APIRouter(tags=["service"], include_in_schema=False)
 
 
 async def _ping_postgres(app: FastAPI) -> None:
-    """Perform a lightweight database connectivity check."""
-
     session_factory = getattr(app.state, "test_sessionmaker", None)
     if session_factory is not None:
         async with session_factory() as session:
@@ -31,8 +33,6 @@ async def _ping_postgres(app: FastAPI) -> None:
 
 
 async def _ping_redis(app: FastAPI, settings: Settings) -> None:
-    """Ensure Redis is reachable for readiness probes."""
-
     client = getattr(app.state, "redis_client", None)
     if client is not None:
         await client.ping()
@@ -45,58 +45,83 @@ async def _ping_redis(app: FastAPI, settings: Settings) -> None:
         await redis.close()
 
 
+def _ping_minio(settings: Settings) -> None:
+    if settings.s3_backend == "memory":
+        return
+    s3.ensure_bucket()
+    s3.list_keys(prefix="", max_keys=1)
+
+
+def _ping_clamav(settings: Settings) -> bool:
+    av_enabled = str(os.getenv("AV_ENABLED", "false")).lower() == "true"
+    if not av_enabled:
+        return True
+    with socket.create_connection((settings.clamav_host, settings.clamav_port), timeout=2):
+        return True
+
+
+def _ping_libreoffice(settings: Settings) -> bool:
+    return bool(settings.libreoffice_bin)
+
+
 def _resolve_settings(request: Request) -> Settings:
     return getattr(request.app.state, "settings", None) or get_settings()
 
 
 @router.get("/health")
 async def health() -> JSONResponse:
-    """Return service liveness information."""
-
     return JSONResponse(status_code=status.HTTP_200_OK, content={"status": "ok"})
-
-
-async def _check_postgres(request: Request) -> bool:
-    try:
-        await _ping_postgres(request.app)
-    except SQLAlchemyError:
-        logger.exception("health.ready.postgres_failed")
-        return False
-    except Exception:  # noqa: BLE001 - defensive logging
-        logger.exception("health.ready.postgres_unexpected")
-        return False
-    return True
-
-
-async def _check_redis(request: Request, settings: Settings) -> bool:
-    if not settings.redis_enabled:
-        return True
-    try:
-        await _ping_redis(request.app, settings)
-    except Exception:  # noqa: BLE001 - defensive logging
-        logger.exception("health.ready.redis_failed")
-        return False
-    return True
 
 
 @router.get("/ready")
 async def ready(request: Request) -> JSONResponse:
-    """Return readiness information for dependent services."""
-
     settings = _resolve_settings(request)
-    postgres_ok = await _check_postgres(request)
-    redis_ok = await _check_redis(request, settings)
-    redis_skipped = not settings.redis_enabled
-    ok = postgres_ok and redis_ok
-    payload = {
-        "status": "ok" if ok else "degraded",
-        "postgres": postgres_ok,
-        "redis": redis_ok,
+    trace_id = request.headers.get(settings.trace_header_name) or "generated"
+
+    statuses: dict[str, bool] = {
+        "postgres": False,
+        "redis": False,
+        "minio": False,
+        "clamav": False,
+        "libreoffice": False,
     }
-    if redis_skipped:
-        payload["redis_skipped"] = True
-    status_code = status.HTTP_200_OK if ok else status.HTTP_503_SERVICE_UNAVAILABLE
-    return JSONResponse(status_code=status_code, content=payload)
+
+    try:
+        await _ping_postgres(request.app)
+        statuses["postgres"] = True
+    except (SQLAlchemyError, Exception):
+        logger.exception("health.ready.postgres_failed")
+
+    try:
+        await _ping_redis(request.app, settings)
+        statuses["redis"] = True
+    except Exception:
+        logger.exception("health.ready.redis_failed")
+
+    try:
+        _ping_minio(settings)
+        statuses["minio"] = True
+    except (ClientError, BotoCoreError, Exception):
+        logger.exception("health.ready.minio_failed")
+
+    try:
+        statuses["clamav"] = _ping_clamav(settings)
+    except Exception:
+        logger.exception("health.ready.clamav_failed")
+
+    try:
+        statuses["libreoffice"] = _ping_libreoffice(settings)
+    except Exception:
+        logger.exception("health.ready.libreoffice_failed")
+
+    required_ok = statuses["postgres"] and statuses["redis"] and statuses["minio"]
+    content = {
+        "status": "ok" if required_ok else "degraded",
+        "dependencies": statuses,
+        "correlation_id": trace_id,
+    }
+    code = status.HTTP_200_OK if required_ok else status.HTTP_503_SERVICE_UNAVAILABLE
+    return JSONResponse(status_code=code, content=content)
 
 
 @router.get("/healthz")

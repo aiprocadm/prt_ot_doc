@@ -1,115 +1,96 @@
 version: "3.9"
 
 services:
-  db:
-    image: postgres:16-alpine
-    env_file:
-      - .env
+  postgres:
+    image: postgres:16
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-documents}
-      POSTGRES_USER: ${POSTGRES_USER:-app}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
+      POSTGRES_DB: ${POSTGRES_DB:-ptd}
+      POSTGRES_USER: ${POSTGRES_USER:-ptd}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ptd}
     ports:
       - "5432:5432"
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-app} -d ${POSTGRES_DB:-documents}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ptd} -d ${POSTGRES_DB:-ptd}"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 5s
 
   redis:
-    image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "yes"]
+    image: redis:7
     ports:
       - "6379:6379"
+    volumes:
+      - redisdata:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 5s
 
   minio:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
-    env_file:
-      - .env
     environment:
-      MINIO_ROOT_USER: ${S3_ACCESS_KEY:?S3_ACCESS_KEY is required}
-      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:?S3_SECRET_KEY is required}
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
     ports:
       - "9000:9000"
       - "9001:9001"
     volumes:
-      - minio_data:/data
+      - miniodata:/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/ready"]
       interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 10s
+      retries: 10
 
-  minio-setup:
+  minio-mc:
     image: minio/mc:latest
-    env_file:
-      - .env
     depends_on:
       minio:
         condition: service_healthy
-    environment:
-      MINIO_ROOT_USER: ${S3_ACCESS_KEY:?S3_ACCESS_KEY is required}
-      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:?S3_SECRET_KEY is required}
-      S3_BUCKET: ${S3_BUCKET:?S3_BUCKET is required}
     entrypoint: >-
       /bin/sh -c "
-      mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD} &&
-      mc mb -p local/$${S3_BUCKET} || true
+      mc alias set local http://minio:9000 ${S3_ACCESS_KEY} ${S3_SECRET_KEY} &&
+      mc mb -p local/${S3_BUCKET} || true &&
+      mc anonymous set private local/${S3_BUCKET} || true
       "
     restart: "no"
 
-  libreoffice:
+  clamav:
+    image: clamav/clamav:latest
+    healthcheck:
+      test: ["CMD-SHELL", "clamdscan --version >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  lo:
     build:
       context: ./config/libreoffice
     expose:
       - "2002"
 
-  clamav:
-    image: clamav/clamav:latest
-    healthcheck:
-      test: ["CMD-SHELL", "clamdscan --fdpass /etc/hosts || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-
-  backend:
+  api:
     build:
       context: .
       dockerfile: Dockerfile
     env_file:
       - .env
     depends_on:
-      db:
+      postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
       minio:
         condition: service_healthy
-      libreoffice:
-        condition: service_healthy
-      clamav:
-        condition: service_healthy
+      minio-mc:
+        condition: service_completed_successfully
     ports:
       - "8000:8000"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 15s
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
   worker:
     build:
@@ -118,77 +99,28 @@ services:
     env_file:
       - .env
     depends_on:
-      backend:
-        condition: service_healthy
-      db:
+      postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
       minio:
         condition: service_healthy
-      clamav:
-        condition: service_healthy
-    command:
-      [
-        "celery",
-        "-A",
-        "app.services.celery_app.celery_app",
-        "worker",
-        "--loglevel=${CELERY_LOGLEVEL:-info}",
-        "--queues=${WORKER_QUEUES:-default}",
-        "--concurrency=${CELERY_CONCURRENCY:-2}",
-      ]
+    command: ["celery", "-A", "app.services.celery_app.celery_app", "worker", "-Q", "default", "-l", "info"]
 
-  worker_pdf:
+  beat:
     build:
       context: .
       dockerfile: Dockerfile
     env_file:
       - .env
     depends_on:
-      backend:
-        condition: service_healthy
-      db:
+      postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
-        condition: service_healthy
-      clamav:
-        condition: service_healthy
-    command:
-      [
-        "celery",
-        "-A",
-        "app.services.celery_app.celery_app",
-        "worker",
-        "--loglevel=${CELERY_LOGLEVEL:-info}",
-        "--queues=${PDF_WORKER_QUEUE:-pdf}",
-        "--concurrency=${PDF_WORKER_CONCURRENCY:-2}",
-      ]
-
-  frontend:
-    build:
-      context: .
-      dockerfile: infra/docker/Dockerfile.frontend
-    env_file:
-      - .env
-    depends_on:
-      backend:
-        condition: service_healthy
-    ports:
-      - "5173:5173"
-
-  proxy:
-    build: ./proxy
-    depends_on:
-      backend:
-        condition: service_healthy
-      frontend:
-        condition: service_started
-    ports:
-      - "8080:80"
+    command: ["celery", "-A", "app.services.celery_app.celery_app", "beat", "-l", "info"]
 
 volumes:
-  db_data:
-  minio_data:
+  pgdata:
+  redisdata:
+  miniodata:

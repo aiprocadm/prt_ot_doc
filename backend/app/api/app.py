@@ -66,13 +66,13 @@ def _create_lifespan(settings: Settings) -> Callable[[FastAPI], AsyncIterator[No
             "app.startup.mode",
             extra={
                 "run_mode": settings.app_run_mode,
-                "database": settings.database_url,
                 "storage_backend": settings.s3_backend,
                 "storage_root": str(settings.storage_root_path)
                 if settings.s3_backend == "local"
                 else None,
                 "celery_eager": settings.celery_eager,
                 "redis_enabled": settings.redis_enabled,
+                "settings": settings.redacted(),
             },
         )
         try:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
@@ -727,6 +728,23 @@ class Settings(BaseSettings):
             return False
         return not self.redis_url.startswith("memory://")
 
+    def redacted(self) -> dict[str, object]:
+        """Return settings payload safe for structured logging."""
+
+        payload = self.model_dump()
+        for key in (
+            "secret_key",
+            "postgres_password",
+            "s3_access_key",
+            "s3_secret_key",
+            "admin_password",
+            "jwt_private_key_pem",
+            "portal_token_salt",
+        ):
+            if key in payload and payload[key]:
+                payload[key] = "***"
+        return payload
+
 
 @lru_cache
 def _load_settings() -> Settings:
@@ -743,6 +761,21 @@ def get_settings(*, force_reload: bool = False) -> Settings:
 
 def bootstrap(role: Literal["api", "worker"]) -> Settings:
     settings = get_settings(force_reload=True)
+    required_vars = [
+        "SECRET_KEY",
+        "DATABASE_URL",
+        "REDIS_URL",
+        "S3_ENDPOINT",
+        "S3_ACCESS_KEY",
+        "S3_SECRET_KEY",
+        "S3_BUCKET",
+    ]
+    missing = [name for name in required_vars if not (os.getenv(name) or "").strip()]
+    if missing:
+        raise RuntimeError(
+            "Missing required environment variables for "
+            f"{role}: {', '.join(sorted(missing))}"
+        )
     configure_runtime_locale(
         locale_name=settings.application.default_locale,
         timezone_name=settings.application.default_timezone,
