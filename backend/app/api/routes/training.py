@@ -210,11 +210,11 @@ async def delete_course(
     tenant: TenantDep,
     session: SessionDep,
     access: ManagerAccess,
-) -> Response:
+) -> None:
     course = await _get_course(session, tenant, course_id)
     course.deleted_at = datetime.now(tz=timezone.utc)
     await session.flush()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return None
 
 
 @router.post("/plans", response_model=TrainingPlanRead, status_code=status.HTTP_201_CREATED)

@@ -153,12 +153,12 @@ async def update_journal(
 @router.delete("/{journal_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_journal(
     journal_id: str, tenant: TenantDep, session: SessionDep, access: ManagerAccess
-) -> Response:
+) -> None:
     journal = await _get_journal(session, tenant, journal_id)
     if journal.deleted_at is None:
         journal.deleted_at = datetime.now(timezone.utc)
     await session.flush()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return None
 
 
 @router.get("/{journal_id}/entries", response_model=JournalEntryPage)
@@ -249,12 +249,12 @@ async def update_entry(
 
 
 @router.delete("/entries/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_entry(entry_id: str, tenant: TenantDep, session: SessionDep, access: ManagerAccess) -> Response:
+async def delete_entry(entry_id: str, tenant: TenantDep, session: SessionDep, access: ManagerAccess) -> None:
     entry = await _get_entry(session, tenant, entry_id)
     if entry.deleted_at is None:
         entry.deleted_at = datetime.now(timezone.utc)
     await session.flush()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return None
 
 
 @router.get("/{journal_id}/export", response_model=dict)

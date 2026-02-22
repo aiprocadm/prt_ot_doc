@@ -182,9 +182,9 @@ async def delete_invoice(
     tenant: TenantDep,
     session: SessionDep,
     _: FinanceAccess,
-) -> Response:
+) -> None:
     invoice = await _get_invoice(session, tenant, invoice_id)
     if invoice.deleted_at is None:
         invoice.deleted_at = datetime.now(timezone.utc)
     await session.commit()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return None

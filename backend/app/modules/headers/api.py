@@ -66,13 +66,13 @@ async def patch_layout_preset(preset_id: str, payload: HeaderFooterPresetPatch, 
 
 
 @router.delete("/layout-presets/{preset_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_layout_preset(preset_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> Response:
+async def delete_layout_preset(preset_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> None:
     row = await session.get(HeaderFooterPreset, preset_id)
     if row is None or row.tenant_id != str(tenant.id) or row.deleted_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Preset not found")
     row.deleted_at = datetime.now(tz=timezone.utc)
     await session.commit()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return None
 
 
 @router.post("/documents/{document_version_id}/apply-headers", response_model=ApplyHeadersAccepted)

@@ -99,7 +99,7 @@ async def patch_profile(profile_id: str, payload: PipelineProfilePatch, session:
 
 
 @router.delete("/profiles/{profile_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_profile(profile_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> Response:
+async def delete_profile(profile_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> None:
     repo = PipelineProfileRepo(session)
     model = await repo.get(tenant_id=str(tenant.id), profile_id=profile_id)
     if model is None:
@@ -111,7 +111,7 @@ async def delete_profile(profile_id: str, session: AsyncSession = Depends(get_se
         raise HTTPException(status.HTTP_409_CONFLICT, "profile has active jobs")
     await repo.soft_delete(model=model)
     await session.commit()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return None
 
 
 @router.post("/runs", response_model=PipelineRunAccepted, status_code=status.HTTP_202_ACCEPTED)

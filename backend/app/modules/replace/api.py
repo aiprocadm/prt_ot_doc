@@ -81,13 +81,13 @@ async def patch_map(replace_map_id: str, payload: ReplaceMapPatch, session: Asyn
 
 
 @router.delete("/replace-maps/{replace_map_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_map(replace_map_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> Response:
+async def delete_map(replace_map_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> None:
     row = await session.get(ReplaceMap, replace_map_id)
     if row is None or row.tenant_id != str(tenant.id) or row.deleted_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Replace map not found")
     row.deleted_at = datetime.now(tz=timezone.utc)
     await session.commit()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return None
 
 
 def _resolve_map_id(payload: ReplaceLaunchRequest, row: ReplaceMap | None) -> str:
