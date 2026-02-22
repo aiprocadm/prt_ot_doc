@@ -34,7 +34,15 @@ from app.models.document import (
     DocumentStatus,
     DocumentVersion,
 )
-from app.models.job_engine import OutboxEvent, OutboxEventStatus
+from app.models.job_engine import (
+    DocumentArtifact,
+    DocumentJob,
+    DocumentJobStatus,
+    DocumentJobStep,
+    JobStepStatus,
+    OutboxEvent,
+    OutboxEventStatus,
+)
 from app.models.models import (
     Company,
     Person,
@@ -46,6 +54,8 @@ from app.models.models import (
     User,
 )
 from app.repository import create_template
+from app.modules.headers.engine import apply_headers_to_docx
+from app.modules.headers.repo import get_preset_by_code
 from app.schemas.template import TemplateCreate, TemplateVersionMetadata
 from app.services.audit import AuditService
 from app.services.celery_app import celery_app
@@ -839,3 +849,92 @@ async def _dispatch_outbox_events(*, max_attempts: int = 3) -> int:
             processed += 1
         await session.flush()
     return processed
+
+
+@celery_app.task(name="app.tasks.apply_headers_job")
+def apply_headers_job(*, job_id: str, tenant_slug: str) -> dict[str, str]:
+    async def _run() -> dict[str, str]:
+        storage = FileStorageService.default()
+        with tenant_context(tenant_slug):
+            ensure_tenant_schema(tenant_slug)
+            async with session_scope(tenant=tenant_slug) as session:
+                job = await session.get(DocumentJob, job_id)
+                if job is None:
+                    raise ValueError("Job not found")
+                step = (
+                    await session.execute(
+                        select(DocumentJobStep).where(
+                            DocumentJobStep.job_id == job.id,
+                            DocumentJobStep.step_code == "apply_headers",
+                        )
+                    )
+                ).scalar_one()
+                payload = step.input_ref or {}
+                version = await session.get(DocumentVersion, payload.get("document_version_id"))
+                if version is None:
+                    raise ValueError("Document version not found")
+                preset = await get_preset_by_code(
+                    session, tenant_id=str(job.tenant_id), code=str(payload.get("preset_code"))
+                )
+                if preset is None:
+                    raise ValueError("Preset not found")
+
+                job.status = DocumentJobStatus.RUNNING.value
+                step.status = JobStepStatus.RUNNING.value
+                step.started_at = datetime.now(tz=timezone.utc)
+                await session.flush()
+
+                source = storage.get(version.file_key)
+                output, report = apply_headers_to_docx(
+                    docx_bytes=source,
+                    preset=preset,
+                    context=payload.get("context") or {},
+                    watermark_override=payload.get("watermark_override"),
+                )
+                new_key = f"{version.file_key.rsplit('.', 1)[0]}_with_headers.docx"
+                storage.put(new_key, output, content_type=DOCX_MIME)
+
+                max_version = await session.scalar(
+                    select(DocumentVersion.version_number)
+                    .where(DocumentVersion.document_id == version.document_id)
+                    .order_by(DocumentVersion.version_number.desc())
+                    .limit(1)
+                )
+                new_version = DocumentVersion(
+                    tenant_id=version.tenant_id,
+                    document_id=version.document_id,
+                    snapshot_id=version.snapshot_id,
+                    template_version=version.template_version,
+                    data_json=version.data_json,
+                    file_key=new_key,
+                    file_id=None,
+                    template_version_id=version.template_version_id,
+                    version_number=int(max_version or 1) + 1,
+                )
+                session.add(new_version)
+                await session.flush()
+                session.add(
+                    DocumentArtifact(
+                        tenant_id=str(job.tenant_id),
+                        job_id=job.id,
+                        step_code="apply_headers",
+                        kind="docx",
+                        file_id=None,
+                        sha256=hashlib.sha256(output).hexdigest(),
+                        meta={"file_key": new_key},
+                    )
+                )
+
+                step.status = JobStepStatus.SUCCESS.value
+                step.ended_at = datetime.now(tz=timezone.utc)
+                step.output_ref = {
+                    "document_version_id": new_version.id,
+                    "report": report.model_dump(),
+                }
+                job.status = DocumentJobStatus.SUCCESS.value
+                job.result_document_version_id = new_version.id
+                job.ended_at = datetime.now(tz=timezone.utc)
+                await session.flush()
+                return {"job_id": job.id, "document_version_id": new_version.id}
+
+    return _run_coroutine(_run())
