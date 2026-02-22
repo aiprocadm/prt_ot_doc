@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,6 +42,10 @@ class JobRead(BaseModel):
     job: JobEnvelopeRead
     steps: list[JobStepRead]
     result: dict[str, Any] | None = None
+
+
+class JobListRead(BaseModel):
+    items: list[JobEnvelopeRead]
 
 
 @router.get("/{job_id}", response_model=JobRead)
@@ -93,6 +97,39 @@ async def get_job(
     )
 
 
+@router.get("", response_model=JobListRead)
+async def list_jobs(
+    status_filter: str | None = Query(default=None, alias="status"),
+    type_filter: str | None = Query(default=None, alias="type"),
+    created_by: str | None = Query(default=None),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> JobListRead:
+    stmt = select(DocumentJob).where(DocumentJob.tenant_id == str(tenant.id))
+    if status_filter:
+        stmt = stmt.where(DocumentJob.status == status_filter)
+    if type_filter:
+        stmt = stmt.where(DocumentJob.kind == type_filter)
+    if created_by:
+        stmt = stmt.where(DocumentJob.created_by == created_by)
+    stmt = stmt.order_by(DocumentJob.updated_at.desc())
+    rows = (await session.execute(stmt)).scalars().all()
+    return JobListRead(
+        items=[
+            JobEnvelopeRead(
+                id=job.id,
+                status=str(job.status),
+                correlation_id=job.correlation_id,
+                started_at=job.started_at,
+                ended_at=job.ended_at,
+                error_code=job.error_code,
+                error_payload=job.error_payload,
+            )
+            for job in rows
+        ]
+    )
+
+
 @router.post("/{job_id}:cancel", response_model=JobRead)
 async def cancel_job(
     job_id: str,
@@ -121,6 +158,31 @@ async def retry_job(
     try:
         await orchestrator.retry_job(job_id=job_id)
     except ValueError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    await session.commit()
+    return await get_job(job_id=job_id, session=session, tenant=tenant)
+
+
+class RetryStepRequest(BaseModel):
+    step_key: str
+
+
+@router.post("/{job_id}:retry-step", response_model=JobRead)
+async def retry_step(
+    job_id: str,
+    payload: RetryStepRequest,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> JobRead:
+    job = await session.get(DocumentJob, job_id)
+    if job is None or str(job.tenant_id) != str(tenant.id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+    orchestrator = DocumentPipelineOrchestrator(session)
+    try:
+        await orchestrator.retry_step(job_id=job_id, step_code=payload.step_key)
+    except ValueError as exc:
+        if str(exc) == "step_not_found":
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Step not found") from exc
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     await session.commit()
     return await get_job(job_id=job_id, session=session, tenant=tenant)
