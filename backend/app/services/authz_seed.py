@@ -1,22 +1,21 @@
 from __future__ import annotations
 
+from app.core.rbac_abac import RESOURCE_PERMISSIONS, ROLE_PERMISSIONS
+from app.models.models import AuthzPermission, AuthzRole, AuthzRolePermission
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.rbac_abac import RESOURCE_PERMISSIONS, ROLE_PERMISSIONS
-from app.models.models import AuthzPermission, AuthzRole, AuthzRolePermission
-
 ROLE_CODES = [
-    "tenant_owner",
-    "tenant_admin",
-    "methodist_legal",
+    "owner",
+    "admin",
+    "methodist",
     "project_manager",
     "executor",
     "clerk",
-    "teacher",
+    "instructor",
     "student",
-    "hsse_head",
-    "hsse_specialist",
+    "hse_head",
+    "hse_specialist",
     "fire_engineer",
     "ecologist",
     "hr",
@@ -25,7 +24,7 @@ ROLE_CODES = [
     "line_manager",
     "client",
     "auditor_ro",
-    "contractor_inspector",
+    "inspector_contractor",
 ]
 
 
