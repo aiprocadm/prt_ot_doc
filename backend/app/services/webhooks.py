@@ -6,6 +6,7 @@ import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from time import time
 from hashlib import sha256
 from typing import Any
 from urllib.parse import urlparse
@@ -180,6 +181,7 @@ class WebhookDispatcher:
                     headers={str(key): str(value) for key, value in (row.headers or {}).items()},
                     endpoint_id=row.id,
                     secret=row.secret,
+                    timeout_ms=row.timeout_ms,
                 )
             )
         return destinations
@@ -241,12 +243,12 @@ class WebhookDispatcher:
             "correlation_id": trace_id,
             "payload": payload,
         }
-        timestamp = datetime.now(tz=timezone.utc).isoformat()
+        timestamp_ms = str(int(time() * 1000))
         request_headers: dict[str, str] = {
             "X-Correlation-Id": trace_id,
             "X-Event-Type": event_type,
             "X-Tenant": tenant_id,
-            "X-Timestamp": timestamp,
+            "X-Timestamp": timestamp_ms,
         }
         if headers:
             for key, value in headers.items():
@@ -263,11 +265,12 @@ class WebhookDispatcher:
         ) if self.client is None else _null_async_context(self.client) as client:
             for destination in destinations:
                 merged_headers = {**request_headers, **destination.headers}
+                body = json.dumps(envelope, separators=(",", ":")).encode("utf-8")
                 if destination.secret:
-                    body = json.dumps(envelope).encode("utf-8")
-                    signature = hmac.new(destination.secret.encode("utf-8"), body, sha256).hexdigest()
-                    merged_headers["X-Signature"] = f"sha256={signature}"
-                response = await client.post(destination.url, json=envelope, headers=merged_headers)
+                    sign_payload = f"{timestamp_ms}.".encode("utf-8") + body
+                    signature = hmac.new(destination.secret.encode("utf-8"), sign_payload, sha256).hexdigest()
+                    merged_headers["X-Signature"] = f"v1={signature}"
+                response = await client.post(destination.url, content=body, headers={**merged_headers, "content-type": "application/json"}, timeout=max(destination.timeout_ms / 1000, 0.1))
                 if response.status_code >= 300:
                     failures.append((destination.url, response.status_code))
                     logger.warning(
@@ -298,6 +301,7 @@ class WebhookDestination:
     headers: dict[str, str]
     endpoint_id: str | None = None
     secret: str | None = None
+    timeout_ms: int = 5000
 
 
 class _null_async_context:

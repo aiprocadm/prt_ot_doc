@@ -488,7 +488,7 @@ class OutboxProcessor:
         return payload or None
 
     async def _already_delivered(self, entry: Outbox) -> bool:
-        subscription_id = (entry.headers or {}).get("X-Webhook-Endpoint-Id")
+        subscription_id = (entry.headers or {}).get("X-Webhook-Endpoint-Id") or (entry.headers or {}).get("X-Webhook-Subscription-Id")
         event_id = str((entry.payload or {}).get("event_id") or entry.id)
         if not subscription_id:
             return False
@@ -508,7 +508,7 @@ class OutboxProcessor:
         status_code: int | None = None,
         error: dict[str, Any] | None = None,
     ) -> None:
-        subscription_id = (entry.headers or {}).get("X-Webhook-Endpoint-Id")
+        subscription_id = (entry.headers or {}).get("X-Webhook-Endpoint-Id") or (entry.headers or {}).get("X-Webhook-Subscription-Id")
         event_id = str((entry.payload or {}).get("event_id") or entry.id)
         if not subscription_id:
             return
@@ -528,5 +528,7 @@ class OutboxProcessor:
         existing.attempts = entry.attempts
         existing.last_status_code = status_code
         existing.last_error = error
+        existing.request_headers = entry.headers
+        existing.ended_at = datetime.now(tz=timezone.utc)
         existing.delivered_at = datetime.now(tz=timezone.utc) if success else None
 

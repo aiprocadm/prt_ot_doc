@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -9,25 +10,36 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, rbac
-from app.models.models import Tenant, WebhookDelivery, WebhookEndpoint
+from app.models.models import Outbox, OutboxStatus, Tenant, WebhookDelivery, WebhookEndpoint
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
-AdminAccess = Annotated[AccessContext, Depends(rbac(["admin"]))]
+AdminAccess = Annotated[AccessContext, Depends(rbac(["admin", "owner", "integrations"]))]
 
 
 class WebhookEndpointIn(BaseModel):
+    name: str | None = None
     url: str
     secret: str | None = None
-    is_enabled: bool = True
+    enabled: bool = True
     subscribed_events: list[str] = Field(default_factory=list)
+    timeout_ms: int = 5000
     headers: dict[str, Any] = Field(default_factory=dict)
 
 
-class WebhookEndpointOut(WebhookEndpointIn):
+class WebhookEndpointOut(BaseModel):
     id: str
+    name: str | None = None
+    url: str
+    secret_masked: str | None = None
+    enabled: bool
+    subscribed_events: list[str]
+    timeout_ms: int
+    headers: dict[str, Any]
+    created_at: datetime
+    updated_at: datetime
 
 
 class WebhookDeliveryOut(BaseModel):
@@ -36,54 +48,156 @@ class WebhookDeliveryOut(BaseModel):
     endpoint_id: str
     attempts: int
     status: str
+    next_attempt_at: datetime | None = None
     response_status: int | None = None
     last_response_body: str | None = None
     last_error: dict[str, Any] | None = None
+    latency_ms: int | None = None
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
 
 
-@router.get("", response_model=list[WebhookEndpointOut])
+def _mask_secret(secret: str | None) -> str | None:
+    if not secret:
+        return None
+    if len(secret) <= 4:
+        return "*" * len(secret)
+    return f"{secret[:2]}***{secret[-2:]}"
+
+
+def _to_endpoint_out(row: WebhookEndpoint) -> WebhookEndpointOut:
+    return WebhookEndpointOut(
+        id=row.id,
+        name=row.name,
+        url=row.url,
+        secret_masked=_mask_secret(row.secret),
+        enabled=row.is_enabled,
+        subscribed_events=row.subscribed_events or [],
+        timeout_ms=row.timeout_ms,
+        headers=row.headers or {},
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+@router.get("/endpoints", response_model=list[WebhookEndpointOut])
 async def list_webhooks(tenant: TenantDep, _: AdminAccess, session: SessionDep) -> list[WebhookEndpointOut]:
-    rows = (await session.execute(select(WebhookEndpoint).where(WebhookEndpoint.tenant_id == tenant.id))).scalars().all()
-    return [WebhookEndpointOut(id=row.id, url=row.url, secret=row.secret, is_enabled=row.is_enabled, subscribed_events=row.subscribed_events or [], headers=row.headers or {}) for row in rows]
+    rows = (
+        await session.execute(select(WebhookEndpoint).where(WebhookEndpoint.tenant_id == tenant.id).order_by(WebhookEndpoint.created_at.desc()))
+    ).scalars().all()
+    return [_to_endpoint_out(row) for row in rows]
 
 
-@router.post("", response_model=WebhookEndpointOut, status_code=status.HTTP_201_CREATED)
+@router.post("/endpoints", response_model=WebhookEndpointOut, status_code=status.HTTP_201_CREATED)
 async def create_webhook(payload: WebhookEndpointIn, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> WebhookEndpointOut:
-    row = WebhookEndpoint(tenant_id=tenant.id, url=payload.url, secret=payload.secret, is_enabled=payload.is_enabled, subscribed_events=payload.subscribed_events, headers=payload.headers)
+    row = WebhookEndpoint(
+        tenant_id=tenant.id,
+        name=payload.name,
+        url=payload.url,
+        secret=payload.secret,
+        is_enabled=payload.enabled,
+        subscribed_events=payload.subscribed_events,
+        timeout_ms=payload.timeout_ms,
+        headers=payload.headers,
+    )
     session.add(row)
     await session.commit()
     await session.refresh(row)
-    return WebhookEndpointOut(id=row.id, url=row.url, secret=row.secret, is_enabled=row.is_enabled, subscribed_events=row.subscribed_events or [], headers=row.headers or {})
+    return _to_endpoint_out(row)
 
 
-@router.patch("/{webhook_id}", response_model=WebhookEndpointOut)
+@router.patch("/endpoints/{webhook_id}", response_model=WebhookEndpointOut)
 async def update_webhook(webhook_id: str, payload: WebhookEndpointIn, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> WebhookEndpointOut:
     row = await session.get(WebhookEndpoint, webhook_id)
     if row is None or row.tenant_id != tenant.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "webhook_not_found")
+    row.name = payload.name
     row.url = payload.url
     row.secret = payload.secret
-    row.is_enabled = payload.is_enabled
+    row.is_enabled = payload.enabled
     row.subscribed_events = payload.subscribed_events
+    row.timeout_ms = payload.timeout_ms
     row.headers = payload.headers
     await session.commit()
-    return WebhookEndpointOut(id=row.id, url=row.url, secret=row.secret, is_enabled=row.is_enabled, subscribed_events=row.subscribed_events or [], headers=row.headers or {})
+    await session.refresh(row)
+    return _to_endpoint_out(row)
 
 
-@router.delete("/{webhook_id}")
-async def delete_webhook(webhook_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> dict[str, str]:
+@router.post("/endpoints/{webhook_id}:disable", response_model=WebhookEndpointOut)
+async def disable_webhook(webhook_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> WebhookEndpointOut:
     row = await session.get(WebhookEndpoint, webhook_id)
     if row is None or row.tenant_id != tenant.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "webhook_not_found")
-    await session.delete(row)
+    row.is_enabled = False
     await session.commit()
-    return {"status": "deleted"}
+    await session.refresh(row)
+    return _to_endpoint_out(row)
+
+
+@router.post("/endpoints/{webhook_id}:enable", response_model=WebhookEndpointOut)
+async def enable_webhook(webhook_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> WebhookEndpointOut:
+    row = await session.get(WebhookEndpoint, webhook_id)
+    if row is None or row.tenant_id != tenant.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "webhook_not_found")
+    row.is_enabled = True
+    await session.commit()
+    await session.refresh(row)
+    return _to_endpoint_out(row)
 
 
 @router.get("/deliveries", response_model=list[WebhookDeliveryOut])
-async def list_deliveries(tenant: TenantDep, _: AdminAccess, session: SessionDep, status_filter: str | None = Query(default=None, alias="status")) -> list[WebhookDeliveryOut]:
-    stmt = select(WebhookDelivery).where(WebhookDelivery.tenant_id == tenant.id)
+async def list_deliveries(
+    tenant: TenantDep,
+    _: AdminAccess,
+    session: SessionDep,
+    status_filter: str | None = Query(default=None, alias="status"),
+    endpoint_id: str | None = Query(default=None),
+    event_type: str | None = Query(default=None),
+) -> list[WebhookDeliveryOut]:
+    stmt = select(WebhookDelivery, Outbox.event_type).join(Outbox, Outbox.id == WebhookDelivery.event_id).where(WebhookDelivery.tenant_id == tenant.id)
     if status_filter:
         stmt = stmt.where(WebhookDelivery.status == status_filter)
-    rows = (await session.execute(stmt.order_by(WebhookDelivery.updated_at.desc()))).scalars().all()
-    return [WebhookDeliveryOut(id=row.id, event_id=row.event_id, endpoint_id=row.endpoint_id, attempts=row.attempts, status=row.status, response_status=row.last_status_code, last_response_body=row.last_response_body, last_error=row.last_error) for row in rows]
+    if endpoint_id:
+        stmt = stmt.where(WebhookDelivery.endpoint_id == endpoint_id)
+    if event_type:
+        stmt = stmt.where(Outbox.event_type == event_type)
+    rows = (await session.execute(stmt.order_by(WebhookDelivery.updated_at.desc()))).all()
+    return [
+        WebhookDeliveryOut(
+            id=delivery.id,
+            event_id=delivery.event_id,
+            endpoint_id=delivery.endpoint_id,
+            attempts=delivery.attempts,
+            status=delivery.status,
+            next_attempt_at=delivery.next_attempt_at,
+            response_status=delivery.last_status_code,
+            last_response_body=delivery.last_response_body,
+            last_error=delivery.last_error,
+            latency_ms=delivery.latency_ms,
+            started_at=delivery.started_at,
+            ended_at=delivery.ended_at,
+        )
+        for delivery, _ in rows
+    ]
+
+
+@router.post("/deliveries/{delivery_id}:retry")
+async def retry_delivery(delivery_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> dict[str, str]:
+    delivery = await session.get(WebhookDelivery, delivery_id)
+    if delivery is None or delivery.tenant_id != tenant.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "delivery_not_found")
+    delivery.status = "pending"
+    delivery.next_attempt_at = datetime.now(tz=timezone.utc)
+    await session.commit()
+    return {"status": "queued"}
+
+
+@router.post("/events/{event_id}:replay")
+async def replay_event(event_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> dict[str, str]:
+    event = await session.get(Outbox, event_id)
+    if event is None or event.tenant_id != tenant.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "event_not_found")
+    event.status = OutboxStatus.PENDING
+    event.next_attempt_at = datetime.now(tz=timezone.utc)
+    await session.commit()
+    return {"status": "queued"}
