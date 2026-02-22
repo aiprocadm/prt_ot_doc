@@ -58,7 +58,7 @@ class TenantMiddleware(BaseHTTPMiddleware):
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
                 detail={
-                    "code": "tenant_required",
+                    "code": "TENANT_REQUIRED",
                     "type": "tenancy",
                     "message": "X-Tenant header is required",
                     "correlation_id": correlation_id,
@@ -98,12 +98,12 @@ class TenantMiddleware(BaseHTTPMiddleware):
         if tenant is None:
             raise HTTPException(
                 status.HTTP_404_NOT_FOUND,
-                detail={"code": "tenant_not_found", "type": "validation", "message": "Tenant not found"},
+                detail={"code": "TENANT_NOT_FOUND", "type": "validation", "message": "Tenant not found"},
             )
         if not tenant.is_active:
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN,
-                detail={"code": "tenant_disabled", "type": "validation", "message": "Tenant disabled"},
+                detail={"code": "TENANT_FORBIDDEN", "type": "validation", "message": "Tenant disabled"},
             )
         request.state.tenant_id = str(tenant.id)
         request.state.tenant_slug = tenant.slug

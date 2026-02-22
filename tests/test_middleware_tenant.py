@@ -67,7 +67,7 @@ async def test_tenant_middleware_requires_header_for_protected_paths() -> None:
     with pytest.raises(HTTPException) as exc_info:
         await middleware.dispatch(request, call_next)
     assert exc_info.value.status_code == 400
-    assert exc_info.value.detail["code"] == "tenant_required"
+    assert exc_info.value.detail["code"] == "TENANT_REQUIRED"
 
 
 @pytest.mark.asyncio

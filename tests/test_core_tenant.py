@@ -9,9 +9,9 @@ from app.core import tenant
 def test_tenant_schema_helpers() -> None:
     info = tenant.TenantInfo(slug="acme")
     assert tenant.tenant_schema("acme") == "tenant_acme"
-    assert tenant.tenant_prefix_path("acme") == "acme"
+    assert tenant.tenant_prefix_path("acme") == "tenants/acme"
     assert info.schema == "tenant_acme"
-    assert info.s3_prefix == "acme"
+    assert info.s3_prefix == "tenants/acme"
 
 
 def test_tenant_required_validates_presence() -> None:

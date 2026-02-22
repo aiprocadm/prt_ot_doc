@@ -17,7 +17,7 @@ async def test_missing_x_tenant_returns_400(async_client, make_auth_headers) -> 
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     body = response.json()
-    assert body["code"] == "tenant_required"
+    assert body["code"] == "TENANT_REQUIRED"
 
 
 @pytest.mark.anyio

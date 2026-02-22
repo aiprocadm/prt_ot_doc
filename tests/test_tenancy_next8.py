@@ -16,7 +16,7 @@ async def test_missing_xtenant_returns_400(app_fixture, make_auth_headers) -> No
         response = await client.get("/api/v1/tenants", headers=headers)
     assert response.status_code == 400
     payload = response.json()
-    assert payload["code"] == "tenant_required"
+    assert payload["code"] == "TENANT_REQUIRED"
 
 
 def test_s3_prefix_uses_tenant_namespace() -> None:
