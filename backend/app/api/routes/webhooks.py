@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import secrets
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -40,6 +41,10 @@ class WebhookEndpointOut(BaseModel):
     headers: dict[str, Any]
     created_at: datetime
     updated_at: datetime
+
+
+class WebhookEndpointCreateOut(WebhookEndpointOut):
+    secret: str | None = None
 
 
 class WebhookDeliveryOut(BaseModel):
@@ -88,13 +93,14 @@ async def list_webhooks(tenant: TenantDep, _: AdminAccess, session: SessionDep) 
     return [_to_endpoint_out(row) for row in rows]
 
 
-@router.post("/endpoints", response_model=WebhookEndpointOut, status_code=status.HTTP_201_CREATED)
+@router.post("/endpoints", response_model=WebhookEndpointCreateOut, status_code=status.HTTP_201_CREATED)
 async def create_webhook(payload: WebhookEndpointIn, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> WebhookEndpointOut:
+    generated_secret = payload.secret or secrets.token_urlsafe(32)
     row = WebhookEndpoint(
         tenant_id=tenant.id,
         name=payload.name,
         url=payload.url,
-        secret=payload.secret,
+        secret=generated_secret,
         is_enabled=payload.enabled,
         subscribed_events=payload.subscribed_events,
         timeout_ms=payload.timeout_ms,
@@ -103,7 +109,7 @@ async def create_webhook(payload: WebhookEndpointIn, tenant: TenantDep, _: Admin
     session.add(row)
     await session.commit()
     await session.refresh(row)
-    return _to_endpoint_out(row)
+    return WebhookEndpointCreateOut(**_to_endpoint_out(row).model_dump(), secret=generated_secret)
 
 
 @router.patch("/endpoints/{webhook_id}", response_model=WebhookEndpointOut)
@@ -121,6 +127,28 @@ async def update_webhook(webhook_id: str, payload: WebhookEndpointIn, tenant: Te
     await session.commit()
     await session.refresh(row)
     return _to_endpoint_out(row)
+
+
+@router.delete("/endpoints/{webhook_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_webhook(webhook_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> None:
+    row = await session.get(WebhookEndpoint, webhook_id)
+    if row is None or row.tenant_id != tenant.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "webhook_not_found")
+    await session.delete(row)
+    await session.commit()
+
+
+@router.post("/endpoints/{webhook_id}:rotate-secret", response_model=WebhookEndpointCreateOut)
+async def rotate_webhook_secret(webhook_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> WebhookEndpointCreateOut:
+    row = await session.get(WebhookEndpoint, webhook_id)
+    if row is None or row.tenant_id != tenant.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "webhook_not_found")
+    new_secret = secrets.token_urlsafe(32)
+    row.secret = new_secret
+    row.updated_at = datetime.now(timezone.utc)
+    await session.commit()
+    await session.refresh(row)
+    return WebhookEndpointCreateOut(**_to_endpoint_out(row).model_dump(), secret=new_secret)
 
 
 @router.post("/endpoints/{webhook_id}:disable", response_model=WebhookEndpointOut)
