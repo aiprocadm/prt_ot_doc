@@ -15,7 +15,7 @@ async def test_missing_x_tenant_returns_400_on_business_route(app_fixture, make_
         response = await client.get("/api/v1/tenants", headers=headers)
 
     assert response.status_code == 400
-    assert response.json()["code"] == "tenant_header_missing"
+    assert response.json()["code"] == "tenant_required"
 
 
 @pytest.mark.anyio

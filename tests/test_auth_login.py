@@ -187,3 +187,36 @@ async def test_company_creation_requires_admin_role(
     body = ping_response.json()
     assert body["status"] == "ok"
     assert isinstance(body["user_id"], str)
+
+
+@pytest.mark.anyio
+async def test_me_permissions_returns_roles_permissions_and_scopes(
+    async_client: AsyncClient,
+    sessionmaker: async_sessionmaker[AsyncSession],
+    data_factory: TestDataFactory,
+) -> None:
+    async with sessionmaker() as session:
+        await data_factory.create_user(
+            email="perm@example.com",
+            role=RoleEnum.ADMIN,
+            password="perm-secret",
+            session=session,
+        )
+        await session.commit()
+
+    login_response = await async_client.post(
+        "/api/v1/auth/login",
+        json={"email": "perm@example.com", "password": "perm-secret"},
+    )
+    assert login_response.status_code == 200
+    token = login_response.json()["access_token"]
+
+    response = await async_client.get(
+        "/api/v1/auth/me/permissions",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert isinstance(payload["roles"], list)
+    assert isinstance(payload["permissions"], list)
+    assert isinstance(payload["abac_scopes"], dict)
