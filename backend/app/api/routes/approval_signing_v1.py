@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -63,6 +63,12 @@ class EdoSendIn(BaseModel):
     object_id: str
     provider: str = "stub"
     meta: dict[str, Any] | None = None
+
+
+class EdoSendOut(BaseModel):
+    id: str
+    status: str
+    external_id: str
 
 
 async def _create_tasks(session: AsyncSession, process: ApprovalProcess, route: ApprovalRoute, step_no: int) -> None:
@@ -241,12 +247,45 @@ async def sign_request_get(request_id: str, session: AsyncSession = Depends(get_
 
 
 @router.post("/edo:send")
-async def edo_send(payload: EdoSendIn, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
-    env = EdoEnvelope(tenant_id=str(tenant.id), object_type=payload.object_type, object_id=payload.object_id, provider=payload.provider, status=EdoEnvelopeStatus.SENT, external_id=f"{payload.provider}-{uuid4().hex[:12]}", last_event_at=datetime.now(timezone.utc))
+async def edo_send(
+    payload: EdoSendIn,
+    request: Request,
+    response: Response,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+):
+    key = normalize_idempotency_key(request.headers.get("Idempotency-Key"))
+    request_hash = make_request_hash(request.url.path, str(tenant.id), None, payload.model_dump(mode="json"))
+    idem = IdempotencyService(session=session, tenant_id=str(tenant.id), endpoint="approval.edo_send")
+    rec, created = await idem.acquire(key=key, request_hash=request_hash, method="POST", path=request.url.path)
+    if not created:
+        return await idem.respond_from_store(rec, model=EdoSendOut, response=response)
+
+    env = EdoEnvelope(
+        tenant_id=str(tenant.id),
+        object_type=payload.object_type,
+        object_id=payload.object_id,
+        provider=payload.provider,
+        status=EdoEnvelopeStatus.SENT,
+        external_id=f"{payload.provider}-{uuid4().hex[:12]}",
+        last_event_at=datetime.now(timezone.utc),
+    )
     session.add(env)
     await session.flush()
-    await OutboxService(session).enqueue(tenant_id=str(tenant.id), event_type="edo.sent", payload={"event_id": str(uuid4()), "tenant_id": str(tenant.id), "metadata": {"envelope_id": env.id}})
-    return {"id": env.id, "status": env.status.value, "external_id": env.external_id}
+    await OutboxService(session).enqueue(
+        tenant_id=str(tenant.id),
+        event_type="edo.sent",
+        payload={"event_id": str(uuid4()), "tenant_id": str(tenant.id), "metadata": {"envelope_id": env.id}},
+    )
+    body = {"id": env.id, "status": env.status.value, "external_id": env.external_id}
+    await idem.store_success(
+        rec,
+        status_code=200,
+        body=body,
+        headers={"correlation-id": request.headers.get("x-correlation-id", "")},
+    )
+    await session.commit()
+    return body
 
 
 @router.get("/edo/envelopes")
