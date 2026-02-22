@@ -1,4 +1,4 @@
-.PHONY: install install-pip lint format test contract run clean up down migrate dev env frontend-install lint-frontend format-frontend test-frontend dev-lite test-lite dev-nodocker test-nodocker check-docker demo cs\:dev cs\:test cs\:reset
+.PHONY: install install-pip lint format test contract run clean up down migrate seed smoke logs dev env frontend-install lint-frontend format-frontend test-frontend dev-lite test-lite dev-nodocker test-nodocker check-docker demo cs\:dev cs\:test cs\:reset
 
 LINT_PATHS=backend/app tests scripts
 VENV_BIN=.venv/bin
@@ -63,6 +63,16 @@ run:
 
 migrate:
 	PYTHONPATH=backend $(ALEMBIC) -c backend/app/migrations/alembic.ini upgrade heads
+
+seed:
+	PYTHONPATH=backend $(PYTHON) scripts/create_tenant.py demo "Demo Tenant" demo@example.local || true
+	PYTHONPATH=backend $(PYTHON) scripts/migrate_tenant.py demo || true
+
+smoke:
+	./scripts/smoke.sh
+
+logs:
+	docker compose logs -f --tail=200
 
 clean:
 	rm -rf .pytest_cache .mypy_cache .ruff_cache .coverage

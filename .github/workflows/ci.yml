@@ -49,3 +49,33 @@ jobs:
 
       - name: Frontend CI checks
         run: npm --prefix frontend run ci
+
+  smoke-compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Prepare env
+        run: cp .env.example .env
+
+      - name: Build and up
+        run: docker compose up -d --build
+
+      - name: Smoke checks
+        run: make smoke
+
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --tail=200
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
