@@ -174,6 +174,7 @@ class ObservabilityMiddleware:
                 "details": details,
                 "trace_id": trace_id,
                 "request_id": trace_id,
+                "correlation_id": trace_id,
             }
         ).encode("utf-8")
         headers = [

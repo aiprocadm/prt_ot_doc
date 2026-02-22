@@ -234,12 +234,14 @@ class WebhookDispatcher:
             self.metrics.record_outbox_no_destination(event_type=event_type)
             return
 
-        trace_id = get_trace_id()
+        payload_correlation = str(payload.get("correlation_id") or "").strip()
+        trace_id = payload_correlation or get_trace_id()
         event_id = str(payload.get("event_id") or payload.get("id") or "")
         envelope = {
             "id": event_id,
             "type": event_type,
             "occurred_at": datetime.now(tz=timezone.utc).isoformat(),
+            "correlation_id": trace_id,
             "payload": payload,
         }
         request_headers: dict[str, str] = {
