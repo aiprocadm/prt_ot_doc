@@ -72,6 +72,8 @@ from app.api.routes import (
 from app.modules.headers import api as headers_api
 from app.modules.pipelines import api as pipelines_api
 from app.modules.replace import api as replace_api
+from app.modules.files.api import router as files_v1_router
+from app.modules.search.api import router as search_router
 from app.core.payload_constraints import (
     PayloadConstraintError,
     enforce_mapping_constraints,
@@ -144,6 +146,7 @@ tenant_router.include_router(audit.router, prefix="/audit", tags=["audit"])
 tenant_router.include_router(admin_users.router, tags=["admin-users"])
 tenant_router.include_router(attestations.router, tags=["attestations"])
 tenant_router.include_router(files.router, prefix="/files", tags=["files"])
+tenant_router.include_router(files_v1_router, prefix="/files", tags=["files-v1"])
 tenant_router.include_router(pdf_router, prefix="/files", tags=["pdf"])
 tenant_router.include_router(packs.router, prefix="/packs", tags=["packs"])
 tenant_router.include_router(client_portal.presets_router)
@@ -180,6 +183,7 @@ tenant_router.include_router(replace_api.router)
 tenant_router.include_router(reports.router, tags=["reports"])
 tenant_router.include_router(headers_api.router, tags=["layout-presets"])
 tenant_router.include_router(pipelines_api.router)
+tenant_router.include_router(search_router, tags=["search"])
 
 router.include_router(tenant_router)
 

@@ -1,0 +1,43 @@
+import hashlib
+
+import pytest
+from fastapi import HTTPException
+
+from app.modules.files.storage import build_tenant_key
+
+
+def test_build_tenant_key_is_tenant_scoped() -> None:
+    key = build_tenant_key(tenant_id="tenant-a", file_id="f1", version_no=2, filename="doc.pdf")
+    assert key.startswith("tenant-a/")
+    assert "/f1/2/" in key
+
+
+def test_sha256_computation_matches_reference() -> None:
+    payload = b"hello world"
+    assert hashlib.sha256(payload).hexdigest() == "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+
+
+@pytest.mark.asyncio
+async def test_download_for_not_ready_version_raises() -> None:
+    from app.modules.files import service
+
+    class DummySession:
+        async def get(self, model, id_):
+            class Obj:
+                file_id = "f"
+                tenant_id = "t"
+                status = "quarantined"
+
+            return Obj()
+
+    with pytest.raises(HTTPException) as exc:
+        await service.issue_download_url(
+            session=DummySession(),
+            tenant_id="t",
+            file_id="f",
+            version_id="v",
+            user_id=None,
+            ip=None,
+            user_agent=None,
+        )
+    assert exc.value.status_code == 409
