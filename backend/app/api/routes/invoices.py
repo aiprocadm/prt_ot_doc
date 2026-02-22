@@ -187,4 +187,4 @@ async def delete_invoice(
     if invoice.deleted_at is None:
         invoice.deleted_at = datetime.now(timezone.utc)
     await session.commit()
-    return None
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

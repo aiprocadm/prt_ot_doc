@@ -210,4 +210,4 @@ async def delete_contract(
     if contract.deleted_at is None:
         contract.deleted_at = datetime.now(timezone.utc)
     await session.commit()
-    return None
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

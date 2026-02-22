@@ -159,4 +159,4 @@ async def delete_order(
     if order.deleted_at is None:
         order.deleted_at = datetime.now(timezone.utc)
     await session.commit()
-    return None
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

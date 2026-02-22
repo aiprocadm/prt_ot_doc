@@ -768,7 +768,7 @@ async def delete_template_version(
 
     await session.delete(version)
     await session.commit()
-    return None
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.delete("/templates/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -794,7 +794,7 @@ async def delete_template(
     )
     await session.delete(template)
     await session.commit()
-    return None
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/docx/mass-replace")

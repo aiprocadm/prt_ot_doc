@@ -138,4 +138,4 @@ async def delete_department(
     if department.deleted_at is None:
         department.deleted_at = datetime.now(timezone.utc)
     await session.commit()
-    return None
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
