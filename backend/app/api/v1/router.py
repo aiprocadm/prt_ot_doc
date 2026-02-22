@@ -102,6 +102,9 @@ from app.repository import (
 from app.schemas.common import PipelineRunRead, TemplatePage
 from app.schemas.person import PersonPage
 from app.schemas.template import TemplateCreate, TemplateVersionMetadata
+from app.modules.templates import build_passport, lint_docx_template, render_preview_docx
+from app.modules.templates.repo import get_template_version_by_code
+from app.modules.templates.schemas import RenderPreviewRequest, RenderPreviewResponse
 from app.services.docx import DocxService
 from app.services.file_storage import FileStorageService
 from app.services.pipeline import PipelineService
@@ -653,6 +656,79 @@ async def create_template(
     return {"id": version.template_id, "version_id": version.id}
 
 
+@router.post("/templates/{template_id}/versions", response_model=dict, status_code=status.HTTP_201_CREATED)
+async def create_template_version(
+    template_id: str,
+    file: UploadDocx,
+    session: SessionDep,
+    tenant: TenantDep,
+    access: EditorAccess,
+    status_value: str = Form("active"),
+) -> dict[str, str]:
+    template = await session.get(Template, template_id)
+    if template is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Template not found")
+    payload = await file.read(MAX_TEMPLATE_SIZE_BYTES + 1)
+    if not payload:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Template file cannot be empty")
+    checksum_hex = hashlib.sha256(payload).hexdigest()
+    lint = lint_docx_template(payload)
+
+    last_ver_stmt = select(func.coalesce(func.max(TemplateVersion.version), 0)).where(TemplateVersion.template_id == template.id)
+    next_ver = int(await session.scalar(last_ver_stmt) or 0) + 1
+    key = f"{tenant.slug}/templates/{template.code or template.name}/v{next_ver}/template.docx"
+    FileStorageService.default().put(key, payload, content_type=DOCX_CONTENT_TYPE)
+
+    version = TemplateVersion(
+        tenant_id=tenant.slug,
+        template_id=template.id,
+        version=next_ver,
+        checksum=bytes.fromhex(checksum_hex),
+        sha256=checksum_hex,
+        status=TemplateVersionStatus(status_value),
+        payload_key=key,
+        file_id=key,
+        placeholder_index=lint,
+    )
+    session.add(version)
+    await session.commit()
+    await session.refresh(version)
+    return {"id": version.id, "template_id": template.id, "version": str(version.version)}
+
+
+@router.get("/templates/{template_id}/versions", response_model=list[dict])
+async def list_template_versions(template_id: str, session: SessionDep, tenant: TenantDep, access: ManagerAccess) -> list[dict[str, object]]:
+    stmt = select(TemplateVersion).where(TemplateVersion.template_id == template_id, TemplateVersion.tenant_id == tenant.slug).order_by(TemplateVersion.version.desc())
+    rows = (await session.execute(stmt)).scalars().all()
+    return [{"id": r.id, "version": r.version, "status": r.status.value, "sha256": r.sha256, "file_id": r.file_id, "placeholder_index": r.placeholder_index} for r in rows]
+
+
+@router.get("/templates/by-code/{code}", response_model=dict)
+async def get_template_by_code_version(code: str, version: int = Query(..., ge=1), session: SessionDep = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), access: ManagerAccess = None) -> dict[str, object]:
+    row = await get_template_version_by_code(session, tenant_id=tenant.slug, code=code, version=version)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Template not found")
+    template, tv = row
+    return {"template_id": template.id, "code": template.code, "name": template.name, "version_id": tv.id, "version": tv.version, "status": tv.status.value, "file_id": tv.file_id}
+
+
+@router.post("/templates/render-preview", response_model=RenderPreviewResponse)
+async def render_preview(payload: RenderPreviewRequest, session: SessionDep, tenant: TenantDep, access: EditorAccess, request: Request) -> RenderPreviewResponse:
+    row = await get_template_version_by_code(session, tenant_id=tenant.slug, code=payload.code, version=payload.version)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Template not found")
+    template, tv = row
+    storage = FileStorageService.default()
+    source = storage.get(tv.file_id or tv.payload_key)
+    correlation_id = get_trace_id(request)
+    passport = build_passport(code=template.code, version=tv.version, tenant_id=tenant.slug, generated_by="api_user", correlation_id=correlation_id, data=payload.data)
+    rendered = render_preview_docx(template_bytes=source, data=payload.data, passport=passport, visible_passport=payload.visible_passport)
+    rendered_sha = hashlib.sha256(rendered).hexdigest()
+    out_key = f"{tenant.slug}/documents/preview/{uuid.uuid4()}/rendered.docx"
+    storage.put(out_key, rendered, content_type=DOCX_CONTENT_TYPE)
+    return RenderPreviewResponse(file_id=out_key, sha256=rendered_sha, passport=passport, warnings=tv.placeholder_index.get("errors", []) if tv.placeholder_index else [], generated_at=datetime.now(timezone.utc))
+
+
 @router.delete(
     "/templates/{template_id}/versions/{version_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -676,7 +752,7 @@ async def delete_template_version(
     ):
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            "Template version is already used and cannot be deleted",
+            {"code": "template_version_in_use", "message": "Template version is already used and cannot be deleted"},
         )
 
     await session.delete(version)

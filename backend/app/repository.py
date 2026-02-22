@@ -277,6 +277,7 @@ async def create_template(
         template = Template(
             id=template_id,
             tenant_id=tenant_identifier,
+            code=effective_payload.name,
             name=effective_payload.name,
             description=effective_payload.description,
             metadata_json=effective_payload.metadata,
