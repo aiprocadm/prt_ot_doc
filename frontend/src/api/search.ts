@@ -1,11 +1,15 @@
 import { apiClient } from "@/api/client";
 
-export type SearchType = "documents" | "people" | "sites" | "incidents" | "inspections";
+export type SearchType = "documents" | "people" | "sites" | "incidents" | "inspections" | "files";
 
 export interface SearchItem {
-  type: string;
-  id: string;
+  kind: "entity" | "file";
+  entity_type: string;
+  entity_id: string;
+  file_id?: string | null;
   title: string;
+  subtitle?: string;
+  tags?: Record<string, string>;
   status?: string;
   updated_at?: string;
   snippet?: string;

@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
 
 import { searchGlobal, type SearchItem } from "@/api/search";
-import { fetchDownloadUrl } from "@/api/files";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 const ArchiveSearch = () => {
@@ -20,30 +18,15 @@ const ArchiveSearch = () => {
       <table className="w-full text-sm">
         <thead>
           <tr className="text-left">
-            <th>filename</th>
-            <th>status</th>
-            <th />
+            <th>title</th>
+            <th>type</th>
           </tr>
         </thead>
         <tbody>
           {items.map((item) => (
-            <tr key={item.id} className="border-t">
+            <tr key={`${item.entity_type}-${item.entity_id}`} className="border-t">
               <td>{item.title}</td>
-              <td>ready</td>
-              <td>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={async () => {
-                    const [fileId, versionId] = item.id.split(":");
-                    if (!versionId) return;
-                    const url = await fetchDownloadUrl(fileId, versionId);
-                    window.open(url, "_blank", "noopener,noreferrer");
-                  }}
-                >
-                  Download
-                </Button>
-              </td>
+              <td>{item.entity_type}</td>
             </tr>
           ))}
         </tbody>

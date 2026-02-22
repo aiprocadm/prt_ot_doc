@@ -5,7 +5,7 @@ import { fetchSearch, type SearchItem, type SearchType } from "@/api/search";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
-const tabs: SearchType[] = ["documents", "people", "sites", "incidents", "inspections"];
+const tabs: SearchType[] = ["documents", "files", "people", "sites", "incidents", "inspections"];
 
 const SearchPage = () => {
   const [params, setParams] = useSearchParams();
@@ -70,11 +70,11 @@ const SearchPage = () => {
       </div>
       <div className="space-y-2">
         {items.map((item) => (
-          <div key={`${item.type}-${item.id}`} className="rounded border p-3">
-            <div className="text-sm text-muted-foreground">{item.type}</div>
+          <div key={`${item.entity_type}-${item.entity_id}`} className="rounded border p-3">
+            <div className="text-sm text-muted-foreground">{item.entity_type}</div>
             <div className="font-medium">{item.title}</div>
             {item.status ? <div className="text-sm">Статус: {item.status}</div> : null}
-            {item.snippet ? <div className="text-sm text-muted-foreground">{item.snippet}</div> : null}
+            {item.snippet ? <div className="text-sm text-muted-foreground" dangerouslySetInnerHTML={{ __html: item.snippet }} /> : null}
           </div>
         ))}
       </div>

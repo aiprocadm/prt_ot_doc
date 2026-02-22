@@ -11,7 +11,7 @@ from app.modules.search.service import SearchFilters, SearchService
 
 router = APIRouter()
 
-_ALLOWED_TYPES = {"documents", "people", "sites", "incidents", "inspections"}
+_ALLOWED_TYPES = {"documents", "people", "sites", "incidents", "inspections", "files"}
 
 
 @router.get("/search")
@@ -23,6 +23,9 @@ async def global_search(
     status: str | None = None,
     company_id: str | None = None,
     site_id: str | None = None,
+    project_id: str | None = None,
+    contractor_id: str | None = None,
+    risk_level: str | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
     session: AsyncSession = Depends(get_session),
@@ -35,6 +38,9 @@ async def global_search(
         status=status,
         company_id=company_id,
         site_id=site_id,
+        project_id=project_id,
+        contractor_id=contractor_id,
+        risk_level=risk_level,
         date_from=date_from,
         date_to=date_to,
     )
