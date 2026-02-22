@@ -438,7 +438,7 @@ class Settings(BaseSettings):
     enable_gzip: bool = Field(True, alias="ENABLE_GZIP")
     max_request_body_bytes: int = Field(1_048_576, alias="MAX_REQUEST_BODY_BYTES")
     request_timeout_seconds: float = Field(15.0, alias="REQUEST_TIMEOUT_SECONDS")
-    trace_header_name: str = Field("X-Trace-Id", alias="TRACE_HEADER_NAME")
+    trace_header_name: str = Field("X-Correlation-Id", alias="TRACE_HEADER_NAME")
     default_locale: str = Field("ru-RU", alias="DEFAULT_LOCALE")
     default_timezone: str = Field("Europe/Moscow", alias="DEFAULT_TIMEZONE")
 

@@ -62,7 +62,10 @@ class IdempotencyService:
         existing = await self.get(key=key)
         if existing is not None:
             if request_hash and existing.request_hash and existing.request_hash != request_hash:
-                raise HTTPException(status.HTTP_409_CONFLICT, "Idempotency key conflict")
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    {"code": "idempotency_conflict", "type": "idempotency", "message": "Idempotency key conflict"},
+                )
             if request_hash and not existing.request_hash:
                 existing.request_hash = request_hash
             if method and not existing.method:

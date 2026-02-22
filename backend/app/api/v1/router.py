@@ -68,6 +68,7 @@ from app.api.routes import (
     tenancy,
     tenants,
     training,
+    webhooks,
 )
 from app.core.payload_constraints import (
     PayloadConstraintError,
@@ -163,6 +164,7 @@ tenant_router.include_router(jobs.router)
 tenant_router.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
 tenant_router.include_router(tenancy.router)
 tenant_router.include_router(outbox_admin.router, prefix="/admin/outbox", tags=["outbox"])
+tenant_router.include_router(webhooks.router)
 tenant_router.include_router(tenants.router)
 tenant_router.include_router(tenants.admin_router)
 tenant_router.include_router(companies.router)

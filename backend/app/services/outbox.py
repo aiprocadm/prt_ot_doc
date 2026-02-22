@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.metrics import PipelineStage, PipelineType, StageResult, get_metrics
+from app.core.tracing import get_trace_id
 from app.models.models import Outbox, OutboxStatus, WebhookDelivery
 from app.services.events import EventType, dedupe_key_for, normalize_payload, resolve_event_type
 from app.services.webhooks import (
@@ -94,6 +95,7 @@ class OutboxService:
                 payload=payload,
                 tenant_id=tenant_id,
             )
+            normalized_payload.setdefault("correlation_id", get_trace_id())
             key = idempotency_key or dedupe_key_for(resolved, payload_model)
             if destination:
                 destinations = [WebhookDestination(url=destination, headers={})]
