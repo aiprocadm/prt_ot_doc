@@ -1,4 +1,4 @@
-import "axios";
+export {};
 
 declare module "axios" {
   export interface AxiosRequestConfig {
