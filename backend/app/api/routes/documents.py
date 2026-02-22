@@ -92,6 +92,38 @@ AccessDep = Depends(
 StatusAccessDep = Depends(rbac(_DOCUMENT_STATUS_ROLES))
 
 
+
+
+class GenerateTemplateRef(BaseModel):
+    code: str
+    version: int
+
+
+class GenerateDataPayload(BaseModel):
+    type: str
+    payload: dict[str, Any] | None = None
+    file_id: str | None = None
+
+
+class GenerateStepOptions(BaseModel):
+    apply_headers: dict[str, Any] | None = None
+    replace: dict[str, Any] | None = None
+    pdf: dict[str, Any] | None = None
+    zip: dict[str, Any] | None = None
+
+
+class GeneratePipelinePayload(BaseModel):
+    profile_code: str | None = None
+    steps: GenerateStepOptions | None = None
+
+
+class DocGeneratePipelineRequest(BaseModel):
+    template: GenerateTemplateRef
+    data: GenerateDataPayload
+    pipeline: GeneratePipelinePayload | None = None
+    npa_binding_id: str | None = None
+
+
 class DocGenerateRequest(BaseModel):
     """Incoming payload for document generation requests."""
 
@@ -320,9 +352,14 @@ async def _resolve_run(
     response_model=TaskAcceptedResponse,
     status_code=status.HTTP_202_ACCEPTED,
 )
+@router.post(
+    "/documents:generate",
+    response_model=TaskAcceptedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 @limiter.limit(lambda: generate_per_tenant(), key_func=ip_tenant_key)
 async def generate_document(
-    payload: DocGenerateRequest,
+    payload: DocGenerateRequest | DocGeneratePipelineRequest,
     request: Request,
     response: Response,
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
@@ -331,9 +368,26 @@ async def generate_document(
     access: AccessContext = AccessDep,
 ) -> TaskAcceptedResponse:
     settings = get_settings()
+    engine_payload: dict[str, Any] | None = None
+    if isinstance(payload, DocGeneratePipelineRequest):
+        template_code = payload.template.code
+        template_version = payload.template.version
+        options = {}
+        if payload.pipeline and payload.pipeline.steps and payload.pipeline.steps.zip:
+            options["zip"] = bool(payload.pipeline.steps.zip.get("enabled"))
+        engine_payload = {
+            "template_code": template_code,
+            "template_version": template_version,
+            "pipeline_profile_id": (payload.pipeline.profile_code if payload.pipeline else None),
+            "input_source_id": payload.data.file_id if payload.data.type == "file" else None,
+            "inline_data": payload.data.payload or {},
+            "options": options,
+        }
+
     try:
-        enforce_mapping_constraints(payload.data, field="data")
-        _ensure_payload_size(payload.data, limit=settings.document_payload_max_bytes, field="data")
+        payload_for_checks = payload.data if isinstance(payload, DocGenerateRequest) else (payload.data.payload or {})
+        enforce_mapping_constraints(payload_for_checks, field="data")
+        _ensure_payload_size(payload_for_checks, limit=settings.document_payload_max_bytes, field="data")
     except PayloadConstraintError as exc:
         raise HTTPException(exc.status_code, str(exc)) from exc
 
@@ -358,16 +412,18 @@ async def generate_document(
 
     created_run = False
     try:
-        if payload.inline_data is not None or payload.input_source_id is not None:
+        if engine_payload is not None or (isinstance(payload, DocGenerateRequest) and (payload.inline_data is not None or payload.input_source_id is not None)):
             orchestrator = DocumentPipelineOrchestrator(session)
-            engine_payload = {
-                "template_code": payload.template_code,
-                "template_version": payload.template_version,
-                "pipeline_profile_id": payload.pipeline_profile_id,
-                "input_source_id": payload.input_source_id,
-                "inline_data": payload.inline_data or {},
-                "options": payload.options or {},
-            }
+            if engine_payload is None:
+                legacy_payload = payload
+                engine_payload = {
+                    "template_code": legacy_payload.template_code,
+                    "template_version": legacy_payload.template_version,
+                    "pipeline_profile_id": legacy_payload.pipeline_profile_id,
+                    "input_source_id": legacy_payload.input_source_id,
+                    "inline_data": legacy_payload.inline_data or {},
+                    "options": legacy_payload.options or {},
+                }
             request_hash = compute_request_hash({
                 "tenant_id": str(tenant.id),
                 "endpoint": "documents.generate",
@@ -381,6 +437,9 @@ async def generate_document(
                     tenant_id=str(tenant.id),
                     created_by=getattr(access.user, "id", None),
                     payload=engine_payload,
+                    idempotency_key=normalized_key,
+                    request_hash=request_hash,
+                    correlation_id=request.headers.get("x-correlation-id"),
                 )
                 await orchestrator.run_job(job_id=job.id)
                 body = {
@@ -396,6 +455,9 @@ async def generate_document(
                 return TaskAcceptedResponse(**body)
             await session.commit()
             return await idempotency.respond_from_store(record, model=TaskAcceptedResponse, response=response)
+
+        if not isinstance(payload, DocGenerateRequest):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "legacy mode requires old payload shape")
 
         payload_hash = _hash_payload(payload.data)
 
@@ -532,6 +594,22 @@ async def generate_document_batch(
     access: AccessContext = AccessDep,
 ) -> DocumentBatchRunRead:
     settings = get_settings()
+    engine_payload: dict[str, Any] | None = None
+    if isinstance(payload, DocGeneratePipelineRequest):
+        template_code = payload.template.code
+        template_version = payload.template.version
+        options = {}
+        if payload.pipeline and payload.pipeline.steps and payload.pipeline.steps.zip:
+            options["zip"] = bool(payload.pipeline.steps.zip.get("enabled"))
+        engine_payload = {
+            "template_code": template_code,
+            "template_version": template_version,
+            "pipeline_profile_id": (payload.pipeline.profile_code if payload.pipeline else None),
+            "input_source_id": payload.data.file_id if payload.data.type == "file" else None,
+            "inline_data": payload.data.payload or {},
+            "options": options,
+        }
+
     if template_version is None or not company_id or not template_code:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
