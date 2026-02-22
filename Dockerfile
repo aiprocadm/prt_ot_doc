@@ -14,6 +14,11 @@ RUN apt-get update \
         libmagic1 \
         libmagic-dev \
         pkg-config \
+        libreoffice \
+        poppler-utils \
+        fonts-dejavu-core \
+        fonts-noto-core \
+        fontconfig \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /srv/app
@@ -21,6 +26,8 @@ WORKDIR /srv/app
 COPY requirements.txt ./
 RUN python -m pip install --upgrade pip \
     && pip install -r requirements.txt
+
+RUN fc-cache -f
 
 COPY backend/app ./backend/app
 COPY scripts ./scripts

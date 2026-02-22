@@ -34,3 +34,5 @@ ALEMBIC_METADATA = _merge_metadata(SharedBase.metadata, TenantBase.metadata)
 TARGET_METADATA = (ALEMBIC_METADATA,)
 
 __all__ = ["Base", "TARGET_METADATA", "ALEMBIC_METADATA", "SharedBase", "TenantBase"]
+
+from app.modules.pdf import models as pdf_models  # noqa: F401
