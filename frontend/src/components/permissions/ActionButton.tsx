@@ -9,14 +9,14 @@ type ButtonProps = ComponentProps<typeof Button>;
 
 interface ActionButtonProps extends ButtonProps {
   permission: Permission;
-  resource?: AbilityResource;
+  abilityResource?: AbilityResource;
   hideWhenDenied?: boolean;
   disabledReason?: string;
 }
 
 export const ActionButton = ({
   permission,
-  resource,
+  abilityResource,
   hideWhenDenied = false,
   disabledReason = "Недостаточно прав",
   disabled,
@@ -24,7 +24,7 @@ export const ActionButton = ({
   ...props
 }: ActionButtonProps) => {
   const { can } = useAbility();
-  const allowed = can(permission, resource);
+  const allowed = can(permission, abilityResource);
 
   if (!allowed && hideWhenDenied) return null;
 

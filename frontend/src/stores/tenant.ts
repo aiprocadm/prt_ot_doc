@@ -14,13 +14,7 @@ interface TenantState {
 const resolveTenant = (stored: StoredTenant | null): TenantOption | null => {
   if (!stored) return null;
   const match = TENANT_OPTIONS.find((option) => option.slug === stored.slug);
-  if (match) return match;
-  return {
-    id: stored.slug,
-    slug: stored.slug,
-    name: stored.slug,
-    site: stored.site ?? "Неизвестная площадка"
-  };
+  return match ?? null;
 };
 
 export const useTenantStore = create<TenantState>((set) => ({

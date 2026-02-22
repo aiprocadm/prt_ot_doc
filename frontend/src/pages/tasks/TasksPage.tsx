@@ -9,6 +9,7 @@ import { FilterField } from "@/components/common/FilterField";
 import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { TaskTable } from "@/features/tasks/TaskTable";
 import { useTasksStore } from "@/stores/tasks";
+import type { TaskPriority } from "@/types/dto/tasks";
 
 const TASK_TYPE_OPTIONS = [
   { value: "", label: "Все типы" },
@@ -32,6 +33,10 @@ const PRIORITY_OPTIONS = [
   { value: "critical", label: "Критичный" }
 ];
 
+const TASK_PRIORITIES: TaskPriority[] = ["low", "medium", "high", "critical"];
+
+const isTaskPriority = (value: string): value is TaskPriority => TASK_PRIORITIES.includes(value as TaskPriority);
+
 const TasksPage = () => {
   const { list, loading, filters, setFilters, items, pagination } = useTasksStore();
   const [searchParams] = useSearchParams();
@@ -41,7 +46,8 @@ const TasksPage = () => {
     const overdueParam = searchParams.get("overdue");
     const overdue =
       overdueParam === "true" ? true : overdueParam === "false" ? false : undefined;
-    const priority = searchParams.get("priority") ?? undefined;
+    const priorityParam = searchParams.get("priority");
+    const priority = priorityParam && isTaskPriority(priorityParam) ? priorityParam : undefined;
     setFilters({ type, overdue, priority });
     list({ type, overdue, priority });
   }, [list, searchParams, setFilters]);
@@ -79,8 +85,9 @@ const TasksPage = () => {
   };
 
   const handlePriorityChange = (value: string) => {
-    setFilters({ priority: value || undefined });
-    list({ priority: value || undefined });
+    const priority = value && isTaskPriority(value) ? value : undefined;
+    setFilters({ priority });
+    list({ priority });
   };
 
   return (
