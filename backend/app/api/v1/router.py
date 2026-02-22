@@ -750,7 +750,7 @@ async def delete_template_version(
     session: SessionDep,
     tenant: TenantDep,
     access: EditorAccess,
-) -> Response:
+) -> None:
     tenant_scope = _tenant_scope(tenant)
     version = await session.get(TemplateVersion, version_id)
     if version is None or version.template_id != template_id:
@@ -768,7 +768,7 @@ async def delete_template_version(
 
     await session.delete(version)
     await session.commit()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return None
 
 
 @router.delete("/templates/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -777,7 +777,7 @@ async def delete_template(
     session: SessionDep,
     tenant: TenantDep,
     access: EditorAccess,
-) -> Response:
+) -> None:
     tenant_scope = _tenant_scope(tenant)
     template = await session.get(Template, template_id)
     if template is None or template.tenant_id not in tenant_scope:
@@ -794,7 +794,7 @@ async def delete_template(
     )
     await session.delete(template)
     await session.commit()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return None
 
 
 @router.post("/docx/mass-replace")

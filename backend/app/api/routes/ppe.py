@@ -144,12 +144,12 @@ async def update_item(
 @router.delete("/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_item(
     item_id: str, tenant: TenantDep, session: SessionDep, access: ManagerAccess
-) -> Response:
+) -> None:
     item = await _get_item(session, tenant, item_id)
     if item.deleted_at is None:
         item.deleted_at = datetime.now(timezone.utc)
     await session.flush()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return None
 
 
 @router.get("/issues", response_model=PPEIssuePage)

@@ -205,9 +205,9 @@ async def delete_contract(
     tenant: TenantDep,
     session: SessionDep,
     _: FinanceAccess,
-) -> Response:
+) -> None:
     contract = await _get_contract(session, tenant, contract_id)
     if contract.deleted_at is None:
         contract.deleted_at = datetime.now(timezone.utc)
     await session.commit()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return None

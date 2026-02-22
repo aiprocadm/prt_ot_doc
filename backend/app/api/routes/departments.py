@@ -133,9 +133,9 @@ async def delete_department(
     tenant: TenantDep,
     session: SessionDep,
     _: DepartmentAccess,
-) -> Response:
+) -> None:
     department = await _get_department(session, tenant, department_id)
     if department.deleted_at is None:
         department.deleted_at = datetime.now(timezone.utc)
     await session.commit()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return None
