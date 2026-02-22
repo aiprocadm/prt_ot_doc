@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.domains.files import s3
 from app.modules.files import av, extractors, storage
 from app.modules.files.models import AVStatus, DownloadLog, FileObject, FileTextIndex, FileVersion, FileVersionStatus, TextIndexStatus
+from app.tasks import index_file_content_job
 
 
 MAX_INDEX_BYTES = 25 * 1024 * 1024
@@ -76,7 +77,7 @@ async def complete_upload(*, session: AsyncSession, tenant_id: str, file_id: str
 
     await session.flush()
     if version.status == FileVersionStatus.ready.value:
-        await index_file_content(session=session, tenant_id=tenant_id, version=version, data=data)
+        index_file_content_job.apply_async(kwargs={"tenant_slug": session.info.get("tenant"), "version_id": version.id}, countdown=0)
     return version
 
 
@@ -109,6 +110,19 @@ async def index_file_content(*, session: AsyncSession, tenant_id: str, version: 
         lang="simple",
     )
     session.add(index)
+
+
+async def index_file_version(session: AsyncSession, *, tenant_id: str, version_id: str) -> None:
+    version = await session.get(FileVersion, version_id)
+    if version is None or version.tenant_id != tenant_id or version.status != FileVersionStatus.ready.value:
+        return
+    if version.text_index_status == TextIndexStatus.indexed.value:
+        existing = await session.get(FileTextIndex, version_id)
+        if existing is not None and existing.file_version_id == version.id:
+            return
+    with s3.stream_object(key=version.s3_key) as body:
+        data = body.read()
+    await index_file_content(session=session, tenant_id=tenant_id, version=version, data=data)
 
 
 async def issue_download_url(*, session: AsyncSession, tenant_id: str, file_id: str, version_id: str, user_id: str | None, ip: str | None, user_agent: str | None) -> str:

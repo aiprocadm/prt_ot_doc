@@ -1,39 +1,42 @@
 from __future__ import annotations
 
+from datetime import date
+
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.models.models import Tenant
+from app.modules.search.service import SearchFilters, SearchService
 
 router = APIRouter()
+
+_ALLOWED_TYPES = {"documents", "people", "sites", "incidents", "inspections"}
 
 
 @router.get("/search")
 async def global_search(
     q: str = Query(min_length=1),
-    types: str = "files,documents",
-    limit: int = 20,
-    offset: int = 0,
+    types: str = "documents,people,sites,incidents,inspections",
+    limit: int = Query(default=20, ge=1, le=100),
+    cursor: str | None = None,
+    status: str | None = None,
+    company_id: str | None = None,
+    site_id: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
 ) -> dict:
-    if "files" not in {item.strip() for item in types.split(",") if item.strip()}:
-        return {"q": q, "items": []}
-    stmt = text(
-        """
-        select fv.id as id, fv.filename as title, fti.excerpt as snippet
-        from file_versions fv
-        join file_objects fo on fo.id = fv.file_id
-        left join file_text_index fti on fti.file_version_id = fv.id
-        where fv.tenant_id = :tenant_id
-          and fv.status = 'ready'
-          and (fv.filename ilike :q or coalesce(fti.raw_text, '') ilike :q)
-        order by fv.updated_at desc
-        limit :limit offset :offset
-        """
+    requested_types = {item.strip() for item in types.split(",") if item.strip()}
+    requested_types &= _ALLOWED_TYPES
+
+    filters = SearchFilters(
+        status=status,
+        company_id=company_id,
+        site_id=site_id,
+        date_from=date_from,
+        date_to=date_to,
     )
-    rows = (await session.execute(stmt, {"tenant_id": str(tenant.id), "q": f"%{q}%", "limit": limit, "offset": offset})).mappings().all()
-    items = [{"type": "file", "id": row["id"], "title": row["title"], "snippet": row.get("snippet"), "score": 1.0, "meta": {}} for row in rows]
-    return {"q": q, "items": items}
+    service = SearchService(session=session, tenant_id=str(tenant.id))
+    return await service.search(q=q, types=requested_types, filters=filters, limit=limit, cursor=cursor)

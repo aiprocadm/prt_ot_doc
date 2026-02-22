@@ -1,13 +1,40 @@
 import { apiClient } from "@/api/client";
 
+export type SearchType = "documents" | "people" | "sites" | "incidents" | "inspections";
+
 export interface SearchItem {
   type: string;
   id: string;
   title: string;
+  status?: string;
+  updated_at?: string;
   snippet?: string;
+  score?: number;
 }
 
-export const searchGlobal = async (q: string) => {
-  const { data } = await apiClient.get<{ q: string; items: SearchItem[] }>("/search", { params: { q } });
+export interface SearchResponse {
+  q: string;
+  facets: Record<string, number>;
+  items: SearchItem[];
+  next_cursor?: string | null;
+}
+
+export const fetchSearch = async (params: {
+  q: string;
+  types?: SearchType[];
+  cursor?: string;
+  limit?: number;
+  status?: string;
+  company_id?: string;
+  site_id?: string;
+}) => {
+  const { data } = await apiClient.get<SearchResponse>("/search", {
+    params: {
+      ...params,
+      types: params.types?.join(","),
+    },
+  });
   return data;
 };
+
+export const searchGlobal = async (q: string) => fetchSearch({ q, limit: 8 });

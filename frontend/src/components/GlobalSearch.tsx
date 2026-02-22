@@ -2,8 +2,8 @@ import { Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { Input } from "@/components/ui/input";
 import { searchGlobal, type SearchItem } from "@/api/search";
+import { Input } from "@/components/ui/input";
 import { useDebounce } from "@/hooks/useDebounce";
 
 export const GlobalSearch = () => {
@@ -11,6 +11,18 @@ export const GlobalSearch = () => {
   const [items, setItems] = useState<SearchItem[]>([]);
   const debounced = useDebounce(query, 300);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "/" && !(event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)) {
+        event.preventDefault();
+        const input = document.getElementById("global-search-input") as HTMLInputElement | null;
+        input?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   useEffect(() => {
     if (!debounced.trim()) {
@@ -25,7 +37,18 @@ export const GlobalSearch = () => {
   return (
     <div className="relative w-full max-w-xl">
       <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-      <Input value={query} onChange={(e) => setQuery(e.target.value)} className="pl-9" placeholder="Глобальный поиск" />
+      <Input
+        id="global-search-input"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && query.trim()) {
+            navigate(`/search?q=${encodeURIComponent(query.trim())}`);
+          }
+        }}
+        className="pl-9"
+        placeholder="Глобальный поиск (/)"
+      />
       {items.length > 0 ? (
         <div className="absolute top-11 z-50 w-full rounded-md border bg-background p-2 shadow">
           {items.map((item) => (
@@ -33,7 +56,7 @@ export const GlobalSearch = () => {
               type="button"
               key={`${item.type}-${item.id}`}
               className="block w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
-              onClick={() => navigate(item.type === "file" ? "/files" : "/documents")}
+              onClick={() => navigate(`/search?q=${encodeURIComponent(query)}&type=${item.type}`)}
             >
               <div className="font-medium">{item.title}</div>
               {item.snippet ? <div className="text-xs text-muted-foreground">{item.snippet}</div> : null}
