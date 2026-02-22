@@ -40,3 +40,38 @@ async def test_header_token_tenant_mismatch_denied(async_client, make_auth_heade
     response = await async_client.get("/api/v1/tenants", headers=headers)
 
     assert response.status_code == 403
+
+
+@pytest.mark.anyio
+async def test_header_can_use_tenant_code_with_slug_scoped_token(
+    sessionmaker,
+    async_client,
+    make_auth_headers,
+):
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    async with sessionmaker() as session:
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
+        tenant.code = "TEST-CODE"
+        await session.commit()
+
+    headers["x-tenant"] = "TEST-CODE"
+    response = await async_client.get("/api/v1/tenants", headers=headers)
+
+    assert response.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_header_can_use_tenant_uuid_with_slug_scoped_token(
+    sessionmaker,
+    async_client,
+    make_auth_headers,
+):
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    async with sessionmaker() as session:
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
+        tenant_id = str(tenant.id)
+
+    headers["x-tenant"] = tenant_id
+    response = await async_client.get("/api/v1/tenants", headers=headers)
+
+    assert response.status_code == 200

@@ -82,11 +82,6 @@ class TenantMiddleware(BaseHTTPMiddleware):
                 token_slug = raw_slug or None
 
         normalized_header = header_slug.strip() if header_slug else None
-        if token_slug and normalized_header.casefold() != token_slug.casefold():
-            raise HTTPException(
-                status.HTTP_403_FORBIDDEN,
-                "Tenant header does not match token scope",
-            )
 
         info = tenant_required(normalized_header)
         async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as session:
@@ -100,6 +95,18 @@ class TenantMiddleware(BaseHTTPMiddleware):
                 status.HTTP_404_NOT_FOUND,
                 detail={"code": "tenant_not_found", "type": "validation", "message": "Tenant not found"},
             )
+        if token_slug:
+            token_scope = token_slug.casefold()
+            tenant_scopes = {
+                (tenant.slug or "").casefold(),
+                (tenant.code or "").casefold(),
+                str(tenant.id).casefold(),
+            }
+            if token_scope not in tenant_scopes:
+                raise HTTPException(
+                    status.HTTP_403_FORBIDDEN,
+                    "Tenant header does not match token scope",
+                )
         if not tenant.is_active:
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN,
