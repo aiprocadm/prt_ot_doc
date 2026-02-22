@@ -40,7 +40,7 @@ def test_require_tenant_missing_header_returns_400() -> None:
     with pytest.raises(HTTPException) as exc:
         require_tenant(request)  # type: ignore[arg-type]
     assert exc.value.status_code == 400
-    assert exc.value.detail["code"] == "tenant_required"
+    assert exc.value.detail["code"] == "TENANT_REQUIRED"
 
 
 def test_policy_engine_abac_denies_foreign_site() -> None:

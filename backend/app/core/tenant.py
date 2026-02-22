@@ -64,7 +64,7 @@ def tenant_schema(slug: str) -> str:
 
 
 def tenant_prefix_path(slug: str) -> str:
-    return slug
+    return f"tenants/{slug}"
 
 
 def get_current_tenant() -> TenantInfo:
@@ -82,7 +82,7 @@ def tenant_required(slug: str | None) -> TenantInfo:
     if slug is None:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            {"code": "tenant_required", "type": "validation", "message": "Tenant header is required"},
+            {"code": "TENANT_REQUIRED", "type": "validation", "message": "X-Tenant header is required"},
         )
     return set_current_tenant(slug)
 

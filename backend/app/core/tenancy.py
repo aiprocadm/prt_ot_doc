@@ -29,7 +29,7 @@ def require_tenant(request: Request) -> str:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
-                "code": "tenant_required",
+                "code": "TENANT_REQUIRED",
                 "type": "tenancy",
                 "message": "X-Tenant header is required",
                 "correlation_id": getattr(request.state, "trace_id", None),
