@@ -12,10 +12,10 @@ from app.models.models import PipelineRun, PipelineRunStatus, Tenant, TenantCoun
 
 def _raise_quota(kind: str, *, limit: int, used: int, billing_gate: bool) -> None:
     code = status.HTTP_402_PAYMENT_REQUIRED if billing_gate else status.HTTP_429_TOO_MANY_REQUESTS
-    error = "payment_required" if billing_gate else "quota_exceeded"
+    error = "TENANT_QUOTA_EXCEEDED"
     raise HTTPException(
         code,
-        detail={"code": error, "type": "tenancy", "message": f"Quota exceeded for {kind}", "meta": {"kind": kind, "limit": limit, "used": used}},
+        detail={"code": error, "type": "validation", "message": "Tenant quota exceeded", "meta": {"kind": kind, "limit": limit, "used": used}},
     )
 
 

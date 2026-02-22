@@ -38,7 +38,7 @@ async def create_upload_session(*, session: AsyncSession, tenant_id: str, payloa
         file_id=obj.id,
         version_no=1,
         filename=payload.filename,
-        s3_key=storage.build_tenant_key(tenant_id=tenant_id, file_id=obj.id, version_no=1, filename=payload.filename),
+        s3_key=storage.build_tenant_key(tenant_id=tenant_id, entity=str(payload.owner_entity_type or "files"), entity_id=str(payload.owner_entity_id or obj.id), file_id=obj.id, filename=payload.filename),
         size=0,
         mime="application/octet-stream",
         sha256="",

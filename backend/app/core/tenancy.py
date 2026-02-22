@@ -31,7 +31,7 @@ def require_tenant(request: Request) -> str:
             detail={
                 "code": "TENANT_REQUIRED",
                 "type": "tenancy",
-                "message": "X-Tenant header is required",
+                "message": "X-Tenant header required",
                 "correlation_id": getattr(request.state, "trace_id", None),
             },
         )

@@ -3,9 +3,9 @@ from __future__ import annotations
 from app.domains.files import s3
 
 
-def build_tenant_key(*, tenant_id: str, file_id: str, version_no: int, filename: str) -> str:
+def build_tenant_key(*, tenant_id: str, entity: str, entity_id: str, file_id: str, filename: str) -> str:
     safe_name = filename.replace("..", "_").replace("/", "_")
-    return f"{tenant_id}/{file_id}/{version_no}/{safe_name}"
+    return f"{tenant_id}/{entity}/{entity_id}/{file_id}_{safe_name}"
 
 
 def presign_get(*, key: str, expires_in: int) -> str:

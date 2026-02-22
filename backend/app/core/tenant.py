@@ -82,7 +82,7 @@ def tenant_required(slug: str | None) -> TenantInfo:
     if slug is None:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            {"code": "TENANT_REQUIRED", "type": "validation", "message": "X-Tenant header is required"},
+            {"code": "TENANT_REQUIRED", "type": "validation", "message": "X-Tenant header required"},
         )
     return set_current_tenant(slug)
 
