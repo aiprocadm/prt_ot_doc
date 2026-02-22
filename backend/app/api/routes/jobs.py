@@ -3,14 +3,17 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.idempotency import compute_request_hash
 from app.models.job_engine import DocumentArtifact, DocumentJob, DocumentJobLog, DocumentJobStep
 from app.models.models import Tenant
+from app.modules.pipelines.models import PipelineProfile
+from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 from app.services.pipelines_orchestrator import DocumentPipelineOrchestrator
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -56,6 +59,62 @@ class JobRead(BaseModel):
     result: dict[str, Any] | None = None
 
 
+class JobCreateRequest(BaseModel):
+    preset_id: str | None = None
+    profile_id: str | None = None
+    inputs: dict[str, Any] = {}
+    options: dict[str, Any] = {}
+
+
+class JobCreateResponse(BaseModel):
+    job_id: str
+    status: str
+
+
+@router.post("", response_model=JobCreateResponse, status_code=status.HTTP_202_ACCEPTED)
+async def create_job(
+    payload: JobCreateRequest,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> JobCreateResponse:
+    if not idempotency_key:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Idempotency-Key is required")
+
+    if not payload.profile_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "profile_id is required")
+
+    profile = await session.get(PipelineProfile, payload.profile_id)
+    if profile is None or str(profile.tenant_id) != str(tenant.id) or not profile.is_active:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "profile not found")
+
+    request_hash = compute_request_hash(payload.model_dump())
+    idem_service = IdempotencyService(session=session, tenant_id=str(tenant.id), endpoint="jobs.create")
+    idem_key = normalize_idempotency_key(idempotency_key)
+    record, created = await idem_service.acquire(key=idem_key, request_hash=request_hash, method="POST", path="/v1/jobs")
+    if not created:
+        body = await idem_service.respond_from_store(record, model=JobCreateResponse)
+        return body
+
+    orchestrator = DocumentPipelineOrchestrator(session)
+    job = await orchestrator.start_document_job(
+        tenant_id=str(tenant.id),
+        created_by=None,
+        payload={
+            "template_code": profile.code,
+            "template_version": 1,
+            "pipeline_profile_id": profile.id,
+            "input": payload.inputs,
+            "options": {**payload.options, "preset_id": payload.preset_id},
+        },
+        idempotency_key=idem_key,
+        request_hash=request_hash,
+    )
+    await idem_service.store_success(record, status_code=status.HTTP_202_ACCEPTED, body={"job_id": job.id, "status": str(job.status)})
+    await session.commit()
+    return JobCreateResponse(job_id=job.id, status=str(job.status))
+
+
 class JobListRead(BaseModel):
     items: list[JobEnvelopeRead]
 
@@ -68,6 +127,9 @@ async def get_job(job_id: str, session: AsyncSession = Depends(get_session), ten
     steps = (await session.execute(select(DocumentJobStep).where(DocumentJobStep.job_id == job.id).order_by(DocumentJobStep.order.asc()))).scalars().all()
     artifacts = (await session.execute(select(DocumentArtifact).where(DocumentArtifact.job_id == job.id).order_by(DocumentArtifact.created_at.asc()))).scalars().all()
     logs = (await session.execute(select(DocumentJobLog).where(DocumentJobLog.job_id == job.id).order_by(DocumentJobLog.created_at.asc()))).scalars().all()
+    artifact_map = {
+        "all": [{"file_id": a.file_id, "step_code": a.step_code, "kind": a.kind, "sha256": a.sha256} for a in artifacts]
+    }
     return JobRead(
         job=JobEnvelopeRead(
             id=job.id,
@@ -82,7 +144,7 @@ async def get_job(job_id: str, session: AsyncSession = Depends(get_session), ten
         ),
         steps=[JobStepRead(code=s.step_code, status=str(s.status), attempt=s.attempts, max_attempts=s.max_attempts, started_at=s.started_at, ended_at=s.ended_at, input_ref=s.input_ref, output_ref=s.output_ref, error_code=s.error_code, error_payload=s.error_payload) for s in steps],
         logs=[JobLogRead(timestamp=l.created_at, level=l.level, message=l.message, step_name=l.step_code, meta_json=l.meta_json) for l in logs],
-        result={"document_version_id": job.result_document_version_id, "files": [{"file_id": a.file_id, "step_code": a.step_code, "kind": a.kind, "sha256": a.sha256} for a in artifacts]} if artifacts or job.result_document_version_id else None,
+        result={"document_version_id": job.result_document_version_id, "files": artifact_map["all"], "artifacts": artifact_map} if artifacts or job.result_document_version_id else None,
     )
 
 
@@ -152,6 +214,17 @@ async def rerun_step(job_id: str, step: str, session: AsyncSession = Depends(get
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     await session.commit()
     return await get_job(job_id=job_id, session=session, tenant=tenant)
+
+
+@router.post("/{job_id}/steps/{step_id}:retry", response_model=JobRead)
+async def retry_step_by_id(job_id: str, step_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> JobRead:
+    job = await session.get(DocumentJob, job_id)
+    if job is None or str(job.tenant_id) != str(tenant.id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+    step = await session.get(DocumentJobStep, step_id)
+    if step is None or step.job_id != job_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Step not found")
+    return await rerun_step(job_id=job_id, step=step.step_code, session=session, tenant=tenant)
 
 
 class RetryStepRequest(BaseModel):

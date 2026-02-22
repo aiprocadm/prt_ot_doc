@@ -21,6 +21,7 @@ export const JobTimeline = ({ steps }: { steps: PipelineStepRun[] }) => (
         <div>
           <div className="font-medium">{step.step_code}</div>
           <div className="text-xs text-muted-foreground">attempt: {step.attempt}</div>
+          {step.error_code ? <div className="text-xs text-red-600">{step.error_code}</div> : null}
         </div>
         <div className="flex items-center gap-2">
           <span className={`rounded px-2 py-0.5 text-xs ${badgeClass(step.status)}`}>{step.status}</span>
