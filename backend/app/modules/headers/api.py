@@ -65,7 +65,7 @@ async def patch_layout_preset(preset_id: str, payload: HeaderFooterPresetPatch, 
     return HeaderFooterPresetRead.model_validate(row)
 
 
-@router.delete("/layout-presets/{preset_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/layout-presets/{preset_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def delete_layout_preset(preset_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> None:
     row = await session.get(HeaderFooterPreset, preset_id)
     if row is None or row.tenant_id != str(tenant.id) or row.deleted_at is not None:

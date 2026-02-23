@@ -98,7 +98,7 @@ async def patch_profile(profile_id: str, payload: PipelineProfilePatch, session:
     return PipelineProfileRead.model_validate(model, from_attributes=True)
 
 
-@router.delete("/profiles/{profile_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/profiles/{profile_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def delete_profile(profile_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> None:
     repo = PipelineProfileRepo(session)
     model = await repo.get(tenant_id=str(tenant.id), profile_id=profile_id)

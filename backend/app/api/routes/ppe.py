@@ -141,7 +141,7 @@ async def update_item(
     return _item_schema(item)
 
 
-@router.delete("/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def delete_item(
     item_id: str, tenant: TenantDep, session: SessionDep, access: ManagerAccess
 ) -> None:

@@ -80,7 +80,7 @@ async def patch_map(replace_map_id: str, payload: ReplaceMapPatch, session: Asyn
     return ReplaceMapRead.model_validate(row)
 
 
-@router.delete("/replace-maps/{replace_map_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/replace-maps/{replace_map_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def delete_map(replace_map_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> None:
     row = await session.get(ReplaceMap, replace_map_id)
     if row is None or row.tenant_id != str(tenant.id) or row.deleted_at is not None:

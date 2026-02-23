@@ -148,7 +148,6 @@ tenant_router.include_router(admin_users.router, tags=["admin-users"])
 tenant_router.include_router(attestations.router, tags=["attestations"])
 tenant_router.include_router(files.router, prefix="/files", tags=["files"])
 tenant_router.include_router(files_v1_router, prefix="/files", tags=["files-v1"])
-tenant_router.include_router(pdf_router, prefix="/files", tags=["pdf"])
 tenant_router.include_router(packs.router, prefix="/packs", tags=["packs"])
 tenant_router.include_router(client_portal.presets_router)
 tenant_router.include_router(client_portal.internal_router)
@@ -743,6 +742,7 @@ async def render_preview(payload: RenderPreviewRequest, session: SessionDep, ten
 @router.delete(
     "/templates/{template_id}/versions/{version_id}",
     status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
 )
 async def delete_template_version(
     template_id: str,
@@ -771,7 +771,7 @@ async def delete_template_version(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.delete("/templates/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/templates/{template_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def delete_template(
     template_id: str,
     session: SessionDep,
