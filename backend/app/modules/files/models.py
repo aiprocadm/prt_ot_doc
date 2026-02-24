@@ -41,7 +41,11 @@ class FileObject(TenantBase, TimestampMixin, SoftDeleteMixin, VersionedMixin, UU
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
     owner_entity_type: Mapped[str] = mapped_column(String(64), nullable=False)
     owner_entity_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    tags: Mapped[list[str]] = mapped_column(ARRAY(String()), nullable=False, default=list)
+    tags: Mapped[list[str]] = mapped_column(
+        ARRAY(String()).with_variant(JSON(), "sqlite"),
+        nullable=False,
+        default=list,
+    )
 
 
 class FileVersion(TenantBase, TimestampMixin, VersionedMixin, UUIDMixin):
