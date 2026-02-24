@@ -143,3 +143,40 @@ async def test_audit_immutable(sessionmaker: async_sessionmaker[AsyncSession]) -
         with pytest.raises(RuntimeError):
             await session.delete(entry)
             await session.flush()
+
+
+@pytest.mark.anyio("asyncio")
+async def test_access_deny_is_written_to_audit_log(
+    async_client: AsyncClient,
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    async with sessionmaker() as session:
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
+        user = User(
+            tenant_id=tenant.id,
+            email="abac-deny-audit@example.com",
+            full_name="ABAC",
+            role=RoleEnum.ADMIN,
+            hashed_password=hash_password("x"),
+        )
+        allowed = Company(tenant_id=tenant.id, name="Allowed Deny")
+        denied = Company(tenant_id=tenant.id, name="Denied Deny")
+        session.add_all([user, allowed, denied])
+        await session.commit()
+        token = issue_access_token(
+            subject=user.id,
+            tenant=tenant.slug,
+            role=user.role.value,
+            additional_claims={"tenant_id": tenant.id, "company_ids": [allowed.id]},
+        )
+
+    headers = {**dict(async_client.headers), "Authorization": f"Bearer {token}", "x-tenant": "test"}
+    resp = await async_client.get(f"/api/v1/companies/{denied.id}", headers=headers)
+    assert resp.status_code == 403
+
+    async with sessionmaker() as session:
+        rows = (
+            await session.execute(select(AuditLog).where(AuditLog.action == "access_deny").order_by(AuditLog.when.desc()))
+        ).scalars().all()
+        assert rows
+        assert rows[0].object_type == "companies"

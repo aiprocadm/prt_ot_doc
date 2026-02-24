@@ -60,7 +60,7 @@ def require_action(resource_type: str, action: str, *, resource_attrs_getter: Ca
                 audit = AuditService(session)
                 await audit.log_event(
                     tenant_id=subject.tenant_id or "-",
-                    action="authz.denied",
+                    action="access_deny",
                     object_type=resource_type,
                     object_id=str(resource_attrs.get("id") or resource_attrs.get("resource_id") or "-"),
                     user_id=subject.user_id,
