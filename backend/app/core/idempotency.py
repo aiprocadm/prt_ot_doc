@@ -66,13 +66,14 @@ async def idempotency_dependency(request: Request) -> Response | None:
     digest.update(b"\x00")
     digest.update((request.headers.get("content-type") or "").encode("utf-8"))
     digest.update(b"\x00")
-    digest.update(str(get_current_tenant().id).encode("utf-8"))
+    tenant = get_current_tenant()
+    tenant_id = getattr(getattr(request, "state", None), "tenant_id", None) or tenant.slug
+    digest.update(str(tenant_id).encode("utf-8"))
     digest.update(b"\x00")
     digest.update(body)
     fingerprint = digest.hexdigest()
     request.state.idempotency = {"key": normalized_key, "fingerprint": fingerprint}
 
-    tenant = get_current_tenant()
     try:
         async with AsyncSessionLocal(tenant=tenant.slug) as session:
             session.info["tenant"] = tenant.slug
@@ -80,7 +81,7 @@ async def idempotency_dependency(request: Request) -> Response | None:
                 select(IdempotencyKey)
                 .where(
                     IdempotencyKey.key == normalized_key,
-                    IdempotencyKey.tenant_id == str(tenant.id),
+                    IdempotencyKey.tenant_id == str(tenant_id),
                     IdempotencyKey.endpoint == request.url.path,
                     IdempotencyKey.method == method,
                     IdempotencyKey.path == request.url.path,
@@ -125,6 +126,7 @@ async def store_idempotent_response(request: Request, response: Response) -> Non
         return None
 
     tenant = get_current_tenant()
+    tenant_id = getattr(getattr(request, "state", None), "tenant_id", None) or tenant.slug
     try:
         async with AsyncSessionLocal(tenant=tenant.slug) as session:
             session.info["tenant"] = tenant.slug
@@ -132,7 +134,7 @@ async def store_idempotent_response(request: Request, response: Response) -> Non
                 select(IdempotencyKey)
                 .where(
                     IdempotencyKey.key == key,
-                    IdempotencyKey.tenant_id == str(tenant.id),
+                    IdempotencyKey.tenant_id == str(tenant_id),
                     IdempotencyKey.endpoint == request.url.path,
                     IdempotencyKey.method == request.method.upper(),
                     IdempotencyKey.path == request.url.path,

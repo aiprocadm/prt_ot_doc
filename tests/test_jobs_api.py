@@ -1,25 +1,35 @@
 from __future__ import annotations
 
 import pytest
-from httpx import ASGITransport, AsyncClient
 
 from app.models.job_engine import DocumentJob, DocumentJobStatus, DocumentJobStep, JobStepStatus
 
+from sqlalchemy import select
+
+from app.db.session import AsyncSessionLocal
+from app.models.models import Tenant
+
+
+async def _ensure_global_tenant(slug: str = "test") -> None:
+    async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as session:
+        existing = (await session.execute(select(Tenant).where(Tenant.slug == slug))).scalar_one_or_none()
+        if existing is None:
+            session.add(Tenant(slug=slug, name=slug.title(), contact_email=f"{slug}@example.com"))
+            await session.commit()
+
 
 @pytest.mark.anyio
-async def test_job_status_endpoint_for_unknown_job(app_fixture, make_auth_headers) -> None:
+async def test_job_status_endpoint_for_unknown_job(async_client, make_auth_headers) -> None:
+    await _ensure_global_tenant("test")
     headers = await make_auth_headers()
-    transport = ASGITransport(app=app_fixture)
-
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        response = await client.get("/api/v1/jobs/unknown", headers=headers)
+    response = await async_client.get("/api/v1/jobs/unknown", headers=headers)
 
     assert response.status_code == 404
 
 
 @pytest.mark.anyio
 async def test_jobs_list_and_retry_step_endpoints(
-    app_fixture,
+    async_client,
     make_auth_headers,
     sessionmaker,
     data_factory,
@@ -59,55 +69,54 @@ async def test_jobs_list_and_retry_step_endpoints(
         await session.commit()
         job_id = job.id
 
+    await _ensure_global_tenant("test")
     headers = await make_auth_headers()
-    transport = ASGITransport(app=app_fixture)
+    listed = await async_client.get("/api/v1/jobs", headers=headers)
+    assert listed.status_code == 200
+    payload = listed.json()
+    assert any(item["id"] == job_id for item in payload["items"])
 
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        listed = await client.get("/api/v1/jobs", headers=headers)
-        assert listed.status_code == 200
-        payload = listed.json()
-        assert any(item["id"] == job_id for item in payload["items"])
-
-        retried = await client.post(
-            f"/api/v1/jobs/{job_id}:retry-step",
-            json={"step_key": "convert_pdf"},
-            headers=headers,
-        )
-        assert retried.status_code == 200
-        body = retried.json()
-        assert body["job"]["id"] == job_id
-        assert body["job"]["status"] in {
-            DocumentJobStatus.RUNNING.value,
-            DocumentJobStatus.SUCCESS.value,
-            DocumentJobStatus.FAILED.value,
-        }
+    retried = await async_client.post(
+        f"/api/v1/jobs/{job_id}:retry-step",
+        json={"step_key": "convert_pdf"},
+        headers=headers,
+    )
+    assert retried.status_code == 200
+    body = retried.json()
+    assert body["job"]["id"] == job_id
+    assert body["job"]["status"] in {
+        DocumentJobStatus.RUNNING.value,
+        DocumentJobStatus.SUCCESS.value,
+        DocumentJobStatus.FAILED.value,
+    }
 
 
 @pytest.mark.anyio
-async def test_create_job_endpoint_with_idempotency(app_fixture, make_auth_headers, client) -> None:
+async def test_create_job_endpoint_with_idempotency(async_client, make_auth_headers) -> None:
+    await _ensure_global_tenant("test")
     headers = await make_auth_headers()
 
     profile_payload = {
         "code": "jobs_default_v1",
         "name": "Jobs default",
-        "steps": [{"code": "render_docx", "required": True}],
-        "limits": {},
+        "steps": [{"code": "render_docx", "required": True, "params_schema": "RenderParamsV1"}],
+        "limits": {"max_parallel": 2, "max_parallel_per_step": {}},
         "is_active": True,
     }
-    created = await client.post("/api/v1/pipelines/profiles", json=profile_payload, headers=headers)
+    created = await async_client.post("/api/v1/pipelines/profiles", json=profile_payload, headers=headers)
     assert created.status_code == 201
     profile_id = created.json()["id"]
 
     payload = {"profile_id": profile_id, "inputs": {"x": 1}, "options": {"run_async": True}}
-    resp1 = await client.post("/api/v1/jobs", json=payload, headers={**headers, "Idempotency-Key": "job-create-idem"})
+    resp1 = await async_client.post("/api/v1/jobs", json=payload, headers={**headers, "Idempotency-Key": "job-create-idem"})
     assert resp1.status_code == 202
-    resp2 = await client.post("/api/v1/jobs", json=payload, headers={**headers, "Idempotency-Key": "job-create-idem"})
+    resp2 = await async_client.post("/api/v1/jobs", json=payload, headers={**headers, "Idempotency-Key": "job-create-idem"})
     assert resp2.status_code == 202
     assert resp1.json()["job_id"] == resp2.json()["job_id"]
 
 
 @pytest.mark.anyio
-async def test_jobs_cancel_and_retry_slash_endpoints(app_fixture, make_auth_headers, sessionmaker, data_factory) -> None:
+async def test_jobs_cancel_and_retry_slash_endpoints(async_client, make_auth_headers, sessionmaker, data_factory) -> None:
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         job = DocumentJob(
@@ -139,17 +148,16 @@ async def test_jobs_cancel_and_retry_slash_endpoints(app_fixture, make_auth_head
         await session.commit()
         job_id = job.id
 
+    await _ensure_global_tenant("test")
     headers = await make_auth_headers()
-    transport = ASGITransport(app=app_fixture)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        canceled = await client.post(f"/api/v1/jobs/{job_id}/cancel", headers=headers)
-        assert canceled.status_code == 200
-        assert canceled.json()["job"]["status"] == DocumentJobStatus.CANCELED.value
+    canceled = await async_client.post(f"/api/v1/jobs/{job_id}/cancel", headers=headers)
+    assert canceled.status_code == 200
+    assert canceled.json()["job"]["status"] == DocumentJobStatus.CANCELED.value
 
-        retried = await client.post(
-            f"/api/v1/jobs/{job_id}/retry",
-            json={"retry_failed_only": False},
-            headers=headers,
-        )
-        assert retried.status_code == 200
-        assert retried.json()["job"]["id"] == job_id
+    retried = await async_client.post(
+        f"/api/v1/jobs/{job_id}/retry",
+        json={"retry_failed_only": False},
+        headers=headers,
+    )
+    assert retried.status_code == 200
+    assert retried.json()["job"]["id"] == job_id
