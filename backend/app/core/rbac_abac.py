@@ -326,6 +326,12 @@ SCOPED_RESOURCES = {
 
 
 class PolicyEngine:
+    _ACTION_ALIASES = {
+        "generate": "run_pipeline",
+        "run": "run_pipeline",
+        "cancel": "cancel_job",
+    }
+
     def enforce(
         self,
         actor: ActorContext,
@@ -346,7 +352,7 @@ class PolicyEngine:
         obj: Any | None = None,
         ctx: dict[str, Any] | None = None,
     ) -> Decision:
-        normalized_action = action.lower()
+        normalized_action = self._ACTION_ALIASES.get(action.lower(), action.lower())
         normalized_resource = resource.lower()
         permission_code = f"{normalized_resource}:{normalized_action}"
 
