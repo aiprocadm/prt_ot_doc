@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, rbac
+from app.models.job_engine import OutboxEvent, OutboxEventStatus
 from app.models.models import Outbox, OutboxStatus, Tenant
 
 router = APIRouter()
@@ -43,6 +44,23 @@ class RetryResponse(BaseModel):
     status: OutboxStatus
     attempts: int
     next_attempt_at: str | None
+
+
+class OutboxEventEntry(BaseModel):
+    id: str
+    tenant_id: str
+    event_id: str
+    event_type: str
+    status: OutboxEventStatus
+    attempts: int
+    next_attempt_at: str | None
+    created_at: str
+    last_error: str | None = None
+
+
+class OutboxEventListResponse(BaseModel):
+    total: int
+    items: list[OutboxEventEntry]
 
 
 @router.get("", response_model=OutboxListResponse)
@@ -150,4 +168,72 @@ async def retry_outbox_entry(
         status=entry.status,
         attempts=entry.attempts,
         next_attempt_at=entry.next_attempt_at.isoformat() if entry.next_attempt_at else None,
+    )
+
+
+@router.get("/events", response_model=OutboxEventListResponse)
+async def list_outbox_events(
+    *,
+    tenant: TenantDep,
+    access: AdminAccess,
+    session: SessionDep,
+    status_filter: OutboxEventStatus | None = Query(None, alias="status"),
+    event_type: str | None = Query(None, min_length=1),
+) -> OutboxEventListResponse:
+    _ = access
+    stmt = select(OutboxEvent).where(OutboxEvent.tenant_id == tenant.id)
+    if status_filter:
+        stmt = stmt.where(OutboxEvent.status == status_filter.value)
+    if event_type:
+        stmt = stmt.where(OutboxEvent.event_type == event_type)
+    rows = (await session.execute(stmt.order_by(OutboxEvent.created_at.desc()))).scalars().all()
+    items = [
+        OutboxEventEntry(
+            id=item.id,
+            tenant_id=item.tenant_id,
+            event_id=item.event_id,
+            event_type=item.event_type,
+            status=OutboxEventStatus(item.status),
+            attempts=item.attempts,
+            next_attempt_at=item.next_attempt_at.isoformat() if item.next_attempt_at else None,
+            created_at=item.created_at.isoformat(),
+            last_error=item.last_error,
+        )
+        for item in rows
+    ]
+    return OutboxEventListResponse(total=len(items), items=items)
+
+
+@router.post("/events/{event_id}/requeue", response_model=OutboxEventEntry)
+async def requeue_outbox_event(
+    event_id: str,
+    *,
+    tenant: TenantDep,
+    access: AdminAccess,
+    session: SessionDep,
+) -> OutboxEventEntry:
+    _ = access
+    event = await session.get(OutboxEvent, event_id)
+    if event is None or event.tenant_id != tenant.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Outbox event not found")
+
+    if event.status not in {OutboxEventStatus.DEAD.value, OutboxEventStatus.FAILED.value}:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Only FAILED or DEAD events can be requeued")
+
+    event.status = OutboxEventStatus.PENDING.value
+    event.attempts = 0
+    event.last_error = None
+    event.next_attempt_at = datetime.now(tz=timezone.utc)
+    await session.commit()
+
+    return OutboxEventEntry(
+        id=event.id,
+        tenant_id=event.tenant_id,
+        event_id=event.event_id,
+        event_type=event.event_type,
+        status=OutboxEventStatus(event.status),
+        attempts=event.attempts,
+        next_attempt_at=event.next_attempt_at.isoformat() if event.next_attempt_at else None,
+        created_at=event.created_at.isoformat(),
+        last_error=event.last_error,
     )

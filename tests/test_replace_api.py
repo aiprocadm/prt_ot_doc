@@ -27,7 +27,7 @@ async def test_replace_dry_run_apply_rollback(app_fixture, make_auth_headers) ->
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         dry = await client.post(
             "/api/v1/replace:dry-run",
-            headers=headers,
+            headers={**headers, "Idempotency-Key": "replace-dry-1"},
             files={
                 "docx_file": ("demo.docx", buffer.getvalue(), "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
                 "replace_map": ("replace_map.csv", mapping, "text/csv"),
@@ -44,7 +44,7 @@ async def test_replace_dry_run_apply_rollback(app_fixture, make_auth_headers) ->
 
         apply = await client.post(
             "/api/v1/replace:apply",
-            headers=headers,
+            headers={**headers, "Idempotency-Key": "replace-apply-1"},
             files={
                 "docx_file": ("demo.docx", buffer.getvalue(), "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
                 "replace_map": ("replace_map.csv", mapping, "text/csv"),
@@ -56,7 +56,7 @@ async def test_replace_dry_run_apply_rollback(app_fixture, make_auth_headers) ->
 
         rollback = await client.post(
             "/api/v1/replace:rollback",
-            headers=headers,
+            headers={**headers, "Idempotency-Key": "replace-rollback-1"},
             params={"apply_job_id": apply_payload["job_id"]},
         )
         assert rollback.status_code == 202
@@ -83,3 +83,37 @@ async def test_replace_requires_tenant_header(app_fixture) -> None:
             },
         )
     assert dry.status_code == 400
+
+
+@pytest.mark.anyio
+async def test_replace_idempotency_conflict_same_key_different_payload(app_fixture, make_auth_headers) -> None:
+    headers = await make_auth_headers()
+    transport = ASGITransport(app=app_fixture)
+
+    doc = Document()
+    doc.add_paragraph("Hello {{company_name}}")
+    buffer = BytesIO()
+    doc.save(buffer)
+    mapping = b"from;to\n{{company_name}};OOO Demo\n"
+
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        first = await client.post(
+            "/api/v1/replace/dry-run",
+            headers={**headers, "Idempotency-Key": "replace-conflict-1"},
+            files={
+                "docx_file": ("demo.docx", buffer.getvalue(), "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+                "replace_map": ("replace_map.csv", mapping, "text/csv"),
+            },
+        )
+        assert first.status_code == 202
+
+        second = await client.post(
+            "/api/v1/replace/dry-run",
+            headers={**headers, "Idempotency-Key": "replace-conflict-1"},
+            files={
+                "docx_file": ("demo.docx", buffer.getvalue() + b"x", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+                "replace_map": ("replace_map.csv", mapping, "text/csv"),
+            },
+        )
+
+    assert second.status_code == 409
