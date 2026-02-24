@@ -18,6 +18,7 @@ from app.models.job_engine import (
     DocumentJobStep,
     JobStepStatus,
     OutboxEvent,
+    OutboxEventStatus,
 )
 
 MANDATORY_STEPS = ["render_docx", "apply_headers", "replace", "convert_pdf"]
@@ -262,7 +263,18 @@ class DocumentPipelineOrchestrator:
                 step.ended_at = now
 
     async def _emit_event(self, *, job: DocumentJob, event_type: str, payload: dict[str, Any]) -> None:
-        self.session.add(OutboxEvent(tenant_id=job.tenant_id, event_type=event_type, event_id=str(uuid4()), payload={**payload, "tenant_id": job.tenant_id}))
+        dedup_source = f"{job.id}:{event_type}:{payload.get('correlation_id') or job.correlation_id}"
+        dedup_event_id = hashlib.sha256(dedup_source.encode("utf-8")).hexdigest()[:36]
+        self.session.add(
+            OutboxEvent(
+                tenant_id=job.tenant_id,
+                event_type=event_type,
+                event_id=dedup_event_id,
+                payload={**payload, "tenant_id": job.tenant_id},
+                status=OutboxEventStatus.PENDING.value,
+                next_attempt_at=datetime.now(tz=timezone.utc),
+            )
+        )
 
     async def _log(self, job: DocumentJob, level: str, message: str, step_code: str | None, meta: dict[str, Any] | None) -> None:
         self.session.add(DocumentJobLog(tenant_id=job.tenant_id, job_id=job.id, step_code=step_code, level=level, message=message, meta_json={**(meta or {}), "correlation_id": job.correlation_id}))

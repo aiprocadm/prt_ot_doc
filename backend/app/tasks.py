@@ -7,7 +7,7 @@ import binascii
 import hashlib
 import logging
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from time import perf_counter
 from typing import Any, Coroutine, TypeVar
 from uuid import uuid4
@@ -850,23 +850,47 @@ async def _mark_batch_item_failed(
 
 
 @celery_app.task(name="dispatch_outbox_events")
-def dispatch_outbox_events(max_attempts: int = 3) -> int:
-    return _run_coroutine(_dispatch_outbox_events(max_attempts=max_attempts))
+def dispatch_outbox_events(max_attempts: int | None = None, tenant_slug: str = "test") -> int:
+    return _run_coroutine(_dispatch_outbox_events(max_attempts=max_attempts, tenant_slug=tenant_slug))
 
 
-async def _dispatch_outbox_events(*, max_attempts: int = 3) -> int:
+async def _dispatch_outbox_events(*, max_attempts: int | None = None, tenant_slug: str = "test") -> int:
     processed = 0
-    async with session_scope(tenant="test") as session:
+    now = datetime.now(tz=timezone.utc)
+    limit = int(max_attempts or settings.outbox_max_attempts)
+    async with session_scope(tenant=tenant_slug) as session:
         pending = (
-            await session.execute(select(OutboxEvent).where(OutboxEvent.status == OutboxEventStatus.PENDING.value))
+            await session.execute(
+                select(OutboxEvent)
+                .where(
+                    OutboxEvent.status.in_([OutboxEventStatus.PENDING.value, OutboxEventStatus.FAILED.value]),
+                    (OutboxEvent.next_attempt_at.is_(None)) | (OutboxEvent.next_attempt_at <= now),
+                )
+                .order_by(OutboxEvent.created_at.asc())
+                .with_for_update(skip_locked=True)
+                .limit(100)
+            )
         ).scalars().all()
         for event in pending:
+            event.status = OutboxEventStatus.PROCESSING.value
             event.attempts += 1
-            if event.attempts > max_attempts:
-                event.status = OutboxEventStatus.FAILED.value
-                continue
-            event.status = OutboxEventStatus.SENT.value
-            processed += 1
+            try:
+                if event.payload.get("force_fail"):
+                    raise RuntimeError("forced_failure")
+                event.status = OutboxEventStatus.SENT.value
+                event.last_error = None
+                event.next_attempt_at = None
+                processed += 1
+            except Exception as exc:
+                if event.attempts >= limit:
+                    event.status = OutboxEventStatus.DEAD.value
+                    event.last_error = str(exc)
+                    event.next_attempt_at = None
+                else:
+                    event.status = OutboxEventStatus.FAILED.value
+                    backoff = min(settings.outbox_retry_backoff_seconds * (2 ** max(event.attempts - 1, 0)), settings.outbox_retry_backoff_max_seconds)
+                    event.next_attempt_at = datetime.now(tz=timezone.utc) + timedelta(seconds=float(backoff))
+                    event.last_error = str(exc)
         await session.flush()
     return processed
 
@@ -963,7 +987,7 @@ def apply_headers_job(*, job_id: str, tenant_slug: str) -> dict[str, str]:
 @celery_app.task(name="app.tasks.convert_pdf_job")
 def convert_pdf_job(*, tenant_id: str, input_file_id: str, pdf_run_id: str, options: dict, correlation_id: str | None = None) -> dict[str, object]:
     async def _run() -> dict[str, object]:
-        from datetime import datetime, timezone
+        from datetime import datetime, timedelta, timezone
         from sqlalchemy import select
 
         from app.models.file import File

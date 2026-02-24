@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import asyncio
 from typing import Any, TypeVar
 
 from fastapi import HTTPException, Response, status
@@ -58,6 +59,8 @@ class IdempotencyService:
         request_hash: str | None = None,
         method: str | None = None,
         path: str | None = None,
+        wait_timeout_seconds: float = 5.0,
+        poll_interval_seconds: float = 0.05,
     ) -> tuple[IdempotencyKey, bool]:
         existing = await self.get(key=key)
         if existing is not None:
@@ -66,7 +69,7 @@ class IdempotencyService:
                 raise HTTPException(
                     status.HTTP_409_CONFLICT,
                     {
-                        "code": "IDEMPOTENCY_CONFLICT",
+                        "code": "IDEMPOTENCY_MISMATCH",
                         "type": "idempotency",
                         "message": "Idempotency key cannot be reused with a different request payload",
                     },
@@ -78,14 +81,21 @@ class IdempotencyService:
             if path and not existing.path:
                 existing.path = path
             if existing.status is IdempotencyStatus.PENDING:
-                raise HTTPException(
-                    status.HTTP_409_CONFLICT,
-                    {
-                        "code": "IDEMPOTENCY_CONFLICT",
-                        "type": "idempotency",
-                        "message": "Request with this Idempotency-Key is already in progress",
-                    },
-                )
+                deadline = datetime.now(tz=timezone.utc).timestamp() + max(wait_timeout_seconds, 0.0)
+                while existing.status is IdempotencyStatus.PENDING and datetime.now(tz=timezone.utc).timestamp() < deadline:
+                    await self.session.refresh(existing)
+                    if existing.status is not IdempotencyStatus.PENDING:
+                        break
+                    await asyncio.sleep(max(poll_interval_seconds, 0.01))
+                if existing.status is IdempotencyStatus.PENDING:
+                    raise HTTPException(
+                        status.HTTP_409_CONFLICT,
+                        {
+                            "code": "IDEMPOTENCY_IN_PROGRESS",
+                            "type": "idempotency",
+                            "message": "Request with this Idempotency-Key is already in progress",
+                        },
+                    )
             return existing, False
 
         now = datetime.now(tz=timezone.utc)
