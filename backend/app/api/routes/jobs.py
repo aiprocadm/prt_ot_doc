@@ -21,6 +21,7 @@ router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 class JobStepRead(BaseModel):
     code: str
+    step_name: str
     status: str
     attempt: int = 0
     max_attempts: int = 1
@@ -72,6 +73,10 @@ class JobCreateResponse(BaseModel):
     status: str
 
 
+def _status_value(raw: Any) -> str:
+    return raw.value if hasattr(raw, "value") else str(raw)
+
+
 @router.post("", response_model=JobCreateResponse, status_code=status.HTTP_202_ACCEPTED)
 async def create_job(
     payload: JobCreateRequest,
@@ -111,9 +116,9 @@ async def create_job(
         idempotency_key=idem_key,
         request_hash=request_hash,
     )
-    await idem_service.store_success(record, status_code=status.HTTP_202_ACCEPTED, body={"job_id": job.id, "status": str(job.status)})
+    await idem_service.store_success(record, status_code=status.HTTP_202_ACCEPTED, body={"job_id": job.id, "status": _status_value(job.status)})
     await session.commit()
-    return JobCreateResponse(job_id=job.id, status=str(job.status))
+    return JobCreateResponse(job_id=job.id, status=_status_value(job.status))
 
 
 class JobListRead(BaseModel):
@@ -136,7 +141,7 @@ async def get_job(job_id: str, session: AsyncSession = Depends(get_session), ten
         job=JobEnvelopeRead(
             id=job.id,
             kind=job.kind,
-            status=str(job.status),
+            status=_status_value(job.status),
             started_at=job.started_at,
             ended_at=job.ended_at,
             error_code=job.error_code,
@@ -145,7 +150,7 @@ async def get_job(job_id: str, session: AsyncSession = Depends(get_session), ten
             profile_id=job.profile_id or job.pipeline_profile_id,
             created_by=job.created_by,
         ),
-        steps=[JobStepRead(code=s.step_code, status=str(s.status), attempt=s.attempts, max_attempts=s.max_attempts, started_at=s.started_at, ended_at=s.ended_at, input_ref=s.input_ref, output_ref=s.output_ref, error_code=s.error_code, error_payload=s.error_payload) for s in steps],
+        steps=[JobStepRead(code=s.step_code, step_name=s.step_code, status=_status_value(s.status), attempt=s.attempts, max_attempts=s.max_attempts, started_at=s.started_at, ended_at=s.ended_at, input_ref=s.input_ref, output_ref=s.output_ref, error_code=s.error_code, error_payload=s.error_payload) for s in steps],
         logs=[JobLogRead(timestamp=l.created_at, level=l.level, message=l.message, step_name=l.step_code, meta_json=l.meta_json) for l in logs],
         result={"document_version_id": job.result_document_version_id, "files": artifact_map["all"], "artifacts": artifact_map} if artifacts or job.result_document_version_id else None,
     )
@@ -184,7 +189,7 @@ async def list_jobs(
     if len(rows) > limit:
         next_cursor = rows[limit - 1].created_at.isoformat() if rows[limit - 1].created_at else None
         rows = rows[:limit]
-    return JobListRead(items=[JobEnvelopeRead(id=job.id, kind=job.kind, status=str(job.status), correlation_id=job.correlation_id, started_at=job.started_at, ended_at=job.ended_at, error_code=job.error_code, error_payload=job.error_payload, profile_id=job.profile_id or job.pipeline_profile_id, created_by=job.created_by) for job in rows], next_cursor=next_cursor)
+    return JobListRead(items=[JobEnvelopeRead(id=job.id, kind=job.kind, status=_status_value(job.status), correlation_id=job.correlation_id, started_at=job.started_at, ended_at=job.ended_at, error_code=job.error_code, error_payload=job.error_payload, profile_id=job.profile_id or job.pipeline_profile_id, created_by=job.created_by) for job in rows], next_cursor=next_cursor)
 
 
 @router.post("/{job_id}:cancel", response_model=JobRead)
