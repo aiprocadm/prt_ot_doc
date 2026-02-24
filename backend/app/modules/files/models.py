@@ -51,6 +51,7 @@ class FileObject(TenantBase, TimestampMixin, SoftDeleteMixin, VersionedMixin, UU
 class FileVersion(TenantBase, TimestampMixin, VersionedMixin, UUIDMixin):
     __tablename__ = "file_versions"
     __tenant_model__ = True
+    __table_args__ = {"extend_existing": True}
 
     tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=False, index=True)
     file_id: Mapped[str] = mapped_column(String(36), ForeignKey("file_objects.id"), nullable=False, index=True)

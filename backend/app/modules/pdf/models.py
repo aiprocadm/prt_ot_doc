@@ -35,6 +35,7 @@ class FileVersion(TenantBaseModel):
     __table_args__ = (
         Index("ix_file_versions_tenant_sha256", "tenant_id", "sha256"),
         Index("ix_file_versions_tenant_updated", "tenant_id", "updated_at"),
+        {"extend_existing": True},
     )
 
 
