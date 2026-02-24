@@ -5,6 +5,7 @@ import zipfile
 from datetime import datetime, timezone
 from io import BytesIO
 from typing import Any
+from xml.sax.saxutils import escape
 
 CP_NS = "http://schemas.openxmlformats.org/officeDocument/2006/custom-properties"
 VT_NS = "http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"
@@ -40,9 +41,10 @@ def build_passport(
 def _passport_rows(passport: dict[str, Any]) -> str:
     rows = []
     for key, val in passport.items():
-        value = "" if val is None else str(val)
+        value = "" if val is None else escape(str(val))
+        safe_key = escape(str(key))
         rows.append(
-            f"<w:tr><w:tc><w:p><w:r><w:t>{key}</w:t></w:r></w:p></w:tc>"
+            f"<w:tr><w:tc><w:p><w:r><w:t>{safe_key}</w:t></w:r></w:p></w:tc>"
             f"<w:tc><w:p><w:r><w:t>{value}</w:t></w:r></w:p></w:tc></w:tr>"
         )
     return "".join(rows)
@@ -60,8 +62,7 @@ def _visible_block(passport: dict[str, Any]) -> str:
 def _hidden_paragraph(passport: dict[str, Any]) -> str:
     payload_json = json.dumps(passport, ensure_ascii=False, sort_keys=True)
     return (
-        f'<w:p><w:r><w:rPr><w:vanish/></w:rPr><w:t>PTD-PASSPORT:{payload_json}</w:t></w:r></w:p>'
-        f'<w:p><w:r><w:t>PTD-PASSPORT:{payload_json}</w:t></w:r></w:p>'
+        f'<w:p><w:r><w:rPr><w:vanish/></w:rPr><w:t>{escape(f"PTD-PASSPORT:{payload_json}")}</w:t></w:r></w:p>'
     )
 
 
@@ -72,7 +73,8 @@ def embed_passport_docx(
     visible: bool,
     qr_url: str | None = None,
 ) -> None:
-    _ = qr_url
+    if qr_url:
+        passport = {**passport, "qr_url": qr_url}
     in_bytes = BytesIO(open(docx_path, "rb").read())
     out = BytesIO()
     with zipfile.ZipFile(in_bytes, "r") as zin, zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zout:
@@ -95,7 +97,7 @@ def embed_passport_docx(
                 continue
             zout.writestr(item, data)
 
-        passport_json = json.dumps(passport, ensure_ascii=False, sort_keys=True)
+        passport_json = escape(json.dumps(passport, ensure_ascii=False, sort_keys=True))
         custom_xml = f'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Properties xmlns="{CP_NS}" xmlns:vt="{VT_NS}">
   <property fmtid="{FMTID}" pid="2" name="passport_json"><vt:lpwstr>{passport_json}</vt:lpwstr></property>
