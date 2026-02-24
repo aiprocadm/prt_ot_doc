@@ -457,22 +457,40 @@ def scoped_query(
 ) -> Select[Any]:
     filters = []
     scoped_fields = 0
+    normalized_resource = (resource or getattr(model, "__tablename__", "") or "").lower()
+
     if hasattr(model, "company_id"):
         scoped_fields += 1
         if actor.company_ids:
             filters.append(model.company_id.in_(actor.company_ids))
+    elif normalized_resource in {"company", "companies"} and hasattr(model, "id"):
+        scoped_fields += 1
+        if actor.company_ids:
+            filters.append(model.id.in_(actor.company_ids))
     if hasattr(model, "site_id"):
         scoped_fields += 1
         if actor.site_ids:
             filters.append(model.site_id.in_(actor.site_ids))
+    elif normalized_resource in {"site", "sites"} and hasattr(model, "id"):
+        scoped_fields += 1
+        if actor.site_ids:
+            filters.append(model.id.in_(actor.site_ids))
     if hasattr(model, "project_id"):
         scoped_fields += 1
         if actor.project_ids:
             filters.append(model.project_id.in_(actor.project_ids))
+    elif normalized_resource in {"project", "projects"} and hasattr(model, "id"):
+        scoped_fields += 1
+        if actor.project_ids:
+            filters.append(model.id.in_(actor.project_ids))
     if hasattr(model, "contractor_id"):
         scoped_fields += 1
         if actor.contractor_ids:
             filters.append(model.contractor_id.in_(actor.contractor_ids))
+    elif normalized_resource in {"contractor", "contractors"} and hasattr(model, "id"):
+        scoped_fields += 1
+        if actor.contractor_ids:
+            filters.append(model.id.in_(actor.contractor_ids))
     if hasattr(model, "status") and actor.allowed_statuses:
         filters.append(model.status.in_(actor.allowed_statuses))
     if hasattr(model, "risk_level") and actor.max_risk_level is not None:
@@ -482,7 +500,6 @@ def scoped_query(
     if filters:
         query = query.where(and_(*filters))
 
-    normalized_resource = (resource or "").lower()
     if (
         scoped_fields == 0
         and normalized_resource in SCOPED_RESOURCES
