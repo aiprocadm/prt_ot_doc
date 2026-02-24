@@ -139,6 +139,8 @@ class DocGenerateRequest(BaseModel):
     input_source_id: str | None = Field(default=None)
     inline_data: dict[str, Any] | None = Field(default=None)
     options: dict[str, Any] = Field(default_factory=dict)
+    visible_passport: bool = Field(default=True)
+    npa_binding_id: str | None = Field(default=None)
 
     @model_validator(mode="after")
     def _ensure_identifier(self) -> "DocGenerateRequest":
@@ -300,6 +302,9 @@ async def _resolve_run(
     payload_hash: str,
     current_user: User,
     context: dict[str, Any],
+    correlation_id: str,
+    npa_binding_id: str | None,
+    visible_passport: bool,
 ) -> tuple[PipelineRun, bool]:
     stmt = select(PipelineRun).where(
         PipelineRun.tenant_id == tenant.id,
@@ -340,6 +345,9 @@ async def _resolve_run(
             "person_id": person.id if person else None,
             "initiated_by": current_user.id,
             "payload_hash": payload_hash,
+            "correlation_id": correlation_id,
+            "npa_binding_id": npa_binding_id,
+            "visible_passport": visible_passport,
         },
     )
     session.add(run)
@@ -492,6 +500,9 @@ async def generate_document(
             payload_hash=payload_hash,
             current_user=current_user,
             context=payload.data,
+            correlation_id=request.headers.get("x-correlation-id") or get_trace_id(),
+            npa_binding_id=payload.npa_binding_id,
+            visible_passport=payload.visible_passport,
         )
 
         if created_run:

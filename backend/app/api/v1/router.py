@@ -731,7 +731,7 @@ async def render_preview(payload: RenderPreviewRequest, session: SessionDep, ten
     storage = FileStorageService.default()
     source = storage.get(tv.file_id or tv.payload_key)
     correlation_id = get_trace_id(request)
-    passport = build_passport(code=template.code, version=tv.version, tenant_id=tenant.slug, generated_by="api_user", correlation_id=correlation_id, data=payload.data)
+    passport = build_passport(code=template.code, version=tv.version, tenant_id=tenant.slug, generated_by="api_user", correlation_id=correlation_id, data=payload.data, options={"visible_passport": payload.visible_passport}, npa_binding_id=payload.npa_binding_id)
     rendered = render_preview_docx(template_bytes=source, data=payload.data, passport=passport, visible_passport=payload.visible_passport)
     rendered_sha = hashlib.sha256(rendered).hexdigest()
     out_key = f"{tenant.slug}/documents/preview/{uuid.uuid4()}/rendered.docx"
