@@ -20,6 +20,35 @@ def test_field_level_diff_masks_pii_and_drops_secrets() -> None:
     # service-level sanitizer removes secret keys when persisting
 
 
+def test_field_level_diff_collections_tracks_added_removed_updated() -> None:
+    diff = field_level_diff(
+        {"items": [{"id": "1", "name": "A"}, {"id": "2", "name": "B"}]},
+        {"items": [{"id": "1", "name": "A2"}, {"id": "3", "name": "C"}]},
+    )
+    assert diff["collections"]["items"]["added"] == [{"id": "3", "name": "C"}]
+    assert diff["collections"]["items"]["removed"] == [{"id": "2", "name": "B"}]
+    assert diff["collections"]["items"]["updated"][0]["id"] == "1"
+
+
+@pytest.mark.anyio("asyncio")
+async def test_audit_delete_uses_delete_action(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    async with sessionmaker() as session:
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
+        audit = AuditService(session)
+        row = await audit.audit_delete(
+            tenant_id=str(tenant.id),
+            entity_type="Template",
+            entity_id="tpl-9",
+            before={"status": "active"},
+            meta={"correlation_id": "corr-delete", "ip": "127.0.0.1"},
+            actor={"id": None, "type": "system"},
+        )
+        assert row.action == "delete"
+        await session.rollback()
+
+
 @pytest.mark.anyio("asyncio")
 async def test_audit_chain_verification_ok(sessionmaker: async_sessionmaker[AsyncSession]) -> None:
     async with sessionmaker() as session:

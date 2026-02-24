@@ -84,6 +84,47 @@ def _flatten(data: Mapping[str, Any], prefix: str = "") -> dict[str, Any]:
     return result
 
 
+def _list_collection_diff(before: list[Any], after: list[Any]) -> dict[str, Any]:
+    """Diff list payloads by item id when possible."""
+
+    if not all(isinstance(item, Mapping) for item in [*before, *after]):
+        if before != after:
+            return {
+                "added": [item for item in after if item not in before],
+                "removed": [item for item in before if item not in after],
+                "updated": [],
+            }
+        return {"added": [], "removed": [], "updated": []}
+
+    def _item_key(item: Mapping[str, Any]) -> str | None:
+        for candidate in ("id", "uuid", "code"):
+            if item.get(candidate) is not None:
+                return str(item.get(candidate))
+        return None
+
+    before_by_id = {
+        key: dict(item) for item in before if isinstance(item, Mapping) and (key := _item_key(item))
+    }
+    after_by_id = {
+        key: dict(item) for item in after if isinstance(item, Mapping) and (key := _item_key(item))
+    }
+    if not before_by_id and not after_by_id:
+        if before != after:
+            return {"added": list(after), "removed": list(before), "updated": []}
+        return {"added": [], "removed": [], "updated": []}
+
+    added = [after_by_id[item_id] for item_id in sorted(after_by_id.keys() - before_by_id.keys())]
+    removed = [
+        before_by_id[item_id] for item_id in sorted(before_by_id.keys() - after_by_id.keys())
+    ]
+    updated: list[dict[str, Any]] = []
+    for item_id in sorted(before_by_id.keys() & after_by_id.keys()):
+        item_diff = field_level_diff(before_by_id[item_id], after_by_id[item_id])
+        if item_diff.get("fields"):
+            updated.append({"id": item_id, "fields": item_diff["fields"]})
+    return {"added": added, "removed": removed, "updated": updated}
+
+
 def field_level_diff(
     before: Mapping[str, Any] | None,
     after: Mapping[str, Any] | None,
@@ -95,8 +136,10 @@ def field_level_diff(
     added: dict[str, Any] = {}
     removed: dict[str, Any] = {}
     masked: list[str] = []
-    before_flat = _flatten(_normalize_payload(before))
-    after_flat = _flatten(_normalize_payload(after))
+    normalized_before = _normalize_payload(before)
+    normalized_after = _normalize_payload(after)
+    before_flat = _flatten(normalized_before)
+    after_flat = _flatten(normalized_after)
     keys = set(before_flat.keys()).union(after_flat.keys())
     for key in keys:
         if key in excluded:
@@ -116,10 +159,33 @@ def field_level_diff(
             else:
                 changed[key] = {"from": from_val, "to": to_val}
 
-    fields = {**{k: {"from": v.get("from"), "to": v.get("to")} for k, v in changed.items()}, **{k: {"from": None, "to": v.get("to")} for k, v in added.items()}, **{k: {"from": v.get("from"), "to": None} for k, v in removed.items()}}
+    fields = {
+        **{k: {"from": v.get("from"), "to": v.get("to")} for k, v in changed.items()},
+        **{k: {"from": None, "to": v.get("to")} for k, v in added.items()},
+        **{k: {"from": v.get("from"), "to": None} for k, v in removed.items()},
+    }
+
+    collections: dict[str, Any] = {}
+    collection_keys = {
+        key
+        for key in set(normalized_before.keys()) | set(normalized_after.keys())
+        if isinstance(normalized_before.get(key), list)
+        or isinstance(normalized_after.get(key), list)
+    }
+    for key in sorted(collection_keys):
+        before_list = (
+            normalized_before.get(key) if isinstance(normalized_before.get(key), list) else []
+        )
+        after_list = (
+            normalized_after.get(key) if isinstance(normalized_after.get(key), list) else []
+        )
+        diff = _list_collection_diff(before_list, after_list)
+        if diff["added"] or diff["removed"] or diff["updated"]:
+            collections[key] = diff
+
     return {
         "fields": fields,
-        "collections": {},
+        "collections": collections,
         "changed": changed,
         "added": added,
         "removed": removed,
@@ -148,7 +214,9 @@ class AuditService:
 
     @staticmethod
     def _canonical_hash_payload(payload: Mapping[str, Any], prev_hash: str | None) -> str:
-        raw = json.dumps(_normalize_payload(payload), sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+        raw = json.dumps(
+            _normalize_payload(payload), sort_keys=True, ensure_ascii=False, separators=(",", ":")
+        )
         return hashlib.sha256(f"{raw}|{prev_hash or ''}".encode("utf-8")).hexdigest()
 
     async def log_event(
@@ -177,7 +245,14 @@ class AuditService:
 
         if not settings.audit_enabled:
             logger.debug("audit.disabled")
-            return AuditLog(tenant_id=tenant_id, action=action, object_type=object_type, object_id=object_id, user_id=user_id, ip=ip or "unknown")
+            return AuditLog(
+                tenant_id=tenant_id,
+                action=action,
+                object_type=object_type,
+                object_id=object_id,
+                user_id=user_id,
+                ip=ip or "unknown",
+            )
         payload = _sanitize_mapping(details)
         safe_diff = _sanitize_mapping(changed_fields)
         correlation_id = request_id or get_trace_id(default="unknown")
@@ -209,7 +284,9 @@ class AuditService:
             changed_fields=safe_diff,
             when=when or datetime.now(tz=timezone.utc),
             details=payload,
-            resource_attrs=_sanitize_mapping(payload.get("resource_attrs") if isinstance(payload, Mapping) else {}),
+            resource_attrs=_sanitize_mapping(
+                payload.get("resource_attrs") if isinstance(payload, Mapping) else {}
+            ),
             actor_type=actor_type,
             actor_email=actor_email,
             parent_type=parent_type,
@@ -272,8 +349,16 @@ class AuditService:
             prev = row.hash
         return {"ok": not broken, "checked": len(rows), "broken_ids": broken}
 
-
-    async def audit_create(self, *, tenant_id: str, entity_type: str, entity_id: str, after: Mapping[str, Any], meta: Mapping[str, Any] | None, actor: Mapping[str, Any]) -> AuditLog:
+    async def audit_create(
+        self,
+        *,
+        tenant_id: str,
+        entity_type: str,
+        entity_id: str,
+        after: Mapping[str, Any],
+        meta: Mapping[str, Any] | None,
+        actor: Mapping[str, Any],
+    ) -> AuditLog:
         return await self.log_event(
             tenant_id=tenant_id,
             action="create",
@@ -290,7 +375,17 @@ class AuditService:
             after_hash=compute_snapshot_hash(after),
         )
 
-    async def audit_update(self, *, tenant_id: str, entity_type: str, entity_id: str, before: Mapping[str, Any], after: Mapping[str, Any], meta: Mapping[str, Any] | None, actor: Mapping[str, Any]) -> AuditLog:
+    async def audit_update(
+        self,
+        *,
+        tenant_id: str,
+        entity_type: str,
+        entity_id: str,
+        before: Mapping[str, Any],
+        after: Mapping[str, Any],
+        meta: Mapping[str, Any] | None,
+        actor: Mapping[str, Any],
+    ) -> AuditLog:
         return await self.log_event(
             tenant_id=tenant_id,
             action="update",
@@ -308,10 +403,19 @@ class AuditService:
             after_hash=compute_snapshot_hash(after),
         )
 
-    async def audit_delete(self, *, tenant_id: str, entity_type: str, entity_id: str, before: Mapping[str, Any], meta: Mapping[str, Any] | None, actor: Mapping[str, Any]) -> AuditLog:
+    async def audit_delete(
+        self,
+        *,
+        tenant_id: str,
+        entity_type: str,
+        entity_id: str,
+        before: Mapping[str, Any],
+        meta: Mapping[str, Any] | None,
+        actor: Mapping[str, Any],
+    ) -> AuditLog:
         return await self.log_event(
             tenant_id=tenant_id,
-            action="soft_delete",
+            action="delete",
             object_type=entity_type,
             object_id=entity_id,
             user_id=actor.get("id"),
@@ -320,9 +424,39 @@ class AuditService:
             ip=str(meta.get("ip", "unknown")) if meta else "unknown",
             request_id=(meta or {}).get("correlation_id"),
             user_agent=(meta or {}).get("user_agent"),
-            changed_fields=field_level_diff(before, {**dict(before), "deleted_at": datetime.now(tz=timezone.utc).isoformat()}),
+            changed_fields=field_level_diff(
+                before, {**dict(before), "deleted_at": datetime.now(tz=timezone.utc).isoformat()}
+            ),
             details={"meta": dict(meta or {})},
             before_hash=compute_snapshot_hash(before),
+        )
+
+    async def audit_restore(
+        self,
+        *,
+        tenant_id: str,
+        entity_type: str,
+        entity_id: str,
+        before: Mapping[str, Any],
+        after: Mapping[str, Any],
+        meta: Mapping[str, Any] | None,
+        actor: Mapping[str, Any],
+    ) -> AuditLog:
+        return await self.log_event(
+            tenant_id=tenant_id,
+            action="restore",
+            object_type=entity_type,
+            object_id=entity_id,
+            user_id=actor.get("id"),
+            actor_email=actor.get("email"),
+            actor_type=str(actor.get("type", "user")),
+            ip=str(meta.get("ip", "unknown")) if meta else "unknown",
+            request_id=(meta or {}).get("correlation_id"),
+            user_agent=(meta or {}).get("user_agent"),
+            changed_fields=field_level_diff(before, after),
+            details={"meta": dict(meta or {})},
+            before_hash=compute_snapshot_hash(before),
+            after_hash=compute_snapshot_hash(after),
         )
 
     async def log(
@@ -340,11 +474,7 @@ class AuditService:
     ) -> AuditLog:
         """Backward-compatible wrapper for logging audit events."""
 
-        tenant_id = str(
-            self.session.info.get("tenant_id")
-            or self.session.info.get("tenant")
-            or ""
-        )
+        tenant_id = str(self.session.info.get("tenant_id") or self.session.info.get("tenant") or "")
         return await self.log_event(
             tenant_id=tenant_id,
             action=action,
