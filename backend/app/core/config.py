@@ -761,16 +761,16 @@ def get_settings(*, force_reload: bool = False) -> Settings:
 
 def bootstrap(role: Literal["api", "worker"]) -> Settings:
     settings = get_settings(force_reload=True)
-    required_vars = [
-        "SECRET_KEY",
-        "DATABASE_URL",
-        "REDIS_URL",
-        "S3_ENDPOINT",
-        "S3_ACCESS_KEY",
-        "S3_SECRET_KEY",
-        "S3_BUCKET",
-    ]
-    missing = [name for name in required_vars if not (os.getenv(name) or "").strip()]
+    required_values = {
+        "SECRET_KEY": settings.secret_key,
+        "DATABASE_URL": settings.database_url,
+        "REDIS_URL": settings.redis_url,
+        "S3_ENDPOINT": settings.s3_endpoint,
+        "S3_ACCESS_KEY": settings.s3_access_key,
+        "S3_SECRET_KEY": settings.s3_secret_key,
+        "S3_BUCKET": settings.s3_bucket,
+    }
+    missing = [name for name, value in required_values.items() if not str(value).strip()]
     if missing:
         raise RuntimeError(
             "Missing required environment variables for "
