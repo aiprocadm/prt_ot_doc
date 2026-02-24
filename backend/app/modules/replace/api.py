@@ -125,7 +125,7 @@ async def _launch(document_version_id: str, payload: ReplaceLaunchRequest, mode:
         mode=mode,
         options=payload.options.model_dump(),
         report_json=execution.report,
-        before_file_id=version.file_key,
+        before_file_id=version.file_id or version.file_key,
         after_file_id=None,
         status=ReplaceRunStatus.SUCCEEDED.value,
     )
@@ -150,7 +150,7 @@ async def _launch(document_version_id: str, payload: ReplaceLaunchRequest, mode:
             storage=storage,
             key_suffix="replace",
         )
-        run.after_file_id = new_version.file_key
+        run.after_file_id = new_version.file_id or new_version.file_key
         response.new_document_version_id = new_version.id
         response.document_id = new_version.document_id
         response.version_number = new_version.version_number
@@ -217,6 +217,8 @@ async def replace_rollback(
         target_version = (await session.execute(stmt)).scalar_one_or_none()
     if target_version is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "target_document_version_id or rollback_to_version_number is required")
+    if target_version.document_id != source_version.document_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Target document version belongs to another document")
 
     storage = FileStorageService.default()
     restored_bytes = storage.get(target_version.file_key)
