@@ -188,6 +188,7 @@ async def list_jobs(
 
 
 @router.post("/{job_id}:cancel", response_model=JobRead)
+@router.post("/{job_id}/cancel", response_model=JobRead)
 async def cancel_job(job_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> JobRead:
     job = await session.get(DocumentJob, job_id)
     if job is None or str(job.tenant_id) != str(tenant.id):
