@@ -22,6 +22,11 @@ class UploadCompleteRequest(BaseModel):
     file_id: str
     version_id: str
 
+class UploadCompleteResponse(BaseModel):
+    version_id: str
+    status: str
+    av_status: str
+
 
 class DownloadURLResponse(BaseModel):
     url: str
