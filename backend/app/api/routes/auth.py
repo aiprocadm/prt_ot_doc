@@ -51,8 +51,10 @@ class MeResponse(BaseModel):
     tenant_id: str | None = None
     tenant_slug: str | None = None
     roles: list[str] = Field(default_factory=list)
+    permissions: list[str] = Field(default_factory=list)
     company_id: str | None = None
     attributes: dict[str, list[str]] = Field(default_factory=dict)
+    abac_scopes: dict[str, list[str] | int | None] = Field(default_factory=dict)
     abilities: list[str] = Field(default_factory=list)
 
 
@@ -144,6 +146,7 @@ async def me(access: AccessContext = Depends(rbac())) -> MeResponse:
     abilities = sorted(
         {perm for role in context.roles for perm in ROLE_PERMISSIONS.get(role, set())}
     )
+    permissions = sorted({perm.replace(":", ".") for perm in abilities})
     return MeResponse(
         sub=context.sub,
         email=access.user.email,
@@ -151,6 +154,7 @@ async def me(access: AccessContext = Depends(rbac())) -> MeResponse:
         tenant_id=context.tenant_id,
         tenant_slug=access.tenant_slug,
         roles=context.roles,
+        permissions=permissions,
         company_id=access.company_id,
         abilities=abilities,
         attributes={
@@ -158,6 +162,13 @@ async def me(access: AccessContext = Depends(rbac())) -> MeResponse:
             "site_ids": [str(v) for v in access.claims.get("site_ids", [])],
             "project_ids": [str(v) for v in access.claims.get("project_ids", [])],
             "contractor_ids": [str(v) for v in access.claims.get("contractor_ids", [])],
+        },
+        abac_scopes={
+            "company_ids": [str(v) for v in access.claims.get("company_ids", [])],
+            "site_ids": [str(v) for v in access.claims.get("site_ids", [])],
+            "project_ids": [str(v) for v in access.claims.get("project_ids", [])],
+            "contractor_ids": [str(v) for v in access.claims.get("contractor_ids", [])],
+            "risk_level_max": access.claims.get("max_risk_level"),
         },
     )
 
@@ -178,8 +189,7 @@ async def me_permissions(access: AccessContext = Depends(rbac())) -> Permissions
             "site_ids": [str(v) for v in access.claims.get("site_ids", [])],
             "project_ids": [str(v) for v in access.claims.get("project_ids", [])],
             "contractor_ids": [str(v) for v in access.claims.get("contractor_ids", [])],
-            "allowed_statuses": [str(v) for v in access.claims.get("allowed_statuses", [])],
-            "max_risk_level": access.claims.get("max_risk_level"),
+            "risk_level_max": access.claims.get("max_risk_level"),
         },
     )
 

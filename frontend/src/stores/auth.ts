@@ -40,7 +40,10 @@ const hydratePermissions = async (user: UserDto | null): Promise<UserDto | null>
       attributes: {
         ...(user.attributes ?? {}),
         company_ids: data.abac_scopes?.company_ids ?? user.attributes?.company_ids,
-        site_ids: data.abac_scopes?.site_ids ?? user.attributes?.site_ids
+        site_ids: data.abac_scopes?.site_ids ?? user.attributes?.site_ids,
+        project_ids: data.abac_scopes?.project_ids ?? user.attributes?.project_ids,
+        contractor_ids: data.abac_scopes?.contractor_ids ?? user.attributes?.contractor_ids,
+        risk_level_max: data.abac_scopes?.risk_level_max ?? user.attributes?.risk_level_max
       }
     };
   } catch {

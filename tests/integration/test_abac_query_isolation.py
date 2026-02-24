@@ -10,3 +10,10 @@ def test_query_filters_apply_company_scope() -> None:
     query = apply_abac_filters(select(Company), subject, Company)
     compiled = str(query.compile(compile_kwargs={"literal_binds": True}))
     assert "company-a" in compiled
+
+
+def test_query_filters_empty_scope_returns_zero_rows() -> None:
+    subject = Subject(user_id="u1", tenant_id="t1", roles=("manager",))
+    query = apply_abac_filters(select(Company), subject, Company)
+    compiled = str(query.compile(compile_kwargs={"literal_binds": True})).lower()
+    assert "false" in compiled or "0 = 1" in compiled

@@ -9,6 +9,9 @@ export interface UserDto extends BaseEntityDto {
     tenant_id?: string;
     company_ids?: string[];
     site_ids?: string[];
+    project_ids?: string[];
+    contractor_ids?: string[];
+    risk_level_max?: number | null;
     is_admin?: boolean;
   };
   last_login_at?: string;
@@ -43,7 +46,6 @@ export interface PermissionsResponseDto {
     site_ids?: string[];
     project_ids?: string[];
     contractor_ids?: string[];
-    allowed_statuses?: string[];
-    max_risk_level?: number | null;
+    risk_level_max?: number | null;
   };
 }
