@@ -1,21 +1,45 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.idempotency import compute_request_hash
 from app.models.models import Tenant
 from app.modules.files import service
 from app.modules.files.schemas import DownloadURLResponse, UploadCompleteRequest, UploadInitRequest, UploadInitResponse
+from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 
 router = APIRouter()
 
 
 @router.post(":upload-init", response_model=UploadInitResponse)
-async def upload_init(payload: UploadInitRequest, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> UploadInitResponse:
+async def upload_init(
+    payload: UploadInitRequest,
+    response: Response,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> UploadInitResponse:
+    if not idempotency_key:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Idempotency-Key is required")
+    request_hash = compute_request_hash(payload.model_dump(mode="json"))
+    idem = IdempotencyService(session=session, tenant_id=str(tenant.id), endpoint="files.upload_init")
+    key = normalize_idempotency_key(idempotency_key)
+    record, created = await idem.acquire(
+        key=key,
+        request_hash=request_hash,
+        method="POST",
+        path="/v1/files:upload-init",
+    )
+    if not created:
+        return await idem.respond_from_store(record, model=UploadInitResponse, response=response)
+
     obj, version, url = await service.create_upload_session(session=session, tenant_id=str(tenant.id), payload=payload, user_id=None)
+    body = UploadInitResponse(file_id=obj.id, version_id=version.id, upload_url=url, s3_key=version.s3_key)
+    await idem.store_success(record, status_code=status.HTTP_200_OK, body=body.model_dump())
     await session.commit()
-    return UploadInitResponse(file_id=obj.id, version_id=version.id, upload_url=url, s3_key=version.s3_key)
+    return body
 
 
 @router.post(":upload-complete")

@@ -104,3 +104,52 @@ async def test_create_job_endpoint_with_idempotency(app_fixture, make_auth_heade
     resp2 = await client.post("/api/v1/jobs", json=payload, headers={**headers, "Idempotency-Key": "job-create-idem"})
     assert resp2.status_code == 202
     assert resp1.json()["job_id"] == resp2.json()["job_id"]
+
+
+@pytest.mark.anyio
+async def test_jobs_cancel_and_retry_slash_endpoints(app_fixture, make_auth_headers, sessionmaker, data_factory) -> None:
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        job = DocumentJob(
+            tenant_id=str(tenant.id),
+            kind="pipeline",
+            status=DocumentJobStatus.QUEUED.value,
+            pipeline_profile_id=None,
+            preset_id=None,
+            input_sha256="a" * 64,
+            request_hash="b" * 64,
+            idempotency_key="idem-job-slash",
+            template_code="TMP",
+            template_version=1,
+            correlation_id="corr-slash",
+            created_by="user-1",
+        )
+        session.add(job)
+        await session.flush()
+        session.add(
+            DocumentJobStep(
+                tenant_id=str(tenant.id),
+                job_id=job.id,
+                step_code="render_docx",
+                status=JobStepStatus.QUEUED.value,
+                attempts=0,
+                input_ref={"job_id": job.id},
+            )
+        )
+        await session.commit()
+        job_id = job.id
+
+    headers = await make_auth_headers()
+    transport = ASGITransport(app=app_fixture)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        canceled = await client.post(f"/api/v1/jobs/{job_id}/cancel", headers=headers)
+        assert canceled.status_code == 200
+        assert canceled.json()["job"]["status"] == DocumentJobStatus.CANCELED.value
+
+        retried = await client.post(
+            f"/api/v1/jobs/{job_id}/retry",
+            json={"retry_failed_only": False},
+            headers=headers,
+        )
+        assert retried.status_code == 200
+        assert retried.json()["job"]["id"] == job_id
