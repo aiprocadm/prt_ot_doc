@@ -7,18 +7,21 @@ from datetime import datetime, timezone
 from io import BytesIO, StringIO
 from uuid import uuid4
 
-from fastapi import APIRouter, File, Header, HTTPException, Query, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.dependencies import get_session, get_tenant_record
+from app.models.models import Tenant
 from app.modules.replace.engine import ReplaceOptions, replace_docx_bytes
+from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 
 router = APIRouter(prefix="/replace", tags=["replace"])
 
 _RUNS: dict[str, dict] = {}
 _REPORTS: dict[str, dict] = {}
 _FILES: dict[str, bytes] = {}
-_IDEMPOTENCY: dict[str, tuple[str, dict]] = {}
 
 
 class ReplaceOptionsPayload(BaseModel):
@@ -111,28 +114,31 @@ def _require_tenant(request: Request) -> None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "X-Tenant header is required")
 
 
-def _idem(key: str | None, req_hash: str) -> dict | None:
-    if not key:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            {
-                "code": "IDEMPOTENCY_KEY_REQUIRED",
-                "type": "idempotency",
-                "message": "Idempotency-Key header is required",
-            },
-        )
-    seen = _IDEMPOTENCY.get(key)
-    if seen is None:
-        return None
-    old_hash, response = seen
-    if old_hash != req_hash:
-        raise HTTPException(status.HTTP_409_CONFLICT, {"code": "IDEMPOTENCY_CONFLICT", "type": "idempotency", "message": "Idempotency-Key already used with different request payload"})
-    return response
-
-
-def _store_idem(key: str | None, req_hash: str, response: dict) -> None:
-    if key:
-        _IDEMPOTENCY[key] = (req_hash, response)
+async def _load_idempotency_response(
+    *,
+    key: str | None,
+    request: Request,
+    request_hash: str,
+    session: AsyncSession,
+    tenant: Tenant,
+    model: type[BaseModel],
+) -> tuple[IdempotencyService, object, bool, BaseModel | None]:
+    normalized_key = normalize_idempotency_key(key)
+    idempotency = IdempotencyService(
+        session=session,
+        tenant_id=str(tenant.id),
+        endpoint=f"{request.method}:{request.url.path}",
+    )
+    record, created = await idempotency.acquire(
+        key=normalized_key,
+        request_hash=request_hash,
+        method=request.method,
+        path=request.url.path,
+    )
+    if not created:
+        cached = await idempotency.respond_from_store(record, model=model)
+        return idempotency, record, created, cached
+    return idempotency, record, created, None
 
 
 def _build_report(run_id: str, hits: list[dict], mapping: dict[str, str], max_samples: int) -> tuple[str, dict]:
@@ -161,6 +167,8 @@ async def replace_dry_run(
     replace_map: UploadFile | None = File(default=None),
     options_json: str | None = Header(default=None, alias="X-Replace-Options"),
     _idempotency: str | None = Header(default=None, alias="Idempotency-Key"),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
 ) -> ReplaceDryRunResponse:
     _require_tenant(request)
     if not docx_file or not replace_map:
@@ -169,16 +177,24 @@ async def replace_dry_run(
     docx_bytes = await docx_file.read()
     mapping = _parse_map(await replace_map.read())
     req_hash = _request_hash(docx_bytes, mapping, options_payload, "dry-run")
-    cached = _idem(_idempotency, req_hash)
-    if cached:
-        return ReplaceDryRunResponse(**cached)
+    idempotency, record, _, cached = await _load_idempotency_response(
+        key=_idempotency,
+        request=request,
+        request_hash=req_hash,
+        session=session,
+        tenant=tenant,
+        model=ReplaceDryRunResponse,
+    )
+    if cached is not None:
+        return cached
     result = replace_docx_bytes(docx_bytes, mapping, _to_options(options_payload), apply_changes=False)
     run_id = str(uuid4())
     hits = [ReplaceDiffItem.model_validate({"from": h.from_text, "to": h.to_text, "part": h.part, "location": h.location, "before": h.before, "after": h.after, "context": h.context, "match_count": h.match_count}).model_dump(by_alias=True) for h in result.hits]
     report_id, data = _build_report(run_id, hits, mapping, options_payload.max_preview_samples)
     _RUNS[run_id] = {"id": run_id, "mode": "dry_run", "report_id": report_id, "status": "succeeded"}
     response = {"job_id": run_id, "report_id": report_id, "summary": data["summary"], "preview_samples": data["preview_samples"]}
-    _store_idem(_idempotency, req_hash, response)
+    await idempotency.store_success(record, status_code=status.HTTP_202_ACCEPTED, body=response)
+    await session.commit()
     return ReplaceDryRunResponse(**response)
 
 
@@ -191,6 +207,8 @@ async def replace_apply(
     backup: bool = Query(True),
     options_json: str | None = Header(default=None, alias="X-Replace-Options"),
     _idempotency: str | None = Header(default=None, alias="Idempotency-Key"),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
 ) -> ReplaceApplyResponse:
     _require_tenant(request)
     if not docx_file or not replace_map:
@@ -199,9 +217,16 @@ async def replace_apply(
     docx_bytes = await docx_file.read()
     mapping = _parse_map(await replace_map.read())
     req_hash = _request_hash(docx_bytes, mapping, options_payload, "apply")
-    cached = _idem(_idempotency, req_hash)
-    if cached:
-        return ReplaceApplyResponse(**cached)
+    idempotency, record, _, cached = await _load_idempotency_response(
+        key=_idempotency,
+        request=request,
+        request_hash=req_hash,
+        session=session,
+        tenant=tenant,
+        model=ReplaceApplyResponse,
+    )
+    if cached is not None:
+        return cached
     result = replace_docx_bytes(docx_bytes, mapping, _to_options(options_payload), apply_changes=True)
     run_id = str(uuid4())
     result_file_id = f"result:{run_id}.docx"
@@ -214,7 +239,8 @@ async def replace_apply(
     report_id, _ = _build_report(run_id, hits, mapping, options_payload.max_preview_samples)
     _RUNS[run_id] = {"id": run_id, "mode": "apply", "backup_file_id": backup_file_id, "result_file_id": result_file_id, "report_id": report_id, "status": "succeeded"}
     response = {"job_id": run_id, "result_file_id": result_file_id, "backup_file_id": backup_file_id, "report_id": report_id}
-    _store_idem(_idempotency, req_hash, response)
+    await idempotency.store_success(record, status_code=status.HTTP_202_ACCEPTED, body=response)
+    await session.commit()
     return ReplaceApplyResponse(**response)
 
 
@@ -226,6 +252,8 @@ async def replace_rollback(
     apply_job_id: str | None = Query(default=None),
     backup_file_id: str | None = Query(default=None),
     _idempotency: str | None = Header(default=None, alias="Idempotency-Key"),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
 ) -> ReplaceRollbackResponse:
     _require_tenant(request)
     target_job = apply_job_id or replace_run_id
@@ -236,15 +264,23 @@ async def replace_rollback(
     if not backup_file_id or backup_file_id not in _FILES:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Backup file not found")
     req_hash = hashlib.sha256(f"rollback:{target_job}:{backup_file_id}".encode()).hexdigest()
-    cached = _idem(_idempotency, req_hash)
-    if cached:
-        return ReplaceRollbackResponse(**cached)
+    idempotency, record, _, cached = await _load_idempotency_response(
+        key=_idempotency,
+        request=request,
+        request_hash=req_hash,
+        session=session,
+        tenant=tenant,
+        model=ReplaceRollbackResponse,
+    )
+    if cached is not None:
+        return cached
     run_id = str(uuid4())
     restored_file_id = f"restored:{run_id}.docx"
     _FILES[restored_file_id] = _FILES[backup_file_id]
     _RUNS[run_id] = {"id": run_id, "mode": "rollback", "restored_file_id": restored_file_id, "status": "succeeded"}
     response = {"job_id": run_id, "restored_file_id": restored_file_id}
-    _store_idem(_idempotency, req_hash, response)
+    await idempotency.store_success(record, status_code=status.HTTP_202_ACCEPTED, body=response)
+    await session.commit()
     return ReplaceRollbackResponse(**response)
 
 
