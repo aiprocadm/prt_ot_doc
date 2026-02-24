@@ -10,7 +10,6 @@ from typing import BinaryIO
 
 import pytest
 from botocore.exceptions import ClientError
-from moto import mock_aws
 from sqlalchemy import select
 
 from app.api.routes.files import MAX_UPLOAD_BYTES
@@ -67,7 +66,8 @@ def _configure_s3(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture()
 def aws() -> None:
-    with mock_aws():
+    moto = pytest.importorskip("moto", reason="moto is required for S3 integration tests")
+    with moto.mock_aws():
         s3.ensure_bucket()
         yield
 
