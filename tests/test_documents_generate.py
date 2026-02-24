@@ -6,7 +6,8 @@ from io import BytesIO
 import pytest
 from docx import Document as DocxDocument
 from httpx import AsyncClient
-from moto import mock_aws
+
+mock_aws = pytest.importorskip("moto").mock_aws
 from sqlalchemy import select
 
 from app.core.config import get_settings
