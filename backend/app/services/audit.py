@@ -3,11 +3,13 @@ from __future__ import annotations
 import logging
 import hashlib
 import re
+import json
 from datetime import date, datetime, timezone
 from enum import Enum
 from typing import Any, Mapping
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.core.tracing import get_trace_id
 from app.core.config import get_settings
@@ -17,6 +19,7 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 _PII_KEY_RE = re.compile(r"(email|phone|passport|snils|inn|birth|address)", re.IGNORECASE)
+_SECRET_KEY_RE = re.compile(r"(password|token|secret|key|signature)", re.IGNORECASE)
 
 
 def _normalize_value(value: Any) -> Any:
@@ -33,6 +36,25 @@ def _normalize_value(value: Any) -> Any:
 
 def _normalize_payload(payload: Mapping[str, Any] | None) -> dict[str, Any]:
     return {key: _normalize_value(val) for key, val in (payload or {}).items()}
+
+
+def _sanitize_mapping(payload: Mapping[str, Any] | None) -> dict[str, Any]:
+    sanitized: dict[str, Any] = {}
+    for key, value in (payload or {}).items():
+        if _SECRET_KEY_RE.search(str(key)):
+            continue
+        if isinstance(value, Mapping):
+            sanitized[key] = _sanitize_mapping(value)
+        elif isinstance(value, list):
+            sanitized[key] = [
+                _sanitize_mapping(item) if isinstance(item, Mapping) else _normalize_value(item)
+                for item in value
+            ]
+        elif _PII_KEY_RE.search(str(key)):
+            sanitized[key] = _mask_value(value)
+        else:
+            sanitized[key] = _normalize_value(value)
+    return sanitized
 
 
 def _mask_value(value: Any) -> Any:
@@ -93,7 +115,16 @@ def field_level_diff(
                 removed[key] = {"from": from_val}
             else:
                 changed[key] = {"from": from_val, "to": to_val}
-    return {"changed": changed, "added": added, "removed": removed, "masked": sorted(set(masked))}
+
+    fields = {**{k: {"from": v.get("from"), "to": v.get("to")} for k, v in changed.items()}, **{k: {"from": None, "to": v.get("to")} for k, v in added.items()}, **{k: {"from": v.get("from"), "to": None} for k, v in removed.items()}}
+    return {
+        "fields": fields,
+        "collections": {},
+        "changed": changed,
+        "added": added,
+        "removed": removed,
+        "masked": sorted(set(masked)),
+    }
 
 
 def compute_snapshot_hash(payload: Mapping[str, Any] | None) -> str | None:
@@ -110,6 +141,15 @@ class AuditService:
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
+
+    async def _prev_hash(self) -> str | None:
+        stmt = select(AuditLog.hash).order_by(AuditLog.when.desc()).limit(1)
+        return (await self.session.execute(stmt)).scalar_one_or_none()
+
+    @staticmethod
+    def _canonical_hash_payload(payload: Mapping[str, Any], prev_hash: str | None) -> str:
+        raw = json.dumps(_normalize_payload(payload), sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+        return hashlib.sha256(f"{raw}|{prev_hash or ''}".encode("utf-8")).hexdigest()
 
     async def log_event(
         self,
@@ -138,7 +178,23 @@ class AuditService:
         if not settings.audit_enabled:
             logger.debug("audit.disabled")
             return AuditLog(tenant_id=tenant_id, action=action, object_type=object_type, object_id=object_id, user_id=user_id, ip=ip or "unknown")
-        payload = _normalize_payload(details)
+        payload = _sanitize_mapping(details)
+        safe_diff = _sanitize_mapping(changed_fields)
+        correlation_id = request_id or get_trace_id(default="unknown")
+        prev_hash = await self._prev_hash()
+        hash_payload = {
+            "tenant_id": tenant_id,
+            "actor_type": actor_type,
+            "user_id": user_id,
+            "action": action,
+            "object_type": object_type,
+            "object_id": object_id,
+            "correlation_id": correlation_id,
+            "diff": safe_diff,
+            "meta": payload,
+            "ts": (when or datetime.now(tz=timezone.utc)).isoformat(),
+        }
+        row_hash = self._canonical_hash_payload(hash_payload, prev_hash)
         entry = AuditLog(
             tenant_id=tenant_id,
             user_id=user_id,
@@ -146,18 +202,22 @@ class AuditService:
             object_type=object_type,
             object_id=object_id,
             ip=ip or "unknown",
-            request_id=request_id or get_trace_id(),
+            request_id=correlation_id,
+            correlation_id=correlation_id,
             session_id=session_id,
             user_agent=user_agent,
-            changed_fields=_normalize_payload(changed_fields),
+            changed_fields=safe_diff,
             when=when or datetime.now(tz=timezone.utc),
             details=payload,
+            resource_attrs=_sanitize_mapping(payload.get("resource_attrs") if isinstance(payload, Mapping) else {}),
             actor_type=actor_type,
             actor_email=actor_email,
             parent_type=parent_type,
             parent_id=parent_id,
             before_hash=before_hash,
             after_hash=after_hash,
+            prev_hash=prev_hash,
+            hash=row_hash,
         )
         self.session.add(entry)
         await self.session.flush()
@@ -172,6 +232,45 @@ class AuditService:
             },
         )
         return entry
+
+    async def verify_audit_chain(
+        self,
+        *,
+        entity_type: str | None = None,
+        entity_id: str | None = None,
+        from_ts: datetime | None = None,
+        to_ts: datetime | None = None,
+    ) -> dict[str, Any]:
+        stmt = select(AuditLog).order_by(AuditLog.when.asc())
+        if entity_type:
+            stmt = stmt.where(AuditLog.object_type == entity_type)
+        if entity_id:
+            stmt = stmt.where(AuditLog.object_id == entity_id)
+        if from_ts:
+            stmt = stmt.where(AuditLog.when >= from_ts)
+        if to_ts:
+            stmt = stmt.where(AuditLog.when <= to_ts)
+        rows = (await self.session.execute(stmt)).scalars().all()
+        prev: str | None = rows[0].prev_hash if rows else None
+        broken: list[str] = []
+        for row in rows:
+            check_payload = {
+                "tenant_id": row.tenant_id,
+                "actor_type": row.actor_type,
+                "user_id": row.user_id,
+                "action": row.action,
+                "object_type": row.object_type,
+                "object_id": row.object_id,
+                "correlation_id": row.correlation_id or row.request_id,
+                "diff": row.changed_fields or {},
+                "meta": row.details or {},
+                "ts": row.when.isoformat(),
+            }
+            expected = self._canonical_hash_payload(check_payload, prev)
+            if row.prev_hash != prev or row.hash != expected:
+                broken.append(row.id)
+            prev = row.hash
+        return {"ok": not broken, "checked": len(rows), "broken_ids": broken}
 
 
     async def audit_create(self, *, tenant_id: str, entity_type: str, entity_id: str, after: Mapping[str, Any], meta: Mapping[str, Any] | None, actor: Mapping[str, Any]) -> AuditLog:

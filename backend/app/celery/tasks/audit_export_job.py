@@ -56,7 +56,7 @@ def export_audit_job(*, export_id: str, tenant_id: str) -> dict[str, str]:
                             row.action,
                             row.object_type,
                             row.object_id,
-                            row.request_id or "",
+                            row.correlation_id or row.request_id or "",
                             json.dumps(row.changed_fields or {}, ensure_ascii=False),
                         ])
                     body = buff.getvalue().encode("utf-8")
@@ -69,7 +69,7 @@ def export_audit_job(*, export_id: str, tenant_id: str) -> dict[str, str]:
                             "action": row.action,
                             "entity_type": row.object_type,
                             "entity_id": row.object_id,
-                            "correlation_id": row.request_id,
+                            "correlation_id": row.correlation_id or row.request_id,
                             "diff": row.changed_fields or {},
                             "meta": row.details or {},
                         }, ensure_ascii=False))

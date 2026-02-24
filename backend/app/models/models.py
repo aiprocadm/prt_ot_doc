@@ -1247,18 +1247,23 @@ class AuditLog(TenantBaseModel):
     parent_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
     parent_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     ip: Mapped[str] = mapped_column(String(64), nullable=False, default="unknown")
+    correlation_id: Mapped[str] = mapped_column(String(128), nullable=False, default="unknown")
     request_id: Mapped[str | None] = mapped_column(String(128))
     session_id: Mapped[str | None] = mapped_column(String(128))
     user_agent: Mapped[str | None] = mapped_column(String(256))
+    resource_attrs: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     details: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     changed_fields: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     before_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     after_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    hash: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    prev_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     __table_args__ = (
         Index("ix_auditlog_action", "action", "when"),
         Index("ix_auditlog_object", "object_type", "object_id", "when"),
         Index("ix_auditlog_actor", "user_id", "when"),
+        Index("ix_auditlog_corr", "correlation_id"),
         Index("ix_auditlog_when", "when"),
     )
 

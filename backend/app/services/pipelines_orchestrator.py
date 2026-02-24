@@ -132,6 +132,7 @@ class DocumentPipelineOrchestrator:
                 job.ended_at = datetime.now(tz=timezone.utc)
                 await self._audit_status_change(job, prev_status, job.status)
                 await self._log(job, "error", "step_failed", step.step_code, {"error_code": exc.code, "error_payload": exc.payload})
+                await self._audit_job_step(job=job, step=step, status=JobStepStatus.FAILED.value, started_at=step.started_at, ended_at=step.ended_at, error_code=exc.code, error_payload=exc.payload)
                 await self._emit_event(job=job, event_type="Failed", payload={"job_id": job.id, "error_code": job.error_code, "correlation_id": job.correlation_id})
                 await self.session.flush()
                 return job
@@ -225,6 +226,7 @@ class DocumentPipelineOrchestrator:
             raise StepFailureError("step_lock_conflict", {"step": step.step_code}, retryable=True)
         await self.session.refresh(step)
         await self._log(job, "info", "step_started", step.step_code, {"attempt": step.attempts})
+        await self._audit_job_step(job=job, step=step, status=JobStepStatus.RUNNING.value, started_at=step.started_at)
 
         if fail_step and step.step_code == fail_step:
             raise StepFailureError("step_failed", {"step": step.step_code, "attempt": step.attempts}, retryable=step.attempts < step.max_attempts)
@@ -253,6 +255,7 @@ class DocumentPipelineOrchestrator:
         step.error_payload = None
         step.ended_at = datetime.now(tz=timezone.utc)
         await self._log(job, "info", "step_success", step.step_code, None)
+        await self._audit_job_step(job=job, step=step, status=JobStepStatus.SUCCESS.value, started_at=step.started_at, ended_at=step.ended_at)
 
     async def _cancel_queued_steps(self, job: DocumentJob) -> None:
         steps = (await self.session.execute(select(DocumentJobStep).where(DocumentJobStep.job_id == job.id))).scalars().all()
@@ -293,6 +296,43 @@ class DocumentPipelineOrchestrator:
             request_id=job.correlation_id,
             changed_fields=field_level_diff({"status": before_status}, {"status": after_status}),
             details={"correlation_id": job.correlation_id},
+        )
+
+
+    async def _audit_job_step(
+        self,
+        *,
+        job: DocumentJob,
+        step: DocumentJobStep,
+        status: str,
+        started_at: datetime | None = None,
+        ended_at: datetime | None = None,
+        error_code: str | None = None,
+        error_payload: dict[str, Any] | None = None,
+    ) -> None:
+        duration_ms: int | None = None
+        if started_at and ended_at:
+            duration_ms = int((ended_at - started_at).total_seconds() * 1000)
+        await AuditService(self.session).log_event(
+            tenant_id=job.tenant_id,
+            action="job_step",
+            object_type="DocumentJob",
+            object_id=job.id,
+            user_id=job.created_by,
+            actor_type="service" if not job.created_by else "user",
+            ip="system",
+            request_id=job.correlation_id,
+            changed_fields={"fields": {"step_status": {"from": None, "to": status}}},
+            details={
+                "step_name": step.step_code,
+                "attempt": step.attempts,
+                "status": status,
+                "duration_ms": duration_ms,
+                "error_code": error_code,
+                "error_payload_sanitized": error_payload,
+                "resource_attrs": {"job_id": job.id},
+                "correlation_id": job.correlation_id,
+            },
         )
 
     @staticmethod

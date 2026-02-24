@@ -77,7 +77,7 @@ def _to_entry(record: AuditLog) -> AuditLogEntry:
         object_id=record.object_id,
         parent_type=record.parent_type,
         parent_id=record.parent_id,
-        correlation_id=record.request_id,
+        correlation_id=record.correlation_id or record.request_id,
         meta={
             "ip": record.ip,
             "user_agent": record.user_agent,
@@ -95,6 +95,7 @@ async def get_audit_history(
     entity_id: str | None = Query(None),
     actor_id: str | None = Query(None),
     action: str | None = Query(None),
+    correlation_id: str | None = Query(None),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     *,
@@ -116,6 +117,9 @@ async def get_audit_history(
     if action:
         stmt = stmt.where(AuditLog.action == action)
         total_stmt = total_stmt.where(AuditLog.action == action)
+    if correlation_id:
+        stmt = stmt.where(AuditLog.correlation_id == correlation_id)
+        total_stmt = total_stmt.where(AuditLog.correlation_id == correlation_id)
     if from_:
         stmt = stmt.where(AuditLog.when >= from_)
         total_stmt = total_stmt.where(AuditLog.when >= from_)
@@ -146,6 +150,8 @@ async def create_export(payload: AuditExportCreate, *, tenant: TenantDep, _: Adm
     return AuditExportCreateResponse(export_job_id=job.id)
 
 
+
+
 @router.get("/exports/{export_id}", response_model=AuditExportRead)
 async def get_export(export_id: str, *, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> AuditExportRead:
     row = await session.get(AuditExportJob, export_id)
@@ -173,7 +179,7 @@ async def download_export(export_id: str, *, tenant: TenantDep, _: AdminAccess, 
 
 @router.get("", response_model=AuditLogHistory)
 async def backward_list(
-    object_id: str = Query(..., min_length=1),
+    object_id: str | None = Query(None, min_length=1),
     object_type: str | None = Query(None, min_length=1),
     action: str | None = Query(None, min_length=1),
     *,
@@ -181,7 +187,7 @@ async def backward_list(
     _: AdminAccess,
     session: SessionDep,
 ) -> AuditLogHistory:
-    return await get_audit_history(entity_id=object_id, entity_type=object_type, action=action, tenant=tenant, _=_, session=session)
+    return await get_audit_history(entity_id=object_id, entity_type=object_type, action=action, correlation_id=None, tenant=tenant, _=_, session=session)
 
 
 @router.get("/export")
