@@ -2,22 +2,20 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from io import BytesIO
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, Response, UploadFile, status
 from fastapi.responses import StreamingResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.idempotency import compute_request_hash
 from app.models.document import DocumentVersion
 from app.models.models import Tenant
 from app.modules.replace.csv_parser import parse_replace_csv
-from app.modules.replace.engine_docx import replace_docx
-from app.modules.replace.engine_xml import replace_xml_parts
 from app.modules.replace.models import ReplaceMap, ReplaceRun, ReplaceRunStatus
 from app.modules.replace.repo import get_replace_map_by_code, get_replace_run, list_replace_maps
-from app.modules.replace.report import build_report, to_csv
-from app.core.idempotency import compute_request_hash
+from app.modules.replace.report import to_csv
 from app.modules.replace.schemas import (
     ReplaceLaunchRequest,
     ReplaceLaunchResponse,
@@ -25,11 +23,13 @@ from app.modules.replace.schemas import (
     ReplaceMapList,
     ReplaceMapPatch,
     ReplaceMapRead,
+    ReplaceRollbackRequest,
     ReplaceRunRead,
 )
+from app.modules.replace.service import create_document_version_from_bytes, execute_replace
+from app.services.audit import AuditService, field_level_diff
 from app.services.file_storage import FileStorageService
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
-from app.services.audit import AuditService
 
 router = APIRouter()
 
@@ -43,7 +43,7 @@ async def create_replace_map(
 ) -> ReplaceMapRead:
     if replace_csv is not None:
         rules = parse_replace_csv(await replace_csv.read())
-        data = ReplaceMapCreate(code=replace_csv.filename or uuid4().hex, name=replace_csv.filename or "csv", source_type="csv", rules=rules)
+        data = ReplaceMapCreate(code=replace_csv.filename or "replace_map", name=replace_csv.filename or "csv", source_type="csv", rules=rules)
     elif payload is not None:
         data = ReplaceMapCreate.model_validate_json(payload)
     else:
@@ -90,12 +90,6 @@ async def delete_map(replace_map_id: str, session: AsyncSession = Depends(get_se
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-def _resolve_map_id(payload: ReplaceLaunchRequest, row: ReplaceMap | None) -> str:
-    if row is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Replace map not found")
-    return row.id
-
-
 async def _launch(document_version_id: str, payload: ReplaceLaunchRequest, mode: str, session: AsyncSession, tenant: Tenant, request: Request, idempotency_key: str | None) -> ReplaceLaunchResponse:
     endpoint = f"replace.{mode}"
     idem = IdempotencyService(session=session, tenant_id=str(tenant.id), endpoint=endpoint)
@@ -109,46 +103,75 @@ async def _launch(document_version_id: str, payload: ReplaceLaunchRequest, mode:
     if version is None or version.tenant_id != str(tenant.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Document version not found")
     replace_map = await session.get(ReplaceMap, payload.replace_map_id) if payload.replace_map_id else await get_replace_map_by_code(session, tenant_id=str(tenant.id), code=str(payload.replace_map_code))
-    replace_map_id = _resolve_map_id(payload, replace_map)
+    if replace_map is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Replace map not found")
+
     storage = FileStorageService.default()
-    source = storage.get(version.file_key)
-    rules = replace_map.rules or []
-    replaced, hits_docx = replace_docx(source, rules, case_sensitive=payload.options.case_sensitive, whole_word=payload.options.whole_word)
-    replaced, hits_xml = replace_xml_parts(replaced, rules, case_sensitive=payload.options.case_sensitive, whole_word=payload.options.whole_word)
-    hits = [h.__dict__ for h in hits_docx] + hits_xml
-    report = build_report(hits, rules)
+    execution = await execute_replace(
+        session=session,
+        tenant_id=str(tenant.id),
+        source_version=version,
+        rules=replace_map.rules or [],
+        case_sensitive=payload.options.case_sensitive,
+        whole_word=payload.options.whole_word,
+        storage=storage,
+        run_id=record.id,
+    )
 
     run = ReplaceRun(
         tenant_id=str(tenant.id),
         document_version_id=version.id,
-        replace_map_id=replace_map_id,
+        replace_map_id=replace_map.id,
         mode=mode,
         options=payload.options.model_dump(),
-        report_json=report,
+        report_json=execution.report,
         before_file_id=version.file_key,
         after_file_id=None,
         status=ReplaceRunStatus.SUCCEEDED.value,
     )
-    if mode == "apply":
-        new_key = f"{version.file_key.rsplit('.', 1)[0]}_replace_{uuid4().hex[:8]}.docx"
-        storage.put(new_key, replaced, content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-        run.after_file_id = new_key
     session.add(run)
     await session.flush()
-    response = ReplaceLaunchResponse(job_id=run.id, replace_run_id=run.id, status_url=f"/v1/replace-runs/{run.id}", new_document_version_id=run.after_file_id)
-    await idem.store_success(record, status_code=status.HTTP_200_OK, body=response.model_dump())
+
+    response = ReplaceLaunchResponse(
+        job_id=run.id,
+        replace_run_id=run.id,
+        status_url=f"/v1/replace-runs/{run.id}",
+        report_file_id=execution.report_file.id,
+        report_file_key=execution.report_file_key,
+        hits_count=execution.hits_count,
+        examples=execution.examples,
+    )
     if mode == "apply":
+        file_row, new_version = await create_document_version_from_bytes(
+            session=session,
+            tenant_id=str(tenant.id),
+            source_version=version,
+            content=execution.output_bytes,
+            storage=storage,
+            key_suffix="replace",
+        )
+        run.after_file_id = new_version.file_key
+        response.new_document_version_id = new_version.id
+        response.document_id = new_version.document_id
+        response.version_number = new_version.version_number
+        response.file_id = file_row.id
+        response.file_key = file_row.storage_key
         await AuditService(session).log_event(
             tenant_id=str(tenant.id),
             action="replace_apply",
             object_type="DocumentVersion",
-            object_id=version.id,
+            object_id=new_version.id,
             user_id=None,
             ip=request.client.host if request.client else "unknown",
             request_id=getattr(request.state, "trace_id", None),
-            changed_fields={"changed": {}, "added": {}, "removed": {}, "masked": []},
-            details={"replace_run_id": run.id, "new_file_key": run.after_file_id},
+            changed_fields=field_level_diff(
+                {"file_key": version.file_key, "file_id": version.file_id, "version_number": version.version_number},
+                {"file_key": new_version.file_key, "file_id": new_version.file_id, "version_number": new_version.version_number},
+            ),
+            details={"replace_run_id": run.id, "source_document_version_id": version.id},
         )
+
+    await idem.store_success(record, status_code=status.HTTP_200_OK, body=response.model_dump())
     await session.commit()
     await session.refresh(run)
     return response
@@ -165,12 +188,73 @@ async def replace_apply(document_version_id: str, payload: ReplaceLaunchRequest,
 
 
 @router.post("/replace-runs/{replace_run_id}/rollback", response_model=ReplaceLaunchResponse)
-async def replace_rollback(replace_run_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> ReplaceLaunchResponse:
+async def replace_rollback(
+    replace_run_id: str,
+    payload: ReplaceRollbackRequest,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> ReplaceLaunchResponse:
     run = await get_replace_run(session, tenant_id=str(tenant.id), run_id=replace_run_id)
-    if run is None or run.mode != "apply" or not run.after_file_id:
+    if run is None or run.mode != "apply":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Replace run cannot be rolled back")
-    rolled_id = f"rollback:{run.before_file_id}"
-    return ReplaceLaunchResponse(job_id=replace_run_id, replace_run_id=replace_run_id, new_document_version_id=rolled_id)
+
+    source_version = await session.get(DocumentVersion, run.document_version_id)
+    if source_version is None or source_version.tenant_id != str(tenant.id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document version not found")
+
+    target_version: DocumentVersion | None = None
+    if payload.target_document_version_id:
+        target_version = await session.get(DocumentVersion, payload.target_document_version_id)
+        if target_version is None or target_version.tenant_id != str(tenant.id):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Target document version not found")
+    elif payload.rollback_to_version_number is not None:
+        stmt = select(DocumentVersion).where(
+            DocumentVersion.document_id == source_version.document_id,
+            DocumentVersion.version_number == payload.rollback_to_version_number,
+            DocumentVersion.tenant_id == str(tenant.id),
+        )
+        target_version = (await session.execute(stmt)).scalar_one_or_none()
+    if target_version is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "target_document_version_id or rollback_to_version_number is required")
+
+    storage = FileStorageService.default()
+    restored_bytes = storage.get(target_version.file_key)
+    file_row, new_version = await create_document_version_from_bytes(
+        session=session,
+        tenant_id=str(tenant.id),
+        source_version=target_version,
+        content=restored_bytes,
+        storage=storage,
+        key_suffix="rollback",
+    )
+
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="replace_rollback",
+        object_type="DocumentVersion",
+        object_id=new_version.id,
+        user_id=None,
+        ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        changed_fields=field_level_diff(
+            {"file_key": source_version.file_key, "file_id": source_version.file_id, "version_number": source_version.version_number},
+            {"file_key": new_version.file_key, "file_id": new_version.file_id, "version_number": new_version.version_number},
+        ),
+        details={"replace_run_id": run.id, "restored_from_version_id": target_version.id},
+    )
+
+    await session.commit()
+    return ReplaceLaunchResponse(
+        job_id=replace_run_id,
+        replace_run_id=replace_run_id,
+        new_document_version_id=new_version.id,
+        restored_from_version_id=target_version.id,
+        version_number=new_version.version_number,
+        document_id=new_version.document_id,
+        file_id=file_row.id,
+        file_key=file_row.storage_key,
+    )
 
 
 @router.get("/replace-runs/{replace_run_id}", response_model=ReplaceRunRead)

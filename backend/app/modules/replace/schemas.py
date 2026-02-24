@@ -52,11 +52,26 @@ class ReplaceLaunchRequest(BaseModel):
     options: ReplaceOptions = Field(default_factory=ReplaceOptions)
 
 
+
+
+class ReplaceRollbackRequest(BaseModel):
+    target_document_version_id: str | None = None
+    rollback_to_version_number: int | None = None
+
 class ReplaceLaunchResponse(BaseModel):
     job_id: str
     replace_run_id: str
     status_url: str | None = None
     new_document_version_id: str | None = None
+    document_id: str | None = None
+    version_number: int | None = None
+    file_id: str | None = None
+    file_key: str | None = None
+    restored_from_version_id: str | None = None
+    report_file_id: str | None = None
+    report_file_key: str | None = None
+    hits_count: int | None = None
+    examples: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class ReplaceRunRead(BaseModel):
