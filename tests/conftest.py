@@ -131,7 +131,9 @@ async def app_fixture():
         info = tenant_required(tenant_slug)
         async with TestSession() as session:
             tenant = (
-                await session.execute(select(Tenant).where(Tenant.slug == info.slug))
+                await session.execute(
+                    select(Tenant).where((Tenant.slug == info.slug) | (Tenant.id == info.slug) | (Tenant.code == info.slug))
+                )
             ).scalar_one_or_none()
             if tenant is None or not tenant.is_active:
                 raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found")
@@ -150,7 +152,7 @@ async def async_client(app_fixture):
     async with AsyncClient(
         transport=transport,
         base_url="http://testserver",
-        headers={"x-tenant": "test"},
+        headers={},
     ) as client:
         yield client
 
@@ -227,6 +229,6 @@ async def make_auth_headers(
             role=role.value,
             additional_claims=claims,
         )
-        return {"Authorization": f"Bearer {token}", "x-tenant": tenant.slug}
+        return {"Authorization": f"Bearer {token}", "x-tenant": str(tenant.id)}
 
     return factory

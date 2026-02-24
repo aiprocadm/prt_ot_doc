@@ -34,6 +34,18 @@ class TenantMiddleware(BaseHTTPMiddleware):
             return False
         return True
 
+    @staticmethod
+    def _bad_request(correlation_id: str, *, code: str, message: str) -> HTTPException:
+        return HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": code,
+                "type": "validation",
+                "message": message,
+                "correlation_id": correlation_id,
+            },
+        )
+
     async def dispatch(self, request: Request, call_next):  # type: ignore[override]
         path = request.url.path
 
@@ -58,15 +70,7 @@ class TenantMiddleware(BaseHTTPMiddleware):
             if header_slug:
                 break
         if path.startswith("/api/v1/") and not header_slug:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "code": "TENANT_REQUIRED",
-                    "type": "validation",
-                    "message": "X-Tenant header required",
-                    "correlation_id": correlation_id,
-                },
-            )
+            raise self._bad_request(correlation_id, code="TENANT_REQUIRED", message="X-Tenant header required")
         if not header_slug:
             tenant_required(None)
         token_slug: str | None = None
@@ -85,12 +89,8 @@ class TenantMiddleware(BaseHTTPMiddleware):
                 token_slug = raw_slug or None
 
         normalized_header = header_slug.strip() if header_slug else None
-        if token_slug and normalized_header.casefold() != token_slug.casefold():
-            raise HTTPException(
-                status.HTTP_403_FORBIDDEN,
-                "Tenant header does not match token scope",
-            )
-
+        if normalized_header and not self._is_uuid(normalized_header):
+            raise self._bad_request(correlation_id, code="TENANT_INVALID", message="X-Tenant must be UUID")
         info = tenant_required(normalized_header)
         async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as session:
             identifier = info.slug
@@ -103,10 +103,15 @@ class TenantMiddleware(BaseHTTPMiddleware):
                 status.HTTP_404_NOT_FOUND,
                 detail={"code": "TENANT_NOT_FOUND", "type": "validation", "message": "Tenant not found", "correlation_id": correlation_id},
             )
+        if token_slug and token_slug.casefold() not in {str(tenant.id).casefold(), str(tenant.slug).casefold(), str(tenant.code).casefold()}:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Tenant header does not match token scope",
+            )
         if not tenant.is_active:
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN,
-                detail={"code": "TENANT_FORBIDDEN", "type": "validation", "message": "Tenant disabled"},
+                detail={"code": "TENANT_FORBIDDEN", "type": "validation", "message": "Tenant disabled", "correlation_id": correlation_id},
             )
         request.state.tenant_id = str(tenant.id)
         request.state.tenant_slug = tenant.slug
@@ -149,6 +154,8 @@ class TenantMiddleware(BaseHTTPMiddleware):
         )
         token = set_tenant_context(ctx)
         try:
-            return await call_next(request)
+            response = await call_next(request)
+            response.headers["X-Correlation-Id"] = correlation_id
+            return response
         finally:
             reset_tenant_context(token)

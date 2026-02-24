@@ -1,4 +1,4 @@
-.PHONY: install install-pip lint format test contract run clean up down migrate seed smoke logs dev env frontend-install lint-frontend format-frontend test-frontend dev-lite test-lite dev-nodocker test-nodocker check-docker demo cs\:dev cs\:test cs\:reset
+.PHONY: install install-pip lint format test contract run clean up down migrate tenant-migrate tenant-init seed smoke logs dev env frontend-install lint-frontend format-frontend test-frontend dev-lite test-lite dev-nodocker test-nodocker check-docker demo cs\:dev cs\:test cs\:reset
 
 LINT_PATHS=backend/app tests scripts
 VENV_BIN=.venv/bin
@@ -107,3 +107,10 @@ down:
 
 demo:
 	@echo "Demo bootstrap is enabled via .env (DEMO_BOOTSTRAP=1). Start app with make cs:dev."
+
+
+tenant-migrate:
+	@test -n "$(TENANT)" || (echo "TENANT is required" && exit 1)
+	PYTHONPATH=backend $(PYTHON) scripts/migrate_tenant.py $(TENANT)
+
+tenant-init: tenant-migrate

@@ -191,6 +191,13 @@ def ensure_tenant_schema(slug: str) -> None:
         _tenant_initialized.add(schema)
 
 
+def resolve_tenant_schema(tenant_id: str) -> str:
+    """Build a deterministic per-tenant schema name from tenant UUID/string."""
+
+    normalized = str(tenant_id).strip().lower().replace("-", "")
+    return f"t_{normalized}"
+
+
 def _format_search_path(schemas: Iterable[str]) -> str:
     """Return a comma-separated search path with quoted schema names."""
 
@@ -270,6 +277,15 @@ async def get_session() -> AsyncIterator[AsyncSession]:
     """FastAPI dependency that yields a tenant-aware session."""
 
     async with session_scope() as session:
+        yield session
+
+
+@asynccontextmanager
+async def with_tenant_session(*, tenant_id: str, schema_name: str | None = None) -> AsyncIterator[AsyncSession]:
+    """Compatibility helper that ensures tenant schema routing inside transaction scope."""
+
+    schema = schema_name or resolve_tenant_schema(tenant_id)
+    async with get_tenant_session(tenant=tenant_id, schema_name=schema) as session:
         yield session
 
 
@@ -355,4 +371,6 @@ __all__ = [
     "supports_schemas",
     "session_scope",
     "get_session",
+    "resolve_tenant_schema",
+    "with_tenant_session",
 ]

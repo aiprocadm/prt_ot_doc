@@ -5,7 +5,7 @@ from functools import lru_cache
 from typing import AsyncIterator
 
 from fastapi import Depends, HTTPException, Request, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.tenant import TENANT_HEADER, get_current_tenant, tenant_required
@@ -25,6 +25,9 @@ from app.services.integrations import (
 
 
 def _resolve_tenant_slug(request: Request) -> str | None:
+    state_tenant = getattr(request.state, "tenant_id", None)
+    if state_tenant:
+        return str(state_tenant)
     for header_name in (TENANT_HEADER, "x-tenant-slug"):
         value = request.headers.get(header_name)
         if value:
@@ -39,13 +42,16 @@ async def get_tenant_record(request: Request) -> Tenant:
     tenant_slug = _resolve_tenant_slug(request)
     info = tenant_required(tenant_slug) if tenant_slug is not None else get_current_tenant()
     async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as session:
-        result = await session.execute(select(Tenant).where(Tenant.slug == info.slug))
+        filters = [Tenant.slug == info.slug, Tenant.code == info.slug]
+        if len(info.slug) == 36:
+            filters.append(Tenant.id == info.slug)
+        result = await session.execute(select(Tenant).where(or_(*filters)))
         tenant = result.scalar_one_or_none()
         if tenant is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found")
         if not tenant.is_active:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Tenant inactive")
-    ensure_tenant_schema(info.slug)
+    ensure_tenant_schema(tenant.slug)
     return tenant
 
 
