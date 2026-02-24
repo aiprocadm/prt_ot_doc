@@ -5,7 +5,7 @@ from __future__ import annotations
 import enum
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
@@ -34,8 +34,10 @@ class JobStepStatus(str, enum.Enum):
 
 class OutboxEventStatus(str, enum.Enum):
     PENDING = "pending"
+    PROCESSING = "processing"
     SENT = "sent"
     FAILED = "failed"
+    DEAD = "dead"
 
 
 class DocumentJob(TenantBaseModel):
@@ -156,8 +158,11 @@ class OutboxEvent(TenantBaseModel):
     payload: Mapped[dict] = mapped_column(JSONBType, nullable=False, default=dict)
     status: Mapped[OutboxEventStatus] = mapped_column(String(16), nullable=False, default=OutboxEventStatus.PENDING.value)
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "event_id", name="uq_outbox_event_tenant_event"),
-        Index("ix_outbox_events_status", "status"),
+        Index("ix_outbox_events_status_next_attempt", "status", "next_attempt_at"),
+        Index("ix_outbox_events_tenant_created", "tenant_id", "created_at"),
     )

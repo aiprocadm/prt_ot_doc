@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -115,6 +117,84 @@ async def test_outbox_created_on_success(sessionmaker) -> None:
         assert any(e.event_type == "DocumentGenerated" for e in events)
 
 
+
+
+@pytest.mark.anyio
+async def test_idempotency_parallel_wait_returns_same_response(sessionmaker) -> None:
+    async with sessionmaker() as first_session:
+        idem1 = IdempotencyService(session=first_session, tenant_id="tenant-1", endpoint="documents.generate")
+        record, _ = await idem1.acquire(key="race-key", request_hash="hash-race")
+        await first_session.flush()
+
+        async def second_request() -> str:
+            async with sessionmaker() as second_session:
+                idem2 = IdempotencyService(session=second_session, tenant_id="tenant-1", endpoint="documents.generate")
+                rec2, created2 = await idem2.acquire(key="race-key", request_hash="hash-race", wait_timeout_seconds=1.0)
+                assert created2 is False
+                return str(rec2.status)
+
+        task = asyncio.create_task(second_request())
+        await asyncio.sleep(0.05)
+        await idem1.store_success(record, status_code=202, body={"job_id": "job-race"})
+        await first_session.commit()
+        status_value = await task
+        assert "succeeded" in status_value
+
+
+@pytest.mark.anyio
+async def test_dispatch_outbox_events_retries_and_dead(sessionmaker) -> None:
+    from datetime import datetime, timezone
+
+    from app.models.job_engine import OutboxEventStatus
+    from app.tasks import _dispatch_outbox_events
+
+    async with sessionmaker() as session:
+        session.add(
+            OutboxEvent(
+                tenant_id="tenant-1",
+                event_type="DocumentGenerated",
+                event_id="evt-fail",
+                payload={"force_fail": True},
+                status=OutboxEventStatus.PENDING.value,
+                next_attempt_at=datetime.now(tz=timezone.utc),
+            )
+        )
+        await session.commit()
+
+    await _dispatch_outbox_events(max_attempts=1, tenant_slug="test")
+
+    async with sessionmaker() as session:
+        event = (await session.execute(select(OutboxEvent).where(OutboxEvent.event_id == "evt-fail"))).scalar_one()
+        assert event.status == OutboxEventStatus.DEAD.value
+        assert event.attempts >= 1
+
+
+@pytest.mark.anyio
+async def test_dispatch_outbox_events_sends_pending(sessionmaker) -> None:
+    from datetime import datetime, timezone
+
+    from app.models.job_engine import OutboxEventStatus
+    from app.tasks import _dispatch_outbox_events
+
+    async with sessionmaker() as session:
+        session.add(
+            OutboxEvent(
+                tenant_id="tenant-1",
+                event_type="DocumentGenerated",
+                event_id="evt-ok",
+                payload={"hello": "world"},
+                status=OutboxEventStatus.PENDING.value,
+                next_attempt_at=datetime.now(tz=timezone.utc),
+            )
+        )
+        await session.commit()
+
+    processed = await _dispatch_outbox_events(max_attempts=2, tenant_slug="test")
+    assert processed >= 1
+
+    async with sessionmaker() as session:
+        event = (await session.execute(select(OutboxEvent).where(OutboxEvent.event_id == "evt-ok"))).scalar_one()
+        assert event.status == OutboxEventStatus.SENT.value
 @pytest.mark.anyio
 async def test_request_hash_stable_for_sorted_keys() -> None:
     from app.core.idempotency import compute_request_hash

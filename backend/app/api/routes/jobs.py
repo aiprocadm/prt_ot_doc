@@ -42,6 +42,7 @@ class JobLogRead(BaseModel):
 
 class JobEnvelopeRead(BaseModel):
     id: str
+    kind: str | None = None
     status: str
     correlation_id: str | None = None
     started_at: datetime | None = None
@@ -117,6 +118,7 @@ async def create_job(
 
 class JobListRead(BaseModel):
     items: list[JobEnvelopeRead]
+    next_cursor: str | None = None
 
 
 @router.get("/{job_id}", response_model=JobRead)
@@ -133,6 +135,7 @@ async def get_job(job_id: str, session: AsyncSession = Depends(get_session), ten
     return JobRead(
         job=JobEnvelopeRead(
             id=job.id,
+            kind=job.kind,
             status=str(job.status),
             started_at=job.started_at,
             ended_at=job.ended_at,
@@ -151,6 +154,9 @@ async def get_job(job_id: str, session: AsyncSession = Depends(get_session), ten
 @router.get("", response_model=JobListRead)
 async def list_jobs(
     status_filter: str | None = Query(default=None, alias="status"),
+    job_type: str | None = Query(default=None, alias="type"),
+    limit: int = Query(default=50, ge=1, le=200),
+    cursor: str | None = Query(default=None),
     created_from: datetime | None = Query(default=None),
     created_to: datetime | None = Query(default=None),
     template_code: str | None = Query(default=None),
@@ -161,6 +167,8 @@ async def list_jobs(
     stmt = select(DocumentJob).where(DocumentJob.tenant_id == str(tenant.id))
     if status_filter:
         stmt = stmt.where(DocumentJob.status == status_filter)
+    if job_type:
+        stmt = stmt.where(DocumentJob.kind == job_type)
     if template_code:
         stmt = stmt.where(DocumentJob.template_code == template_code)
     if project_id:
@@ -169,8 +177,14 @@ async def list_jobs(
         stmt = stmt.where(DocumentJob.created_at >= created_from)
     if created_to:
         stmt = stmt.where(DocumentJob.created_at <= created_to)
-    rows = (await session.execute(stmt.order_by(DocumentJob.updated_at.desc()))).scalars().all()
-    return JobListRead(items=[JobEnvelopeRead(id=job.id, status=str(job.status), correlation_id=job.correlation_id, started_at=job.started_at, ended_at=job.ended_at, error_code=job.error_code, error_payload=job.error_payload, profile_id=job.profile_id or job.pipeline_profile_id, created_by=job.created_by) for job in rows])
+    if cursor:
+        stmt = stmt.where(DocumentJob.created_at < datetime.fromisoformat(cursor))
+    rows = (await session.execute(stmt.order_by(DocumentJob.created_at.desc()).limit(limit + 1))).scalars().all()
+    next_cursor = None
+    if len(rows) > limit:
+        next_cursor = rows[limit - 1].created_at.isoformat() if rows[limit - 1].created_at else None
+        rows = rows[:limit]
+    return JobListRead(items=[JobEnvelopeRead(id=job.id, kind=job.kind, status=str(job.status), correlation_id=job.correlation_id, started_at=job.started_at, ended_at=job.ended_at, error_code=job.error_code, error_payload=job.error_payload, profile_id=job.profile_id or job.pipeline_profile_id, created_by=job.created_by) for job in rows], next_cursor=next_cursor)
 
 
 @router.post("/{job_id}:cancel", response_model=JobRead)
