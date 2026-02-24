@@ -58,6 +58,11 @@ async def complete_upload(*, session: AsyncSession, tenant_id: str, file_id: str
     if version is None or version.tenant_id != tenant_id or version.file_id != file_id:
         raise HTTPException(status_code=404, detail="version_not_found")
 
+    try:
+        storage.assert_tenant_key(tenant_id=tenant_id, key=version.s3_key)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden") from exc
+
     metadata = s3.head_object(key=version.s3_key)
     if not metadata:
         raise HTTPException(status_code=409, detail="object_not_found")
@@ -148,6 +153,10 @@ async def issue_download_url(*, session: AsyncSession, tenant_id: str, file_id: 
         raise HTTPException(status_code=404, detail="version_not_found")
     if version.status != FileVersionStatus.ready.value:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="file_not_ready")
+    try:
+        storage.assert_tenant_key(tenant_id=tenant_id, key=version.s3_key)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden") from exc
     url = storage.presign_get(key=version.s3_key, expires_in=600)
     session.add(DownloadLog(tenant_id=tenant_id, user_id=user_id, file_id=file_id, version_id=version_id, ip=ip, user_agent=user_agent))
     await session.flush()

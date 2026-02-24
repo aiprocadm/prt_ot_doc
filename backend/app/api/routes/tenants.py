@@ -12,8 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import abac, verify_token
-from app.core.tenant import tenant_schema
-from app.db.session import _create_tenant_schema
+from app.db.session import _create_tenant_schema, resolve_tenant_schema
 from app.models.models import RoleEnum, Tenant, TenantQuota, TenantSettings
 from app.repository import list_tenants
 from app.schemas.tenant import (
@@ -82,7 +81,7 @@ async def create_tenant_endpoint(
     credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
 ) -> TenantRead:
     _require_admin(credentials)
-    schema_name = tenant_schema(payload.slug)
+    schema_name = resolve_tenant_schema(payload.slug)
     tenant = Tenant(
         slug=payload.slug,
         code=(payload.code or payload.slug),

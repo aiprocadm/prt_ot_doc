@@ -17,7 +17,7 @@ class TenantSemaphore:
         self.redis = redis
         self.tenant_id = tenant_id
         self.max_parallel = max_parallel
-        self.key = f"pipeline:tenant:{tenant_id}:running"
+        self.key = f"tenant:{tenant_id}:semaphore:jobs"
 
     async def acquire(self) -> bool:
         value = await self.redis.incr(self.key)
