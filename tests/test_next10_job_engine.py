@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 
 from app.models.job_engine import DocumentArtifact, DocumentJob, OutboxEvent
+from app.db import session_scope
 from app.services.idempotency import IdempotencyService
 from app.services.pipelines_orchestrator import DocumentPipelineOrchestrator
 
@@ -138,7 +139,7 @@ async def test_idempotency_parallel_wait_returns_same_response(sessionmaker) -> 
         await idem1.store_success(record, status_code=202, body={"job_id": "job-race"})
         await first_session.commit()
         status_value = await task
-        assert "succeeded" in status_value
+        assert status_value == "IdempotencyStatus.SUCCEEDED"
 
 
 @pytest.mark.anyio
@@ -148,7 +149,7 @@ async def test_dispatch_outbox_events_retries_and_dead(sessionmaker) -> None:
     from app.models.job_engine import OutboxEventStatus
     from app.tasks import _dispatch_outbox_events
 
-    async with sessionmaker() as session:
+    async with session_scope(tenant="tenant-1") as session:
         session.add(
             OutboxEvent(
                 tenant_id="tenant-1",
@@ -161,9 +162,9 @@ async def test_dispatch_outbox_events_retries_and_dead(sessionmaker) -> None:
         )
         await session.commit()
 
-    await _dispatch_outbox_events(max_attempts=1, tenant_slug="test")
+    await _dispatch_outbox_events(max_attempts=1, tenant_slug="tenant-1")
 
-    async with sessionmaker() as session:
+    async with session_scope(tenant="tenant-1") as session:
         event = (await session.execute(select(OutboxEvent).where(OutboxEvent.event_id == "evt-fail"))).scalar_one()
         assert event.status == OutboxEventStatus.DEAD.value
         assert event.attempts >= 1
@@ -176,7 +177,7 @@ async def test_dispatch_outbox_events_sends_pending(sessionmaker) -> None:
     from app.models.job_engine import OutboxEventStatus
     from app.tasks import _dispatch_outbox_events
 
-    async with sessionmaker() as session:
+    async with session_scope(tenant="tenant-1") as session:
         session.add(
             OutboxEvent(
                 tenant_id="tenant-1",
@@ -189,10 +190,10 @@ async def test_dispatch_outbox_events_sends_pending(sessionmaker) -> None:
         )
         await session.commit()
 
-    processed = await _dispatch_outbox_events(max_attempts=2, tenant_slug="test")
+    processed = await _dispatch_outbox_events(max_attempts=2, tenant_slug="tenant-1")
     assert processed >= 1
 
-    async with sessionmaker() as session:
+    async with session_scope(tenant="tenant-1") as session:
         event = (await session.execute(select(OutboxEvent).where(OutboxEvent.event_id == "evt-ok"))).scalar_one()
         assert event.status == OutboxEventStatus.SENT.value
 @pytest.mark.anyio
