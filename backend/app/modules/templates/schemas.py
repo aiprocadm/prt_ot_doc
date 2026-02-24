@@ -10,7 +10,8 @@ class RenderPreviewRequest(BaseModel):
     code: str
     version: int
     data: dict[str, Any]
-    visible_passport: bool = False
+    visible_passport: bool = True
+    npa_binding_id: str | None = None
 
 
 class RenderPreviewResponse(BaseModel):

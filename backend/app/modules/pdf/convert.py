@@ -5,6 +5,7 @@ import io
 import tempfile
 from pathlib import Path
 
+from app.core.utils.pdf_passport import embed_pdf_passport
 from app.domains.files import s3
 from app.models.file import File, FileKind, FileScanStatus
 from app.modules.pdf.service_pool import LibreOfficePool
@@ -15,14 +16,14 @@ def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def convert_docx_bytes(*, source_bytes: bytes, timeout_s: int, pool: LibreOfficePool) -> tuple[bytes, str]:
+def convert_docx_bytes(*, source_bytes: bytes, timeout_s: int, pool: LibreOfficePool, passport: dict[str, object] | None = None) -> tuple[bytes, str]:
     with tempfile.TemporaryDirectory(prefix="pdf-convert-") as td:
         workdir = Path(td)
         source = workdir / "source.docx"
         source.write_bytes(source_bytes)
         pdf_path = pool.convert(source=source, output_dir=workdir, timeout_s=timeout_s)
         ensure_embedded_fonts(pdf_path)
-        payload = pdf_path.read_bytes()
+        payload = embed_pdf_passport(pdf_path.read_bytes(), passport)
         return payload, _sha256(payload)
 
 
