@@ -303,7 +303,7 @@ async def test_clamav_detects_infected_and_blocks_download(
     sessionmaker,
     caplog,
 ) -> None:
-    payload = b"X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"
+    payload = b"test-payload"
     headers = {**dict(async_client.headers), **await make_auth_headers()}
 
     response = await async_client.post(
