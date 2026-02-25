@@ -79,12 +79,49 @@ async def test_tenant_middleware_passes_normalized_slug(monkeypatch: pytest.Monk
 
     captured: dict[str, str] = {}
 
+    valid_tenant = "Acme"
+
     def _fake_tenant_required(slug: str | None) -> SimpleNamespace:
-        assert slug == "Acme"
+        assert slug == valid_tenant
         captured["slug"] = slug or ""
-        return SimpleNamespace(slug="acme")
+        return SimpleNamespace(slug=valid_tenant)
 
     monkeypatch.setattr("app.middleware.tenant.tenant_required", _fake_tenant_required)
+
+    class _FakeResult:
+        def scalar_one_or_none(self):
+            return SimpleNamespace(
+                id="tenant-id",
+                slug="acme",
+                code="acme",
+                is_active=True,
+                schema_name="tenant_acme",
+                s3_prefix="tenants/acme",
+                settings={},
+            )
+
+    class _FakeSession:
+        def __init__(self) -> None:
+            self._calls = 0
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def execute(self, _query):
+            self._calls += 1
+            if self._calls == 1:
+                return _FakeResult()
+
+            class _EmptyResult:
+                def scalar_one_or_none(self):
+                    return None
+
+            return _EmptyResult()
+
+    monkeypatch.setattr("app.middleware.tenant.AsyncSessionLocal", lambda **kwargs: _FakeSession())
 
     scope = {
         "type": "http",

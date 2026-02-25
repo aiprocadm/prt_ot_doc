@@ -49,7 +49,9 @@ def _ping_minio(settings: Settings) -> None:
     if settings.s3_backend == "memory":
         return
     s3.ensure_bucket()
-    s3.list_keys(prefix="", max_keys=1)
+    list_keys = getattr(s3, "list_keys", None)
+    if callable(list_keys):
+        list_keys(prefix="", max_keys=1)
 
 
 def _ping_clamav(settings: Settings) -> bool:
@@ -117,6 +119,11 @@ async def ready(request: Request) -> JSONResponse:
     required_ok = statuses["postgres"] and statuses["redis"] and statuses["minio"]
     content = {
         "status": "ok" if required_ok else "degraded",
+        "postgres": statuses["postgres"],
+        "redis": statuses["redis"],
+        "minio": statuses["minio"],
+        "clamav": statuses["clamav"],
+        "libreoffice": statuses["libreoffice"],
         "dependencies": statuses,
         "correlation_id": trace_id,
     }

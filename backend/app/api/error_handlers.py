@@ -106,7 +106,7 @@ def _build_response(
     ).to_dict()
     if detail_payload is not None:
         payload["detail"] = detail_payload
-    response_headers = {trace_header: trace_id}
+    response_headers = {trace_header: trace_id, "X-Trace-Id": trace_id}
     if headers:
         response_headers.update(headers)
     return JSONResponse(status_code=status_code, content=payload, headers=response_headers)
@@ -180,6 +180,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             return _handle_unexpected_exception(request, exc, trace_id, trace_header)
 
         response.headers.setdefault(trace_header, trace_id)
+        response.headers.setdefault("X-Trace-Id", trace_id)
         return response
 
     @app.exception_handler(RequestValidationError)

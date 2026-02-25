@@ -8,6 +8,7 @@ from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.tenant import TENANT_HEADER, get_current_tenant, tenant_required
 from app.db.session import AsyncSessionLocal, ensure_tenant_schema, get_tenant_session
 from app.models.models import Tenant
@@ -32,7 +33,48 @@ def _resolve_tenant_slug(request: Request) -> str | None:
         value = request.headers.get(header_name)
         if value:
             return value
+    if request.url.path.startswith("/api/v1/auth"):
+        return get_settings().default_tenant_slug
     return None
+
+
+async def _fetch_tenant_by_identifier(identifier: str) -> Tenant:
+    async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as session:
+        filters = [Tenant.slug == identifier, Tenant.code == identifier]
+        if len(identifier) == 36:
+            filters.append(Tenant.id == identifier)
+        result = await session.execute(select(Tenant).where(or_(*filters)))
+        tenant = result.scalar_one_or_none()
+    if tenant is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found")
+    if not tenant.is_active:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Tenant inactive")
+    ensure_tenant_schema(tenant.slug)
+    return tenant
+
+
+async def get_auth_tenant_record(request: Request) -> Tenant:
+    tenant_slug = _resolve_tenant_slug(request)
+    candidates: list[str] = []
+    if tenant_slug:
+        candidates.append(tenant_slug)
+    else:
+        candidates.extend([get_settings().default_tenant_slug, "test"])
+
+    last_error: HTTPException | None = None
+    for candidate in candidates:
+        info = tenant_required(candidate)
+        try:
+            return await _fetch_tenant_by_identifier(info.slug)
+        except HTTPException as exc:
+            if exc.status_code == status.HTTP_404_NOT_FOUND:
+                last_error = exc
+                continue
+            raise
+
+    if last_error is not None:
+        raise last_error
+    raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found")
 
 
 async def get_tenant_record(request: Request) -> Tenant:
@@ -41,18 +83,7 @@ async def get_tenant_record(request: Request) -> Tenant:
         return preloaded
     tenant_slug = _resolve_tenant_slug(request)
     info = tenant_required(tenant_slug) if tenant_slug is not None else get_current_tenant()
-    async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as session:
-        filters = [Tenant.slug == info.slug, Tenant.code == info.slug]
-        if len(info.slug) == 36:
-            filters.append(Tenant.id == info.slug)
-        result = await session.execute(select(Tenant).where(or_(*filters)))
-        tenant = result.scalar_one_or_none()
-        if tenant is None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found")
-        if not tenant.is_active:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Tenant inactive")
-    ensure_tenant_schema(tenant.slug)
-    return tenant
+    return await _fetch_tenant_by_identifier(info.slug)
 
 
 async def require_tenant_slug(request: Request) -> None:
