@@ -88,7 +88,10 @@ async def app_fixture():
     seed_tenants = {"test", "acme", "beta", "gamma", "delta", "zeta", "epsilon"}
 
     async with TestSession() as seed_session:
+        existing_slugs = set((await seed_session.execute(select(Tenant.slug))).scalars().all())
         for slug in seed_tenants:
+            if slug in existing_slugs:
+                continue
             seed_session.add(
                 Tenant(
                     slug=slug,
