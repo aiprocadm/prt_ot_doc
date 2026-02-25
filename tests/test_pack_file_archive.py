@@ -43,7 +43,7 @@ def _configure_s3(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture()
 def aws() -> None:
-    from moto import mock_aws
+    mock_aws = pytest.importorskip("moto").mock_aws
 
     with mock_aws():
         s3.ensure_bucket()
