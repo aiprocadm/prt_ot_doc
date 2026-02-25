@@ -1,10 +1,11 @@
 import { apiClient } from "@/api/client";
+import type { WizardPipelineStatus } from "@/api/documents";
 
 export type PipelineStepRun = {
   step_run_id: string;
   run_id: string;
   step_code: string;
-  status: string;
+  status: WizardPipelineStatus;
   attempt: number;
   started_at?: string | null;
   ended_at?: string | null;
@@ -22,7 +23,7 @@ export type PipelineLog = {
 export type PipelineRun = {
   run_id: string;
   profile_id?: string | null;
-  status: string;
+  status: WizardPipelineStatus;
   inputs_json?: Record<string, unknown> | null;
   outputs_json?: Record<string, unknown> | null;
   created_by?: string | null;
@@ -33,7 +34,7 @@ export type PipelineRun = {
 };
 
 export const listPipelineRuns = async (params?: Record<string, string>) => {
-  const response = await apiClient.get<{ items: Array<{ id: string; status: string; profile_id?: string | null; created_by?: string | null; correlation_id?: string | null }> }>("/v1/jobs", { params });
+  const response = await apiClient.get<{ items: Array<{ id: string; status: WizardPipelineStatus; profile_id?: string | null; created_by?: string | null; correlation_id?: string | null }> }>("/v1/jobs", { params });
   return response.data.items.map((item) => ({
     run_id: item.id,
     status: item.status,
@@ -45,7 +46,7 @@ export const listPipelineRuns = async (params?: Record<string, string>) => {
 };
 
 export const getPipelineRun = async (runId: string) => {
-  const response = await apiClient.get<{ job: { id: string; status: string; profile_id?: string | null; created_by?: string | null; correlation_id?: string | null }; steps: Array<{ code: string; status: string; attempt: number; started_at?: string | null; ended_at?: string | null; error_code?: string | null; error_payload?: Record<string, unknown> | null }>; logs: PipelineLog[]; result?: { artifacts?: Record<string, unknown> } | null }>(`/v1/jobs/${runId}`);
+  const response = await apiClient.get<{ job: { id: string; status: WizardPipelineStatus; profile_id?: string | null; created_by?: string | null; correlation_id?: string | null }; steps: Array<{ code: string; status: WizardPipelineStatus; attempt: number; started_at?: string | null; ended_at?: string | null; error_code?: string | null; error_payload?: Record<string, unknown> | null }>; logs: PipelineLog[]; result?: { artifacts?: Record<string, unknown> } | null }>(`/v1/jobs/${runId}`);
   const d = response.data;
   return {
     run_id: d.job.id,
