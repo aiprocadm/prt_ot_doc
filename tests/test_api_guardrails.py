@@ -6,6 +6,16 @@ from starlette import status
 
 from app.models.models import RoleEnum
 
+from app.middleware.tenant import TenantMiddleware
+
+
+@pytest.fixture(autouse=True)
+def _bypass_tenant_middleware(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _dispatch_passthrough(self, request, call_next):  # type: ignore[no-untyped-def]
+        return await call_next(request)
+
+    monkeypatch.setattr(TenantMiddleware, "dispatch", _dispatch_passthrough)
+
 
 @pytest.mark.anyio
 async def test_missing_tenant_header_returns_structured_error(app_fixture) -> None:
