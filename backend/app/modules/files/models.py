@@ -53,7 +53,7 @@ class FileVersion(TenantBase, TimestampMixin, VersionedMixin, UUIDMixin):
     __tenant_model__ = True
     __table_args__ = {"extend_existing": True}
 
-    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=False, index=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=False)
     file_id: Mapped[str] = mapped_column(String(36), ForeignKey("file_objects.id"), nullable=False, index=True)
     version_no: Mapped[int] = mapped_column(Integer, nullable=False)
     filename: Mapped[str] = mapped_column(String(255), nullable=False)

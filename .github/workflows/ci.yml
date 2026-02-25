@@ -13,6 +13,7 @@ jobs:
       REDIS_URL: memory://
       REDIS_RESULT_URL: cache+memory://
       RATE_LIMIT_STORAGE_URI: memory://
+      S3_ENDPOINT: http://localhost
     steps:
       - uses: actions/checkout@v4
 
