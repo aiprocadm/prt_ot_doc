@@ -312,7 +312,9 @@ class DocumentPipelineOrchestrator:
     ) -> None:
         duration_ms: int | None = None
         if started_at and ended_at:
-            duration_ms = int((ended_at - started_at).total_seconds() * 1000)
+            start_ts = self._as_utc(started_at)
+            end_ts = self._as_utc(ended_at)
+            duration_ms = int((end_ts - start_ts).total_seconds() * 1000)
         await AuditService(self.session).log_event(
             tenant_id=job.tenant_id,
             action="job_step",
@@ -334,6 +336,12 @@ class DocumentPipelineOrchestrator:
                 "correlation_id": job.correlation_id,
             },
         )
+
+    @staticmethod
+    def _as_utc(value: datetime) -> datetime:
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
 
     @staticmethod
     def _artifact_kind(step_code: str) -> str | None:
