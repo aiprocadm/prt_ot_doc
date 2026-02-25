@@ -10,7 +10,7 @@ os.environ.setdefault("APP_NAME", "TestService")
 os.environ.setdefault("APP_TRUSTED_HOSTS", "localhost,127.0.0.1,testserver")
 os.environ.setdefault("DEFAULT_LOCALE", "en-US")
 os.environ.setdefault("LIBREOFFICE_BIN", sys.executable)
-_SQLITE_TEST_DB = "sqlite+aiosqlite:///file::memory:?cache=shared&uri=true"
+_SQLITE_TEST_DB = "sqlite+aiosqlite:///:memory:"
 os.environ.setdefault("DATABASE_URL", _SQLITE_TEST_DB)
 os.environ.setdefault("REDIS_URL", "memory://")
 os.environ.setdefault("REDIS_RESULT_URL", "cache+memory://")
@@ -82,7 +82,6 @@ async def app_fixture():
     engine = create_async_engine(
         _SQLITE_TEST_DB,
         future=True,
-        connect_args={"uri": True},
         poolclass=StaticPool,
     )
     async with engine.begin() as conn:
