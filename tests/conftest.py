@@ -4,13 +4,14 @@ import os
 import sys
 import types
 from collections.abc import AsyncIterator, Awaitable, Callable
+from uuid import UUID
 
 # Set environment variables BEFORE any app imports
 os.environ.setdefault("APP_NAME", "TestService")
 os.environ.setdefault("APP_TRUSTED_HOSTS", "localhost,127.0.0.1,testserver")
 os.environ.setdefault("DEFAULT_LOCALE", "en-US")
 os.environ.setdefault("LIBREOFFICE_BIN", sys.executable)
-_SQLITE_TEST_DB = "sqlite+aiosqlite:///:memory:"
+_SQLITE_TEST_DB = "sqlite+aiosqlite:////tmp/prt_ot_doc_tests.db"
 os.environ.setdefault("DATABASE_URL", _SQLITE_TEST_DB)
 os.environ.setdefault("REDIS_URL", "memory://")
 os.environ.setdefault("REDIS_RESULT_URL", "cache+memory://")
@@ -26,16 +27,15 @@ import pytest
 import pytest_asyncio
 from fastapi import HTTPException, Request, status
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.pool import StaticPool
 
 from app.api import create_app
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import issue_access_token
 from app.core.tenant import TENANT_HEADER, tenant_required
 from app.db import Base, SharedBase
-from app.db.session import configure_engine
+from app.db.session import AsyncSessionLocal, configure_engine
 from app.models.models import Company, RoleEnum, Tenant, User
 from app.services.clamav import reset_quarantine_publisher
 from app.services.file_storage import FileStorageService
@@ -79,10 +79,11 @@ async def app_fixture():
     os.environ.setdefault("POSTGRES_DB", "test")
 
     _prepare_sqlite_metadata()
+    if os.path.exists("/tmp/prt_ot_doc_tests.db"):
+        os.remove("/tmp/prt_ot_doc_tests.db")
     engine = create_async_engine(
         _SQLITE_TEST_DB,
         future=True,
-        poolclass=StaticPool,
     )
     async with engine.begin() as conn:
         await conn.run_sync(SharedBase.metadata.create_all)
@@ -92,16 +93,37 @@ async def app_fixture():
 
     seed_tenants = {"test", "acme", "beta", "gamma", "delta", "zeta", "epsilon"}
 
+    async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as shared_session:
+        shared_existing = set((await shared_session.execute(select(Tenant.slug))).scalars().all())
+        for slug in seed_tenants:
+            if slug in shared_existing:
+                continue
+            shared_session.add(
+                Tenant(
+                    slug=slug,
+                    name=slug.title(),
+                    contact_email=f"{slug}@example.com",
+                )
+            )
+        await shared_session.commit()
+        shared_tenants = {
+            tenant.slug: tenant
+            for tenant in (await shared_session.execute(select(Tenant))).scalars().all()
+            if tenant.slug in seed_tenants
+        }
+
     async with TestSession() as seed_session:
         existing_slugs = set((await seed_session.execute(select(Tenant.slug))).scalars().all())
         for slug in seed_tenants:
             if slug in existing_slugs:
                 continue
+            shared = shared_tenants.get(slug)
             seed_session.add(
                 Tenant(
+                    id=(shared.id if shared is not None else None),
                     slug=slug,
-                    name=slug.title(),
-                    contact_email=f"{slug}@example.com",
+                    name=(shared.name if shared is not None else slug.title()),
+                    contact_email=(shared.contact_email if shared is not None else f"{slug}@example.com"),
                 )
             )
         await seed_session.commit()
@@ -135,14 +157,17 @@ async def app_fixture():
     app.state.redis_client = _StubRedisClient()
 
     async def override_tenant_record(request: Request) -> Tenant:
+        preloaded = getattr(request.state, "tenant_record", None)
+        if isinstance(preloaded, Tenant):
+            return preloaded
+
         tenant_slug = request.headers.get(TENANT_HEADER) or request.headers.get("x-tenant-slug")
         info = tenant_required(tenant_slug)
         async with TestSession() as session:
-            tenant = (
-                await session.execute(
-                    select(Tenant).where((Tenant.slug == info.slug) | (Tenant.id == info.slug) | (Tenant.code == info.slug))
-                )
-            ).scalar_one_or_none()
+            filters = [Tenant.slug == info.slug, Tenant.code == info.slug]
+            if len(info.slug) == 36:
+                filters.append(Tenant.id == str(UUID(info.slug)))
+            tenant = (await session.execute(select(Tenant).where(or_(*filters)))).scalar_one_or_none()
             if tenant is None or not tenant.is_active:
                 raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found")
             return tenant
@@ -227,7 +252,15 @@ async def make_auth_headers(
                 str(user.company_id) if getattr(user, "company_id", None) else None
             )
 
-        claims: dict[str, str | object] = {"tenant_id": token_tenant_id}
+        request_tenant_id = str(tenant.id)
+        async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as public_session:
+            public_tenant = (
+                await public_session.execute(select(Tenant).where(Tenant.slug == tenant.slug))
+            ).scalar_one_or_none()
+            if public_tenant is not None:
+                request_tenant_id = str(public_tenant.id)
+
+        claims: dict[str, str | object] = {"tenant_id": request_tenant_id}
         if company_claim:
             claims["company_id"] = company_claim
 
@@ -237,6 +270,7 @@ async def make_auth_headers(
             role=role.value,
             additional_claims=claims,
         )
-        return {"Authorization": f"Bearer {token}", "x-tenant": str(tenant.id)}
+
+        return {"Authorization": f"Bearer {token}", "x-tenant": request_tenant_id}
 
     return factory
