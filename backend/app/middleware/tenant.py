@@ -11,7 +11,7 @@ from starlette.responses import Response
 from starlette.types import ASGIApp
 
 from app.core.security import verify_token
-from app.core.tenant import TENANT_HEADER_ALIASES, tenant_required
+from app.core.tenant import TENANT_HEADER, TENANT_HEADER_ALIASES, tenant_required
 from app.db.session import AsyncSessionLocal
 from app.modules.tenancy.context import TenantContext, reset_tenant_context, set_tenant_context
 from app.models.models import Tenant, TenantQuota, TenantSettings
