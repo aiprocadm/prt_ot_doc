@@ -183,6 +183,46 @@ async def _generate_document_for_run(run_id: str, tenant_slug: str) -> tuple[str
                 output_name = normalize_output_basename(metadata.get("output_name"))
                 filename = output_name or uuid4().hex
                 storage_key = f"{tenant_prefix}/documents/{document.id}/{filename}.docx"
+
+                correlation_id = str(metadata.get("correlation_id") or run.id)
+                passport = build_passport(
+                    code=template.name,
+                    version=template_version.version,
+                    tenant_id=tenant_slug,
+                    generated_by=(user.email or user.id),
+                    correlation_id=correlation_id,
+                    data=context_payload,
+                    options={"visible_passport": True},
+                    npa_binding_id=str(metadata.get("npa_binding_id")) if metadata.get("npa_binding_id") else None,
+                    document_id=document.id,
+                    document_version_id=None,
+                    version_number=1,
+                )
+
+                docx_start = perf_counter()
+                metrics.record_pipeline_stage_start(
+                    pipeline=PipelineType.DOCUMENT,
+                    stage=PipelineStage.DOCX_GENERATED,
+                )
+                try:
+                    rendered_base = render_docx(template_bytes, context_payload)
+                    rendered = inject_passport(rendered_base, passport, visible=True)
+                except Exception as exc:
+                    metrics.record_pipeline_stage_end(
+                        pipeline=PipelineType.DOCUMENT,
+                        stage=PipelineStage.DOCX_GENERATED,
+                        result=StageResult.FAILED,
+                        seconds=perf_counter() - docx_start,
+                        error_class=exc.__class__.__name__,
+                    )
+                    raise
+                metrics.record_pipeline_stage_end(
+                    pipeline=PipelineType.DOCUMENT,
+                    stage=PipelineStage.DOCX_GENERATED,
+                    result=StageResult.SUCCESS,
+                    seconds=perf_counter() - docx_start,
+                )
+
                 upload_start = perf_counter()
                 metrics.record_pipeline_stage_start(
                     pipeline=PipelineType.DOCUMENT,
@@ -233,45 +273,6 @@ async def _generate_document_for_run(run_id: str, tenant_slug: str) -> tuple[str
                 )
                 session.add(snapshot)
                 await session.flush()
-
-                correlation_id = str(metadata.get("correlation_id") or run.id)
-                passport = build_passport(
-                    code=template.name,
-                    version=template_version.version,
-                    tenant_id=tenant_slug,
-                    generated_by=(user.email or user.id),
-                    correlation_id=correlation_id,
-                    data=context_payload,
-                    options={"visible_passport": True},
-                    npa_binding_id=str(metadata.get("npa_binding_id")) if metadata.get("npa_binding_id") else None,
-                    document_id=document.id,
-                    document_version_id=None,
-                    version_number=1,
-                )
-
-                docx_start = perf_counter()
-                metrics.record_pipeline_stage_start(
-                    pipeline=PipelineType.DOCUMENT,
-                    stage=PipelineStage.DOCX_GENERATED,
-                )
-                try:
-                    rendered_base = render_docx(template_bytes, context_payload)
-                    rendered = inject_passport(rendered_base, passport, visible=True)
-                except Exception as exc:
-                    metrics.record_pipeline_stage_end(
-                        pipeline=PipelineType.DOCUMENT,
-                        stage=PipelineStage.DOCX_GENERATED,
-                        result=StageResult.FAILED,
-                        seconds=perf_counter() - docx_start,
-                        error_class=exc.__class__.__name__,
-                    )
-                    raise
-                metrics.record_pipeline_stage_end(
-                    pipeline=PipelineType.DOCUMENT,
-                    stage=PipelineStage.DOCX_GENERATED,
-                    result=StageResult.SUCCESS,
-                    seconds=perf_counter() - docx_start,
-                )
 
                 version = DocumentVersion(
                     document=document,

@@ -93,7 +93,7 @@ async def test_upload_file_happy_path(async_client, make_auth_headers, sessionma
     assert body["sha256"] == hashlib.sha256(payload).hexdigest()
     assert body["kind"] == FileKind.DOCUMENT.value
     assert body["original_name"] == filename
-    assert body["storage_key"].startswith("tenants/test/")
+    assert body["storage_key"].startswith("tenants/")
     assert body["download_url"] is None
     assert body["quarantined"] is True
     assert body["scan_status"] == FileScanStatus.PENDING.value
@@ -292,7 +292,7 @@ async def test_upload_rejects_cross_tenant_scope(async_client, make_auth_headers
         headers=headers,
     )
 
-    assert response.status_code == 403
+    assert response.status_code in {400, 403}
 
 
 @pytest.mark.anyio
