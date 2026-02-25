@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+import types
 from collections.abc import AsyncIterator, Awaitable, Callable
 
 # Set environment variables BEFORE any app imports
@@ -15,6 +16,11 @@ os.environ.setdefault("REDIS_URL", "memory://")
 os.environ.setdefault("REDIS_RESULT_URL", "cache+memory://")
 os.environ.setdefault("RATE_LIMIT_STORAGE_URI", "memory://")
 os.environ.setdefault("S3_ENDPOINT", "http://localhost")
+
+# Some CI/python environments don't provide the stdlib `crypt` module
+# (e.g. Windows, slim containers). Passlib imports it during auth setup,
+# so provide a tiny fallback stub for tests when it's unavailable.
+sys.modules.setdefault("crypt", types.SimpleNamespace(crypt=lambda secret, salt: "mocked"))
 
 import pytest
 import pytest_asyncio
