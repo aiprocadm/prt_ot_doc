@@ -3,9 +3,21 @@ from __future__ import annotations
 from app.domains.files import s3
 
 
-def build_tenant_key(*, tenant_id: str, entity: str, entity_id: str, file_id: str, filename: str) -> str:
+def build_tenant_key(
+    *,
+    tenant_id: str,
+    file_id: str,
+    filename: str,
+    entity: str | None = None,
+    entity_id: str | None = None,
+    version_no: int | None = None,
+) -> str:
     safe_name = filename.replace("..", "_").replace("/", "_")
-    return f"tenants/{tenant_id}/{entity}/{entity_id}/{file_id}_{safe_name}"
+    if version_no is not None:
+        return f"{tenant_id}/{file_id}/{version_no}/{safe_name}"
+    resolved_entity = str(entity or "files")
+    resolved_entity_id = str(entity_id or file_id)
+    return f"tenants/{tenant_id}/{resolved_entity}/{resolved_entity_id}/{file_id}_{safe_name}"
 
 
 def assert_tenant_key(*, tenant_id: str, key: str) -> None:

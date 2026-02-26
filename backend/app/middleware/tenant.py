@@ -89,7 +89,7 @@ class TenantMiddleware(BaseHTTPMiddleware):
                 token_slug = raw_slug or None
 
         normalized_header = header_slug.strip() if header_slug else None
-        if normalized_header and not self._is_uuid(normalized_header):
+        if path.startswith("/api/v1/") and normalized_header and not self._is_uuid(normalized_header):
             raise self._bad_request(correlation_id, code="TENANT_INVALID", message="X-Tenant must be UUID")
         info = tenant_required(normalized_header)
         async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as session:

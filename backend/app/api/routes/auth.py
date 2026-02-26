@@ -69,6 +69,15 @@ class PermissionsResponse(BaseModel):
     abac_scopes: dict[str, list[str] | int | None] = Field(default_factory=dict)
 
 
+
+async def _resolve_login_tenant(request: Request) -> Tenant | None:
+    try:
+        return await get_tenant_record(request)
+    except HTTPException as exc:
+        if exc.status_code in {status.HTTP_400_BAD_REQUEST, status.HTTP_404_NOT_FOUND}:
+            return None
+        raise
+
 def _invalid_credentials() -> HTTPException:
     return HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid email or password")
 
@@ -92,9 +101,12 @@ async def login(
     response: Response,
     payload: LoginRequest = Depends(_inject_login_subject),
     session: AsyncSession = Depends(get_session),
-    tenant: Tenant = Depends(get_tenant_record),
+    tenant: Tenant | None = Depends(_resolve_login_tenant),
 ) -> TokenPair:
     """Authenticate a user and issue a new token pair."""
+
+    if tenant is None:
+        raise _invalid_credentials()
 
     normalized_email = payload.email.lower()
     getattr(request.state, "rate_limit_subject", None)
