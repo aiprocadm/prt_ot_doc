@@ -88,7 +88,7 @@ class PipelineOrchestrator:
         await self.session.flush()
         return job
 
-    async def start_job(self, *, job_id: str) -> DocumentJob:
+    async def start_job(self, *, job_id: str, enqueue: bool = True) -> DocumentJob:
         job = await self.session.get(DocumentJob, job_id)
         if not job:
             raise ValueError("job_not_found")
@@ -98,9 +98,11 @@ class PipelineOrchestrator:
         await self._audit_diff(job, {"status": prev}, {"status": job.status})
         await self._audit_action(job=job, action="start_job", details={})
         await self.session.flush()
+        if enqueue:
+            await self.continue_job(job_id=job.id)
         return job
 
-    async def continue_job(self, *, job_id: str, from_step_order: int | None = None) -> DocumentJob:
+    async def continue_job(self, *, job_id: str, from_step_order: int | None = None, enqueue: bool = True) -> DocumentJob:
         job = await self.session.get(DocumentJob, job_id)
         if not job:
             raise ValueError("job_not_found")
@@ -112,6 +114,8 @@ class PipelineOrchestrator:
             await self.session.flush()
             return job
         job.current_step_index = step.step_order or step.order
+        if enqueue:
+            self.enqueue_next_step(job=job, step=step)
         await self.session.flush()
         return job
 
@@ -154,14 +158,14 @@ class PipelineOrchestrator:
             pivot_order = (failed.step_order or failed.order) if failed else 1
 
         for step in steps:
+            if retry_failed_only and str(step.status) != JobStepStatus.FAILED.value:
+                continue
             if (step.step_order or step.order) >= pivot_order:
                 step.status = JobStepStatus.QUEUED.value
                 step.started_at = None
                 step.ended_at = None
                 step.error_code = None
                 step.error_payload = None
-                if (step.step_order or step.order) == pivot_order:
-                    step.attempts += 1
 
         job.status = DocumentJobStatus.QUEUED.value
         job.error_code = None
@@ -182,7 +186,11 @@ class PipelineOrchestrator:
         locked = await self.session.execute(
             update(DocumentJobStep)
             .where(DocumentJobStep.id == step_id, DocumentJobStep.status.in_([JobStepStatus.QUEUED.value, JobStepStatus.FAILED.value]))
-            .values(status=JobStepStatus.RUNNING.value, started_at=datetime.now(timezone.utc))
+            .values(
+                status=JobStepStatus.RUNNING.value,
+                started_at=datetime.now(timezone.utc),
+                attempts=DocumentJobStep.attempts + 1,
+            )
         )
         if not (locked.rowcount or 0):
             return step
@@ -216,6 +224,15 @@ class PipelineOrchestrator:
         finally:
             await self.session.flush()
         return step
+
+
+    def enqueue_next_step(self, *, job: DocumentJob, step: DocumentJobStep) -> None:
+        from app.celery.tasks.job_steps import run_job_step
+
+        run_job_step.apply_async(
+            kwargs={"tenant_slug": str(job.tenant_id), "job_id": job.id, "step_id": step.id},
+            headers={"tenant_id": str(job.tenant_id)},
+        )
 
     async def _next_step(self, job_id: str, from_step_order: int | None = None) -> DocumentJobStep | None:
         stmt = select(DocumentJobStep).where(DocumentJobStep.job_id == job_id, DocumentJobStep.status == JobStepStatus.QUEUED.value)
@@ -356,7 +373,7 @@ class DocumentPipelineOrchestrator(PipelineOrchestrator):
         )
 
     async def run_job(self, *, job_id: str, fail_step: str | None = None) -> DocumentJob:
-        job = await self.start_job(job_id=job_id)
+        job = await self.start_job(job_id=job_id, enqueue=False)
         while True:
             step = await self._next_step(job.id)
             if not step:
@@ -369,7 +386,7 @@ class DocumentPipelineOrchestrator(PipelineOrchestrator):
                 await self.session.flush()
                 return job
             await self.run_step(job_id=job.id, step_id=step.id)
-        await self.continue_job(job_id=job.id)
+        await self.continue_job(job_id=job.id, enqueue=False)
         return job
 
     async def advance_job(self, *, job_id: str, fail_step: str | None = None) -> DocumentJob:
