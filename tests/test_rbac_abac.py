@@ -1,7 +1,5 @@
 import pytest
 from httpx import AsyncClient
-import pytest
-from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -66,7 +64,7 @@ async def test_cross_tenant_write_is_rejected(
 
     assert response.status_code == 403
     body = response.json()
-    assert body["code"] == "forbidden"
+    assert body["code"] == "TENANT_SCOPE_MISMATCH"
     assert "tenant" in body["message"].lower()
 
 
@@ -81,5 +79,5 @@ async def test_cross_tenant_read_is_forbidden(
 
     assert response.status_code == 403
     body = response.json()
-    assert body["code"] == "forbidden"
+    assert body["code"] == "TENANT_SCOPE_MISMATCH"
     assert "tenant" in body["message"].lower()
