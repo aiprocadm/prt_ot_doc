@@ -31,3 +31,8 @@ def export_report_job(*, tenant_slug: str, report_id: str) -> dict[str, str]:
 @celery_app.task(name="app.tasks.sync_integration_job")
 def sync_integration_job(*, tenant_slug: str, integration_key: str) -> dict[str, str]:
     return {"tenant": tenant_slug, "integration_key": integration_key, "status": "accepted"}
+
+
+@celery_app.task(name="app.tasks.index_file_content_job")
+def index_file_content_job(*, tenant_slug: str, job_id: str, step_id: str) -> dict[str, str]:
+    return {"tenant": tenant_slug, "job_id": job_id, "step_id": step_id, "status": "accepted"}
