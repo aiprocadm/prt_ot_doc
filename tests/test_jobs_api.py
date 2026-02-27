@@ -229,3 +229,30 @@ async def test_jobs_logs_endpoint(async_client, make_auth_headers, sessionmaker,
     resp = await async_client.get(f"/api/v1/jobs/{job_id}/steps/{step_id}/logs", headers=headers)
     assert resp.status_code == 200, resp.text
     assert resp.json()["lines"]
+
+
+@pytest.mark.anyio
+async def test_create_job_endpoint_without_idempotency_key(async_client, make_auth_headers, sessionmaker, data_factory) -> None:
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+    await _ensure_global_tenant(slug=tenant.slug, tenant_id=str(tenant.id))
+    headers = await make_auth_headers()
+    headers["x-tenant"] = str(tenant.id)
+
+    profile_payload = {
+        "code": "jobs_default_v2",
+        "name": "Jobs default v2",
+        "steps": [{"code": "render_docx", "required": True, "params_schema": "RenderParamsV1"}],
+        "limits": {"max_parallel": 2, "max_parallel_per_step": {}},
+        "is_active": True,
+    }
+    created = await async_client.post("/api/v1/pipelines/profiles", json=profile_payload, headers=headers)
+    assert created.status_code == 201, created.text
+    profile_id = created.json()["id"]
+
+    payload = {"profile_id": profile_id, "inputs": {"x": 1}, "options": {"run_async": True}}
+    resp = await async_client.post("/api/v1/jobs", json=payload, headers=headers)
+    assert resp.status_code == 202
+    body = resp.json()
+    assert body["correlation_id"]
+    assert body["steps"]

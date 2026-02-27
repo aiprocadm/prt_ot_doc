@@ -111,7 +111,7 @@ class DocumentJobStep(TenantBaseModel):
     __table_args__ = (
         UniqueConstraint("job_id", "step_code", name="uq_document_job_step"),
         Index("ix_job_steps_tenant_job", "tenant_id", "job_id"),
-        Index("ix_job_steps_tenant_job_order", "tenant_id", "job_id", "order"),
+        Index("ix_job_steps_tenant_job_order", "tenant_id", "job_id", "step_order"),
     )
 
 

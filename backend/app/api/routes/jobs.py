@@ -73,6 +73,8 @@ class JobCreateRequest(BaseModel):
 class JobCreateResponse(BaseModel):
     job_id: str
     status: str
+    correlation_id: str
+    steps: list[JobStepRead]
 
 
 def _status_value(raw: Any) -> str:
@@ -86,9 +88,6 @@ async def create_job(
     tenant: Tenant = Depends(get_tenant_record),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> JobCreateResponse:
-    if not idempotency_key:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Idempotency-Key is required")
-
     profile = None
     if payload.profile_id:
         profile = await session.get(PipelineProfile, payload.profile_id)
@@ -99,11 +98,13 @@ async def create_job(
 
     request_hash = compute_request_hash(payload.model_dump())
     idem_service = IdempotencyService(session=session, tenant_id=str(tenant.id), endpoint="jobs.create")
-    idem_key = normalize_idempotency_key(idempotency_key)
-    record, created = await idem_service.acquire(key=idem_key, request_hash=request_hash, method="POST", path="/v1/jobs")
-    if not created:
-        body = await idem_service.respond_from_store(record, model=JobCreateResponse)
-        return body
+    idem_key = normalize_idempotency_key(idempotency_key) if idempotency_key else None
+    record = None
+    if idem_key:
+        record, created = await idem_service.acquire(key=idem_key, request_hash=request_hash, method="POST", path="/v1/jobs")
+        if not created:
+            body = await idem_service.respond_from_store(record, model=JobCreateResponse)
+            return body
 
     orchestrator = DocumentPipelineOrchestrator(session)
     job = await orchestrator.start_document_job(
@@ -116,12 +117,35 @@ async def create_job(
             "input": payload.input_payload or payload.inputs,
             "options": {**payload.options, "preset_id": payload.preset_id},
         },
-        idempotency_key=idem_key,
+        idempotency_key=idem_key or f"jobs:{tenant.id}:{request_hash[:16]}",
         request_hash=request_hash,
     )
-    await idem_service.store_success(record, status_code=status.HTTP_202_ACCEPTED, body={"job_id": job.id, "status": _status_value(job.status)})
+    steps = (await session.execute(select(DocumentJobStep).where(DocumentJobStep.job_id == job.id).order_by(DocumentJobStep.order.asc()))).scalars().all()
+    response_body = {
+        "job_id": job.id,
+        "status": _status_value(job.status),
+        "correlation_id": job.correlation_id,
+        "steps": [
+            {
+                "code": s.step_key or s.step_code,
+                "step_name": s.step_key or s.step_code,
+                "status": _status_value(s.status),
+                "attempt": s.attempts,
+                "max_attempts": s.max_attempts,
+                "started_at": s.started_at,
+                "ended_at": s.ended_at,
+                "input_ref": s.input_ref,
+                "output_ref": s.output_ref,
+                "error_code": s.error_code,
+                "error_payload": s.error_payload,
+            }
+            for s in steps
+        ],
+    }
+    if idem_key and record is not None:
+        await idem_service.store_success(record, status_code=status.HTTP_202_ACCEPTED, body=response_body)
     await session.commit()
-    return JobCreateResponse(job_id=job.id, status=_status_value(job.status))
+    return JobCreateResponse.model_validate(response_body)
 
 
 class JobListRead(BaseModel):
@@ -219,7 +243,7 @@ async def retry_job(job_id: str, payload: RetryJobRequest, session: AsyncSession
     if job is None or str(job.tenant_id) != str(tenant.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
     try:
-        await DocumentPipelineOrchestrator(session).retry_job(job_id=job_id, from_step_key=payload.from_step_key or payload.step_key)
+        await DocumentPipelineOrchestrator(session).retry_job(job_id=job_id, from_step_key=payload.from_step_key or payload.step_key, retry_failed_only=payload.retry_failed_only)
     except ValueError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     await session.commit()
