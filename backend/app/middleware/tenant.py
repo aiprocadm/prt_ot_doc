@@ -11,7 +11,7 @@ from starlette.responses import Response
 from starlette.types import ASGIApp
 
 from app.core.security import verify_token
-from app.core.tenant import TENANT_HEADER_ALIASES, tenant_required
+from app.core.tenant import TENANT_HEADER, TENANT_HEADER_ALIASES, tenant_required
 from app.db.session import AsyncSessionLocal
 from app.modules.tenancy.context import TenantContext, reset_tenant_context, set_tenant_context
 from app.models.models import Tenant, TenantQuota, TenantSettings
@@ -147,8 +147,8 @@ class TenantMiddleware(BaseHTTPMiddleware):
             slug=tenant.slug,
             schema=request.state.tenant_schema,
             s3_prefix=request.state.tenant_s3_prefix,
-            tenant_level=tenant.kind,
-            plan=((tenant.settings or {}).get("plan") if isinstance(tenant.settings, dict) else None) or "Free",
+            tenant_level=getattr(tenant, "kind", "customer"),
+            plan=((getattr(tenant, "settings", None) or {}).get("plan") if isinstance(getattr(tenant, "settings", None), dict) else None) or "Free",
             limits={
                 "users": None,
                 "templates": None,
@@ -173,3 +173,6 @@ class TenantMiddleware(BaseHTTPMiddleware):
             return response
         finally:
             reset_tenant_context(token)
+
+
+__all__ = ["TENANT_HEADER", "TenantMiddleware"]
