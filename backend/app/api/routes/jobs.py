@@ -62,8 +62,10 @@ class JobRead(BaseModel):
 
 
 class JobCreateRequest(BaseModel):
+    profile_code: str | None = None
     preset_id: str | None = None
     profile_id: str | None = None
+    input_payload: dict[str, Any] = {}
     inputs: dict[str, Any] = {}
     options: dict[str, Any] = {}
 
@@ -87,10 +89,11 @@ async def create_job(
     if not idempotency_key:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Idempotency-Key is required")
 
-    if not payload.profile_id:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "profile_id is required")
-
-    profile = await session.get(PipelineProfile, payload.profile_id)
+    profile = None
+    if payload.profile_id:
+        profile = await session.get(PipelineProfile, payload.profile_id)
+    elif payload.profile_code:
+        profile = (await session.execute(select(PipelineProfile).where(PipelineProfile.tenant_id == str(tenant.id), PipelineProfile.code == payload.profile_code, PipelineProfile.is_active.is_(True)))).scalar_one_or_none()
     if profile is None or str(profile.tenant_id) != str(tenant.id) or not profile.is_active:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "profile not found")
 
@@ -110,7 +113,7 @@ async def create_job(
             "template_code": profile.code,
             "template_version": 1,
             "pipeline_profile_id": profile.id,
-            "input": payload.inputs,
+            "input": payload.input_payload or payload.inputs,
             "options": {**payload.options, "preset_id": payload.preset_id},
         },
         idempotency_key=idem_key,
@@ -204,6 +207,8 @@ async def cancel_job(job_id: str, session: AsyncSession = Depends(get_session), 
 
 
 class RetryJobRequest(BaseModel):
+    step_key: str | None = None
+    from_step_key: str | None = None
     retry_failed_only: bool = False
 
 
@@ -214,7 +219,7 @@ async def retry_job(job_id: str, payload: RetryJobRequest, session: AsyncSession
     if job is None or str(job.tenant_id) != str(tenant.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
     try:
-        await DocumentPipelineOrchestrator(session).retry_job(job_id=job_id, retry_failed_only=payload.retry_failed_only)
+        await DocumentPipelineOrchestrator(session).retry_job(job_id=job_id, from_step_key=payload.from_step_key or payload.step_key)
     except ValueError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     await session.commit()
@@ -247,6 +252,27 @@ async def retry_step_by_id(job_id: str, step_id: str, session: AsyncSession = De
     return await rerun_step(job_id=job_id, step=step.step_code, session=session, tenant=tenant)
 
 
+
+
+@router.get("/{job_id}/steps/{step_id}/logs")
+async def get_step_logs(job_id: str, step_id: str, tail: int = Query(default=200, ge=1, le=2000), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict[str, Any]:
+    job = await session.get(DocumentJob, job_id)
+    if job is None or str(job.tenant_id) != str(tenant.id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+    step = await session.get(DocumentJobStep, step_id)
+    if step is None or step.job_id != job_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Step not found")
+    if not step.logs_uri:
+        return {"logs_uri": None, "lines": []}
+
+    from app.services.file_storage import FileStorageService
+
+    storage = FileStorageService.default()
+    key = step.logs_uri.replace("s3://", "")
+    if not storage.has(key):
+        return {"logs_uri": step.logs_uri, "lines": []}
+    lines = storage.get(key).decode("utf-8").splitlines()[-tail:]
+    return {"logs_uri": step.logs_uri, "lines": lines}
 class RetryStepRequest(BaseModel):
     step_key: str
 

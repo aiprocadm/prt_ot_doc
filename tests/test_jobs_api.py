@@ -179,3 +179,53 @@ async def test_jobs_cancel_and_retry_slash_endpoints(async_client, make_auth_hea
     )
     assert retried.status_code == 200
     assert retried.json()["job"]["id"] == job_id
+
+
+@pytest.mark.anyio
+async def test_jobs_logs_endpoint(async_client, make_auth_headers, sessionmaker, data_factory) -> None:
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        job = DocumentJob(
+            tenant_id=str(tenant.id),
+            kind="pipeline",
+            status=DocumentJobStatus.RUNNING.value,
+            pipeline_profile_id=None,
+            preset_id=None,
+            input_sha256="a" * 64,
+            request_hash="b" * 64,
+            idempotency_key="idem-job-logs",
+            template_code="TMP",
+            template_version=1,
+            correlation_id="corr-logs",
+            created_by="user-1",
+        )
+        session.add(job)
+        await session.flush()
+        step = DocumentJobStep(
+            tenant_id=str(tenant.id),
+            job_id=job.id,
+            step_code="render_docx",
+            step_key="render_docx",
+            status=JobStepStatus.RUNNING.value,
+            logs_uri=f"s3://{tenant.id}/jobs/{job.id}/render_docx.jsonl",
+        )
+        session.add(step)
+        await session.commit()
+        job_id = job.id
+        step_id = step.id
+
+    from app.services.file_storage import FileStorageService
+
+    storage = FileStorageService.default()
+    storage.put(
+        f"{tenant.id}/jobs/{job_id}/render_docx.jsonl",
+        b'{"timestamp":"2026-01-01T00:00:00Z","level":"info","message":"ok","meta":{}}\n',
+        content_type="application/jsonl",
+    )
+
+    headers = await make_auth_headers()
+    headers["x-tenant"] = str(tenant.id)
+    await _ensure_global_tenant(slug=tenant.slug, tenant_id=str(tenant.id))
+    resp = await async_client.get(f"/api/v1/jobs/{job_id}/steps/{step_id}/logs", headers=headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["lines"]

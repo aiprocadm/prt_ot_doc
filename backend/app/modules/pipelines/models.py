@@ -26,3 +26,19 @@ class PipelineProfile(TenantBaseModel):
         UniqueConstraint("tenant_id", "code", name="uq_pipeline_profile_tenant_code"),
         Index("ix_pipeline_profiles_tenant_active", "tenant_id", "is_active"),
     )
+
+
+class PipelinePackageProfile(TenantBaseModel):
+    """Package profile for document job orchestrator compatibility."""
+
+    __tablename__ = "package_profiles"
+
+    code: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    steps_json: Mapped[list[dict]] = mapped_column(JSONBType, nullable=False, default=list)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "code", name="uq_package_profile_tenant_code"),
+        Index("ix_package_profiles_tenant_code", "tenant_id", "code"),
+    )
