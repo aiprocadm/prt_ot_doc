@@ -89,8 +89,6 @@ class TenantMiddleware(BaseHTTPMiddleware):
                 token_slug = raw_slug or None
 
         normalized_header = header_slug.strip() if header_slug else None
-        if path.startswith("/api/v1/") and normalized_header and not self._is_uuid(normalized_header):
-            raise self._error(status.HTTP_400_BAD_REQUEST, correlation_id, code="TENANT_INVALID", message="X-Tenant must be UUID")
         info = tenant_required(normalized_header)
         async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as session:
             identifier = info.slug
@@ -106,9 +104,11 @@ class TenantMiddleware(BaseHTTPMiddleware):
                 message="Tenant not found",
             )
         if token_slug and token_slug.casefold() not in {str(tenant.id).casefold(), str(tenant.slug).casefold(), str(tenant.code).casefold()}:
-            raise HTTPException(
+            raise self._error(
                 status.HTTP_403_FORBIDDEN,
-                "Tenant header does not match token scope",
+                correlation_id,
+                code="TENANT_SCOPE_MISMATCH",
+                message="Tenant header does not match token scope",
             )
         if not tenant.is_active:
             raise self._error(
