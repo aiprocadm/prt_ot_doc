@@ -187,7 +187,27 @@ async def backward_list(
     _: AdminAccess,
     session: SessionDep,
 ) -> AuditLogHistory:
-    return await get_audit_history(entity_id=object_id, entity_type=object_type, action=action, correlation_id=None, tenant=tenant, _=_, session=session)
+    if object_id is not None and not object_id.strip():
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "object_id must not be blank")
+    if object_type is not None and not object_type.strip():
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "object_type must not be blank")
+    if action is not None and not action.strip():
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "action must not be blank")
+
+    return await get_audit_history(
+        from_=None,
+        to=None,
+        entity_type=object_type,
+        entity_id=object_id,
+        actor_id=None,
+        action=action,
+        correlation_id=None,
+        limit=100,
+        offset=0,
+        tenant=tenant,
+        _=_,
+        session=session,
+    )
 
 
 @router.get("/export")
