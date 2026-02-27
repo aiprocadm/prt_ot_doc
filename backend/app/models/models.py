@@ -89,6 +89,8 @@ __all__ = [
     "TenantQuota",
     "TenantCounter",
     "TenantSettings",
+    "TenantIntegrationKey",
+    "TenantQuotaCounter",
     "Template",
     "TemplateVersion",
     "Training",
@@ -208,6 +210,34 @@ class TenantCounter(SharedModel):
     doc_generations: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     __table_args__ = (UniqueConstraint("tenant_id", "yyyymm", name="uq_tenant_counter_period"),)
+
+
+
+
+class TenantIntegrationKey(SharedModel):
+    __tablename__ = "tenant_integrations_keys"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(64), nullable=False)
+    encrypted_secret: Mapped[str] = mapped_column(Text, nullable=False)
+    meta_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "provider", name="uq_tenant_integrations_keys_tenant_provider"),
+    )
+
+
+class TenantQuotaCounter(SharedModel):
+    __tablename__ = "tenant_quotas_counters"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=False, index=True)
+    counter_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    period: Mapped[str] = mapped_column(String(7), nullable=False)
+    value: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "counter_name", "period", name="uq_tenant_quota_counter"),
+    )
 
 
 class WebhookSubscription(SharedModel):

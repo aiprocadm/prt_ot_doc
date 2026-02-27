@@ -11,7 +11,7 @@ from starlette.responses import Response
 from starlette.types import ASGIApp
 
 from app.core.security import verify_token
-from app.core.tenant import TENANT_HEADER, TENANT_HEADER_ALIASES, tenant_required
+from app.core.tenant import TENANT_HEADER_ALIASES, tenant_required
 from app.db.session import AsyncSessionLocal
 from app.modules.tenancy.context import TenantContext, reset_tenant_context, set_tenant_context
 from app.models.models import Tenant, TenantQuota, TenantSettings
@@ -35,12 +35,12 @@ class TenantMiddleware(BaseHTTPMiddleware):
         return True
 
     @staticmethod
-    def _bad_request(correlation_id: str, *, code: str, message: str) -> HTTPException:
+    def _error(status_code: int, correlation_id: str, *, code: str, message: str, err_type: str = "tenancy") -> HTTPException:
         return HTTPException(
-            status.HTTP_400_BAD_REQUEST,
+            status_code,
             detail={
                 "code": code,
-                "type": "validation",
+                "type": err_type,
                 "message": message,
                 "correlation_id": correlation_id,
             },
@@ -56,7 +56,7 @@ class TenantMiddleware(BaseHTTPMiddleware):
             path in self._system_paths
             or (self._metrics_enabled and path == "/metrics")
             or path.startswith("/docs")
-            or path == "/openapi.json"
+            or path.endswith("/openapi.json")
             or any(path.startswith(prefix) for prefix in self._public_prefixes)
         ):
             return await call_next(request)
@@ -70,7 +70,7 @@ class TenantMiddleware(BaseHTTPMiddleware):
             if header_slug:
                 break
         if path.startswith("/api/v1/") and not header_slug:
-            raise self._bad_request(correlation_id, code="TENANT_REQUIRED", message="X-Tenant header required")
+            raise self._error(status.HTTP_400_BAD_REQUEST, correlation_id, code="TENANT_REQUIRED", message="X-Tenant header required")
         if not header_slug:
             tenant_required(None)
         token_slug: str | None = None
@@ -90,7 +90,7 @@ class TenantMiddleware(BaseHTTPMiddleware):
 
         normalized_header = header_slug.strip() if header_slug else None
         if path.startswith("/api/v1/") and normalized_header and not self._is_uuid(normalized_header):
-            raise self._bad_request(correlation_id, code="TENANT_INVALID", message="X-Tenant must be UUID")
+            raise self._error(status.HTTP_400_BAD_REQUEST, correlation_id, code="TENANT_INVALID", message="X-Tenant must be UUID")
         info = tenant_required(normalized_header)
         async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as session:
             identifier = info.slug
@@ -99,9 +99,11 @@ class TenantMiddleware(BaseHTTPMiddleware):
                 filters.append(Tenant.id == identifier)
             tenant = (await session.execute(select(Tenant).where(or_(*filters)))).scalar_one_or_none()
         if tenant is None:
-            raise HTTPException(
+            raise self._error(
                 status.HTTP_404_NOT_FOUND,
-                detail={"code": "TENANT_NOT_FOUND", "type": "validation", "message": "Tenant not found", "correlation_id": correlation_id},
+                correlation_id,
+                code="TENANT_NOT_FOUND",
+                message="Tenant not found",
             )
         if token_slug and token_slug.casefold() not in {str(tenant.id).casefold(), str(tenant.slug).casefold(), str(tenant.code).casefold()}:
             raise HTTPException(
@@ -109,9 +111,11 @@ class TenantMiddleware(BaseHTTPMiddleware):
                 "Tenant header does not match token scope",
             )
         if not tenant.is_active:
-            raise HTTPException(
+            raise self._error(
                 status.HTTP_403_FORBIDDEN,
-                detail={"code": "TENANT_FORBIDDEN", "type": "validation", "message": "Tenant disabled", "correlation_id": correlation_id},
+                correlation_id,
+                code="TENANT_BLOCKED",
+                message="Tenant blocked",
             )
         request.state.tenant_id = str(tenant.id)
         request.state.tenant_slug = tenant.slug
@@ -143,7 +147,16 @@ class TenantMiddleware(BaseHTTPMiddleware):
             slug=tenant.slug,
             schema=request.state.tenant_schema,
             s3_prefix=request.state.tenant_s3_prefix,
+            tenant_level=tenant.kind,
             plan=((tenant.settings or {}).get("plan") if isinstance(tenant.settings, dict) else None) or "Free",
+            limits={
+                "users": None,
+                "templates": None,
+                "generations_per_month": quota.max_doc_generations_per_month if quota else None,
+                "s3_gb": int((quota.max_storage_mb or 0) / 1024) if quota else None,
+                "edo_out_docs": quota.monthly_edo_outgoing if quota else None,
+                "enforce_billing_gate": quota.enforce_billing_gate if quota else False,
+            },
             max_parallel_jobs=(quota.max_parallel_jobs if quota else None),
             max_storage_mb=(quota.max_storage_mb if quota else None),
             max_generations_per_month=(quota.max_doc_generations_per_month if quota else None),
@@ -152,6 +165,7 @@ class TenantMiddleware(BaseHTTPMiddleware):
             roles=tuple([r.strip() for r in roles_raw.split(",") if r.strip()]),
             attributes=attributes or None,
         )
+        request.state.tenant_context = ctx
         token = set_tenant_context(ctx)
         try:
             response = await call_next(request)
