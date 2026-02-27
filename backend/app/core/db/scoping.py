@@ -24,6 +24,8 @@ def scope_query(
         raise ValueError(f"Model {model.__name__} does not expose tenant_id for scoping")
 
     filters = [model.tenant_id == str(tenant_id)]
+    if hasattr(model, "deleted_at"):
+        filters.append(model.deleted_at.is_(None))
     if hasattr(model, "company_id") and allowed_company_ids:
         filters.append(model.company_id.in_(allowed_company_ids))
     if hasattr(model, "site_id") and allowed_site_ids:

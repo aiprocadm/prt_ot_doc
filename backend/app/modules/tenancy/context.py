@@ -9,8 +9,10 @@ class TenantContext:
     tenant_id: str
     slug: str
     schema: str
+    tenant_level: str
     s3_prefix: str
     plan: str
+    limits: dict[str, int | bool | None] | None = None
     max_parallel_jobs: int | None = None
     max_storage_mb: int | None = None
     max_generations_per_month: int | None = None
