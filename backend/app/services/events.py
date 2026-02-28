@@ -11,7 +11,9 @@ class EventType(str, enum.Enum):
     DOCUMENT_CREATED = "DocumentCreated"
     DOCUMENT_GENERATED = "DocumentGenerated"
     DOCUMENT_SIGNED = "DocumentSigned"
+    SIGNED = "Signed"
     DOCUMENT_EXPORTED = "DocumentExported"
+    EXPORTED = "Exported"
     RISK_ASSESSED = "RiskAssessed"
     PPE_ISSUED = "PPEIssued"
     PPE_RETURNED = "PPEReturned"
@@ -152,7 +154,9 @@ _PAYLOADS: dict[EventType, type[BaseEventPayload]] = {
     EventType.DOCUMENT_CREATED: DocumentCreatedPayload,
     EventType.DOCUMENT_GENERATED: DocumentGeneratedPayload,
     EventType.DOCUMENT_SIGNED: DocumentSignedPayload,
+    EventType.SIGNED: DocumentSignedPayload,
     EventType.DOCUMENT_EXPORTED: DocumentExportedPayload,
+    EventType.EXPORTED: DocumentExportedPayload,
     EventType.RISK_ASSESSED: RiskAssessedPayload,
     EventType.PPE_ISSUED: PPEIssuedPayload,
     EventType.PPE_RETURNED: PPEReturnedPayload,
@@ -171,6 +175,12 @@ _PAYLOADS: dict[EventType, type[BaseEventPayload]] = {
 def resolve_event_type(event_type: EventType | str) -> EventType:
     if isinstance(event_type, EventType):
         return event_type
+    aliases = {
+        "Signed": EventType.DOCUMENT_SIGNED,
+        "Exported": EventType.DOCUMENT_EXPORTED,
+    }
+    if event_type in aliases:
+        return aliases[event_type]
     return EventType(event_type)
 
 
