@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import Enum
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Integer, String, Text
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import ARRAY, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON
 
@@ -31,6 +31,12 @@ class TextIndexStatus(str, Enum):
     indexed = "indexed"
     skipped = "skipped"
     error = "error"
+
+
+class FileContentIndexStatus(str, Enum):
+    queued = "queued"
+    indexed = "indexed"
+    failed = "failed"
 
 
 class FileStatus(str, Enum):
@@ -126,6 +132,24 @@ class FileTextIndex(TenantBase, TimestampMixin, UUIDMixin):
     raw_text: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class FileContentIndex(TenantBase, TimestampMixin, SoftDeleteMixin, VersionedMixin, UUIDMixin):
+    __tablename__ = "file_content_index"
+    __tenant_model__ = True
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=False, index=True)
+    file_id: Mapped[str] = mapped_column(String(36), ForeignKey("files.id"), nullable=False, unique=True)
+    doc_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    content_text: Mapped[str | None] = mapped_column(TSVECTOR, nullable=True)
+    raw_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    language: Mapped[str] = mapped_column(String(16), nullable=False, default="ru")
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default=FileContentIndexStatus.queued.value)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
 class FileRecord(TenantBase, TimestampMixin, SoftDeleteMixin, VersionedMixin, UUIDMixin):
     __tablename__ = "files"
     __tenant_model__ = True
@@ -174,3 +198,4 @@ Index("ix_files_tenant_created_at", FileRecord.tenant_id, FileRecord.created_at)
 Index("ix_files_tenant_status", FileRecord.tenant_id, FileRecord.status)
 Index("ix_file_links_tenant_entity", FileLink.tenant_id, FileLink.entity_type, FileLink.entity_id)
 Index("ix_file_download_logs_tenant_file_created", FileDownloadLog.tenant_id, FileDownloadLog.file_id, FileDownloadLog.created_at)
+Index("ix_file_content_index_status_updated", FileContentIndex.status, FileContentIndex.updated_at)

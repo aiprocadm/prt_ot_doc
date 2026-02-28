@@ -1275,9 +1275,9 @@ def convert_pdf_job(*, tenant_id: str, input_file_id: str, pdf_run_id: str, opti
 
 
 @celery_app.task(name="files.index_content", bind=True, max_retries=3, default_retry_delay=30)
-def index_file_content_job(self, tenant_slug: str, version_id: str):
+def index_file_content_job(self, tenant_slug: str, version_id: str | None = None, file_id: str | None = None):
     async def _run() -> dict[str, str]:
-        from app.modules.files.service import index_file_version
+        from app.modules.files.service import index_file_version, index_file_record
 
         with tenant_context(tenant_slug):
             ensure_tenant_schema(tenant_slug)
@@ -1288,7 +1288,10 @@ def index_file_content_job(self, tenant_slug: str, version_id: str):
                     if tenant is None:
                         return {"status": "tenant_missing"}
                     tenant_id = str(tenant.id)
-                await index_file_version(session, tenant_id=tenant_id, version_id=version_id)
+                if version_id:
+                    await index_file_version(session, tenant_id=tenant_id, version_id=version_id)
+                if file_id:
+                    await index_file_record(session, tenant_id=tenant_id, file_id=file_id)
                 await session.flush()
                 outbox = OutboxService(session)
                 await outbox.enqueue(
@@ -1297,10 +1300,10 @@ def index_file_content_job(self, tenant_slug: str, version_id: str):
                     payload={
                         "tenant_id": tenant_id,
                         "occurred_at": datetime.now(timezone.utc),
-                        "metadata": {"event": "FileIndexed", "version_id": version_id},
+                        "metadata": {"event": "FileIndexed", "version_id": version_id, "file_id": file_id},
                     },
                 )
-                return {"status": "ok", "version_id": version_id}
+                return {"status": "ok", "version_id": version_id or "", "file_id": file_id or ""}
 
     try:
         return _run_coroutine(_run())

@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.document import Document
 from app.models.models import Incident, Inspection, Person, Site
-from app.modules.files.models import FileObject, FileTextIndex, FileVersion
+from app.modules.files.models import FileContentIndex, FileObject, FileTextIndex, FileVersion
 
 
 @dataclass(slots=True)
@@ -41,23 +41,20 @@ class SearchService:
         offset = int(cursor or "0") if (cursor or "0").isdigit() else 0
         queries: list[Any] = []
         normalized_q = q.strip()
-        if not normalized_q:
-            return {"q": q, "facets": {}, "items": [], "next_cursor": None}
-
-        like_q = f"%{normalized_q}%"
+        like_q = f"%{normalized_q}%" if normalized_q else None
 
         if "documents" in types:
-            queries.append(self._documents_query(like_q, filters))
+            queries.append(self._documents_query(like_q, filters, normalized_q))
         if "people" in types:
-            queries.append(self._people_query(like_q, filters))
+            queries.append(self._people_query(like_q, filters, normalized_q))
         if "sites" in types:
-            queries.append(self._sites_query(like_q, filters))
+            queries.append(self._sites_query(like_q, filters, normalized_q))
         if "incidents" in types:
-            queries.append(self._incidents_query(like_q, filters))
+            queries.append(self._incidents_query(like_q, filters, normalized_q))
         if "inspections" in types:
-            queries.append(self._inspections_query(like_q, filters))
+            queries.append(self._inspections_query(like_q, filters, normalized_q))
         if "files" in types:
-            queries.append(self._files_query(like_q))
+            queries.append(self._files_query(like_q, normalized_q))
 
         if not queries:
             return {"q": q, "facets": {}, "items": [], "next_cursor": None}
@@ -94,6 +91,7 @@ class SearchService:
 
         return {
             "q": q,
+            "total": sum(facets.values()),
             "facets": facets,
             "items": [
                 {
@@ -114,14 +112,14 @@ class SearchService:
             "next_cursor": next_cursor,
         }
 
-    def _documents_query(self, like_q: str, filters: SearchFilters):
+    def _documents_query(self, like_q: str | None, filters: SearchFilters, normalized_q: str):
         title = func.coalesce(Document.title, literal(""))
         file_name = func.coalesce(FileVersion.filename, literal(""))
         status_text = cast(Document.status, String)
-        raw_text = func.coalesce(FileTextIndex.raw_text, literal(""))
+        raw_text = func.coalesce(FileContentIndex.raw_text, literal(""))
         combined = func.concat_ws(" ", title, file_name, status_text, raw_text)
 
-        score = case((combined.ilike(like_q), literal(1.0)), else_=literal(0.0))
+        score = case((combined.ilike(like_q) if like_q else literal(True), literal(1.0)), else_=literal(0.0))
         stmt = (
             select(
                 literal("documents").label("type"),
@@ -137,9 +135,11 @@ class SearchService:
             .select_from(Document)
             .outerjoin(FileObject, and_(FileObject.owner_entity_id == Document.id, FileObject.owner_entity_type == literal("document")))
             .outerjoin(FileVersion, and_(FileVersion.file_id == FileObject.id, FileVersion.status == "ready"))
-            .outerjoin(FileTextIndex, FileTextIndex.file_version_id == FileVersion.id)
-            .where(Document.tenant_id == self.tenant_id, combined.ilike(like_q), Document.deleted_at.is_(None))
+            .outerjoin(FileContentIndex, FileContentIndex.file_id == FileVersion.file_id)
+            .where(Document.tenant_id == self.tenant_id, Document.deleted_at.is_(None))
         )
+        if like_q:
+            stmt = stmt.where(combined.ilike(like_q))
         if filters.status:
             stmt = stmt.where(cast(Document.status, String) == filters.status)
         if filters.company_id:
@@ -152,7 +152,7 @@ class SearchService:
             stmt = stmt.where(cast(Document.updated_at, Date) <= filters.date_to)
         return stmt
 
-    def _people_query(self, like_q: str, filters: SearchFilters):
+    def _people_query(self, like_q: str | None, filters: SearchFilters, normalized_q: str):
         full_name = func.concat_ws(" ", Person.last_name, Person.first_name, Person.middle_name)
         text = func.concat_ws(" ", full_name, Person.personnel_number, Person.employment_status)
         stmt = select(
@@ -164,13 +164,15 @@ class SearchService:
             cast(Person.employment_status, String).label("status"),
             Person.updated_at.label("updated_at"),
             literal(None).label("snippet"),
-            case((text.ilike(like_q), literal(0.8)), else_=literal(0.0)).label("score"),
-        ).where(Person.tenant_id == self.tenant_id, text.ilike(like_q), Person.deleted_at.is_(None))
+            (case((text.ilike(like_q), literal(0.8)), else_=literal(0.0)) if like_q else literal(0.3)).label("score"),
+        ).where(Person.tenant_id == self.tenant_id, Person.deleted_at.is_(None))
+        if like_q:
+            stmt = stmt.where(text.ilike(like_q))
         if filters.company_id:
             stmt = stmt.where(Person.company_id == filters.company_id)
         return stmt
 
-    def _sites_query(self, like_q: str, filters: SearchFilters):
+    def _sites_query(self, like_q: str | None, filters: SearchFilters, normalized_q: str):
         text = func.concat_ws(" ", Site.name, Site.address, Site.opo_register_number)
         stmt = select(
             literal("sites").label("type"),
@@ -181,13 +183,15 @@ class SearchService:
             literal(None).label("status"),
             Site.updated_at.label("updated_at"),
             Site.address.label("snippet"),
-            case((text.ilike(like_q), literal(0.7)), else_=literal(0.0)).label("score"),
-        ).where(Site.tenant_id == self.tenant_id, text.ilike(like_q), Site.deleted_at.is_(None))
+            (case((text.ilike(like_q), literal(0.7)), else_=literal(0.0)) if like_q else literal(0.3)).label("score"),
+        ).where(Site.tenant_id == self.tenant_id, Site.deleted_at.is_(None))
+        if like_q:
+            stmt = stmt.where(text.ilike(like_q))
         if filters.company_id:
             stmt = stmt.where(Site.company_id == filters.company_id)
         return stmt
 
-    def _incidents_query(self, like_q: str, filters: SearchFilters):
+    def _incidents_query(self, like_q: str | None, filters: SearchFilters, normalized_q: str):
         text = func.concat_ws(" ", Incident.title, Incident.description, Incident.location_description)
         stmt = select(
             literal("incidents").label("type"),
@@ -198,8 +202,10 @@ class SearchService:
             cast(Incident.status, String).label("status"),
             Incident.updated_at.label("updated_at"),
             func.coalesce(Incident.description, Incident.location_description).label("snippet"),
-            case((text.ilike(like_q), literal(0.75)), else_=literal(0.0)).label("score"),
-        ).where(Incident.tenant_id == self.tenant_id, text.ilike(like_q), Incident.deleted_at.is_(None))
+            (case((text.ilike(like_q), literal(0.75)), else_=literal(0.0)) if like_q else literal(0.3)).label("score"),
+        ).where(Incident.tenant_id == self.tenant_id, Incident.deleted_at.is_(None))
+        if like_q:
+            stmt = stmt.where(text.ilike(like_q))
         if filters.company_id:
             stmt = stmt.where(Incident.company_id == filters.company_id)
         if filters.site_id:
@@ -212,7 +218,7 @@ class SearchService:
             stmt = stmt.where(cast(Incident.occurred_at, Date) <= filters.date_to)
         return stmt
 
-    def _inspections_query(self, like_q: str, filters: SearchFilters):
+    def _inspections_query(self, like_q: str | None, filters: SearchFilters, normalized_q: str):
         text = func.concat_ws(" ", Inspection.authority, Inspection.purpose, Inspection.result_summary)
         stmt = select(
             literal("inspections").label("type"),
@@ -223,8 +229,10 @@ class SearchService:
             cast(Inspection.status, String).label("status"),
             Inspection.updated_at.label("updated_at"),
             func.coalesce(Inspection.purpose, Inspection.result_summary).label("snippet"),
-            case((text.ilike(like_q), literal(0.72)), else_=literal(0.0)).label("score"),
-        ).where(Inspection.tenant_id == self.tenant_id, text.ilike(like_q))
+            (case((text.ilike(like_q), literal(0.72)), else_=literal(0.0)) if like_q else literal(0.3)).label("score"),
+        ).where(Inspection.tenant_id == self.tenant_id)
+        if like_q:
+            stmt = stmt.where(text.ilike(like_q))
         if filters.company_id:
             stmt = stmt.where(Inspection.company_id == filters.company_id)
         if filters.site_id:
@@ -237,9 +245,9 @@ class SearchService:
             stmt = stmt.where(cast(Inspection.scheduled_at, Date) <= filters.date_to)
         return stmt
 
-    def _files_query(self, like_q: str):
+    def _files_query(self, like_q: str | None, normalized_q: str):
         text = func.concat_ws(" ", FileVersion.filename, FileTextIndex.raw_text)
-        return (
+        stmt = (
             select(
                 literal("files").label("type"),
                 literal("file").label("kind"),
@@ -249,9 +257,12 @@ class SearchService:
                 FileVersion.status.label("status"),
                 FileVersion.updated_at.label("updated_at"),
                 func.substr(func.coalesce(FileTextIndex.raw_text, literal("")), 1, 220).label("snippet"),
-                case((text.ilike(like_q), literal(0.65)), else_=literal(0.0)).label("score"),
+                (case((text.ilike(like_q), literal(0.65)), else_=literal(0.0)) if like_q else literal(0.3)).label("score"),
             )
             .select_from(FileVersion)
             .outerjoin(FileTextIndex, FileTextIndex.file_version_id == FileVersion.id)
-            .where(FileVersion.tenant_id == self.tenant_id, text.ilike(like_q), FileVersion.status == "ready")
+            .where(FileVersion.tenant_id == self.tenant_id, FileVersion.status == "ready")
         )
+        if like_q:
+            stmt = stmt.where(text.ilike(like_q))
+        return stmt
