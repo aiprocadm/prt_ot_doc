@@ -73,6 +73,7 @@ class SearchService:
         search_subq = union_subq.subquery("search_union")
         ranked = (
             select(
+                search_subq.c.type,
                 search_subq.c.kind,
                 search_subq.c.entity_type,
                 search_subq.c.id,
@@ -108,6 +109,7 @@ class SearchService:
                     "kind": row["kind"],
                     "entity_type": row["entity_type"],
                     "entity_id": row["id"],
+                    "permissions_scope": "tenant",
                     "file_id": row["id"] if row["entity_type"] == "File" else None,
                     "title": row["title"],
                     "subtitle": row["entity_type"],
