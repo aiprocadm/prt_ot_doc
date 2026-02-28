@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings, get_settings
 from app.core.metrics import Metrics, get_metrics
 from app.core.tracing import get_trace_id
-from app.models.models import WebhookEndpoint
+from app.models.models import WebhookEndpoint, WebhookSubscription
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +118,16 @@ class WebhookDispatcher:
         return list(urls_by_event.get(event_type, ()))
 
     @staticmethod
+    def _event_aliases(event_type: str) -> set[str]:
+        aliases: dict[str, set[str]] = {
+            "Signed": {"Signed", "DocumentSigned"},
+            "DocumentSigned": {"Signed", "DocumentSigned"},
+            "Exported": {"Exported", "DocumentExported"},
+            "DocumentExported": {"Exported", "DocumentExported"},
+        }
+        return aliases.get(event_type, {event_type})
+
+    @staticmethod
     def _validate_url(url: str) -> bool:
         parsed = urlparse(url)
         return parsed.scheme in {"http", "https"} and bool(parsed.hostname)
@@ -128,7 +138,58 @@ class WebhookDispatcher:
         session: AsyncSession,
         event_type: str,
         tenant_id: str,
-    ) -> list[WebhookEndpoint]:
+    ) -> list[WebhookDestination]:
+        event_variants = self._event_aliases(event_type)
+
+        subscription_base = select(WebhookSubscription).where(
+            WebhookSubscription.enabled.is_(True),
+            WebhookSubscription.event_type.in_(event_variants),
+        )
+        tenant_subs = (
+            await session.execute(
+                subscription_base
+                .where(WebhookSubscription.tenant_id == tenant_id)
+                .order_by(WebhookSubscription.created_at.asc())
+            )
+        ).scalars().all()
+        if tenant_subs:
+            destinations: list[WebhookDestination] = []
+            for sub in tenant_subs:
+                if not self._validate_url(sub.url):
+                    logger.warning("webhook.invalid_url", extra={"event_type": event_type, "url": sub.url})
+                    continue
+                destinations.append(
+                    WebhookDestination(
+                        url=sub.url,
+                        headers={str(key): str(value) for key, value in (sub.headers or {}).items()},
+                        secret=sub.secret,
+                    )
+                )
+            return destinations
+
+        global_subs = (
+            await session.execute(
+                subscription_base
+                .where(WebhookSubscription.tenant_id.is_(None))
+                .order_by(WebhookSubscription.created_at.asc())
+            )
+        ).scalars().all()
+        if global_subs:
+            destinations: list[WebhookDestination] = []
+            for sub in global_subs:
+                if not self._validate_url(sub.url):
+                    logger.warning("webhook.invalid_url", extra={"event_type": event_type, "url": sub.url})
+                    continue
+                destinations.append(
+                    WebhookDestination(
+                        url=sub.url,
+                        headers={str(key): str(value) for key, value in (sub.headers or {}).items()},
+                        secret=sub.secret,
+                    )
+                )
+            return destinations
+
+        # Backward compatibility for legacy endpoint table.
         base_stmt = select(WebhookEndpoint).where(WebhookEndpoint.is_enabled.is_(True))
         tenant_stmt = base_stmt.where(WebhookEndpoint.tenant_id == tenant_id).order_by(
             WebhookEndpoint.created_at.asc()
@@ -136,13 +197,19 @@ class WebhookDispatcher:
         tenant_result = await session.execute(tenant_stmt)
         tenant_rows = tenant_result.scalars().all()
         if tenant_rows:
-            return [row for row in tenant_rows if event_type in (row.subscribed_events or [])]
+            return self._build_destinations_from_rows(
+                event_type=event_type,
+                rows=[row for row in tenant_rows if (not row.subscribed_events) or bool(event_variants.intersection(set(row.subscribed_events or [])))],
+            )
 
         global_stmt = base_stmt.where(WebhookEndpoint.tenant_id.is_(None)).order_by(
             WebhookEndpoint.created_at.asc()
         )
         global_result = await session.execute(global_stmt)
-        return [row for row in global_result.scalars().all() if event_type in (row.subscribed_events or [])]
+        return self._build_destinations_from_rows(
+            event_type=event_type,
+            rows=[row for row in global_result.scalars().all() if (not row.subscribed_events) or bool(event_variants.intersection(set(row.subscribed_events or [])))],
+        )
 
     def _build_destinations_from_urls(
         self,
@@ -200,7 +267,7 @@ class WebhookDispatcher:
                 tenant_id=tenant_id,
             )
             if rows:
-                return self._build_destinations_from_rows(event_type=event_type, rows=rows)
+                return rows
         return self._build_destinations_from_urls(
             event_type=event_type,
             urls=self._resolve_urls(event_type),
@@ -239,6 +306,7 @@ class WebhookDispatcher:
         envelope = {
             "id": event_id,
             "type": event_type,
+            "event_type": event_type,
             "occurred_at": datetime.now(tz=timezone.utc).isoformat(),
             "correlation_id": trace_id,
             "payload": payload,
