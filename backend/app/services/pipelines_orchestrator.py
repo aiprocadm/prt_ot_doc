@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 from datetime import datetime, timezone
 from typing import Any
@@ -13,6 +14,8 @@ from app.models.job_engine import DocumentArtifact, DocumentJob, DocumentJobStat
 from app.modules.pipelines.models import PipelinePackageProfile, PipelineProfile
 from app.services.audit import AuditService, field_level_diff
 from app.services.file_storage import FileStorageService
+from app.modules.files.service import FileService, build_artifact_name
+from app.modules.files.models import FileEntityType, FileLinkRole
 
 DEFAULT_STEPS = ["render_docx", "apply_headers", "replace_apply", "convert_pdf", "build_zip", "archive"]
 STUB_STEPS = {"sign", "edo", "index_file_content"}
@@ -200,6 +203,8 @@ class PipelineOrchestrator:
         handler = self._dispatch(step.step_key or step.step_code)
         try:
             out = handler(job=job, step=step)
+            if inspect.isawaitable(out):
+                out = await out
             step.output = out
             step.output_ref = out
             step.status = JobStepStatus.SUCCESS.value
@@ -269,11 +274,30 @@ class PipelineOrchestrator:
         return codes or DEFAULT_STEPS
 
     def _dispatch(self, step_key: str):
-        def _artifact_handler(*, job: DocumentJob, step: DocumentJobStep) -> dict[str, Any]:
-            key = f"{job.tenant_id}/jobs/{job.id}/{step_key}.bin"
-            self.storage.put(key, f"{step_key}:{job.id}".encode("utf-8"), content_type="application/octet-stream")
-            self.session.add(DocumentArtifact(tenant_id=job.tenant_id, job_id=job.id, step_code=step_key, kind=step_key, meta={"key": key}))
-            return {"artifact_key": key, "kind": step_key}
+        async def _artifact_handler(*, job: DocumentJob, step: DocumentJobStep) -> dict[str, Any]:
+            payload = f"{step_key}:{job.id}".encode("utf-8")
+            ext = "pdf" if step_key == "convert_pdf" else ("zip" if step_key == "build_zip" else "bin")
+            filename = build_artifact_name(job.input_payload_json or {}, ext=ext)
+            svc = FileService(session=self.session, tenant_id=str(job.tenant_id))
+            file_record = await svc.create_artifact_from_bytes(
+                payload=payload,
+                filename=filename,
+                content_type="application/octet-stream",
+                job_id=job.id,
+                step_key=step_key,
+                metadata_json={"job_id": job.id, "step_key": step_key, "display_name": filename},
+                entity_type=FileEntityType.job_step.value,
+                entity_id=step.id,
+                role=FileLinkRole.artifact.value,
+            )
+            await svc.link_file(
+                file_id=file_record.id,
+                entity_type=FileEntityType.job.value,
+                entity_id=job.id,
+                role=FileLinkRole.artifact.value,
+            )
+            self.session.add(DocumentArtifact(tenant_id=job.tenant_id, job_id=job.id, step_code=step_key, kind=step_key, file_id=file_record.id, sha256=file_record.sha256, meta={"file_id": file_record.id, "display_name": filename}))
+            return {"file_id": file_record.id, "kind": step_key, "display_name": filename}
 
         if step_key in {"render_docx", "apply_headers", "replace_apply", "convert_pdf", "build_zip", "archive"}:
             return _artifact_handler
@@ -288,14 +312,26 @@ class PipelineOrchestrator:
             "message": message,
             "meta": meta or {},
         }
-        logs_uri = step.logs_uri or f"s3://{job.tenant_id}/jobs/{job.id}/{step.step_key or step.step_code}.jsonl"
-        store_key = logs_uri.replace("s3://", "")
+        store_key = f"logs/jobs/{job.id}/{step.step_key or step.step_code}.jsonl"
         current = b""
         if self.storage.has(store_key):
             current = self.storage.get(store_key)
         payload = current + (json.dumps(row, ensure_ascii=False) + "\n").encode("utf-8")
         self.storage.put(store_key, payload, content_type="application/jsonl")
-        step.logs_uri = logs_uri
+        svc = FileService(session=self.session, tenant_id=str(job.tenant_id))
+        file_record = await svc.create_artifact_from_bytes(
+            payload=payload,
+            filename=f"{step.step_key or step.step_code}.jsonl",
+            content_type="application/jsonl",
+            job_id=job.id,
+            step_key=step.step_key or step.step_code,
+            metadata_json={"job_id": job.id, "step_key": step.step_key or step.step_code, "log": True},
+            entity_type=FileEntityType.job_step.value,
+            entity_id=step.id,
+            role=FileLinkRole.log.value,
+        )
+        step.logs_file_id = file_record.id
+        step.logs_uri = None
 
     async def _artifact_list(self, job_id: str) -> list[dict[str, Any]]:
         rows = (await self.session.execute(select(DocumentArtifact).where(DocumentArtifact.job_id == job_id))).scalars().all()

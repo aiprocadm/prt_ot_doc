@@ -33,6 +33,41 @@ class TextIndexStatus(str, Enum):
     error = "error"
 
 
+class FileStatus(str, Enum):
+    uploaded = "uploaded"
+    scanning = "scanning"
+    clean = "clean"
+    infected = "infected"
+    quarantined = "quarantined"
+    deleted = "deleted"
+
+
+class FileEntityType(str, Enum):
+    job = "job"
+    job_step = "job_step"
+    template = "template"
+    template_version = "template_version"
+    preset = "preset"
+    document = "document"
+    person = "person"
+    site = "site"
+    incident = "incident"
+    inspection = "inspection"
+    report = "report"
+    other = "other"
+
+
+class FileLinkRole(str, Enum):
+    source = "source"
+    artifact = "artifact"
+    log = "log"
+    attachment = "attachment"
+    signature = "signature"
+    certificate = "certificate"
+    import_file = "import"
+    export = "export"
+
+
 class FileObject(TenantBase, TimestampMixin, SoftDeleteMixin, VersionedMixin, UUIDMixin):
     __tablename__ = "file_objects"
     __tenant_model__ = True
@@ -91,5 +126,51 @@ class FileTextIndex(TenantBase, TimestampMixin, UUIDMixin):
     raw_text: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class FileRecord(TenantBase, TimestampMixin, SoftDeleteMixin, VersionedMixin, UUIDMixin):
+    __tablename__ = "files"
+    __tenant_model__ = True
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=False, index=True)
+    bucket: Mapped[str] = mapped_column(String(255), nullable=False, default="main")
+    object_key: Mapped[str] = mapped_column(String(512), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default=FileStatus.uploaded.value)
+    av_vendor: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    av_result_json: Mapped[dict] = mapped_column(JSON(), nullable=False, default=dict)
+    version_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    metadata_json: Mapped[dict] = mapped_column(JSON(), nullable=False, default=dict)
+    created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+
+class FileLink(TenantBase, TimestampMixin, UUIDMixin):
+    __tablename__ = "file_links"
+    __tenant_model__ = True
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=False, index=True)
+    file_id: Mapped[str] = mapped_column(String(36), ForeignKey("files.id"), nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    entity_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    role: Mapped[str] = mapped_column(String(32), nullable=False)
+
+
+class FileDownloadLog(TenantBase, TimestampMixin, UUIDMixin):
+    __tablename__ = "file_download_logs"
+    __tenant_model__ = True
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=False, index=True)
+    file_id: Mapped[str] = mapped_column(String(36), ForeignKey("files.id"), nullable=False)
+    actor_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    purpose: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
 Index("ix_file_versions_tenant_status_updated", FileVersion.tenant_id, FileVersion.status, FileVersion.updated_at)
 Index("ix_file_objects_owner", FileObject.tenant_id, FileObject.owner_entity_type, FileObject.owner_entity_id)
+Index("ix_files_tenant_sha256", FileRecord.tenant_id, FileRecord.sha256)
+Index("ix_files_tenant_created_at", FileRecord.tenant_id, FileRecord.created_at)
+Index("ix_files_tenant_status", FileRecord.tenant_id, FileRecord.status)
+Index("ix_file_links_tenant_entity", FileLink.tenant_id, FileLink.entity_type, FileLink.entity_id)
+Index("ix_file_download_logs_tenant_file_created", FileDownloadLog.tenant_id, FileDownloadLog.file_id, FileDownloadLog.created_at)
