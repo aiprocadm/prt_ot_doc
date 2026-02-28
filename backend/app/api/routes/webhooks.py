@@ -7,12 +7,13 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, rbac
 from app.models.job_engine import InboundWebhookDedup
-from app.tasks import process_inbound_webhook
+from app.tasks import compute_inbound_dedup_key, process_inbound_webhook
 from app.models.models import Outbox, OutboxStatus, Tenant, WebhookDelivery, WebhookEndpoint
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
@@ -211,6 +212,58 @@ async def list_deliveries(
     ]
 
 
+@router.get("/endpoints/{webhook_id}/deliveries", response_model=list[WebhookDeliveryOut])
+async def list_endpoint_deliveries(webhook_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> list[WebhookDeliveryOut]:
+    row = await session.get(WebhookEndpoint, webhook_id)
+    if row is None or row.tenant_id != tenant.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "webhook_not_found")
+    rows = (
+        await session.execute(
+            select(WebhookDelivery).where(
+                WebhookDelivery.tenant_id == tenant.id,
+                WebhookDelivery.endpoint_id == webhook_id,
+            ).order_by(WebhookDelivery.created_at.desc())
+        )
+    ).scalars().all()
+    return [
+        WebhookDeliveryOut(
+            id=delivery.id,
+            event_id=delivery.event_id,
+            endpoint_id=delivery.endpoint_id,
+            attempts=delivery.attempts,
+            status=delivery.status,
+            next_attempt_at=delivery.next_attempt_at,
+            response_status=delivery.last_status_code,
+            last_response_body=delivery.last_response_body,
+            last_error=delivery.last_error,
+            latency_ms=delivery.latency_ms,
+            started_at=delivery.started_at,
+            ended_at=delivery.ended_at,
+        )
+        for delivery in rows
+    ]
+
+
+@router.post("/endpoints/{webhook_id}:test")
+async def test_endpoint(webhook_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> dict[str, str]:
+    row = await session.get(WebhookEndpoint, webhook_id)
+    if row is None or row.tenant_id != tenant.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "webhook_not_found")
+    event = Outbox(
+        tenant_id=str(tenant.id),
+        event_type="DocumentGenerated",
+        destination=row.url,
+        payload={"tenant_id": str(tenant.id), "event_id": f"test-{webhook_id}", "document_id": "test", "document_version_id": "test", "template_id": "test", "template_version_id": "test", "company_id": "test", "status": "generated"},
+        headers={"X-Webhook-Endpoint-Id": row.id, "X-Correlation-Id": f"test-{webhook_id}"},
+        idempotency_key=f"webhook-test:{webhook_id}:{datetime.now(timezone.utc).timestamp()}",
+        status=OutboxStatus.PENDING,
+        next_attempt_at=datetime.now(tz=timezone.utc),
+    )
+    session.add(event)
+    await session.commit()
+    return {"status": "queued"}
+
+
 @router.post("/deliveries/{delivery_id}:retry")
 async def retry_delivery(delivery_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> dict[str, str]:
     delivery = await session.get(WebhookDelivery, delivery_id)
@@ -242,7 +295,7 @@ async def inbound_webhook(
 ) -> dict[str, str]:
     raw = await request.body()
     payload = await request.json()
-    dedup_key = str(payload.get("event_id") or payload.get("message_id") or __import__("hashlib").sha256(raw).hexdigest())
+    dedup_key = compute_inbound_dedup_key(payload, raw)
     row = InboundWebhookDedup(
         tenant_id=tenant.id,
         source=source,
@@ -253,7 +306,7 @@ async def inbound_webhook(
     session.add(row)
     try:
         await session.commit()
-    except Exception:
+    except IntegrityError:
         await session.rollback()
         return {"status": "duplicate"}
     process_inbound_webhook.delay(source=source, tenant_slug=str(tenant.id), payload=payload)

@@ -49,6 +49,7 @@ from app.models.models import (
     Company,
     EdoMessage,
     EdoStatus,
+    EdoEnvelopeStatus,
     EdoStatusHistory,
     Person,
     PipelineRun,
@@ -109,6 +110,10 @@ RETRYABLE_EXCEPTIONS: tuple[type[BaseException], ...] = (
     OSError,
     asyncio.TimeoutError,
 )
+
+
+def compute_inbound_dedup_key(payload: dict[str, Any], raw_body: bytes) -> str:
+    return str(payload.get("event_id") or payload.get("message_id") or hashlib.sha256(raw_body).hexdigest())
 
 
 async def _generate_document_for_run(run_id: str, tenant_slug: str) -> tuple[str, str]:
@@ -863,7 +868,7 @@ def dispatch_outbox_events(max_attempts: int | None = None, tenant_slug: str = "
 def _compute_outbox_backoff(attempts: int) -> timedelta:
     base = max(int(settings.outbox_retry_backoff_seconds), 1)
     cap = max(int(settings.outbox_retry_backoff_max_seconds), base)
-    jitter = attempts % 3
+    jitter = min(attempts, 5)
     seconds = min((2 ** max(attempts - 1, 0)) * base + jitter, cap)
     return timedelta(seconds=seconds)
 
@@ -956,11 +961,11 @@ async def _dispatch_outbox_events(*, max_attempts: int | None = None, tenant_slu
                 elif event.attempts >= limit:
                     event.status = OutboxEventStatus.POISONED.value
                     event.next_attempt_at = None
-                    event.last_error = "poisoned"
+                    event.last_error = "poisoned_after_max_attempts"
                 else:
                     event.status = OutboxEventStatus.FAILED.value
                     event.next_attempt_at = datetime.now(tz=timezone.utc) + _compute_outbox_backoff(event.attempts)
-                    event.last_error = "delivery_failed"
+                    event.last_error = "delivery_failed_retry_scheduled"
         await session.flush()
     return processed
 
@@ -971,43 +976,115 @@ def process_inbound_webhook(*, source: str, tenant_slug: str, payload: dict[str,
 
 
 async def _process_inbound_webhook(*, source: str, tenant_slug: str, payload: dict[str, Any]) -> int:
+    from app.models.document import DocumentVersion, DocumentVersionStatus
+    from app.models.models import EdoEnvelope, EdoEnvelopeStatus
+
     async with session_scope(tenant=tenant_slug) as session:
         if source != "edo":
             return 0
         external_id = str(payload.get("external_id") or "")
-        status_value = str(payload.get("status") or "")
+        status_value = str(payload.get("status") or "").lower()
         if not external_id or not status_value:
             return 0
+
+        status_map = {
+            "queued": EdoEnvelopeStatus.QUEUED,
+            "sent": EdoEnvelopeStatus.SENT,
+            "delivered": EdoEnvelopeStatus.DELIVERED,
+            "signed": EdoEnvelopeStatus.SIGNED,
+            "rejected": EdoEnvelopeStatus.REJECTED,
+            "failed": EdoEnvelopeStatus.FAILED,
+            "accepted": EdoEnvelopeStatus.SIGNED,
+        }
+        target_status = status_map.get(status_value)
+        if target_status is None:
+            return 0
+
+        envelope = (
+            await session.execute(
+                select(EdoEnvelope).where(EdoEnvelope.tenant_id == tenant_slug, EdoEnvelope.external_id == external_id)
+            )
+        ).scalar_one_or_none()
         message = (
             await session.execute(
                 select(EdoMessage).where(EdoMessage.tenant_id == tenant_slug, EdoMessage.external_id == external_id)
             )
         ).scalar_one_or_none()
-        if message is None:
+        if envelope is None and message is None:
             return 0
-        current = str(message.status.value if hasattr(message.status, 'value') else message.status)
-        if current == status_value:
+
+        changed = 0
+        if envelope is not None:
+            current = envelope.status
+            rank = {
+                EdoEnvelopeStatus.QUEUED: 0,
+                EdoEnvelopeStatus.SENT: 1,
+                EdoEnvelopeStatus.DELIVERED: 2,
+                EdoEnvelopeStatus.SIGNED: 3,
+                EdoEnvelopeStatus.REJECTED: 3,
+                EdoEnvelopeStatus.FAILED: 3,
+            }
+            if rank[target_status] > rank[current]:
+                envelope.status = target_status
+                envelope.last_event_at = datetime.now(tz=timezone.utc)
+                changed += 1
+                if envelope.object_type == "document_version":
+                    version = await session.get(DocumentVersion, envelope.object_id)
+                    if version is not None and target_status in {EdoEnvelopeStatus.SIGNED, EdoEnvelopeStatus.DELIVERED}:
+                        version.status = DocumentVersionStatus.PUBLISHED
+        if message is not None:
+            msg_map = {
+                EdoEnvelopeStatus.QUEUED: EdoStatus.QUEUED,
+                EdoEnvelopeStatus.SENT: EdoStatus.SENT,
+                EdoEnvelopeStatus.DELIVERED: EdoStatus.DELIVERED,
+                EdoEnvelopeStatus.SIGNED: EdoStatus.ACCEPTED,
+                EdoEnvelopeStatus.REJECTED: EdoStatus.REJECTED,
+                EdoEnvelopeStatus.FAILED: EdoStatus.FAILED,
+            }
+            message_target = msg_map[target_status]
+            if message.status != message_target:
+                message.status = message_target
+                changed += 1
+                session.add(
+                    EdoStatusHistory(
+                        tenant_id=tenant_slug,
+                        edo_message_id=message.id,
+                        status=message_target,
+                        raw_payload_json=payload,
+                    )
+                )
+
+        if changed == 0:
             return 0
-        message.status = EdoStatus(status_value)
-        session.add(
-            EdoStatusHistory(
-                tenant_id=tenant_slug,
-                edo_message_id=message.id,
-                status=EdoStatus(status_value),
-                raw_payload_json=payload,
-            )
-        )
+
         await AuditService(session).log_event(
             tenant_id=tenant_slug,
             action="edo_status_update",
-            object_type="EdoMessage",
-            object_id=message.id,
+            object_type="EdoEnvelope" if envelope is not None else "EdoMessage",
+            object_id=(envelope.id if envelope is not None else message.id),
             actor_type="service",
             ip="system",
             request_id=str(payload.get("correlation_id") or payload.get("event_id") or uuid4()),
             changed_fields=None,
-            details={"source": source, "status": status_value},
+            details={"source": source, "status": target_status.value, "external_id": external_id},
         )
+        if target_status == EdoEnvelopeStatus.SIGNED and envelope is not None:
+            await OutboxService(session).add_event(
+                tenant_id=tenant_slug,
+                event_type="Signed",
+                aggregate_type="edo_envelope",
+                aggregate_id=envelope.id,
+                payload={
+                    "tenant_id": tenant_slug,
+                    "event_id": str(uuid4()),
+                    "document_id": envelope.object_id,
+                    "document_version_id": envelope.object_id,
+                    "status": "signed",
+                    "signed_at": datetime.now(timezone.utc).isoformat(),
+                    "correlation_id": payload.get("correlation_id"),
+                },
+                headers={"correlation_id": payload.get("correlation_id"), "produced_by": "inbound_webhook", "schema_version": 1},
+            )
         return 1
 
 
