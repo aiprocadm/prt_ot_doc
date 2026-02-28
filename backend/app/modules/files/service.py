@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.domains.files import s3
 from app.modules.files import av, extractors, storage
+from app.modules.search.models import SearchDocument
 from app.modules.files.models import (
     AVStatus,
     DownloadLog,
@@ -464,7 +465,48 @@ async def index_file_record(session: AsyncSession, *, tenant_id: str, file_id: s
     existing.last_error = None if text else "not_indexable"
     existing.language = "ru"
 
+    await _upsert_file_search_document(session, tenant_id=tenant_id, file_record=record, text=text)
 
+
+async def _upsert_file_search_document(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    file_record: FileRecord,
+    text: str,
+) -> None:
+    links = (
+        await session.execute(select(FileLink).where(FileLink.tenant_id == tenant_id, FileLink.file_id == file_record.id))
+    ).scalars().all()
+    meta = dict(file_record.metadata_json or {})
+    if links:
+        primary = links[0]
+        meta.setdefault("entity_type", primary.entity_type)
+        meta.setdefault("entity_id", primary.entity_id)
+    existing = (
+        await session.execute(
+            select(SearchDocument).where(
+                SearchDocument.tenant_id == tenant_id,
+                SearchDocument.entity_type == "file",
+                SearchDocument.entity_id == file_record.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is None:
+        existing = SearchDocument(
+            tenant_id=tenant_id,
+            entity_type="file",
+            entity_id=file_record.id,
+            source_file_id=file_record.id,
+        )
+        session.add(existing)
+    existing.title = Path(file_record.object_key).name
+    existing.summary = f"{file_record.content_type} • {file_record.size_bytes} bytes"
+    existing.text_content = text or None
+    existing.lang = "russian"
+    existing.meta = meta
+    existing.indexed_at = datetime.now(timezone.utc)
+    existing.fts = text or existing.title
 
 
 async def issue_download_url(*, session: AsyncSession, tenant_id: str, file_id: str, version_id: str, user_id: str | None, ip: str | None, user_agent: str | None) -> str:

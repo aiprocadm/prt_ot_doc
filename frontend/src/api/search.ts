@@ -1,6 +1,6 @@
 import { apiClient } from "@/api/client";
 
-export type SearchType = "documents" | "people" | "sites" | "incidents" | "inspections" | "files" | "ppe" | "risk" | "training";
+export type SearchType = "documents" | "people" | "sites" | "incidents" | "inspections" | "files" | "ppe" | "risk" | "training" | "jobs" | "templates";
 
 export interface SearchItem {
   kind: "entity" | "file";
@@ -14,12 +14,16 @@ export interface SearchItem {
   updated_at?: string;
   snippet?: string;
   score?: number;
+  deeplink?: string;
 }
 
 export interface SearchResponse {
   q: string;
   total?: number;
-  facets: Record<string, number>;
+  facets: {
+    type_counts?: Record<string, number>;
+    status_counts?: Record<string, number>;
+  };
   items: SearchItem[];
   next_cursor?: string | null;
   correlation_id?: string;
@@ -33,6 +37,8 @@ export const fetchSearch = async (params: {
   status?: string;
   company_id?: string;
   site_id?: string;
+  project_id?: string;
+  contractor_id?: string;
   risk_level?: string;
   date_from?: string;
   date_to?: string;
@@ -47,3 +53,15 @@ export const fetchSearch = async (params: {
 };
 
 export const searchGlobal = async (q: string) => fetchSearch({ q, limit: 8 });
+
+export const fetchArchiveFiles = async (params: {
+  cursor?: string;
+  limit?: number;
+  status?: string;
+  site_id?: string;
+  project_id?: string;
+  contractor_id?: string;
+}) => {
+  const { data } = await apiClient.get<{ items: Array<Record<string, unknown>>; next_cursor?: string | null }>("/archive/files", { params });
+  return data;
+};

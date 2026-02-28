@@ -5,7 +5,7 @@ import { fetchSearch, type SearchItem, type SearchType } from "@/api/search";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
-const tabs: SearchType[] = ["documents", "files", "people", "sites", "incidents", "inspections", "risk", "ppe", "training"];
+const tabs: SearchType[] = ["documents", "files", "people", "sites", "incidents", "inspections", "risk", "ppe", "training", "jobs", "templates"];
 
 const SearchPage = () => {
   const [params, setParams] = useSearchParams();
@@ -32,7 +32,7 @@ const SearchPage = () => {
     fetchSearch({ q, types: activeTypes })
       .then((data) => {
         setItems(data.items);
-        setFacets(data.facets);
+        setFacets(data.facets.type_counts ?? {});
         setNextCursor(data.next_cursor ?? null);
       })
       .catch(() => {
@@ -72,7 +72,7 @@ const SearchPage = () => {
         {items.map((item) => (
           <div key={`${item.entity_type}-${item.entity_id}`} className="rounded border p-3">
             <div className="text-sm text-muted-foreground">{item.entity_type}</div>
-            <div className="font-medium">{item.title}</div>
+            <a className="font-medium text-primary underline" href={item.deeplink ?? "#"}>{item.title}</a>
             {item.status ? <div className="text-sm">Статус: {item.status}</div> : null}
             {item.snippet ? <div className="text-sm text-muted-foreground" dangerouslySetInnerHTML={{ __html: item.snippet }} /> : null}
           </div>

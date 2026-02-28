@@ -1,49 +1,70 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { fetchSearch, type SearchItem, type SearchType } from "@/api/search";
 import { useDebounce } from "@/hooks/useDebounce";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
-const tabs: { label: string; value: SearchType }[] = [
+const tabs: { label: string; value: SearchType | "all" }[] = [
+  { label: "Все", value: "all" },
   { label: "Документы", value: "documents" },
-  { label: "Люди", value: "people" },
-  { label: "Объекты", value: "sites" },
-  { label: "Риски", value: "risk" },
-  { label: "СИЗ", value: "ppe" },
-  { label: "Обучение", value: "training" },
-  { label: "Инциденты", value: "incidents" },
-  { label: "Проверки", value: "inspections" },
+  { label: "Файлы", value: "files" },
+  { label: "Задачи", value: "jobs" },
+  { label: "Справочники", value: "templates" },
 ];
 
 const ArchiveSearch = () => {
-  const [q, setQ] = useState("");
-  const [type, setType] = useState<SearchType>("documents");
-  const [siteId, setSiteId] = useState("");
-  const [status, setStatus] = useState("");
+  const [params, setParams] = useSearchParams();
   const [items, setItems] = useState<SearchItem[]>([]);
+  const q = params.get("q") ?? "";
+  const type = (params.get("type") as SearchType | "all" | null) ?? "all";
+  const siteId = params.get("site_id") ?? "";
+  const status = params.get("status") ?? "";
+  const projectId = params.get("project_id") ?? "";
+  const contractorId = params.get("contractor_id") ?? "";
   const debouncedQ = useDebounce(q, 400);
 
+  const activeTypes = useMemo(() => (type === "all" ? undefined : [type]), [type]);
+
+  const patchParams = (patch: Record<string, string>) => {
+    const next = new URLSearchParams(params);
+    Object.entries(patch).forEach(([key, value]) => {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    });
+    setParams(next);
+  };
+
   useEffect(() => {
-    fetchSearch({ q: debouncedQ, types: [type], site_id: siteId || undefined, status: status || undefined })
+    fetchSearch({
+      q: debouncedQ,
+      types: activeTypes,
+      site_id: siteId || undefined,
+      status: status || undefined,
+      project_id: projectId || undefined,
+      contractor_id: contractorId || undefined,
+    })
       .then((result) => setItems(result.items))
       .catch(() => setItems([]));
-  }, [debouncedQ, type, siteId, status]);
+  }, [debouncedQ, activeTypes, siteId, status, projectId, contractorId]);
 
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-semibold">Архив / Поиск</h1>
-      <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Поиск по метаданным и содержимому" />
+      <Input value={q} onChange={(e) => patchParams({ q: e.target.value })} placeholder="Поиск по метаданным и содержимому" />
       <div className="flex flex-wrap gap-2">
         {tabs.map((tab) => (
-          <Button key={tab.value} variant={type === tab.value ? "default" : "outline"} size="sm" onClick={() => setType(tab.value)}>
+          <Button key={tab.value} variant={type === tab.value ? "default" : "outline"} size="sm" onClick={() => patchParams({ type: tab.value })}>
             {tab.label}
           </Button>
         ))}
       </div>
-      <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-        <Input value={siteId} onChange={(e) => setSiteId(e.target.value)} placeholder="site_id" />
-        <Input value={status} onChange={(e) => setStatus(e.target.value)} placeholder="status" />
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
+        <Input value={siteId} onChange={(e) => patchParams({ site_id: e.target.value })} placeholder="site_id" />
+        <Input value={projectId} onChange={(e) => patchParams({ project_id: e.target.value })} placeholder="project_id" />
+        <Input value={contractorId} onChange={(e) => patchParams({ contractor_id: e.target.value })} placeholder="contractor_id" />
+        <Input value={status} onChange={(e) => patchParams({ status: e.target.value })} placeholder="status" />
       </div>
       <table className="w-full text-sm">
         <thead>
@@ -56,7 +77,7 @@ const ArchiveSearch = () => {
         <tbody>
           {items.map((item) => (
             <tr key={`${item.entity_type}-${item.entity_id}`} className="border-t align-top">
-              <td className="py-2">{item.title}</td>
+              <td className="py-2"><a className="text-primary underline" href={item.deeplink ?? "#"}>{item.title}</a></td>
               <td className="py-2">{item.entity_type}</td>
               <td className="py-2 text-muted-foreground" dangerouslySetInnerHTML={{ __html: item.snippet ?? "—" }} />
             </tr>

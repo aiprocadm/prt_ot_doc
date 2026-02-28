@@ -40,3 +40,5 @@ __all__ = ["Base", "TARGET_METADATA", "ALEMBIC_METADATA", "SharedBase", "TenantB
 from app.modules.pdf import models as pdf_models  # noqa: F401
 
 from app.modules.files import models as files_models  # noqa: F401
+
+from app.modules.search import models as search_models  # noqa: F401
