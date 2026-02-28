@@ -305,17 +305,27 @@ async def get_step_logs(job_id: str, step_id: str, tail: int = Query(default=200
     step = await session.get(DocumentJobStep, step_id)
     if step is None or step.job_id != job_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Step not found")
-    if not step.logs_uri:
-        return {"logs_uri": None, "lines": []}
-
     from app.services.file_storage import FileStorageService
 
     storage = FileStorageService.default()
-    key = step.logs_uri.replace("s3://", "")
+
+    logs_uri = step.logs_uri
+    key: str | None = None
+    if step.logs_file_id:
+        file_record = await session.get(FileRecord, step.logs_file_id)
+        if file_record is not None and str(file_record.tenant_id) == str(tenant.id):
+            key = file_record.object_key
+            logs_uri = f"s3://{key}"
+
+    if key is None:
+        if not step.logs_uri:
+            return {"logs_uri": None, "lines": []}
+        key = step.logs_uri.replace("s3://", "")
+
     if not storage.has(key):
-        return {"logs_uri": step.logs_uri, "lines": []}
+        return {"logs_uri": logs_uri, "lines": []}
     lines = storage.get(key).decode("utf-8").splitlines()[-tail:]
-    return {"logs_uri": step.logs_uri, "lines": lines}
+    return {"logs_uri": logs_uri, "lines": lines}
 class RetryStepRequest(BaseModel):
     step_key: str
 

@@ -7,6 +7,7 @@ from app.db.session import AsyncSessionLocal
 from app.middleware.tenant import TenantMiddleware
 from app.models.job_engine import DocumentJob, DocumentJobStatus, DocumentJobStep, JobStepStatus
 from app.models.models import Tenant
+from app.modules.files.models import FileRecord, FileStatus
 
 
 async def _ensure_global_tenant(*, slug: str = "test", tenant_id: str | None = None) -> None:
@@ -256,3 +257,72 @@ async def test_create_job_endpoint_without_idempotency_key(async_client, make_au
     body = resp.json()
     assert body["correlation_id"]
     assert body["steps"]
+
+
+@pytest.mark.anyio
+async def test_jobs_logs_endpoint_reads_logs_file_id(async_client, make_auth_headers, sessionmaker, data_factory) -> None:
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        job = DocumentJob(
+            tenant_id=str(tenant.id),
+            kind="pipeline",
+            status=DocumentJobStatus.RUNNING.value,
+            pipeline_profile_id=None,
+            preset_id=None,
+            input_sha256="a" * 64,
+            request_hash="b" * 64,
+            idempotency_key="idem-job-logs-file-id",
+            template_code="TMP",
+            template_version=1,
+            correlation_id="corr-logs-file-id",
+            created_by="user-1",
+        )
+        session.add(job)
+        await session.flush()
+
+        file_record = FileRecord(
+            tenant_id=str(tenant.id),
+            bucket="main",
+            object_key=f"logs/jobs/{job.id}/render_docx.jsonl",
+            content_type="application/jsonl",
+            size_bytes=0,
+            sha256="f" * 64,
+            status=FileStatus.clean.value,
+            av_result_json={},
+            metadata_json={"display_name": "render_docx.jsonl"},
+        )
+        session.add(file_record)
+        await session.flush()
+
+        step = DocumentJobStep(
+            tenant_id=str(tenant.id),
+            job_id=job.id,
+            step_code="render_docx",
+            step_key="render_docx",
+            status=JobStepStatus.RUNNING.value,
+            logs_uri=None,
+            logs_file_id=file_record.id,
+        )
+        session.add(step)
+        await session.commit()
+        job_id = job.id
+        step_id = step.id
+        log_key = file_record.object_key
+
+    from app.services.file_storage import FileStorageService
+
+    storage = FileStorageService.default()
+    storage.put(
+        log_key,
+        b'{"timestamp":"2026-01-01T00:00:00Z","level":"info","message":"ok-file-id","meta":{}}\n',
+        content_type="application/jsonl",
+    )
+
+    headers = await make_auth_headers()
+    headers["x-tenant"] = str(tenant.id)
+    await _ensure_global_tenant(slug=tenant.slug, tenant_id=str(tenant.id))
+    resp = await async_client.get(f"/api/v1/jobs/{job_id}/steps/{step_id}/logs", headers=headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["logs_uri"] == f"s3://{log_key}"
+    assert body["lines"]
