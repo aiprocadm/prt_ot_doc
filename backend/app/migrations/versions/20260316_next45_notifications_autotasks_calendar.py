@@ -64,16 +64,22 @@ def upgrade() -> None:
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("dedup_key", name="uq_notifications_dedup_key"),
     )
     op.create_index("ix_notifications_queue", "notifications", ["tenant_id", "user_id", "status", "scheduled_at"])
+    op.create_index(
+        "ix_notifications_dedup_active",
+        "notifications",
+        ["dedup_key"],
+        unique=True,
+        postgresql_where=sa.text("deleted_at IS NULL"),
+    )
 
     op.create_table(
         "reminder_rules",
         sa.Column("code", sa.String(length=128), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("is_enabled", sa.Boolean(), nullable=False, server_default=sa.text("true")),
-        sa.Column("entity_type", sa.Enum("training", "ppe", "medical", "permit", "inspection", name="reminderentitytype"), nullable=False),
+        sa.Column("entity_type", sa.Enum("training", "ppe", "medical", "permit", "inspection", "incident", "document_job", "edo", name="reminderentitytype"), nullable=False),
         sa.Column("date_field", sa.String(length=64), nullable=False),
         sa.Column("schedule", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column("recipients", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
@@ -114,6 +120,7 @@ def downgrade() -> None:
     op.drop_index("ix_plan_tasks_assignee_status_due", table_name="plan_tasks")
     op.drop_table("plan_tasks")
     op.drop_table("reminder_rules")
+    op.drop_index("ix_notifications_dedup_active", table_name="notifications")
     op.drop_index("ix_notifications_queue", table_name="notifications")
     op.drop_table("notifications")
     op.drop_table("notification_channel_settings")

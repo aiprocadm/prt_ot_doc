@@ -130,6 +130,16 @@ async def mark_read(payload: MarkReadRequest, session: SessionDep, tenant: Tenan
     return {"updated": updated}
 
 
+@router.get("/notification-settings/me", response_model=ChannelSettingsOut)
+async def get_settings_alias(session: SessionDep, tenant: TenantDep, access: AccessDep) -> ChannelSettingsOut:
+    return await get_settings(session=session, tenant=tenant, access=access)
+
+
+@router.put("/notification-settings/me", response_model=ChannelSettingsOut)
+async def put_settings_alias(payload: ChannelSettingsIn, session: SessionDep, tenant: TenantDep, access: AccessDep) -> ChannelSettingsOut:
+    return await put_settings(payload=payload, session=session, tenant=tenant, access=access)
+
+
 
 
 class CalendarEventRead(BaseModel):
@@ -278,4 +288,3 @@ async def put_settings(payload: ChannelSettingsIn, session: SessionDep, tenant: 
         setattr(settings, key, value)
     await session.flush()
     return ChannelSettingsOut.model_validate(settings, from_attributes=True)
-
