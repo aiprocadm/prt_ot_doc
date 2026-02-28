@@ -77,7 +77,10 @@ async def list_notifications(
         Notification.deleted_at.is_(None),
     )
     if status:
-        stmt = stmt.where(Notification.status == NotificationStatus(status))
+        if status == "unread":
+            stmt = stmt.where(Notification.status != NotificationStatus.READ)
+        else:
+            stmt = stmt.where(Notification.status == NotificationStatus(status))
     if cursor:
         stmt = stmt.where(Notification.created_at < datetime.fromisoformat(cursor))
     rows = (await session.execute(stmt.order_by(Notification.created_at.desc()).limit(limit + 1))).scalars().all()
@@ -275,3 +278,4 @@ async def put_settings(payload: ChannelSettingsIn, session: SessionDep, tenant: 
         setattr(settings, key, value)
     await session.flush()
     return ChannelSettingsOut.model_validate(settings, from_attributes=True)
+
