@@ -1,19 +1,36 @@
 from __future__ import annotations
 
 import hashlib
+from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from time import perf_counter
+from typing import Any
 
 import logging
 
 from fastapi import HTTPException, status
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.domains.files import s3
 from app.modules.files import av, extractors, storage
-from app.modules.files.models import AVStatus, DownloadLog, FileObject, FileTextIndex, FileVersion, FileVersionStatus, TextIndexStatus
-from sqlalchemy import select
+from app.modules.files.models import (
+    AVStatus,
+    DownloadLog,
+    FileDownloadLog,
+    FileEntityType,
+    FileLink,
+    FileLinkRole,
+    FileObject,
+    FileRecord,
+    FileStatus,
+    FileTextIndex,
+    FileVersion,
+    FileVersionStatus,
+    TextIndexStatus,
+)
 from app.tasks import index_file_content_job
 
 
@@ -23,6 +40,218 @@ MAX_INDEX_CHARS = 500_000
 logger = logging.getLogger(__name__)
 
 
+def _sha256_bytes(payload: bytes) -> str:
+    h = hashlib.sha256()
+    h.update(payload)
+    return h.hexdigest()
+
+
+def compute_sha256_stream(chunks: list[bytes]) -> str:
+    h = hashlib.sha256()
+    for chunk in chunks:
+        h.update(chunk)
+    return h.hexdigest()
+
+
+def _safe_filename(filename: str | None, fallback: str = "artifact.bin") -> str:
+    candidate = (filename or fallback).strip().replace("/", "_").replace("..", "_")
+    return candidate or fallback
+
+
+def build_artifact_name(payload: dict[str, Any] | None, ext: str) -> str:
+    data = payload or {}
+    org = data.get("org") or "org"
+    unit = data.get("unit") or "unit"
+    project = data.get("project") or "project"
+    client = data.get("client") or "client"
+    doc = data.get("doc") or "doc"
+    topic = data.get("topic") or "topic"
+    version = int(data.get("version") or 1)
+    date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
+    parts = [str(org), str(unit), str(project), str(client), str(doc), str(topic), f"v{version:02d}", date_str]
+    base = "_".join(p.replace(" ", "-") for p in parts if p)
+    normalized_ext = ext if ext.startswith(".") else f".{ext}"
+    return f"{base}{normalized_ext}"
+
+
+class FileService:
+    def __init__(self, session: AsyncSession, tenant_id: str) -> None:
+        self.session = session
+        self.tenant_id = tenant_id
+
+    async def create_upload_session(
+        self,
+        *,
+        filename: str,
+        content_type: str,
+        size_bytes: int,
+        metadata_json: dict[str, Any] | None = None,
+        created_by: str | None = None,
+    ) -> tuple[FileRecord, str, int]:
+        settings = get_settings()
+        object_id = FileRecord.new_id()
+        object_key = f"uploads/{datetime.now(timezone.utc):%Y/%m/%d}/{object_id}/{_safe_filename(filename)}"
+        record = FileRecord(
+            id=object_id,
+            tenant_id=self.tenant_id,
+            bucket="main",
+            object_key=object_key,
+            content_type=content_type,
+            size_bytes=size_bytes,
+            sha256="",
+            status=FileStatus.uploaded.value,
+            av_vendor="clamav",
+            av_result_json={},
+            metadata_json=metadata_json or {},
+            created_by=created_by,
+        )
+        self.session.add(record)
+        await self.session.flush()
+        upload_url = s3.generate_presigned_put_url(object_key, expires_in=settings.presign_download_ttl_seconds, content_type=content_type)
+        return record, upload_url, settings.presign_download_ttl_seconds
+
+    async def finalize_upload(self, *, file_id: str) -> FileRecord:
+        record = await self.session.get(FileRecord, file_id)
+        if record is None or record.tenant_id != self.tenant_id:
+            raise HTTPException(status_code=404, detail="file_not_found")
+        metadata = s3.head_object(key=record.object_key)
+        if metadata is None:
+            raise HTTPException(status_code=409, detail="object_not_found")
+        with s3.stream_object(key=record.object_key) as body:
+            data = body.read()
+        record.size_bytes = int(metadata.get("size") or len(data))
+        record.content_type = str(metadata.get("content_type") or record.content_type)
+        record.sha256 = _sha256_bytes(data)
+        record.status = FileStatus.scanning.value
+        await self.session.flush()
+        await self.av_scan_file(file_id=file_id)
+        return record
+
+    async def av_scan_file(self, *, file_id: str) -> FileRecord:
+        record = await self.session.get(FileRecord, file_id)
+        if record is None or record.tenant_id != self.tenant_id:
+            raise HTTPException(status_code=404, detail="file_not_found")
+        try:
+            with s3.stream_object(key=record.object_key) as body:
+                data = body.read()
+        except Exception:
+            logger.warning("files.av.unavailable", extra={"file_id": file_id})
+            record.status = FileStatus.scanning.value
+            record.av_result_json = {"status": "unavailable"}
+            await self.session.flush()
+            return record
+
+        with NamedTemporaryFile(delete=True) as tmp:
+            tmp.write(data)
+            tmp.flush()
+            verdict = av.scan_file(Path(tmp.name))
+
+        if verdict.status == "infected":
+            quarantine_key = f"quarantine/{datetime.now(timezone.utc):%Y/%m/%d}/{record.id}/{Path(record.object_key).name}"
+            s3.put_object(data=data, mime=record.content_type, key=quarantine_key)
+            record.object_key = quarantine_key
+            record.status = FileStatus.infected.value
+            record.av_result_json = {"status": "infected", "signature": verdict.signature}
+        else:
+            record.status = FileStatus.clean.value
+            record.av_result_json = {"status": "clean"}
+        record.av_vendor = "clamav"
+        await self.session.flush()
+        return record
+
+    async def get_signed_download_url(self, *, file_id: str, purpose: str, ttl: int = 600, actor_id: str | None = None, ip: str | None = None, user_agent: str | None = None) -> str:
+        record = await self.session.get(FileRecord, file_id)
+        if record is None or record.tenant_id != self.tenant_id:
+            raise HTTPException(status_code=404, detail="file_not_found")
+        if record.status != FileStatus.clean.value:
+            raise HTTPException(status_code=409, detail="file_not_clean")
+        url = storage.presign_get(key=record.object_key, expires_in=ttl)
+        self.session.add(
+            FileDownloadLog(
+                tenant_id=self.tenant_id,
+                file_id=file_id,
+                actor_id=actor_id,
+                ip=ip,
+                user_agent=user_agent,
+                purpose=purpose,
+            )
+        )
+        await self.session.flush()
+        return url
+
+    async def link_file(self, *, file_id: str, entity_type: str, entity_id: str, role: str) -> FileLink:
+        link = FileLink(
+            tenant_id=self.tenant_id,
+            file_id=file_id,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            role=role,
+        )
+        self.session.add(link)
+        await self.session.flush()
+        return link
+
+    async def unlink_file(self, *, file_id: str, entity_type: str, entity_id: str, role: str | None = None) -> None:
+        stmt = delete(FileLink).where(
+            FileLink.tenant_id == self.tenant_id,
+            FileLink.file_id == file_id,
+            FileLink.entity_type == entity_type,
+            FileLink.entity_id == entity_id,
+        )
+        if role:
+            stmt = stmt.where(FileLink.role == role)
+        await self.session.execute(stmt)
+
+    async def create_artifact_from_bytes(
+        self,
+        *,
+        payload: bytes,
+        filename: str,
+        content_type: str,
+        job_id: str | None = None,
+        step_key: str | None = None,
+        metadata_json: dict[str, Any] | None = None,
+        created_by: str | None = None,
+        entity_type: str = FileEntityType.other.value,
+        entity_id: str | None = None,
+        role: str = FileLinkRole.artifact.value,
+    ) -> FileRecord:
+        sha256 = _sha256_bytes(payload)
+        ext = Path(filename).suffix or ".bin"
+        if job_id and step_key:
+            object_key = f"artifacts/jobs/{job_id}/{step_key}/{sha256}{ext}"
+        else:
+            object_key = f"artifacts/{datetime.now(timezone.utc):%Y/%m/%d}/{sha256}{ext}"
+        s3.put_object(data=payload, mime=content_type, key=object_key)
+        record = FileRecord(
+            tenant_id=self.tenant_id,
+            bucket="main",
+            object_key=object_key,
+            content_type=content_type,
+            size_bytes=len(payload),
+            sha256=sha256,
+            status=FileStatus.clean.value,
+            av_vendor="internal",
+            av_result_json={"status": "skipped_internal_artifact"},
+            metadata_json=metadata_json or {},
+            created_by=created_by,
+        )
+        self.session.add(record)
+        await self.session.flush()
+        await self.link_file(file_id=record.id, entity_type=entity_type, entity_id=entity_id or record.id, role=role)
+        return record
+
+    async def delete_file(self, *, file_id: str) -> FileRecord:
+        record = await self.session.get(FileRecord, file_id)
+        if record is None or record.tenant_id != self.tenant_id:
+            raise HTTPException(status_code=404, detail="file_not_found")
+        record.status = FileStatus.deleted.value
+        record.deleted_at = datetime.now(timezone.utc)
+        await self.session.flush()
+        return record
+
+
+# legacy NEXT29 API kept for compatibility
 async def create_upload_session(*, session: AsyncSession, tenant_id: str, payload, user_id: str | None) -> tuple[FileObject, FileVersion, str]:
     obj = FileObject(
         tenant_id=tenant_id,

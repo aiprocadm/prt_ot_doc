@@ -37,3 +37,5 @@ TARGET_METADATA = (ALEMBIC_METADATA,)
 __all__ = ["Base", "TARGET_METADATA", "ALEMBIC_METADATA", "SharedBase", "TenantBase"]
 
 from app.modules.pdf import models as pdf_models  # noqa: F401
+
+from app.modules.files import models as files_models  # noqa: F401
