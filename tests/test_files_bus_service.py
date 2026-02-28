@@ -74,3 +74,49 @@ async def test_download_creates_log(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert url == "http://signed"
     assert any(isinstance(item, FileDownloadLog) for item in session.added)
+
+
+def test_build_artifact_name_supports_flags_and_sanitizes() -> None:
+    from app.modules.files.service import build_artifact_name
+
+    name = build_artifact_name(
+        {
+            "org": "АО Ромашка",
+            "unit": "Unit 1",
+            "project": "Proj",
+            "client": "Client",
+            "doc": "DOC",
+            "topic": "Topic Name",
+            "version": 3,
+            "date": "2026-03-12",
+            "flags": ["draft", "for sign"],
+        },
+        ext="pdf",
+    )
+
+    assert name == "ао-ромашка_unit-1_proj_client_doc_topic-name_v03_20260312_draft_for-sign.pdf"
+
+
+@pytest.mark.asyncio
+async def test_create_upload_session_validates_limits(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.core.config import get_settings
+
+    rec = FileRecord(id="f4", tenant_id="t1", bucket="main", object_key="a", content_type="text/plain", size_bytes=1, sha256="d" * 64, status=FileStatus.clean.value, av_result_json={}, metadata_json={})
+    session = DummySession(rec)
+    svc = FileService(session=session, tenant_id="t1")
+
+    monkeypatch.setenv("MAX_UPLOAD_SIZE", "10")
+    monkeypatch.setenv("FILE_ALLOWED_MIME", "text/plain")
+    get_settings.cache_clear()  # type: ignore[attr-defined]
+
+    with pytest.raises(HTTPException) as exc:
+        await svc.create_upload_session(filename="a.txt", content_type="text/plain", size_bytes=11)
+
+    assert exc.value.status_code == 413
+
+    with pytest.raises(HTTPException) as exc2:
+        await svc.create_upload_session(filename="a.pdf", content_type="application/pdf", size_bytes=5)
+
+    assert exc2.value.status_code == 415
+
+    get_settings.cache_clear()  # type: ignore[attr-defined]
