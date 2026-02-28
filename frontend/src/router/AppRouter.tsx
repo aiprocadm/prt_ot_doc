@@ -46,6 +46,8 @@ const PipelineRunsPage = lazy(() => import("@/pages/PipelineRuns"));
 const PipelineRunDetailsPage = lazy(() => import("@/pages/PipelineRunDetails"));
 const ArchiveSearchPage = lazy(() => import("@/pages/ArchiveSearch"));
 const SearchPage = lazy(() => import("@/pages/SearchPage"));
+const NotificationsPage = lazy(() => import("@/pages/notifications/NotificationsPage"));
+const CalendarPage = lazy(() => import("@/pages/calendar/CalendarPage"));
 
 const AppRouter = () => {
   const initialize = useAuthStore((state) => state.initialize);
@@ -97,6 +99,10 @@ const AppRouter = () => {
               </Route>
               <Route element={<ProtectedRoute permission={PERMISSIONS.TASK_VIEW} />}>
                 <Route path="/tasks" element={<TasksPage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.TASK_VIEW} />}>
+                <Route path="/notifications" element={<NotificationsPage />} />
+                <Route path="/calendar" element={<CalendarPage />} />
               </Route>
               <Route element={<ProtectedRoute permission={PERMISSIONS.RISK_VIEW} />}>
                 <Route path="/risk" element={<RiskPage />} />

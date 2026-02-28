@@ -25,6 +25,8 @@ const navGroups = [
     items: [
       { label: "Главная", to: "/dashboard", icon: LayoutDashboard, permission: PERMISSIONS.DASHBOARD_VIEW },
       { label: "Задачи", to: "/tasks", icon: ClipboardCheck, permission: PERMISSIONS.TASK_VIEW },
+      { label: "Уведомления", to: "/notifications", icon: AlertTriangle, permission: PERMISSIONS.TASK_VIEW },
+      { label: "Календарь", to: "/calendar", icon: Activity, permission: PERMISSIONS.TASK_VIEW },
       { label: "Документы", to: "/documents", icon: FileText, permission: PERMISSIONS.DOCUMENT_VIEW },
       { label: "Согласования", to: "/approvals/inbox", icon: ClipboardCheck, permission: PERMISSIONS.DOCUMENT_VIEW },
       { label: "Подписи", to: "/signatures", icon: FileText, permission: PERMISSIONS.DOCUMENT_VIEW },

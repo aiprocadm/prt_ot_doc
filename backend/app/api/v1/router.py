@@ -55,6 +55,7 @@ from app.api.routes import (
     jobs,
     medical,
     npa,
+    notifications,
     orders,
     outbox_admin,
     packs,
@@ -158,6 +159,7 @@ tenant_router.include_router(incidents.router, tags=["incidents"])
 tenant_router.include_router(inspections.router, tags=["inspections"])
 tenant_router.include_router(prescriptions.router, tags=["prescriptions"])
 tenant_router.include_router(obligations.router, tags=["obligations"])
+tenant_router.include_router(notifications.router)
 tenant_router.include_router(departments.router, tags=["departments"])
 tenant_router.include_router(contracts.router, tags=["contracts"])
 tenant_router.include_router(dashboard.router, tags=["dashboard"])
