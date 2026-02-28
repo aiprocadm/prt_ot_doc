@@ -30,7 +30,7 @@ const NotificationsPage = () => {
 
   const load = async () => {
     const response = await apiClient.get<{ items: NotificationItem[] }>("/notifications", {
-      params: filter === "unread" ? { status: "sent" } : undefined
+      params: filter === "unread" ? { status: "unread" } : undefined
     });
     setItems(response.data.items);
   };
