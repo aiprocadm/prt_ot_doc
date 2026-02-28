@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from uuid import uuid4
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -116,7 +117,7 @@ class FileService:
         lower_name = filename.lower()
         if lower_name.endswith((".docm", ".xlsm")):
             raise HTTPException(status_code=400, detail="macro_enabled_documents_are_forbidden")
-        object_id = FileRecord.new_id()
+        object_id = str(uuid4())
         object_key = f"uploads/{datetime.now(timezone.utc):%Y/%m/%d}/{object_id}/{_safe_filename(filename)}"
         record = FileRecord(
             id=object_id,
@@ -249,7 +250,7 @@ class FileService:
     ) -> FileRecord:
         sha256 = _sha256_bytes(payload)
         ext = Path(filename).suffix or ".bin"
-        record_id = FileRecord.new_id()
+        record_id = str(uuid4())
         display_name = _safe_filename(filename, fallback=f"artifact{ext}")
         if job_id and step_key:
             object_key = f"artifacts/jobs/{job_id}/{step_key}/{record_id}{ext}"

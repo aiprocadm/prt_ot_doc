@@ -4,13 +4,14 @@ import hashlib
 import inspect
 import json
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.job_engine import DocumentArtifact, DocumentJob, DocumentJobStatus, DocumentJobStep, JobStepStatus
+from app.models.job_engine import DocumentArtifact, DocumentJob, DocumentJobStatus, DocumentJobStep, JobStepStatus, OutboxEvent, OutboxEventStatus
 from app.modules.pipelines.models import PipelinePackageProfile, PipelineProfile
 from app.services.audit import AuditService, field_level_diff
 from app.services.file_storage import FileStorageService
@@ -114,6 +115,7 @@ class PipelineOrchestrator:
             if await self._all_done(job_id):
                 job.status = DocumentJobStatus.SUCCESS.value
                 job.ended_at = datetime.now(timezone.utc)
+                await self._ensure_document_generated_event(job)
             await self.session.flush()
             return job
         job.current_step_index = step.step_order or step.order
@@ -249,7 +251,7 @@ class PipelineOrchestrator:
         steps = (await self.session.execute(select(DocumentJobStep).where(DocumentJobStep.job_id == job_id))).scalars().all()
         return all(str(s.status) in {JobStepStatus.SUCCESS.value, JobStepStatus.SKIPPED.value} for s in steps)
 
-    async def _resolve_profile(self, *, tenant_id: str, profile_code: str) -> PipelineProfile | PipelinePackageProfile:
+    async def _resolve_profile(self, *, tenant_id: str, profile_code: str) -> PipelineProfile | PipelinePackageProfile | SimpleNamespace:
         profile = (
             await self.session.execute(
                 select(PipelineProfile).where(PipelineProfile.tenant_id == tenant_id, PipelineProfile.code == profile_code, PipelineProfile.is_active.is_(True))
@@ -264,10 +266,14 @@ class PipelineOrchestrator:
         ).scalar_one_or_none()
         if package:
             return package
-        raise ValueError("profile_not_found")
+        return SimpleNamespace(
+            id=None,
+            code=profile_code,
+            steps_json=[{"code": step} for step in DEFAULT_STEPS],
+        )
 
     @staticmethod
-    def _profile_steps(profile: PipelineProfile | PipelinePackageProfile) -> list[str]:
+    def _profile_steps(profile: PipelineProfile | PipelinePackageProfile | SimpleNamespace) -> list[str]:
         raw = getattr(profile, "steps", None) or getattr(profile, "steps_json", None) or []
         codes = [s.get("code") if isinstance(s, dict) else str(s) for s in raw]
         codes = [c for c in codes if c]
@@ -336,6 +342,25 @@ class PipelineOrchestrator:
     async def _artifact_list(self, job_id: str) -> list[dict[str, Any]]:
         rows = (await self.session.execute(select(DocumentArtifact).where(DocumentArtifact.job_id == job_id))).scalars().all()
         return [{"step_code": r.step_code, "kind": r.kind, "meta": r.meta} for r in rows]
+
+    async def _ensure_document_generated_event(self, job: DocumentJob) -> None:
+        existing = (
+            await self.session.execute(
+                select(OutboxEvent).where(OutboxEvent.tenant_id == job.tenant_id, OutboxEvent.event_id == job.id)
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            return
+        self.session.add(
+            OutboxEvent(
+                tenant_id=job.tenant_id,
+                event_type="DocumentGenerated",
+                event_id=job.id,
+                payload={"job_id": job.id, "status": job.status, "artifacts": await self._artifact_list(job.id)},
+                status=OutboxEventStatus.PENDING.value,
+                next_attempt_at=datetime.now(timezone.utc),
+            )
+        )
 
     async def _audit_diff(self, job: DocumentJob, before: dict[str, Any], after: dict[str, Any]) -> None:
         await AuditService(self.session).log_event(
@@ -419,6 +444,9 @@ class DocumentPipelineOrchestrator(PipelineOrchestrator):
                 step.error_code = "step_failed"
                 step.error_payload = {"forced": True}
                 job.status = DocumentJobStatus.FAILED.value
+                job.error_code = step.error_code
+                job.error_payload = step.error_payload
+                job.ended_at = datetime.now(timezone.utc)
                 await self.session.flush()
                 return job
             await self.run_step(job_id=job.id, step_id=step.id)
