@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { fetchSearch, type SearchItem, type SearchType } from "@/api/search";
+import { useDebounce } from "@/hooks/useDebounce";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
@@ -21,12 +22,13 @@ const ArchiveSearch = () => {
   const [siteId, setSiteId] = useState("");
   const [status, setStatus] = useState("");
   const [items, setItems] = useState<SearchItem[]>([]);
+  const debouncedQ = useDebounce(q, 400);
 
   useEffect(() => {
-    fetchSearch({ q, types: [type], site_id: siteId || undefined, status: status || undefined })
+    fetchSearch({ q: debouncedQ, types: [type], site_id: siteId || undefined, status: status || undefined })
       .then((result) => setItems(result.items))
       .catch(() => setItems([]));
-  }, [q, type, siteId, status]);
+  }, [debouncedQ, type, siteId, status]);
 
   return (
     <div className="space-y-4">

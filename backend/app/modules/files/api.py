@@ -10,7 +10,7 @@ from app.api.dependencies import get_session, get_tenant_record
 from app.core.idempotency import compute_request_hash
 from app.models.models import Tenant
 from app.modules.files import service
-from app.modules.files.models import FileLink, FileRecord
+from app.modules.files.models import FileContentIndex, FileLink, FileRecord
 from app.modules.files.schemas import (
     DownloadURLResponse,
     DownloadUrlRequest,
@@ -18,6 +18,7 @@ from app.modules.files.schemas import (
     EntityFileListItem,
     FileDto,
     FinalizeUploadResponse,
+    FileIndexStatusDto,
     LinkFileRequest,
     UploadCompleteRequest,
     UploadCompleteResponse,
@@ -25,6 +26,7 @@ from app.modules.files.schemas import (
     UploadInitResponse,
     UploadSessionRequest,
     UploadSessionResponse,
+    ReindexFileResponse,
 )
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 
@@ -144,6 +146,7 @@ async def get_file_v2(
     if file_record is None or file_record.tenant_id != str(tenant.id):
         raise HTTPException(status_code=404, detail="file_not_found")
     link_rows = (await session.execute(select(FileLink).where(FileLink.tenant_id == str(tenant.id), FileLink.file_id == file_id))).scalars().all()
+    content_index = (await session.execute(select(FileContentIndex).where(FileContentIndex.file_id == file_id))).scalar_one_or_none()
     return FileDto(
         id=file_record.id,
         bucket=file_record.bucket,
@@ -156,7 +159,25 @@ async def get_file_v2(
         av_result_json=file_record.av_result_json or {},
         metadata_json=file_record.metadata_json or {},
         links=[EntityFileListItem(file_id=file_record.id, role=l.role, status=file_record.status, display_name=Path(file_record.object_key).name, size=file_record.size_bytes) for l in link_rows],
+        content_index=FileIndexStatusDto(status=content_index.status, attempts=int(content_index.attempts or 0), last_error=content_index.last_error) if content_index else None,
     )
+
+
+
+
+@router.post("/{file_id}:reindex", response_model=ReindexFileResponse)
+async def reindex_file_content_v2(
+    file_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> ReindexFileResponse:
+    file_record = await session.get(FileRecord, file_id)
+    if file_record is None or file_record.tenant_id != str(tenant.id):
+        raise HTTPException(status_code=404, detail="file_not_found")
+    from app.tasks import index_file_content_job
+
+    index_file_content_job.apply_async(kwargs={"tenant_slug": session.info.get("tenant"), "file_id": file_id}, countdown=0)
+    return ReindexFileResponse(file_id=file_id, status="queued")
 
 
 @router.post("/{file_id}:download-url", response_model=DownloadUrlResponse)

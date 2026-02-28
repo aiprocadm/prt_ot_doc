@@ -5,7 +5,7 @@ import { fetchSearch, type SearchItem, type SearchType } from "@/api/search";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
-const tabs: SearchType[] = ["documents", "files", "people", "sites", "incidents", "inspections"];
+const tabs: SearchType[] = ["documents", "files", "people", "sites", "incidents", "inspections", "risk", "ppe", "training"];
 
 const SearchPage = () => {
   const [params, setParams] = useSearchParams();

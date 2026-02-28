@@ -139,7 +139,7 @@ class FileContentIndex(TenantBase, TimestampMixin, SoftDeleteMixin, VersionedMix
     tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=False, index=True)
     file_id: Mapped[str] = mapped_column(String(36), ForeignKey("files.id"), nullable=False, unique=True)
     doc_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    content_text: Mapped[str | None] = mapped_column(TSVECTOR, nullable=True)
+    content_text: Mapped[str | None] = mapped_column(TSVECTOR().with_variant(Text(), "sqlite"), nullable=True)
     raw_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     mime_type: Mapped[str] = mapped_column(String(128), nullable=False)
