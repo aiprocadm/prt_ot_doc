@@ -5,7 +5,7 @@ from __future__ import annotations
 import enum
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, Enum, Index, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, DateTime, Enum, Index, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import SoftDeleteMixin, TenantBaseModel
@@ -75,7 +75,13 @@ class Notification(TenantBaseModel, SoftDeleteMixin):
 
     __table_args__ = (
         Index("ix_notifications_queue", "tenant_id", "user_id", "status", "scheduled_at"),
-        UniqueConstraint("dedup_key", name="uq_notifications_dedup_key"),
+        Index(
+            "ix_notifications_dedup_active",
+            "dedup_key",
+            unique=True,
+            sqlite_where=text("deleted_at IS NULL"),
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
     )
 
 
@@ -85,6 +91,9 @@ class ReminderEntityType(str, enum.Enum):
     MEDICAL = "medical"
     PERMIT = "permit"
     INSPECTION = "inspection"
+    INCIDENT = "incident"
+    DOCUMENT_JOB = "document_job"
+    EDO = "edo"
 
 
 class ReminderRule(TenantBaseModel, SoftDeleteMixin):
