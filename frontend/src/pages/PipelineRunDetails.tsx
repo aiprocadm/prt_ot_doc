@@ -40,6 +40,11 @@ const PipelineRunDetails = () => {
         <button className="rounded border px-3 py-1" onClick={() => cancelPipelineRun(run.run_id).then(setRun)}>Cancel</button>
       </div>
       <JobTimeline steps={run.step_runs} />
+      <div className="rounded border p-3 text-sm">
+        <h2 className="mb-2 font-medium">Индексация файлов</h2>
+        <p className="text-muted-foreground">Статусы контент-индексации отображаются в карточках файлов (queued/indexed/failed).</p>
+        <button className="mt-2 rounded border px-3 py-1">Переиндексировать</button>
+      </div>
       <div className="grid gap-4 md:grid-cols-2">
         <div className="rounded border p-3 text-sm">
           <h2 className="mb-2 font-medium">Step logs</h2>

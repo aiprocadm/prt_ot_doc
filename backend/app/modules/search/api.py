@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,13 +12,13 @@ from app.modules.search.service import SearchFilters, SearchService
 
 router = APIRouter()
 
-_ALLOWED_TYPES = {"documents", "people", "sites", "incidents", "inspections", "files"}
+_ALLOWED_TYPES = {"documents", "people", "sites", "incidents", "inspections", "files", "ppe", "risk", "training"}
 
 
 @router.get("/search")
 async def global_search(
-    q: str = Query(min_length=1),
-    types: str = "documents,people,sites,incidents,inspections",
+    q: str = Query(default=""),
+    types: str = "documents,people,sites,incidents,inspections,ppe,risk,training",
     limit: int = Query(default=20, ge=1, le=100),
     cursor: str | None = None,
     status: str | None = None,
@@ -45,4 +46,6 @@ async def global_search(
         date_to=date_to,
     )
     service = SearchService(session=session, tenant_id=str(tenant.id))
-    return await service.search(q=q, types=requested_types, filters=filters, limit=limit, cursor=cursor)
+    payload = await service.search(q=q, types=requested_types, filters=filters, limit=limit, cursor=cursor)
+    payload["correlation_id"] = str(uuid4())
+    return payload

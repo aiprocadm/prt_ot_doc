@@ -28,6 +28,8 @@ from app.modules.files.models import (
     FileRecord,
     FileStatus,
     FileTextIndex,
+    FileContentIndex,
+    FileContentIndexStatus,
     FileVersion,
     FileVersionStatus,
     TextIndexStatus,
@@ -189,6 +191,11 @@ class FileService:
             record.av_result_json = {"status": "clean"}
         record.av_vendor = "clamav"
         await self.session.flush()
+        if record.status == FileStatus.clean.value:
+            try:
+                index_file_content_job.apply_async(kwargs={"tenant_slug": self.session.info.get("tenant"), "file_id": record.id}, countdown=0)
+            except Exception:
+                await index_file_record(self.session, tenant_id=self.tenant_id, file_id=record.id)
         return record
 
     async def get_signed_download_url(self, *, file_id: str, purpose: str, ttl: int = 600, actor_id: str | None = None, ip: str | None = None, user_agent: str | None = None) -> str:
@@ -411,6 +418,53 @@ async def index_file_version(session: AsyncSession, *, tenant_id: str, version_i
     with s3.stream_object(key=version.s3_key) as body:
         data = body.read()
     await index_file_content(session=session, tenant_id=tenant_id, version=version, data=data)
+
+
+async def index_file_record(session: AsyncSession, *, tenant_id: str, file_id: str) -> None:
+    record = await session.get(FileRecord, file_id)
+    if record is None or record.tenant_id != tenant_id or record.status != FileStatus.clean.value:
+        return
+
+    file_hash = record.sha256
+    existing = (await session.execute(select(FileContentIndex).where(FileContentIndex.file_id == file_id))).scalar_one_or_none()
+    if existing is not None and existing.content_sha256 == file_hash and existing.status == FileContentIndexStatus.indexed.value:
+        return
+
+    if existing is None:
+        existing = FileContentIndex(tenant_id=tenant_id, file_id=file_id, content_sha256=file_hash, mime_type=record.content_type)
+        session.add(existing)
+
+    existing.attempts = int(existing.attempts or 0) + 1
+    existing.status = FileContentIndexStatus.queued.value
+    existing.mime_type = record.content_type
+
+    with s3.stream_object(key=record.object_key) as body:
+        data = body.read()
+    if len(data) > MAX_INDEX_BYTES:
+        existing.status = FileContentIndexStatus.failed.value
+        existing.last_error = "max_size_exceeded"
+        return
+
+    text = ""
+    suffix = Path(record.object_key).suffix.lower()
+    with NamedTemporaryFile(delete=True, suffix=suffix or ".bin") as tmp:
+        tmp.write(data)
+        tmp.flush()
+        if suffix == ".pdf":
+            text = extractors.extract_text_pdf(Path(tmp.name))
+        elif suffix == ".docx":
+            text = extractors.extract_text_docx(Path(tmp.name))
+
+    if len(text) > MAX_INDEX_CHARS:
+        text = text[:MAX_INDEX_CHARS]
+
+    existing.raw_text = text
+    existing.content_sha256 = file_hash
+    existing.status = FileContentIndexStatus.indexed.value if text else FileContentIndexStatus.failed.value
+    existing.last_error = None if text else "not_indexable"
+    existing.language = "ru"
+
+
 
 
 async def issue_download_url(*, session: AsyncSession, tenant_id: str, file_id: str, version_id: str, user_id: str | None, ip: str | None, user_agent: str | None) -> str:
