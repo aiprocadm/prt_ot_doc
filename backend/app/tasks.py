@@ -57,6 +57,7 @@ from app.models.models import (
     Template,
     TemplateVersion,
     Tenant,
+    TrainingPlan,
     User,
     WebhookDelivery,
     WebhookEndpoint,
@@ -72,6 +73,8 @@ from app.services.idempotency import IdempotencyService, cleanup_idempotency_key
 from app.services.events import EventType
 from app.services.obligations import process_task_reminders
 from app.services.outbox import OutboxProcessor, OutboxService
+from app.services.notifications import send_notification, build_dedup_key
+from app.models.notifications import Notification, NotificationChannel, NotificationStatus, NotificationType, ReminderRule, ReminderEntityType, PlanTask, PlanTaskStatus
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -906,6 +909,30 @@ async def _dispatch_outbox_events(*, max_attempts: int | None = None, tenant_slu
             for event in pending:
                 event.attempts += 1
                 correlation_id = str((event.headers or {}).get("correlation_id") or (event.payload or {}).get("correlation_id") or event.id)
+                if event.event_type in {"DocumentGenerated", "DocumentExported", "DocumentSigned", "RiskAssessed", "PPEIssued", "TrainingCompleted"}:
+                    actor_id = str((event.payload or {}).get("actor_id") or "")
+                    if actor_id:
+                        mapped = {
+                            "DocumentGenerated": NotificationType.DOCUMENT_GENERATED,
+                            "DocumentExported": NotificationType.DOCUMENT_EXPORTED,
+                            "DocumentSigned": NotificationType.DOCUMENT_SIGNED,
+                            "TrainingCompleted": NotificationType.TRAINING_COMPLETED,
+                            "PPEIssued": NotificationType.PPE_ISSUE_CREATED,
+                            "RiskAssessed": NotificationType.CA_DUE_SOON,
+                        }[event.event_type]
+                        tenant_row = (await session.execute(select(Tenant).where(Tenant.slug == tenant_slug))).scalar_one_or_none()
+                        resolved_tenant_id = str(tenant_row.id) if tenant_row is not None else str(event.tenant_id)
+                        await send_notification(
+                            session,
+                            tenant_id=resolved_tenant_id,
+                            user_id=actor_id,
+                            channel=NotificationChannel.INAPP,
+                            type=mapped,
+                            title=event.event_type,
+                            body="Событие из outbox",
+                            payload={"event_id": event.event_id, "entity_type": "outbox_event", "entity_id": event.id},
+                            dedup_key=f"outbox:{event.event_id}:inapp",
+                        )
                 body = {
                     "event_id": event.event_id,
                     "event_type": event.event_type,
@@ -969,6 +996,80 @@ async def _dispatch_outbox_events(*, max_attempts: int | None = None, tenant_slu
         await session.flush()
     return processed
 
+
+
+
+@celery_app.task(name="notifications.dispatch")
+def dispatch_notification_job(notification_id: str, tenant_slug: str = "test") -> int:
+    return _run_coroutine(_dispatch_notification_job(notification_id=notification_id, tenant_slug=tenant_slug))
+
+
+async def _dispatch_notification_job(*, notification_id: str, tenant_slug: str = "test") -> int:
+    async with session_scope(tenant=tenant_slug) as session:
+        notification = (await session.execute(select(Notification).where(Notification.id == notification_id))).scalar_one_or_none()
+        if notification is None:
+            return 0
+        if notification.status != NotificationStatus.QUEUED:
+            return 0
+        try:
+            if notification.channel == NotificationChannel.INAPP:
+                notification.status = NotificationStatus.SENT
+                notification.sent_at = datetime.now(tz=timezone.utc)
+            elif notification.channel == NotificationChannel.EMAIL:
+                notification.status = NotificationStatus.SENT
+                notification.sent_at = datetime.now(tz=timezone.utc)
+            else:
+                notification.status = NotificationStatus.SENT
+                notification.sent_at = datetime.now(tz=timezone.utc)
+            notification.attempts += 1
+        except Exception as exc:  # pragma: no cover
+            notification.attempts += 1
+            notification.status = NotificationStatus.FAILED
+            notification.last_error = str(exc)
+        await session.flush()
+    return 1
+
+
+@celery_app.task(name="reminders.scan")
+def scan_reminders_job(tenant_slug: str = "test") -> int:
+    return _run_coroutine(_scan_reminders_job(tenant_slug=tenant_slug))
+
+
+async def _scan_reminders_job(*, tenant_slug: str = "test") -> int:
+    now = datetime.now(tz=timezone.utc)
+    processed = 0
+    async with session_scope(tenant=tenant_slug) as session:
+        rules = (await session.execute(select(ReminderRule).where(ReminderRule.is_enabled.is_(True), ReminderRule.deleted_at.is_(None)))).scalars().all()
+        for rule in rules:
+            entity_type_value = rule.entity_type.value if hasattr(rule.entity_type, "value") else str(rule.entity_type)
+            if entity_type_value != ReminderEntityType.TRAINING.value:
+                continue
+            offsets = [int(x) for x in (rule.schedule or {}).get("offsets_days", [7, 1, 0])]
+            training_rows = (await session.execute(select(TrainingPlan).where(TrainingPlan.due_date.is_not(None)))).scalars().all()
+            for training in training_rows:
+                due_dt = datetime.combine(training.due_date, datetime.min.time(), tzinfo=timezone.utc)
+                days_left = (due_dt.date() - now.date()).days
+                overdue = due_dt.date() < now.date()
+                if days_left not in offsets and not overdue:
+                    continue
+                user_id = training.person_id or training.created_by
+                if not user_id:
+                    continue
+                status = PlanTaskStatus.OVERDUE if overdue else PlanTaskStatus.OPEN
+                task = (await session.execute(select(PlanTask).where(PlanTask.tenant_id == rule.tenant_id, PlanTask.entity_type == "training", PlanTask.entity_id == training.id, PlanTask.deleted_at.is_(None)))).scalar_one_or_none()
+                if task is None and bool((rule.action or {}).get("create_task", True)):
+                    task = PlanTask(tenant_id=rule.tenant_id, title=f"Training due: {training.id}", description="Autogenerated from reminder rule", entity_type="training", entity_id=training.id, assignee_id=user_id, status=status, due_at=due_dt)
+                    session.add(task)
+                elif task is not None:
+                    task.status = status
+                    task.due_at = due_dt
+                if bool((rule.action or {}).get("notify", True)):
+                    n_type = NotificationType.TRAINING_OVERDUE if overdue else NotificationType.TRAINING_DUE_SOON
+                    dedup_key = build_dedup_key(tenant_id=rule.tenant_id, user_id=user_id, type=n_type, entity_type="training", entity_id=training.id, bucket=f"{due_dt.date().isoformat()}:{days_left}")
+                    await send_notification(session, tenant_id=rule.tenant_id, user_id=user_id, channel=NotificationChannel.INAPP, type=n_type, title="Контрольная дата обучения", body="Проверьте дедлайн обучения", payload={"entity_type": "training", "entity_id": training.id, "deeplink": f"/training?id={training.id}"}, dedup_key=dedup_key)
+                processed += 1
+        await session.flush()
+    return processed
 
 @celery_app.task(name="process_inbound_webhook")
 def process_inbound_webhook(*, source: str, tenant_slug: str, payload: dict[str, Any]) -> int:

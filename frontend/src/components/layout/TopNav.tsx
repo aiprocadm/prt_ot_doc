@@ -1,5 +1,6 @@
 import { Bell, CheckCircle2, ChevronDown, LogOut, Moon, Settings, Sun } from "lucide-react";
 import { useMemo } from "react";
+import { Link } from "react-router-dom";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -63,12 +64,12 @@ export const TopNav = () => {
               {kpi.tasks}
             </Badge>
           </Button>
-          <Button variant="ghost" size="icon" aria-label="Уведомления" className="relative">
+          <Button asChild variant="ghost" size="icon" aria-label="Уведомления" className="relative"><Link to="/notifications">
             <Bell className="h-5 w-5" />
             <Badge variant="destructive" className="absolute -right-1 -top-1 hidden h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-[10px] sm:flex">
               {kpi.alerts}
             </Badge>
-          </Button>
+          </Link></Button>
           <Button variant="ghost" size="icon" aria-label="Toggle theme" onClick={toggleTheme}>
             {theme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
           </Button>

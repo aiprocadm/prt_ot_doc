@@ -95,6 +95,17 @@ from app.models.models import (
     EdoDirection,
     EdoStatus,
 )
+from app.models.notifications import (
+    Notification,
+    NotificationChannel,
+    NotificationChannelSettings,
+    NotificationStatus,
+    NotificationType,
+    ReminderEntityType,
+    ReminderRule,
+    PlanTask as CalendarPlanTask,
+    PlanTaskStatus as CalendarPlanTaskStatus,
+)
 from app.models.npa import NpaAct, NpaClause
 from app.models.risk import (
     Risk,
@@ -212,4 +223,13 @@ __all__ = [
     "EdoStatusHistory",
     "EdoDirection",
     "EdoStatus",
+    "Notification",
+    "NotificationChannel",
+    "NotificationChannelSettings",
+    "NotificationStatus",
+    "NotificationType",
+    "ReminderEntityType",
+    "ReminderRule",
+    "CalendarPlanTask",
+    "CalendarPlanTaskStatus",
 ]

@@ -12,6 +12,7 @@ from app.models import (
     file,  # noqa: F401
     job_engine,  # noqa: F401
     models,  # noqa: F401
+    notifications,  # noqa: F401
     npa,  # noqa: F401
     risk,  # noqa: F401
 )
