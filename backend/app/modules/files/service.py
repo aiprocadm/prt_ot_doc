@@ -58,18 +58,38 @@ def _safe_filename(filename: str | None, fallback: str = "artifact.bin") -> str:
     return candidate or fallback
 
 
+def _normalize_name_part(value: Any, fallback: str) -> str:
+    raw = str(value).strip() if value is not None else ""
+    if not raw:
+        return fallback
+    normalized = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "-" for ch in raw)
+    normalized = "-".join(part for part in normalized.split("-") if part)
+    return normalized.lower() or fallback
+
+
 def build_artifact_name(payload: dict[str, Any] | None, ext: str) -> str:
     data = payload or {}
-    org = data.get("org") or "org"
-    unit = data.get("unit") or "unit"
-    project = data.get("project") or "project"
-    client = data.get("client") or "client"
-    doc = data.get("doc") or "doc"
-    topic = data.get("topic") or "topic"
+    org = _normalize_name_part(data.get("org"), "org")
+    unit = _normalize_name_part(data.get("unit"), "unit")
+    project = _normalize_name_part(data.get("project"), "project")
+    client = _normalize_name_part(data.get("client"), "client")
+    doc = _normalize_name_part(data.get("doc"), "doc")
+    topic = _normalize_name_part(data.get("topic"), "topic")
     version = int(data.get("version") or 1)
-    date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
-    parts = [str(org), str(unit), str(project), str(client), str(doc), str(topic), f"v{version:02d}", date_str]
-    base = "_".join(p.replace(" ", "-") for p in parts if p)
+    if data.get("date"):
+        date_str = str(data["date"]).replace("-", "")[:8]
+    else:
+        date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
+    parts = [org, unit, project, client, doc, topic, f"v{version:02d}", date_str]
+    flags = data.get("flags") or []
+    if isinstance(flags, str):
+        flags = [flags]
+    if isinstance(flags, list):
+        for flag in flags:
+            normalized_flag = _normalize_name_part(flag, "")
+            if normalized_flag:
+                parts.append(normalized_flag)
+    base = "_".join(parts)
     normalized_ext = ext if ext.startswith(".") else f".{ext}"
     return f"{base}{normalized_ext}"
 
@@ -89,6 +109,10 @@ class FileService:
         created_by: str | None = None,
     ) -> tuple[FileRecord, str, int]:
         settings = get_settings()
+        if size_bytes > settings.max_upload_size:
+            raise HTTPException(status_code=413, detail="max_upload_size_exceeded")
+        if content_type not in settings.file_allowed_mime:
+            raise HTTPException(status_code=415, detail="unsupported_content_type")
         lower_name = filename.lower()
         if lower_name.endswith((".docm", ".xlsm")):
             raise HTTPException(status_code=400, detail="macro_enabled_documents_are_forbidden")
