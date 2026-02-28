@@ -10,8 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, rbac
-from app.models.models import Tenant
-from app.models.notifications import Notification, NotificationChannelSettings, NotificationStatus
+from app.models.models import Tenant, TrainingPlan, PPEIssue, Inspection
+from app.models.notifications import Notification, NotificationChannelSettings, NotificationStatus, PlanTask
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
@@ -52,6 +52,12 @@ class ChannelSettingsOut(ChannelSettingsIn):
 
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 AccessDep = Annotated[AccessContext, Depends(rbac())]
 
@@ -119,6 +125,118 @@ async def mark_read(payload: MarkReadRequest, session: SessionDep, tenant: Tenan
             updated += 1
         await session.flush()
     return {"updated": updated}
+
+
+
+
+class CalendarEventRead(BaseModel):
+    id: str
+    source: str
+    entity_type: str
+    entity_id: str
+    title: str
+    date: datetime
+    status: str | None = None
+    deeplink: str | None = None
+
+
+@router.get("/calendar/events", response_model=list[CalendarEventRead])
+async def list_calendar_events(
+    session: SessionDep,
+    tenant: TenantDep,
+    access: AccessDep,
+    status: str | None = Query(default=None),
+    source: str | None = Query(default=None),
+) -> list[CalendarEventRead]:
+    events: list[CalendarEventRead] = []
+
+    task_stmt = select(PlanTask).where(
+        PlanTask.tenant_id == tenant.id,
+        PlanTask.deleted_at.is_(None),
+        PlanTask.due_at.is_not(None),
+    )
+    if status:
+        task_stmt = task_stmt.where(PlanTask.status == status)
+    task_rows = (await session.execute(task_stmt.order_by(PlanTask.due_at.asc()).limit(300))).scalars().all()
+    for row in task_rows:
+        if source and source != "task":
+            continue
+        if row.due_at is None:
+            continue
+        events.append(CalendarEventRead(
+            id=f"task:{row.id}",
+            source="task",
+            entity_type=row.entity_type,
+            entity_id=row.entity_id,
+            title=row.title,
+            date=_as_utc(row.due_at),
+            status=row.status.value if hasattr(row.status, "value") else str(row.status),
+            deeplink=f"/tasks?entity={row.entity_type}:{row.entity_id}",
+        ))
+
+    training_rows = (
+        await session.execute(
+            select(TrainingPlan).where(TrainingPlan.tenant_id == tenant.id, TrainingPlan.deleted_at.is_(None), TrainingPlan.due_date.is_not(None)).limit(300)
+        )
+    ).scalars().all()
+    for row in training_rows:
+        if source and source != "training":
+            continue
+        if row.due_date is None:
+            continue
+        events.append(CalendarEventRead(
+            id=f"training:{row.id}",
+            source="training",
+            entity_type="training",
+            entity_id=row.id,
+            title="Обучение: контрольная дата",
+            date=datetime.combine(row.due_date, datetime.min.time(), tzinfo=timezone.utc),
+            deeplink=f"/training?id={row.id}",
+        ))
+
+    ppe_rows = (
+        await session.execute(
+            select(PPEIssue).where(PPEIssue.tenant_id == tenant.id, PPEIssue.deleted_at.is_(None), PPEIssue.expires_at.is_not(None)).limit(300)
+        )
+    ).scalars().all()
+    for row in ppe_rows:
+        if source and source != "ppe":
+            continue
+        if row.expires_at is None:
+            continue
+        events.append(CalendarEventRead(
+            id=f"ppe:{row.id}",
+            source="ppe",
+            entity_type="ppe",
+            entity_id=row.id,
+            title="СИЗ: окончание срока",
+            date=_as_utc(row.expires_at),
+            deeplink=f"/ppe?issue={row.id}",
+        ))
+
+    inspection_rows = (
+        await session.execute(
+            select(Inspection).where(Inspection.tenant_id == tenant.id, Inspection.deleted_at.is_(None), Inspection.scheduled_at.is_not(None)).limit(300)
+        )
+    ).scalars().all()
+    for row in inspection_rows:
+        if source and source != "inspection":
+            continue
+        if row.scheduled_at is None:
+            continue
+        events.append(CalendarEventRead(
+            id=f"inspection:{row.id}",
+            source="inspection",
+            entity_type="inspection",
+            entity_id=row.id,
+            title="Проверка: запланировано",
+            date=datetime.combine(row.scheduled_at, datetime.min.time(), tzinfo=timezone.utc),
+            status=row.status.value if hasattr(row.status, "value") else str(row.status),
+            deeplink=f"/inspections?id={row.id}",
+        ))
+
+    events.sort(key=lambda item: _as_utc(item.date))
+    return events[:500]
 
 
 @router.get("/settings/me", response_model=ChannelSettingsOut)
