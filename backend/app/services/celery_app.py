@@ -70,6 +70,10 @@ celery_app.conf.beat_schedule = {
     "tasks-reminders-daily": {
         "task": "tasks.reminders.dispatch",
         "schedule": crontab(hour=2, minute=0),
+    },
+    "reminders-scan-hourly": {
+        "task": "reminders.scan",
+        "schedule": crontab(minute=0),
     }
 }
 
