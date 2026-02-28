@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from app.core.rbac_abac import ActorContext, policy_engine
+from app.core.rbac_abac import ActorContext, ROLE_PERMISSIONS, _normalize_role, policy_engine
 from app.models.models import AuthzPolicy
 
 from .types import Decision, PolicyContext, Resource, Subject
@@ -105,6 +105,13 @@ def evaluate(subject: Subject, action: str, resource: Resource, context: PolicyC
     # RBAC precondition
     normalized_permission = f"{resource.resource_type}:{action}".lower()
     explicit_permissions = {p.replace(".", ":") for p in subject.permissions}
+    if not explicit_permissions:
+        normalized_roles = {_normalize_role(role) for role in subject.roles}
+        explicit_permissions = {
+            permission
+            for role in normalized_roles
+            for permission in ROLE_PERMISSIONS.get(role, set())
+        }
     if normalized_permission not in explicit_permissions:
         return Decision(allow=False, reason="missing_permission", audit_fields={"permission": normalized_permission})
 

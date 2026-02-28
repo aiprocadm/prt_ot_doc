@@ -4,7 +4,7 @@ from __future__ import annotations
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
@@ -92,12 +92,16 @@ class TenantMiddleware(BaseHTTPMiddleware):
 
         normalized_header = header_slug.strip() if header_slug else None
         info = tenant_required(normalized_header)
+        identifier = info.slug
+        if not self._is_uuid(identifier):
+            raise self._error(
+                status.HTTP_400_BAD_REQUEST,
+                correlation_id,
+                code="TENANT_INVALID",
+                message="X-Tenant must be UUID",
+            )
         async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as session:
-            identifier = info.slug
-            filters = [Tenant.slug == identifier, Tenant.code == identifier]
-            if self._is_uuid(identifier):
-                filters.append(Tenant.id == identifier)
-            tenant = (await session.execute(select(Tenant).where(or_(*filters)))).scalar_one_or_none()
+            tenant = (await session.execute(select(Tenant).where(Tenant.id == identifier))).scalar_one_or_none()
         if tenant is None:
             raise self._error(
                 status.HTTP_404_NOT_FOUND,
