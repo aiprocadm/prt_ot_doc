@@ -68,7 +68,7 @@ export const GlobalSearch = () => {
               type="button"
               key={`${item.entity_type}-${item.entity_id}`}
               className="block w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
-              onClick={() => navigate(`/search?q=${encodeURIComponent(query)}&type=${toTabType(item.entity_type)}`)}
+              onClick={() => navigate(item.deeplink ?? `/search?q=${encodeURIComponent(query)}&type=${toTabType(item.entity_type)}`)}
             >
               <div className="font-medium">{item.title}</div>
               {item.snippet ? <div className="text-xs text-muted-foreground">{item.snippet}</div> : null}

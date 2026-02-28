@@ -102,3 +102,12 @@ class EntityFileListItem(BaseModel):
 class ReindexFileResponse(BaseModel):
     file_id: str
     status: str
+
+
+class SignedUrlRequest(BaseModel):
+    purpose: str
+    ttl_sec: int = Field(default=300, ge=60, le=3600)
+
+
+class SignedUrlResponse(BaseModel):
+    signed_url: str

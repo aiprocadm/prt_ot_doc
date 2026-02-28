@@ -27,6 +27,8 @@ from app.modules.files.schemas import (
     UploadSessionRequest,
     UploadSessionResponse,
     ReindexFileResponse,
+    SignedUrlRequest,
+    SignedUrlResponse,
 )
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 
@@ -241,3 +243,23 @@ async def list_entity_files_v2(
         )
         for link, file_rec in rows
     ]
+
+
+@router.post("/{file_id}:signed-url", response_model=SignedUrlResponse)
+async def get_signed_url_v2(
+    file_id: str,
+    payload: SignedUrlRequest,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> SignedUrlResponse:
+    svc = service.FileService(session=session, tenant_id=str(tenant.id))
+    url = await svc.get_signed_download_url(
+        file_id=file_id,
+        purpose=payload.purpose,
+        ttl=payload.ttl_sec,
+        ip=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
+    await session.commit()
+    return SignedUrlResponse(signed_url=url)
