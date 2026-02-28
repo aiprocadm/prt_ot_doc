@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from pydantic import BaseModel, Field
+from datetime import datetime
 
 
 class UploadInitRequest(BaseModel):
@@ -45,8 +46,8 @@ class UploadSessionRequest(BaseModel):
 
 class UploadSessionResponse(BaseModel):
     file_id: str
-    upload_url: str
-    expires_in: int
+    signed_put_url: str
+    expires_at: datetime
 
 
 class FinalizeUploadResponse(BaseModel):
@@ -65,6 +66,7 @@ class FileDto(BaseModel):
     av_vendor: str | None
     av_result_json: dict[str, Any]
     metadata_json: dict[str, Any]
+    links: list["EntityFileListItem"] = Field(default_factory=list)
 
 
 class DownloadUrlRequest(BaseModel):

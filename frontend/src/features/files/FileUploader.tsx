@@ -2,28 +2,47 @@ import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { toast } from "sonner";
 
+import { createUploadSession, finalizeUpload, getFile } from "@/api/files";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { useFilesStore } from "@/stores/files";
 
 export const FileUploader = () => {
-  const { upload } = useFilesStore();
   const [description, setDescription] = useState("");
   const [isUploading, setIsUploading] = useState(false);
 
-  const onDrop = useCallback(
-    async (acceptedFiles: File[]) => {
-      if (!acceptedFiles.length) return;
-      setIsUploading(true);
-      try {
-        await Promise.all(acceptedFiles.map((file) => upload(file, { description })));
-        toast.success("Файлы загружены");
-      } finally {
-        setIsUploading(false);
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    if (!acceptedFiles.length) return;
+    setIsUploading(true);
+    try {
+      for (const file of acceptedFiles) {
+        const session = await createUploadSession({
+          filename: file.name,
+          content_type: file.type || "application/octet-stream",
+          size_bytes: file.size,
+          metadata_json: { description }
+        });
+        await fetch(session.signed_put_url, {
+          method: "PUT",
+          headers: { "Content-Type": file.type || "application/octet-stream" },
+          body: file
+        });
+        await finalizeUpload(session.file_id);
+        for (let i = 0; i < 20; i += 1) {
+          const current = await getFile(session.file_id);
+          if (current.status === "clean") break;
+          if (current.status === "infected" || current.status === "quarantined") {
+            throw new Error(`Файл ${file.name} не прошёл AV-проверку`);
+          }
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        }
       }
-    },
-    [description, upload]
-  );
+      toast.success("Файлы загружены");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Ошибка загрузки");
+    } finally {
+      setIsUploading(false);
+    }
+  }, [description]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop });
 
