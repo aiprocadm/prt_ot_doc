@@ -22,6 +22,7 @@ from app.models.finance import (
     OrderStatus,
 )
 from app.models.file import File
+from app.models.job_engine import InboundWebhookDedup
 from app.models.obligations import Task, TaskPriority, TaskReminderChannel, TaskStatus
 from app.models.models import (
     NPA,
@@ -115,6 +116,7 @@ __all__ = [
     "DocumentBatchStatus",
     "DocumentGenerationJob",
     "DocumentJobStatus",
+    "InboundWebhookDedup",
     "DocumentSnapshot",
     "DocumentStatus",
     "DocumentVersion",

@@ -37,7 +37,7 @@ class OutboxEventStatus(str, enum.Enum):
     PROCESSING = "processing"
     SENT = "sent"
     FAILED = "failed"
-    DEAD = "dead"
+    POISONED = "poisoned"
 
 
 class DocumentJob(TenantBaseModel):
@@ -146,15 +146,34 @@ class OutboxEvent(TenantBaseModel):
     __tablename__ = "outbox_events"
 
     event_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    aggregate_type: Mapped[str] = mapped_column(String(64), nullable=False, default="unknown")
+    aggregate_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     event_id: Mapped[str] = mapped_column(String(36), nullable=False)
     payload: Mapped[dict] = mapped_column(JSONBType, nullable=False, default=dict)
+    headers: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
     status: Mapped[OutboxEventStatus] = mapped_column(String(16), nullable=False, default=OutboxEventStatus.PENDING.value)
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
-        UniqueConstraint("tenant_id", "event_id", name="uq_outbox_event_tenant_event"),
-        Index("ix_outbox_events_status_next_attempt", "status", "next_attempt_at"),
+        UniqueConstraint("event_id", name="uq_outbox_event_event"),
+        Index("ix_outbox_events_status_next_created", "status", "next_attempt_at", "created_at"),
+        Index("ix_outbox_events_aggregate", "aggregate_type", "aggregate_id", "created_at"),
         Index("ix_outbox_events_tenant_created", "tenant_id", "created_at"),
+    )
+
+
+class InboundWebhookDedup(TenantBaseModel):
+    __tablename__ = "inbound_webhook_dedup"
+
+    source: Mapped[str] = mapped_column(String(64), nullable=False)
+    dedup_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "source", "dedup_key", name="uq_inbound_webhook_dedup"),
+        Index("ix_inbound_webhook_received", "tenant_id", "source", "received_at"),
     )

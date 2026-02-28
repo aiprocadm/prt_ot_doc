@@ -355,8 +355,11 @@ class PipelineOrchestrator:
             OutboxEvent(
                 tenant_id=job.tenant_id,
                 event_type="DocumentGenerated",
+                aggregate_type="document_job",
+                aggregate_id=job.id,
                 event_id=job.id,
-                payload={"job_id": job.id, "status": job.status, "artifacts": await self._artifact_list(job.id)},
+                payload={"job_id": job.id, "status": job.status, "artifacts": await self._artifact_list(job.id), "tenant_id": job.tenant_id, "correlation_id": job.correlation_id},
+                headers={"correlation_id": job.correlation_id, "produced_by": "pipelines_orchestrator", "schema_version": "1"},
                 status=OutboxEventStatus.PENDING.value,
                 next_attempt_at=datetime.now(timezone.utc),
             )

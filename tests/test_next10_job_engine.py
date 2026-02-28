@@ -143,7 +143,7 @@ async def test_idempotency_parallel_wait_returns_same_response(sessionmaker) -> 
 
 
 @pytest.mark.anyio
-async def test_dispatch_outbox_events_retries_and_dead(sessionmaker) -> None:
+async def test_dispatch_outbox_events_retries_and_poisoned(sessionmaker) -> None:
     from datetime import datetime, timezone
 
     from app.models.job_engine import OutboxEventStatus
@@ -166,7 +166,7 @@ async def test_dispatch_outbox_events_retries_and_dead(sessionmaker) -> None:
 
     async with session_scope(tenant="tenant-1") as session:
         event = (await session.execute(select(OutboxEvent).where(OutboxEvent.event_id == "evt-fail"))).scalar_one()
-        assert event.status == OutboxEventStatus.DEAD.value
+        assert event.status == OutboxEventStatus.POISONED.value
         assert event.attempts >= 1
 
 

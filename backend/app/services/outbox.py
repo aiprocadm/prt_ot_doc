@@ -7,6 +7,7 @@ import random
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from time import perf_counter
+from uuid import uuid4
 from typing import Any, Mapping
 
 import httpx
@@ -16,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.metrics import PipelineStage, PipelineType, StageResult, get_metrics
 from app.core.tracing import get_trace_id
+from app.models.job_engine import OutboxEvent, OutboxEventStatus
 from app.models.models import Outbox, OutboxStatus, WebhookDelivery
 from app.services.events import EventType, dedupe_key_for, normalize_payload, resolve_event_type
 from app.services.webhooks import (
@@ -75,6 +77,32 @@ class OutboxService:
         self.session = session
         self.metrics = get_metrics()
         self.dispatcher = dispatcher or WebhookDispatcher()
+
+    async def add_event(
+        self,
+        *,
+        tenant_id: str,
+        event_type: str,
+        aggregate_type: str,
+        aggregate_id: str | None,
+        payload: Mapping[str, Any],
+        headers: Mapping[str, Any] | None = None,
+        event_id: str | None = None,
+    ) -> OutboxEvent:
+        event = OutboxEvent(
+            tenant_id=tenant_id,
+            event_type=event_type,
+            aggregate_type=aggregate_type,
+            aggregate_id=aggregate_id,
+            event_id=event_id or str(payload.get("event_id") or uuid4()),
+            payload=dict(payload),
+            headers=dict(headers or {}),
+            status=OutboxEventStatus.PENDING.value,
+            next_attempt_at=datetime.now(tz=timezone.utc),
+        )
+        self.session.add(event)
+        await self.session.flush()
+        return event
 
     async def enqueue(
         self,

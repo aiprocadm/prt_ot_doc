@@ -217,7 +217,7 @@ async def requeue_outbox_event(
     if event is None or event.tenant_id != tenant.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Outbox event not found")
 
-    if event.status not in {OutboxEventStatus.DEAD.value, OutboxEventStatus.FAILED.value}:
+    if event.status not in {OutboxEventStatus.POISONED.value, OutboxEventStatus.FAILED.value}:
         raise HTTPException(status.HTTP_409_CONFLICT, "Only FAILED or DEAD events can be requeued")
 
     event.status = OutboxEventStatus.PENDING.value

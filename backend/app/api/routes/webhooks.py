@@ -4,13 +4,15 @@ from datetime import datetime, timezone
 import secrets
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, rbac
+from app.models.job_engine import InboundWebhookDedup
+from app.tasks import process_inbound_webhook
 from app.models.models import Outbox, OutboxStatus, Tenant, WebhookDelivery, WebhookEndpoint
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
@@ -229,3 +231,30 @@ async def replay_event(event_id: str, tenant: TenantDep, _: AdminAccess, session
     event.next_attempt_at = datetime.now(tz=timezone.utc)
     await session.commit()
     return {"status": "queued"}
+
+
+@router.post("/inbound/{source}", status_code=status.HTTP_202_ACCEPTED)
+async def inbound_webhook(
+    source: str,
+    request: Request,
+    tenant: TenantDep,
+    session: SessionDep,
+) -> dict[str, str]:
+    raw = await request.body()
+    payload = await request.json()
+    dedup_key = str(payload.get("event_id") or payload.get("message_id") or __import__("hashlib").sha256(raw).hexdigest())
+    row = InboundWebhookDedup(
+        tenant_id=tenant.id,
+        source=source,
+        dedup_key=dedup_key,
+        payload_hash=__import__("hashlib").sha256(raw).hexdigest(),
+        received_at=datetime.now(timezone.utc),
+    )
+    session.add(row)
+    try:
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        return {"status": "duplicate"}
+    process_inbound_webhook.delay(source=source, tenant_slug=str(tenant.id), payload=payload)
+    return {"status": "accepted"}
