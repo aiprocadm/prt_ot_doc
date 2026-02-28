@@ -47,6 +47,9 @@ from app.models.job_engine import (
 )
 from app.models.models import (
     Company,
+    EdoMessage,
+    EdoStatus,
+    EdoStatusHistory,
     Person,
     PipelineRun,
     PipelineRunStatus,
@@ -54,6 +57,8 @@ from app.models.models import (
     TemplateVersion,
     Tenant,
     User,
+    WebhookDelivery,
+    WebhookEndpoint,
 )
 from app.repository import create_template
 from app.modules.headers.engine import apply_headers_to_docx
@@ -855,7 +860,20 @@ def dispatch_outbox_events(max_attempts: int | None = None, tenant_slug: str = "
     return _run_coroutine(_dispatch_outbox_events(max_attempts=max_attempts, tenant_slug=tenant_slug))
 
 
+def _compute_outbox_backoff(attempts: int) -> timedelta:
+    base = max(int(settings.outbox_retry_backoff_seconds), 1)
+    cap = max(int(settings.outbox_retry_backoff_max_seconds), base)
+    jitter = attempts % 3
+    seconds = min((2 ** max(attempts - 1, 0)) * base + jitter, cap)
+    return timedelta(seconds=seconds)
+
+
 async def _dispatch_outbox_events(*, max_attempts: int | None = None, tenant_slug: str = "test") -> int:
+    import hmac
+    import json
+
+    import httpx
+
     processed = 0
     now = datetime.now(tz=timezone.utc)
     limit = int(max_attempts or settings.outbox_max_attempts)
@@ -874,26 +892,123 @@ async def _dispatch_outbox_events(*, max_attempts: int | None = None, tenant_slu
         ).scalars().all()
         for event in pending:
             event.status = OutboxEventStatus.PROCESSING.value
-            event.attempts += 1
-            try:
-                if event.payload.get("force_fail"):
-                    raise RuntimeError("forced_failure")
-                event.status = OutboxEventStatus.SENT.value
-                event.last_error = None
-                event.next_attempt_at = None
-                processed += 1
-            except Exception as exc:
-                if event.attempts >= limit:
-                    event.status = OutboxEventStatus.DEAD.value
-                    event.last_error = str(exc)
+        await session.flush()
+
+        endpoints = (
+            await session.execute(select(WebhookEndpoint).where(WebhookEndpoint.tenant_id == tenant_slug, WebhookEndpoint.is_enabled.is_(True)))
+        ).scalars().all()
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            for event in pending:
+                event.attempts += 1
+                correlation_id = str((event.headers or {}).get("correlation_id") or (event.payload or {}).get("correlation_id") or event.id)
+                body = {
+                    "event_id": event.event_id,
+                    "event_type": event.event_type,
+                    "tenant_id": event.tenant_id,
+                    "payload": event.payload,
+                    "headers": event.headers or {},
+                    "correlation_id": correlation_id,
+                }
+                raw_body = json.dumps(body, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+                matching = [ep for ep in endpoints if not ep.subscribed_events or event.event_type in (ep.subscribed_events or [])]
+                success = not bool((event.payload or {}).get("force_fail"))
+                for ep in matching:
+                    delivered = WebhookDelivery(
+                        tenant_id=event.tenant_id,
+                        endpoint_id=ep.id,
+                        event_id=event.event_id,
+                        status="processing",
+                        attempts=event.attempts,
+                        started_at=datetime.now(tz=timezone.utc),
+                    )
+                    session.add(delivered)
+                    ts = str(int(datetime.now(tz=timezone.utc).timestamp()))
+                    signature = hmac.new((ep.secret or "").encode("utf-8"), f"{ts}.".encode("utf-8") + raw_body, hashlib.sha256).hexdigest()
+                    headers = {
+                        "Content-Type": "application/json",
+                        "X-Event-Id": event.event_id,
+                        "X-Event-Type": event.event_type,
+                        "X-Tenant": event.tenant_id,
+                        "X-Correlation-Id": correlation_id,
+                        "X-Signature": f"v1={signature}",
+                        "X-Signature-Ts": ts,
+                    }
+                    try:
+                        resp = await client.post(ep.url, content=raw_body, headers=headers, timeout=max(ep.timeout_ms / 1000, 0.1))
+                        delivered.status = "success" if 200 <= resp.status_code < 300 else "failed"
+                        delivered.last_status_code = resp.status_code
+                        delivered.last_response_body = (resp.text or "")[:1000]
+                        delivered.ended_at = datetime.now(tz=timezone.utc)
+                        delivered.delivered_at = delivered.ended_at if delivered.status == "success" else None
+                        if delivered.status != "success":
+                            success = False
+                    except Exception as exc:
+                        delivered.status = "failed"
+                        delivered.last_error = {"message": str(exc)}
+                        delivered.ended_at = datetime.now(tz=timezone.utc)
+                        success = False
+                if success:
+                    event.status = OutboxEventStatus.SENT.value
+                    event.sent_at = datetime.now(tz=timezone.utc)
                     event.next_attempt_at = None
+                    event.last_error = None
+                    processed += 1
+                elif event.attempts >= limit:
+                    event.status = OutboxEventStatus.POISONED.value
+                    event.next_attempt_at = None
+                    event.last_error = "poisoned"
                 else:
                     event.status = OutboxEventStatus.FAILED.value
-                    backoff = min(settings.outbox_retry_backoff_seconds * (2 ** max(event.attempts - 1, 0)), settings.outbox_retry_backoff_max_seconds)
-                    event.next_attempt_at = datetime.now(tz=timezone.utc) + timedelta(seconds=float(backoff))
-                    event.last_error = str(exc)
+                    event.next_attempt_at = datetime.now(tz=timezone.utc) + _compute_outbox_backoff(event.attempts)
+                    event.last_error = "delivery_failed"
         await session.flush()
     return processed
+
+
+@celery_app.task(name="process_inbound_webhook")
+def process_inbound_webhook(*, source: str, tenant_slug: str, payload: dict[str, Any]) -> int:
+    return _run_coroutine(_process_inbound_webhook(source=source, tenant_slug=tenant_slug, payload=payload))
+
+
+async def _process_inbound_webhook(*, source: str, tenant_slug: str, payload: dict[str, Any]) -> int:
+    async with session_scope(tenant=tenant_slug) as session:
+        if source != "edo":
+            return 0
+        external_id = str(payload.get("external_id") or "")
+        status_value = str(payload.get("status") or "")
+        if not external_id or not status_value:
+            return 0
+        message = (
+            await session.execute(
+                select(EdoMessage).where(EdoMessage.tenant_id == tenant_slug, EdoMessage.external_id == external_id)
+            )
+        ).scalar_one_or_none()
+        if message is None:
+            return 0
+        current = str(message.status.value if hasattr(message.status, 'value') else message.status)
+        if current == status_value:
+            return 0
+        message.status = EdoStatus(status_value)
+        session.add(
+            EdoStatusHistory(
+                tenant_id=tenant_slug,
+                edo_message_id=message.id,
+                status=EdoStatus(status_value),
+                raw_payload_json=payload,
+            )
+        )
+        await AuditService(session).log_event(
+            tenant_id=tenant_slug,
+            action="edo_status_update",
+            object_type="EdoMessage",
+            object_id=message.id,
+            actor_type="service",
+            ip="system",
+            request_id=str(payload.get("correlation_id") or payload.get("event_id") or uuid4()),
+            changed_fields=None,
+            details={"source": source, "status": status_value},
+        )
+        return 1
 
 
 @celery_app.task(name="app.tasks.apply_headers_job")

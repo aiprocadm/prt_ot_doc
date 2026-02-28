@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, abac
 from app.models.document import DocumentVersion
+from app.models.job_engine import InboundWebhookDedup
 from app.models.models import (
     ApprovalDecision,
     ApprovalDecisionType,
@@ -37,6 +38,7 @@ from app.services.file_storage import FileStorageService
 from app.models.models import IdempotencyStatus
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 from app.services.outbox import OutboxService
+from app.tasks import process_inbound_webhook
 
 router = APIRouter()
 SessionDep = Depends(get_session)
@@ -422,52 +424,32 @@ async def edo_webhook(
     if x_signature and not hmac.compare_digest(expected, x_signature):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid webhook signature")
 
-    message = (
-        await session.execute(
-            select(EdoMessage).where(
-                EdoMessage.tenant_id == str(tenant.id),
-                EdoMessage.provider_code == provider_code,
-                EdoMessage.external_id == payload.external_id,
-            )
-        )
-    ).scalar_one_or_none()
-    if message is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "EDO message not found")
-
-    existing = (
-        await session.execute(
-            select(EdoStatusHistory).where(
-                EdoStatusHistory.tenant_id == str(tenant.id),
-                EdoStatusHistory.edo_message_id == message.id,
-                EdoStatusHistory.raw_payload_json["event_id"].as_string() == payload.event_id,
-            )
-        )
-    ).scalar_one_or_none()
-    if existing is not None:
+    payload_hash = hashlib.sha256(raw).hexdigest()
+    dedup_key = str(payload.event_id or payload_hash)
+    dedup = InboundWebhookDedup(
+        tenant_id=str(tenant.id),
+        source=f"edo_operator:{provider_code}",
+        dedup_key=dedup_key,
+        payload_hash=payload_hash,
+        received_at=datetime.now(tz=timezone.utc),
+    )
+    session.add(dedup)
+    try:
+        await session.flush()
+    except Exception:
+        await session.rollback()
         return {"status": "duplicate"}
 
-    message.status = payload.status
-    history = EdoStatusHistory(
-        tenant_id=str(tenant.id),
-        edo_message_id=message.id,
-        status=payload.status,
-        raw_payload_json={"event_id": payload.event_id, **payload.raw_payload},
+    process_inbound_webhook.delay(
+        source="edo",
+        tenant_slug=str(tenant.id),
+        payload={
+            "provider_code": provider_code,
+            "external_id": payload.external_id,
+            "status": payload.status.value,
+            "event_id": payload.event_id,
+            "correlation_id": request.headers.get("X-Correlation-Id"),
+            "raw_payload": payload.raw_payload,
+        },
     )
-    session.add(history)
-    await OutboxService(session).enqueue(
-        tenant_id=str(tenant.id),
-        event_type="edo.status_changed",
-        payload={"tenant_id": str(tenant.id), "event_id": str(uuid4()), "metadata": {"edo_message_id": message.id, "status": payload.status.value}},
-        destination="internal://edo",
-        idempotency_key=f"edo.status:{message.id}:{payload.event_id}",
-    )
-    if payload.status in {EdoStatus.ACCEPTED, EdoStatus.REJECTED}:
-        session.add(
-            EdoReceipt(
-                tenant_id=str(tenant.id),
-                edo_message_id=message.id,
-                receipt_type=payload.status.value,
-                s3_key=f"{tenant.slug}/edo/{message.id}/{payload.event_id}.json",
-            )
-        )
-    return {"status": "ok"}
+    return {"status": "accepted"}
