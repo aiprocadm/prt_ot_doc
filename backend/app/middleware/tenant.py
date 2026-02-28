@@ -74,12 +74,14 @@ class TenantMiddleware(BaseHTTPMiddleware):
         if not header_slug:
             tenant_required(None)
         token_slug: str | None = None
+        token_claims: dict[str, object] = {}
         auth_header = request.headers.get("authorization") or ""
         if auth_header.lower().startswith("bearer "):
             token = auth_header.split(None, 1)[1].strip()
             if token:
                 try:
                     payload = verify_token(token, expected_type="access")
+                    token_claims = payload
                 except Exception as exc:
                     raise HTTPException(
                         status.HTTP_401_UNAUTHORIZED,
@@ -165,6 +167,15 @@ class TenantMiddleware(BaseHTTPMiddleware):
             roles=tuple([r.strip() for r in roles_raw.split(",") if r.strip()]),
             attributes=attributes or None,
         )
+        request.state.claims = token_claims
+        request.state.user_id = token_claims.get("sub") if token_claims else request.headers.get("x-actor-id")
+        request.state.roles = tuple(str(role).lower() for role in token_claims.get("roles", [])) if token_claims else tuple()
+        request.state.scopes = {
+            "company_ids": list(token_claims.get("company_ids", [])) if token_claims else [],
+            "site_ids": list(token_claims.get("site_ids", [])) if token_claims else [],
+            "project_ids": list(token_claims.get("project_ids", [])) if token_claims else [],
+            "contractor_ids": list(token_claims.get("contractor_ids", [])) if token_claims else [],
+        }
         request.state.tenant_context = ctx
         token = set_tenant_context(ctx)
         try:

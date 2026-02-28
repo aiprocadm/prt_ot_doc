@@ -32,6 +32,8 @@ class PolicyContext:
     permissions: tuple[str, ...] = ()
     abac_scopes: dict[str, Any] = field(default_factory=dict)
     request_attrs: dict[str, Any] = field(default_factory=dict)
+    action: str | None = None
+    resource: str | None = None
     correlation_id: str | None = None
 
 
@@ -39,4 +41,5 @@ class PolicyContext:
 class Decision:
     allow: bool
     reason: str
+    matched_policy_id: str | None = None
     audit_fields: dict[str, Any] = field(default_factory=dict)
