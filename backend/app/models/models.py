@@ -320,12 +320,22 @@ class UserAttribute(TenantBaseModel):
 class AuthzBaseModel(TenantBase, TimestampMixin, VersionedMixin, UUIDMixin):
     __abstract__ = True
 
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenant.id"), nullable=False, index=True
+    )
+
 
 class AuthzRole(AuthzBaseModel):
     __tablename__ = "authz_roles"
 
-    code: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    code: Mapped[str] = mapped_column(String(128), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "code", name="uq_authz_roles_tenant_code"),
+    )
 
 
 class AuthzPermission(AuthzBaseModel):
@@ -334,6 +344,7 @@ class AuthzPermission(AuthzBaseModel):
     resource: Mapped[str] = mapped_column(String(128), nullable=False)
     action: Mapped[str] = mapped_column(String(64), nullable=False)
     code: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    description: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
     __table_args__ = (
         UniqueConstraint("resource", "action", name="uq_authz_permission_resource_action"),
@@ -346,12 +357,13 @@ class AuthzRolePermission(AuthzBaseModel):
     role_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("authz_roles.id", ondelete="CASCADE"), nullable=False
     )
-    permission_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("authz_permissions.id", ondelete="CASCADE"), nullable=False
+    permission_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("authz_permissions.id", ondelete="CASCADE"), nullable=True
     )
+    permission_code: Mapped[str] = mapped_column(String(255), nullable=False)
 
     __table_args__ = (
-        UniqueConstraint("role_id", "permission_id", name="pk_authz_role_permission"),
+        UniqueConstraint("tenant_id", "role_id", "permission_code", name="uq_authz_role_permissions_tenant_role_code"),
     )
 
 
@@ -364,14 +376,27 @@ class AuthzUserRole(AuthzBaseModel):
     role_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("authz_roles.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    scope_company_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    scope_site_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    scope_project_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    scope_contractor_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    scope_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
 
     __table_args__ = (
-        Index("ix_authz_user_roles_user", "user_id"),
-        Index("ix_authz_user_roles_role", "role_id"),
+        UniqueConstraint("tenant_id", "user_id", "role_id", name="uq_authz_user_roles_tenant_user_role"),
+        Index("ix_authz_user_roles_user", "tenant_id", "user_id"),
+        Index("ix_authz_user_roles_role", "tenant_id", "role_id"),
+    )
+
+
+class AuthzPolicy(AuthzBaseModel):
+    __tablename__ = "authz_policies"
+
+    resource: Mapped[str] = mapped_column(String(128), nullable=False)
+    action: Mapped[str] = mapped_column(String(64), nullable=False)
+    effect: Mapped[str] = mapped_column(String(8), nullable=False)
+    conditions_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    __table_args__ = (
+        Index("ix_authz_policy_lookup", "tenant_id", "resource", "action", "enabled", "priority"),
     )
 
 
@@ -1283,7 +1308,10 @@ class AuditLog(TenantBaseModel):
     user_agent: Mapped[str | None] = mapped_column(String(256))
     resource_attrs: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     details: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    before_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    after_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     changed_fields: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    actor_role_codes: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     before_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     after_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     hash: Mapped[str] = mapped_column(String(64), nullable=False, default="")

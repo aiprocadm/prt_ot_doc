@@ -35,6 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record, require_tenant_slug
 from app.api.routes import (
     admin_users,
+    admin_authz,
     approval_signing_v1,
     attestations,
     audit,
@@ -145,6 +146,7 @@ tenant_router = APIRouter(dependencies=[Depends(require_tenant_slug)])
 router.include_router(auth.router, prefix="/auth", tags=["auth"])
 tenant_router.include_router(audit.router, prefix="/audit", tags=["audit"])
 tenant_router.include_router(admin_users.router, tags=["admin-users"])
+tenant_router.include_router(admin_authz.router)
 tenant_router.include_router(attestations.router, tags=["attestations"])
 tenant_router.include_router(files.router, prefix="/files", tags=["files"])
 tenant_router.include_router(files_v1_router, prefix="/files", tags=["files-v1"])

@@ -240,6 +240,9 @@ class AuditService:
         parent_id: str | None = None,
         before_hash: str | None = None,
         after_hash: str | None = None,
+        before_json: Mapping[str, Any] | None = None,
+        after_json: Mapping[str, Any] | None = None,
+        actor_role_codes: list[str] | None = None,
     ) -> AuditLog:
         """Create and persist a new audit log entry."""
 
@@ -282,6 +285,9 @@ class AuditService:
             session_id=session_id,
             user_agent=user_agent,
             changed_fields=safe_diff,
+            before_json=_sanitize_mapping(before_json),
+            after_json=_sanitize_mapping(after_json),
+            actor_role_codes=[str(item) for item in (actor_role_codes or [])],
             when=when or datetime.now(tz=timezone.utc),
             details=payload,
             resource_attrs=_sanitize_mapping(
@@ -371,6 +377,8 @@ class AuditService:
             request_id=(meta or {}).get("correlation_id"),
             user_agent=(meta or {}).get("user_agent"),
             changed_fields=field_level_diff({}, after),
+            before_json={},
+            after_json=after,
             details={"meta": dict(meta or {})},
             after_hash=compute_snapshot_hash(after),
         )
@@ -398,6 +406,8 @@ class AuditService:
             request_id=(meta or {}).get("correlation_id"),
             user_agent=(meta or {}).get("user_agent"),
             changed_fields=field_level_diff(before, after),
+            before_json=before,
+            after_json=after,
             details={"meta": dict(meta or {})},
             before_hash=compute_snapshot_hash(before),
             after_hash=compute_snapshot_hash(after),
@@ -427,6 +437,8 @@ class AuditService:
             changed_fields=field_level_diff(
                 before, {**dict(before), "deleted_at": datetime.now(tz=timezone.utc).isoformat()}
             ),
+            before_json=before,
+            after_json={"deleted": True},
             details={"meta": dict(meta or {})},
             before_hash=compute_snapshot_hash(before),
         )
@@ -454,9 +466,44 @@ class AuditService:
             request_id=(meta or {}).get("correlation_id"),
             user_agent=(meta or {}).get("user_agent"),
             changed_fields=field_level_diff(before, after),
+            before_json=before,
+            after_json=after,
             details={"meta": dict(meta or {})},
             before_hash=compute_snapshot_hash(before),
             after_hash=compute_snapshot_hash(after),
+        )
+
+
+    async def log_change(
+        self,
+        *,
+        tenant_id: str,
+        entity_type: str,
+        entity_id: str,
+        action: str,
+        before: Mapping[str, Any] | None,
+        after: Mapping[str, Any] | None,
+        actor_id: str | None,
+        actor_role_codes: list[str] | None = None,
+        correlation_id: str | None = None,
+        ip: str = "unknown",
+        user_agent: str | None = None,
+        details: Mapping[str, Any] | None = None,
+    ) -> AuditLog:
+        return await self.log_event(
+            tenant_id=tenant_id,
+            action=action,
+            object_type=entity_type,
+            object_id=entity_id,
+            user_id=actor_id,
+            ip=ip,
+            request_id=correlation_id,
+            user_agent=user_agent,
+            changed_fields=field_level_diff(before, after),
+            before_json=before,
+            after_json=after,
+            actor_role_codes=actor_role_codes or [],
+            details=details or {},
         )
 
     async def log(

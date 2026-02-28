@@ -1,8 +1,15 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Any
+
 from app.core.rbac_abac import ActorContext, policy_engine
+from app.models.models import AuthzPolicy
 
 from .types import Decision, PolicyContext, Resource, Subject
+
+_POLICY_CACHE: dict[str, tuple[datetime, tuple[AuthzPolicy, ...]]] = {}
 
 
 def _to_actor(subject: Subject) -> ActorContext:
@@ -18,28 +25,122 @@ def _to_actor(subject: Subject) -> ActorContext:
     )
 
 
-def authorize(subject: Subject, action: str, resource: Resource, context: PolicyContext | None = None) -> Decision:
+def _read_attr(path: str, attrs: dict[str, Any], scope: dict[str, Any]) -> Any:
+    if path.startswith("$scope."):
+        return scope.get(path.removeprefix("$scope."))
+    return attrs.get(path)
+
+
+def _op_eval(*, op: str, left: Any, right: Any) -> bool:
+    if op == "eq":
+        return left == right
+    if op == "ne":
+        return left != right
+    if op == "in":
+        return left in (right or [])
+    if op == "not_in":
+        return left not in (right or [])
+    if op == "lt":
+        return left is not None and right is not None and left < right
+    if op == "lte":
+        return left is not None and right is not None and left <= right
+    if op == "gt":
+        return left is not None and right is not None and left > right
+    if op == "gte":
+        return left is not None and right is not None and left >= right
+    if op == "contains":
+        if isinstance(left, (list, tuple, set)):
+            return right in left
+        if isinstance(right, (list, tuple, set)):
+            return left in right
+        return False
+    if op == "exists":
+        return left is not None
+    if op == "not_exists":
+        return left is None
+    return False
+
+
+def _match_condition(cond: dict[str, Any], attrs: dict[str, Any], scope: dict[str, Any]) -> bool:
+    attr = str(cond.get("attr") or "")
+    op = str(cond.get("op") or "eq")
+    left = _read_attr(attr, attrs, scope)
+    raw = cond.get("value")
+    right = _read_attr(raw, attrs, scope) if isinstance(raw, str) and raw.startswith("$scope.") else raw
+    return _op_eval(op=op, left=left, right=right)
+
+
+def _match_policy_conditions(conditions: dict[str, Any], attrs: dict[str, Any], scope: dict[str, Any]) -> bool:
+    all_conditions = conditions.get("all") or []
+    any_conditions = conditions.get("any") or []
+    all_ok = all(_match_condition(cond, attrs, scope) for cond in all_conditions)
+    if any_conditions:
+        return all_ok and any(_match_condition(cond, attrs, scope) for cond in any_conditions)
+    return all_ok
+
+
+def _get_cached_policies(ctx: PolicyContext) -> tuple[AuthzPolicy, ...]:
+    provided = (ctx.request_attrs or {}).get("policies")
+    if isinstance(provided, (list, tuple)):
+        return tuple(item for item in provided if isinstance(item, AuthzPolicy))
+    session = (ctx.request_attrs or {}).get("db_session")
+    if session is None or not ctx.tenant_id:
+        return ()
+    updated_at = (ctx.request_attrs or {}).get("policies_updated_at")
+    ts = updated_at if isinstance(updated_at, datetime) else datetime.now(tz=timezone.utc)
+    cached = _POLICY_CACHE.get(ctx.tenant_id)
+    if cached and cached[0] >= ts:
+        return cached[1]
+    return ()
+
+
+def evaluate(subject: Subject, action: str, resource: Resource, context: PolicyContext | None = None) -> Decision:
     actor = _to_actor(subject)
     ctx = dict(resource.attrs)
+    if context:
+        ctx.update(context.request_attrs or {})
     if context and context.tenant_id:
         ctx.setdefault("tenant_id", context.tenant_id)
+
+    # RBAC precondition
+    normalized_permission = f"{resource.resource_type}:{action}".lower()
+    explicit_permissions = {p.replace(".", ":") for p in subject.permissions}
+    if normalized_permission not in explicit_permissions:
+        return Decision(allow=False, reason="missing_permission", audit_fields={"permission": normalized_permission})
+
+    # fallback static policy engine (deny-by-default)
     result = policy_engine.authorize(actor=actor, action=action, resource=resource.resource_type, ctx=ctx)
-    audit_fields: dict[str, object] = {"requested_action": action, "resource": resource.resource_type}
-    for key, values in (
-        ("company_id", subject.company_ids),
-        ("site_id", subject.site_ids),
-        ("project_id", subject.project_ids),
-        ("contractor_id", subject.contractor_ids),
-    ):
-        if values:
-            audit_fields[key] = list(values)
-    if subject.permissions:
-        normalized_permission = f"{resource.resource_type}:{action}".lower()
-        explicit_permissions = {p.replace(".", ":") for p in subject.permissions}
-        if normalized_permission not in explicit_permissions:
-            return Decision(
-                allow=False,
-                reason="missing_permission",
-                audit_fields={**audit_fields, "permission": normalized_permission},
-            )
-    return Decision(allow=result.allowed, reason=result.reason, audit_fields={**audit_fields, **result.audit_meta})
+
+    # ABAC dynamic policies (best-effort; deny override)
+    matched_policy_id: str | None = None
+    if context:
+        rules = _get_cached_policies(context)
+        applicable = [
+            rule
+            for rule in rules
+            if rule.enabled and rule.resource == resource.resource_type and rule.action == action
+        ]
+        applicable.sort(key=lambda item: item.priority)
+        matched: list[AuthzPolicy] = [
+            rule for rule in applicable if _match_policy_conditions(rule.conditions_json or {}, ctx, context.abac_scopes or {})
+        ]
+        if matched:
+            top_priority = matched[0].priority
+            top = [item for item in matched if item.priority == top_priority]
+            deny_rule = next((item for item in top if (item.effect or "").lower() == "deny"), None)
+            if deny_rule is not None:
+                return Decision(allow=False, reason="policy_deny", matched_policy_id=deny_rule.id)
+            allow_rule = next((item for item in top if (item.effect or "").lower() == "allow"), None)
+            if allow_rule is not None:
+                return Decision(allow=True, reason="policy_allow", matched_policy_id=allow_rule.id)
+
+    return Decision(
+        allow=result.allowed,
+        reason=result.reason,
+        matched_policy_id=matched_policy_id,
+        audit_fields={"resource": resource.resource_type, "requested_action": action, **result.audit_meta},
+    )
+
+
+def authorize(subject: Subject, action: str, resource: Resource, context: PolicyContext | None = None) -> Decision:
+    return evaluate(subject, action, resource, context)

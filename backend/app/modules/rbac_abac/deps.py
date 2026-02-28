@@ -6,7 +6,7 @@ from typing import Any
 from app.services.audit import AuditService
 from fastapi import HTTPException, Request, status
 
-from .engine import authorize
+from .engine import evaluate
 from .types import PolicyContext, Resource, Subject
 
 
@@ -31,7 +31,7 @@ def require_action(resource_type: str, action: str, *, resource_attrs_getter: Ca
     async def dependency(request: Request) -> None:
         subject = _subject_from_request(request)
         resource_attrs = resource_attrs_getter(request) if resource_attrs_getter else {}
-        decision = authorize(
+        decision = evaluate(
             subject,
             action=action,
             resource=Resource(resource_type=resource_type, attrs=resource_attrs),
@@ -51,7 +51,9 @@ def require_action(resource_type: str, action: str, *, resource_attrs_getter: Ca
                     "path": request.url.path,
                     "method": request.method,
                 },
-                correlation_id=getattr(request.state, "trace_id", None),
+                action=action,
+                resource=resource_type,
+                correlation_id=getattr(request.state, "correlation_id", None) or getattr(request.state, "trace_id", None),
             ),
         )
         if not decision.allow:
@@ -67,7 +69,8 @@ def require_action(resource_type: str, action: str, *, resource_attrs_getter: Ca
                     ip=request.client.host if request.client else "unknown",
                     details={
                         "reason": decision.reason,
-                        "correlation_id": getattr(request.state, "trace_id", None),
+                        "correlation_id": getattr(request.state, "correlation_id", None) or getattr(request.state, "trace_id", None),
+                        "matched_policy_id": decision.matched_policy_id,
                         "audit_fields": decision.audit_fields,
                     },
                 )
@@ -77,7 +80,7 @@ def require_action(resource_type: str, action: str, *, resource_attrs_getter: Ca
                     "code": "AUTHZ_DENIED",
                     "type": "authorization",
                     "message": "Access denied by policy",
-                    "correlation-id": getattr(request.state, "trace_id", None),
+                    "correlation-id": getattr(request.state, "correlation_id", None) or getattr(request.state, "trace_id", None),
                 },
             )
 
