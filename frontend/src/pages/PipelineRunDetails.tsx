@@ -2,12 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 
 import { cancelPipelineRun, getPipelineRun, retryPipelineRun, retryPipelineStepRun, type PipelineRun } from "@/api/pipelines";
+import { getFile, listEntityFiles, reindexFile } from "@/api/files";
 import { JobTimeline } from "@/components/JobTimeline";
 import { FileList } from "@/features/files/FileList";
 
 const PipelineRunDetails = () => {
   const { id = "" } = useParams();
   const [run, setRun] = useState<PipelineRun | null>(null);
+  const [indexStatus, setIndexStatus] = useState<string>("—");
+  const [indexedFileId, setIndexedFileId] = useState<string | null>(null);
 
   const load = () => getPipelineRun(id).then(setRun);
 
@@ -27,6 +30,27 @@ const PipelineRunDetails = () => {
 
   const stepLogs = useMemo(() => run?.logs ?? [], [run]);
 
+  useEffect(() => {
+    if (!run?.run_id) return;
+    listEntityFiles("job", run.run_id)
+      .then(async (files) => {
+        const candidate = files[0]?.file_id;
+        if (!candidate) {
+          setIndexedFileId(null);
+          setIndexStatus("—");
+          return;
+        }
+        setIndexedFileId(candidate);
+        const file = await getFile(candidate);
+        setIndexStatus(file.content_index?.status ?? "queued");
+      })
+      .catch(() => {
+        setIndexedFileId(null);
+        setIndexStatus("—");
+      });
+  }, [run?.run_id]);
+
+
   if (!run) return <section>Загрузка...</section>;
 
   return (
@@ -41,9 +65,19 @@ const PipelineRunDetails = () => {
       </div>
       <JobTimeline steps={run.step_runs} />
       <div className="rounded border p-3 text-sm">
-        <h2 className="mb-2 font-medium">Индексация файлов</h2>
-        <p className="text-muted-foreground">Статусы контент-индексации отображаются в карточках файлов (queued/indexed/failed).</p>
-        <button className="mt-2 rounded border px-3 py-1">Переиндексировать</button>
+        <h2 className="mb-2 font-medium">Найдено по содержимому</h2>
+        <p className="text-muted-foreground">Файлы проиндексированы: <span className="font-medium">{indexStatus}</span></p>
+        <button
+          className="mt-2 rounded border px-3 py-1"
+          disabled={!indexedFileId}
+          onClick={async () => {
+            if (!indexedFileId) return;
+            await reindexFile(indexedFileId);
+            setIndexStatus("queued");
+          }}
+        >
+          Переиндексировать
+        </button>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         <div className="rounded border p-3 text-sm">

@@ -11,6 +11,7 @@ export type FileRecordResponse = {
   status: string;
   size_bytes: number;
   metadata_json: Record<string, unknown>;
+  content_index?: { status: string; attempts: number; last_error?: string | null } | null;
 };
 
 export const createUploadSession = async (payload: {
@@ -53,4 +54,10 @@ export const fetchDownloadUrl = async (fileId: string, versionId: string) => {
 export const fetchFileDownloadLink = async (fileId: string) => {
   const signed_get_url = await getDownloadUrl(fileId, "ui_download");
   return { url: signed_get_url, expires_in: 600 };
+};
+
+
+export const reindexFile = async (fileId: string) => {
+  const { data } = await apiClient.post<{ file_id: string; status: string }>(`/v1/files/${fileId}:reindex`);
+  return data;
 };

@@ -1255,6 +1255,7 @@ def convert_pdf_job(*, tenant_id: str, input_file_id: str, pdf_run_id: str, opti
                         run.error_code = None
                         run.error_payload = {}
                         await session.flush()
+                        index_file_content_job.apply_async(kwargs={"tenant_slug": tenant_id, "file_id": existing.id}, countdown=0)
                         return {"status": "success", "output_file_id": existing.id, "attempts": attempts}
                 except Exception as exc:  # noqa: BLE001
                     last_error = exc

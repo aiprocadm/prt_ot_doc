@@ -55,6 +55,12 @@ class FinalizeUploadResponse(BaseModel):
     status: str
 
 
+class FileIndexStatusDto(BaseModel):
+    status: str
+    attempts: int
+    last_error: str | None = None
+
+
 class FileDto(BaseModel):
     id: str
     bucket: str
@@ -67,6 +73,7 @@ class FileDto(BaseModel):
     av_result_json: dict[str, Any]
     metadata_json: dict[str, Any]
     links: list["EntityFileListItem"] = Field(default_factory=list)
+    content_index: FileIndexStatusDto | None = None
 
 
 class DownloadUrlRequest(BaseModel):
@@ -90,3 +97,8 @@ class EntityFileListItem(BaseModel):
     status: str
     display_name: str
     size: int
+
+
+class ReindexFileResponse(BaseModel):
+    file_id: str
+    status: str
