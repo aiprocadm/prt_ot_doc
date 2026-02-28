@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -117,9 +118,10 @@ async def create_upload_session_v2(
         metadata_json=payload.metadata_json,
     )
     await session.commit()
-    return UploadSessionResponse(file_id=file_record.id, upload_url=upload_url, expires_in=expires_in)
+    return UploadSessionResponse(file_id=file_record.id, signed_put_url=upload_url, expires_at=datetime.now(timezone.utc) + timedelta(seconds=expires_in))
 
 
+@router.post("/{file_id}:finalize", response_model=FinalizeUploadResponse)
 @router.post("/{file_id}:complete", response_model=FinalizeUploadResponse)
 async def finalize_upload_v2(
     file_id: str,
@@ -141,6 +143,7 @@ async def get_file_v2(
     file_record = await session.get(FileRecord, file_id)
     if file_record is None or file_record.tenant_id != str(tenant.id):
         raise HTTPException(status_code=404, detail="file_not_found")
+    link_rows = (await session.execute(select(FileLink).where(FileLink.tenant_id == str(tenant.id), FileLink.file_id == file_id))).scalars().all()
     return FileDto(
         id=file_record.id,
         bucket=file_record.bucket,
@@ -152,6 +155,7 @@ async def get_file_v2(
         av_vendor=file_record.av_vendor,
         av_result_json=file_record.av_result_json or {},
         metadata_json=file_record.metadata_json or {},
+        links=[EntityFileListItem(file_id=file_record.id, role=l.role, status=file_record.status, display_name=Path(file_record.object_key).name, size=file_record.size_bytes) for l in link_rows],
     )
 
 
@@ -187,6 +191,7 @@ async def link_file_v2(
     await session.commit()
 
 
+@router.get("/entities/{entity_type}/{entity_id}/files", response_model=list[EntityFileListItem])
 @router.get("/entities/{entity_type}/{entity_id}/list", response_model=list[EntityFileListItem])
 async def list_entity_files_v2(
     entity_type: str,

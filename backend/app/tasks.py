@@ -1114,3 +1114,10 @@ def index_file_content_job(self, tenant_slug: str, version_id: str):
         return _run_coroutine(_run())
     except RETRYABLE_EXCEPTIONS as exc:
         raise self.retry(exc=exc)
+
+
+@celery_app.task(name="files.av_scan_file_job")
+def av_scan_file_job(tenant_id: str, file_id: str) -> str:
+    from app.modules.files.tasks import av_scan_file_job as _delegate
+
+    return _delegate(tenant_id, file_id)

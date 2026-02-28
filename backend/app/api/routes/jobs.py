@@ -13,6 +13,7 @@ from app.core.idempotency import compute_request_hash
 from app.models.job_engine import DocumentArtifact, DocumentJob, DocumentJobLog, DocumentJobStep
 from app.models.models import Tenant
 from app.modules.pipelines.models import PipelineProfile
+from app.modules.files.models import FileRecord
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 from app.services.pipelines_orchestrator import DocumentPipelineOrchestrator
 
@@ -161,8 +162,26 @@ async def get_job(job_id: str, session: AsyncSession = Depends(get_session), ten
     steps = (await session.execute(select(DocumentJobStep).where(DocumentJobStep.job_id == job.id).order_by(DocumentJobStep.order.asc()))).scalars().all()
     artifacts = (await session.execute(select(DocumentArtifact).where(DocumentArtifact.job_id == job.id).order_by(DocumentArtifact.created_at.asc()))).scalars().all()
     logs = (await session.execute(select(DocumentJobLog).where(DocumentJobLog.job_id == job.id).order_by(DocumentJobLog.created_at.asc()))).scalars().all()
+    file_ids = [a.file_id for a in artifacts if a.file_id]
+    file_rows = {}
+    if file_ids:
+        file_rows = {
+            f.id: f
+            for f in (await session.execute(select(FileRecord).where(FileRecord.id.in_(file_ids)))).scalars().all()
+        }
     artifact_map = {
-        "all": [{"file_id": a.file_id, "step_code": a.step_code, "kind": a.kind, "sha256": a.sha256} for a in artifacts]
+        "all": [
+            {
+                "file_id": a.file_id,
+                "step_code": a.step_code,
+                "kind": a.kind,
+                "sha256": a.sha256,
+                "display_name": (file_rows.get(a.file_id).metadata_json or {}).get("display_name") if file_rows.get(a.file_id) else None,
+                "size": file_rows.get(a.file_id).size_bytes if file_rows.get(a.file_id) else None,
+                "status": file_rows.get(a.file_id).status if file_rows.get(a.file_id) else None,
+            }
+            for a in artifacts
+        ]
     }
     return JobRead(
         job=JobEnvelopeRead(

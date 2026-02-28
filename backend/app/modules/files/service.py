@@ -31,7 +31,7 @@ from app.modules.files.models import (
     FileVersionStatus,
     TextIndexStatus,
 )
-from app.tasks import index_file_content_job
+from app.tasks import index_file_content_job, av_scan_file_job
 
 
 MAX_INDEX_BYTES = 25 * 1024 * 1024
@@ -89,6 +89,9 @@ class FileService:
         created_by: str | None = None,
     ) -> tuple[FileRecord, str, int]:
         settings = get_settings()
+        lower_name = filename.lower()
+        if lower_name.endswith((".docm", ".xlsm")):
+            raise HTTPException(status_code=400, detail="macro_enabled_documents_are_forbidden")
         object_id = FileRecord.new_id()
         object_key = f"uploads/{datetime.now(timezone.utc):%Y/%m/%d}/{object_id}/{_safe_filename(filename)}"
         record = FileRecord(
@@ -107,8 +110,9 @@ class FileService:
         )
         self.session.add(record)
         await self.session.flush()
-        upload_url = s3.generate_presigned_put_url(object_key, expires_in=settings.presign_download_ttl_seconds, content_type=content_type)
-        return record, upload_url, settings.presign_download_ttl_seconds
+        ttl = settings.presign_download_ttl_seconds
+        upload_url = s3.generate_presigned_put_url(object_key, expires_in=ttl, content_type=content_type)
+        return record, upload_url, ttl
 
     async def finalize_upload(self, *, file_id: str) -> FileRecord:
         record = await self.session.get(FileRecord, file_id)
@@ -124,7 +128,10 @@ class FileService:
         record.sha256 = _sha256_bytes(data)
         record.status = FileStatus.scanning.value
         await self.session.flush()
-        await self.av_scan_file(file_id=file_id)
+        try:
+            av_scan_file_job.delay(self.tenant_id, file_id)
+        except Exception:
+            await self.av_scan_file(file_id=file_id)
         return record
 
     async def av_scan_file(self, *, file_id: str) -> FileRecord:
@@ -150,7 +157,7 @@ class FileService:
             quarantine_key = f"quarantine/{datetime.now(timezone.utc):%Y/%m/%d}/{record.id}/{Path(record.object_key).name}"
             s3.put_object(data=data, mime=record.content_type, key=quarantine_key)
             record.object_key = quarantine_key
-            record.status = FileStatus.infected.value
+            record.status = FileStatus.quarantined.value
             record.av_result_json = {"status": "infected", "signature": verdict.signature}
         else:
             record.status = FileStatus.clean.value
@@ -218,12 +225,17 @@ class FileService:
     ) -> FileRecord:
         sha256 = _sha256_bytes(payload)
         ext = Path(filename).suffix or ".bin"
+        record_id = FileRecord.new_id()
+        display_name = _safe_filename(filename, fallback=f"artifact{ext}")
         if job_id and step_key:
-            object_key = f"artifacts/jobs/{job_id}/{step_key}/{sha256}{ext}"
+            object_key = f"artifacts/jobs/{job_id}/{step_key}/{record_id}{ext}"
         else:
-            object_key = f"artifacts/{datetime.now(timezone.utc):%Y/%m/%d}/{sha256}{ext}"
+            object_key = f"artifacts/{datetime.now(timezone.utc):%Y/%m/%d}/{record_id}{ext}"
         s3.put_object(data=payload, mime=content_type, key=object_key)
+        metadata = dict(metadata_json or {})
+        metadata.setdefault("display_name", display_name)
         record = FileRecord(
+            id=record_id,
             tenant_id=self.tenant_id,
             bucket="main",
             object_key=object_key,
@@ -233,7 +245,7 @@ class FileService:
             status=FileStatus.clean.value,
             av_vendor="internal",
             av_result_json={"status": "skipped_internal_artifact"},
-            metadata_json=metadata_json or {},
+            metadata_json=metadata,
             created_by=created_by,
         )
         self.session.add(record)

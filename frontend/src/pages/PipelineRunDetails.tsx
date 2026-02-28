@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 
 import { cancelPipelineRun, getPipelineRun, retryPipelineRun, retryPipelineStepRun, type PipelineRun } from "@/api/pipelines";
 import { JobTimeline } from "@/components/JobTimeline";
+import { FileList } from "@/features/files/FileList";
 
 const PipelineRunDetails = () => {
   const { id = "" } = useParams();
@@ -52,7 +53,7 @@ const PipelineRunDetails = () => {
         </div>
         <div className="rounded border p-3 text-sm">
           <h2 className="mb-2 font-medium">Artifacts</h2>
-          <pre className="max-h-56 overflow-auto text-xs">{JSON.stringify(run.artifacts ?? {}, null, 2)}</pre>
+          <FileList entityType="job" entityId={run.run_id} />
         </div>
       </div>
     </section>
