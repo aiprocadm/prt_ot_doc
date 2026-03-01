@@ -37,6 +37,7 @@ from app.services.events import EventType
 from app.services.file_storage import FileStorageService
 from app.models.models import IdempotencyStatus
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
+from app.services.billing import BillingService
 from app.services.outbox import OutboxService
 from app.tasks import process_inbound_webhook
 
@@ -206,6 +207,7 @@ async def start_approval_request(
     access: AccessContext = AccessDep,
 ):
     _correlation_id(request, response)
+    await BillingService(session).assert_allowed(tenant, "edo.send")
     idem_service, replay = await _idempotent_or_replay(
         request=request, response=response, session=session, tenant=tenant, user_id=str(access.user.id), model=payload
     )
@@ -372,6 +374,7 @@ async def send_to_edo(
     access: AccessContext = AccessDep
 ):
     _correlation_id(request, response)
+    await BillingService(session).assert_allowed(tenant, "edo.send")
     idem_service, replay = await _idempotent_or_replay(
         request=request, response=response, session=session, tenant=tenant, user_id=str(access.user.id), model=payload
     )
@@ -403,6 +406,7 @@ async def send_to_edo(
         destination="internal://edo",
         idempotency_key=f"edo.sent:{message.id}",
     )
+    await BillingService(session).add_usage(tenant_id=str(tenant.id), edo_outgoing=1)
     body = {"id": message.id, "external_id": message.external_id, "status": message.status.value}
     if idem_service is not None:
         await idem_service.store_success(replay, status_code=200, body=body)

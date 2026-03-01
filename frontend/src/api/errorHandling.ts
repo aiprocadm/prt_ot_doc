@@ -28,6 +28,21 @@ export const handleApiError = (error: ApiError, requestUrl?: string) => {
     return;
   }
 
+  if (error.code === "BILLING_BLOCKED") {
+    toast.error("Доступ ограничен из-за статуса оплаты. Откройте раздел Администрирование → Биллинг.");
+    return;
+  }
+
+  if (error.code === "QUOTA_EXCEEDED") {
+    toast.error("Превышен лимит тарифа. Проверьте usage и лимиты в разделе Биллинг.");
+    return;
+  }
+
+  if (error.code === "FEATURE_DISABLED") {
+    toast.error("Функция недоступна на текущем тарифе.");
+    return;
+  }
+
   if (status === 401 && !isAuthPath(requestUrl)) {
     tokenStorage.clear();
     redirectToLogin();

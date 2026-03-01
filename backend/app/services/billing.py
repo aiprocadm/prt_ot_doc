@@ -127,6 +127,23 @@ class BillingService:
         if used > limit:
             raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, detail={"code": "QUOTA_EXCEEDED", "message": "Quota exceeded", "meta": {"action": action, "limit": limit, "used": used}})
 
+    async def add_usage(
+        self,
+        *,
+        tenant_id: str,
+        docs_generated: int = 0,
+        edo_outgoing: int = 0,
+        s3_bytes_delta: int = 0,
+        period_yyyymm: int | None = None,
+    ) -> BillingUsageCounter:
+        usage = await self.ensure_usage_row(tenant_id=tenant_id, period_yyyymm=period_yyyymm)
+        usage.docs_generated = int(usage.docs_generated or 0) + int(docs_generated)
+        usage.edo_outgoing = int(usage.edo_outgoing or 0) + int(edo_outgoing)
+        updated_bytes = int(usage.s3_bytes_used or 0) + int(s3_bytes_delta)
+        usage.s3_bytes_used = max(updated_bytes, 0)
+        await self.session.flush()
+        return usage
+
     @staticmethod
     def compute_remaining(limits: dict[str, Any], usage: BillingUsageCounter | None) -> dict[str, int | None]:
         usage = usage or BillingUsageCounter(tenant_id="", period_yyyymm=current_period_yyyymm())
