@@ -35,6 +35,9 @@ class _StubSession:
             def all(self):
                 return [self._value] if self._value is not None else []
 
+            def scalar_one(self):
+                return self._value
+
         text = str(stmt)
         if "FROM subscriptions" in text:
             return _Res(self._sub)
@@ -42,6 +45,8 @@ class _StubSession:
             return _Res(None)
         if "FROM usage_counters" in text:
             return _Res(self._usage)
+        if "count(template.id)" in text:
+            return _Res(10)
         return _Res(None)
 
     async def get(self, model, _id):  # noqa: ANN001
@@ -97,3 +102,14 @@ async def test_assert_allowed_blocks_disabled_feature() -> None:
         await service.assert_allowed(tenant, "edo.send")
     assert exc.value.status_code == 403
     assert exc.value.detail["code"] == "FEATURE_DISABLED"
+
+
+@pytest.mark.asyncio
+async def test_assert_allowed_blocks_template_limit() -> None:
+    tenant, plan, sub, usage = _prepare(BillingSubscriptionStatus.ACTIVE, grace_delta_days=5)
+    plan.limits = {"templates_max": 10}
+    service = BillingService(_StubSession(tenant=tenant, plan=plan, sub=sub, usage=usage))
+    with pytest.raises(HTTPException) as exc:
+        await service.assert_allowed(tenant, "templates.create")
+    assert exc.value.status_code == 429
+    assert exc.value.detail["code"] == "QUOTA_EXCEEDED"

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
   Activity,
@@ -18,6 +19,7 @@ import {
 
 import { PERMISSIONS } from "@/permissions/permissions";
 import { useAbility } from "@/permissions/useAbility";
+import { getBillingSummary } from "@/api/billing";
 
 const navGroups = [
   {
@@ -74,10 +76,21 @@ const navGroups = [
 
 export const SideNav = () => {
   const { can } = useAbility();
+  const [featureFlags, setFeatureFlags] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    void getBillingSummary()
+      .then((summary) => setFeatureFlags(summary.features ?? {}))
+      .catch(() => undefined);
+  }, []);
+
   const visibleGroups = navGroups
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => can(item.permission))
+      items: group.items.filter((item) => {
+        if (item.to === "/edo" && featureFlags.edo === false) return false;
+        return can(item.permission);
+      })
     }))
     .filter((group) => group.items.length > 0);
 
