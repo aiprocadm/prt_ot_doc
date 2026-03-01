@@ -14,6 +14,7 @@ from sqlalchemy import (
     Index,
     Integer,
     LargeBinary,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -91,6 +92,13 @@ __all__ = [
     "TenantSettings",
     "TenantIntegrationKey",
     "TenantQuotaCounter",
+    "BillingPlan",
+    "BillingSubscription",
+    "BillingSubscriptionStatus",
+    "BillingUsageCounter",
+    "BillingInvoice",
+    "BillingInvoiceStatus",
+    "TenantLimitOverride",
     "Template",
     "TemplateVersion",
     "Training",
@@ -238,6 +246,86 @@ class TenantQuotaCounter(SharedModel):
     __table_args__ = (
         UniqueConstraint("tenant_id", "counter_name", "period", name="uq_tenant_quota_counter"),
     )
+
+
+class BillingSubscriptionStatus(str, enum.Enum):
+    ACTIVE = "active"
+    TRIAL = "trial"
+    PAST_DUE = "past_due"
+    SUSPENDED = "suspended"
+    CANCELED = "canceled"
+
+
+class BillingPlan(SharedModel, SoftDeleteMixin):
+    __tablename__ = "plans"
+
+    code: Mapped[str] = mapped_column(String(32), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    limits: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    features: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    price: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+
+
+class BillingSubscription(SharedModel, SoftDeleteMixin):
+    __tablename__ = "subscriptions"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=False, index=True)
+    plan_id: Mapped[str] = mapped_column(String(36), ForeignKey("plans.id"), nullable=False)
+    status: Mapped[BillingSubscriptionStatus] = mapped_column(Enum(BillingSubscriptionStatus), nullable=False, default=BillingSubscriptionStatus.ACTIVE)
+    period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    auto_renew: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    grace_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    external_provider: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+
+    __table_args__ = (
+        Index("ix_subscriptions_tenant_status", "tenant_id", "status"),
+        Index("ix_subscriptions_tenant_period_end", "tenant_id", "period_end"),
+    )
+
+
+class BillingUsageCounter(SharedModel, SoftDeleteMixin):
+    __tablename__ = "usage_counters"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=False)
+    period_yyyymm: Mapped[int] = mapped_column(Integer, nullable=False)
+    docs_generated: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    edo_outgoing: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    s3_bytes_used: Mapped[int] = mapped_column(Numeric(20, 0), nullable=False, default=0)
+    active_workers: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    api_calls: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    __table_args__ = (UniqueConstraint("tenant_id", "period_yyyymm", name="uq_usage_counters_tenant_period"),)
+
+
+class BillingInvoiceStatus(str, enum.Enum):
+    DRAFT = "draft"
+    ISSUED = "issued"
+    PAID = "paid"
+    OVERDUE = "overdue"
+    VOID = "void"
+
+
+class BillingInvoice(SharedModel):
+    __tablename__ = "invoices"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=False, index=True)
+    period_yyyymm: Mapped[int] = mapped_column(Integer, nullable=False)
+    amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0)
+    status: Mapped[BillingInvoiceStatus] = mapped_column(Enum(BillingInvoiceStatus), nullable=False, default=BillingInvoiceStatus.DRAFT)
+    due_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+
+    __table_args__ = (Index("ix_invoices_tenant_status", "tenant_id", "status"),)
+
+
+class TenantLimitOverride(SharedModel):
+    __tablename__ = "tenant_limits_override"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=False, unique=True)
+    limits: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    features: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    effective_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(tz=timezone.utc))
 
 
 class WebhookSubscription(SharedModel):

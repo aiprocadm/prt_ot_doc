@@ -30,6 +30,7 @@ from app.services.dev_bootstrap import bootstrap_admin_user
 from app.services.demo_bootstrap import bootstrap_demo_tenant
 from app.middleware.observability import ObservabilityMiddleware
 from app.middleware.tenant import TenantMiddleware
+from app.middleware.billing_guard import BillingGuardMiddleware
 
 __all__ = ["create_app", "SettingsError"]
 
@@ -52,6 +53,7 @@ def _configure_middlewares(app: FastAPI, settings: Settings) -> None:
         allow_headers=["*"],
     )
     app.add_middleware(TenantMiddleware, metrics_enabled=settings.enable_metrics)
+    app.add_middleware(BillingGuardMiddleware)
     app.add_middleware(SlowAPIMiddleware)
     app.add_middleware(ObservabilityMiddleware, settings=settings)
 
