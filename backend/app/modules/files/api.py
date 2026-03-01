@@ -31,6 +31,7 @@ from app.modules.files.schemas import (
     SignedUrlResponse,
 )
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
+from app.services.billing import BillingService
 
 router = APIRouter()
 
@@ -114,6 +115,7 @@ async def create_upload_session_v2(
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
 ) -> UploadSessionResponse:
+    await BillingService(session).assert_allowed(tenant, "files.upload", meta={"delta_bytes": int(payload.size_bytes)})
     svc = service.FileService(session=session, tenant_id=str(tenant.id))
     file_record, upload_url, expires_in = await svc.create_upload_session(
         filename=payload.filename,
@@ -134,6 +136,7 @@ async def finalize_upload_v2(
 ) -> FinalizeUploadResponse:
     svc = service.FileService(session=session, tenant_id=str(tenant.id))
     file_record = await svc.finalize_upload(file_id=file_id)
+    await BillingService(session).add_usage(tenant_id=str(tenant.id), s3_bytes_delta=int(file_record.size_bytes or 0))
     await session.commit()
     return FinalizeUploadResponse(file_id=file_record.id, status=file_record.status)
 

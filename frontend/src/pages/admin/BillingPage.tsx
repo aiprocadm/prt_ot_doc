@@ -1,8 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { getBillingSummary, type BillingSummary } from "@/api/billing";
+import { changeBillingPlan, getBillingInvoices, getBillingSummary, type BillingInvoice, type BillingSummary } from "@/api/billing";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+const plans = [
+  { code: "free", name: "Free" },
+  { code: "pro", name: "Pro" },
+  { code: "enterprise", name: "Enterprise" },
+];
 
 const Meter = ({ label, used, limit }: { label: string; used: number; limit: number }) => {
   const pct = Math.min(Math.round((used / Math.max(limit, 1)) * 100), 100);
@@ -17,29 +24,96 @@ const Meter = ({ label, used, limit }: { label: string; used: number; limit: num
 
 const BillingPage = () => {
   const [data, setData] = useState<BillingSummary | null>(null);
+  const [invoices, setInvoices] = useState<BillingInvoice[]>([]);
+  const [busyPlan, setBusyPlan] = useState<string | null>(null);
+
+  const reload = async () => {
+    const [summary, invoiceItems] = await Promise.all([getBillingSummary(), getBillingInvoices()]);
+    setData(summary);
+    setInvoices(invoiceItems);
+  };
 
   useEffect(() => {
-    void getBillingSummary().then(setData);
+    void reload();
   }, []);
+
+  const alerts = useMemo(() => {
+    if (!data) return [] as string[];
+    const out: string[] = [];
+    if (["suspended", "canceled", "past_due"].includes(data.subscription.status)) {
+      out.push("Оплата просрочена или подписка неактивна — часть операций может быть заблокирована.");
+    }
+    const genLimit = Number(data.limits.generations_per_month ?? 0);
+    const genUsed = Number(data.usage.docs_generated ?? 0);
+    if (genLimit > 0 && genUsed >= genLimit) out.push("Лимит генераций документов исчерпан.");
+    return out;
+  }, [data]);
+
+  const switchPlan = async (code: string) => {
+    setBusyPlan(code);
+    try {
+      await changeBillingPlan(code);
+      await reload();
+    } finally {
+      setBusyPlan(null);
+    }
+  };
 
   return (
     <div className="space-y-6">
       <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Администрирование", to: "/admin" }, { label: "Биллинг" }]} />
+
+      {alerts.length > 0 && (
+        <Card className="border-red-500/50">
+          <CardHeader><CardTitle>Предупреждения</CardTitle></CardHeader>
+          <CardContent className="text-sm text-red-600 space-y-1">
+            {alerts.map((item) => <div key={item}>• {item}</div>)}
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader><CardTitle>Текущий тариф</CardTitle></CardHeader>
         <CardContent className="text-sm space-y-1">
           <div>План: {data?.plan.name ?? "—"}</div>
           <div>Статус: {data?.subscription.status ?? "—"}</div>
           <div>Период до: {data?.subscription.period_end ?? "—"}</div>
+          <div>Grace period до: {data?.subscription.grace_until ?? "—"}</div>
         </CardContent>
       </Card>
+
       <Card>
         <CardHeader><CardTitle>Лимиты и usage</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           {data && <>
             <Meter label="Генерации / мес" used={Number(data.usage.docs_generated ?? 0)} limit={Number(data.limits.generations_per_month ?? 0)} />
             <Meter label="ЭДО исходящие / мес" used={Number(data.usage.edo_outgoing ?? 0)} limit={Number(data.limits.edo_outgoing_per_month ?? 0)} />
+            <Meter label="S3 (GiB)" used={Math.round(Number(data.usage.s3_bytes_used ?? 0) / (1024 * 1024 * 1024))} limit={Number(data.limits.s3_gb_max ?? 0)} />
           </>}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Тарифы</CardTitle></CardHeader>
+        <CardContent className="space-y-2">
+          {plans.map((plan) => (
+            <div key={plan.code} className="flex items-center justify-between rounded border p-3 text-sm">
+              <div>{plan.name}</div>
+              <Button size="sm" disabled={busyPlan === plan.code || data?.plan.code === plan.code} onClick={() => void switchPlan(plan.code)}>
+                {data?.plan.code === plan.code ? "Текущий" : "Сменить"}
+              </Button>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Счета</CardTitle></CardHeader>
+        <CardContent className="text-sm space-y-1">
+          {invoices.length === 0 && <div>Счета пока не выставлялись.</div>}
+          {invoices.map((inv) => (
+            <div key={inv.id} className="flex justify-between"><span>{inv.period_yyyymm} / {inv.status}</span><span>{inv.amount}</span></div>
+          ))}
         </CardContent>
       </Card>
     </div>
