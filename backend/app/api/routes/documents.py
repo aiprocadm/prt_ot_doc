@@ -51,6 +51,7 @@ from app.models.models import (
 from app.schemas.document import DocumentBatchRunRead, DocumentRead, DocumentStatusUpdate
 from app.schemas.task import TaskAcceptedResponse, TaskStatusResponse
 from app.services.audit import AuditService
+from app.services.billing import BillingService
 from app.services.documents import (
     DocumentNotFoundError,
     DocumentWorkflowService,
@@ -376,6 +377,7 @@ async def generate_document(
     access: AccessContext = AccessDep,
 ) -> TaskAcceptedResponse:
     settings = get_settings()
+    await BillingService(session).assert_allowed(tenant, "documents.generate")
     engine_payload: dict[str, Any] | None = None
     if isinstance(payload, DocGeneratePipelineRequest):
         template_code = payload.template.code
@@ -464,6 +466,7 @@ async def generate_document(
                     "status_url": f"/api/v1/jobs/{job.id}",
                     "document_version_id": None,
                 }
+                await BillingService(session).add_usage(tenant_id=str(tenant.id), docs_generated=1)
                 await idempotency.store_success(record, status_code=status.HTTP_202_ACCEPTED, body=body)
                 await session.commit()
                 response.status_code = status.HTTP_202_ACCEPTED
@@ -543,6 +546,7 @@ async def generate_document(
             status_url=status_url,
             document_version_id=metadata.get("document_version_id"),
         )
+        await BillingService(session).add_usage(tenant_id=str(tenant.id), docs_generated=1)
         await idempotency.store_success(
             record,
             status_code=status.HTTP_202_ACCEPTED,
@@ -612,6 +616,7 @@ async def generate_document_batch(
     access: AccessContext = AccessDep,
 ) -> DocumentBatchRunRead:
     settings = get_settings()
+    await BillingService(session).assert_allowed(tenant, "documents.generate")
     engine_payload: dict[str, Any] | None = None
     if isinstance(payload, DocGeneratePipelineRequest):
         template_code = payload.template.code
