@@ -9,6 +9,13 @@ export type BillingSummary = {
   remaining: Record<string, number | null>;
 };
 
+export type BillingPlan = {
+  code: string;
+  name: string;
+  limits: Record<string, number | boolean | null>;
+  features: Record<string, boolean>;
+};
+
 export type BillingInvoice = {
   id: string;
   period_yyyymm: number;
@@ -34,5 +41,11 @@ export const changeBillingPlan = async (planCode: string) => {
     { plan_code: planCode },
     { headers: { "Idempotency-Key": `plan-${planCode}-${Date.now()}` } }
   );
+  return data;
+};
+
+
+export const getBillingPlans = async () => {
+  const { data } = await apiClient.get<BillingPlan[]>("/billing/plans");
   return data;
 };
