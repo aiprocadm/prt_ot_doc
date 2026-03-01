@@ -38,6 +38,7 @@ from app.api.routes import (
     admin_authz,
     approval_signing_v1,
     attestations,
+    billing,
     audit,
     auth,
     companies,
@@ -189,6 +190,7 @@ tenant_router.include_router(reports.router, tags=["reports"])
 tenant_router.include_router(headers_api.router, tags=["layout-presets"])
 tenant_router.include_router(pipelines_api.router)
 tenant_router.include_router(search_router, tags=["search"])
+tenant_router.include_router(billing.router)
 
 router.include_router(tenant_router)
 

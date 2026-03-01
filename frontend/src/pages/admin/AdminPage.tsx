@@ -6,6 +6,7 @@ import { PERMISSIONS } from "@/permissions/permissions";
 import { useAbility } from "@/permissions/useAbility";
 
 const adminBlocks = [
+  { title: "Биллинг", description: "Тариф, лимиты, usage и статус оплаты.", to: "/admin/billing" },
   { title: "Роли и права", description: "RBAC/ABAC матрица, атрибуты, маскирование ПДн." },
   { title: "Маршруты согласования", description: "CRUD маршрутов, делегирование, SLA и эскалации." },
   { title: "Шаблоны документов", description: "Версионирование, запрет удаления используемых шаблонов." },
@@ -32,7 +33,7 @@ const AdminPage = () => {
             <CardHeader>
               <CardTitle className="text-sm font-semibold">{block.title}</CardTitle>
             </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">{block.description}</CardContent>
+            <CardContent className="text-sm text-muted-foreground">{block.description}{(block as {to?: string}).to ? <div className="mt-2"><a className="underline" href={(block as {to: string}).to}>Открыть</a></div> : null}</CardContent>
           </Card>
         ))}
       </div>
