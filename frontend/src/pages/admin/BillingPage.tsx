@@ -1,10 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 
+import { changeBillingPlan, getBillingInvoices, getBillingSummary, type BillingInvoice, type BillingSummary } from "@/api/billing";
 import { changeBillingPlan, getBillingInvoices, getBillingPlans, getBillingSummary, type BillingInvoice, type BillingPlan, type BillingSummary } from "@/api/billing";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
+const plans = [
+  { code: "free", name: "Free" },
+  { code: "pro", name: "Pro" },
+  { code: "enterprise", name: "Enterprise" },
+];
 
 const Meter = ({ label, used, limit }: { label: string; used: number; limit: number }) => {
   const pct = Math.min(Math.round((used / Math.max(limit, 1)) * 100), 100);
@@ -20,6 +26,12 @@ const Meter = ({ label, used, limit }: { label: string; used: number; limit: num
 const BillingPage = () => {
   const [data, setData] = useState<BillingSummary | null>(null);
   const [invoices, setInvoices] = useState<BillingInvoice[]>([]);
+  const [busyPlan, setBusyPlan] = useState<string | null>(null);
+
+  const reload = async () => {
+    const [summary, invoiceItems] = await Promise.all([getBillingSummary(), getBillingInvoices()]);
+    setData(summary);
+    setInvoices(invoiceItems);
   const [plans, setPlans] = useState<BillingPlan[]>([]);
   const [busyPlan, setBusyPlan] = useState<string | null>(null);
 
@@ -92,6 +104,14 @@ const BillingPage = () => {
       </Card>
 
       <Card>
+        <CardHeader><CardTitle>Тарифы</CardTitle></CardHeader>
+        <CardContent className="space-y-2">
+          {plans.map((plan) => (
+            <div key={plan.code} className="flex items-center justify-between rounded border p-3 text-sm">
+              <div>{plan.name}</div>
+              <Button size="sm" disabled={busyPlan === plan.code || data?.plan.code === plan.code} onClick={() => void switchPlan(plan.code)}>
+                {data?.plan.code === plan.code ? "Текущий" : "Сменить"}
+              </Button>
         <CardHeader><CardTitle>Возможности тарифа</CardTitle></CardHeader>
         <CardContent className="grid gap-2 text-sm md:grid-cols-2">
           {data && Object.entries(data.features).map(([feature, enabled]) => (
