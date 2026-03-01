@@ -44,10 +44,20 @@ const PipelineBuilderPage = () => {
     }
   }, [graphText]);
 
+  const validationError = useMemo(() => {
+    if (!parsedGraph) return "Граф невалидный JSON";
+    const ids = parsedGraph.nodes.map((n) => n.id);
+    if (new Set(ids).size !== ids.length) return "Есть дубли id нод";
+    const idSet = new Set(ids);
+    const badEdge = parsedGraph.edges.find((e) => !idSet.has(e.from) || !idSet.has(e.to));
+    if (badEdge) return `Ребро ${badEdge.from} → ${badEdge.to} ссылается на неизвестную ноду`;
+    return null;
+  }, [parsedGraph]);
+
   const save = async () => {
     try {
       setError(null);
-      if (!parsedGraph) throw new Error("Граф невалидный JSON");
+      if (validationError) throw new Error(validationError);
       await apiClient.post("/v1/pipelines/profiles", { code, name, graph: parsedGraph, is_active: true });
       await load();
     } catch (e) {
@@ -63,8 +73,9 @@ const PipelineBuilderPage = () => {
           <input className="w-full rounded border px-2 py-1" value={code} onChange={(e) => setCode(e.target.value)} placeholder="Code" />
           <input className="w-full rounded border px-2 py-1" value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" />
           <textarea className="h-72 w-full rounded border p-2 font-mono text-xs" value={graphText} onChange={(e) => setGraphText(e.target.value)} />
+          {validationError ? <p className="text-xs text-amber-700">{validationError}</p> : null}
           {error ? <p className="text-xs text-red-600">{error}</p> : null}
-          <button className="rounded border px-3 py-1" onClick={() => save().catch(() => undefined)}>Сохранить профиль</button>
+          <button className="rounded border px-3 py-1 disabled:opacity-60" disabled={Boolean(validationError)} onClick={() => save().catch(() => undefined)}>Сохранить профиль</button>
         </div>
         <div className="rounded border p-3 text-sm">
           <h2 className="mb-2 font-medium">Профили</h2>

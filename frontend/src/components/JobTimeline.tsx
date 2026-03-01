@@ -35,6 +35,7 @@ export const JobTimeline = ({ steps }: { steps: PipelineStepRun[] }) => (
         </div>
         {step.error_code ? <div className="text-xs text-red-600">{step.error_code}</div> : null}
         {step.error_payload ? <pre className="overflow-auto rounded bg-red-50 p-2 text-[11px] text-red-800">{stringify(step.error_payload)}</pre> : null}
+        {(step as { input?: unknown }).input ? <pre className="overflow-auto rounded bg-slate-50 p-2 text-[11px]">{stringify((step as { input?: unknown }).input)}</pre> : null}
         {(step as { output?: unknown }).output ? <pre className="overflow-auto rounded bg-muted/40 p-2 text-[11px]">{stringify((step as { output?: unknown }).output)}</pre> : null}
       </div>
     ))}

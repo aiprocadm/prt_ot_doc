@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
@@ -118,6 +119,22 @@ async def patch_profile(profile_id: str, payload: PipelineProfilePatch, session:
     return _serialize_profile(model)
 
 
+@router.put("/profiles/{profile_id}", response_model=PipelineProfileRead)
+async def put_profile(profile_id: str, payload: PipelineProfilePatch, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> PipelineProfileRead:
+    return await patch_profile(profile_id=profile_id, payload=payload, session=session, tenant=tenant)
+
+
+@router.post("/profiles/{profile_id}:activate", response_model=PipelineProfileRead)
+async def activate_profile(profile_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> PipelineProfileRead:
+    repo = PipelineProfileRepo(session)
+    model = await repo.get(tenant_id=str(tenant.id), profile_id=profile_id)
+    if model is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "profile not found")
+    model.is_active = True
+    await session.commit()
+    return _serialize_profile(model)
+
+
 @router.delete("/profiles/{profile_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def delete_profile(profile_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> None:
     repo = PipelineProfileRepo(session)
@@ -190,6 +207,8 @@ async def list_runs(
     status_filter: str | None = Query(default=None, alias="status"),
     profile: str | None = Query(default=None),
     created_by: str | None = Query(default=None),
+    q: str | None = Query(default=None),
+    date_from: datetime | None = Query(default=None),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
 ) -> list[PipelineRunRead]:
@@ -200,8 +219,34 @@ async def list_runs(
         stmt = stmt.where((DocumentJob.profile_id == profile) | (DocumentJob.pipeline_profile_id == profile) | (DocumentJob.template_code == profile))
     if created_by:
         stmt = stmt.where(DocumentJob.created_by == created_by)
+    if q:
+        stmt = stmt.where((DocumentJob.template_code.ilike(f"%{q}%")) | (DocumentJob.correlation_id.ilike(f"%{q}%")))
+    if date_from:
+        stmt = stmt.where(DocumentJob.created_at >= date_from)
     runs = (await session.execute(stmt)).scalars().all()
     return [await _build_run_read(session, run) for run in runs]
+
+
+@router.post("/runs:bulk", response_model=list[PipelineRunRead])
+async def bulk_update_runs(
+    run_ids: list[str],
+    action: str = Query(pattern="^(retry|cancel)$"),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> list[PipelineRunRead]:
+    orchestrator = DocumentPipelineOrchestrator(session)
+    updated: list[PipelineRunRead] = []
+    for run_id in run_ids:
+        run = await session.get(DocumentJob, run_id)
+        if run is None or str(run.tenant_id) != str(tenant.id):
+            continue
+        if action == "retry":
+            await orchestrator.retry_job(job_id=run.id, retry_failed_only=True)
+        else:
+            await orchestrator.cancel_job(job_id=run.id)
+        updated.append(await _build_run_read(session, run))
+    await session.commit()
+    return updated
 
 
 @router.get("/runs/{run_id}", response_model=PipelineRunRead)
