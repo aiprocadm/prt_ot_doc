@@ -116,6 +116,7 @@ from app.modules.templates.schemas import RenderPreviewRequest, RenderPreviewRes
 from app.services.docx import DocxService
 from app.services.file_storage import FileStorageService
 from app.services.pipeline import PipelineService
+from app.services.billing import BillingService
 from app.services.tasks import run_pipeline_task
 from app.tenancy_quotas import assert_quota
 
@@ -576,6 +577,7 @@ async def create_template(
     profile: str | None = Form(None),
 ) -> dict[str, str]:
     """Persist a DOCX template and metadata in the database."""
+    await BillingService(session).assert_allowed(tenant, "templates.create")
     storage = FileStorageService.default()
     payload_bytes = await file.read(MAX_TEMPLATE_SIZE_BYTES + 1)
     if not payload_bytes:
@@ -684,6 +686,7 @@ async def create_template_version(
     template = await session.get(Template, template_id)
     if template is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Template not found")
+    await BillingService(session).assert_allowed(tenant, "templates.create")
     payload = await file.read(MAX_TEMPLATE_SIZE_BYTES + 1)
     if not payload:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Template file cannot be empty")

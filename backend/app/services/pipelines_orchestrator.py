@@ -12,6 +12,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.job_engine import DocumentArtifact, DocumentJob, DocumentJobStatus, DocumentJobStep, JobStepStatus, OutboxEvent, OutboxEventStatus
+from app.modules.pipelines.graph import safe_eval_condition
 from app.modules.pipelines.models import PipelinePackageProfile, PipelineProfile
 from app.services.audit import AuditService, field_level_diff
 from app.services.file_storage import FileStorageService
@@ -74,18 +75,19 @@ class PipelineOrchestrator:
         await self.session.flush()
 
         steps = self._profile_steps(profile)
-        for idx, step_key in enumerate(steps, start=1):
+        for idx, step_def in enumerate(steps, start=1):
+            step_key = step_def["kind"]
             self.session.add(
                 DocumentJobStep(
                     tenant_id=tenant_id,
                     job_id=job.id,
-                    step_code=step_key,
+                    step_code=step_def["node_id"],
                     step_key=step_key,
                     order=idx,
                     step_order=idx,
                     status=JobStepStatus.QUEUED.value,
-                    max_attempts=RETRYABLE.get(step_key, 1),
-                    input={"payload": payload},
+                    max_attempts=int(step_def.get("max_attempts") or RETRYABLE.get(step_key, 1)),
+                    input={"payload": payload, "depends_on": step_def.get("depends_on", []), "condition": step_def.get("condition"), "config": step_def.get("config", {})},
                 )
             )
         await self._audit_action(job=job, action="create_job", details={"profile_code": profile_code})
@@ -245,7 +247,24 @@ class PipelineOrchestrator:
         stmt = select(DocumentJobStep).where(DocumentJobStep.job_id == job_id, DocumentJobStep.status == JobStepStatus.QUEUED.value)
         if from_step_order is not None:
             stmt = stmt.where(DocumentJobStep.order >= from_step_order)
-        return (await self.session.execute(stmt.order_by(DocumentJobStep.order.asc()))).scalars().first()
+        candidates = (await self.session.execute(stmt.order_by(DocumentJobStep.order.asc()))).scalars().all()
+        status_by_node = {s.step_code: str(s.status) for s in (await self.session.execute(select(DocumentJobStep).where(DocumentJobStep.job_id == job_id))).scalars().all()}
+        for step in candidates:
+            meta = step.input or {}
+            deps = meta.get("depends_on", [])
+            if any(status_by_node.get(dep) not in {JobStepStatus.SUCCESS.value, JobStepStatus.SKIPPED.value} for dep in deps):
+                continue
+            condition = meta.get("condition")
+            if condition:
+                payload = meta.get("payload", {}) if isinstance(meta, dict) else {}
+                input_meta = payload.get("input", {}) if isinstance(payload, dict) else {}
+                ctx = {"artifacts": {}, "meta": {"job_id": job_id, **input_meta}}
+                if not safe_eval_condition(condition, ctx):
+                    step.status = JobStepStatus.SKIPPED.value
+                    step.ended_at = datetime.now(timezone.utc)
+                    continue
+            return step
+        return None
 
     async def _all_done(self, job_id: str) -> bool:
         steps = (await self.session.execute(select(DocumentJobStep).where(DocumentJobStep.job_id == job_id))).scalars().all()
@@ -273,11 +292,32 @@ class PipelineOrchestrator:
         )
 
     @staticmethod
-    def _profile_steps(profile: PipelineProfile | PipelinePackageProfile | SimpleNamespace) -> list[str]:
+    def _profile_steps(profile: PipelineProfile | PipelinePackageProfile | SimpleNamespace) -> list[dict[str, Any]]:
+        graph = getattr(profile, "graph", None) or {}
+        nodes = graph.get("nodes") or []
+        edges = graph.get("edges") or []
+        if nodes:
+            incoming: dict[str, list[dict[str, Any]]] = {n.get("id"): [] for n in nodes if n.get("id")}
+            for edge in edges:
+                to_node = edge.get("to")
+                if to_node in incoming:
+                    incoming[to_node].append(edge)
+            ordered = sorted(nodes, key=lambda n: n.get("id", ""))
+            return [
+                {
+                    "node_id": node["id"],
+                    "kind": node.get("type", "noop"),
+                    "depends_on": [e.get("from") for e in incoming.get(node["id"], []) if e.get("from")],
+                    "condition": next((e.get("condition") for e in incoming.get(node["id"], []) if e.get("condition")), None),
+                    "max_attempts": ((node.get("retry") or {}).get("max_attempts")),
+                    "config": node.get("config", {}),
+                }
+                for node in ordered
+            ]
         raw = getattr(profile, "steps", None) or getattr(profile, "steps_json", None) or []
         codes = [s.get("code") if isinstance(s, dict) else str(s) for s in raw]
         codes = [c for c in codes if c]
-        return codes or DEFAULT_STEPS
+        return [{"node_id": c, "kind": c, "depends_on": [], "condition": None, "config": {}} for c in (codes or DEFAULT_STEPS)]
 
     def _dispatch(self, step_key: str):
         async def _artifact_handler(*, job: DocumentJob, step: DocumentJobStep) -> dict[str, Any]:

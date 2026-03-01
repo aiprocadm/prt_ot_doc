@@ -14,6 +14,7 @@ from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, abac
 from app.models.models import Company, Person, Position, Tenant, Workplace
 from app.repository import list_persons
+from app.services.billing import BillingService
 from app.schemas.person import PersonCreate, PersonPage, PersonRead, PersonUpdate
 
 router = APIRouter(prefix="/persons", tags=["persons"])
@@ -133,6 +134,7 @@ async def create_person_endpoint(
     session: SessionDep,
     access: EditorAccess,
 ) -> PersonRead:
+    await BillingService(session).assert_allowed(tenant, "users.create")
     company = await _get_company(session, tenant, payload.company_id)
     position_id = None
     workplace_id = None

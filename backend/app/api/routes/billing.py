@@ -16,6 +16,7 @@ from app.schemas.billing import (
     BillingChangePlanRequest,
     BillingInvoiceRead,
     BillingOverrideRequest,
+    BillingPlanRead,
     BillingSummaryRead,
 )
 from app.services.billing import BillingService
@@ -66,6 +67,17 @@ async def billing_summary(session: SessionDep, tenant: Tenant = Depends(get_tena
         },
         remaining=remaining,
     )
+
+
+@router.get("/plans", response_model=list[BillingPlanRead])
+async def billing_plans(
+    session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
+    access: OwnerAdminAccess = None,
+) -> list[BillingPlanRead]:
+    _ = (tenant, access)
+    plans = list((await session.execute(select(BillingPlan).order_by(BillingPlan.name.asc()))).scalars().all())
+    return [BillingPlanRead(code=item.code, name=item.name, limits=item.limits or {}, features=item.features or {}) for item in plans]
 
 
 @router.post("/change-plan")
