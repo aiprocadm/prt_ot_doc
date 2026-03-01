@@ -86,3 +86,14 @@ def test_compute_remaining() -> None:
     remaining = BillingService.compute_remaining({"generations_per_month": 10, "edo_outgoing_per_month": 5}, usage)
     assert remaining["generations_per_month"] == 5
     assert remaining["edo_outgoing_per_month"] == 2
+
+
+@pytest.mark.asyncio
+async def test_assert_allowed_blocks_disabled_feature() -> None:
+    tenant, plan, sub, usage = _prepare(BillingSubscriptionStatus.ACTIVE, grace_delta_days=5)
+    plan.features = {"edo": False}
+    service = BillingService(_StubSession(tenant=tenant, plan=plan, sub=sub, usage=usage))
+    with pytest.raises(HTTPException) as exc:
+        await service.assert_allowed(tenant, "edo.send")
+    assert exc.value.status_code == 403
+    assert exc.value.detail["code"] == "FEATURE_DISABLED"

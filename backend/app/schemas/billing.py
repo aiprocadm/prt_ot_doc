@@ -33,3 +33,10 @@ class BillingInvoiceRead(BaseModel):
     payload: dict[str, Any]
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class BillingPlanRead(BaseModel):
+    code: str
+    name: str
+    limits: dict[str, Any]
+    features: dict[str, Any]
