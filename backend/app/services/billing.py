@@ -6,16 +6,19 @@ from decimal import Decimal
 from typing import Any
 
 from app.models.models import (
+    Company,
     BillingInvoice,
     BillingPlan,
     BillingSubscription,
     BillingSubscriptionStatus,
     BillingUsageCounter,
+    Template,
     Tenant,
     TenantLimitOverride,
+    User,
 )
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -82,6 +85,18 @@ class BillingService:
             await self.session.flush()
         return row
 
+    async def _count_tenant_entities(self, tenant_id: str, action: str) -> int:
+        count_stmt = None
+        if action == "templates.create":
+            count_stmt = select(func.count(Template.id)).where(Template.tenant_id == tenant_id)
+        elif action == "users.create":
+            count_stmt = select(func.count(User.id)).where(User.tenant_id == tenant_id, User.deleted_at.is_(None))
+        elif action == "contractors.create":
+            count_stmt = select(func.count(Company.id)).where(Company.tenant_id == tenant_id, Company.deleted_at.is_(None))
+        if count_stmt is None:
+            return 0
+        return int((await self.session.execute(count_stmt)).scalar_one() or 0)
+
     async def assert_allowed(self, tenant: Tenant, action: str, meta: dict[str, Any] | None = None) -> None:
         meta = meta or {}
         ctx = await self.get_context(tenant)
@@ -123,7 +138,7 @@ class BillingService:
         elif usage_field:
             used = int(getattr(usage, usage_field) or 0) + int(meta.get("delta") or 1)
         else:
-            return
+            used = await self._count_tenant_entities(tenant.id, action) + int(meta.get("delta") or 1)
         if used > limit:
             raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, detail={"code": "QUOTA_EXCEEDED", "message": "Quota exceeded", "meta": {"action": action, "limit": limit, "used": used}})
 
