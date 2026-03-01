@@ -8,8 +8,9 @@ from typing import Any
 from sqlalchemy import Date, String, and_, case, cast, func, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.job_engine import DocumentJob
 from app.models.document import Document
-from app.models.models import Incident, Inspection, PPEItem, Person, Site, Training
+from app.models.models import Incident, Inspection, PPEItem, Person, Site, Template, Training
 from app.models.risk import Risk
 from app.modules.files.models import FileContentIndex, FileObject, FileTextIndex, FileVersion
 
@@ -64,6 +65,10 @@ class SearchService:
             queries.append(self._ppe_query(like_q, filters))
         if "training" in types:
             queries.append(self._training_query(like_q, filters))
+        if "jobs" in types:
+            queries.append(self._jobs_query(like_q, filters))
+        if "templates" in types:
+            queries.append(self._templates_query(like_q))
 
         if not queries:
             return {"q": q, "facets": {}, "items": [], "next_cursor": None}
@@ -151,6 +156,8 @@ class SearchService:
             "risk": f"/risk/{entity_id}",
             "ppe": f"/ppe/{entity_id}",
             "training": f"/training/{entity_id}",
+            "jobs": f"/jobs/{entity_id}",
+            "templates": f"/templates/{entity_id}",
         }
         return mapping.get(entity_type, f"/{entity_type}/{entity_id}")
 
@@ -380,4 +387,40 @@ class SearchService:
             stmt = stmt.where(text.ilike(like_q))
         if filters.status:
             stmt = stmt.where(cast(Training.status, String) == filters.status)
+        return stmt
+
+    def _jobs_query(self, like_q: str | None, filters: SearchFilters):
+        text = func.concat_ws(" ", DocumentJob.template_code, DocumentJob.status, DocumentJob.correlation_id)
+        stmt = select(
+            literal("jobs").label("type"),
+            literal("entity").label("kind"),
+            literal("DocumentJob").label("entity_type"),
+            DocumentJob.id.label("id"),
+            DocumentJob.template_code.label("title"),
+            cast(DocumentJob.status, String).label("status"),
+            DocumentJob.updated_at.label("updated_at"),
+            DocumentJob.correlation_id.label("snippet"),
+            (case((text.ilike(like_q), literal(0.65)), else_=literal(0.0)) if like_q else literal(0.3)).label("score"),
+        ).where(DocumentJob.tenant_id == self.tenant_id, DocumentJob.deleted_at.is_(None))
+        if like_q:
+            stmt = stmt.where(text.ilike(like_q))
+        if filters.status:
+            stmt = stmt.where(cast(DocumentJob.status, String) == filters.status)
+        return stmt
+
+    def _templates_query(self, like_q: str | None):
+        text = func.concat_ws(" ", Template.name, Template.code, Template.description)
+        stmt = select(
+            literal("templates").label("type"),
+            literal("entity").label("kind"),
+            literal("Template").label("entity_type"),
+            Template.id.label("id"),
+            Template.name.label("title"),
+            literal(None).label("status"),
+            Template.updated_at.label("updated_at"),
+            Template.description.label("snippet"),
+            (case((text.ilike(like_q), literal(0.6)), else_=literal(0.0)) if like_q else literal(0.3)).label("score"),
+        ).where(Template.tenant_id == self.tenant_id, Template.deleted_at.is_(None))
+        if like_q:
+            stmt = stmt.where(text.ilike(like_q))
         return stmt
