@@ -27,6 +27,24 @@ from app.services.pipelines_orchestrator import DocumentPipelineOrchestrator
 router = APIRouter(prefix="/pipelines", tags=["pipelines"])
 
 
+def _serialize_profile(model) -> PipelineProfileRead:
+    step_payload = []
+    for step in (model.steps or []):
+        if isinstance(step, dict) and "code" in step and "params_schema" in step:
+            step_payload.append(step)
+    return PipelineProfileRead(
+        id=model.id,
+        code=model.code,
+        name=model.name,
+        description=getattr(model, "description", None),
+        is_active=model.is_active,
+        steps=step_payload,
+        graph=getattr(model, "graph", None) or None,
+        limits=model.limits or {},
+        profile_version=getattr(model, "profile_version", 1),
+        version=model.version,
+    )
+
 def _serialize_step(step: DocumentJobStep) -> dict[str, Any]:
     return {
         "step_run_id": step.id,
@@ -38,6 +56,8 @@ def _serialize_step(step: DocumentJobStep) -> dict[str, Any]:
         "ended_at": step.ended_at,
         "error_code": step.error_code,
         "error_payload": step.error_payload,
+        "input": step.input,
+        "output": step.output,
     }
 
 
@@ -70,13 +90,13 @@ async def create_profile(payload: PipelineProfileCreate, session: AsyncSession =
     except IntegrityError as exc:
         await session.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "profile code already exists") from exc
-    return PipelineProfileRead.model_validate(model, from_attributes=True)
+    return _serialize_profile(model)
 
 
 @router.get("/profiles", response_model=list[PipelineProfileRead])
 async def list_profiles(active: bool | None = None, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> list[PipelineProfileRead]:
     rows = await PipelineProfileRepo(session).list(tenant_id=str(tenant.id), active=active)
-    return [PipelineProfileRead.model_validate(r, from_attributes=True) for r in rows]
+    return [_serialize_profile(r) for r in rows]
 
 
 @router.get("/profiles/{profile_id}", response_model=PipelineProfileRead)
@@ -84,7 +104,7 @@ async def get_profile(profile_id: str, session: AsyncSession = Depends(get_sessi
     model = await PipelineProfileRepo(session).get(tenant_id=str(tenant.id), profile_id=profile_id)
     if model is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "profile not found")
-    return PipelineProfileRead.model_validate(model, from_attributes=True)
+    return _serialize_profile(model)
 
 
 @router.patch("/profiles/{profile_id}", response_model=PipelineProfileRead)
@@ -95,7 +115,7 @@ async def patch_profile(profile_id: str, payload: PipelineProfilePatch, session:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "profile not found")
     await repo.patch(model=model, payload=payload)
     await session.commit()
-    return PipelineProfileRead.model_validate(model, from_attributes=True)
+    return _serialize_profile(model)
 
 
 @router.delete("/profiles/{profile_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)

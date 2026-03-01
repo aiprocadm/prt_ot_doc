@@ -5,26 +5,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-STEP_CODES = {
-    "render_docx",
-    "apply_headers",
-    "replace",
-    "convert_pdf",
-    "build_zip",
-    "archive",
-    "send_edo",
-    "index_content",
-}
+from app.modules.pipelines.graph import PipelineGraph, PipelineProfileValidator
 
-KNOWN_SCHEMAS = {
-    "RenderParamsV1",
-    "HeadersParamsV1",
-    "ReplaceParamsV1",
-    "PdfParamsV1",
-    "ZipParamsV1",
-    "ArchiveParamsV1",
-    "EdoParamsV1",
-}
+STEP_CODES = {"render_docx", "apply_headers", "replace", "convert_pdf", "build_zip", "archive", "send_edo", "index_content"}
+KNOWN_SCHEMAS = {"RenderParamsV1", "HeadersParamsV1", "ReplaceParamsV1", "PdfParamsV1", "ZipParamsV1", "ArchiveParamsV1", "EdoParamsV1"}
 
 JobStatusLiteral = Literal["queued", "running", "success", "failed", "canceled"]
 
@@ -51,27 +35,48 @@ class PipelineLimitsSchema(BaseModel):
 class PipelineProfileCreate(BaseModel):
     code: str = Field(min_length=2, max_length=64)
     name: str = Field(min_length=2, max_length=255)
-    steps: list[PipelineStepSchema]
+    description: str | None = None
+    steps: list[PipelineStepSchema] | None = None
+    graph: PipelineGraph | None = None
     limits: PipelineLimitsSchema = Field(default_factory=PipelineLimitsSchema)
     is_active: bool = True
 
     model_config = ConfigDict(extra="forbid")
 
+    @model_validator(mode="after")
+    def validate_graph_or_steps(self) -> "PipelineProfileCreate":
+        if not self.steps and not self.graph:
+            raise ValueError("steps or graph is required")
+        if self.graph:
+            PipelineProfileValidator().validate(self.graph)
+        return self
+
 
 class PipelineProfilePatch(BaseModel):
     name: str | None = None
+    description: str | None = None
     steps: list[PipelineStepSchema] | None = None
+    graph: PipelineGraph | None = None
     limits: PipelineLimitsSchema | None = None
     is_active: bool | None = None
+
+    @model_validator(mode="after")
+    def validate_graph(self) -> "PipelineProfilePatch":
+        if self.graph:
+            PipelineProfileValidator().validate(self.graph)
+        return self
 
 
 class PipelineProfileRead(BaseModel):
     id: str
     code: str
     name: str
+    description: str | None = None
     is_active: bool
-    steps: list[PipelineStepSchema]
+    steps: list[PipelineStepSchema] = Field(default_factory=list)
+    graph: PipelineGraph | None = None
     limits: PipelineLimitsSchema
+    profile_version: int = 1
     version: int
 
 
@@ -104,6 +109,8 @@ class PipelineStepRunRead(BaseModel):
     ended_at: datetime | None = None
     error_code: str | None = None
     error_payload: dict[str, Any] | None = None
+    input: dict[str, Any] | None = None
+    output: dict[str, Any] | None = None
 
 
 class PipelineRunRead(BaseModel):

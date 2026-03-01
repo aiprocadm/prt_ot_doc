@@ -11,6 +11,8 @@ export type PipelineStepRun = {
   ended_at?: string | null;
   error_code?: string | null;
   error_payload?: Record<string, unknown> | null;
+  input?: Record<string, unknown> | null;
+  output?: Record<string, unknown> | null;
 };
 
 export type PipelineLog = {
