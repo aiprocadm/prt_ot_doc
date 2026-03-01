@@ -11,7 +11,7 @@ from typing import Any
 import logging
 
 from fastapi import HTTPException, status
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -133,6 +133,8 @@ class FileService:
             status=FileStatus.uploaded.value,
             av_vendor="clamav",
             av_result_json={},
+            original_filename=_safe_filename(filename),
+            tags=metadata_json or {},
             metadata_json=metadata_json or {},
             created_by=created_by,
         )
@@ -228,6 +230,10 @@ class FileService:
             role=role,
         )
         self.session.add(link)
+        record = await self.session.get(FileRecord, file_id)
+        if record is not None and record.tenant_id == self.tenant_id:
+            record.entity_type = entity_type
+            record.entity_id = entity_id
         await self.session.flush()
         return link
 
@@ -267,6 +273,7 @@ class FileService:
         s3.put_object(data=payload, mime=content_type, key=object_key)
         metadata = dict(metadata_json or {})
         metadata.setdefault("display_name", display_name)
+        resolved_entity_id = entity_id or record_id
         record = FileRecord(
             id=record_id,
             tenant_id=self.tenant_id,
@@ -278,12 +285,16 @@ class FileService:
             status=FileStatus.clean.value,
             av_vendor="internal",
             av_result_json={"status": "skipped_internal_artifact"},
+            original_filename=display_name,
+            entity_type=entity_type,
+            entity_id=resolved_entity_id,
+            tags=metadata,
             metadata_json=metadata,
             created_by=created_by,
         )
         self.session.add(record)
         await self.session.flush()
-        await self.link_file(file_id=record.id, entity_type=entity_type, entity_id=entity_id or record.id, role=role)
+        await self.link_file(file_id=record.id, entity_type=entity_type, entity_id=resolved_entity_id, role=role)
         return record
 
     async def delete_file(self, *, file_id: str) -> FileRecord:
@@ -501,12 +512,18 @@ async def _upsert_file_search_document(
         )
         session.add(existing)
     existing.title = Path(file_record.object_key).name
+    text_content = text.strip()
+    if not text_content:
+        text_content = "no text extracted"
     existing.summary = f"{file_record.content_type} • {file_record.size_bytes} bytes"
-    existing.text_content = text or None
+    existing.text_content = text_content
     existing.lang = "russian"
     existing.meta = meta
     existing.indexed_at = datetime.now(timezone.utc)
-    existing.fts = text or existing.title
+    if session.bind is not None and session.bind.dialect.name == "postgresql":
+        existing.fts = func.to_tsvector("russian", text_content)
+    else:
+        existing.fts = text_content
 
 
 async def issue_download_url(*, session: AsyncSession, tenant_id: str, file_id: str, version_id: str, user_id: str | None, ip: str | None, user_agent: str | None) -> str:

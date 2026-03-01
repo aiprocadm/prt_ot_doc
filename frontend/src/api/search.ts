@@ -42,6 +42,7 @@ export const fetchSearch = async (params: {
   risk_level?: string;
   date_from?: string;
   date_to?: string;
+  sort?: "relevance" | "updated_at" | "date";
 }) => {
   const { data } = await apiClient.get<SearchResponse>("/search", {
     params: {
