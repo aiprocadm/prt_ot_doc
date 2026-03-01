@@ -71,23 +71,89 @@ class PipelineGraph(BaseModel):
 
 
 _SAFE_CALLS = {"len"}
+_SAFE_BOOL_OPS = (ast.And, ast.Or)
+_SAFE_COMPARE_OPS = (ast.Eq, ast.NotEq, ast.In, ast.NotIn, ast.Lt, ast.LtE, ast.Gt, ast.GtE)
+
+
+def _eval_ast(node: ast.AST, ctx: dict[str, Any]) -> Any:
+    if isinstance(node, ast.Expression):
+        return _eval_ast(node.body, ctx)
+    if isinstance(node, ast.Constant):
+        return node.value
+    if isinstance(node, ast.Name):
+        if node.id == "ctx":
+            return ctx
+        raise ValueError("unsafe name in condition")
+    if isinstance(node, ast.Subscript):
+        value = _eval_ast(node.value, ctx)
+        key = _eval_ast(node.slice, ctx)
+        return value[key]
+    if isinstance(node, ast.Attribute):
+        value = _eval_ast(node.value, ctx)
+        if node.attr.startswith("__"):
+            raise ValueError("unsafe attribute access")
+        return getattr(value, node.attr)
+    if isinstance(node, ast.Call):
+        if isinstance(node.func, ast.Name) and node.func.id in _SAFE_CALLS:
+            fn = len if node.func.id == "len" else None
+            if fn is None:
+                raise ValueError("unsafe call in condition")
+            args = [_eval_ast(arg, ctx) for arg in node.args]
+            return fn(*args)
+        if isinstance(node.func, ast.Attribute) and node.func.attr == "get":
+            target = _eval_ast(node.func.value, ctx)
+            args = [_eval_ast(arg, ctx) for arg in node.args]
+            return target.get(*args)
+        raise ValueError("unsafe call in condition")
+    if isinstance(node, ast.BoolOp):
+        if not isinstance(node.op, _SAFE_BOOL_OPS):
+            raise ValueError("unsafe bool operator")
+        values = [_eval_ast(v, ctx) for v in node.values]
+        return all(values) if isinstance(node.op, ast.And) else any(values)
+    if isinstance(node, ast.Compare):
+        left = _eval_ast(node.left, ctx)
+        for op, comparator in zip(node.ops, node.comparators, strict=False):
+            if not isinstance(op, _SAFE_COMPARE_OPS):
+                raise ValueError("unsafe compare operator")
+            right = _eval_ast(comparator, ctx)
+            ok = (
+                left == right
+                if isinstance(op, ast.Eq)
+                else left != right
+                if isinstance(op, ast.NotEq)
+                else left in right
+                if isinstance(op, ast.In)
+                else left not in right
+                if isinstance(op, ast.NotIn)
+                else left < right
+                if isinstance(op, ast.Lt)
+                else left <= right
+                if isinstance(op, ast.LtE)
+                else left > right
+                if isinstance(op, ast.Gt)
+                else left >= right
+            )
+            if not ok:
+                return False
+            left = right
+        return True
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+        return not _eval_ast(node.operand, ctx)
+    if isinstance(node, ast.List):
+        return [_eval_ast(el, ctx) for el in node.elts]
+    if isinstance(node, ast.Tuple):
+        return tuple(_eval_ast(el, ctx) for el in node.elts)
+    if isinstance(node, ast.Dict):
+        return {_eval_ast(k, ctx): _eval_ast(v, ctx) for k, v in zip(node.keys, node.values, strict=False)}
+    raise ValueError("unsafe expression")
 
 
 def safe_eval_condition(expression: str, ctx: dict[str, Any]) -> bool:
     tree = ast.parse(expression, mode="eval")
     for node in ast.walk(tree):
-        if isinstance(node, ast.Call):
-            if isinstance(node.func, ast.Name):
-                if node.func.id not in _SAFE_CALLS:
-                    raise ValueError("unsafe call in condition")
-            elif isinstance(node.func, ast.Attribute):
-                if node.func.attr not in {"get"}:
-                    raise ValueError("unsafe call in condition")
-            else:
-                raise ValueError("unsafe call in condition")
-        elif isinstance(node, (ast.Import, ast.ImportFrom, ast.Lambda, ast.FunctionDef, ast.ClassDef, ast.Assign, ast.AugAssign)):
+        if isinstance(node, (ast.Import, ast.ImportFrom, ast.Lambda, ast.FunctionDef, ast.ClassDef, ast.Assign, ast.AugAssign, ast.BinOp)):
             raise ValueError("unsafe expression")
-    value = eval(compile(tree, "<condition>", "eval"), {"__builtins__": {}, "len": len}, {"ctx": ctx})
+    value = _eval_ast(tree, ctx)
     return bool(value)
 
 
