@@ -45,6 +45,7 @@ const SignaturesPage = lazy(() => import("@/pages/signatures/SignaturesPage"));
 const EdoPage = lazy(() => import("@/pages/edo/EdoPage"));
 const PipelineRunsPage = lazy(() => import("@/pages/PipelineRuns"));
 const PipelineRunDetailsPage = lazy(() => import("@/pages/PipelineRunDetails"));
+const PipelineBuilderPage = lazy(() => import("@/pages/PipelineBuilderPage"));
 const ArchiveSearchPage = lazy(() => import("@/pages/ArchiveSearch"));
 const SearchPage = lazy(() => import("@/pages/SearchPage"));
 const NotificationsPage = lazy(() => import("@/pages/notifications/NotificationsPage"));
@@ -163,6 +164,7 @@ const AppRouter = () => {
                 <Route path="/reports" element={<ReportsPage />} />
               </Route>
               <Route element={<ProtectedRoute permission={PERMISSIONS.DOCUMENT_VIEW} />}>
+                <Route path="/pipelines/profiles" element={<PipelineBuilderPage />} />
                 <Route path="/pipelines/runs" element={<PipelineRunsPage />} />
                 <Route path="/pipelines/runs/:id" element={<PipelineRunDetailsPage />} />
                 <Route path="/jobs" element={<PipelineRunsPage />} />

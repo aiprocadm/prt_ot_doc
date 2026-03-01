@@ -6,6 +6,15 @@ import { setReturnTo } from "@/utils/returnTo";
 
 const AUTH_PATHS = ["/auth/login", "/auth/refresh", "/auth/logout"];
 
+const BILLING_ALERT_STORAGE_KEY = "billing:alert";
+
+const rememberBillingAlert = (code: string) => {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(BILLING_ALERT_STORAGE_KEY, JSON.stringify({ code, ts: Date.now() }));
+};
+
+export { BILLING_ALERT_STORAGE_KEY };
+
 const isAuthPath = (url?: string) => {
   if (!url) return false;
   return AUTH_PATHS.some((path) => url.includes(path));
@@ -29,11 +38,13 @@ export const handleApiError = (error: ApiError, requestUrl?: string) => {
   }
 
   if (error.code === "BILLING_BLOCKED") {
+    rememberBillingAlert("BILLING_BLOCKED");
     toast.error("Доступ ограничен из-за статуса оплаты. Откройте раздел Администрирование → Биллинг.");
     return;
   }
 
   if (error.code === "QUOTA_EXCEEDED") {
+    rememberBillingAlert("QUOTA_EXCEEDED");
     toast.error("Превышен лимит тарифа. Проверьте usage и лимиты в разделе Биллинг.");
     return;
   }

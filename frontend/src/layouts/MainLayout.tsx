@@ -1,5 +1,5 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
-import { Outlet } from "react-router-dom";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Link, Outlet } from "react-router-dom";
 
 import { Toaster } from "sonner";
 
@@ -8,6 +8,7 @@ import { SideNav } from "@/components/layout/SideNav";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopNav } from "@/components/layout/TopNav";
 import { TenantGate } from "@/components/tenant/TenantGate";
+import { BILLING_ALERT_STORAGE_KEY } from "@/api/errorHandling";
 
 interface SidebarContextValue {
   setSidebar: (content: ReactNode) => void;
@@ -23,13 +24,37 @@ export const useSidebar = () => {
 
 export const MainLayout = () => {
   const [sidebarContent, setSidebarContent] = useState<ReactNode>(null);
+  const [billingAlert, setBillingAlert] = useState<string | null>(null);
   const contextValue = useMemo(() => ({ setSidebar: setSidebarContent }), []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const raw = window.sessionStorage.getItem(BILLING_ALERT_STORAGE_KEY);
+    if (!raw) return;
+    try {
+      const payload = JSON.parse(raw) as { code?: string; ts?: number };
+      if (!payload.code) return;
+      if (payload.ts && Date.now() - payload.ts > 1000 * 60 * 30) {
+        window.sessionStorage.removeItem(BILLING_ALERT_STORAGE_KEY);
+        return;
+      }
+      setBillingAlert(payload.code);
+    } catch {
+      window.sessionStorage.removeItem(BILLING_ALERT_STORAGE_KEY);
+    }
+  }, []);
 
   return (
     <SidebarContext.Provider value={contextValue}>
       <TenantGate>
         <div className="min-h-screen bg-background text-foreground">
           <TopNav />
+          {billingAlert && (
+            <div className="border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+              {billingAlert === "BILLING_BLOCKED" ? "Доступ ограничен из-за статуса оплаты." : "Достигнут лимит тарифа."}{" "}
+              <Link className="font-medium underline" to="/admin/billing">Перейти в биллинг</Link>
+            </div>
+          )}
           <div className="flex">
             <SideNav />
             <div className="flex-1">

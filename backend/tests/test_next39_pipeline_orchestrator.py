@@ -51,6 +51,23 @@ async def _seed_profile(session, *, tenant_id: str, code: str = "pkg-doc") -> Pi
             {"code": "build_zip"},
             {"code": "archive"},
         ],
+        graph={
+            "nodes": [
+                {"id": "render", "type": "render_docx", "config": {"template_code": code}},
+                {"id": "headers", "type": "apply_headers"},
+                {"id": "replace", "type": "replace_apply"},
+                {"id": "pdf", "type": "convert_pdf"},
+                {"id": "zip", "type": "build_zip"},
+                {"id": "archive", "type": "archive"},
+            ],
+            "edges": [
+                {"from": "render", "to": "headers"},
+                {"from": "headers", "to": "replace"},
+                {"from": "replace", "to": "pdf"},
+                {"from": "pdf", "to": "zip"},
+                {"from": "zip", "to": "archive"},
+            ],
+        },
         limits={},
     )
     session.add(profile)
@@ -103,12 +120,13 @@ async def test_pipeline_full_run_and_retry_failed_step(db_session) -> None:
 
     convert_step = (
         await db_session.execute(
-            select(DocumentJobStep).where(DocumentJobStep.job_id == job.id, DocumentJobStep.step_code == "convert_pdf")
+            select(DocumentJobStep).where(DocumentJobStep.job_id == job.id, DocumentJobStep.step_key == "convert_pdf")
         )
     ).scalar_one()
     assert convert_step.status == JobStepStatus.FAILED.value
 
-    resumed = await orchestrator.retry_step(job_id=job.id, step_code="convert_pdf")
+    await orchestrator.retry_job(job_id=job.id, retry_failed_only=True)
+    resumed = await orchestrator.run_job(job_id=job.id)
     assert resumed.status == "success"
 
     steps = (await db_session.execute(select(DocumentJobStep).where(DocumentJobStep.job_id == job.id))).scalars().all()
