@@ -27,3 +27,8 @@ def test_condition_engine_safe_eval() -> None:
     assert safe_eval_condition("ctx['meta']['x'] > 2 and 'pdf' in ctx['artifacts']", {"meta": {"x": 3}, "artifacts": {"pdf": "f1"}})
     with pytest.raises(ValueError):
         safe_eval_condition("__import__('os').system('echo x')", {})
+
+
+def test_condition_engine_rejects_binary_math() -> None:
+    with pytest.raises(ValueError, match="unsafe"):
+        safe_eval_condition("ctx.get('x', 0) + 1 > 2", {"x": 1})
