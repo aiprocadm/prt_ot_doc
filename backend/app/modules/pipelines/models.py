@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Index, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Index, Integer, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON
@@ -17,8 +17,11 @@ class PipelineProfile(TenantBaseModel):
 
     code: Mapped[str] = mapped_column(String(64), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     steps: Mapped[list[dict]] = mapped_column(JSONBType, nullable=False, default=list)
+    graph: Mapped[dict] = mapped_column(JSONBType, nullable=False, default=dict)
     limits: Mapped[dict] = mapped_column(JSONBType, nullable=False, default=dict)
+    profile_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
