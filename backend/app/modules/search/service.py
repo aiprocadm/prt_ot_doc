@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
+from collections import Counter
 from typing import Any
 
 from sqlalchemy import Date, String, and_, case, cast, func, literal, select
@@ -36,6 +37,7 @@ class SearchService:
         q: str,
         types: set[str],
         filters: SearchFilters,
+        sort: str,
         limit: int,
         cursor: str | None,
     ) -> dict[str, Any]:
@@ -71,6 +73,13 @@ class SearchService:
             union_subq = union_subq.union_all(query)
 
         search_subq = union_subq.subquery("search_union")
+        order_by = {
+            "updated_at": (search_subq.c.updated_at.desc().nullslast(), search_subq.c.score.desc()),
+            "date": (search_subq.c.updated_at.desc().nullslast(), search_subq.c.score.desc()),
+            "relevance": (search_subq.c.score.desc(), search_subq.c.updated_at.desc().nullslast()),
+        }
+        sort_order = order_by.get(sort, order_by["relevance"])
+
         ranked = (
             select(
                 search_subq.c.type,
@@ -83,15 +92,20 @@ class SearchService:
                 search_subq.c.snippet,
                 search_subq.c.score,
             )
-            .order_by(search_subq.c.score.desc(), search_subq.c.updated_at.desc().nullslast())
+            .order_by(*sort_order)
             .offset(offset)
             .limit(limit + 1)
         )
         rows = (await self.session.execute(ranked)).mappings().all()
 
-        facets_stmt = select(search_subq.c.entity_type, func.count()).group_by(search_subq.c.entity_type)
+        facets_stmt = select(search_subq.c.entity_type, search_subq.c.status)
         facet_rows = (await self.session.execute(facets_stmt)).all()
-        facets = {row[0]: row[1] for row in facet_rows}
+        type_counts = Counter(row[0] for row in facet_rows if row[0])
+        status_counts = Counter(row[1] for row in facet_rows if row[1])
+        facets = {
+            "type_counts": dict(type_counts),
+            "status_counts": dict(status_counts),
+        }
 
         has_more = len(rows) > limit
         items = rows[:limit]
@@ -99,7 +113,7 @@ class SearchService:
 
         return {
             "q": q,
-            "total": sum(facets.values()),
+            "total": len(facet_rows),
             "facets": facets,
             "items": [
                 {
@@ -118,6 +132,7 @@ class SearchService:
                     "updated_at": row["updated_at"],
                     "snippet": row["snippet"],
                     "score": float(row["score"] or 0),
+                    "deeplink": self._build_entity_url(row["type"], row["id"]),
                 }
                 for row in items
             ],

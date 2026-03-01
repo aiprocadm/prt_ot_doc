@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, time
 from pathlib import Path
 from uuid import uuid4
 
@@ -24,6 +24,7 @@ async def global_search(
     types: str = "documents,people,sites,incidents,inspections,ppe,risk,training,files",
     limit: int = Query(default=20, ge=1, le=100),
     cursor: str | None = None,
+    sort: str = Query(default="relevance", pattern="^(relevance|updated_at|date)$"),
     status: str | None = None,
     company_id: str | None = None,
     site_id: str | None = None,
@@ -49,7 +50,7 @@ async def global_search(
         date_to=date_to,
     )
     service = SearchService(session=session, tenant_id=str(tenant.id))
-    payload = await service.search(q=q, types=requested_types, filters=filters, limit=limit, cursor=cursor)
+    payload = await service.search(q=q, types=requested_types, filters=filters, sort=sort, limit=limit, cursor=cursor)
     payload["correlation_id"] = str(uuid4())
     return payload
 
@@ -62,6 +63,9 @@ async def archive_files(
     site_id: str | None = None,
     project_id: str | None = None,
     contractor_id: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    sort: str = Query(default="updated_at", pattern="^(updated_at|date)$"),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
 ) -> dict:
@@ -75,7 +79,13 @@ async def archive_files(
         stmt = stmt.where(FileRecord.metadata_json["project_id"].astext == project_id)
     if contractor_id:
         stmt = stmt.where(FileRecord.metadata_json["contractor_id"].astext == contractor_id)
-    stmt = stmt.order_by(FileRecord.updated_at.desc()).offset(offset).limit(limit + 1)
+    if date_from:
+        stmt = stmt.where(FileRecord.updated_at >= datetime.combine(date_from, time.min))
+    if date_to:
+        stmt = stmt.where(FileRecord.updated_at <= datetime.combine(date_to, time.max))
+
+    order_expr = FileRecord.updated_at.desc() if sort in {"updated_at", "date"} else FileRecord.updated_at.desc()
+    stmt = stmt.order_by(order_expr).offset(offset).limit(limit + 1)
     records = (await session.execute(stmt)).scalars().all()
 
     file_ids = [record.id for record in records[:limit]]
@@ -93,12 +103,12 @@ async def archive_files(
     items = [
         {
             "id": record.id,
-            "filename": Path(record.object_key).name,
+            "filename": record.original_filename or Path(record.object_key).name,
             "content_type": record.content_type,
             "size_bytes": record.size_bytes,
             "status": record.status,
             "updated_at": record.updated_at,
-            "meta": record.metadata_json or {},
+            "meta": (record.tags or record.metadata_json or {}),
             "links": links_by_file.get(record.id, []),
         }
         for record in records[:limit]
