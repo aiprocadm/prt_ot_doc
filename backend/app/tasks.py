@@ -1568,3 +1568,49 @@ def av_scan_file_job(tenant_id: str, file_id: str) -> str:
     from app.modules.files.tasks import av_scan_file_job as _delegate
 
     return _delegate(tenant_id, file_id)
+
+@celery_app.task(name="billing.recompute_active_workers")
+def recompute_active_workers_job(tenant_slug: str) -> dict[str, int | str]:
+    async def _run() -> dict[str, int | str]:
+        from sqlalchemy import func
+
+        from app.models.models import EmploymentStatus
+        from app.services.billing import BillingService, current_period_yyyymm
+
+        with tenant_context(tenant_slug):
+            ensure_tenant_schema(tenant_slug)
+            async with session_scope(tenant=tenant_slug) as session:
+                tenant_id = str(session.info.get("tenant_id") or "")
+                if not tenant_id:
+                    tenant = (await session.execute(select(Tenant).where(Tenant.slug == tenant_slug))).scalar_one_or_none()
+                    if tenant is None:
+                        return {"status": "tenant_missing", "active_workers": 0}
+                    tenant_id = str(tenant.id)
+
+                active_workers = int(
+                    (
+                        await session.execute(
+                            select(func.count(Person.id)).where(
+                                Person.tenant_id == tenant_id,
+                                Person.deleted_at.is_(None),
+                                Person.employment_status == EmploymentStatus.ACTIVE,
+                            )
+                        )
+                    ).scalar_one()
+                    or 0
+                )
+                service = BillingService(session)
+                usage = await service.ensure_usage_row(
+                    tenant_id=tenant_id,
+                    period_yyyymm=current_period_yyyymm(),
+                )
+                usage.active_workers = active_workers
+                await session.flush()
+                return {
+                    "status": "ok",
+                    "tenant_id": tenant_id,
+                    "active_workers": active_workers,
+                    "period_yyyymm": usage.period_yyyymm,
+                }
+
+    return _run_coroutine(_run())
