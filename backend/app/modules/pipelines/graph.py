@@ -31,6 +31,15 @@ REQUIRED_CONFIG_KEYS = {
     "delay": {"seconds"},
 }
 
+RESERVED_CTX_KEYS = {
+    "tenant_id",
+    "correlation_id",
+    "job_id",
+    "run_id",
+    "artifacts",
+    "meta",
+}
+
 
 class PipelineRetryPolicy(BaseModel):
     max_attempts: int = Field(default=1, ge=1, le=10)
@@ -168,6 +177,8 @@ class PipelineProfileValidator:
         self.limits = limits or GraphValidationLimits()
 
     def validate(self, graph: PipelineGraph) -> None:
+        if not graph.nodes:
+            raise ValueError("graph_has_no_nodes")
         if len(graph.nodes) > self.limits.max_nodes:
             raise ValueError("too_many_nodes")
         node_ids = {n.id for n in graph.nodes}
@@ -215,10 +226,14 @@ class PipelineProfileValidator:
 
         for node in graph.nodes:
             if node.type == "branch":
+                if len(outgoing.get(node.id, [])) < 2:
+                    raise ValueError(f"branch '{node.id}' must have at least 2 outgoing edges")
                 conditioned = [e for e in outgoing.get(node.id, []) if e.condition]
                 defaults = [e for e in outgoing.get(node.id, []) if not e.condition]
                 if conditioned and not defaults:
                     raise ValueError(f"branch '{node.id}' has no default edge")
+
+        self._validate_context_contract(graph)
 
         depth = self._max_depth(starts, outgoing)
         if depth > self.limits.max_depth:
@@ -233,3 +248,10 @@ class PipelineProfileValidator:
             for edge in outgoing.get(node, []):
                 stack.append((edge.to_node, depth + 1))
         return best
+
+    def _validate_context_contract(self, graph: PipelineGraph) -> None:
+        # Reserved keys are controlled by orchestrator runtime and must not be redefined.
+        reserved_redefined = RESERVED_CTX_KEYS.intersection(graph.inputs.keys())
+        if reserved_redefined:
+            keys = ", ".join(sorted(reserved_redefined))
+            raise ValueError(f"graph_inputs_redefine_reserved_keys: {keys}")
