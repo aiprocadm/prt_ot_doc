@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import asyncio
+import hashlib
+import json
 from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -80,6 +84,11 @@ async def _build_run_read(session: AsyncSession, run: DocumentJob) -> PipelineRu
         correlation_id=run.correlation_id,
         step_runs=[PipelineStepRunRead(**_serialize_step(step)) for step in steps],
     )
+
+
+def _run_snapshot_hash(run_payload: PipelineRunRead) -> str:
+    body = json.dumps(run_payload.model_dump(mode="json"), sort_keys=True, ensure_ascii=False)
+    return hashlib.sha1(body.encode("utf-8")).hexdigest()
 
 
 @router.post("/profiles", response_model=PipelineProfileRead, status_code=status.HTTP_201_CREATED)
@@ -255,6 +264,39 @@ async def get_run(run_id: str, session: AsyncSession = Depends(get_session), ten
     if run is None or str(run.tenant_id) != str(tenant.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "run not found")
     return await _build_run_read(session, run)
+
+
+@router.get("/runs/{run_id}/events")
+async def stream_run_events(run_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> StreamingResponse:
+    run = await session.get(DocumentJob, run_id)
+    if run is None or str(run.tenant_id) != str(tenant.id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "run not found")
+
+    async def _stream() -> Any:
+        previous_hash: str | None = None
+        while True:
+            run_obj = await session.get(DocumentJob, run_id)
+            if run_obj is None or str(run_obj.tenant_id) != str(tenant.id):
+                break
+            payload = await _build_run_read(session, run_obj)
+            snapshot_hash = _run_snapshot_hash(payload)
+            if snapshot_hash != previous_hash:
+                previous_hash = snapshot_hash
+                yield "event: run.update\n"
+                yield f"data: {json.dumps(payload.model_dump(mode='json'), ensure_ascii=False)}\n\n"
+            if str(run_obj.status) in {"success", "failed", "canceled"}:
+                yield "event: run.done\n"
+                yield f"data: {json.dumps(payload.model_dump(mode='json'), ensure_ascii=False)}\n\n"
+                break
+            yield ": keepalive\n\n"
+            await asyncio.sleep(2)
+
+    headers = {
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+    }
+    return StreamingResponse(_stream(), media_type="text/event-stream", headers=headers)
 
 
 @router.post("/runs/{run_id}:cancel", response_model=PipelineRunRead)
