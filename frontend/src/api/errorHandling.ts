@@ -37,8 +37,8 @@ export const handleApiError = (error: ApiError, requestUrl?: string) => {
     return;
   }
 
-  if (error.code === "BILLING_BLOCKED") {
-    rememberBillingAlert("BILLING_BLOCKED");
+  if (error.code === "BILLING_BLOCKED" || error.code === "TENANT_SUSPENDED" || error.code === "TENANT_PAST_DUE") {
+    rememberBillingAlert(error.code);
     toast.error("Доступ ограничен из-за статуса оплаты. Откройте раздел Администрирование → Биллинг.");
     return;
   }

@@ -13,11 +13,11 @@ from app.services.billing import BillingContext, BillingService
 async def test_compute_remaining_uses_usage_counters() -> None:
     usage = BillingUsageCounter(tenant_id="t1", period_yyyymm=202603, docs_generated=12, edo_outgoing=4, s3_bytes_used=3 * 1024**3)
     remaining = BillingService.compute_remaining(
-        {"generations_per_month": 20, "edo_outgoing_per_month": 5, "s3_gb_max": 10}, usage
+        {"max_generations_per_month": 20, "edo_outgoing_per_month": 5, "max_s3_bytes": 10 * 1024**3}, usage
     )
-    assert remaining["generations_per_month"] == 8
+    assert remaining["max_generations_per_month"] == 8
     assert remaining["edo_outgoing_per_month"] == 1
-    assert remaining["s3_gb_max"] == 7
+    assert remaining["max_s3_bytes"] == 7 * 1024**3
 
 
 @pytest.mark.asyncio
@@ -44,14 +44,14 @@ async def test_assert_allowed_blocks_past_due_without_grace(monkeypatch: pytest.
         await service.assert_allowed(tenant, "documents.generate")
 
     assert exc_info.value.status_code == 402
-    assert exc_info.value.detail["code"] == "BILLING_BLOCKED"
+    assert exc_info.value.detail["code"] == "TENANT_SUSPENDED"
 
 
 @pytest.mark.asyncio
 async def test_assert_allowed_enforces_generation_quota(monkeypatch: pytest.MonkeyPatch) -> None:
     service = BillingService(session=None)  # type: ignore[arg-type]
     tenant = Tenant(id="tenant-1", slug="tenant-1", name="Tenant 1", code="tenant-1", schema_name="tenant_1")
-    plan = BillingPlan(code="pro", name="Pro", limits={"generations_per_month": 2}, features={"edo": True}, price={})
+    plan = BillingPlan(code="pro", name="Pro", limits={"max_generations_per_month": 2}, features={"edo": True}, price={})
     usage = BillingUsageCounter(tenant_id=tenant.id, period_yyyymm=202603, docs_generated=2)
     context = BillingContext(plan=plan, subscription=None, usage=usage, limits=plan.limits, features=plan.features)
 

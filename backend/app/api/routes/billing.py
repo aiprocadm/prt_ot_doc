@@ -1,32 +1,24 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, abac
-from app.models.models import (
-    AuditLog,
-    BillingPlan,
-    BillingSubscription,
-    Tenant,
-    TenantLimitOverride,
-)
+from app.models.models import BillingSubscription, BillingSubscriptionStatus, Tenant
 from app.schemas.billing import (
     BillingChangePlanRequest,
     BillingInvoiceRead,
-    BillingOverrideRequest,
     BillingPlanRead,
+    BillingStatusMutationRequest,
     BillingSummaryRead,
 )
-from app.services.billing import BillingService
-from app.services.outbox import OutboxService
+from app.services.billing import BillingService, current_period_yyyymm
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/billing", tags=["billing"])
-
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
@@ -40,8 +32,8 @@ OwnerAdminAccess = Annotated[
 ]
 
 
-@router.get("/summary", response_model=BillingSummaryRead)
-async def billing_summary(session: SessionDep, tenant: Tenant = Depends(get_tenant_record), access: OwnerAdminAccess = None) -> BillingSummaryRead:
+@router.get("/plan", response_model=BillingSummaryRead)
+async def billing_plan(session: SessionDep, tenant: Tenant = Depends(get_tenant_record), access: OwnerAdminAccess = None) -> BillingSummaryRead:
     _ = access
     service = BillingService(session)
     ctx = await service.get_context(tenant)
@@ -50,16 +42,17 @@ async def billing_summary(session: SessionDep, tenant: Tenant = Depends(get_tena
         plan={"code": ctx.plan.code, "name": ctx.plan.name} if ctx.plan else {"code": "free", "name": "Free"},
         subscription={
             "status": ctx.subscription.status.value,
+            "period_start": ctx.subscription.period_start,
             "period_end": ctx.subscription.period_end,
             "grace_until": ctx.subscription.grace_until,
             "auto_renew": ctx.subscription.auto_renew,
         }
         if ctx.subscription
-        else {"status": "trial", "period_end": None, "grace_until": None, "auto_renew": False},
+        else {"status": "trial", "period_start": None, "period_end": None, "grace_until": None, "auto_renew": False},
         limits=ctx.limits,
         features=ctx.features,
         usage={
-            "period_yyyymm": ctx.usage.period_yyyymm if ctx.usage else None,
+            "period_yyyymm": ctx.usage.period_yyyymm if ctx.usage else current_period_yyyymm(),
             "docs_generated": int(ctx.usage.docs_generated) if ctx.usage else 0,
             "edo_outgoing": int(ctx.usage.edo_outgoing) if ctx.usage else 0,
             "s3_bytes_used": int(ctx.usage.s3_bytes_used) if ctx.usage else 0,
@@ -69,18 +62,50 @@ async def billing_summary(session: SessionDep, tenant: Tenant = Depends(get_tena
     )
 
 
-@router.get("/plans", response_model=list[BillingPlanRead])
-async def billing_plans(
+@router.get("/usage")
+async def billing_usage(
     session: SessionDep,
     tenant: Tenant = Depends(get_tenant_record),
     access: OwnerAdminAccess = None,
-) -> list[BillingPlanRead]:
+    period: int | None = None,
+) -> dict[str, Any]:
+    _ = access
+    service = BillingService(session)
+    ctx = await service.get_context(tenant)
+    selected_period = period or current_period_yyyymm()
+    if ctx.usage is None or ctx.usage.period_yyyymm != selected_period:
+        usage = await service.ensure_usage_row(tenant.id, selected_period)
+    else:
+        usage = ctx.usage
+    return {
+        "period": selected_period,
+        "usage": {
+            "generations_count": int(usage.docs_generated or 0),
+            "edo_outgoing_count": int(usage.edo_outgoing or 0),
+            "active_workers_count": int(usage.active_workers or 0),
+            "s3_bytes_used": int(usage.s3_bytes_used or 0),
+        },
+        "limits": ctx.limits,
+    }
+
+
+@router.get("/limits")
+async def billing_limits(session: SessionDep, tenant: Tenant = Depends(get_tenant_record), access: OwnerAdminAccess = None) -> dict[str, Any]:
+    _ = access
+    ctx = await BillingService(session).get_context(tenant)
+    return {"plan": ctx.plan.code if ctx.plan else "free", "limits": ctx.limits, "features": ctx.features}
+
+
+@router.get("/plans", response_model=list[BillingPlanRead])
+async def billing_plans(session: SessionDep, tenant: Tenant = Depends(get_tenant_record), access: OwnerAdminAccess = None) -> list[BillingPlanRead]:
     _ = (tenant, access)
+    from app.models.models import BillingPlan
+
     plans = list((await session.execute(select(BillingPlan).order_by(BillingPlan.name.asc()))).scalars().all())
     return [BillingPlanRead(code=item.code, name=item.name, limits=item.limits or {}, features=item.features or {}) for item in plans]
 
 
-@router.post("/change-plan")
+@router.post("/plan/change")
 async def change_plan(
     payload: BillingChangePlanRequest,
     session: SessionDep,
@@ -88,56 +113,67 @@ async def change_plan(
     access: OwnerAdminAccess = None,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, Any]:
-    _ = access
     if not idempotency_key:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "IDEMPOTENCY_REQUIRED", "message": "Idempotency-Key required"})
-    plan = (await session.execute(select(BillingPlan).where(BillingPlan.code == payload.plan_code))).scalars().first()
-    if plan is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Plan not found")
-    sub = (
-        await session.execute(select(BillingSubscription).where(BillingSubscription.tenant_id == tenant.id).order_by(BillingSubscription.created_at.desc()))
-    ).scalars().first()
-    now = datetime.now(tz=timezone.utc)
-    if sub is None:
-        sub = BillingSubscription(
-            tenant_id=tenant.id,
-            plan_id=plan.id,
-            status="active",
-            period_start=now,
-            period_end=now,
-            auto_renew=True,
-        )
-        session.add(sub)
-    else:
-        if sub.plan_id == plan.id:
-            return {"status": "ok", "idempotent": True}
-        sub.plan_id = plan.id
-        sub.updated_at = now
-
-    session.add(
-        AuditLog(
-            tenant_id=tenant.id,
-            action="billing.plan_changed",
-            object_type="subscription",
-            object_id=sub.id,
-            user_id=getattr(access.user, "id", None) if access else None,
-            ip="api",
-            correlation_id=idempotency_key,
-            details={"plan_code": payload.plan_code},
-            resource_attrs={},
-            changed_fields={"plan_code": payload.plan_code},
-            actor_role_codes=[],
-            hash="",
-        )
-    )
-    await OutboxService(session).enqueue(
-        tenant_id=tenant.id,
-        event_type="PlanChanged",
-        payload={"tenant_id": tenant.id, "plan_code": payload.plan_code, "event_id": idempotency_key},
-        idempotency_key=f"plan-change:{tenant.id}:{idempotency_key}",
+    sub = await BillingService(session).switch_plan(
+        tenant,
+        payload.plan_code,
+        actor_user_id=getattr(access.user, "id", None) if access else None,
+        correlation_id=idempotency_key,
     )
     await session.commit()
-    return {"status": "ok", "plan_code": payload.plan_code}
+    return {"status": "ok", "subscription_id": sub.id, "plan_code": payload.plan_code}
+
+
+@router.post("/subscription/mark_past_due")
+async def mark_past_due(
+    payload: BillingStatusMutationRequest,
+    session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
+    access: OwnerAdminAccess = None,
+) -> dict[str, str]:
+    _ = access
+    sub = (await session.execute(select(BillingSubscription).where(BillingSubscription.tenant_id == tenant.id).order_by(BillingSubscription.created_at.desc()))).scalars().first()
+    if sub is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": "SUBSCRIPTION_NOT_FOUND", "message": "Subscription not found"})
+    sub.status = BillingSubscriptionStatus.PAST_DUE
+    sub.grace_until = datetime.now(tz=timezone.utc) + timedelta(days=payload.grace_days)
+    await session.commit()
+    return {"status": "ok"}
+
+
+@router.post("/subscription/mark_paid")
+async def mark_paid(session: SessionDep, tenant: Tenant = Depends(get_tenant_record), access: OwnerAdminAccess = None) -> dict[str, str]:
+    _ = access
+    sub = (await session.execute(select(BillingSubscription).where(BillingSubscription.tenant_id == tenant.id).order_by(BillingSubscription.created_at.desc()))).scalars().first()
+    if sub is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": "SUBSCRIPTION_NOT_FOUND", "message": "Subscription not found"})
+    sub.status = BillingSubscriptionStatus.ACTIVE
+    sub.grace_until = None
+    await session.commit()
+    return {"status": "ok"}
+
+
+@router.post("/subscription/suspend")
+async def suspend(session: SessionDep, tenant: Tenant = Depends(get_tenant_record), access: OwnerAdminAccess = None) -> dict[str, str]:
+    _ = access
+    sub = (await session.execute(select(BillingSubscription).where(BillingSubscription.tenant_id == tenant.id).order_by(BillingSubscription.created_at.desc()))).scalars().first()
+    if sub is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": "SUBSCRIPTION_NOT_FOUND", "message": "Subscription not found"})
+    sub.status = BillingSubscriptionStatus.SUSPENDED
+    await session.commit()
+    return {"status": "ok"}
+
+
+@router.post("/subscription/activate")
+async def activate(session: SessionDep, tenant: Tenant = Depends(get_tenant_record), access: OwnerAdminAccess = None) -> dict[str, str]:
+    _ = access
+    sub = (await session.execute(select(BillingSubscription).where(BillingSubscription.tenant_id == tenant.id).order_by(BillingSubscription.created_at.desc()))).scalars().first()
+    if sub is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": "SUBSCRIPTION_NOT_FOUND", "message": "Subscription not found"})
+    sub.status = BillingSubscriptionStatus.ACTIVE
+    await session.commit()
+    return {"status": "ok"}
 
 
 @router.get("/invoices", response_model=list[BillingInvoiceRead])
@@ -150,32 +186,3 @@ async def billing_invoices(
     _ = access
     items = await BillingService(session).list_invoices(tenant.id, period)
     return [BillingInvoiceRead.model_validate(item) for item in items]
-
-
-@router.post("/override")
-async def billing_override(
-    payload: BillingOverrideRequest,
-    session: SessionDep,
-    tenant: Tenant = Depends(get_tenant_record),
-    access: OwnerAdminAccess = None,
-    x_platform_admin: str | None = Header(default=None, alias="X-Platform-Admin"),
-) -> dict[str, str]:
-    _ = access
-    if x_platform_admin != "true":
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail={"code": "FORBIDDEN", "message": "platform admin required"})
-    override = (await session.execute(select(TenantLimitOverride).where(TenantLimitOverride.tenant_id == tenant.id))).scalars().first()
-    now = datetime.now(tz=timezone.utc)
-    if override is None:
-        override = TenantLimitOverride(
-            tenant_id=tenant.id,
-            limits=payload.limits,
-            features=payload.features,
-            effective_from=now,
-        )
-        session.add(override)
-    else:
-        override.limits = payload.limits
-        override.features = payload.features
-        override.effective_from = now
-    await session.commit()
-    return {"status": "ok"}
