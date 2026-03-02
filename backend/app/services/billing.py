@@ -78,13 +78,19 @@ class BillingService:
             return None
         now = datetime.now(tz=timezone.utc)
         if sub.status in {BillingSubscriptionStatus.SUSPENDED, BillingSubscriptionStatus.CANCELED}:
-            raise HTTPException(status.HTTP_402_PAYMENT_REQUIRED, detail={"code": "BILLING_BLOCKED", "type": "billing", "message": "Tenant subscription is suspended"})
+            raise HTTPException(
+                status.HTTP_402_PAYMENT_REQUIRED,
+                detail={"code": "TENANT_SUSPENDED", "type": "billing", "message": "Tenant subscription is suspended"},
+            )
         if sub.status is BillingSubscriptionStatus.PAST_DUE:
             if sub.grace_until is None or sub.grace_until < now:
                 sub.status = BillingSubscriptionStatus.SUSPENDED
                 if self.session is not None:
                     await self.session.flush()
-                raise HTTPException(status.HTTP_402_PAYMENT_REQUIRED, detail={"code": "BILLING_BLOCKED", "type": "billing", "message": "Grace period expired"})
+                raise HTTPException(
+                    status.HTTP_402_PAYMENT_REQUIRED,
+                    detail={"code": "TENANT_SUSPENDED", "type": "billing", "message": "Grace period expired"},
+                )
             raise HTTPException(status.HTTP_402_PAYMENT_REQUIRED, detail={"code": "TENANT_PAST_DUE", "type": "billing", "message": "Tenant payment past due"})
         return sub
 

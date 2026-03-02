@@ -77,15 +77,30 @@ async def billing_usage(
         usage = await service.ensure_usage_row(tenant.id, selected_period)
     else:
         usage = ctx.usage
+    usage_payload = {
+        "generations_count": int(usage.docs_generated or 0),
+        "edo_outgoing_count": int(usage.edo_outgoing or 0),
+        "active_workers_count": int(usage.active_workers or 0),
+        "s3_bytes_used": int(usage.s3_bytes_used or 0),
+    }
+    percentages: dict[str, float | None] = {}
+    for usage_key, limit_key in {
+        "generations_count": "max_generations_per_month",
+        "edo_outgoing_count": "edo_outgoing_per_month",
+        "active_workers_count": "max_users",
+        "s3_bytes_used": "max_s3_bytes",
+    }.items():
+        raw_limit = ctx.limits.get(limit_key)
+        if raw_limit in (None, 0):
+            percentages[usage_key] = None
+            continue
+        percentages[usage_key] = round((float(usage_payload[usage_key]) / float(raw_limit)) * 100, 2)
+
     return {
         "period": selected_period,
-        "usage": {
-            "generations_count": int(usage.docs_generated or 0),
-            "edo_outgoing_count": int(usage.edo_outgoing or 0),
-            "active_workers_count": int(usage.active_workers or 0),
-            "s3_bytes_used": int(usage.s3_bytes_used or 0),
-        },
+        "usage": usage_payload,
         "limits": ctx.limits,
+        "percentages": percentages,
     }
 
 
