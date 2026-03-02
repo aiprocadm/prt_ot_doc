@@ -4,6 +4,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.modules.files.storage import build_tenant_key
+from app.modules.files.service import compute_sha256_stream
 
 
 def test_build_tenant_key_is_tenant_scoped() -> None:
@@ -15,6 +16,11 @@ def test_build_tenant_key_is_tenant_scoped() -> None:
 def test_sha256_computation_matches_reference() -> None:
     payload = b"hello world"
     assert hashlib.sha256(payload).hexdigest() == "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+
+
+def test_sha256_streaming_matches_reference() -> None:
+    chunks = [b"hello ", b"world"]
+    assert compute_sha256_stream(chunks) == hashlib.sha256(b"hello world").hexdigest()
 
 
 @pytest.mark.asyncio
