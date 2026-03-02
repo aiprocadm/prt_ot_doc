@@ -2,9 +2,11 @@ import { apiClient } from "@/api/client";
 
 export type ApprovalTask = {
   id: string;
-  process_id: string;
+  process_id?: string;
+  instance_id?: string;
   status: string;
-  due_at: string | null;
+  due_at?: string | null;
+  deadline_at?: string | null;
 };
 
 export type ApprovalProcess = {
@@ -28,7 +30,7 @@ export const approvalsApi = {
     return data.items;
   },
   decideTask: async (taskId: string, decision: "approve" | "reject", comment?: string) => {
-    const { data } = await apiClient.post(`/v1/approvals/tasks/${taskId}:decide`, { decision, comment });
+    const { data } = await apiClient.post(`/v1/approvals/tasks/${taskId}/decision`, { decision, comment });
     return data;
   },
   delegateTask: async (taskId: string, to_user_id: string, reason?: string) => {

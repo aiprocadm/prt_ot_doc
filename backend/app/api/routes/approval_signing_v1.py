@@ -27,10 +27,14 @@ from app.models.models import (
     Tenant,
     User,
     UserRole,
+    WebhookEndpoint,
 )
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 from app.services.outbox import OutboxService
 from app.modules.approval.core import cond_matches, make_request_hash
+
+from app.models.job_engine import InboundWebhookDedup
+from app.modules.approval.webhook_utils import build_edo_status_dedup_key, build_webhook_signature
 
 router = APIRouter()
 
@@ -82,6 +86,21 @@ class EdoSendOut(BaseModel):
     id: str
     status: str
     external_id: str
+
+class ApprovalRouteIn(BaseModel):
+    code: str
+    name: str
+    conditions: dict[str, Any] = Field(default_factory=dict)
+    steps: list[dict[str, Any]] = Field(default_factory=list)
+    is_active: bool = True
+    priority: int = 0
+
+
+class WebhookSubscriptionIn(BaseModel):
+    event_type: str
+    url: str
+    secret: str
+
 
 
 async def _create_tasks(session: AsyncSession, process: ApprovalProcess, route: ApprovalRoute, step_no: int) -> None:
@@ -335,7 +354,7 @@ async def edo_get(envelope_id: str, session: AsyncSession = Depends(get_session)
 @router.post("/edo/webhooks/{provider}")
 async def edo_webhook(provider: str, payload: dict[str, Any], request: Request, x_signature: str | None = Header(default=None, alias="X-Signature"), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
     secret = str((tenant.settings or {}).get("edo_webhook_secret", "dev-secret"))
-    expected = hmac.new(secret.encode(), await request.body(), hashlib.sha256).hexdigest()
+    expected = build_webhook_signature(secret=secret, body=await request.body())
     if x_signature and not hmac.compare_digest(x_signature, expected):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid signature")
     external_id = payload.get("external_id")
@@ -420,10 +439,79 @@ async def edo_messages_v1(document_version_id: str | None = None, session: Async
 async def edo_webhook_status(payload: dict[str, Any], session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
     provider = str(payload.get("provider") or "stub")
     external_id = payload.get("external_id")
+    if not external_id:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "external_id is required")
+    status_value = str(payload.get("status", "failed"))
+    dedup_key = build_edo_status_dedup_key(external_id=external_id, status=status_value)
+    dedup = InboundWebhookDedup(
+        tenant_id=str(tenant.id),
+        source=f"edo_status:{provider}",
+        dedup_key=dedup_key,
+        payload_hash=hashlib.sha256(str(payload).encode("utf-8")).hexdigest(),
+        received_at=datetime.now(timezone.utc),
+    )
+    session.add(dedup)
+    try:
+        await session.flush()
+    except Exception:
+        await session.rollback()
+        return {"status": "duplicate"}
+
     env = (await session.execute(select(EdoEnvelope).where(EdoEnvelope.tenant_id == str(tenant.id), EdoEnvelope.provider == provider, EdoEnvelope.external_id == external_id))).scalar_one_or_none()
     if not env:
         raise HTTPException(404, "Envelope not found")
-    env.status = EdoEnvelopeStatus(payload.get("status", "failed"))
+    env.status = EdoEnvelopeStatus(status_value)
     env.last_event_at = datetime.now(timezone.utc)
     await OutboxService(session).enqueue(tenant_id=str(tenant.id), event_type="EdoStatusChanged", payload={"event_id": str(uuid4()), "tenant_id": str(tenant.id), "metadata": {"envelope_id": env.id, "status": env.status.value}})
     return {"status": "ok"}
+
+
+@router.get("/approvals/routes")
+async def approval_routes_v1(session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+    rows = (await session.execute(select(ApprovalRoute).where(ApprovalRoute.tenant_id == str(tenant.id)).order_by(ApprovalRoute.created_at.desc()))).scalars().all()
+    return {"items": [{"id": r.id, "code": r.code, "name": r.name, "conditions": r.conditions, "steps": r.steps, "is_active": r.is_active} for r in rows]}
+
+
+@router.post("/approvals/routes")
+async def approval_routes_create_v1(payload: ApprovalRouteIn, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+    row = ApprovalRoute(tenant_id=str(tenant.id), code=payload.code, name=payload.name, conditions=payload.conditions, steps=payload.steps, is_active=payload.is_active, priority=payload.priority, version=1)
+    session.add(row)
+    await session.flush()
+    return {"id": row.id, "code": row.code, "name": row.name}
+
+
+@router.patch("/approvals/routes/{route_id}")
+async def approval_routes_patch_v1(route_id: str, payload: ApprovalRouteIn, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+    row = await session.get(ApprovalRoute, route_id)
+    if not row or row.tenant_id != str(tenant.id):
+        raise HTTPException(404, "Route not found")
+    row.name = payload.name
+    row.conditions = payload.conditions
+    row.steps = payload.steps
+    row.is_active = payload.is_active
+    row.priority = payload.priority
+    row.version = int((row.version or 1) + 1)
+    return {"id": row.id, "code": row.code, "name": row.name, "version": row.version}
+
+
+@router.get("/webhooks")
+async def webhooks_v1(session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+    rows = (await session.execute(select(WebhookEndpoint).where(WebhookEndpoint.tenant_id == str(tenant.id)).order_by(WebhookEndpoint.created_at.desc()))).scalars().all()
+    return {"items": [{"id": r.id, "event_type": (r.subscribed_events or [None])[0], "url": r.url, "is_active": r.is_enabled} for r in rows]}
+
+
+@router.post("/webhooks")
+async def webhooks_create_v1(payload: WebhookSubscriptionIn, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+    row = WebhookEndpoint(tenant_id=str(tenant.id), name=f"{payload.event_type} subscription", url=payload.url, secret=payload.secret, is_enabled=True, subscribed_events=[payload.event_type])
+    session.add(row)
+    await session.flush()
+    return {"id": row.id, "event_type": payload.event_type, "url": row.url, "is_active": row.is_enabled}
+
+
+@router.patch("/webhooks/{webhook_id}/disable")
+async def webhooks_disable_v1(webhook_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+    row = await session.get(WebhookEndpoint, webhook_id)
+    if not row or row.tenant_id != str(tenant.id):
+        raise HTTPException(404, "Webhook not found")
+    row.is_enabled = False
+    return {"id": row.id, "is_active": row.is_enabled}
