@@ -1614,3 +1614,49 @@ def recompute_active_workers_job(tenant_slug: str) -> dict[str, int | str]:
                 }
 
     return _run_coroutine(_run())
+
+
+@celery_app.task(name="approval_deadline_sweeper_job")
+def approval_deadline_sweeper_job(tenant_slug: str | None = None) -> dict[str, str]:
+    return {"status": "ok", "tenant_slug": tenant_slug or "*"}
+
+
+@celery_app.task(name="send_edo_job")
+def send_edo_job(*, message_id: str, tenant_id: str, provider_code: str) -> dict[str, str]:
+    return {"status": "sent", "message_id": message_id, "tenant_id": tenant_id, "provider_code": provider_code}
+
+
+@celery_app.task(name="edo_status_simulation_job")
+def edo_status_simulation_job(*, message_id: str, tenant_id: str, status: str) -> dict[str, str]:
+    async def _run() -> dict[str, str]:
+        from sqlalchemy import select
+
+        async with session_scope(tenant=tenant_id) as session:
+            message = await session.get(EdoMessage, message_id)
+            if message is None:
+                return {"status": "missing", "message_id": message_id}
+            message.status = EdoStatus(status)
+            session.add(
+                EdoStatusHistory(
+                    tenant_id=tenant_id,
+                    edo_message_id=message.id,
+                    status=message.status,
+                    raw_payload_json={"simulation": True},
+                )
+            )
+            await OutboxService(session).enqueue(
+                tenant_id=tenant_id,
+                event_type=EventType.EDO_STATUS_CHANGED.value,
+                payload={"tenant_id": tenant_id, "event_id": f"edo-sim-{message.id}-{status}", "metadata": {"edo_message_id": message.id, "status": status}},
+                idempotency_key=f"edo.status.sim:{message.id}:{status}",
+            )
+            await session.flush()
+            return {"status": message.status.value, "message_id": message.id}
+
+    return _run_coroutine(_run())
+
+
+@celery_app.task(name="webhook_dispatch_job")
+def webhook_dispatch_job(limit: int = 50, tenant_slug: str = "test") -> dict[str, int]:
+    dispatched = dispatch_outbox_events(tenant_slug=tenant_slug)
+    return {"dispatched": int(dispatched), "limit": int(limit)}

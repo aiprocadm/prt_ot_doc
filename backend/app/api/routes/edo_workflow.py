@@ -39,7 +39,7 @@ from app.models.models import IdempotencyStatus
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 from app.services.billing import BillingService
 from app.services.outbox import OutboxService
-from app.tasks import process_inbound_webhook
+from app.tasks import edo_status_simulation_job, process_inbound_webhook, send_edo_job
 
 router = APIRouter()
 SessionDep = Depends(get_session)
@@ -109,6 +109,23 @@ class SignatureCreate(BaseModel):
 class EdoSendRequest(BaseModel):
     document_version_id: str
     provider_code: str = "mock"
+    recipient: str | None = None
+    operator_code: str | None = None
+
+    def resolved_provider(self) -> str:
+        return self.operator_code or self.provider_code
+
+
+class SignatureRequestIn(BaseModel):
+    document_version_id: str
+    kind: SignatureType = SignatureType.INTERNAL
+
+
+class SignatureSubmitIn(BaseModel):
+    document_version_id: str
+    kind: SignatureType = SignatureType.INTERNAL
+    signed_blob: str
+    cert_info: dict[str, Any] = Field(default_factory=dict)
 
 
 class EdoWebhookPayload(BaseModel):
@@ -197,6 +214,27 @@ async def list_approval_routes(session: AsyncSession = SessionDep, tenant: Tenan
     return {"items": [{"id": row.id, "code": row.code, "name": row.name, "version": row.version} for row in rows]}
 
 
+@router.patch("/approvals/routes/{route_id}")
+async def update_approval_route(
+    route_id: str,
+    payload: ApprovalRouteCreate,
+    session: AsyncSession = SessionDep,
+    tenant: Tenant = TenantDep,
+    _: AccessContext = AccessDep,
+):
+    route = await session.get(ApprovalRoute, route_id)
+    if route is None or route.tenant_id != str(tenant.id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Approval route not found")
+    ApprovalRules.validate_rules(payload.rules_json)
+    route.code = payload.code
+    route.name = payload.name
+    route.rules_json = payload.rules_json
+    route.version = payload.version
+    route.is_active = payload.is_active
+    await session.flush()
+    return {"id": route.id, "version": route.version, "is_active": route.is_active}
+
+
 @router.post("/approvals/requests")
 async def start_approval_request(
     payload: ApprovalRequestCreate,
@@ -252,6 +290,49 @@ async def start_approval_request(
     if idem_service is not None:
         await idem_service.store_success(replay, status_code=200, body=body)
     return body
+
+
+@router.post("/approvals/start")
+async def start_approval_request_v1(
+    payload: ApprovalRequestCreate,
+    request: Request,
+    response: Response,
+    session: AsyncSession = SessionDep,
+    tenant: Tenant = TenantDep,
+    access: AccessContext = AccessDep,
+):
+    return await start_approval_request(payload, request, response, session, tenant, access)
+
+
+@router.get("/approvals/instances")
+async def list_approval_instances(
+    document_version_id: str | None = None,
+    session: AsyncSession = SessionDep,
+    tenant: Tenant = TenantDep,
+    _: AccessContext = AccessDep,
+):
+    stmt = select(ApprovalRequest).where(ApprovalRequest.tenant_id == str(tenant.id))
+    if document_version_id:
+        stmt = stmt.where(ApprovalRequest.document_version_id == document_version_id)
+    items = (await session.execute(stmt.order_by(ApprovalRequest.created_at.desc()))).scalars().all()
+    return {"items": [{"id": row.id, "status": row.status.value, "document_version_id": row.document_version_id} for row in items]}
+
+
+@router.get("/approvals/tasks")
+async def list_approval_tasks(
+    mine: int = 0,
+    status_filter: str | None = None,
+    session: AsyncSession = SessionDep,
+    tenant: Tenant = TenantDep,
+    access: AccessContext = AccessDep,
+):
+    stmt = select(ApprovalDecision).where(ApprovalDecision.tenant_id == str(tenant.id))
+    if mine:
+        stmt = stmt.where(ApprovalDecision.actor_user_id == access.user.id)
+    if status_filter:
+        stmt = stmt.where(ApprovalDecision.decision == ApprovalDecisionType(status_filter))
+    items = (await session.execute(stmt.order_by(ApprovalDecision.created_at.desc()))).scalars().all()
+    return {"items": [{"id": row.id, "request_id": row.request_id, "decision": row.decision.value} for row in items]}
 
 
 @router.post("/approvals/requests/{request_id}/decide")
@@ -355,6 +436,58 @@ async def create_signature(
     return {"id": signature.id, "status": signature.status.value, "receipts_s3_key": signature.receipts_s3_key}
 
 
+@router.post("/sign/request")
+async def sign_request(
+    payload: SignatureRequestIn,
+    session: AsyncSession = SessionDep,
+    tenant: Tenant = TenantDep,
+    access: AccessContext = AccessDep,
+):
+    return await create_signature(SignatureCreate(document_version_id=payload.document_version_id, type=payload.kind), session, tenant, access)
+
+
+@router.post("/sign/submit")
+async def sign_submit(
+    payload: SignatureSubmitIn,
+    session: AsyncSession = SessionDep,
+    tenant: Tenant = TenantDep,
+    access: AccessContext = AccessDep,
+):
+    signature = Signature(
+        tenant_id=str(tenant.id),
+        document_version_id=payload.document_version_id,
+        type=payload.kind,
+        status=SignatureStatus.SIGNED,
+        signer_user_id=access.user.id,
+        cert_info_json=payload.cert_info,
+        signed_at=datetime.now(tz=timezone.utc),
+    )
+    session.add(signature)
+    await session.flush()
+    await OutboxService(session).enqueue(
+        tenant_id=str(tenant.id),
+        event_type=EventType.DOCUMENT_SIGNED.value,
+        payload={"tenant_id": str(tenant.id), "event_id": str(uuid4()), "document_version_id": payload.document_version_id, "status": signature.status.value},
+        idempotency_key=f"signature:submit:{signature.id}",
+    )
+    return {"id": signature.id, "status": signature.status.value}
+
+
+@router.get("/sign/status")
+async def sign_status(
+    document_version_id: str,
+    session: AsyncSession = SessionDep,
+    tenant: Tenant = TenantDep,
+    _: AccessContext = AccessDep,
+):
+    items = (
+        await session.execute(
+            select(Signature).where(Signature.tenant_id == str(tenant.id), Signature.document_version_id == document_version_id)
+        )
+    ).scalars().all()
+    return {"items": [{"id": row.id, "status": row.status.value, "kind": row.type.value} for row in items]}
+
+
 @router.get("/signatures")
 async def list_signatures(document_version_id: str | None = None, session: AsyncSession = SessionDep, tenant: Tenant = TenantDep, _: AccessContext = AccessDep):
     stmt = select(Signature).where(Signature.tenant_id == str(tenant.id))
@@ -384,19 +517,19 @@ async def send_to_edo(
         tenant_id=str(tenant.id),
         direction=EdoDirection.OUTGOING,
         document_version_id=payload.document_version_id,
-        provider_code=payload.provider_code,
+        provider_code=payload.resolved_provider(),
         status=EdoStatus.QUEUED,
         payload_json={"document_version_id": payload.document_version_id},
     )
     session.add(message)
     await session.flush()
-    message.external_id = f"{payload.provider_code}-{message.id}"
+    message.external_id = f"{payload.resolved_provider()}-{message.id}"
     message.status = EdoStatus.SENT
     history = EdoStatusHistory(
         tenant_id=str(tenant.id),
         edo_message_id=message.id,
         status=EdoStatus.SENT,
-        raw_payload_json={"provider": payload.provider_code},
+        raw_payload_json={"provider": payload.resolved_provider()},
     )
     session.add(history)
     await OutboxService(session).enqueue(
@@ -408,9 +541,36 @@ async def send_to_edo(
     )
     await BillingService(session).add_usage(tenant_id=str(tenant.id), edo_outgoing=1)
     body = {"id": message.id, "external_id": message.external_id, "status": message.status.value}
+    send_edo_job.delay(message_id=message.id, tenant_id=str(tenant.id), provider_code=payload.resolved_provider())
+    edo_status_simulation_job.delay(message_id=message.id, tenant_id=str(tenant.id), status="delivered")
+    edo_status_simulation_job.delay(message_id=message.id, tenant_id=str(tenant.id), status="accepted")
     if idem_service is not None:
         await idem_service.store_success(replay, status_code=200, body=body)
     return body
+
+
+@router.get("/edo/messages")
+async def edo_messages(
+    document_version_id: str | None = None,
+    session: AsyncSession = SessionDep,
+    tenant: Tenant = TenantDep,
+    _: AccessContext = AccessDep,
+):
+    stmt = select(EdoMessage).where(EdoMessage.tenant_id == str(tenant.id))
+    if document_version_id:
+        stmt = stmt.where(EdoMessage.document_version_id == document_version_id)
+    rows = (await session.execute(stmt.order_by(EdoMessage.created_at.desc()))).scalars().all()
+    return {"items": [{"id": row.id, "external_id": row.external_id, "status": row.status.value} for row in rows]}
+
+
+@router.post("/edo/webhook/status")
+async def edo_status_webhook_v1(
+    payload: EdoWebhookPayload,
+    request: Request,
+    session: AsyncSession = SessionDep,
+    tenant: Tenant = TenantDep,
+):
+    return await edo_webhook("stub", payload, request, session, tenant, None)
 
 
 @router.post("/edo/webhooks/{provider_code}")
