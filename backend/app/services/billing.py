@@ -20,6 +20,7 @@ from app.models.models import (
     TenantLimitOverride,
     User,
 )
+from app.models.job_engine import DocumentJob
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -77,13 +78,13 @@ class BillingService:
             return None
         now = datetime.now(tz=timezone.utc)
         if sub.status in {BillingSubscriptionStatus.SUSPENDED, BillingSubscriptionStatus.CANCELED}:
-            raise HTTPException(status.HTTP_402_PAYMENT_REQUIRED, detail={"code": "TENANT_SUSPENDED", "type": "billing", "message": "Tenant subscription is suspended"})
+            raise HTTPException(status.HTTP_402_PAYMENT_REQUIRED, detail={"code": "BILLING_BLOCKED", "type": "billing", "message": "Tenant subscription is suspended"})
         if sub.status is BillingSubscriptionStatus.PAST_DUE:
             if sub.grace_until is None or sub.grace_until < now:
                 sub.status = BillingSubscriptionStatus.SUSPENDED
                 if self.session is not None:
                     await self.session.flush()
-                raise HTTPException(status.HTTP_402_PAYMENT_REQUIRED, detail={"code": "TENANT_SUSPENDED", "type": "billing", "message": "Grace period expired"})
+                raise HTTPException(status.HTTP_402_PAYMENT_REQUIRED, detail={"code": "BILLING_BLOCKED", "type": "billing", "message": "Grace period expired"})
             raise HTTPException(status.HTTP_402_PAYMENT_REQUIRED, detail={"code": "TENANT_PAST_DUE", "type": "billing", "message": "Tenant payment past due"})
         return sub
 
@@ -105,13 +106,13 @@ class BillingService:
 
     async def _count_tenant_entities(self, tenant_id: str, action: str) -> int:
         count_stmt = None
-        if action == "templates.create":
+        if action in {"templates.create", "create_template"}:
             count_stmt = select(func.count(Template.id)).where(Template.tenant_id == tenant_id)
-        elif action == "users.create":
+        elif action in {"users.create", "create_user"}:
             count_stmt = select(func.count(User.id)).where(User.tenant_id == tenant_id, User.deleted_at.is_(None))
-        elif action in {"companies.create", "sites.create"}:
+        elif action in {"companies.create", "sites.create", "create_company"}:
             count_stmt = select(func.count(Company.id)).where(Company.tenant_id == tenant_id, Company.deleted_at.is_(None))
-        elif action == "integrations.enable":
+        elif action in {"integrations.enable", "enable_integration"}:
             from app.models.models import TenantIntegrationKey
 
             count_stmt = select(func.count(TenantIntegrationKey.id)).where(TenantIntegrationKey.tenant_id == tenant_id)
@@ -125,8 +126,10 @@ class BillingService:
         usage = ctx.usage or await self.ensure_usage_row(tenant.id)
         checks = {
             "templates.create": ("max_templates", None),
+            "create_template": ("max_templates", None),
             "start_generation_job": ("max_generations_per_month", "docs_generated"),
             "documents.generate": ("max_generations_per_month", "docs_generated"),
+            "create_user": ("max_users", None),
             "edo.send": ("edo_outgoing_per_month", "edo_outgoing"),
             "send_edo": ("edo_outgoing_per_month", "edo_outgoing"),
             "files.upload": ("max_s3_bytes", "s3_bytes_used"),
@@ -135,11 +138,30 @@ class BillingService:
             "create_company": ("max_companies", None),
             "sites.create": ("max_companies", None),
             "integrations.enable": ("max_integrations", None),
+            "enable_integration": ("max_integrations", None),
+            "start_generation_job.concurrent": ("max_concurrent_jobs", None),
         }
         limit_key, usage_field = checks.get(action, (None, None))
         if not limit_key:
             return
+
+        if action in {"edo.send", "send_edo"} and not bool(ctx.features.get("edo", True)):
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "FEATURE_DISABLED",
+                    "type": "billing",
+                    "message": "Feature unavailable on current plan",
+                    "details": {"action": action, "feature": "edo"},
+                },
+            )
+
         raw_limit = ctx.limits.get(limit_key)
+        if raw_limit in (None, 0):
+            if limit_key == "max_templates":
+                raw_limit = ctx.limits.get("templates_max")
+            elif limit_key == "max_generations_per_month":
+                raw_limit = ctx.limits.get("generations_per_month")
         if raw_limit in (None, 0):
             return
         limit = int(raw_limit)
@@ -147,8 +169,21 @@ class BillingService:
             used = int(Decimal(getattr(usage, usage_field) or 0)) + int(meta.get("delta_bytes") or 0)
         elif usage_field:
             used = int(getattr(usage, usage_field) or 0) + int(meta.get("delta") or 1)
+        elif action == "start_generation_job.concurrent":
+            used = int(
+                (
+                    await self.session.execute(
+                        select(func.count(DocumentJob.id)).where(
+                            DocumentJob.tenant_id == tenant.id,
+                            DocumentJob.status.in_(["queued", "running"]),
+                        )
+                    )
+                ).scalar_one()
+                or 0
+            ) + int(meta.get("delta") or 1)
         else:
             used = await self._count_tenant_entities(tenant.id, action) + int(meta.get("delta") or 1)
+
         if used > limit:
             raise HTTPException(
                 status.HTTP_429_TOO_MANY_REQUESTS,
@@ -278,6 +313,7 @@ class BillingService:
     @staticmethod
     def compute_remaining(limits: dict[str, Any], usage: BillingUsageCounter | None) -> dict[str, int | None]:
         usage = usage or BillingUsageCounter(tenant_id="", period_yyyymm=current_period_yyyymm())
+        generation_limit = limits.get("max_generations_per_month", limits.get("generations_per_month"))
         fields = {
             "max_generations_per_month": int(usage.docs_generated or 0),
             "edo_outgoing_per_month": int(usage.edo_outgoing or 0),
@@ -285,10 +321,15 @@ class BillingService:
         }
         out: dict[str, int | None] = {}
         for key, used in fields.items():
-            if limits.get(key) is None:
+            limit = limits.get(key)
+            if key == "max_generations_per_month":
+                limit = generation_limit
+            if limit is None:
                 out[key] = None
             else:
-                out[key] = max(int(limits[key]) - used, 0)
+                out[key] = max(int(limit) - used, 0)
+        if generation_limit is not None:
+            out["generations_per_month"] = out["max_generations_per_month"]
         return out
 
     async def list_invoices(self, tenant_id: str, period_yyyymm: int | None = None) -> list[BillingInvoice]:
