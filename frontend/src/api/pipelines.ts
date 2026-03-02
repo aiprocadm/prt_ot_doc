@@ -36,54 +36,50 @@ export type PipelineRun = {
 };
 
 export const listPipelineRuns = async (params?: Record<string, string>) => {
-  const response = await apiClient.get<{ items: Array<{ id: string; status: WizardPipelineStatus; profile_id?: string | null; created_by?: string | null; correlation_id?: string | null }> }>("/v1/jobs", { params });
-  return response.data.items.map((item) => ({
-    run_id: item.id,
+  const response = await apiClient.get<Array<{ run_id: string; status: WizardPipelineStatus; profile_id?: string | null; created_by?: string | null; correlation_id?: string | null; step_runs?: PipelineStepRun[] }>>("/v1/pipelines/runs", { params });
+  return response.data.map((item) => ({
+    run_id: item.run_id,
     status: item.status,
     profile_id: item.profile_id,
     created_by: item.created_by,
     correlation_id: item.correlation_id,
-    step_runs: []
+    step_runs: item.step_runs ?? []
   })) as PipelineRun[];
 };
 
 export const getPipelineRun = async (runId: string) => {
-  const response = await apiClient.get<{ job: { id: string; status: WizardPipelineStatus; profile_id?: string | null; created_by?: string | null; correlation_id?: string | null }; steps: Array<{ code: string; status: WizardPipelineStatus; attempt: number; started_at?: string | null; ended_at?: string | null; error_code?: string | null; error_payload?: Record<string, unknown> | null }>; logs: PipelineLog[]; result?: { artifacts?: Record<string, unknown> } | null }>(`/v1/jobs/${runId}`);
+  const response = await apiClient.get<PipelineRun>(`/v1/pipelines/runs/${runId}`);
   const d = response.data;
   return {
-    run_id: d.job.id,
-    status: d.job.status,
-    profile_id: d.job.profile_id,
-    created_by: d.job.created_by,
-    correlation_id: d.job.correlation_id,
-    step_runs: d.steps.map((s) => ({
-      step_run_id: `${d.job.id}:${s.code}`,
-      run_id: d.job.id,
-      step_code: s.code,
-      status: s.status,
-      attempt: s.attempt,
-      started_at: s.started_at,
-      ended_at: s.ended_at,
-      error_code: s.error_code,
-      error_payload: s.error_payload
-    })),
+    run_id: d.run_id,
+    status: d.status,
+    profile_id: d.profile_id,
+    created_by: d.created_by,
+    correlation_id: d.correlation_id,
+    inputs_json: d.inputs_json,
+    outputs_json: d.outputs_json,
+    step_runs: d.step_runs,
     logs: d.logs,
-    artifacts: d.result?.artifacts
+    artifacts: d.artifacts
   } as PipelineRun;
 };
 
 export const retryPipelineRun = async (runId: string) => {
-  await apiClient.post(`/v1/jobs/${runId}:retry`, { retry_failed_only: true });
+  await apiClient.post(`/v1/pipelines/runs/${runId}:retry`);
   return getPipelineRun(runId);
 };
 
 export const cancelPipelineRun = async (runId: string) => {
-  await apiClient.post(`/v1/jobs/${runId}:cancel`);
+  await apiClient.post(`/v1/pipelines/runs/${runId}:cancel`);
   return getPipelineRun(runId);
 };
 
 export const retryPipelineStepRun = async (runId: string, stepRunId: string) => {
   const stepId = stepRunId.includes(":") ? stepRunId.split(":").slice(1).join(":") : stepRunId;
-  await apiClient.post(`/v1/jobs/${runId}/steps/${stepId}:rerun`);
+  await apiClient.post(`/v1/pipelines/runs/${runId}/steps/${stepId}:retry`);
   return getPipelineRun(runId);
+};
+
+export const bulkActionPipelineRuns = async (runIds: string[], action: "retry" | "cancel") => {
+  await apiClient.post(`/v1/pipelines/runs:bulk?action=${action}`, runIds);
 };
