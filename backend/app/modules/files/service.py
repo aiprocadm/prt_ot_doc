@@ -31,6 +31,7 @@ from app.modules.files.models import (
     FileTextIndex,
     FileContentIndex,
     FileContentIndexStatus,
+    FileScanResult,
     FileVersion,
     FileVersionStatus,
     TextIndexStatus,
@@ -121,7 +122,7 @@ class FileService:
         if lower_name.endswith((".docm", ".xlsm")):
             raise HTTPException(status_code=400, detail="macro_enabled_documents_are_forbidden")
         object_id = str(uuid4())
-        object_key = f"uploads/{datetime.now(timezone.utc):%Y/%m/%d}/{object_id}/{_safe_filename(filename)}"
+        object_key = f"tenants/{self.tenant_id}/uploads/{datetime.now(timezone.utc):%Y/%m/%d}/{object_id}/{_safe_filename(filename)}"
         record = FileRecord(
             id=object_id,
             tenant_id=self.tenant_id,
@@ -190,11 +191,23 @@ class FileService:
             record.status = FileStatus.quarantined.value
             record.av_result_json = {"status": "infected", "signature": verdict.signature}
         else:
-            record.status = FileStatus.clean.value
+            record.status = FileStatus.ready.value
             record.av_result_json = {"status": "clean"}
         record.av_vendor = "clamav"
+
+        self.session.add(
+            FileScanResult(
+                tenant_id=self.tenant_id,
+                file_id=record.id,
+                engine="clamav",
+                status="infected" if verdict.status == "infected" else "clean",
+                signature=verdict.signature,
+                scanned_at=datetime.now(timezone.utc),
+                raw={"status": verdict.status},
+            )
+        )
         await self.session.flush()
-        if record.status == FileStatus.clean.value:
+        if record.status in {FileStatus.clean.value, FileStatus.ready.value}:
             try:
                 index_file_content_job.apply_async(kwargs={"tenant_slug": self.session.info.get("tenant"), "file_id": record.id}, countdown=0)
             except Exception:
@@ -205,8 +218,8 @@ class FileService:
         record = await self.session.get(FileRecord, file_id)
         if record is None or record.tenant_id != self.tenant_id:
             raise HTTPException(status_code=404, detail="file_not_found")
-        if record.status != FileStatus.clean.value:
-            raise HTTPException(status_code=409, detail="file_not_clean")
+        if record.status not in {FileStatus.clean.value, FileStatus.ready.value}:
+            raise HTTPException(status_code=409, detail="file_not_ready")
         url = storage.presign_get(key=record.object_key, expires_in=ttl)
         self.session.add(
             FileDownloadLog(
@@ -434,7 +447,7 @@ async def index_file_version(session: AsyncSession, *, tenant_id: str, version_i
 
 async def index_file_record(session: AsyncSession, *, tenant_id: str, file_id: str) -> None:
     record = await session.get(FileRecord, file_id)
-    if record is None or record.tenant_id != tenant_id or record.status != FileStatus.clean.value:
+    if record is None or record.tenant_id != tenant_id or record.status not in {FileStatus.clean.value, FileStatus.ready.value}:
         return
 
     file_hash = record.sha256

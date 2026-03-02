@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status, File, Form, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -109,7 +109,7 @@ async def download_url(file_id: str, version_id: str, request: Request, session:
     return DownloadURLResponse(url=url, expires_in=600)
 
 
-@router.post(":upload-session", response_model=UploadSessionResponse)
+@router.post("/presign-upload", response_model=UploadSessionResponse)
 async def create_upload_session_v2(
     payload: UploadSessionRequest,
     session: AsyncSession = Depends(get_session),
@@ -130,12 +130,12 @@ async def create_upload_session_v2(
 @router.post("/{file_id}:finalize", response_model=FinalizeUploadResponse)
 @router.post("/{file_id}:complete", response_model=FinalizeUploadResponse)
 async def finalize_upload_v2(
-    file_id: str,
+    payload: UploadCompleteRequest,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
 ) -> FinalizeUploadResponse:
     svc = service.FileService(session=session, tenant_id=str(tenant.id))
-    file_record = await svc.finalize_upload(file_id=file_id)
+    file_record = await svc.finalize_upload(file_id=payload.file_id)
     await BillingService(session).add_usage(tenant_id=str(tenant.id), s3_bytes_delta=int(file_record.size_bytes or 0))
     await session.commit()
     return FinalizeUploadResponse(file_id=file_record.id, status=file_record.status)
@@ -266,3 +266,46 @@ async def get_signed_url_v2(
     )
     await session.commit()
     return SignedUrlResponse(signed_url=url)
+
+
+@router.post("/upload", response_model=FinalizeUploadResponse)
+async def upload_multipart_v1(
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> FinalizeUploadResponse:
+    svc = service.FileService(session=session, tenant_id=str(tenant.id))
+    payload = await file.read()
+    filename = file.filename or "upload.bin"
+    content_type = file.content_type or "application/octet-stream"
+    file_record, _upload_url, _ = await svc.create_upload_session(filename=filename, content_type=content_type, size_bytes=len(payload), metadata_json={})
+    from app.domains.files import s3
+    s3.put_object(data=payload, mime=content_type, key=file_record.object_key)
+    file_record = await svc.finalize_upload(file_id=file_record.id)
+    await session.commit()
+    return FinalizeUploadResponse(file_id=file_record.id, status=file_record.status)
+
+
+@router.get("", response_model=list[FileDto])
+async def list_files_v1(
+    status: str | None = None,
+    query: str | None = None,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> list[FileDto]:
+    stmt = select(FileRecord).where(FileRecord.tenant_id == str(tenant.id), FileRecord.deleted_at.is_(None))
+    if status:
+        stmt = stmt.where(FileRecord.status == status)
+    if query:
+        stmt = stmt.where(FileRecord.object_key.ilike(f"%{query}%"))
+    rows = (await session.execute(stmt.order_by(FileRecord.updated_at.desc()).limit(200))).scalars().all()
+    return [FileDto(
+        id=r.id,bucket=r.bucket,object_key=r.object_key,content_type=r.content_type,size_bytes=r.size_bytes,sha256=r.sha256,status=r.status,av_vendor=r.av_vendor,av_result_json=r.av_result_json or {},metadata_json=r.metadata_json or {},links=[],content_index=None
+    ) for r in rows]
+
+@router.delete("/{file_id}")
+async def delete_file_v1(file_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict[str, str]:
+    svc = service.FileService(session=session, tenant_id=str(tenant.id))
+    await svc.delete_file(file_id=file_id)
+    await session.commit()
+    return {"status":"deleted"}

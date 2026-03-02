@@ -114,3 +114,17 @@ async def archive_files(
         for record in records[:limit]
     ]
     return {"items": items, "next_cursor": str(offset + limit) if has_more else None, "correlation_id": str(uuid4())}
+
+
+@router.get("/search/files")
+async def search_files(
+    q: str = Query(default=""),
+    limit: int = Query(default=50, ge=1, le=200),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> dict:
+    stmt = select(FileRecord).where(FileRecord.tenant_id == str(tenant.id), FileRecord.deleted_at.is_(None))
+    if q:
+        stmt = stmt.where(FileRecord.object_key.ilike(f"%{q}%"))
+    rows = (await session.execute(stmt.order_by(FileRecord.updated_at.desc()).limit(limit))).scalars().all()
+    return {"items": [{"id":r.id,"filename":(r.original_filename or Path(r.object_key).name),"status":r.status,"updated_at":r.updated_at} for r in rows]}
