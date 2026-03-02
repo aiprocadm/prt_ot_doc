@@ -1,17 +1,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
 from app.models.models import (
-    Company,
+    AuditLog,
+    BillingEvent,
+    BillingEventType,
     BillingInvoice,
     BillingPlan,
     BillingSubscription,
     BillingSubscriptionStatus,
     BillingUsageCounter,
+    Company,
     Template,
     Tenant,
     TenantLimitOverride,
@@ -50,9 +53,7 @@ class BillingService:
         ).scalars().first()
         plan = await self.session.get(BillingPlan, subscription.plan_id) if subscription else None
         override = (
-            await self.session.execute(
-                select(TenantLimitOverride).where(TenantLimitOverride.tenant_id == tenant.id)
-            )
+            await self.session.execute(select(TenantLimitOverride).where(TenantLimitOverride.tenant_id == tenant.id))
         ).scalars().first()
         usage = (
             await self.session.execute(
@@ -68,6 +69,23 @@ class BillingService:
             limits.update(override.limits or {})
             features.update(override.features or {})
         return BillingContext(plan=plan, subscription=subscription, usage=usage, limits=limits, features=features)
+
+    async def ensure_active(self, tenant: Tenant) -> BillingSubscription | None:
+        ctx = await self.get_context(tenant)
+        sub = ctx.subscription
+        if sub is None:
+            return None
+        now = datetime.now(tz=timezone.utc)
+        if sub.status in {BillingSubscriptionStatus.SUSPENDED, BillingSubscriptionStatus.CANCELED}:
+            raise HTTPException(status.HTTP_402_PAYMENT_REQUIRED, detail={"code": "TENANT_SUSPENDED", "type": "billing", "message": "Tenant subscription is suspended"})
+        if sub.status is BillingSubscriptionStatus.PAST_DUE:
+            if sub.grace_until is None or sub.grace_until < now:
+                sub.status = BillingSubscriptionStatus.SUSPENDED
+                if self.session is not None:
+                    await self.session.flush()
+                raise HTTPException(status.HTTP_402_PAYMENT_REQUIRED, detail={"code": "TENANT_SUSPENDED", "type": "billing", "message": "Grace period expired"})
+            raise HTTPException(status.HTTP_402_PAYMENT_REQUIRED, detail={"code": "TENANT_PAST_DUE", "type": "billing", "message": "Tenant payment past due"})
+        return sub
 
     async def ensure_usage_row(self, tenant_id: str, period_yyyymm: int | None = None) -> BillingUsageCounter:
         period = period_yyyymm or current_period_yyyymm()
@@ -91,39 +109,32 @@ class BillingService:
             count_stmt = select(func.count(Template.id)).where(Template.tenant_id == tenant_id)
         elif action == "users.create":
             count_stmt = select(func.count(User.id)).where(User.tenant_id == tenant_id, User.deleted_at.is_(None))
-        elif action == "contractors.create":
+        elif action in {"companies.create", "sites.create"}:
             count_stmt = select(func.count(Company.id)).where(Company.tenant_id == tenant_id, Company.deleted_at.is_(None))
+        elif action == "integrations.enable":
+            from app.models.models import TenantIntegrationKey
+
+            count_stmt = select(func.count(TenantIntegrationKey.id)).where(TenantIntegrationKey.tenant_id == tenant_id)
         if count_stmt is None:
             return 0
         return int((await self.session.execute(count_stmt)).scalar_one() or 0)
 
-    async def assert_allowed(self, tenant: Tenant, action: str, meta: dict[str, Any] | None = None) -> None:
+    async def check_quota(self, tenant: Tenant, action: str, meta: dict[str, Any] | None = None) -> None:
         meta = meta or {}
         ctx = await self.get_context(tenant)
-        now = datetime.now(tz=timezone.utc)
-        sub = ctx.subscription
-        if sub is not None:
-            blocked = sub.status in {BillingSubscriptionStatus.SUSPENDED, BillingSubscriptionStatus.CANCELED}
-            overdue = sub.status is BillingSubscriptionStatus.PAST_DUE and (sub.grace_until is None or sub.grace_until < now)
-            if blocked or overdue:
-                raise HTTPException(status.HTTP_402_PAYMENT_REQUIRED, detail={"code": "BILLING_BLOCKED", "message": "Tenant billing is blocked"})
-
-        feature_map = {
-            "edo.send": "edo",
-            "integrations.use": "integrations_1c",
-        }
-        feature_key = feature_map.get(action)
-        if feature_key is not None and ctx.features.get(feature_key) is False:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, detail={"code": "FEATURE_DISABLED", "message": "Feature is disabled", "meta": {"feature": feature_key}})
-
         usage = ctx.usage or await self.ensure_usage_row(tenant.id)
         checks = {
-            "templates.create": ("templates_max", None),
-            "documents.generate": ("generations_per_month", "docs_generated"),
+            "templates.create": ("max_templates", None),
+            "start_generation_job": ("max_generations_per_month", "docs_generated"),
+            "documents.generate": ("max_generations_per_month", "docs_generated"),
             "edo.send": ("edo_outgoing_per_month", "edo_outgoing"),
-            "files.upload": ("s3_gb_max", "s3_bytes_used"),
-            "users.create": ("users_max", None),
-            "contractors.create": ("contractors_max", None),
+            "send_edo": ("edo_outgoing_per_month", "edo_outgoing"),
+            "files.upload": ("max_s3_bytes", "s3_bytes_used"),
+            "upload_file": ("max_s3_bytes", "s3_bytes_used"),
+            "users.create": ("max_users", None),
+            "create_company": ("max_companies", None),
+            "sites.create": ("max_companies", None),
+            "integrations.enable": ("max_integrations", None),
         }
         limit_key, usage_field = checks.get(action, (None, None))
         if not limit_key:
@@ -133,14 +144,59 @@ class BillingService:
             return
         limit = int(raw_limit)
         if usage_field == "s3_bytes_used":
-            limit = limit * 1024 * 1024 * 1024
             used = int(Decimal(getattr(usage, usage_field) or 0)) + int(meta.get("delta_bytes") or 0)
         elif usage_field:
             used = int(getattr(usage, usage_field) or 0) + int(meta.get("delta") or 1)
         else:
             used = await self._count_tenant_entities(tenant.id, action) + int(meta.get("delta") or 1)
         if used > limit:
-            raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, detail={"code": "QUOTA_EXCEEDED", "message": "Quota exceeded", "meta": {"action": action, "limit": limit, "used": used}})
+            raise HTTPException(
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                detail={
+                    "code": "QUOTA_EXCEEDED",
+                    "type": "quota",
+                    "message": "Quota exceeded",
+                    "details": {"action": action, "limit": limit, "current": used},
+                },
+            )
+
+    async def assert_allowed(self, tenant: Tenant, action: str, meta: dict[str, Any] | None = None) -> None:
+        await self.ensure_active(tenant)
+        await self.check_quota(tenant, action, meta)
+
+    async def add_billing_event(
+        self,
+        *,
+        tenant_id: str,
+        event_type: BillingEventType,
+        ref_type: str | None,
+        ref_id: str | None,
+        payload: dict[str, Any] | None = None,
+    ) -> bool:
+        if ref_id:
+            exists = (
+                await self.session.execute(
+                    select(BillingEvent).where(
+                        BillingEvent.tenant_id == tenant_id,
+                        BillingEvent.type == event_type,
+                        BillingEvent.ref_type == ref_type,
+                        BillingEvent.ref_id == ref_id,
+                    )
+                )
+            ).scalars().first()
+            if exists is not None:
+                return False
+        self.session.add(
+            BillingEvent(
+                tenant_id=tenant_id,
+                type=event_type,
+                ref_type=ref_type,
+                ref_id=ref_id,
+                payload=payload or {},
+            )
+        )
+        await self.session.flush()
+        return True
 
     async def add_usage(
         self,
@@ -150,22 +206,82 @@ class BillingService:
         edo_outgoing: int = 0,
         s3_bytes_delta: int = 0,
         period_yyyymm: int | None = None,
+        ref_id: str | None = None,
     ) -> BillingUsageCounter:
         usage = await self.ensure_usage_row(tenant_id=tenant_id, period_yyyymm=period_yyyymm)
-        usage.docs_generated = int(usage.docs_generated or 0) + int(docs_generated)
-        usage.edo_outgoing = int(usage.edo_outgoing or 0) + int(edo_outgoing)
+        if docs_generated:
+            recorded = await self.add_billing_event(
+                tenant_id=tenant_id,
+                event_type=BillingEventType.GENERATION_COMPLETED,
+                ref_type="document_job",
+                ref_id=ref_id,
+                payload={"count": docs_generated},
+            )
+            if recorded:
+                usage.docs_generated = int(usage.docs_generated or 0) + int(docs_generated)
+        if edo_outgoing:
+            recorded = await self.add_billing_event(
+                tenant_id=tenant_id,
+                event_type=BillingEventType.EDO_SENT,
+                ref_type="edo_message",
+                ref_id=ref_id,
+                payload={"count": edo_outgoing},
+            )
+            if recorded:
+                usage.edo_outgoing = int(usage.edo_outgoing or 0) + int(edo_outgoing)
         updated_bytes = int(usage.s3_bytes_used or 0) + int(s3_bytes_delta)
         usage.s3_bytes_used = max(updated_bytes, 0)
         await self.session.flush()
         return usage
 
+    async def switch_plan(self, tenant: Tenant, plan_code: str, *, actor_user_id: str | None, correlation_id: str) -> BillingSubscription:
+        plan = (await self.session.execute(select(BillingPlan).where(BillingPlan.code == plan_code))).scalars().first()
+        if plan is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": "PLAN_NOT_FOUND", "message": "Plan not found"})
+        sub = (
+            await self.session.execute(select(BillingSubscription).where(BillingSubscription.tenant_id == tenant.id).order_by(BillingSubscription.created_at.desc()))
+        ).scalars().first()
+        now = datetime.now(tz=timezone.utc)
+        if sub is None:
+            sub = BillingSubscription(
+                tenant_id=tenant.id,
+                plan_id=plan.id,
+                status=BillingSubscriptionStatus.ACTIVE,
+                period_start=now,
+                period_end=now + timedelta(days=30),
+                auto_renew=True,
+            )
+            self.session.add(sub)
+        else:
+            sub.plan_id = plan.id
+            sub.updated_at = now
+        await self.add_billing_event(tenant_id=tenant.id, event_type=BillingEventType.PLAN_CHANGED, ref_type="subscription", ref_id=sub.id, payload={"plan_code": plan_code})
+        self.session.add(
+            AuditLog(
+                tenant_id=tenant.id,
+                action="billing.plan_changed",
+                object_type="subscription",
+                object_id=sub.id,
+                user_id=actor_user_id,
+                ip="api",
+                correlation_id=correlation_id,
+                details={"plan_code": plan_code},
+                resource_attrs={},
+                changed_fields={"plan_code": plan_code},
+                actor_role_codes=[],
+                hash="",
+            )
+        )
+        await self.session.flush()
+        return sub
+
     @staticmethod
     def compute_remaining(limits: dict[str, Any], usage: BillingUsageCounter | None) -> dict[str, int | None]:
         usage = usage or BillingUsageCounter(tenant_id="", period_yyyymm=current_period_yyyymm())
         fields = {
-            "generations_per_month": int(usage.docs_generated or 0),
+            "max_generations_per_month": int(usage.docs_generated or 0),
             "edo_outgoing_per_month": int(usage.edo_outgoing or 0),
-            "s3_gb_max": int((Decimal(usage.s3_bytes_used or 0) / Decimal(1024 ** 3)).quantize(Decimal("1"))),
+            "max_s3_bytes": int(usage.s3_bytes_used or 0),
         }
         out: dict[str, int | None] = {}
         for key, used in fields.items():

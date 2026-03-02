@@ -40,3 +40,7 @@ class BillingPlanRead(BaseModel):
     name: str
     limits: dict[str, Any]
     features: dict[str, Any]
+
+
+class BillingStatusMutationRequest(BaseModel):
+    grace_days: int = 7

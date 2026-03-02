@@ -98,6 +98,9 @@ __all__ = [
     "BillingUsageCounter",
     "BillingInvoice",
     "BillingInvoiceStatus",
+    "BillingEvent",
+    "BillingEventType",
+    "TenantRateLimit",
     "TenantLimitOverride",
     "Template",
     "TemplateVersion",
@@ -277,6 +280,8 @@ class BillingSubscription(SharedModel, SoftDeleteMixin):
     auto_renew: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     grace_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     external_provider: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    external_customer_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
     __table_args__ = (
         Index("ix_subscriptions_tenant_status", "tenant_id", "status"),
@@ -317,6 +322,44 @@ class BillingInvoice(SharedModel):
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
 
     __table_args__ = (Index("ix_invoices_tenant_status", "tenant_id", "status"),)
+
+
+class BillingEventType(str, enum.Enum):
+    GENERATION_COMPLETED = "generation_completed"
+    EDO_SENT = "edo_sent"
+    FILE_UPLOADED = "file_uploaded"
+    WORKER_ACTIVATED = "worker_activated"
+    PLAN_CHANGED = "plan_changed"
+    PAYMENT_FAILED = "payment_failed"
+    PAYMENT_SUCCEEDED = "payment_succeeded"
+
+
+class BillingEvent(SharedModel):
+    __tablename__ = "billing_events"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=False, index=True)
+    type: Mapped[BillingEventType] = mapped_column(Enum(BillingEventType), nullable=False, index=True)
+    ref_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    ref_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    amount: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_billing_events_tenant_created", "tenant_id", "created_at"),
+        Index("ix_billing_events_type", "type"),
+        UniqueConstraint("tenant_id", "type", "ref_type", "ref_id", name="uq_billing_event_dedup"),
+    )
+
+
+class TenantRateLimit(SharedModel):
+    __tablename__ = "tenant_rate_limits"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=False, unique=True)
+    concurrency_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    burst: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    rps: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
+    queues: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
 
 
 class TenantLimitOverride(SharedModel):
