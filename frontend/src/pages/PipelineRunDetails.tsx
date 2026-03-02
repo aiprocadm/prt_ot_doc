@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 
 import { cancelPipelineRun, getPipelineRun, retryPipelineRun, retryPipelineStepRun, type PipelineRun } from "@/api/pipelines";
@@ -18,13 +18,60 @@ const PipelineRunDetails = () => {
     load().catch(() => setRun(null));
   }, [id]);
 
+  const sseRef = useRef<EventSource | null>(null);
+
   useEffect(() => {
-    if (!run || !["queued", "running"].includes(run.status)) return;
-    const t = setInterval(() => {
-      load().catch(() => undefined);
-    }, 3000);
-    return () => clearInterval(t);
-  }, [run]);
+    if (!id) return;
+    if (sseRef.current) {
+      sseRef.current.close();
+      sseRef.current = null;
+    }
+
+    let pollTimer: number | null = null;
+    const startPolling = () => {
+      if (pollTimer) return;
+      pollTimer = window.setInterval(() => {
+        load().catch(() => undefined);
+      }, 3000);
+    };
+
+    try {
+      const source = new EventSource(`/api/v1/pipelines/runs/${id}/events`, { withCredentials: true });
+      sseRef.current = source;
+      source.addEventListener("run.update", (event) => {
+        try {
+          const payload = JSON.parse((event as MessageEvent<string>).data) as PipelineRun;
+          setRun(payload);
+        } catch {
+          load().catch(() => undefined);
+        }
+      });
+      source.addEventListener("run.done", (event) => {
+        try {
+          const payload = JSON.parse((event as MessageEvent<string>).data) as PipelineRun;
+          setRun(payload);
+        } finally {
+          source.close();
+          sseRef.current = null;
+        }
+      });
+      source.onerror = () => {
+        source.close();
+        sseRef.current = null;
+        startPolling();
+      };
+    } catch {
+      startPolling();
+    }
+
+    return () => {
+      if (sseRef.current) {
+        sseRef.current.close();
+        sseRef.current = null;
+      }
+      if (pollTimer) window.clearInterval(pollTimer);
+    };
+  }, [id]);
 
   const failedStep = useMemo(() => run?.step_runs.find((s) => s.status === "failed"), [run]);
 
