@@ -26,3 +26,11 @@ Same key + same hash returns cached response, different hash returns 409.
 ## Logs
 `job_logs` keeps timeline entries with fields:
 `timestamp, level, message, step_name, meta_json`.
+
+
+## Low-code graph DSL (NEXT-49)
+- `graph.nodes[]`: `{id, type, config, retry, timeout_s, on_error, emit_events}`.
+- `graph.edges[]`: `{from, to, condition?}` with safe condition evaluator (`==`, `!=`, `in`, `and/or`, numeric compares).
+- `graph.inputs` / `graph.outputs`: runtime context contracts.
+- Reserved context keys (cannot be overridden by `inputs`): `tenant_id`, `correlation_id`, `job_id`, `run_id`, `artifacts`, `meta`.
+- Validator constraints: DAG only (no cycles), reachable terminal nodes, branch nodes require default edge (if conditional edges exist) and at least two outgoing edges, depth and node count limits.

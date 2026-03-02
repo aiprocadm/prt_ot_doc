@@ -19,6 +19,16 @@ const stringify = (data: unknown) => {
   return JSON.stringify(data, null, 2);
 };
 
+const extractArtifacts = (output: unknown): Array<{ key: string; value: string }> => {
+  if (!output || typeof output !== "object") return [];
+  const map = output as Record<string, unknown>;
+  const artifacts = map.artifacts;
+  if (!artifacts || typeof artifacts !== "object") return [];
+  return Object.entries(artifacts as Record<string, unknown>)
+    .filter(([, v]) => typeof v === "string" && v.length > 0)
+    .map(([key, value]) => ({ key, value: value as string }));
+};
+
 export const JobTimeline = ({ steps }: { steps: PipelineStepRun[] }) => (
   <div className="space-y-2">
     {steps.map((step, idx) => (
@@ -44,6 +54,16 @@ export const JobTimeline = ({ steps }: { steps: PipelineStepRun[] }) => (
         {step.error_payload ? <pre className="overflow-auto rounded bg-red-50 p-2 text-[11px] text-red-800">{stringify(step.error_payload)}</pre> : null}
         {(step as { input?: unknown }).input ? <pre className="overflow-auto rounded bg-slate-50 p-2 text-[11px]">{stringify((step as { input?: unknown }).input)}</pre> : null}
         {(step as { output?: unknown }).output ? <pre className="overflow-auto rounded bg-muted/40 p-2 text-[11px]">{stringify((step as { output?: unknown }).output)}</pre> : null}
+        {extractArtifacts((step as { output?: unknown }).output).length ? (
+          <div className="space-y-1 text-xs">
+            <div className="font-medium">Artifacts</div>
+            {extractArtifacts((step as { output?: unknown }).output).map((artifact) => (
+              <div key={`${step.step_run_id}-${artifact.key}`} className="text-muted-foreground">
+                {artifact.key}: <a className="text-blue-600 underline" href={artifact.value} target="_blank" rel="noreferrer">{artifact.value}</a>
+              </div>
+            ))}
+          </div>
+        ) : null}
       </div>
     ))}
   </div>
