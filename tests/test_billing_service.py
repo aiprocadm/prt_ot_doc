@@ -83,7 +83,7 @@ async def test_assert_allowed_blocks_past_due_after_grace() -> None:
     service = BillingService(_StubSession(tenant=tenant, plan=plan, sub=sub, usage=usage))
     with pytest.raises(HTTPException) as exc:
         await service.assert_allowed(tenant, "documents.generate")
-    assert exc.value.detail["code"] == "BILLING_BLOCKED"
+    assert exc.value.detail["code"] == "TENANT_SUSPENDED"
 
 
 def test_compute_remaining() -> None:
