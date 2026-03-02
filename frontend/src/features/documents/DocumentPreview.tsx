@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { ActionButton } from "@/components/permissions/ActionButton";
+import { releaseApi, type ReleaseStatus } from "@/api/release";
+import { approvalsApi } from "@/api/approvals";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PERMISSIONS } from "@/permissions/permissions";
@@ -14,6 +16,8 @@ import { downloadBlob } from "@/utils/download";
 export const DocumentPreview = ({ document }: { document: DocumentDto }) => {
   const { refreshStatus, download } = useDocumentsStore();
   const [current, setCurrent] = useState(document);
+  const [release, setRelease] = useState<ReleaseStatus>({ approval: "draft", signature: "pending", edo: "queued" });
+  const [myTaskId, setMyTaskId] = useState<string | null>(null);
   const { can } = useAbility();
   const resource = {
     status: current.status,
@@ -22,6 +26,11 @@ export const DocumentPreview = ({ document }: { document: DocumentDto }) => {
 
   useEffect(() => {
     setCurrent(document);
+    releaseApi.documentReleaseStatus(document.id).then(setRelease).catch(() => undefined);
+    approvalsApi.listMyTasks("pending").then((items) => {
+      const mine = items.find((it) => (it.instance_id || it.process_id));
+      setMyTaskId(mine?.id ?? null);
+    }).catch(() => undefined);
   }, [document]);
 
   const handleRefresh = async () => {
@@ -35,6 +44,27 @@ export const DocumentPreview = ({ document }: { document: DocumentDto }) => {
   const handleDownload = async () => {
     const blob = await download(document.id);
     downloadBlob(blob, `${document.name}.pdf`);
+  };
+
+
+  const handleQuickApprove = async () => {
+    if (!myTaskId) return;
+    await releaseApi.quickApprove(myTaskId, "mobile approve");
+    toast.success("Согласовано");
+    releaseApi.documentReleaseStatus(document.id).then(setRelease).catch(() => undefined);
+  };
+
+  const handleQuickReject = async () => {
+    if (!myTaskId) return;
+    await releaseApi.quickReject(myTaskId, "mobile reject");
+    toast.success("Отклонено");
+    releaseApi.documentReleaseStatus(document.id).then(setRelease).catch(() => undefined);
+  };
+
+  const handleQuickSign = async () => {
+    await releaseApi.quickSign(document.id);
+    toast.success("Подписано (stub)");
+    releaseApi.documentReleaseStatus(document.id).then(setRelease).catch(() => undefined);
   };
 
   return (
@@ -67,6 +97,16 @@ export const DocumentPreview = ({ document }: { document: DocumentDto }) => {
         </div>
       </CardHeader>
       <CardContent>
+        <div className="mb-4 grid gap-2 rounded-md border p-3 text-sm sm:grid-cols-3">
+          <div><span className="text-muted-foreground">Approval:</span> {release.approval}</div>
+          <div><span className="text-muted-foreground">Signature:</span> {release.signature}</div>
+          <div><span className="text-muted-foreground">EDO:</span> {release.edo}</div>
+        </div>
+        <div className="mb-4 flex flex-wrap gap-2">
+          <ActionButton permission={PERMISSIONS.DOCUMENT_SIGN} abilityResource={resource} variant="outline" onClick={handleQuickApprove}>Согласовать</ActionButton>
+          <ActionButton permission={PERMISSIONS.DOCUMENT_SIGN} abilityResource={resource} variant="outline" onClick={handleQuickReject}>Отклонить</ActionButton>
+          <ActionButton permission={PERMISSIONS.DOCUMENT_SIGN} abilityResource={resource} onClick={handleQuickSign}>Подписать (stub)</ActionButton>
+        </div>
         {!can(PERMISSIONS.DOCUMENT_SIGN, resource) && (
           <div className="mb-3 rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
             Режим только для чтения
