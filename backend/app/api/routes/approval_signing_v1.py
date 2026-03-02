@@ -44,6 +44,7 @@ class ApprovalStartIn(BaseModel):
 class DecideIn(BaseModel):
     decision: str
     comment: str | None = None
+    delegate_to_user_id: str | None = None
 
 
 class DelegateIn(BaseModel):
@@ -52,16 +53,28 @@ class DelegateIn(BaseModel):
 
 
 class SignRequestIn(BaseModel):
-    object_type: str
-    object_id: str
+    document_version_id: str | None = None
+    object_type: str = "document_version"
+    object_id: str | None = None
     provider: str = "stub"
+    kind: str | None = None
     payload: dict[str, Any] | None = None
 
 
+class SignSubmitIn(BaseModel):
+    document_version_id: str
+    kind: str = "un_ep"
+    signed_blob: str
+    cert_info: dict[str, Any] = Field(default_factory=dict)
+
+
 class EdoSendIn(BaseModel):
-    object_type: str
-    object_id: str
+    document_version_id: str | None = None
+    object_type: str = "document_version"
+    object_id: str | None = None
     provider: str = "stub"
+    operator_code: str | None = None
+    recipient: str | None = None
     meta: dict[str, Any] | None = None
 
 
@@ -207,6 +220,9 @@ async def approval_cancel(process_id: str, session: AsyncSession = Depends(get_s
 
 @router.post("/sign:request")
 async def sign_request(payload: SignRequestIn, request: Request, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), x_user_id: str = Header(default="system", alias="X-User-Id")):
+    object_id = payload.object_id or payload.document_version_id
+    if not object_id:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "document_version_id is required")
     key = request.headers.get("Idempotency-Key")
     idem = None
     if key:
@@ -214,13 +230,13 @@ async def sign_request(payload: SignRequestIn, request: Request, session: AsyncS
         rec, _ = await idem.acquire(key=normalize_idempotency_key(key), request_hash=make_request_hash(request.url.path, str(tenant.id), x_user_id, payload.model_dump(mode="json")), method="POST", path=request.url.path)
         if rec.status is IdempotencyStatus.SUCCEEDED:
             return rec.result_json["body"]
-    sig = SignatureRequest(tenant_id=str(tenant.id), object_type=payload.object_type, object_id=payload.object_id, provider=payload.provider, status=SignatureRequestStatus.REQUESTED, payload_json=payload.payload or {})
+    sig = SignatureRequest(tenant_id=str(tenant.id), object_type=payload.object_type, object_id=object_id, provider=payload.provider, status=SignatureRequestStatus.REQUESTED, payload_json={"kind": payload.kind or "un_ep", **(payload.payload or {})})
     session.add(sig)
     await session.flush()
     if payload.provider == "stub":
         sig.status = SignatureRequestStatus.SIGNED
         sig.result_json = {"signed_by": x_user_id, "verified": True}
-        await OutboxService(session).enqueue(tenant_id=str(tenant.id), event_type="DocumentSigned", payload={"event_id": str(uuid4()), "tenant_id": str(tenant.id), "document_id": payload.object_id, "document_version_id": payload.object_id, "status": "signed", "signed_at": datetime.now(timezone.utc).isoformat()})
+        await OutboxService(session).enqueue(tenant_id=str(tenant.id), event_type="Signed", payload={"event_id": str(uuid4()), "tenant_id": str(tenant.id), "document_id": object_id, "document_version_id": object_id, "status": "signed", "signed_at": datetime.now(timezone.utc).isoformat()})
     body = {"signature_request_id": sig.id, "status": sig.status.value}
     if idem:
         await idem.store_success(rec, status_code=200, body=body)
@@ -261,21 +277,30 @@ async def edo_send(
     if not created:
         return await idem.respond_from_store(rec, model=EdoSendOut, response=response)
 
+    object_id = payload.object_id or payload.document_version_id
+    if not object_id:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "document_version_id is required")
     env = EdoEnvelope(
         tenant_id=str(tenant.id),
         object_type=payload.object_type,
-        object_id=payload.object_id,
-        provider=payload.provider,
+        object_id=object_id,
+        provider=payload.operator_code or payload.provider,
         status=EdoEnvelopeStatus.SENT,
-        external_id=f"{payload.provider}-{uuid4().hex[:12]}",
+        external_id=f"{(payload.operator_code or payload.provider)}-{uuid4().hex[:12]}",
         last_event_at=datetime.now(timezone.utc),
     )
     session.add(env)
     await session.flush()
-    await OutboxService(session).enqueue(
+    outbox = OutboxService(session)
+    await outbox.enqueue(
         tenant_id=str(tenant.id),
-        event_type="edo.sent",
+        event_type="Exported",
         payload={"event_id": str(uuid4()), "tenant_id": str(tenant.id), "metadata": {"envelope_id": env.id}},
+    )
+    await outbox.enqueue(
+        tenant_id=str(tenant.id),
+        event_type="EdoStatusChanged",
+        payload={"event_id": str(uuid4()), "tenant_id": str(tenant.id), "metadata": {"envelope_id": env.id, "status": EdoEnvelopeStatus.DELIVERED.value}},
     )
     body = {"id": env.id, "status": env.status.value, "external_id": env.external_id}
     await idem.store_success(
@@ -321,4 +346,84 @@ async def edo_webhook(provider: str, payload: dict[str, Any], request: Request, 
     env.status = EdoEnvelopeStatus(new_status)
     env.last_event_at = datetime.now(timezone.utc)
     await OutboxService(session).enqueue(tenant_id=str(tenant.id), event_type="edo.status_changed", payload={"event_id": str(uuid4()), "tenant_id": str(tenant.id), "metadata": {"envelope_id": env.id, "status": env.status.value}})
+    return {"status": "ok"}
+
+
+@router.post("/approvals/start")
+async def approvals_start_v1(payload: ApprovalStartIn, request: Request, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), x_user_id: str = Header(default="system", alias="X-User-Id")):
+    return await approvals_start(payload, request, session, tenant, x_user_id)
+
+
+@router.get("/approvals/instances")
+async def approval_instances(document_version_id: str | None = None, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+    items = (await session.execute(select(ApprovalProcess).where(ApprovalProcess.tenant_id == str(tenant.id), ApprovalProcess.object_id == (document_version_id or ApprovalProcess.object_id)).order_by(ApprovalProcess.created_at.desc()))).scalars().all()
+    return {"items": [{"id": i.id, "document_version_id": i.object_id, "status": i.status.value, "started_at": i.started_at, "finished_at": i.finished_at} for i in items]}
+
+
+@router.get("/approvals/tasks")
+async def approval_tasks_v1(mine: int = 1, status: str = "pending", session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), x_user_id: str = Header(default="system", alias="X-User-Id")):
+    stmt = select(ApprovalTask).where(ApprovalTask.tenant_id == str(tenant.id))
+    if mine:
+        stmt = stmt.where(ApprovalTask.assignee_id == x_user_id)
+    stmt = stmt.where(ApprovalTask.status == (ApprovalTaskStatus.OPEN if status == "pending" else ApprovalTaskStatus.DONE))
+    items = (await session.execute(stmt.order_by(ApprovalTask.created_at.desc()))).scalars().all()
+    return {"items": [{"id": t.id, "instance_id": t.process_id, "status": "pending" if t.status == ApprovalTaskStatus.OPEN else "approved", "assignee_user_id": t.assignee_id, "deadline_at": t.due_at} for t in items]}
+
+
+@router.post("/approvals/tasks/{task_id}/decision")
+async def approval_decision_v1(task_id: str, payload: DecideIn, request: Request, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), x_user_id: str = Header(default="system", alias="X-User-Id")):
+    if payload.delegate_to_user_id:
+        return await approval_delegate(task_id, DelegateIn(to_user_id=payload.delegate_to_user_id, reason=payload.comment), request, session, tenant, x_user_id)
+    return await approval_decide(task_id, DecideIn(decision=payload.decision, comment=payload.comment), request, session, tenant, x_user_id)
+
+
+@router.post("/sign/request")
+async def sign_request_v1(payload: SignRequestIn, request: Request, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), x_user_id: str = Header(default="system", alias="X-User-Id")):
+    return await sign_request(payload, request, session, tenant, x_user_id)
+
+
+@router.post("/sign/submit")
+async def sign_submit_v1(payload: SignSubmitIn, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), x_user_id: str = Header(default="system", alias="X-User-Id")):
+    cert_info = payload.cert_info or {}
+    valid_from = cert_info.get("valid_from")
+    valid_to = cert_info.get("valid_to")
+    if valid_from and valid_to and valid_from > valid_to:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "invalid certificate period")
+    sig = SignatureRequest(tenant_id=str(tenant.id), object_type="document_version", object_id=payload.document_version_id, provider="stub", status=SignatureRequestStatus.SIGNED, payload_json={"kind": payload.kind, "signed_blob": payload.signed_blob[:64]}, result_json={"cert_info": cert_info, "ocsp_status": cert_info.get("ocsp_status", "unknown")})
+    session.add(sig)
+    await session.flush()
+    await OutboxService(session).enqueue(tenant_id=str(tenant.id), event_type="Signed", payload={"event_id": str(uuid4()), "tenant_id": str(tenant.id), "document_version_id": payload.document_version_id, "signature_id": sig.id})
+    return {"id": sig.id, "status": sig.status.value}
+
+
+@router.get("/sign/status")
+async def sign_status_v1(document_version_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+    rows = (await session.execute(select(SignatureRequest).where(SignatureRequest.tenant_id == str(tenant.id), SignatureRequest.object_id == document_version_id).order_by(SignatureRequest.created_at.desc()))).scalars().all()
+    return {"items": [{"id": s.id, "status": s.status.value, "payload": s.payload_json, "result": s.result_json} for s in rows]}
+
+
+@router.post("/edo/send")
+async def edo_send_v1(payload: EdoSendIn, request: Request, response: Response, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+    return await edo_send(payload, request, response, session, tenant)
+
+
+@router.get("/edo/messages")
+async def edo_messages_v1(document_version_id: str | None = None, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+    stmt = select(EdoEnvelope).where(EdoEnvelope.tenant_id == str(tenant.id))
+    if document_version_id:
+        stmt = stmt.where(EdoEnvelope.object_id == document_version_id)
+    items = (await session.execute(stmt.order_by(EdoEnvelope.created_at.desc()))).scalars().all()
+    return {"items": [{"id": e.id, "document_version_id": e.object_id, "status": e.status.value, "external_id": e.external_id, "last_status_at": e.last_event_at} for e in items]}
+
+
+@router.post("/edo/webhook/status")
+async def edo_webhook_status(payload: dict[str, Any], session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+    provider = str(payload.get("provider") or "stub")
+    external_id = payload.get("external_id")
+    env = (await session.execute(select(EdoEnvelope).where(EdoEnvelope.tenant_id == str(tenant.id), EdoEnvelope.provider == provider, EdoEnvelope.external_id == external_id))).scalar_one_or_none()
+    if not env:
+        raise HTTPException(404, "Envelope not found")
+    env.status = EdoEnvelopeStatus(payload.get("status", "failed"))
+    env.last_event_at = datetime.now(timezone.utc)
+    await OutboxService(session).enqueue(tenant_id=str(tenant.id), event_type="EdoStatusChanged", payload={"event_id": str(uuid4()), "tenant_id": str(tenant.id), "metadata": {"envelope_id": env.id, "status": env.status.value}})
     return {"status": "ok"}
