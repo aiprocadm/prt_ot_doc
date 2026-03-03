@@ -29,7 +29,7 @@ export const FileUploader = () => {
         await finalizeUpload(session.file_id);
         for (let i = 0; i < 20; i += 1) {
           const current = await getFile(session.file_id);
-          if (current.status === "clean") break;
+          if (current.status === "ready") break;
           if (current.status === "infected" || current.status === "quarantined") {
             throw new Error(`Файл ${file.name} не прошёл AV-проверку`);
           }

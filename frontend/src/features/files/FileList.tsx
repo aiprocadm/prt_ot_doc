@@ -24,7 +24,7 @@ export const FileList = ({ entityType, entityId }: Props) => {
           </div>
           <button
             className="rounded border px-2 py-1"
-            disabled={item.status !== "clean"}
+            disabled={item.status !== "ready"}
             onClick={async () => {
               const url = await getDownloadUrl(item.file_id, "ui_preview");
               window.open(url, "_blank", "noopener,noreferrer");

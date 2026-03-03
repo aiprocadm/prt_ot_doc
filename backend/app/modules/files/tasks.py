@@ -14,7 +14,7 @@ from app.services.celery_app import celery_app
 @celery_app.task(name="files.av_scan_file_job")
 def av_scan_file_job(tenant_id: str, file_id: str) -> str:
     async def _run() -> None:
-        async with session_scope(tenant="test") as session:
+        async with session_scope(tenant=tenant_id) as session:
             svc = FileService(session=session, tenant_id=tenant_id)
             await svc.av_scan_file(file_id=file_id)
             await session.commit()

@@ -1,6 +1,7 @@
 import { type ColumnDef } from "@tanstack/react-table";
 import { useMemo } from "react";
 
+import { getDownloadUrl } from "@/api/files";
 import { DataTable } from "@/components/common/DataTable";
 import { Button } from "@/components/ui/button";
 import { useFilesStore } from "@/stores/files";
@@ -28,26 +29,44 @@ export const FileTable = () => {
         cell: ({ row }) => `${(row.original.size / 1024).toFixed(1)} КБ`
       },
       {
+        accessorKey: "status",
+        header: "Статус",
+        cell: ({ row }) => (row.original as FileDto & { status?: string }).status ?? "—"
+      },
+      {
         accessorKey: "created_at",
         header: "Загружен",
         cell: ({ row }) => formatDate(row.original.created_at)
       },
       {
         id: "actions",
-        header: "Удалить",
+        header: "Действия",
         cell: ({ row }) => (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={async () => {
-              if (window.confirm("Удалить файл?")) {
-                await remove(row.original.id);
-                list();
-              }
-            }}
-          >
-            Удалить
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={(row.original as FileDto & { status?: string }).status !== "ready"}
+              onClick={async () => {
+                const url = await getDownloadUrl(row.original.id, "files_table_download");
+                window.open(url, "_blank", "noopener,noreferrer");
+              }}
+            >
+              Скачать
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={async () => {
+                if (window.confirm("Удалить файл?")) {
+                  await remove(row.original.id);
+                  list();
+                }
+              }}
+            >
+              Удалить
+            </Button>
+          </div>
         )
       }
     ],

@@ -20,12 +20,12 @@ export const createUploadSession = async (payload: {
   size_bytes: number;
   metadata_json?: Record<string, unknown>;
 }) => {
-  const { data } = await apiClient.post<UploadSessionResponse>("/v1/files:upload-session", payload);
+  const { data } = await apiClient.post<UploadSessionResponse>("/v1/files/presign-upload", payload);
   return data;
 };
 
 export const finalizeUpload = async (fileId: string) => {
-  const { data } = await apiClient.post<{ file_id: string; status: string }>(`/v1/files/${fileId}:finalize`);
+  const { data } = await apiClient.post<{ file_id: string; status: string }>(`/v1/files/complete-upload`, { file_id: fileId });
   return data;
 };
 
