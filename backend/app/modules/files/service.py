@@ -145,6 +145,69 @@ class FileService:
         upload_url = s3.generate_presigned_put_url(object_key, expires_in=ttl, content_type=content_type)
         return record, upload_url, ttl
 
+
+
+    async def create_new_version_upload_session(
+        self,
+        *,
+        file_id: str,
+        filename: str,
+        content_type: str,
+        size_bytes: int,
+        metadata_json: dict[str, Any] | None = None,
+        created_by: str | None = None,
+    ) -> tuple[FileVersion, str, int]:
+        record = await self.session.get(FileRecord, file_id)
+        if record is None or record.tenant_id != self.tenant_id or record.deleted_at is not None:
+            raise HTTPException(status_code=404, detail="file_not_found")
+        settings = get_settings()
+        if size_bytes > settings.max_upload_size:
+            raise HTTPException(status_code=413, detail="max_upload_size_exceeded")
+        if content_type not in settings.file_allowed_mime:
+            raise HTTPException(status_code=415, detail="unsupported_content_type")
+
+        latest = (
+            await self.session.execute(
+                select(func.max(FileVersion.version_no)).where(
+                    FileVersion.tenant_id == self.tenant_id,
+                    FileVersion.file_id == file_id,
+                )
+            )
+        ).scalar_one()
+        version_no = int(latest or 0) + 1
+        key = storage.build_tenant_key(
+            tenant_id=self.tenant_id,
+            entity="files",
+            entity_id=file_id,
+            file_id=file_id,
+            filename=filename,
+            version_no=version_no,
+        )
+        version = FileVersion(
+            tenant_id=self.tenant_id,
+            file_id=file_id,
+            version_no=version_no,
+            filename=_safe_filename(filename),
+            s3_key=key,
+            size=size_bytes,
+            mime=content_type,
+            sha256="",
+            status=FileVersionStatus.uploaded.value,
+            av_status=AVStatus.pending.value,
+            text_index_status=TextIndexStatus.pending.value,
+            created_by=created_by,
+        )
+        self.session.add(version)
+        if metadata_json:
+            merged = dict(record.metadata_json or {})
+            merged.update(metadata_json)
+            record.metadata_json = merged
+            record.tags = merged
+        await self.session.flush()
+        ttl = settings.presign_download_ttl_seconds
+        upload_url = s3.generate_presigned_put_url(key, expires_in=ttl, content_type=content_type)
+        return version, upload_url, ttl
+
     async def finalize_upload(self, *, file_id: str) -> FileRecord:
         record = await self.session.get(FileRecord, file_id)
         if record is None or record.tenant_id != self.tenant_id:

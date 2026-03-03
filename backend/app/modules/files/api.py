@@ -10,7 +10,7 @@ from app.api.dependencies import get_session, get_tenant_record
 from app.core.idempotency import compute_request_hash
 from app.models.models import Tenant
 from app.modules.files import service
-from app.modules.files.models import FileContentIndex, FileLink, FileRecord
+from app.modules.files.models import FileContentIndex, FileLink, FileRecord, FileVersion
 from app.modules.files.schemas import (
     DownloadURLResponse,
     DownloadUrlRequest,
@@ -30,6 +30,9 @@ from app.modules.files.schemas import (
     SignedUrlRequest,
     SignedUrlResponse,
     CompleteUploadRequest,
+    NewFileVersionRequest,
+    NewFileVersionResponse,
+    FileVersionDto,
 )
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 from app.services.billing import BillingService
@@ -321,6 +324,59 @@ async def list_files_v1(
     return [FileDto(
         id=r.id,bucket=r.bucket,object_key=r.object_key,content_type=r.content_type,size_bytes=r.size_bytes,sha256=r.sha256,status=r.status,av_vendor=r.av_vendor,av_result_json=r.av_result_json or {},metadata_json=r.metadata_json or {},links=[],content_index=None
     ) for r in rows]
+
+
+@router.post("/{file_id}/new-version", response_model=NewFileVersionResponse)
+async def create_new_version_v1(
+    file_id: str,
+    payload: NewFileVersionRequest,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> NewFileVersionResponse:
+    await BillingService(session).assert_allowed(tenant, "files.upload", meta={"delta_bytes": int(payload.size_bytes)})
+    svc = service.FileService(session=session, tenant_id=str(tenant.id))
+    version, upload_url, expires_in = await svc.create_new_version_upload_session(
+        file_id=file_id,
+        filename=payload.filename,
+        content_type=payload.content_type,
+        size_bytes=payload.size_bytes,
+        metadata_json=payload.metadata_json,
+    )
+    await session.commit()
+    return NewFileVersionResponse(
+        file_id=file_id,
+        version_id=version.id,
+        signed_put_url=upload_url,
+        expires_at=datetime.now(timezone.utc) + timedelta(seconds=expires_in),
+        status=version.status,
+    )
+
+
+@router.get("/{file_id}/versions", response_model=list[FileVersionDto])
+async def list_file_versions_v1(
+    file_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> list[FileVersionDto]:
+    rows = (
+        await session.execute(
+            select(FileVersion)
+            .where(FileVersion.tenant_id == str(tenant.id), FileVersion.file_id == file_id)
+            .order_by(FileVersion.version_no.desc())
+        )
+    ).scalars().all()
+    return [
+        FileVersionDto(
+            id=v.id,
+            file_id=v.file_id,
+            sha256=v.sha256,
+            size_bytes=v.size,
+            s3_version_id=None,
+            created_by=v.created_by,
+            created_at=v.created_at,
+        )
+        for v in rows
+    ]
 
 @router.delete("/{file_id}")
 async def delete_file_v1(file_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict[str, str]:

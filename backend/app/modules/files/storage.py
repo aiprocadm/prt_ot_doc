@@ -14,7 +14,7 @@ def build_tenant_key(
 ) -> str:
     safe_name = filename.replace("..", "_").replace("/", "_")
     if version_no is not None:
-        return f"{tenant_id}/{file_id}/{version_no}/{safe_name}"
+        return f"tenants/{tenant_id}/{entity or "files"}/{entity_id or file_id}/{file_id}/{version_no}/{safe_name}"
     resolved_entity = str(entity or "files")
     resolved_entity_id = str(entity_id or file_id)
     return f"tenants/{tenant_id}/{resolved_entity}/{resolved_entity_id}/{file_id}_{safe_name}"

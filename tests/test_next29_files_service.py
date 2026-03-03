@@ -9,7 +9,7 @@ from app.modules.files.service import compute_sha256_stream
 
 def test_build_tenant_key_is_tenant_scoped() -> None:
     key = build_tenant_key(tenant_id="tenant-a", file_id="f1", version_no=2, filename="doc.pdf")
-    assert key.startswith("tenant-a/")
+    assert key.startswith("tenants/tenant-a/")
     assert "/f1/2/" in key
 
 
