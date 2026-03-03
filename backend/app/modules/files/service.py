@@ -36,6 +36,7 @@ from app.modules.files.models import (
     FileVersionStatus,
     TextIndexStatus,
 )
+from app.services.outbox import OutboxService
 from app.tasks import index_file_content_job, av_scan_file_job
 
 
@@ -229,6 +230,19 @@ class FileService:
         record.sha256 = _sha256_bytes(data)
         record.status = "scanning"
         await self.session.flush()
+        await OutboxService(self.session).add_event(
+            tenant_id=self.tenant_id,
+            event_type="FileUploaded",
+            aggregate_type="file",
+            aggregate_id=record.id,
+            payload={
+                "tenant_id": self.tenant_id,
+                "file_id": record.id,
+                "sha256": record.sha256,
+                "status": record.status,
+                "object_key": record.object_key,
+            },
+        )
         try:
             av_scan_file_job.delay(self.tenant_id, file_id)
         except Exception:
@@ -249,10 +263,28 @@ class FileService:
             await self.session.flush()
             return record
 
-        with NamedTemporaryFile(delete=True) as tmp:
-            tmp.write(data)
-            tmp.flush()
-            verdict = av.scan_file(Path(tmp.name))
+        try:
+            with NamedTemporaryFile(delete=True) as tmp:
+                tmp.write(data)
+                tmp.flush()
+                verdict = av.scan_file(Path(tmp.name))
+        except Exception as exc:
+            logger.exception("files.av.scan_failed", extra={"file_id": file_id, "error_class": exc.__class__.__name__})
+            record.status = FileStatus.scanning.value
+            record.av_result_json = {"status": "error", "error_class": exc.__class__.__name__}
+            self.session.add(
+                FileScanResult(
+                    tenant_id=self.tenant_id,
+                    file_id=record.id,
+                    engine="clamav",
+                    status="error",
+                    signature=None,
+                    scanned_at=datetime.now(timezone.utc),
+                    raw={"status": "error", "error_class": exc.__class__.__name__},
+                )
+            )
+            await self.session.flush()
+            return record
 
         if verdict.status == "infected":
             record.status = FileStatus.infected.value
@@ -272,6 +304,19 @@ class FileService:
                 scanned_at=datetime.now(timezone.utc),
                 raw={"status": verdict.status},
             )
+        )
+        await OutboxService(self.session).add_event(
+            tenant_id=self.tenant_id,
+            event_type="FileScanned",
+            aggregate_type="file",
+            aggregate_id=record.id,
+            payload={
+                "tenant_id": self.tenant_id,
+                "file_id": record.id,
+                "status": record.status,
+                "scan_status": verdict.status,
+                "signature": verdict.signature,
+            },
         )
         await self.session.flush()
         if record.status in {FileStatus.clean.value}:

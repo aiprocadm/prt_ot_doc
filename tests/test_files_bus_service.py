@@ -165,6 +165,66 @@ async def test_av_scan_infected_moves_to_quarantine(monkeypatch: pytest.MonkeyPa
     assert rec.status == FileStatus.infected.value
 
 
+@pytest.mark.asyncio
+async def test_finalize_upload_emits_file_uploaded_event(monkeypatch: pytest.MonkeyPatch) -> None:
+    rec = FileRecord(id="f7", tenant_id="t1", bucket="main", object_key="tenants/t1/uploads/a.txt", content_type="text/plain", size_bytes=1, sha256="0" * 64, status=FileStatus.uploaded.value, av_result_json={}, metadata_json={})
+    session = DummySession(rec)
+    svc = FileService(session=session, tenant_id="t1")
+    events: list[str] = []
+
+    class _Body:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return b"safe"
+
+    monkeypatch.setattr("app.modules.files.service.s3.head_object", lambda *, key: {"size": 4, "content_type": "text/plain"})
+    monkeypatch.setattr("app.modules.files.service.s3.stream_object", lambda *, key: _Body())
+    monkeypatch.setattr("app.modules.files.service.av_scan_file_job.delay", lambda *_args: None)
+
+    async def _capture_event(self, *, event_type, **kwargs):  # type: ignore[no-untyped-def]
+        events.append(event_type)
+        return None
+
+    monkeypatch.setattr("app.modules.files.service.OutboxService.add_event", _capture_event)
+
+    await svc.finalize_upload(file_id="f7")
+
+    assert "FileUploaded" in events
+
+
+@pytest.mark.asyncio
+async def test_av_scan_error_creates_error_result(monkeypatch: pytest.MonkeyPatch) -> None:
+    rec = FileRecord(id="f8", tenant_id="t1", bucket="main", object_key="tenants/t1/uploads/a.txt", content_type="text/plain", size_bytes=1, sha256="1" * 64, status=FileStatus.scanning.value, av_result_json={}, metadata_json={})
+    session = DummySession(rec)
+    svc = FileService(session=session, tenant_id="t1")
+
+    class _Body:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return b"safe"
+
+    def _broken_scan(_path):  # type: ignore[no-untyped-def]
+        raise RuntimeError("clamd_down")
+
+    monkeypatch.setattr("app.modules.files.service.s3.stream_object", lambda *, key: _Body())
+    monkeypatch.setattr("app.modules.files.service.av.scan_file", _broken_scan)
+
+    await svc.av_scan_file(file_id="f8")
+
+    assert rec.status == FileStatus.scanning.value
+    assert rec.av_result_json.get("status") == "error"
+
+
 class _ScalarResult:
     def __init__(self, value):
         self._value = value
