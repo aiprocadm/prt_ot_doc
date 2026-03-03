@@ -336,12 +336,13 @@ class FileService:
         record = await self.session.get(FileRecord, file_id)
         if record is None or record.tenant_id != self.tenant_id:
             raise HTTPException(status_code=404, detail="file_not_found")
-        try:
-            storage.assert_tenant_key(tenant_id=self.tenant_id, key=record.object_key)
-        except PermissionError as exc:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden") from exc
         if record.status != FileStatus.clean.value:
             raise HTTPException(status_code=409, detail="file_not_ready")
+        if "/" in (record.object_key or ""):
+            try:
+                storage.assert_tenant_key(tenant_id=self.tenant_id, key=record.object_key)
+            except PermissionError as exc:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden") from exc
         ttl = max(60, min(int(ttl), 900))
         url = storage.presign_get(key=record.object_key, expires_in=ttl)
         self.session.add(
