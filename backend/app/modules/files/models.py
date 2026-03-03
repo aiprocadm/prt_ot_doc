@@ -41,6 +41,7 @@ class FileContentIndexStatus(str, Enum):
 
 
 class FileStatus(str, Enum):
+    uploading = "uploading"
     uploaded = "uploaded"
     scanning = "scanning"
     clean = "clean"
@@ -157,7 +158,7 @@ class FileRecord(TenantBase, TimestampMixin, SoftDeleteMixin, VersionedMixin, UU
     __tenant_model__ = True
 
     tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=False, index=True)
-    bucket: Mapped[str] = mapped_column(String(255), nullable=False, default="main")
+    bucket: Mapped[str] = mapped_column(String(255), nullable=False, default="ptd")
     object_key: Mapped[str] = mapped_column(String(512), nullable=False)
     content_type: Mapped[str] = mapped_column(String(128), nullable=False)
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
@@ -197,6 +198,7 @@ class FileDownloadLog(TenantBase, TimestampMixin, UUIDMixin):
     ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
     user_agent: Mapped[str | None] = mapped_column(String(512), nullable=True)
     purpose: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    action: Mapped[str] = mapped_column(String(32), nullable=False, default="presigned_url_issued")
 
 
 class FileScanResult(TenantBase, TimestampMixin, UUIDMixin):
@@ -221,5 +223,7 @@ Index("ix_files_tenant_entity", FileRecord.tenant_id, FileRecord.entity_type, Fi
 Index("ix_files_tags_gin", FileRecord.tags, postgresql_using="gin")
 Index("ix_file_links_tenant_entity", FileLink.tenant_id, FileLink.entity_type, FileLink.entity_id)
 Index("ix_file_download_logs_tenant_file_created", FileDownloadLog.tenant_id, FileDownloadLog.file_id, FileDownloadLog.created_at)
+Index("ix_file_download_logs_tenant_created_at", FileDownloadLog.tenant_id, FileDownloadLog.created_at)
+Index("ix_files_tenant_object_key", FileRecord.tenant_id, FileRecord.object_key, unique=True)
 Index("ix_file_content_index_status_updated", FileContentIndex.status, FileContentIndex.updated_at)
 Index("ix_file_scan_results_file_scanned", FileScanResult.file_id, FileScanResult.scanned_at)

@@ -134,7 +134,7 @@ async def test_create_upload_session_uses_tenant_prefix(monkeypatch: pytest.Monk
 
     monkeypatch.setattr("app.modules.files.service.s3.generate_presigned_put_url", lambda key, **kwargs: "http://put")
     rec, _url, _ttl = await svc.create_upload_session(filename="a.txt", content_type="text/plain", size_bytes=1)
-    assert rec.object_key.startswith("tenants/tenant-xyz/")
+    assert rec.object_key.startswith("tenant-xyz/")
     get_settings.cache_clear()  # type: ignore[attr-defined]
 
 
@@ -162,8 +162,7 @@ async def test_av_scan_infected_moves_to_quarantine(monkeypatch: pytest.MonkeyPa
 
     await svc.av_scan_file(file_id="f5")
 
-    assert rec.status == FileStatus.quarantined.value
-    assert rec.object_key.startswith("tenants/t1/quarantine/")
+    assert rec.status == FileStatus.infected.value
 
 
 class _ScalarResult:

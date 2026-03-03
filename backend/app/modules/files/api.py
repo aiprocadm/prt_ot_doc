@@ -115,6 +115,7 @@ async def download_url(file_id: str, version_id: str, request: Request, session:
 
 
 @router.post("/presign-upload", response_model=UploadSessionResponse)
+@router.post("/init-upload", response_model=UploadSessionResponse)
 async def create_upload_session_v2(
     payload: UploadSessionRequest,
     session: AsyncSession = Depends(get_session),
@@ -126,13 +127,14 @@ async def create_upload_session_v2(
         filename=payload.filename,
         content_type=payload.content_type,
         size_bytes=payload.size_bytes,
-        metadata_json=payload.metadata_json,
+        metadata_json=payload.metadata or payload.metadata_json or ({"sha256": payload.sha256} if payload.sha256 else None),
     )
     await session.commit()
-    return UploadSessionResponse(file_id=file_record.id, signed_put_url=upload_url, expires_at=datetime.now(timezone.utc) + timedelta(seconds=expires_in))
+    return UploadSessionResponse(file_id=file_record.id, signed_put_url=upload_url, expires_at=datetime.now(timezone.utc) + timedelta(seconds=max(expires_in, 0)), existing=(upload_url == ""))
 
 
 @router.post("/complete-upload", response_model=FinalizeUploadResponse)
+@router.post("/complete-upload-v2", response_model=FinalizeUploadResponse)
 async def complete_upload_v2(
     payload: CompleteUploadRequest,
     session: AsyncSession = Depends(get_session),
@@ -274,6 +276,7 @@ async def list_entity_files_v2(
 
 
 @router.post("/{file_id}:signed-url", response_model=SignedUrlResponse)
+@router.post("/{file_id}/signed-url", response_model=SignedUrlResponse)
 async def get_signed_url_v2(
     file_id: str,
     payload: SignedUrlRequest,
@@ -284,8 +287,8 @@ async def get_signed_url_v2(
     svc = service.FileService(session=session, tenant_id=str(tenant.id))
     url = await svc.get_signed_download_url(
         file_id=file_id,
-        purpose=payload.purpose,
-        ttl=payload.ttl_sec,
+        purpose=payload.action,
+        ttl=payload.ttl_seconds,
         ip=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent"),
     )
@@ -362,7 +365,7 @@ async def create_new_version_v1(
         filename=payload.filename,
         content_type=payload.content_type,
         size_bytes=payload.size_bytes,
-        metadata_json=payload.metadata_json,
+        metadata_json=payload.metadata or payload.metadata_json or ({"sha256": payload.sha256} if payload.sha256 else None),
     )
     await session.commit()
     return NewFileVersionResponse(

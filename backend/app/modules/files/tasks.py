@@ -23,8 +23,8 @@ def av_scan_file_job(tenant_id: str, file_id: str) -> str:
     return file_id
 
 
-@celery_app.task(name="files.cleanup_temp_objects")
-def cleanup_temp_objects(hours: int = 24) -> int:
+@celery_app.task(name="files.purge_temp_files")
+def purge_temp_files(hours: int = 24) -> int:
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
 
     async def _run() -> int:
@@ -32,7 +32,7 @@ def cleanup_temp_objects(hours: int = 24) -> int:
             rows = (
                 await session.execute(
                     select(FileRecord).where(
-                        FileRecord.object_key.like("uploads/%"),
+                        FileRecord.object_key.like("tmp/%"),
                         FileRecord.created_at < cutoff,
                         FileRecord.status != FileStatus.clean.value,
                     )
