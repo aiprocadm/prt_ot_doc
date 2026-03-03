@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status, File, Form, UploadFile
+import hashlib
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status, File, Form, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -147,12 +148,14 @@ async def complete_upload_v2(
 @router.post("/{file_id}:finalize", response_model=FinalizeUploadResponse)
 @router.post("/{file_id}:complete", response_model=FinalizeUploadResponse)
 async def finalize_upload_v2(
+    file_id: str,
     payload: UploadCompleteRequest,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
 ) -> FinalizeUploadResponse:
     svc = service.FileService(session=session, tenant_id=str(tenant.id))
-    file_record = await svc.finalize_upload(file_id=payload.file_id)
+    resolved_file_id = payload.file_id or file_id
+    file_record = await svc.finalize_upload(file_id=resolved_file_id)
     await BillingService(session).add_usage(tenant_id=str(tenant.id), s3_bytes_delta=int(file_record.size_bytes or 0))
     await session.commit()
     return FinalizeUploadResponse(file_id=file_record.id, status=file_record.status)
@@ -297,12 +300,25 @@ async def upload_multipart_v1(
     tenant: Tenant = Depends(get_tenant_record),
 ) -> FinalizeUploadResponse:
     svc = service.FileService(session=session, tenant_id=str(tenant.id))
-    payload = await file.read()
     filename = file.filename or "upload.bin"
     content_type = file.content_type or "application/octet-stream"
-    file_record, _upload_url, _ = await svc.create_upload_session(filename=filename, content_type=content_type, size_bytes=len(payload), metadata_json={})
+    file_record, _upload_url, _ = await svc.create_upload_session(filename=filename, content_type=content_type, size_bytes=0, metadata_json={})
     from app.domains.files import s3
+
+    sha256 = hashlib.sha256()
+    chunks: list[bytes] = []
+    total_size = 0
+    while True:
+        chunk = await file.read(1024 * 1024)
+        if not chunk:
+            break
+        total_size += len(chunk)
+        sha256.update(chunk)
+        chunks.append(chunk)
+    payload = b"".join(chunks)
     s3.put_object(data=payload, mime=content_type, key=file_record.object_key)
+    file_record.size_bytes = total_size
+    file_record.sha256 = sha256.hexdigest()
     file_record = await svc.finalize_upload(file_id=file_record.id)
     await session.commit()
     return FinalizeUploadResponse(file_id=file_record.id, status=file_record.status)
@@ -312,6 +328,8 @@ async def upload_multipart_v1(
 async def list_files_v1(
     status: str | None = None,
     query: str | None = None,
+    meta_document_version_id: str | None = Query(default=None, alias="meta.document_version_id"),
+    updated_from: datetime | None = None,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
 ) -> list[FileDto]:
@@ -320,6 +338,10 @@ async def list_files_v1(
         stmt = stmt.where(FileRecord.status == status)
     if query:
         stmt = stmt.where(FileRecord.object_key.ilike(f"%{query}%"))
+    if meta_document_version_id:
+        stmt = stmt.where(FileRecord.metadata_json["document_version_id"].astext == meta_document_version_id)
+    if updated_from:
+        stmt = stmt.where(FileRecord.updated_at >= updated_from)
     rows = (await session.execute(stmt.order_by(FileRecord.updated_at.desc()).limit(200))).scalars().all()
     return [FileDto(
         id=r.id,bucket=r.bucket,object_key=r.object_key,content_type=r.content_type,size_bytes=r.size_bytes,sha256=r.sha256,status=r.status,av_vendor=r.av_vendor,av_result_json=r.av_result_json or {},metadata_json=r.metadata_json or {},links=[],content_index=None
