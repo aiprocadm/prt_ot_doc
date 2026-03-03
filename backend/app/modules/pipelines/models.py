@@ -21,6 +21,7 @@ class PipelineProfile(TenantBaseModel):
     steps: Mapped[list[dict]] = mapped_column(JSONBType, nullable=False, default=list)
     graph: Mapped[dict] = mapped_column(JSONBType, nullable=False, default=dict)
     limits: Mapped[dict] = mapped_column(JSONBType, nullable=False, default=dict)
+    concurrency_limit_per_tenant: Mapped[int | None] = mapped_column(Integer, nullable=True)
     profile_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

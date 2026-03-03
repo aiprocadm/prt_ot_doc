@@ -48,6 +48,7 @@ def _serialize_profile(model) -> PipelineProfileRead:
         limits=model.limits or {},
         profile_version=getattr(model, "profile_version", 1),
         version=model.version,
+        concurrency_limit_per_tenant=getattr(model, "concurrency_limit_per_tenant", None),
     )
 
 def _serialize_step(step: DocumentJobStep) -> dict[str, Any]:
@@ -56,7 +57,7 @@ def _serialize_step(step: DocumentJobStep) -> dict[str, Any]:
         "run_id": step.job_id,
         "step_code": step.step_code,
         "status": str(step.status),
-        "attempt": step.attempts,
+        "attempt": step.attempt,
         "started_at": step.started_at,
         "ended_at": step.ended_at,
         "error_code": step.error_code,
@@ -71,7 +72,7 @@ async def _build_run_read(session: AsyncSession, run: DocumentJob) -> PipelineRu
         await session.execute(
             select(DocumentJobStep)
             .where(DocumentJobStep.job_id == run.id)
-            .order_by(DocumentJobStep.order.asc())
+            .order_by(DocumentJobStep.seq.asc().nullslast(), DocumentJobStep.order.asc())
         )
     ).scalars().all()
     return PipelineRunRead(
@@ -165,9 +166,12 @@ async def run_pipeline(
     payload: PipelineRunRequest,
     response: Response,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    x_tenant: str | None = Header(default=None, alias="X-Tenant"),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
 ) -> PipelineRunAccepted:
+    if not x_tenant:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "X-Tenant is required")
     if not idempotency_key:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Idempotency-Key is required")
 
@@ -204,12 +208,30 @@ async def run_pipeline(
     job.profile_id = profile.id
     job.input = payload.inputs
     await session.flush()
-    steps = (await session.execute(select(DocumentJobStep).where(DocumentJobStep.job_id == job.id).order_by(DocumentJobStep.order.asc()))).scalars().all()
+    steps = (await session.execute(select(DocumentJobStep).where(DocumentJobStep.job_id == job.id).order_by(DocumentJobStep.seq.asc().nullslast(), DocumentJobStep.order.asc()))).scalars().all()
     accepted = PipelineRunAccepted(run_id=job.id, status=str(job.status), step_runs=[_serialize_step(s) for s in steps])
     await idem_service.store_success(record, status_code=status.HTTP_202_ACCEPTED, body=accepted.model_dump())
     await session.commit()
     return accepted
 
+
+@router.post("/run", response_model=PipelineRunAccepted, status_code=status.HTTP_202_ACCEPTED)
+async def run_pipeline_compat(
+    payload: PipelineRunRequest,
+    response: Response,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    x_tenant: str | None = Header(default=None, alias="X-Tenant"),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> PipelineRunAccepted:
+    return await run_pipeline(
+        payload=payload,
+        response=response,
+        idempotency_key=idempotency_key,
+        x_tenant=x_tenant,
+        session=session,
+        tenant=tenant,
+    )
 
 @router.get("/runs", response_model=list[PipelineRunRead])
 async def list_runs(

@@ -156,7 +156,7 @@ async def create_job(
                 "code": s.step_key or s.step_code,
                 "step_name": s.step_key or s.step_code,
                 "status": _status_value(s.status),
-                "attempt": s.attempts,
+                "attempt": s.attempt,
                 "max_attempts": s.max_attempts,
                 "started_at": s.started_at,
                 "ended_at": s.ended_at,
@@ -268,7 +268,7 @@ async def get_job(
                 code=s.step_code,
                 step_name=s.step_code,
                 status=_status_value(s.status),
-                attempt=s.attempts,
+                attempt=s.attempt,
                 max_attempts=s.max_attempts,
                 started_at=s.started_at,
                 ended_at=s.ended_at,
@@ -456,7 +456,7 @@ async def get_step_logs(
 
     storage = FileStorageService.default()
 
-    logs_uri = step.logs_uri
+    logs_uri = step.logs_ref or step.logs_uri
     key: str | None = None
     if step.logs_file_id:
         file_record = await session.get(FileRecord, step.logs_file_id)
@@ -525,7 +525,7 @@ async def stream_jobs(
                         "step_id": step.id,
                         "step_code": step.step_key or step.step_code,
                         "status": _status_value(step.status),
-                        "attempt": step.attempts,
+                        "attempt": step.attempt,
                     }
                     for step in steps
                 ],

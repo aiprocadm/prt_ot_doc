@@ -101,6 +101,7 @@ class PipelineOrchestrator:
             tenant_id=tenant_id,
             kind="pipeline",
             status=DocumentJobStatus.QUEUED.value,
+            queued_at=datetime.now(timezone.utc),
             profile_id=getattr(profile, "id", None),
             pipeline_profile_id=getattr(profile, "id", None),
             template_code=profile_code,
@@ -125,6 +126,7 @@ class PipelineOrchestrator:
                     step_code=step_def["node_id"],
                     step_key=step_key,
                     order=idx,
+                    seq=idx,
                     step_order=idx,
                     status=JobStepStatus.QUEUED.value,
                     max_attempts=int(step_def.get("max_attempts") or RETRYABLE.get(step_key, 1)),
@@ -281,6 +283,7 @@ class PipelineOrchestrator:
                 status=JobStepStatus.RUNNING.value,
                 started_at=datetime.now(timezone.utc),
                 attempts=DocumentJobStep.attempts + 1,
+                attempt=DocumentJobStep.attempt + 1,
             )
         )
         if not (locked.rowcount or 0):
@@ -296,6 +299,7 @@ class PipelineOrchestrator:
             step.output = out
             step.output_ref = out
             step.status = JobStepStatus.SUCCESS.value
+            step.logs_ref = step.logs_uri or step.logs_ref
             step.ended_at = datetime.now(timezone.utc)
             if step.step_key == "archive":
                 job.output_payload_json = {"artifacts": await self._artifact_list(job.id)}
@@ -306,7 +310,7 @@ class PipelineOrchestrator:
             step.error_code = "step_failed"
             step.error_payload = {"message": str(exc)}
             step.ended_at = datetime.now(timezone.utc)
-            if step.attempts < step.max_attempts:
+            if step.attempt < step.max_attempts:
                 step.status = JobStepStatus.QUEUED.value
                 step.started_at = None
                 step.ended_at = None
@@ -315,7 +319,7 @@ class PipelineOrchestrator:
                     step,
                     "warning",
                     "step_retry_scheduled",
-                    {"attempt": step.attempts, "max_attempts": step.max_attempts},
+                    {"attempt": step.attempt, "max_attempts": step.max_attempts},
                 )
             else:
                 step.status = JobStepStatus.FAILED.value
@@ -428,6 +432,11 @@ class PipelineOrchestrator:
         profile = await self.session.get(PipelineProfile, profile_id)
         if profile is None or str(profile.tenant_id) != str(job.tenant_id):
             return None
+        if getattr(profile, "concurrency_limit_per_tenant", None) is not None:
+            try:
+                return int(profile.concurrency_limit_per_tenant)
+            except (TypeError, ValueError):
+                return None
         limits = profile.limits or {}
         raw = limits.get("concurrency_limit_per_tenant") if isinstance(limits, dict) else None
         try:
@@ -631,6 +640,7 @@ class PipelineOrchestrator:
         )
         step.logs_file_id = file_record.id
         step.logs_uri = None
+        step.logs_ref = f"s3://{store_key}"
 
     async def _artifact_list(self, job_id: str) -> list[dict[str, Any]]:
         rows = (
@@ -709,7 +719,7 @@ class PipelineOrchestrator:
                     "job.status": {"from": None, "to": job.status},
                     "job.current_step_index": {"from": None, "to": job.current_step_index},
                     "step.status": {"from": None, "to": step.status},
-                    "step.attempt": {"from": None, "to": step.attempts},
+                    "step.attempt": {"from": None, "to": step.attempt},
                 }
             },
             details={"step_key": step.step_key or step.step_code},

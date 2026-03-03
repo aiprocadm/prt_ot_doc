@@ -25,6 +25,7 @@ class PipelineProfileRepo:
             graph=graph_payload,
             limits=payload.limits.model_dump(),
             is_active=payload.is_active,
+            concurrency_limit_per_tenant=payload.concurrency_limit_per_tenant,
         )
         self.session.add(model)
         await self.session.flush()
