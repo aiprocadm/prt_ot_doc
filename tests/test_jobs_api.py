@@ -11,8 +11,12 @@ from app.modules.files.models import FileRecord, FileStatus
 
 
 async def _ensure_global_tenant(*, slug: str = "test", tenant_id: str | None = None) -> None:
-    async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as session:
-        existing = (await session.execute(select(Tenant).where(Tenant.slug == slug))).scalar_one_or_none()
+    async with AsyncSessionLocal(
+        tenant="public", include_public=False, create_schema=False
+    ) as session:
+        existing = (
+            await session.execute(select(Tenant).where(Tenant.slug == slug))
+        ).scalar_one_or_none()
         if existing is not None:
             return
         payload = {"slug": slug, "name": slug.title(), "contact_email": f"{slug}@example.com"}
@@ -29,8 +33,11 @@ def _bypass_tenant_middleware(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(TenantMiddleware, "dispatch", _dispatch_passthrough)
 
+
 @pytest.mark.anyio
-async def test_job_status_endpoint_for_unknown_job(async_client, make_auth_headers, sessionmaker, data_factory) -> None:
+async def test_job_status_endpoint_for_unknown_job(
+    async_client, make_auth_headers, sessionmaker, data_factory
+) -> None:
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
     await _ensure_global_tenant(slug=tenant.slug, tenant_id=str(tenant.id))
@@ -107,7 +114,9 @@ async def test_jobs_list_and_retry_step_endpoints(
 
 
 @pytest.mark.anyio
-async def test_create_job_endpoint_with_idempotency(async_client, make_auth_headers, sessionmaker, data_factory) -> None:
+async def test_create_job_endpoint_with_idempotency(
+    async_client, make_auth_headers, sessionmaker, data_factory
+) -> None:
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
     await _ensure_global_tenant(slug=tenant.slug, tenant_id=str(tenant.id))
@@ -121,20 +130,28 @@ async def test_create_job_endpoint_with_idempotency(async_client, make_auth_head
         "limits": {"max_parallel": 2, "max_parallel_per_step": {}},
         "is_active": True,
     }
-    created = await async_client.post("/api/v1/pipelines/profiles", json=profile_payload, headers=headers)
+    created = await async_client.post(
+        "/api/v1/pipelines/profiles", json=profile_payload, headers=headers
+    )
     assert created.status_code == 201, created.text
     profile_id = created.json()["id"]
 
     payload = {"profile_id": profile_id, "inputs": {"x": 1}, "options": {"run_async": True}}
-    resp1 = await async_client.post("/api/v1/jobs", json=payload, headers={**headers, "Idempotency-Key": "job-create-idem"})
+    resp1 = await async_client.post(
+        "/api/v1/jobs", json=payload, headers={**headers, "Idempotency-Key": "job-create-idem"}
+    )
     assert resp1.status_code == 202
-    resp2 = await async_client.post("/api/v1/jobs", json=payload, headers={**headers, "Idempotency-Key": "job-create-idem"})
+    resp2 = await async_client.post(
+        "/api/v1/jobs", json=payload, headers={**headers, "Idempotency-Key": "job-create-idem"}
+    )
     assert resp2.status_code == 202
     assert resp1.json()["job_id"] == resp2.json()["job_id"]
 
 
 @pytest.mark.anyio
-async def test_jobs_cancel_and_retry_slash_endpoints(async_client, make_auth_headers, sessionmaker, data_factory) -> None:
+async def test_jobs_cancel_and_retry_slash_endpoints(
+    async_client, make_auth_headers, sessionmaker, data_factory
+) -> None:
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         job = DocumentJob(
@@ -183,7 +200,9 @@ async def test_jobs_cancel_and_retry_slash_endpoints(async_client, make_auth_hea
 
 
 @pytest.mark.anyio
-async def test_jobs_logs_endpoint(async_client, make_auth_headers, sessionmaker, data_factory) -> None:
+async def test_jobs_logs_endpoint(
+    async_client, make_auth_headers, sessionmaker, data_factory
+) -> None:
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         job = DocumentJob(
@@ -233,7 +252,9 @@ async def test_jobs_logs_endpoint(async_client, make_auth_headers, sessionmaker,
 
 
 @pytest.mark.anyio
-async def test_create_job_endpoint_without_idempotency_key(async_client, make_auth_headers, sessionmaker, data_factory) -> None:
+async def test_create_job_endpoint_without_idempotency_key(
+    async_client, make_auth_headers, sessionmaker, data_factory
+) -> None:
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
     await _ensure_global_tenant(slug=tenant.slug, tenant_id=str(tenant.id))
@@ -247,7 +268,9 @@ async def test_create_job_endpoint_without_idempotency_key(async_client, make_au
         "limits": {"max_parallel": 2, "max_parallel_per_step": {}},
         "is_active": True,
     }
-    created = await async_client.post("/api/v1/pipelines/profiles", json=profile_payload, headers=headers)
+    created = await async_client.post(
+        "/api/v1/pipelines/profiles", json=profile_payload, headers=headers
+    )
     assert created.status_code == 201, created.text
     profile_id = created.json()["id"]
 
@@ -260,7 +283,9 @@ async def test_create_job_endpoint_without_idempotency_key(async_client, make_au
 
 
 @pytest.mark.anyio
-async def test_jobs_logs_endpoint_reads_logs_file_id(async_client, make_auth_headers, sessionmaker, data_factory) -> None:
+async def test_jobs_logs_endpoint_reads_logs_file_id(
+    async_client, make_auth_headers, sessionmaker, data_factory
+) -> None:
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         job = DocumentJob(
@@ -326,3 +351,47 @@ async def test_jobs_logs_endpoint_reads_logs_file_id(async_client, make_auth_hea
     body = resp.json()
     assert body["logs_uri"] == f"s3://{log_key}"
     assert body["lines"]
+
+
+@pytest.mark.anyio
+async def test_jobs_ws_stream_endpoint(
+    async_client, make_auth_headers, sessionmaker, data_factory
+) -> None:
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        job = DocumentJob(
+            tenant_id=str(tenant.id),
+            kind="pipeline",
+            status=DocumentJobStatus.QUEUED.value,
+            pipeline_profile_id=None,
+            preset_id=None,
+            input_sha256="a" * 64,
+            request_hash="b" * 64,
+            idempotency_key="idem-job-stream",
+            template_code="TMP",
+            template_version=1,
+            correlation_id="corr-stream",
+            created_by="user-1",
+        )
+        session.add(job)
+        await session.flush()
+        session.add(
+            DocumentJobStep(
+                tenant_id=str(tenant.id),
+                job_id=job.id,
+                step_code="render_docx",
+                step_key="render_docx",
+                status=JobStepStatus.QUEUED.value,
+                attempts=0,
+            )
+        )
+        await session.commit()
+
+    headers = await make_auth_headers()
+    headers["x-tenant"] = str(tenant.id)
+    await _ensure_global_tenant(slug=tenant.slug, tenant_id=str(tenant.id))
+
+    response = await async_client.get(f"/api/v1/jobs/ws/jobs/{job.id}", headers=headers)
+    assert response.status_code == 200
+    assert "text/event-stream" in response.headers.get("content-type", "")
+    assert "step_status_changed" in response.text
