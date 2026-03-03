@@ -250,7 +250,10 @@ class FileService:
             verdict = av.scan_file(Path(tmp.name))
 
         if verdict.status == "infected":
-            quarantine_key = f"quarantine/{datetime.now(timezone.utc):%Y/%m/%d}/{record.id}/{Path(record.object_key).name}"
+            quarantine_key = (
+                f"tenants/{self.tenant_id}/quarantine/"
+                f"{datetime.now(timezone.utc):%Y/%m/%d}/{record.id}/{Path(record.object_key).name}"
+            )
             s3.put_object(data=data, mime=record.content_type, key=quarantine_key)
             record.object_key = quarantine_key
             record.status = FileStatus.quarantined.value

@@ -163,7 +163,7 @@ async def test_av_scan_infected_moves_to_quarantine(monkeypatch: pytest.MonkeyPa
     await svc.av_scan_file(file_id="f5")
 
     assert rec.status == FileStatus.quarantined.value
-    assert rec.object_key.startswith("quarantine/")
+    assert rec.object_key.startswith("tenants/t1/quarantine/")
 
 
 class _ScalarResult:
