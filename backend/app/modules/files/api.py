@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
-from datetime import datetime, timedelta, timezone
 import hashlib
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status, File, Form, UploadFile
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.idempotency import compute_request_hash
@@ -13,30 +10,45 @@ from app.models.models import Tenant
 from app.modules.files import service
 from app.modules.files.models import FileContentIndex, FileLink, FileRecord, FileVersion
 from app.modules.files.schemas import (
-    DownloadURLResponse,
+    CompleteUploadRequest,
     DownloadUrlRequest,
+    DownloadURLResponse,
     DownloadUrlResponse,
     EntityFileListItem,
     FileDto,
-    FinalizeUploadResponse,
     FileIndexStatusDto,
+    FileVersionDto,
+    FinalizeUploadResponse,
     LinkFileRequest,
+    LinkFileResponse,
+    NewFileVersionRequest,
+    NewFileVersionResponse,
+    ReindexFileResponse,
+    SignedUrlRequest,
+    SignedUrlResponse,
     UploadCompleteRequest,
     UploadCompleteResponse,
     UploadInitRequest,
     UploadInitResponse,
     UploadSessionRequest,
     UploadSessionResponse,
-    ReindexFileResponse,
-    SignedUrlRequest,
-    SignedUrlResponse,
-    CompleteUploadRequest,
-    NewFileVersionRequest,
-    NewFileVersionResponse,
-    FileVersionDto,
 )
-from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 from app.services.billing import BillingService
+from app.services.idempotency import IdempotencyService, normalize_idempotency_key
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()
 
@@ -185,7 +197,7 @@ async def get_file_v2(
         av_vendor=file_record.av_vendor,
         av_result_json=file_record.av_result_json or {},
         metadata_json=file_record.metadata_json or {},
-        links=[EntityFileListItem(file_id=file_record.id, role=l.role, status=file_record.status, display_name=Path(file_record.object_key).name, size=file_record.size_bytes) for l in link_rows],
+        links=[EntityFileListItem(file_id=file_record.id, role=link_row.role, status=file_record.status, display_name=Path(file_record.object_key).name, size=file_record.size_bytes) for link_row in link_rows],
         content_index=FileIndexStatusDto(status=content_index.status, attempts=int(content_index.attempts or 0), last_error=content_index.last_error) if content_index else None,
     )
 
@@ -232,16 +244,19 @@ async def get_download_url_v2(
     return DownloadUrlResponse(signed_get_url=url)
 
 
-@router.post("/{file_id}:link")
+@router.post("/{file_id}:link", response_model=LinkFileResponse)
+@router.post("/{file_id}/link", response_model=LinkFileResponse)
 async def link_file_v2(
     file_id: str,
     payload: LinkFileRequest,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
-) -> None:
+) -> LinkFileResponse:
     svc = service.FileService(session=session, tenant_id=str(tenant.id))
-    await svc.link_file(file_id=file_id, entity_type=payload.entity_type, entity_id=payload.entity_id, role=payload.role)
+    role = payload.role or payload.tag or "attachment"
+    link = await svc.link_file(file_id=file_id, entity_type=payload.entity_type, entity_id=payload.entity_id, role=role)
     await session.commit()
+    return LinkFileResponse(link_id=link.id)
 
 
 @router.get("/entities/{entity_type}/{entity_id}/files", response_model=list[EntityFileListItem])
@@ -270,6 +285,7 @@ async def list_entity_files_v2(
             status=file_rec.status,
             display_name=Path(file_rec.object_key).name,
             size=file_rec.size_bytes,
+            link_id=link.id,
         )
         for link, file_rec in rows
     ]
@@ -295,6 +311,32 @@ async def get_signed_url_v2(
     await session.commit()
     return SignedUrlResponse(signed_url=url)
 
+
+
+
+@router.delete("/{file_id}/link/{link_id}")
+async def delete_link_v2(
+    file_id: str,
+    link_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> dict[str, str]:
+    svc = service.FileService(session=session, tenant_id=str(tenant.id))
+    await svc.unlink_file_by_id(file_id=file_id, link_id=link_id)
+    await session.commit()
+    return {"status": "deleted"}
+
+
+@router.post("/abort-upload")
+async def abort_upload_v2(
+    payload: CompleteUploadRequest,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> dict[str, str]:
+    svc = service.FileService(session=session, tenant_id=str(tenant.id))
+    await svc.abort_upload(file_id=payload.file_id)
+    await session.commit()
+    return {"status": "aborted"}
 
 @router.post("/upload", response_model=FinalizeUploadResponse)
 async def upload_multipart_v1(

@@ -1,49 +1,53 @@
 from __future__ import annotations
 
 import hashlib
-from uuid import uuid4
+import logging
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from time import perf_counter
 from typing import Any
-
-import logging
-
-from fastapi import HTTPException, status
-from sqlalchemy import delete, func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from uuid import uuid4
 
 from app.core.config import get_settings
 from app.domains.files import s3
 from app.modules.files import av, extractors, storage
-from app.modules.search.models import SearchDocument
 from app.modules.files.models import (
     AVStatus,
     DownloadLog,
+    FileContentIndex,
+    FileContentIndexStatus,
     FileDownloadLog,
     FileEntityType,
     FileLink,
     FileLinkRole,
     FileObject,
     FileRecord,
+    FileScanResult,
     FileStatus,
     FileTextIndex,
-    FileContentIndex,
-    FileContentIndexStatus,
-    FileScanResult,
     FileVersion,
     FileVersionStatus,
     TextIndexStatus,
 )
+from app.modules.search.models import SearchDocument
 from app.services.outbox import OutboxService
-from app.tasks import index_file_content_job, av_scan_file_job
-
+from app.tasks import av_scan_file_job, index_file_content_job
+from fastapi import HTTPException, status
+from sqlalchemy import delete, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 MAX_INDEX_BYTES = 25 * 1024 * 1024
 MAX_INDEX_CHARS = 500_000
 
 logger = logging.getLogger(__name__)
+
+_PII_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.IGNORECASE), "[masked_email]"),
+    (re.compile(r"(?:\+7|8)?[\s\-()]?\d{3}[\s\-()]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}"), "[masked_phone]"),
+    (re.compile(r"\b\d{4}\s?\d{6}\b"), "[masked_passport]"),
+)
 
 
 def _sha256_bytes(payload: bytes) -> str:
@@ -62,6 +66,13 @@ def compute_sha256_stream(chunks: list[bytes]) -> str:
 def _safe_filename(filename: str | None, fallback: str = "artifact.bin") -> str:
     candidate = (filename or fallback).strip().replace("/", "_").replace("..", "_")
     return candidate or fallback
+
+
+def _mask_pii(text: str) -> str:
+    masked = text
+    for pattern, replacement in _PII_PATTERNS:
+        masked = pattern.sub(replacement, masked)
+    return masked
 
 
 def _normalize_name_part(value: Any, fallback: str) -> str:
@@ -337,7 +348,7 @@ class FileService:
         if record is None or record.tenant_id != self.tenant_id:
             raise HTTPException(status_code=404, detail="file_not_found")
         if record.status != FileStatus.clean.value:
-            raise HTTPException(status_code=409, detail="file_not_ready")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="file_not_clean")
         if "/" in (record.object_key or ""):
             try:
                 storage.assert_tenant_key(tenant_id=self.tenant_id, key=record.object_key)
@@ -360,6 +371,12 @@ class FileService:
         return url
 
     async def link_file(self, *, file_id: str, entity_type: str, entity_id: str, role: str) -> FileLink:
+        guarded_roles = {"output", "signature", "receipt"}
+        record = await self.session.get(FileRecord, file_id)
+        if record is None or record.tenant_id != self.tenant_id:
+            raise HTTPException(status_code=404, detail="file_not_found")
+        if role in guarded_roles and record.status != FileStatus.clean.value:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="file_not_clean")
         link = FileLink(
             tenant_id=self.tenant_id,
             file_id=file_id,
@@ -368,12 +385,33 @@ class FileService:
             role=role,
         )
         self.session.add(link)
-        record = await self.session.get(FileRecord, file_id)
-        if record is not None and record.tenant_id == self.tenant_id:
-            record.entity_type = entity_type
-            record.entity_id = entity_id
+        record.entity_type = entity_type
+        record.entity_id = entity_id
         await self.session.flush()
         return link
+
+    async def unlink_file_by_id(self, *, file_id: str, link_id: str) -> None:
+        await self.session.execute(
+            delete(FileLink).where(
+                FileLink.tenant_id == self.tenant_id,
+                FileLink.file_id == file_id,
+                FileLink.id == link_id,
+            )
+        )
+
+    async def abort_upload(self, *, file_id: str) -> None:
+        record = await self.session.get(FileRecord, file_id)
+        if record is None or record.tenant_id != self.tenant_id:
+            raise HTTPException(status_code=404, detail="file_not_found")
+        if record.status not in {FileStatus.uploading.value, FileStatus.uploaded.value}:
+            raise HTTPException(status_code=409, detail="upload_not_abortable")
+        try:
+            s3.delete_object(key=record.object_key)
+        except Exception:
+            logger.warning("files.abort_upload.cleanup_failed", extra={"file_id": file_id})
+        record.status = FileStatus.deleted.value
+        record.deleted_at = datetime.now(timezone.utc)
+        await self.session.flush()
 
     async def unlink_file(self, *, file_id: str, entity_type: str, entity_id: str, role: str | None = None) -> None:
         stmt = delete(FileLink).where(
@@ -536,6 +574,7 @@ async def index_file_content(*, session: AsyncSession, tenant_id: str, version: 
         logger.info("files.index_content.not_indexable", extra={"version_id": version.id, "mime": version.mime})
         return
     truncated = False
+    text = _mask_pii(text)
     if len(text) > MAX_INDEX_CHARS:
         text = text[:MAX_INDEX_CHARS]
         truncated = True

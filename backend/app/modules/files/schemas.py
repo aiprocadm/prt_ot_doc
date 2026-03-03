@@ -111,7 +111,12 @@ class DownloadUrlResponse(BaseModel):
 class LinkFileRequest(BaseModel):
     entity_type: str
     entity_id: str
-    role: str
+    role: str | None = None
+    tag: str | None = None
+
+
+class LinkFileResponse(BaseModel):
+    link_id: str
 
 
 class EntityFileListItem(BaseModel):
@@ -120,6 +125,7 @@ class EntityFileListItem(BaseModel):
     status: str
     display_name: str
     size: int
+    link_id: str | None = None
 
 
 class ReindexFileResponse(BaseModel):

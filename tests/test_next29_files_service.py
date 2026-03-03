@@ -1,16 +1,15 @@
 import hashlib
 
 import pytest
-from fastapi import HTTPException
-
-from app.modules.files.storage import build_tenant_key
 from app.modules.files.service import compute_sha256_stream
+from app.modules.files.storage import build_tenant_key
+from fastapi import HTTPException
 
 
 def test_build_tenant_key_is_tenant_scoped() -> None:
     key = build_tenant_key(tenant_id="tenant-a", file_id="f1", version_no=2, filename="doc.pdf")
-    assert key.startswith("tenants/tenant-a/")
-    assert "/f1/2/" in key
+    assert key.startswith("tenant/tenant-a/")
+    assert "/f1/v2/" in key
 
 
 def test_sha256_computation_matches_reference() -> None:
