@@ -40,6 +40,7 @@ class PipelineProfileCreate(BaseModel):
     graph: PipelineGraph | None = None
     limits: PipelineLimitsSchema = Field(default_factory=PipelineLimitsSchema)
     is_active: bool = True
+    concurrency_limit_per_tenant: int | None = Field(default=None, ge=1, le=256)
 
     model_config = ConfigDict(extra="forbid")
 
@@ -59,6 +60,7 @@ class PipelineProfilePatch(BaseModel):
     graph: PipelineGraph | None = None
     limits: PipelineLimitsSchema | None = None
     is_active: bool | None = None
+    concurrency_limit_per_tenant: int | None = Field(default=None, ge=1, le=256)
 
     @model_validator(mode="after")
     def validate_graph(self) -> "PipelineProfilePatch":
@@ -78,6 +80,7 @@ class PipelineProfileRead(BaseModel):
     limits: PipelineLimitsSchema
     profile_version: int = 1
     version: int
+    concurrency_limit_per_tenant: int | None = None
 
 
 class PipelineRunRequest(BaseModel):

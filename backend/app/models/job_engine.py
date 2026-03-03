@@ -72,6 +72,7 @@ class DocumentJob(TenantBaseModel):
     )
     error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
     error_payload: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
+    queued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     steps: Mapped[list["DocumentJobStep"]] = relationship(
@@ -98,6 +99,7 @@ class DocumentJobStep(TenantBaseModel):
     )
     step_code: Mapped[str] = mapped_column(String(64), nullable=False)
     step_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    seq: Mapped[int | None] = mapped_column(Integer, nullable=True)
     order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     step_order: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[JobStepStatus] = mapped_column(
@@ -106,6 +108,7 @@ class DocumentJobStep(TenantBaseModel):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     inputs_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     input_ref: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
@@ -114,6 +117,7 @@ class DocumentJobStep(TenantBaseModel):
     output: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
     logs_file_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     logs_uri: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    logs_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
     error_payload: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -124,6 +128,8 @@ class DocumentJobStep(TenantBaseModel):
         UniqueConstraint("job_id", "step_code", name="uq_document_job_step"),
         Index("ix_job_steps_tenant_job", "tenant_id", "job_id"),
         Index("ix_job_steps_tenant_job_order", "tenant_id", "job_id", "step_order"),
+        Index("ix_document_job_steps_job_seq", "job_id", "seq"),
+        Index("ix_document_job_steps_job_status", "job_id", "status"),
     )
 
 
