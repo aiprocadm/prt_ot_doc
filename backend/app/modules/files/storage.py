@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from app.domains.files import s3
 
 
@@ -13,6 +15,9 @@ def build_tenant_key(
     version_no: int | None = None,
 ) -> str:
     safe_name = filename.replace("..", "_").replace("/", "_")
+    if entity is None and entity_id is None and version_no is None:
+        now = datetime.now(timezone.utc)
+        return f"{tenant_id}/{now:%Y/%m/%d}/{file_id}/{safe_name}"
     if version_no is not None:
         return f"tenants/{tenant_id}/{entity or "files"}/{entity_id or file_id}/{file_id}/{version_no}/{safe_name}"
     resolved_entity = str(entity or "files")
@@ -21,6 +26,8 @@ def build_tenant_key(
 
 
 def assert_tenant_key(*, tenant_id: str, key: str) -> None:
+    if key.startswith(f"{tenant_id}/"):
+        return
     expected_prefix = f"tenants/{tenant_id}/"
     if not key.startswith(expected_prefix):
         raise PermissionError("tenant_key_forbidden")

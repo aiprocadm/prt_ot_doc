@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from typing import Any
+from datetime import datetime
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
-from datetime import datetime
 
 
 class UploadInitRequest(BaseModel):
@@ -41,6 +41,7 @@ class UploadSessionRequest(BaseModel):
     filename: str
     content_type: str
     size_bytes: int = Field(ge=0)
+    metadata: dict[str, Any] | None = None
     metadata_json: dict[str, Any] | None = None
     sha256: str | None = None
 
@@ -50,6 +51,7 @@ class UploadSessionResponse(BaseModel):
     signed_put_url: str
     expires_at: datetime
     required_headers: dict[str, str] = Field(default_factory=dict)
+    existing: bool = False
 
 
 class CompleteUploadRequest(BaseModel):
@@ -99,7 +101,7 @@ class FileDto(BaseModel):
 
 class DownloadUrlRequest(BaseModel):
     purpose: str
-    ttl_seconds: int = Field(default=600, ge=60, le=3600)
+    ttl_seconds: int = Field(default=600, ge=60, le=900)
 
 
 class DownloadUrlResponse(BaseModel):
@@ -136,8 +138,8 @@ class FileVersionDto(BaseModel):
 
 
 class SignedUrlRequest(BaseModel):
-    purpose: str
-    ttl_sec: int = Field(default=300, ge=60, le=3600)
+    action: Literal["download"] = "download"
+    ttl_seconds: int = Field(default=300, ge=60, le=900)
 
 
 class SignedUrlResponse(BaseModel):
