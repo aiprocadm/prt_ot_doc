@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import asyncio
+import json
 from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -93,16 +96,28 @@ async def create_job(
     if payload.profile_id:
         profile = await session.get(PipelineProfile, payload.profile_id)
     elif payload.profile_code:
-        profile = (await session.execute(select(PipelineProfile).where(PipelineProfile.tenant_id == str(tenant.id), PipelineProfile.code == payload.profile_code, PipelineProfile.is_active.is_(True)))).scalar_one_or_none()
+        profile = (
+            await session.execute(
+                select(PipelineProfile).where(
+                    PipelineProfile.tenant_id == str(tenant.id),
+                    PipelineProfile.code == payload.profile_code,
+                    PipelineProfile.is_active.is_(True),
+                )
+            )
+        ).scalar_one_or_none()
     if profile is None or str(profile.tenant_id) != str(tenant.id) or not profile.is_active:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "profile not found")
 
     request_hash = compute_request_hash(payload.model_dump())
-    idem_service = IdempotencyService(session=session, tenant_id=str(tenant.id), endpoint="jobs.create")
+    idem_service = IdempotencyService(
+        session=session, tenant_id=str(tenant.id), endpoint="jobs.create"
+    )
     idem_key = normalize_idempotency_key(idempotency_key) if idempotency_key else None
     record = None
     if idem_key:
-        record, created = await idem_service.acquire(key=idem_key, request_hash=request_hash, method="POST", path="/v1/jobs")
+        record, created = await idem_service.acquire(
+            key=idem_key, request_hash=request_hash, method="POST", path="/v1/jobs"
+        )
         if not created:
             body = await idem_service.respond_from_store(record, model=JobCreateResponse)
             return body
@@ -121,7 +136,17 @@ async def create_job(
         idempotency_key=idem_key or f"jobs:{tenant.id}:{request_hash[:16]}",
         request_hash=request_hash,
     )
-    steps = (await session.execute(select(DocumentJobStep).where(DocumentJobStep.job_id == job.id).order_by(DocumentJobStep.order.asc()))).scalars().all()
+    steps = (
+        (
+            await session.execute(
+                select(DocumentJobStep)
+                .where(DocumentJobStep.job_id == job.id)
+                .order_by(DocumentJobStep.order.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
     response_body = {
         "job_id": job.id,
         "status": _status_value(job.status),
@@ -144,7 +169,9 @@ async def create_job(
         ],
     }
     if idem_key and record is not None:
-        await idem_service.store_success(record, status_code=status.HTTP_202_ACCEPTED, body=response_body)
+        await idem_service.store_success(
+            record, status_code=status.HTTP_202_ACCEPTED, body=response_body
+        )
     await session.commit()
     return JobCreateResponse.model_validate(response_body)
 
@@ -155,19 +182,55 @@ class JobListRead(BaseModel):
 
 
 @router.get("/{job_id}", response_model=JobRead)
-async def get_job(job_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> JobRead:
+async def get_job(
+    job_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> JobRead:
     job = await session.get(DocumentJob, job_id)
     if job is None or str(job.tenant_id) != str(tenant.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
-    steps = (await session.execute(select(DocumentJobStep).where(DocumentJobStep.job_id == job.id).order_by(DocumentJobStep.order.asc()))).scalars().all()
-    artifacts = (await session.execute(select(DocumentArtifact).where(DocumentArtifact.job_id == job.id).order_by(DocumentArtifact.created_at.asc()))).scalars().all()
-    logs = (await session.execute(select(DocumentJobLog).where(DocumentJobLog.job_id == job.id).order_by(DocumentJobLog.created_at.asc()))).scalars().all()
+    steps = (
+        (
+            await session.execute(
+                select(DocumentJobStep)
+                .where(DocumentJobStep.job_id == job.id)
+                .order_by(DocumentJobStep.order.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    artifacts = (
+        (
+            await session.execute(
+                select(DocumentArtifact)
+                .where(DocumentArtifact.job_id == job.id)
+                .order_by(DocumentArtifact.created_at.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    logs = (
+        (
+            await session.execute(
+                select(DocumentJobLog)
+                .where(DocumentJobLog.job_id == job.id)
+                .order_by(DocumentJobLog.created_at.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
     file_ids = [a.file_id for a in artifacts if a.file_id]
     file_rows = {}
     if file_ids:
         file_rows = {
             f.id: f
-            for f in (await session.execute(select(FileRecord).where(FileRecord.id.in_(file_ids)))).scalars().all()
+            for f in (await session.execute(select(FileRecord).where(FileRecord.id.in_(file_ids))))
+            .scalars()
+            .all()
         }
     artifact_map = {
         "all": [
@@ -176,7 +239,11 @@ async def get_job(job_id: str, session: AsyncSession = Depends(get_session), ten
                 "step_code": a.step_code,
                 "kind": a.kind,
                 "sha256": a.sha256,
-                "display_name": (file_rows.get(a.file_id).metadata_json or {}).get("display_name") if file_rows.get(a.file_id) else None,
+                "display_name": (
+                    (file_rows.get(a.file_id).metadata_json or {}).get("display_name")
+                    if file_rows.get(a.file_id)
+                    else None
+                ),
                 "size": file_rows.get(a.file_id).size_bytes if file_rows.get(a.file_id) else None,
                 "status": file_rows.get(a.file_id).status if file_rows.get(a.file_id) else None,
             }
@@ -196,9 +263,41 @@ async def get_job(job_id: str, session: AsyncSession = Depends(get_session), ten
             profile_id=job.profile_id or job.pipeline_profile_id,
             created_by=job.created_by,
         ),
-        steps=[JobStepRead(code=s.step_code, step_name=s.step_code, status=_status_value(s.status), attempt=s.attempts, max_attempts=s.max_attempts, started_at=s.started_at, ended_at=s.ended_at, input_ref=s.input_ref, output_ref=s.output_ref, error_code=s.error_code, error_payload=s.error_payload) for s in steps],
-        logs=[JobLogRead(timestamp=l.created_at, level=l.level, message=l.message, step_name=l.step_code, meta_json=l.meta_json) for l in logs],
-        result={"document_version_id": job.result_document_version_id, "files": artifact_map["all"], "artifacts": artifact_map} if artifacts or job.result_document_version_id else None,
+        steps=[
+            JobStepRead(
+                code=s.step_code,
+                step_name=s.step_code,
+                status=_status_value(s.status),
+                attempt=s.attempts,
+                max_attempts=s.max_attempts,
+                started_at=s.started_at,
+                ended_at=s.ended_at,
+                input_ref=s.input_ref,
+                output_ref=s.output_ref,
+                error_code=s.error_code,
+                error_payload=s.error_payload,
+            )
+            for s in steps
+        ],
+        logs=[
+            JobLogRead(
+                timestamp=l.created_at,
+                level=l.level,
+                message=l.message,
+                step_name=l.step_code,
+                meta_json=l.meta_json,
+            )
+            for l in logs
+        ],
+        result=(
+            {
+                "document_version_id": job.result_document_version_id,
+                "files": artifact_map["all"],
+                "artifacts": artifact_map,
+            }
+            if artifacts or job.result_document_version_id
+            else None
+        ),
     )
 
 
@@ -230,17 +329,42 @@ async def list_jobs(
         stmt = stmt.where(DocumentJob.created_at <= created_to)
     if cursor:
         stmt = stmt.where(DocumentJob.created_at < datetime.fromisoformat(cursor))
-    rows = (await session.execute(stmt.order_by(DocumentJob.created_at.desc()).limit(limit + 1))).scalars().all()
+    rows = (
+        (await session.execute(stmt.order_by(DocumentJob.created_at.desc()).limit(limit + 1)))
+        .scalars()
+        .all()
+    )
     next_cursor = None
     if len(rows) > limit:
         next_cursor = rows[limit - 1].created_at.isoformat() if rows[limit - 1].created_at else None
         rows = rows[:limit]
-    return JobListRead(items=[JobEnvelopeRead(id=job.id, kind=job.kind, status=_status_value(job.status), correlation_id=job.correlation_id, started_at=job.started_at, ended_at=job.ended_at, error_code=job.error_code, error_payload=job.error_payload, profile_id=job.profile_id or job.pipeline_profile_id, created_by=job.created_by) for job in rows], next_cursor=next_cursor)
+    return JobListRead(
+        items=[
+            JobEnvelopeRead(
+                id=job.id,
+                kind=job.kind,
+                status=_status_value(job.status),
+                correlation_id=job.correlation_id,
+                started_at=job.started_at,
+                ended_at=job.ended_at,
+                error_code=job.error_code,
+                error_payload=job.error_payload,
+                profile_id=job.profile_id or job.pipeline_profile_id,
+                created_by=job.created_by,
+            )
+            for job in rows
+        ],
+        next_cursor=next_cursor,
+    )
 
 
 @router.post("/{job_id}:cancel", response_model=JobRead)
 @router.post("/{job_id}/cancel", response_model=JobRead)
-async def cancel_job(job_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> JobRead:
+async def cancel_job(
+    job_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> JobRead:
     job = await session.get(DocumentJob, job_id)
     if job is None or str(job.tenant_id) != str(tenant.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
@@ -257,12 +381,21 @@ class RetryJobRequest(BaseModel):
 
 @router.post("/{job_id}:retry", response_model=JobRead)
 @router.post("/{job_id}/retry", response_model=JobRead)
-async def retry_job(job_id: str, payload: RetryJobRequest, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> JobRead:
+async def retry_job(
+    job_id: str,
+    payload: RetryJobRequest,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> JobRead:
     job = await session.get(DocumentJob, job_id)
     if job is None or str(job.tenant_id) != str(tenant.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
     try:
-        await DocumentPipelineOrchestrator(session).retry_job(job_id=job_id, from_step_key=payload.from_step_key or payload.step_key, retry_failed_only=payload.retry_failed_only)
+        await DocumentPipelineOrchestrator(session).retry_job(
+            job_id=job_id,
+            from_step_key=payload.from_step_key or payload.step_key,
+            retry_failed_only=payload.retry_failed_only,
+        )
     except ValueError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     await session.commit()
@@ -270,7 +403,12 @@ async def retry_job(job_id: str, payload: RetryJobRequest, session: AsyncSession
 
 
 @router.post("/{job_id}/steps/{step}:rerun", response_model=JobRead)
-async def rerun_step(job_id: str, step: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> JobRead:
+async def rerun_step(
+    job_id: str,
+    step: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> JobRead:
     job = await session.get(DocumentJob, job_id)
     if job is None or str(job.tenant_id) != str(tenant.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
@@ -285,7 +423,12 @@ async def rerun_step(job_id: str, step: str, session: AsyncSession = Depends(get
 
 
 @router.post("/{job_id}/steps/{step_id}:retry", response_model=JobRead)
-async def retry_step_by_id(job_id: str, step_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> JobRead:
+async def retry_step_by_id(
+    job_id: str,
+    step_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> JobRead:
     job = await session.get(DocumentJob, job_id)
     if job is None or str(job.tenant_id) != str(tenant.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
@@ -295,10 +438,14 @@ async def retry_step_by_id(job_id: str, step_id: str, session: AsyncSession = De
     return await rerun_step(job_id=job_id, step=step.step_code, session=session, tenant=tenant)
 
 
-
-
 @router.get("/{job_id}/steps/{step_id}/logs")
-async def get_step_logs(job_id: str, step_id: str, tail: int = Query(default=200, ge=1, le=2000), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict[str, Any]:
+async def get_step_logs(
+    job_id: str,
+    step_id: str,
+    tail: int = Query(default=200, ge=1, le=2000),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> dict[str, Any]:
     job = await session.get(DocumentJob, job_id)
     if job is None or str(job.tenant_id) != str(tenant.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
@@ -326,10 +473,73 @@ async def get_step_logs(job_id: str, step_id: str, tail: int = Query(default=200
         return {"logs_uri": logs_uri, "lines": []}
     lines = storage.get(key).decode("utf-8").splitlines()[-tail:]
     return {"logs_uri": logs_uri, "lines": lines}
+
+
 class RetryStepRequest(BaseModel):
     step_key: str
 
 
 @router.post("/{job_id}:retry-step", response_model=JobRead)
-async def retry_step_compat(job_id: str, payload: RetryStepRequest, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> JobRead:
+async def retry_step_compat(
+    job_id: str,
+    payload: RetryStepRequest,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> JobRead:
     return await rerun_step(job_id=job_id, step=payload.step_key, session=session, tenant=tenant)
+
+
+@router.get("/ws/jobs/{job_id}")
+async def stream_jobs(
+    job_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> StreamingResponse:
+    job = await session.get(DocumentJob, job_id)
+    if job is None or str(job.tenant_id) != str(tenant.id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+
+    async def _stream() -> Any:
+        previous_payload = None
+        while True:
+            run_obj = await session.get(DocumentJob, job_id)
+            if run_obj is None or str(run_obj.tenant_id) != str(tenant.id):
+                break
+            steps = (
+                (
+                    await session.execute(
+                        select(DocumentJobStep)
+                        .where(DocumentJobStep.job_id == job_id)
+                        .order_by(DocumentJobStep.order.asc())
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            payload = {
+                "event": "job_status_changed",
+                "job_id": run_obj.id,
+                "job_status": _status_value(run_obj.status),
+                "steps": [
+                    {
+                        "step_id": step.id,
+                        "step_code": step.step_key or step.step_code,
+                        "status": _status_value(step.status),
+                        "attempt": step.attempts,
+                    }
+                    for step in steps
+                ],
+                "updated_at": run_obj.updated_at.isoformat() if run_obj.updated_at else None,
+            }
+            snapshot = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+            if snapshot != previous_payload:
+                previous_payload = snapshot
+                yield "event: step_status_changed\n"
+                yield f"data: {snapshot}\n\n"
+            if _status_value(run_obj.status) in {"success", "failed", "canceled"}:
+                break
+            yield ": keepalive\n\n"
+            await asyncio.sleep(2)
+
+    headers = {"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"}
+    return StreamingResponse(_stream(), media_type="text/event-stream", headers=headers)
