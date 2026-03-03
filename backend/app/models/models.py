@@ -347,7 +347,6 @@ class BillingEvent(SharedModel):
 
     __table_args__ = (
         Index("ix_billing_events_tenant_created", "tenant_id", "created_at"),
-        Index("ix_billing_events_type", "type"),
         UniqueConstraint("tenant_id", "type", "ref_type", "ref_id", name="uq_billing_event_dedup"),
     )
 
