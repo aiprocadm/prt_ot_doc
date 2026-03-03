@@ -29,6 +29,7 @@ from app.modules.files.schemas import (
     ReindexFileResponse,
     SignedUrlRequest,
     SignedUrlResponse,
+    CompleteUploadRequest,
 )
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 from app.services.billing import BillingService
@@ -127,6 +128,19 @@ async def create_upload_session_v2(
     return UploadSessionResponse(file_id=file_record.id, signed_put_url=upload_url, expires_at=datetime.now(timezone.utc) + timedelta(seconds=expires_in))
 
 
+@router.post("/complete-upload", response_model=FinalizeUploadResponse)
+async def complete_upload_v2(
+    payload: CompleteUploadRequest,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> FinalizeUploadResponse:
+    svc = service.FileService(session=session, tenant_id=str(tenant.id))
+    file_record = await svc.finalize_upload(file_id=payload.file_id)
+    await BillingService(session).add_usage(tenant_id=str(tenant.id), s3_bytes_delta=int(file_record.size_bytes or 0))
+    await session.commit()
+    return FinalizeUploadResponse(file_id=file_record.id, status=file_record.status)
+
+
 @router.post("/{file_id}:finalize", response_model=FinalizeUploadResponse)
 @router.post("/{file_id}:complete", response_model=FinalizeUploadResponse)
 async def finalize_upload_v2(
@@ -185,19 +199,24 @@ async def reindex_file_content_v2(
     return ReindexFileResponse(file_id=file_id, status="queued")
 
 
+@router.get("/{file_id}/download-url", response_model=DownloadUrlResponse)
 @router.post("/{file_id}:download-url", response_model=DownloadUrlResponse)
 async def get_download_url_v2(
     file_id: str,
-    payload: DownloadUrlRequest,
     request: Request,
+    payload: DownloadUrlRequest | None = None,
+    purpose: str | None = None,
+    ttl: int = 600,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
 ) -> DownloadUrlResponse:
+    resolved_purpose = (payload.purpose if payload else purpose) or "download"
+    resolved_ttl = payload.ttl_seconds if payload else ttl
     svc = service.FileService(session=session, tenant_id=str(tenant.id))
     url = await svc.get_signed_download_url(
         file_id=file_id,
-        purpose=payload.purpose,
-        ttl=payload.ttl_seconds,
+        purpose=resolved_purpose,
+        ttl=resolved_ttl,
         ip=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent"),
     )

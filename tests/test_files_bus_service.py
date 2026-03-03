@@ -120,3 +120,47 @@ async def test_create_upload_session_validates_limits(monkeypatch: pytest.Monkey
     assert exc2.value.status_code == 415
 
     get_settings.cache_clear()  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_create_upload_session_uses_tenant_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.core.config import get_settings
+
+    session = DummySession(None)
+    svc = FileService(session=session, tenant_id="tenant-xyz")
+
+    monkeypatch.setenv("FILE_ALLOWED_MIME", "text/plain")
+    get_settings.cache_clear()  # type: ignore[attr-defined]
+
+    monkeypatch.setattr("app.modules.files.service.s3.generate_presigned_put_url", lambda key, **kwargs: "http://put")
+    rec, _url, _ttl = await svc.create_upload_session(filename="a.txt", content_type="text/plain", size_bytes=1)
+    assert rec.object_key.startswith("tenants/tenant-xyz/")
+    get_settings.cache_clear()  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_av_scan_infected_moves_to_quarantine(monkeypatch: pytest.MonkeyPatch) -> None:
+    rec = FileRecord(id="f5", tenant_id="t1", bucket="main", object_key="tenants/t1/uploads/a.txt", content_type="text/plain", size_bytes=1, sha256="e" * 64, status=FileStatus.scanning.value, av_result_json={}, metadata_json={})
+    session = DummySession(rec)
+    svc = FileService(session=session, tenant_id="t1")
+
+    class _Body:
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc, tb):
+            return False
+        def read(self):
+            return b"bad"
+
+    class _Verdict:
+        status = "infected"
+        signature = "Eicar-Test-Signature"
+
+    monkeypatch.setattr("app.modules.files.service.s3.stream_object", lambda *, key: _Body())
+    monkeypatch.setattr("app.modules.files.service.s3.put_object", lambda *, data, mime, key: None)
+    monkeypatch.setattr("app.modules.files.service.av.scan_file", lambda _path: _Verdict())
+
+    await svc.av_scan_file(file_id="f5")
+
+    assert rec.status == FileStatus.quarantined.value
+    assert rec.object_key.startswith("quarantine/")
