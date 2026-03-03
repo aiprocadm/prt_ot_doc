@@ -126,6 +126,12 @@ class FileService:
         if declared_sha:
             dedupe = (await self.session.execute(select(FileRecord).where(FileRecord.tenant_id == self.tenant_id, FileRecord.sha256 == declared_sha, FileRecord.status == FileStatus.clean.value, FileRecord.deleted_at.is_(None)).limit(1))).scalar_one_or_none()
             if dedupe is not None:
+                if metadata_json:
+                    merged = dict(dedupe.metadata_json or {})
+                    merged.update(metadata_json)
+                    dedupe.metadata_json = merged
+                    dedupe.tags = merged
+                    await self.session.flush()
                 return dedupe, "", 0
         object_id = str(uuid4())
         object_key = storage.build_tenant_key(tenant_id=self.tenant_id, file_id=object_id, filename=_safe_filename(filename))
@@ -330,6 +336,10 @@ class FileService:
         record = await self.session.get(FileRecord, file_id)
         if record is None or record.tenant_id != self.tenant_id:
             raise HTTPException(status_code=404, detail="file_not_found")
+        try:
+            storage.assert_tenant_key(tenant_id=self.tenant_id, key=record.object_key)
+        except PermissionError as exc:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden") from exc
         if record.status != FileStatus.clean.value:
             raise HTTPException(status_code=409, detail="file_not_ready")
         ttl = max(60, min(int(ttl), 900))
