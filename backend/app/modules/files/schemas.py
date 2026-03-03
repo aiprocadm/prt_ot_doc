@@ -56,8 +56,23 @@ class CompleteUploadRequest(BaseModel):
     file_id: str
 
 
+class NewFileVersionRequest(BaseModel):
+    filename: str
+    content_type: str
+    size_bytes: int = Field(ge=0)
+    metadata_json: dict[str, Any] | None = None
+
+
 class FinalizeUploadResponse(BaseModel):
     file_id: str
+    status: str
+
+
+class NewFileVersionResponse(BaseModel):
+    file_id: str
+    version_id: str
+    signed_put_url: str
+    expires_at: datetime
     status: str
 
 

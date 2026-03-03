@@ -164,3 +164,43 @@ async def test_av_scan_infected_moves_to_quarantine(monkeypatch: pytest.MonkeyPa
 
     assert rec.status == FileStatus.quarantined.value
     assert rec.object_key.startswith("quarantine/")
+
+
+class _ScalarResult:
+    def __init__(self, value):
+        self._value = value
+
+    def scalar_one(self):
+        return self._value
+
+
+class DummySessionWithVersion(DummySession):
+    async def execute(self, stmt):
+        return _ScalarResult(2)
+
+
+@pytest.mark.asyncio
+async def test_create_new_version_upload_session_uses_tenant_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.core.config import get_settings
+    from app.modules.files.models import FileVersion
+
+    rec = FileRecord(
+        id="f6", tenant_id="t1", bucket="main", object_key="tenants/t1/uploads/a.txt",
+        content_type="text/plain", size_bytes=1, sha256="f" * 64, status=FileStatus.ready.value, av_result_json={}, metadata_json={}
+    )
+    session = DummySessionWithVersion(rec)
+    svc = FileService(session=session, tenant_id="t1")
+
+    monkeypatch.setenv("FILE_ALLOWED_MIME", "text/plain")
+    get_settings.cache_clear()  # type: ignore[attr-defined]
+    monkeypatch.setattr("app.modules.files.service.s3.generate_presigned_put_url", lambda key, **kwargs: f"http://put/{key}")
+
+    version, upload_url, _ = await svc.create_new_version_upload_session(
+        file_id="f6", filename="next.txt", content_type="text/plain", size_bytes=10
+    )
+
+    assert isinstance(version, FileVersion)
+    assert version.version_no == 3
+    assert version.s3_key.startswith("tenants/t1/files/f6/f6/3/")
+    assert upload_url.startswith("http://put/tenants/t1/files/f6/f6/3/")
+    get_settings.cache_clear()  # type: ignore[attr-defined]
