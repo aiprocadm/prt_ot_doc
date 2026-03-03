@@ -48,6 +48,8 @@ async def test_acquire_creates_and_reuses_records(sessionmaker) -> None:
         assert created is True
         assert record.status is IdempotencyStatus.PENDING
 
+        await service.store_success(record, status_code=200, body={"ok": True})
+
         reused, reused_created = await service.acquire(
             key="abc",
             request_hash="hash-1",
