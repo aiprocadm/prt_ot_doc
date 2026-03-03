@@ -5,12 +5,12 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.models.models import Tenant
-from app.modules.files.models import FileLink, FileRecord
+from app.modules.files.models import FileContentIndex, FileLink, FileRecord
 from app.modules.search.service import SearchFilters, SearchService
 
 router = APIRouter()
@@ -120,11 +120,37 @@ async def archive_files(
 async def search_files(
     q: str = Query(default=""),
     limit: int = Query(default=50, ge=1, le=200),
+    status: str | None = None,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
 ) -> dict:
-    stmt = select(FileRecord).where(FileRecord.tenant_id == str(tenant.id), FileRecord.deleted_at.is_(None))
+    stmt = (
+        select(FileRecord, FileContentIndex)
+        .outerjoin(FileContentIndex, FileContentIndex.file_id == FileRecord.id)
+        .where(FileRecord.tenant_id == str(tenant.id), FileRecord.deleted_at.is_(None))
+    )
+    if status:
+        stmt = stmt.where(FileRecord.status == status)
     if q:
-        stmt = stmt.where(FileRecord.object_key.ilike(f"%{q}%"))
-    rows = (await session.execute(stmt.order_by(FileRecord.updated_at.desc()).limit(limit))).scalars().all()
-    return {"items": [{"id":r.id,"filename":(r.original_filename or Path(r.object_key).name),"status":r.status,"updated_at":r.updated_at} for r in rows]}
+        like = f"%{q}%"
+        stmt = stmt.where(
+            or_(
+                FileRecord.object_key.ilike(like),
+                FileRecord.original_filename.ilike(like),
+                FileRecord.metadata_json.astext.ilike(like),
+                FileContentIndex.raw_text.ilike(like),
+            )
+        )
+    rows = (await session.execute(stmt.order_by(FileRecord.updated_at.desc()).limit(limit))).all()
+    return {
+        "items": [
+            {
+                "id": r.id,
+                "filename": (r.original_filename or Path(r.object_key).name),
+                "status": r.status,
+                "updated_at": r.updated_at,
+                "content_index_status": idx.status if idx else None,
+            }
+            for r, idx in rows
+        ]
+    }

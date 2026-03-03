@@ -42,12 +42,18 @@ class UploadSessionRequest(BaseModel):
     content_type: str
     size_bytes: int = Field(ge=0)
     metadata_json: dict[str, Any] | None = None
+    sha256: str | None = None
 
 
 class UploadSessionResponse(BaseModel):
     file_id: str
     signed_put_url: str
     expires_at: datetime
+    required_headers: dict[str, str] = Field(default_factory=dict)
+
+
+class CompleteUploadRequest(BaseModel):
+    file_id: str
 
 
 class FinalizeUploadResponse(BaseModel):
@@ -102,6 +108,16 @@ class EntityFileListItem(BaseModel):
 class ReindexFileResponse(BaseModel):
     file_id: str
     status: str
+
+
+class FileVersionDto(BaseModel):
+    id: str
+    file_id: str
+    sha256: str
+    size_bytes: int
+    s3_version_id: str | None = None
+    created_by: str | None = None
+    created_at: datetime
 
 
 class SignedUrlRequest(BaseModel):
