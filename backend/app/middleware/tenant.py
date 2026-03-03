@@ -4,7 +4,7 @@ from __future__ import annotations
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
@@ -64,11 +64,7 @@ class TenantMiddleware(BaseHTTPMiddleware):
         correlation_id = request.headers.get("x-correlation-id") or getattr(request.state, "trace_id", None) or str(uuid4())
         request.state.correlation_id = correlation_id
 
-        header_slug = None
-        for header_name in TENANT_HEADER_ALIASES:
-            header_slug = request.headers.get(header_name)
-            if header_slug:
-                break
+        header_slug = request.headers.get(TENANT_HEADER)
         if path.startswith("/api/v1/") and not header_slug:
             raise self._error(status.HTTP_400_BAD_REQUEST, correlation_id, code="TENANT_REQUIRED", message="X-Tenant header required")
         if not header_slug:
@@ -93,15 +89,16 @@ class TenantMiddleware(BaseHTTPMiddleware):
         normalized_header = header_slug.strip() if header_slug else None
         info = tenant_required(normalized_header)
         identifier = info.slug
-        if not self._is_uuid(identifier):
-            raise self._error(
-                status.HTTP_400_BAD_REQUEST,
-                correlation_id,
-                code="TENANT_INVALID",
-                message="X-Tenant must be UUID",
-            )
+        if not identifier:
+            raise self._error(status.HTTP_400_BAD_REQUEST, correlation_id, code="TENANT_INVALID", message="X-Tenant has invalid value")
+
+        lookup = str(identifier).strip()
+        if self._is_uuid(lookup):
+            filters = [Tenant.id == lookup]
+        else:
+            filters = [Tenant.slug == lookup.lower(), Tenant.code == lookup.lower()]
         async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as session:
-            tenant = (await session.execute(select(Tenant).where(Tenant.id == identifier))).scalar_one_or_none()
+            tenant = (await session.execute(select(Tenant).where(or_(*filters)))).scalar_one_or_none()
         if tenant is None:
             raise self._error(
                 status.HTTP_404_NOT_FOUND,

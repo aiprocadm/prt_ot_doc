@@ -29,7 +29,7 @@ def test_policy_engine_allows_documents_write_for_admin_same_company() -> None:
         attrs={"company_id": "cmp-1"},
     )
 
-    assert decision.allowed is False
+    assert decision.allowed is True
 
 
 def test_policy_engine_denies_risk_write_for_worker() -> None:
