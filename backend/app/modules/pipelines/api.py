@@ -353,13 +353,3 @@ async def retry_step_run(run_id: str, step_run_id: str, session: AsyncSession = 
     await session.commit()
     return await _build_run_read(session, run)
 
-
-@router.post("/run", response_model=PipelineRunAccepted, status_code=status.HTTP_202_ACCEPTED)
-async def run_pipeline_compat(
-    payload: PipelineRunRequest,
-    response: Response,
-    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
-    session: AsyncSession = Depends(get_session),
-    tenant: Tenant = Depends(get_tenant_record),
-) -> PipelineRunAccepted:
-    return await run_pipeline(payload=payload, response=response, idempotency_key=idempotency_key, session=session, tenant=tenant)
