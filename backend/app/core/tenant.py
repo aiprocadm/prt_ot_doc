@@ -64,7 +64,7 @@ def tenant_schema(slug: str) -> str:
 
 
 def tenant_prefix_path(slug: str) -> str:
-    return f"tenants/{slug}"
+    return slug
 
 
 def get_current_tenant() -> TenantInfo:
