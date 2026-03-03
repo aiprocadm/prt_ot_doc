@@ -19,9 +19,30 @@ from app.services.file_storage import FileStorageService
 from app.modules.files.service import FileService, build_artifact_name
 from app.modules.files.models import FileEntityType, FileLinkRole
 
-DEFAULT_STEPS = ["render_docx", "apply_headers", "replace_apply", "convert_pdf", "build_zip", "archive"]
-STUB_STEPS = {"sign", "edo", "index_file_content"}
-RETRYABLE = {"convert_pdf": 2, "send_edo": 2, "edo": 2}
+DEFAULT_STEPS = ["render_docx", "apply_headers", "replace", "convert_pdf", "build_zip", "sign", "send_edo", "archive"]
+STUB_STEPS = {"sign", "send_edo", "index_file_content"}
+RETRYABLE = {"convert_pdf": 2, "send_edo": 2}
+STEP_ALIASES = {
+    "replace_apply": "replace",
+    "edo": "send_edo",
+}
+
+
+def _sanitize_log_payload(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {k: _sanitize_log_payload(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_sanitize_log_payload(v) for v in value]
+    if isinstance(value, str):
+        lowered = value.lower()
+        if "@" in value and "." in value:
+            return "***"
+        if any(token in lowered for token in ("паспорт", "passport", "snils", "снилс")):
+            return "***"
+        digits = ''.join(ch for ch in value if ch.isdigit())
+        if len(digits) >= 10:
+            return "***"
+    return value
 
 
 class PipelineOrchestrator:
@@ -76,7 +97,7 @@ class PipelineOrchestrator:
 
         steps = self._profile_steps(profile)
         for idx, step_def in enumerate(steps, start=1):
-            step_key = step_def["kind"]
+            step_key = STEP_ALIASES.get(step_def["kind"], step_def["kind"])
             self.session.add(
                 DocumentJobStep(
                     tenant_id=tenant_id,
@@ -99,6 +120,20 @@ class PipelineOrchestrator:
         if not job:
             raise ValueError("job_not_found")
         prev = str(job.status)
+        limit = await self._tenant_concurrency_limit(job)
+        if limit is not None:
+            running_count = (
+                await self.session.execute(
+                    select(DocumentJob.id).where(
+                        DocumentJob.tenant_id == job.tenant_id,
+                        DocumentJob.status == DocumentJobStatus.RUNNING.value,
+                        DocumentJob.id != job.id,
+                    )
+                )
+            ).scalars().all()
+            if len(running_count) >= limit:
+                await self.session.flush()
+                return job
         job.status = DocumentJobStatus.RUNNING.value
         job.started_at = job.started_at or datetime.now(timezone.utc)
         await self._audit_diff(job, {"status": prev}, {"status": job.status})
@@ -219,17 +254,23 @@ class PipelineOrchestrator:
             await self._write_step_log(job, step, "info", "step_success", out)
             await self._audit_step(job, step)
         except Exception as exc:  # noqa: BLE001
-            step.status = JobStepStatus.FAILED.value
             step.error_code = "step_failed"
             step.error_payload = {"message": str(exc)}
             step.ended_at = datetime.now(timezone.utc)
-            await self._write_step_log(job, step, "error", "step_failed", step.error_payload)
-            if step.attempts >= step.max_attempts:
+            if step.attempts < step.max_attempts:
+                step.status = JobStepStatus.QUEUED.value
+                step.started_at = None
+                step.ended_at = None
+                await self._write_step_log(job, step, "warning", "step_retry_scheduled", {"attempt": step.attempts, "max_attempts": step.max_attempts})
+            else:
+                step.status = JobStepStatus.FAILED.value
+                await self._write_step_log(job, step, "error", "step_failed", step.error_payload)
                 job.status = DocumentJobStatus.FAILED.value
                 job.error_code = step.error_code
                 job.error_payload = step.error_payload
                 job.ended_at = datetime.now(timezone.utc)
-            raise
+            if step.status == JobStepStatus.FAILED.value:
+                raise
         finally:
             await self.session.flush()
         return step
@@ -269,6 +310,20 @@ class PipelineOrchestrator:
     async def _all_done(self, job_id: str) -> bool:
         steps = (await self.session.execute(select(DocumentJobStep).where(DocumentJobStep.job_id == job_id))).scalars().all()
         return all(str(s.status) in {JobStepStatus.SUCCESS.value, JobStepStatus.SKIPPED.value} for s in steps)
+
+    async def _tenant_concurrency_limit(self, job: DocumentJob) -> int | None:
+        profile_id = job.profile_id or job.pipeline_profile_id
+        if not profile_id:
+            return None
+        profile = await self.session.get(PipelineProfile, profile_id)
+        if profile is None or str(profile.tenant_id) != str(job.tenant_id):
+            return None
+        limits = profile.limits or {}
+        raw = limits.get("concurrency_limit_per_tenant") if isinstance(limits, dict) else None
+        try:
+            return int(raw) if raw is not None else None
+        except (TypeError, ValueError):
+            return None
 
     async def _resolve_profile(self, *, tenant_id: str, profile_code: str) -> PipelineProfile | PipelinePackageProfile | SimpleNamespace:
         profile = (
@@ -315,9 +370,29 @@ class PipelineOrchestrator:
                 for node in ordered
             ]
         raw = getattr(profile, "steps", None) or getattr(profile, "steps_json", None) or []
-        codes = [s.get("code") if isinstance(s, dict) else str(s) for s in raw]
-        codes = [c for c in codes if c]
-        return [{"node_id": c, "kind": c, "depends_on": [], "condition": None, "config": {}} for c in (codes or DEFAULT_STEPS)]
+        parsed: list[dict[str, Any]] = []
+        for item in raw:
+            if isinstance(item, dict):
+                if item.get("enabled") is False:
+                    continue
+                code = item.get("code") or item.get("kind")
+                if not code:
+                    continue
+                retry_policy = item.get("retry_policy") or {}
+                parsed.append({
+                    "node_id": code,
+                    "kind": code,
+                    "depends_on": [],
+                    "condition": None,
+                    "config": item.get("config", {}),
+                    "max_attempts": item.get("max_attempts") or retry_policy.get("max_attempts"),
+                    "timeout_s": item.get("timeout_s"),
+                })
+            else:
+                code = str(item)
+                if code:
+                    parsed.append({"node_id": code, "kind": code, "depends_on": [], "condition": None, "config": {}})
+        return parsed or [{"node_id": c, "kind": c, "depends_on": [], "condition": None, "config": {}} for c in DEFAULT_STEPS]
 
     def _dispatch(self, step_key: str):
         async def _artifact_handler(*, job: DocumentJob, step: DocumentJobStep) -> dict[str, Any]:
@@ -342,10 +417,10 @@ class PipelineOrchestrator:
                 entity_id=job.id,
                 role=FileLinkRole.artifact.value,
             )
-            self.session.add(DocumentArtifact(tenant_id=job.tenant_id, job_id=job.id, step_code=step_key, kind=step_key, file_id=file_record.id, sha256=file_record.sha256, meta={"file_id": file_record.id, "display_name": filename}))
+            self.session.add(DocumentArtifact(tenant_id=job.tenant_id, job_id=job.id, step_code=step.step_code, kind=step_key, file_id=file_record.id, sha256=file_record.sha256, meta={"file_id": file_record.id, "display_name": filename}))
             return {"file_id": file_record.id, "kind": step_key, "display_name": filename}
 
-        if step_key in {"render_docx", "apply_headers", "replace_apply", "convert_pdf", "build_zip", "archive"}:
+        if step_key in {"render_docx", "apply_headers", "replace", "convert_pdf", "build_zip", "archive"}:
             return _artifact_handler
         if step_key in STUB_STEPS:
             return lambda *, job, step: {"stub": True, "step": step_key}
@@ -356,7 +431,7 @@ class PipelineOrchestrator:
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "level": level,
             "message": message,
-            "meta": meta or {},
+            "meta": _sanitize_log_payload(meta or {}),
         }
         store_key = f"logs/jobs/{job.id}/{step.step_key or step.step_code}.jsonl"
         current = b""
