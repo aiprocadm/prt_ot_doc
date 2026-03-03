@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import pytest
-from fastapi import HTTPException
-
 from app.modules.files.models import FileRecord, FileStatus
 from app.modules.files.service import FileService
 from app.modules.files.storage import assert_tenant_key, build_tenant_key
+from fastapi import HTTPException
 
 
 class _Scalar:
@@ -37,21 +36,21 @@ class DummySession:
 
 def test_build_tenant_key_date_prefix() -> None:
     key = build_tenant_key(tenant_id="tenant-1", file_id="f1", filename="doc.pdf")
-    assert key.startswith("tenant-1/")
+    assert key.startswith("tenant/tenant-1/")
     assert key.endswith("/f1/doc.pdf")
 
 
 def test_assert_tenant_key_accepts_new_prefix() -> None:
-    assert_tenant_key(tenant_id="tenant-1", key="tenant-1/2026/03/03/f1/doc.pdf")
+    assert_tenant_key(tenant_id="tenant-1", key="tenant/tenant-1/2026/03/03/f1/doc.pdf")
 
 
 @pytest.mark.asyncio
 async def test_signed_url_blocked_for_infected() -> None:
-    rec = FileRecord(id="f1", tenant_id="t1", bucket="ptd", object_key="t1/2026/03/03/f1/a.txt", content_type="text/plain", size_bytes=1, sha256="a" * 64, status=FileStatus.infected.value, av_result_json={}, metadata_json={})
+    rec = FileRecord(id="f1", tenant_id="t1", bucket="ptd", object_key="tenant/t1/2026/03/03/f1/a.txt", content_type="text/plain", size_bytes=1, sha256="a" * 64, status=FileStatus.infected.value, av_result_json={}, metadata_json={})
     svc = FileService(session=DummySession(rec), tenant_id="t1")
     with pytest.raises(HTTPException) as exc:
         await svc.get_signed_download_url(file_id="f1", purpose="download")
-    assert exc.value.status_code == 409
+    assert exc.value.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -102,7 +101,7 @@ async def test_create_upload_session_dedupe_merges_metadata(monkeypatch: pytest.
 
 @pytest.mark.asyncio
 async def test_signed_url_rejects_cross_tenant_object_key() -> None:
-    rec = FileRecord(id="f1", tenant_id="t1", bucket="ptd", object_key="tenant-2/2026/03/03/f1/a.txt", content_type="text/plain", size_bytes=1, sha256="a" * 64, status=FileStatus.clean.value, av_result_json={}, metadata_json={})
+    rec = FileRecord(id="f1", tenant_id="t1", bucket="ptd", object_key="tenant/t2/2026/03/03/f1/a.txt", content_type="text/plain", size_bytes=1, sha256="a" * 64, status=FileStatus.clean.value, av_result_json={}, metadata_json={})
     svc = FileService(session=DummySession(rec), tenant_id="t1")
     with pytest.raises(HTTPException) as exc:
         await svc.get_signed_download_url(file_id="f1", purpose="download")

@@ -4,14 +4,13 @@ from datetime import date, datetime, time
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy import or_, select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.api.dependencies import get_session, get_tenant_record
 from app.models.models import Tenant
 from app.modules.files.models import FileContentIndex, FileLink, FileRecord
 from app.modules.search.service import SearchFilters, SearchService
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()
 
@@ -121,6 +120,8 @@ async def search_files(
     q: str = Query(default=""),
     limit: int = Query(default=50, ge=1, le=200),
     status: str | None = None,
+    entity_type: str | None = None,
+    entity_id: str | None = None,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
 ) -> dict:
@@ -131,6 +132,12 @@ async def search_files(
     )
     if status:
         stmt = stmt.where(FileRecord.status == status)
+    if entity_type or entity_id:
+        stmt = stmt.join(FileLink, FileLink.file_id == FileRecord.id)
+    if entity_type:
+        stmt = stmt.where(FileLink.entity_type == entity_type)
+    if entity_id:
+        stmt = stmt.where(FileLink.entity_id == entity_id)
     if q:
         like = f"%{q}%"
         stmt = stmt.where(

@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import pytest
-from fastapi import HTTPException
-
 from app.modules.files.models import FileDownloadLog, FileLink, FileRecord, FileStatus
 from app.modules.files.service import FileService, compute_sha256_stream
+from fastapi import HTTPException
 
 
 class DummySession:
@@ -44,7 +43,7 @@ async def test_download_blocked_if_not_clean() -> None:
     with pytest.raises(HTTPException) as exc:
         await svc.get_signed_download_url(file_id="f1", purpose="api")
 
-    assert exc.value.status_code == 409
+    assert exc.value.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -134,13 +133,13 @@ async def test_create_upload_session_uses_tenant_prefix(monkeypatch: pytest.Monk
 
     monkeypatch.setattr("app.modules.files.service.s3.generate_presigned_put_url", lambda key, **kwargs: "http://put")
     rec, _url, _ttl = await svc.create_upload_session(filename="a.txt", content_type="text/plain", size_bytes=1)
-    assert rec.object_key.startswith("tenant-xyz/")
+    assert rec.object_key.startswith("tenant/tenant-xyz/")
     get_settings.cache_clear()  # type: ignore[attr-defined]
 
 
 @pytest.mark.asyncio
 async def test_av_scan_infected_moves_to_quarantine(monkeypatch: pytest.MonkeyPatch) -> None:
-    rec = FileRecord(id="f5", tenant_id="t1", bucket="main", object_key="tenants/t1/uploads/a.txt", content_type="text/plain", size_bytes=1, sha256="e" * 64, status=FileStatus.scanning.value, av_result_json={}, metadata_json={})
+    rec = FileRecord(id="f5", tenant_id="t1", bucket="main", object_key="tenant/t1/uploads/a.txt", content_type="text/plain", size_bytes=1, sha256="e" * 64, status=FileStatus.scanning.value, av_result_json={}, metadata_json={})
     session = DummySession(rec)
     svc = FileService(session=session, tenant_id="t1")
 
@@ -167,7 +166,7 @@ async def test_av_scan_infected_moves_to_quarantine(monkeypatch: pytest.MonkeyPa
 
 @pytest.mark.asyncio
 async def test_finalize_upload_emits_file_uploaded_event(monkeypatch: pytest.MonkeyPatch) -> None:
-    rec = FileRecord(id="f7", tenant_id="t1", bucket="main", object_key="tenants/t1/uploads/a.txt", content_type="text/plain", size_bytes=1, sha256="0" * 64, status=FileStatus.uploaded.value, av_result_json={}, metadata_json={})
+    rec = FileRecord(id="f7", tenant_id="t1", bucket="main", object_key="tenant/t1/uploads/a.txt", content_type="text/plain", size_bytes=1, sha256="0" * 64, status=FileStatus.uploaded.value, av_result_json={}, metadata_json={})
     session = DummySession(rec)
     svc = FileService(session=session, tenant_id="t1")
     events: list[str] = []
@@ -199,7 +198,7 @@ async def test_finalize_upload_emits_file_uploaded_event(monkeypatch: pytest.Mon
 
 @pytest.mark.asyncio
 async def test_av_scan_error_creates_error_result(monkeypatch: pytest.MonkeyPatch) -> None:
-    rec = FileRecord(id="f8", tenant_id="t1", bucket="main", object_key="tenants/t1/uploads/a.txt", content_type="text/plain", size_bytes=1, sha256="1" * 64, status=FileStatus.scanning.value, av_result_json={}, metadata_json={})
+    rec = FileRecord(id="f8", tenant_id="t1", bucket="main", object_key="tenant/t1/uploads/a.txt", content_type="text/plain", size_bytes=1, sha256="1" * 64, status=FileStatus.scanning.value, av_result_json={}, metadata_json={})
     session = DummySession(rec)
     svc = FileService(session=session, tenant_id="t1")
 
@@ -244,7 +243,7 @@ async def test_create_new_version_upload_session_uses_tenant_prefix(monkeypatch:
     from app.modules.files.models import FileVersion
 
     rec = FileRecord(
-        id="f6", tenant_id="t1", bucket="main", object_key="tenants/t1/uploads/a.txt",
+        id="f6", tenant_id="t1", bucket="main", object_key="tenant/t1/uploads/a.txt",
         content_type="text/plain", size_bytes=1, sha256="f" * 64, status=FileStatus.ready.value, av_result_json={}, metadata_json={}
     )
     session = DummySessionWithVersion(rec)
@@ -260,6 +259,28 @@ async def test_create_new_version_upload_session_uses_tenant_prefix(monkeypatch:
 
     assert isinstance(version, FileVersion)
     assert version.version_no == 3
-    assert version.s3_key.startswith("tenants/t1/files/f6/f6/3/")
-    assert upload_url.startswith("http://put/tenants/t1/files/f6/f6/3/")
+    assert version.s3_key.startswith("tenant/t1/files/f6/f6/v3/")
+    assert upload_url.startswith("http://put/tenant/t1/files/f6/f6/v3/")
     get_settings.cache_clear()  # type: ignore[attr-defined]
+
+
+def test_mask_pii_for_indexing() -> None:
+    from app.modules.files.service import _mask_pii
+
+    text = "mail a@b.com phone +7 (999) 123-45-67 passport 1234 567890"
+    masked = _mask_pii(text)
+    assert "a@b.com" not in masked
+    assert "1234 567890" not in masked
+    assert "[masked_email]" in masked
+
+
+@pytest.mark.asyncio
+async def test_link_output_requires_clean() -> None:
+    rec = FileRecord(id="f9", tenant_id="t1", bucket="main", object_key="a", content_type="text/plain", size_bytes=1, sha256="f" * 64, status=FileStatus.scanning.value, av_result_json={}, metadata_json={})
+    session = DummySession(rec)
+    svc = FileService(session=session, tenant_id="t1")
+
+    with pytest.raises(HTTPException) as exc:
+        await svc.link_file(file_id="f9", entity_type="job", entity_id="j1", role="output")
+
+    assert exc.value.status_code == 403
