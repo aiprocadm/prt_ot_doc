@@ -25,11 +25,11 @@ async def test_pipeline_run_idempotency_returns_same_job(app_fixture, make_auth_
     headers["Idempotency-Key"] = "next26-pipeline-idem"
     transport = ASGITransport(app=app_fixture)
 
-    payload = {"profile_code": "doc_gen_default", "input": {"x": 1}, "overrides": {}}
+    payload = {"profile_code": "doc_gen_default", "inputs": {"x": 1}, "options": {}}
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         first = await client.post("/api/v1/pipelines/run", json=payload, headers=headers)
         second = await client.post("/api/v1/pipelines/run", json=payload, headers=headers)
 
     assert first.status_code == 202
     assert second.status_code == 202
-    assert first.json()["job_id"] == second.json()["job_id"]
+    assert first.json()["run_id"] == second.json()["run_id"]
