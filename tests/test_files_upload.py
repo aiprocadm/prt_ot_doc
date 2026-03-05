@@ -106,7 +106,7 @@ async def test_upload_file_happy_path(async_client, make_auth_headers, sessionma
     assert metadata["content_type"] == mime
 
     now = datetime.now(timezone.utc)
-    expected_prefix = f"tenants/test/kind/document/{now.year:04d}/{now.month:02d}/"
+    expected_prefix = f'tenants/{headers["x-tenant"]}/kind/document/{now.year:04d}/{now.month:02d}/'
     assert body["storage_key"].startswith(expected_prefix)
     suffix = body["storage_key"][len(expected_prefix) :]
     assert re.fullmatch(r"[0-9a-f]{64}-[0-9a-f]{32}\.txt", suffix)
