@@ -22,7 +22,6 @@ from app.services.pipelines_orchestrator import DocumentPipelineOrchestrator
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
-
 class JobStepRead(BaseModel):
     code: str
     step_name: str
@@ -36,14 +35,12 @@ class JobStepRead(BaseModel):
     error_code: str | None = None
     error_payload: dict[str, Any] | None = None
 
-
 class JobLogRead(BaseModel):
     timestamp: datetime
     level: str
     message: str
     step_name: str | None = None
     meta_json: dict[str, Any] | None = None
-
 
 class JobEnvelopeRead(BaseModel):
     id: str
@@ -57,13 +54,11 @@ class JobEnvelopeRead(BaseModel):
     profile_id: str | None = None
     created_by: str | None = None
 
-
 class JobRead(BaseModel):
     job: JobEnvelopeRead
     steps: list[JobStepRead]
     logs: list[JobLogRead] = []
     result: dict[str, Any] | None = None
-
 
 class JobCreateRequest(BaseModel):
     profile_code: str | None = None
@@ -73,17 +68,14 @@ class JobCreateRequest(BaseModel):
     inputs: dict[str, Any] = {}
     options: dict[str, Any] = {}
 
-
 class JobCreateResponse(BaseModel):
     job_id: str
     status: str
     correlation_id: str
     steps: list[JobStepRead]
 
-
 def _status_value(raw: Any) -> str:
     return raw.value if hasattr(raw, "value") else str(raw)
-
 
 @router.post("", response_model=JobCreateResponse, status_code=status.HTTP_202_ACCEPTED)
 async def create_job(
@@ -175,11 +167,9 @@ async def create_job(
     await session.commit()
     return JobCreateResponse.model_validate(response_body)
 
-
 class JobListRead(BaseModel):
     items: list[JobEnvelopeRead]
     next_cursor: str | None = None
-
 
 @router.get("/{job_id}", response_model=JobRead)
 async def get_job(
@@ -300,7 +290,6 @@ async def get_job(
         ),
     )
 
-
 @router.get("", response_model=JobListRead)
 async def list_jobs(
     status_filter: str | None = Query(default=None, alias="status"),
@@ -357,7 +346,6 @@ async def list_jobs(
         next_cursor=next_cursor,
     )
 
-
 @router.post("/{job_id}:cancel", response_model=JobRead)
 @router.post("/{job_id}/cancel", response_model=JobRead)
 async def cancel_job(
@@ -372,35 +360,36 @@ async def cancel_job(
     await session.commit()
     return await get_job(job_id=job_id, session=session, tenant=tenant)
 
-
 class RetryJobRequest(BaseModel):
     step_key: str | None = None
     from_step_key: str | None = None
     retry_failed_only: bool = False
 
-
 @router.post("/{job_id}:retry", response_model=JobRead)
 @router.post("/{job_id}/retry", response_model=JobRead)
 async def retry_job(
     job_id: str,
-    payload: RetryJobRequest,
+    payload: RetryJobRequest | None = None,
+    step_code: str | None = Query(default=None),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
 ) -> JobRead:
     job = await session.get(DocumentJob, job_id)
     if job is None or str(job.tenant_id) != str(tenant.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+    if step_code:
+        return await rerun_step(job_id=job_id, step=step_code, session=session, tenant=tenant)
+    request = payload or RetryJobRequest(retry_failed_only=True)
     try:
         await DocumentPipelineOrchestrator(session).retry_job(
             job_id=job_id,
-            from_step_key=payload.from_step_key or payload.step_key,
-            retry_failed_only=payload.retry_failed_only,
+            from_step_key=request.from_step_key or request.step_key,
+            retry_failed_only=request.retry_failed_only,
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     await session.commit()
     return await get_job(job_id=job_id, session=session, tenant=tenant)
-
 
 @router.post("/{job_id}/steps/{step}:rerun", response_model=JobRead)
 async def rerun_step(
@@ -421,7 +410,6 @@ async def rerun_step(
     await session.commit()
     return await get_job(job_id=job_id, session=session, tenant=tenant)
 
-
 @router.post("/{job_id}/steps/{step_id}:retry", response_model=JobRead)
 async def retry_step_by_id(
     job_id: str,
@@ -436,7 +424,6 @@ async def retry_step_by_id(
     if step is None or step.job_id != job_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Step not found")
     return await rerun_step(job_id=job_id, step=step.step_code, session=session, tenant=tenant)
-
 
 @router.get("/{job_id}/steps/{step_id}/logs")
 async def get_step_logs(
@@ -474,10 +461,45 @@ async def get_step_logs(
     lines = storage.get(key).decode("utf-8").splitlines()[-tail:]
     return {"logs_uri": logs_uri, "lines": lines}
 
+@router.get("/{job_id}/steps", response_model=list[JobStepRead])
+async def get_job_steps(
+    job_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> list[JobStepRead]:
+    job = await session.get(DocumentJob, job_id)
+    if job is None or str(job.tenant_id) != str(tenant.id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+    steps = (
+        (
+            await session.execute(
+                select(DocumentJobStep)
+                .where(DocumentJobStep.job_id == job.id)
+                .order_by(DocumentJobStep.order.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [
+        JobStepRead(
+            code=s.step_code,
+            step_name=s.step_code,
+            status=_status_value(s.status),
+            attempt=s.attempt,
+            max_attempts=s.max_attempts,
+            started_at=s.started_at,
+            ended_at=s.ended_at,
+            input_ref=s.input_ref,
+            output_ref=s.output_ref,
+            error_code=s.error_code,
+            error_payload=s.error_payload,
+        )
+        for s in steps
+    ]
 
 class RetryStepRequest(BaseModel):
     step_key: str
-
 
 @router.post("/{job_id}:retry-step", response_model=JobRead)
 async def retry_step_compat(
@@ -487,7 +509,6 @@ async def retry_step_compat(
     tenant: Tenant = Depends(get_tenant_record),
 ) -> JobRead:
     return await rerun_step(job_id=job_id, step=payload.step_key, session=session, tenant=tenant)
-
 
 @router.get("/ws/jobs/{job_id}")
 async def stream_jobs(

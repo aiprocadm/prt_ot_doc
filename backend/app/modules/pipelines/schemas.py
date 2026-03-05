@@ -86,13 +86,21 @@ class PipelineProfileRead(BaseModel):
 class PipelineRunRequest(BaseModel):
     profile_code: str | None = None
     profile_id: str | None = None
+    pipeline_profile_code: str | None = None
+    pipeline_profile_id: str | None = None
+    preset_id: str | None = None
+    sources: list[dict[str, Any]] = Field(default_factory=list)
+    template_versions: list[dict[str, Any]] = Field(default_factory=list)
+    header_preset_id: str | None = None
+    replace_map_file_id: str | None = None
+    naming_template: str | None = None
     inputs: dict[str, Any] = Field(default_factory=dict)
     options: dict[str, Any] | None = None
 
     @model_validator(mode="after")
     def validate_profile_selector(self) -> "PipelineRunRequest":
-        if not self.profile_code and not self.profile_id:
-            raise ValueError("profile_code or profile_id is required")
+        if not any((self.profile_code, self.profile_id, self.pipeline_profile_code, self.pipeline_profile_id)):
+            raise ValueError("profile_code/profile_id or pipeline_profile_code/pipeline_profile_id is required")
         return self
 
 

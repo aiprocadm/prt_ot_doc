@@ -177,14 +177,17 @@ async def run_pipeline(
 
     repo = PipelineProfileRepo(session)
     profile = None
-    if payload.profile_id:
-        profile = await repo.get(tenant_id=str(tenant.id), profile_id=payload.profile_id)
-    elif payload.profile_code:
-        profile = await repo.get_by_code(tenant_id=str(tenant.id), code=payload.profile_code)
+    requested_profile_id = payload.profile_id or payload.pipeline_profile_id
+    requested_profile_code = payload.profile_code or payload.pipeline_profile_code
+    if requested_profile_id:
+        profile = await repo.get(tenant_id=str(tenant.id), profile_id=requested_profile_id)
+    elif requested_profile_code:
+        profile = await repo.get_by_code(tenant_id=str(tenant.id), code=requested_profile_code)
     if profile is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "profile not found")
 
-    request_hash = compute_request_hash(payload.model_dump())
+    request_payload = payload.model_dump(mode="json")
+    request_hash = compute_request_hash({"tenant_id": str(tenant.id), "endpoint": "/api/v1/pipelines/run", "body": request_payload})
     idem_service = IdempotencyService(session=session, tenant_id=str(tenant.id), endpoint="pipelines.runs")
     idem_key = normalize_idempotency_key(idempotency_key)
     record, created = await idem_service.acquire(key=idem_key, request_hash=request_hash, method="POST", path="/v1/pipelines/runs")
@@ -200,7 +203,15 @@ async def run_pipeline(
             "template_version": 1,
             "pipeline_profile_id": profile.id,
             "input": payload.inputs,
-            "options": payload.options or {},
+            "sources": payload.sources,
+            "template_versions": payload.template_versions,
+            "header_preset_id": payload.header_preset_id,
+            "replace_map_file_id": payload.replace_map_file_id,
+            "naming_template": payload.naming_template,
+            "options": {
+                **(payload.options or {}),
+                "preset_id": payload.preset_id,
+            },
         },
         idempotency_key=idem_key,
         request_hash=request_hash,
