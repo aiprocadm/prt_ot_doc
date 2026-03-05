@@ -1,5 +1,11 @@
-"""Template module models are defined in app.models.models (Template, TemplateVersion)."""
+"""Template module models are defined in app.models.models."""
 
-from app.models.models import Template, TemplateVersion, TemplateVersionStatus
+from app.models.models import (
+    Template,
+    TemplateStatus,
+    TemplateUsage,
+    TemplateVersion,
+    TemplateVersionStatus,
+)
 
-__all__ = ["Template", "TemplateVersion", "TemplateVersionStatus"]
+__all__ = ["Template", "TemplateStatus", "TemplateVersion", "TemplateVersionStatus", "TemplateUsage"]

@@ -14,6 +14,107 @@ from time import perf_counter
 from typing import Annotated, Any, Mapping
 from uuid import UUID
 
+from app.api.dependencies import get_session, get_tenant_record, require_tenant_slug
+from app.api.routes import (
+    admin_authz,
+    admin_users,
+    approval_signing_v1,
+    attestations,
+    audit,
+    auth,
+    billing,
+    client_portal,
+    companies,
+    contracts,
+    dashboard,
+    departments,
+    documents,
+    edo_workflow,
+    files,
+    incidents,
+    inspections,
+    invoices,
+    jobs,
+    journals,
+    medical,
+    notifications,
+    npa,
+    obligations,
+    orders,
+    outbox_admin,
+    packs,
+    persons,
+    ppe,
+    prescriptions,
+    reports,
+    risk,
+    sites,
+    tasks,
+    tenancy,
+    tenants,
+    training,
+    webhooks,
+)
+from app.core.metrics import PipelineStage, PipelineType, StageResult, get_metrics
+from app.core.payload_constraints import (
+    PayloadConstraintError,
+    enforce_mapping_constraints,
+    normalize_output_basename,
+)
+from app.core.security import AccessContext, abac
+from app.core.tracing import get_trace_id
+from app.domains.files.utils import build_dated_prefix
+from app.models.document import Document
+from app.models.models import (
+    DocumentPackItem,
+    PipelineRun,
+    PipelineRunStatus,
+    Template,
+    TemplateStatus,
+    TemplateVersion,
+    TemplateVersionStatus,
+    Tenant,
+    TenantCounter,
+    TenantQuota,
+)
+from app.modules.files.api import router as files_v1_router
+from app.modules.headers import api as headers_api
+from app.modules.pipelines import api as pipelines_api
+from app.modules.replace import api as replace_api
+from app.modules.search.api import router as search_router
+from app.modules.templates import build_passport, lint_docx_template, render_preview_docx
+from app.modules.templates.repo import get_template_version_by_code
+from app.modules.templates.schemas import (
+    LintReportDTO,
+    LintRequest,
+    PreviewRequest,
+    PreviewResponse,
+    RenderPreviewRequest,
+    RenderPreviewResponse,
+    TemplateCreateRequest,
+    TemplateDTO,
+    TemplatePatchRequest,
+    TemplateVersionDTO,
+)
+from app.repository import (
+    create_template as create_template_record,
+)
+from app.repository import (
+    get_active_template_with_version,
+    list_persons,
+    list_templates,
+)
+from app.schemas.common import PipelineRunRead, TemplatePage
+from app.schemas.person import PersonPage
+from app.schemas.template import TemplateCreate, TemplateVersionMetadata
+from app.services.audit import AuditService, field_level_diff
+from app.services.billing import BillingService
+from app.services.docx import DocxService
+from app.services.file_storage import FileStorageService
+from app.services.idempotency import IdempotencyService, normalize_idempotency_key
+from app.services.pipeline import PipelineService
+from app.services.tasks import run_pipeline_task
+from app.tenancy_quotas import assert_quota
 from fastapi import (
     APIRouter,
     Depends,
@@ -28,97 +129,8 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, ValidationError
-from sqlalchemy import delete, func, select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.api.dependencies import get_session, get_tenant_record, require_tenant_slug
-from app.api.routes import (
-    admin_users,
-    admin_authz,
-    approval_signing_v1,
-    attestations,
-    billing,
-    audit,
-    auth,
-    companies,
-    client_portal,
-    contracts,
-    dashboard,
-    departments,
-    documents,
-    edo_workflow,
-    files,
-    incidents,
-    inspections,
-    invoices,
-    journals,
-    jobs,
-    medical,
-    npa,
-    notifications,
-    orders,
-    outbox_admin,
-    packs,
-    persons,
-    prescriptions,
-    reports,
-    obligations,
-    ppe,
-    risk,
-    sites,
-    tasks,
-    tenancy,
-    tenants,
-    training,
-    webhooks,
-)
-from app.modules.headers import api as headers_api
-from app.modules.pipelines import api as pipelines_api
-from app.modules.replace import api as replace_api
-from app.modules.files.api import router as files_v1_router
-from app.modules.search.api import router as search_router
-from app.core.payload_constraints import (
-    PayloadConstraintError,
-    enforce_mapping_constraints,
-    normalize_output_basename,
-)
-from app.core.metrics import PipelineStage, PipelineType, StageResult, get_metrics
-from app.core.security import AccessContext, abac
-from app.core.tracing import get_trace_id
-from app.domains.files.utils import build_dated_prefix
-from app.models.document import Document
-from app.models.models import (
-    DocumentPackItem,
-    PipelineRun,
-    PipelineRunStatus,
-    Template,
-    TemplateVersion,
-    TemplateVersionStatus,
-    Tenant,
-    TenantQuota,
-    TenantCounter,
-)
-from app.repository import (
-    get_active_template_with_version,
-    list_persons,
-    list_templates,
-)
-from app.repository import (
-    create_template as create_template_record,
-)
-from app.schemas.common import PipelineRunRead, TemplatePage
-from app.schemas.person import PersonPage
-from app.schemas.template import TemplateCreate, TemplateVersionMetadata
-from app.modules.templates import build_passport, lint_docx_template, render_preview_docx
-from app.modules.templates.repo import get_template_version_by_code
-from app.modules.templates.schemas import RenderPreviewRequest, RenderPreviewResponse
-from app.services.docx import DocxService
-from app.services.file_storage import FileStorageService
-from app.services.pipeline import PipelineService
-from app.services.billing import BillingService
-from app.services.tasks import run_pipeline_task
-from app.tenancy_quotas import assert_quota
 
 DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 ATTACHMENT_HEADER = 'attachment; filename="{filename}"'
@@ -560,6 +572,197 @@ async def get_templates(
     return TemplatePage(items=templates, total=total)
 
 
+@router.post("/templates/catalog", response_model=TemplateDTO, status_code=status.HTTP_201_CREATED)
+async def create_template_catalog(
+    payload: TemplateCreateRequest,
+    session: SessionDep,
+    tenant: TenantDep,
+    access: EditorAccess,
+    request: Request,
+) -> TemplateDTO:
+    template = Template(
+        tenant_id=tenant.slug,
+        code=payload.code,
+        name=payload.name,
+        description=payload.description,
+        status=TemplateStatus.DRAFT,
+    )
+    session.add(template)
+    await session.flush()
+    await AuditService(session).log_event(
+        tenant_id=tenant.slug,
+        action="create",
+        object_type="template",
+        object_id=template.id,
+        user_id=getattr(access, "user_id", None),
+        ip=request.client.host if request.client else "unknown",
+        request_id=get_trace_id(request),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields={"after": {"code": template.code, "name": template.name}},
+    )
+    await session.commit()
+    await session.refresh(template)
+    return TemplateDTO.model_validate(template)
+
+
+@router.get("/templates/{template_id}", response_model=TemplateDTO)
+async def get_template_details(template_id: str, session: SessionDep, tenant: TenantDep, access: ManagerAccess) -> TemplateDTO:
+    template = await session.get(Template, template_id)
+    if template is None or template.tenant_id not in _tenant_scope(tenant) or template.deleted_at is not None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Template not found")
+    return TemplateDTO.model_validate(template)
+
+
+@router.patch("/templates/{template_id}", response_model=TemplateDTO)
+async def patch_template(
+    template_id: str,
+    payload: TemplatePatchRequest,
+    session: SessionDep,
+    tenant: TenantDep,
+    access: EditorAccess,
+    request: Request,
+) -> TemplateDTO:
+    template = await session.get(Template, template_id)
+    if template is None or template.tenant_id not in _tenant_scope(tenant) or template.deleted_at is not None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Template not found")
+    before = {"name": template.name, "description": template.description, "status": str(template.status), "current_version_id": template.current_version_id, "version": template.version}
+    if payload.version is not None and payload.version != template.version:
+        raise HTTPException(status.HTTP_409_CONFLICT, {"code": "optimistic_lock_mismatch", "type": "conflict", "message": "template version mismatch"})
+    for key in ("name", "description", "status", "current_version_id"):
+        value = getattr(payload, key)
+        if value is not None:
+            setattr(template, key, value)
+    await session.flush()
+    await AuditService(session).log_event(
+        tenant_id=tenant.slug,
+        action="update",
+        object_type="template",
+        object_id=template.id,
+        user_id=getattr(access, "user_id", None),
+        ip=request.client.host if request.client else "unknown",
+        request_id=get_trace_id(request),
+        user_agent=request.headers.get("user-agent"),
+        changed_fields=field_level_diff(before, {"name": template.name, "description": template.description, "status": str(template.status), "current_version_id": template.current_version_id, "version": template.version}),
+    )
+    await session.commit()
+    await session.refresh(template)
+    return TemplateDTO.model_validate(template)
+
+
+@router.post("/templates/{template_id}/versions:upload", response_model=TemplateVersionDTO, status_code=status.HTTP_201_CREATED)
+async def upload_template_version(
+    template_id: str,
+    file: UploadDocx,
+    session: SessionDep,
+    tenant: TenantDep,
+    access: EditorAccess,
+    request: Request,
+    response: Response,
+) -> TemplateVersionDTO:
+    template = await session.get(Template, template_id)
+    if template is None or template.tenant_id not in _tenant_scope(tenant) or template.deleted_at is not None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Template not found")
+    idempotency_key = request.headers.get("Idempotency-Key")
+    idem_service = None
+    idem_record = None
+    if idempotency_key:
+        normalized = normalize_idempotency_key(idempotency_key)
+        idem_service = IdempotencyService(session=session, tenant_id=tenant.slug, endpoint=f"template_upload:{template_id}")
+        idem_record, created = await idem_service.acquire(
+            key=normalized,
+            request_hash=hashlib.sha256((file.filename or "") .encode("utf-8")).hexdigest(),
+            method=request.method,
+            path=str(request.url.path),
+        )
+        if not created:
+            return await idem_service.respond_from_store(idem_record, model=TemplateVersionDTO, response=response)
+    payload_bytes = await file.read()
+    sha = hashlib.sha256(payload_bytes).hexdigest()
+    next_ver = int((await session.scalar(select(func.max(TemplateVersion.version)).where(TemplateVersion.template_id == template.id)) or 0) + 1)
+    key = f"{tenant.slug}/templates/{template.id}/v{next_ver}/{Path(file.filename or 'template.docx').name}"
+    storage = FileStorageService.default()
+    storage.put(key, payload_bytes, content_type=DOCX_CONTENT_TYPE)
+    parsed = lint_docx_template(payload_bytes)
+    version = TemplateVersion(
+        tenant_id=tenant.slug,
+        template_id=template.id,
+        version=next_ver,
+        checksum=hashlib.sha256(payload_bytes).digest(),
+        sha256=sha,
+        status=TemplateVersionStatus.UPLOADED,
+        payload_key=key,
+        file_id=key,
+        size_bytes=len(payload_bytes),
+        placeholder_index=parsed.get("placeholders_json"),
+        linter_report_json=parsed,
+    )
+    session.add(version)
+    template.current_version_id = version.id
+    await session.flush()
+    dto = TemplateVersionDTO.model_validate(version)
+    if idem_service and idem_record:
+        await idem_service.store_success(idem_record, status_code=status.HTTP_201_CREATED, body=dto.model_dump(mode="json", by_alias=True))
+    await session.commit()
+    await session.refresh(version)
+    return TemplateVersionDTO.model_validate(version)
+
+
+@router.post("/templates/{template_id}/versions/{version_id}:lint", response_model=LintReportDTO)
+async def lint_template_version(
+    template_id: str,
+    version_id: str,
+    payload: LintRequest,
+    session: SessionDep,
+    tenant: TenantDep,
+    access: EditorAccess,
+) -> LintReportDTO:
+    version = await session.get(TemplateVersion, version_id)
+    if version is None or version.template_id != template_id or version.tenant_id not in _tenant_scope(tenant) or version.deleted_at is not None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Template version not found")
+    storage = FileStorageService.default()
+    source = storage.get(version.file_id or version.payload_key)
+    report = lint_docx_template(source)
+    if payload.required_fields:
+        missing = [field for field in payload.required_fields if field not in report.get("found_fields", [])]
+        for item in missing:
+            report.setdefault("warnings", []).append(f"Required field is not used in template: {item}")
+            report["summary"]["warning_count"] = len(report.get("warnings", []))
+    version.placeholder_index = report.get("placeholders_json")
+    version.linter_report_json = report
+    version.status = TemplateVersionStatus.READY if not report.get("errors") else TemplateVersionStatus.LINTED
+    await session.commit()
+    return LintReportDTO.model_validate(report)
+
+
+@router.post("/templates/{template_id}/versions/{version_id}:preview", response_model=PreviewResponse)
+async def preview_template_version(
+    template_id: str,
+    version_id: str,
+    payload: PreviewRequest,
+    session: SessionDep,
+    tenant: TenantDep,
+    access: EditorAccess,
+    request: Request,
+) -> PreviewResponse:
+    version = await session.get(TemplateVersion, version_id)
+    if version is None or version.template_id != template_id or version.tenant_id not in _tenant_scope(tenant) or version.deleted_at is not None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Template version not found")
+    storage = FileStorageService.default()
+    source = storage.get(version.file_id or version.payload_key)
+    template = await session.get(Template, template_id)
+    passport = build_passport(
+        code=template.code or template.name,
+        version=version.version,
+        tenant_id=tenant.slug,
+        generated_by="api_user",
+        correlation_id=get_trace_id(request),
+        data=payload.data,
+    )
+    rendered = render_preview_docx(template_bytes=source, data=payload.data, passport=passport)
+    out_key = f"{tenant.slug}/templates/preview/{uuid.uuid4()}/preview.docx"
+    storage.put(out_key, rendered, content_type=DOCX_CONTENT_TYPE)
+    return PreviewResponse(job_id=str(uuid.uuid4()), status="done", docx_url=out_key, pdf_url=None)
+
 @router.post("/templates", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_template(
     file: UploadDocx,
@@ -775,7 +978,10 @@ async def delete_template_version(
             {"code": "template_version_in_use", "message": "Template version is already used and cannot be deleted"},
         )
 
-    await session.delete(version)
+    version.deleted_at = datetime.now(timezone.utc)
+    template = await session.get(Template, template_id)
+    if template is not None and template.current_version_id == version.id:
+        template.current_version_id = None
     await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -798,10 +1004,11 @@ async def delete_template(
             "Template is already used and cannot be deleted",
         )
 
-    await session.execute(
-        delete(TemplateVersion).where(TemplateVersion.template_id == template.id)
-    )
-    await session.delete(template)
+    has_versions = await session.scalar(select(func.count()).select_from(TemplateVersion).where(TemplateVersion.template_id == template.id, TemplateVersion.deleted_at.is_(None)))
+    if has_versions:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Template has versions; archive it instead")
+    template.deleted_at = datetime.now(timezone.utc)
+    template.status = TemplateStatus.ARCHIVED
     await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

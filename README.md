@@ -56,3 +56,11 @@ python scripts/migrate_tenant.py <slug>
 ```bash
 pytest -q tests/test_tenancy_enforcement.py
 ```
+
+
+## Templates module quickstart
+
+- Create template card: `POST /api/v1/templates/catalog` with JSON `{ "code": "safety_order", "name": "Safety order" }`.
+- Upload DOCX version: `POST /api/v1/templates/{template_id}/versions:upload` (`multipart/form-data`, field `file`, optional `Idempotency-Key`).
+- Run linter: `POST /api/v1/templates/{template_id}/versions/{version_id}:lint`.
+- Render preview: `POST /api/v1/templates/{template_id}/versions/{version_id}:preview` with JSON data payload.
