@@ -106,7 +106,9 @@ class PipelineRunRequest(BaseModel):
 
 class PipelineRunAccepted(BaseModel):
     run_id: str
+    job_id: str
     status: JobStatusLiteral
+    correlation_id: str
     step_runs: list[dict[str, Any]]
 
 
@@ -120,6 +122,8 @@ class PipelineStepRunRead(BaseModel):
     ended_at: datetime | None = None
     error_code: str | None = None
     error_payload: dict[str, Any] | None = None
+    max_attempts: int = 1
+    logs_ref: str | None = None
     input: dict[str, Any] | None = None
     output: dict[str, Any] | None = None
 

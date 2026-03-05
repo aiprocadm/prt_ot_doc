@@ -56,12 +56,14 @@ def _serialize_step(step: DocumentJobStep) -> dict[str, Any]:
         "step_run_id": step.id,
         "run_id": step.job_id,
         "step_code": step.step_code,
-        "status": str(step.status),
+        "status": step.status.value if hasattr(step.status, "value") else str(step.status),
         "attempt": step.attempt,
         "started_at": step.started_at,
         "ended_at": step.ended_at,
         "error_code": step.error_code,
         "error_payload": step.error_payload,
+        "max_attempts": step.max_attempts,
+        "logs_ref": step.logs_ref,
         "input": step.input,
         "output": step.output,
     }
@@ -78,7 +80,7 @@ async def _build_run_read(session: AsyncSession, run: DocumentJob) -> PipelineRu
     return PipelineRunRead(
         run_id=run.id,
         profile_id=run.profile_id or run.pipeline_profile_id,
-        status=str(run.status),
+        status=run.status.value if hasattr(run.status, "value") else str(run.status),
         inputs_json=run.input,
         outputs_json=run.output,
         created_by=run.created_by,
@@ -190,7 +192,7 @@ async def run_pipeline(
     request_hash = compute_request_hash({"tenant_id": str(tenant.id), "endpoint": "/api/v1/pipelines/run", "body": request_payload})
     idem_service = IdempotencyService(session=session, tenant_id=str(tenant.id), endpoint="pipelines.runs")
     idem_key = normalize_idempotency_key(idempotency_key)
-    record, created = await idem_service.acquire(key=idem_key, request_hash=request_hash, method="POST", path="/v1/pipelines/runs")
+    record, created = await idem_service.acquire(key=idem_key, request_hash=request_hash, method="POST", path="/api/v1/pipelines/run")
     if not created:
         return await idem_service.respond_from_store(record, model=PipelineRunAccepted, response=response)
 
@@ -220,7 +222,13 @@ async def run_pipeline(
     job.input = payload.inputs
     await session.flush()
     steps = (await session.execute(select(DocumentJobStep).where(DocumentJobStep.job_id == job.id).order_by(DocumentJobStep.seq.asc().nullslast(), DocumentJobStep.order.asc()))).scalars().all()
-    accepted = PipelineRunAccepted(run_id=job.id, status=str(job.status), step_runs=[_serialize_step(s) for s in steps])
+    accepted = PipelineRunAccepted(
+        run_id=job.id,
+        job_id=job.id,
+        status=job.status.value if hasattr(job.status, "value") else str(job.status),
+        correlation_id=job.correlation_id,
+        step_runs=[_serialize_step(s) for s in steps],
+    )
     await idem_service.store_success(record, status_code=status.HTTP_202_ACCEPTED, body=accepted.model_dump())
     await session.commit()
     return accepted
@@ -317,7 +325,8 @@ async def stream_run_events(run_id: str, session: AsyncSession = Depends(get_ses
                 previous_hash = snapshot_hash
                 yield "event: run.update\n"
                 yield f"data: {json.dumps(payload.model_dump(mode='json'), ensure_ascii=False)}\n\n"
-            if str(run_obj.status) in {"success", "failed", "canceled"}:
+            current_status = run_obj.status.value if hasattr(run_obj.status, "value") else str(run_obj.status)
+            if current_status in {"success", "failed", "canceled"}:
                 yield "event: run.done\n"
                 yield f"data: {json.dumps(payload.model_dump(mode='json'), ensure_ascii=False)}\n\n"
                 break
