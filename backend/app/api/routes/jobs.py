@@ -32,6 +32,7 @@ class JobStepRead(BaseModel):
     ended_at: datetime | None = None
     input_ref: dict[str, Any] | None = None
     output_ref: dict[str, Any] | None = None
+    logs_ref: str | None = None
     error_code: str | None = None
     error_payload: dict[str, Any] | None = None
 
@@ -154,6 +155,7 @@ async def create_job(
                 "ended_at": s.ended_at,
                 "input_ref": s.input_ref,
                 "output_ref": s.output_ref,
+                "logs_ref": s.logs_ref,
                 "error_code": s.error_code,
                 "error_payload": s.error_payload,
             }
@@ -264,6 +266,7 @@ async def get_job(
                 ended_at=s.ended_at,
                 input_ref=s.input_ref,
                 output_ref=s.output_ref,
+                logs_ref=s.logs_ref,
                 error_code=s.error_code,
                 error_payload=s.error_payload,
             )
@@ -492,6 +495,7 @@ async def get_job_steps(
             ended_at=s.ended_at,
             input_ref=s.input_ref,
             output_ref=s.output_ref,
+            logs_ref=s.logs_ref,
             error_code=s.error_code,
             error_payload=s.error_payload,
         )

@@ -9,6 +9,7 @@ from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import select, update
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.job_engine import (
@@ -21,6 +22,7 @@ from app.models.job_engine import (
     OutboxEventStatus,
     PipelineStepLock,
 )
+from app.models.models import TenantQuota
 from app.modules.pipelines.graph import safe_eval_condition
 from app.modules.pipelines.models import PipelinePackageProfile, PipelineProfile
 from app.services.audit import AuditService, field_level_diff
@@ -78,6 +80,7 @@ class PipelineOrchestrator:
         request_hash: str,
         created_by: str | None = None,
         correlation_id: str | None = None,
+        enqueue: bool = True,
     ) -> DocumentJob:
         if idempotency_key:
             existing = (
@@ -170,6 +173,24 @@ class PipelineOrchestrator:
         job = await self.session.get(DocumentJob, job_id)
         if not job:
             raise ValueError("job_not_found")
+        if str(job.status) == DocumentJobStatus.CANCELED.value:
+            queued_steps = (
+                (
+                    await self.session.execute(
+                        select(DocumentJobStep).where(
+                            DocumentJobStep.job_id == job_id,
+                            DocumentJobStep.status == JobStepStatus.QUEUED.value,
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            for queued in queued_steps:
+                queued.status = JobStepStatus.CANCELED.value
+                queued.ended_at = datetime.now(timezone.utc)
+            await self.session.flush()
+            return job
         step = await self._next_step(job_id, from_step_order)
         if not step:
             if await self._all_done(job_id):
@@ -270,6 +291,12 @@ class PipelineOrchestrator:
         job = await self.session.get(DocumentJob, job_id)
         if not job:
             raise ValueError("job_not_found")
+        if str(job.status) == DocumentJobStatus.CANCELED.value:
+            if str(step.status) in {JobStepStatus.QUEUED.value, JobStepStatus.RUNNING.value}:
+                step.status = JobStepStatus.CANCELED.value
+                step.ended_at = datetime.now(timezone.utc)
+                await self.session.flush()
+            return step
 
         locked = await self.session.execute(
             update(DocumentJobStep)
@@ -426,6 +453,19 @@ class PipelineOrchestrator:
         lock.running_count = max(0, int(lock.running_count or 0) - 1)
 
     async def _tenant_concurrency_limit(self, job: DocumentJob) -> int | None:
+        try:
+            quota = (
+                await self.session.execute(
+                    select(TenantQuota.max_parallel_jobs).where(TenantQuota.tenant_id == job.tenant_id)
+                )
+            ).scalar_one_or_none()
+        except SQLAlchemyError:
+            quota = None
+        if quota is not None:
+            try:
+                return max(1, int(quota))
+            except (TypeError, ValueError):
+                return 1
         profile_id = job.profile_id or job.pipeline_profile_id
         if not profile_id:
             return None
@@ -752,8 +792,9 @@ class DocumentPipelineOrchestrator(PipelineOrchestrator):
         idempotency_key: str,
         request_hash: str,
         correlation_id: str | None = None,
+        enqueue: bool = True,
     ) -> DocumentJob:
-        return await self.create_job(
+        job = await self.create_job(
             tenant_id=tenant_id,
             profile_code=payload["template_code"],
             payload=payload,
@@ -762,6 +803,7 @@ class DocumentPipelineOrchestrator(PipelineOrchestrator):
             created_by=created_by,
             correlation_id=correlation_id,
         )
+        return await self.start_job(job_id=job.id, enqueue=enqueue)
 
     async def run_job(self, *, job_id: str, fail_step: str | None = None) -> DocumentJob:
         job = await self.start_job(job_id=job_id, enqueue=False)
