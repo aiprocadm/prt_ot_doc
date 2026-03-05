@@ -71,6 +71,7 @@ from app.models.models import (
     PipelineRunStatus,
     Template,
     TemplateStatus,
+    TemplateUsage,
     TemplateVersion,
     TemplateVersionStatus,
     Tenant,
@@ -333,8 +334,15 @@ async def _template_version_in_use(
             DocumentPackItem.tenant_id.in_(tenant_scope),
         )
     )
+    usage_count = await session.scalar(
+        select(func.count()).select_from(TemplateUsage).where(
+            TemplateUsage.template_version_id == template_version_id,
+            TemplateUsage.tenant_id.in_(tenant_scope),
+        )
+    )
     return any(
-        count and count > 0 for count in (document_count, pipeline_count, pack_count)
+        count and count > 0
+        for count in (document_count, pipeline_count, pack_count, usage_count)
     )
 
 
@@ -662,6 +670,7 @@ async def upload_template_version(
     template = await session.get(Template, template_id)
     if template is None or template.tenant_id not in _tenant_scope(tenant) or template.deleted_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Template not found")
+    payload_bytes = await file.read()
     idempotency_key = request.headers.get("Idempotency-Key")
     idem_service = None
     idem_record = None
@@ -670,13 +679,12 @@ async def upload_template_version(
         idem_service = IdempotencyService(session=session, tenant_id=tenant.slug, endpoint=f"template_upload:{template_id}")
         idem_record, created = await idem_service.acquire(
             key=normalized,
-            request_hash=hashlib.sha256((file.filename or "") .encode("utf-8")).hexdigest(),
+            request_hash=hashlib.sha256(payload_bytes).hexdigest(),
             method=request.method,
             path=str(request.url.path),
         )
         if not created:
             return await idem_service.respond_from_store(idem_record, model=TemplateVersionDTO, response=response)
-    payload_bytes = await file.read()
     sha = hashlib.sha256(payload_bytes).hexdigest()
     next_ver = int((await session.scalar(select(func.max(TemplateVersion.version)).where(TemplateVersion.template_id == template.id)) or 0) + 1)
     key = f"{tenant.slug}/templates/{template.id}/v{next_ver}/{Path(file.filename or 'template.docx').name}"
@@ -920,9 +928,36 @@ async def create_template_version(
 
 @router.get("/templates/{template_id}/versions", response_model=list[dict])
 async def list_template_versions(template_id: str, session: SessionDep, tenant: TenantDep, access: ManagerAccess) -> list[dict[str, object]]:
-    stmt = select(TemplateVersion).where(TemplateVersion.template_id == template_id, TemplateVersion.tenant_id == tenant.slug).order_by(TemplateVersion.version.desc())
+    stmt = (
+        select(TemplateVersion)
+        .where(
+            TemplateVersion.template_id == template_id,
+            TemplateVersion.tenant_id == tenant.slug,
+            TemplateVersion.deleted_at.is_(None),
+        )
+        .order_by(TemplateVersion.version.desc())
+    )
     rows = (await session.execute(stmt)).scalars().all()
     return [{"id": r.id, "version": r.version, "status": r.status.value, "sha256": r.sha256, "file_id": r.file_id, "placeholder_index": r.placeholder_index} for r in rows]
+
+
+@router.get("/templates/{template_id}/versions/{version_id}", response_model=TemplateVersionDTO)
+async def get_template_version(
+    template_id: str,
+    version_id: str,
+    session: SessionDep,
+    tenant: TenantDep,
+    access: ManagerAccess,
+) -> TemplateVersionDTO:
+    version = await session.get(TemplateVersion, version_id)
+    if (
+        version is None
+        or version.template_id != template_id
+        or version.tenant_id != tenant.slug
+        or version.deleted_at is not None
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Template version not found")
+    return TemplateVersionDTO.model_validate(version)
 
 
 @router.get("/templates/by-code/{code}", response_model=dict)
