@@ -708,12 +708,12 @@ async def download_file(
             detail={"code": "not_found", "message": "File not found"},
         )
 
-    expected_prefix = f"{getattr(tenant, 's3_prefix', None) or tenant.id}/"
+    expected_prefix = f"tenants/{getattr(tenant, 's3_prefix', None) or tenant.id}/"
     if not str(record.storage_key).startswith(expected_prefix):
         _record_download_denied("forbidden_prefix")
         raise HTTPException(
-            status.HTTP_403_FORBIDDEN,
-            detail={"code": "forbidden", "message": "File does not belong to current tenant"},
+            status.HTTP_404_NOT_FOUND,
+            detail={"code": "not_found", "message": "File not found"},
         )
 
     try:
