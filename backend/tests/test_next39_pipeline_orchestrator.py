@@ -88,6 +88,7 @@ async def test_create_job_idempotency_returns_same_job(db_session) -> None:
         idempotency_key="idem-1",
         request_hash="hash-1",
         correlation_id="corr-1",
+        enqueue=False,
     )
     job2 = await orchestrator.start_document_job(
         tenant_id="t-1",
@@ -96,6 +97,7 @@ async def test_create_job_idempotency_returns_same_job(db_session) -> None:
         idempotency_key="idem-1",
         request_hash="hash-1",
         correlation_id="corr-2",
+        enqueue=False,
     )
 
     assert job1.id == job2.id
@@ -113,6 +115,7 @@ async def test_pipeline_full_run_and_retry_failed_step(db_session) -> None:
         payload=payload,
         idempotency_key="idem-2",
         request_hash="hash-2",
+        enqueue=False,
     )
 
     failed_job = await orchestrator.run_job(job_id=job.id, fail_step="convert_pdf")
@@ -145,6 +148,7 @@ async def test_cancel_marks_queued_steps_as_canceled(db_session) -> None:
         payload={"template_code": "pkg-doc", "input": {}},
         idempotency_key="idem-3",
         request_hash="hash-3",
+        enqueue=False,
     )
 
     canceled = await orchestrator.cancel_job(job_id=job.id)
@@ -152,3 +156,69 @@ async def test_cancel_marks_queued_steps_as_canceled(db_session) -> None:
 
     steps = (await db_session.execute(select(DocumentJobStep).where(DocumentJobStep.job_id == job.id))).scalars().all()
     assert {s.status for s in steps} == {JobStepStatus.CANCELED.value}
+
+
+@pytest.mark.asyncio
+async def test_start_document_job_moves_job_to_running(db_session) -> None:
+    await _seed_profile(db_session, tenant_id="t-1")
+    orchestrator = DocumentPipelineOrchestrator(db_session)
+
+    job = await orchestrator.start_document_job(
+        tenant_id="t-1",
+        created_by=None,
+        payload={"template_code": "pkg-doc", "input": {}},
+        idempotency_key="idem-4",
+        request_hash="hash-4",
+        enqueue=False,
+    )
+
+    assert job.status == "running"
+
+
+@pytest.mark.asyncio
+async def test_tenant_quota_concurrency_limit_respected(db_session) -> None:
+    profile = await _seed_profile(db_session, tenant_id="t-1")
+    profile.concurrency_limit_per_tenant = 1
+    await db_session.flush()
+    orchestrator = DocumentPipelineOrchestrator(db_session)
+
+    first = await orchestrator.start_document_job(
+        tenant_id="t-1",
+        created_by=None,
+        payload={"template_code": "pkg-doc", "input": {"doc": "A"}},
+        idempotency_key="idem-5",
+        request_hash="hash-5",
+        enqueue=False,
+    )
+    second = await orchestrator.start_document_job(
+        tenant_id="t-1",
+        created_by=None,
+        payload={"template_code": "pkg-doc", "input": {"doc": "B"}},
+        idempotency_key="idem-6",
+        request_hash="hash-6",
+        enqueue=False,
+    )
+
+    assert first.status == "running"
+    assert second.status == "queued"
+
+
+@pytest.mark.asyncio
+async def test_run_step_is_skipped_when_job_canceled(db_session) -> None:
+    await _seed_profile(db_session, tenant_id="t-1")
+    orchestrator = DocumentPipelineOrchestrator(db_session)
+
+    job = await orchestrator.create_job(
+        tenant_id="t-1",
+        profile_code="pkg-doc",
+        payload={"template_code": "pkg-doc", "input": {}},
+        idempotency_key="idem-7",
+        request_hash="hash-7",
+    )
+    steps = (await db_session.execute(select(DocumentJobStep).where(DocumentJobStep.job_id == job.id).order_by(DocumentJobStep.order.asc()))).scalars().all()
+    first_step = steps[0]
+
+    await orchestrator.cancel_job(job_id=job.id)
+    step_after = await orchestrator.run_step(job_id=job.id, step_id=first_step.id)
+
+    assert step_after.status == JobStepStatus.CANCELED.value
