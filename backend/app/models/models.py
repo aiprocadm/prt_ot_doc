@@ -2,8 +2,18 @@ from __future__ import annotations
 
 import enum
 from datetime import date, datetime, timezone
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+from app.db.session import TenantBase
+from app.models.base import (
+    SharedModel,
+    SoftDeleteMixin,
+    TenantBaseModel,
+    TimestampMixin,
+    UUIDMixin,
+    VersionedMixin,
+)
+from app.models.file import File
 from sqlalchemy import (
     JSON,
     Boolean,
@@ -21,10 +31,6 @@ from sqlalchemy import (
     event,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
-
-from app.db.session import TenantBase
-from app.models.base import SharedModel, SoftDeleteMixin, TenantBaseModel, TimestampMixin, UUIDMixin, VersionedMixin
-from app.models.file import File
 
 if TYPE_CHECKING:  # pragma: no cover - used for type checkers only
     from app.models.file import File
@@ -103,7 +109,9 @@ __all__ = [
     "TenantRateLimit",
     "TenantLimitOverride",
     "Template",
+    "TemplateStatus",
     "TemplateVersion",
+    "TemplateUsage",
     "Training",
     "TrainingStatus",
     "TrainingCourse",
@@ -958,6 +966,12 @@ class PPEIssue(TenantBaseModel, SoftDeleteMixin):
     )
 
 
+class TemplateStatus(str, enum.Enum):
+    DRAFT = "draft"
+    ACTIVE = "active"
+    ARCHIVED = "archived"
+
+
 class Template(TenantBaseModel):
     code: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
@@ -965,10 +979,18 @@ class Template(TenantBaseModel):
     description: Mapped[str | None] = mapped_column(String(1024))
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     storage_key: Mapped[str | None] = mapped_column(String(512), nullable=True, index=True)
+    status: Mapped[TemplateStatus] = mapped_column(
+        Enum(TemplateStatus), nullable=False, default=TemplateStatus.DRAFT
+    )
+    current_version_id: Mapped[str | None] = mapped_column(
+        ForeignKey("templateversion.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "code", name="uq_templates_tenant_code"),
+        Index("ix_template_status_updated", "tenant_id", "status", "updated_at"),
+        Index("ix_template_updated", "tenant_id", "updated_at"),
     )
 
 
@@ -976,6 +998,10 @@ class TemplateVersionStatus(str, enum.Enum):
     DRAFT = "draft"
     ACTIVE = "active"
     ARCHIVED = "archived"
+    UPLOADED = "uploaded"
+    LINTED = "linted"
+    READY = "ready"
+    DEPRECATED = "deprecated"
 
 
 class TemplateVersion(TenantBaseModel):
@@ -983,18 +1009,23 @@ class TemplateVersion(TenantBaseModel):
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     checksum: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    status: Mapped[TemplateVersionStatus] = mapped_column(Enum(TemplateVersionStatus), nullable=False)
+    status: Mapped[TemplateVersionStatus] = mapped_column(
+        Enum(TemplateVersionStatus), nullable=False, default=TemplateVersionStatus.UPLOADED
+    )
     payload_key: Mapped[str] = mapped_column(String(512), nullable=False)
     file_id: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     placeholder_index: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    linter_report_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     document_type: Mapped[str | None] = mapped_column(String(255))
     required_fields_schema: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     applicability_rules: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     output_types: Mapped[list[str] | None] = mapped_column(JSON)
     profile: Mapped[dict[str, Any] | None] = mapped_column(JSON)
 
-    template: Mapped[Template] = relationship(backref="versions")
+    template: Mapped[Template] = relationship(backref="versions", foreign_keys=[template_id])
 
     __mapper_args__ = {
         "version_id_generator": False,
@@ -1002,6 +1033,28 @@ class TemplateVersion(TenantBaseModel):
 
     __table_args__ = (
         UniqueConstraint("template_id", "version", name="uq_template_version"),
+        Index("ix_template_version_status", "tenant_id", "status"),
+        Index("ix_template_version_updated", "tenant_id", "updated_at"),
+    )
+
+
+class TemplateUsage(TenantBaseModel):
+    template_version_id: Mapped[str] = mapped_column(
+        ForeignKey("templateversion.id"), nullable=False, index=True
+    )
+    used_by_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    used_by_id: Mapped[str] = mapped_column(String(36), nullable=False)
+
+    template_version: Mapped[TemplateVersion] = relationship(backref="usages")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "template_version_id",
+            "used_by_type",
+            "used_by_id",
+            name="uq_template_usage_target",
+        ),
+        Index("ix_template_usage_lookup", "tenant_id", "template_version_id"),
     )
 
 
