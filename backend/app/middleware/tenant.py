@@ -100,11 +100,18 @@ class TenantMiddleware(BaseHTTPMiddleware):
         async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as session:
             tenant = (await session.execute(select(Tenant).where(or_(*filters)))).scalar_one_or_none()
         if tenant is None:
+            if self._is_uuid(lookup):
+                raise self._error(
+                    status.HTTP_404_NOT_FOUND,
+                    correlation_id,
+                    code="TENANT_NOT_FOUND",
+                    message="Tenant not found",
+                )
             raise self._error(
-                status.HTTP_404_NOT_FOUND,
+                status.HTTP_400_BAD_REQUEST,
                 correlation_id,
-                code="TENANT_NOT_FOUND",
-                message="Tenant not found",
+                code="TENANT_INVALID",
+                message="X-Tenant has invalid value",
             )
         if token_slug and token_slug.casefold() not in {str(tenant.id).casefold(), str(tenant.slug).casefold(), str(tenant.code).casefold()}:
             raise self._error(
