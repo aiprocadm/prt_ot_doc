@@ -729,12 +729,7 @@ async def lint_template_version(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Template version not found")
     storage = FileStorageService.default()
     source = storage.get(version.file_id or version.payload_key)
-    report = lint_docx_template(source)
-    if payload.required_fields:
-        missing = [field for field in payload.required_fields if field not in report.get("found_fields", [])]
-        for item in missing:
-            report.setdefault("warnings", []).append(f"Required field is not used in template: {item}")
-            report["summary"]["warning_count"] = len(report.get("warnings", []))
+    report = lint_docx_template(source, required_fields=payload.required_fields)
     version.placeholder_index = report.get("placeholders_json")
     version.linter_report_json = report
     version.status = TemplateVersionStatus.READY if not report.get("errors") else TemplateVersionStatus.LINTED
@@ -757,6 +752,20 @@ async def preview_template_version(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Template version not found")
     storage = FileStorageService.default()
     source = storage.get(version.file_id or version.payload_key)
+    idempotency_key = request.headers.get("Idempotency-Key")
+    idem_service = None
+    idem_record = None
+    if idempotency_key:
+        normalized = normalize_idempotency_key(idempotency_key)
+        idem_service = IdempotencyService(session=session, tenant_id=tenant.slug, endpoint=f"template_preview:{template_id}:{version_id}")
+        idem_record, created = await idem_service.acquire(
+            key=normalized,
+            request_hash=hashlib.sha256(json.dumps(payload.model_dump(mode="json"), sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest(),
+            method=request.method,
+            path=str(request.url.path),
+        )
+        if not created:
+            return await idem_service.respond_from_store(idem_record, model=PreviewResponse)
     template = await session.get(Template, template_id)
     passport = build_passport(
         code=template.code or template.name,
@@ -769,7 +778,11 @@ async def preview_template_version(
     rendered = render_preview_docx(template_bytes=source, data=payload.data, passport=passport)
     out_key = f"{tenant.slug}/templates/preview/{uuid.uuid4()}/preview.docx"
     storage.put(out_key, rendered, content_type=DOCX_CONTENT_TYPE)
-    return PreviewResponse(job_id=str(uuid.uuid4()), status="done", docx_url=out_key, pdf_url=None)
+    preview = PreviewResponse(job_id=str(uuid.uuid4()), status="done", docx_url=out_key, pdf_url=None)
+    if idem_service and idem_record:
+        await idem_service.store_success(idem_record, status_code=status.HTTP_200_OK, body=preview.model_dump(mode="json"))
+        await session.commit()
+    return preview
 
 @router.post("/templates", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_template(

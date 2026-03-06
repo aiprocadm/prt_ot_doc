@@ -42,8 +42,8 @@ def build_passport(
     }
 
 
-def lint_docx_template(docx_bytes: bytes) -> dict[str, Any]:
-    return lint_template(docx_bytes)
+def lint_docx_template(docx_bytes: bytes, *, required_fields: list[str] | None = None) -> dict[str, Any]:
+    return lint_template(docx_bytes, required_fields=required_fields)
 
 
 def render_preview_docx(*, template_bytes: bytes, data: dict[str, Any], passport: dict[str, Any], visible_passport: bool = False) -> bytes:
