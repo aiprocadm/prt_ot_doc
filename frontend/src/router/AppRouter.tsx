@@ -50,6 +50,10 @@ const ArchiveSearchPage = lazy(() => import("@/pages/ArchiveSearch"));
 const SearchPage = lazy(() => import("@/pages/SearchPage"));
 const NotificationsPage = lazy(() => import("@/pages/notifications/NotificationsPage"));
 const CalendarPage = lazy(() => import("@/pages/calendar/CalendarPage"));
+const PackageProfilesPage = lazy(() => import("@/pages/packs/PackageProfilesPage"));
+const PackagePresetsPage = lazy(() => import("@/pages/packs/PackagePresetsPage"));
+const GeneratePackWizardPage = lazy(() => import("@/pages/packs/GeneratePackWizardPage"));
+const PackRunDetailsPage = lazy(() => import("@/pages/packs/PackRunDetailsPage"));
 
 const AppRouter = () => {
   const initialize = useAuthStore((state) => state.initialize);
@@ -169,6 +173,10 @@ const AppRouter = () => {
                 <Route path="/pipelines/runs/:id" element={<PipelineRunDetailsPage />} />
                 <Route path="/jobs" element={<PipelineRunsPage />} />
                 <Route path="/jobs/:id" element={<PipelineRunDetailsPage />} />
+                <Route path="/package-profiles" element={<PackageProfilesPage />} />
+                <Route path="/package-presets" element={<PackagePresetsPage />} />
+                <Route path="/generate-pack/:presetId" element={<GeneratePackWizardPage />} />
+                <Route path="/pack-runs/:id" element={<PackRunDetailsPage />} />
               </Route>
             </Route>
           </Route>

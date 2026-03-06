@@ -136,7 +136,7 @@ class PackRunItemRead(BaseModel):
     id: str
     row_no: int
     status: str
-    filename: str
+    file_name: str
     error_code: str | None
 
 

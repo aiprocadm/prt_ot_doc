@@ -108,7 +108,7 @@ async def test_pack_run_unique_filenames_when_same_mapping(async_client: AsyncCl
 
     items_resp = await async_client.get(f"/api/v1/pack-runs/{run_id}/items", headers=headers)
     assert items_resp.status_code == 200, items_resp.text
-    filenames = [item["filename"] for item in items_resp.json()]
+    filenames = [item["file_name"] for item in items_resp.json()]
     assert filenames == ["same.docx", "same_2.docx"]
 
 
@@ -215,7 +215,7 @@ async def test_pack_run_naming_rule_supports_yyyymmdd_token(async_client: AsyncC
 
     items_resp = await async_client.get(f"/api/v1/pack-runs/{run_id}/items", headers=headers)
     assert items_resp.status_code == 200, items_resp.text
-    filename = items_resp.json()[0]["filename"]
+    filename = items_resp.json()[0]["file_name"]
     assert filename.startswith("акт_")
     assert filename.endswith(".docx")
     assert len(filename.split("_")[1].split(".")[0]) == 8

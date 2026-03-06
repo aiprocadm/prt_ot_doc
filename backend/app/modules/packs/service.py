@@ -37,6 +37,7 @@ class NamingRuleEngine:
     TOKEN_ALIASES: dict[str, str] = {
         "yyyymmdd": "date",
     }
+    ALLOWED_TOKENS: set[str] = {"org", "unit", "project", "client", "doc", "topic", "version", "date", "flags"}
 
     def _resolve_token_value(self, key: str, payload: dict[str, Any]) -> str:
         normalized = key.strip().lower()
@@ -58,6 +59,15 @@ class NamingRuleEngine:
         value = re.sub(r"\s+", " ", value).strip(" ._")
         value = value[:180] if len(value) > 180 else value
         return f"{value or 'document'}.{ext}"
+
+    def validate_rule(self, rule: str) -> list[str]:
+        warnings: list[str] = []
+        for token in self.TOKEN_RE.findall(rule):
+            key = token.strip().lower()
+            canonical = self.TOKEN_ALIASES.get(key, key)
+            if canonical not in self.ALLOWED_TOKENS:
+                warnings.append(f"unknown naming token <{token}>")
+        return warnings
 
     def ensure_unique(self, rendered_filename: str, used_filenames: set[str]) -> str:
         if rendered_filename not in used_filenames:
@@ -208,6 +218,10 @@ class PackageService:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "template version not found")
         if tv.deleted_at is not None or tv.status in {TemplateVersionStatus.ARCHIVED, TemplateVersionStatus.DEPRECATED}:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "template version is invalid for package")
+        replace_mode = payload.replace_mode
+        if replace_mode == "dry-run":
+            replace_mode = "preview"
+
         item = PackagePresetItem(
             tenant_id=tenant_id,
             package_preset_id=preset.id,
@@ -215,7 +229,7 @@ class PackageService:
             template_version_id=payload.template_version_id,
             order_no=payload.order_no,
             header_preset_json=payload.header_preset_json,
-            replace_mode=payload.replace_mode,
+            replace_mode=replace_mode,
             replace_map_json=payload.replace_map_json,
             output_format=payload.output_format,
             is_required=payload.is_required,
@@ -232,6 +246,15 @@ class PackageService:
         )
         await self.session.flush()
         return item
+
+    async def get_item(self, tenant_id: str, preset_id: str, item_id: str) -> PackagePresetItem | None:
+        stmt = select(PackagePresetItem).where(
+            PackagePresetItem.tenant_id == tenant_id,
+            PackagePresetItem.package_preset_id == preset_id,
+            PackagePresetItem.id == item_id,
+            PackagePresetItem.deleted_at.is_(None),
+        )
+        return (await self.session.execute(stmt)).scalar_one_or_none()
 
 
 class PackRunService:
