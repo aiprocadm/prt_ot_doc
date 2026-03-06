@@ -95,7 +95,7 @@ export const useTemplatesStore = create<TemplatesState>()(
       }
     },
     create: async (payload) => {
-      const { data } = await apiClient.post<TemplateDto>("/templates", payload);
+      const { data } = await apiClient.post<TemplateDto>("/templates/catalog", payload);
       set((state) => {
         state.items.unshift(data);
         state.pagination.total += 1;
@@ -103,7 +103,7 @@ export const useTemplatesStore = create<TemplatesState>()(
       return data;
     },
     update: async (id, payload) => {
-      const { data } = await apiClient.put<TemplateDto>(`/templates/${id}`, payload);
+      const { data } = await apiClient.patch<TemplateDto>(`/templates/${id}`, payload);
       set((state) => {
         state.items = state.items.map((template) => (template.id === id ? data : template));
         if (state.item?.id === id) state.item = data;
@@ -111,7 +111,7 @@ export const useTemplatesStore = create<TemplatesState>()(
       return data;
     },
     activateVersion: async (templateId, versionId) => {
-      const { data } = await apiClient.post<TemplateDto>(`/templates/${templateId}/versions/${versionId}/activate`);
+      const { data } = await apiClient.patch<TemplateDto>(`/templates/${templateId}`, { current_version_id: versionId });
       set((state) => {
         state.items = state.items.map((template) => (template.id === templateId ? data : template));
         if (state.item?.id === templateId) state.item = data;

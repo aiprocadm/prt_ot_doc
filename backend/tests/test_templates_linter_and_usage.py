@@ -4,7 +4,6 @@ import zipfile
 from io import BytesIO
 
 import pytest
-
 from app.api.v1.router import _template_version_in_use
 from app.modules.templates.linter import lint_template, parse_docx_placeholders
 
@@ -53,6 +52,25 @@ def test_parse_placeholders_tracks_dotted_fields() -> None:
     names = {item["name"] for item in parsed["fields"]}
     assert "employee.name" in names
     assert "employee.position.title" in names
+
+def test_parse_placeholders_tracks_locations_in_headers() -> None:
+    payload = _docx_bytes("{{ employee.name }}")
+
+    parsed = parse_docx_placeholders(payload)
+
+    item = next(entry for entry in parsed["fields"] if entry["name"] == "employee.name")
+    assert item["locations"]
+    assert item["locations"][0]["source"] == "word/document.xml"
+
+
+def test_linter_reports_required_field_warning() -> None:
+    payload = _docx_bytes("{{ employee.name }}")
+
+    report = lint_template(payload, required_fields=["employee.name", "employee.position"])
+
+    assert report["errors"] == []
+    assert any("employee.position" in warning for warning in report["warnings"])
+
 
 
 class _Tenant:

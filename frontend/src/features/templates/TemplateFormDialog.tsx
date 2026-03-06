@@ -20,6 +20,7 @@ export const TemplateFormDialog = ({ trigger, initialData, onSubmitted }: Templa
   const form = useForm<TemplateFormValues>({
     resolver: zodResolver(templateSchema),
     defaultValues: {
+      code: initialData?.code ?? "",
       name: initialData?.name ?? "",
       description: initialData?.description ?? "",
       category: initialData?.category ?? "",
@@ -32,6 +33,7 @@ export const TemplateFormDialog = ({ trigger, initialData, onSubmitted }: Templa
   useEffect(() => {
     if (initialData) {
       form.reset({
+        code: initialData.code ?? "",
         name: initialData.name,
         description: initialData.description ?? "",
         category: initialData.category ?? "",
@@ -54,6 +56,12 @@ export const TemplateFormDialog = ({ trigger, initialData, onSubmitted }: Templa
           <DialogDescription>Опишите назначение шаблона и его метаданные.</DialogDescription>
         </DialogHeader>
         <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
+          <div className="space-y-2">
+            <label className="text-sm font-medium" htmlFor="template-code">
+              Код
+            </label>
+            <Input id="template-code" {...form.register("code")} />
+          </div>
           <div className="space-y-2">
             <label className="text-sm font-medium" htmlFor="template-name">
               Название
