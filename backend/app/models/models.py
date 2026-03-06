@@ -1058,6 +1058,191 @@ class TemplateUsage(TenantBaseModel):
     )
 
 
+class PackageEntityStatus(str, enum.Enum):
+    DRAFT = "draft"
+    ACTIVE = "active"
+    ARCHIVED = "archived"
+
+
+class PackageSourceType(str, enum.Enum):
+    CSV = "csv"
+    XLSX = "xlsx"
+    JSON = "json"
+    MIXED = "mixed"
+
+
+class ReplaceMode(str, enum.Enum):
+    NONE = "none"
+    PREVIEW = "preview"
+    APPLY = "apply"
+
+
+class OutputFormat(str, enum.Enum):
+    DOCX = "docx"
+    PDF = "pdf"
+    BOTH = "both"
+
+
+class PackRunLifecycleStatus(str, enum.Enum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCESS = "success"
+    FAILED = "failed"
+    CANCELED = "canceled"
+    PARTIAL_SUCCESS = "partial_success"
+
+
+class PackRunItemStatus(str, enum.Enum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCESS = "success"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
+class PackLogLevel(str, enum.Enum):
+    INFO = "info"
+    WARNING = "warning"
+    ERROR = "error"
+
+
+class PackageProfileConfig(TenantBaseModel):
+    __tablename__ = "package_profiles_v2"
+
+    code: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    pipeline_steps_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    concurrency_limit: Mapped[int | None] = mapped_column(Integer)
+    status: Mapped[PackageEntityStatus] = mapped_column(
+        Enum(PackageEntityStatus, name="package_entity_status"),
+        nullable=False,
+        default=PackageEntityStatus.DRAFT,
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "code", name="uq_package_profiles_v2_tenant_code"),
+        Index("ix_package_profiles_v2_tenant_status_updated", "tenant_id", "status", "updated_at"),
+    )
+
+
+class PackagePresetConfig(TenantBaseModel):
+    __tablename__ = "package_presets_v2"
+
+    code: Mapped[str] = mapped_column(String(128), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    package_profile_id: Mapped[str] = mapped_column(ForeignKey("package_profiles_v2.id"), nullable=False, index=True)
+    naming_rule: Mapped[str] = mapped_column(String(512), nullable=False)
+    source_type: Mapped[PackageSourceType] = mapped_column(
+        Enum(PackageSourceType, name="package_source_type"), nullable=False, default=PackageSourceType.CSV
+    )
+    mapping_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    options_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    status: Mapped[PackageEntityStatus] = mapped_column(
+        Enum(PackageEntityStatus, name="package_preset_status"),
+        nullable=False,
+        default=PackageEntityStatus.DRAFT,
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    profile: Mapped[PackageProfileConfig] = relationship(backref="presets_v2")
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "code", name="uq_package_presets_v2_tenant_code"),
+        Index("ix_package_presets_v2_tenant_status_updated", "tenant_id", "status", "updated_at"),
+    )
+
+
+class PackagePresetItem(TenantBaseModel):
+    __tablename__ = "package_preset_items"
+
+    package_preset_id: Mapped[str] = mapped_column(ForeignKey("package_presets_v2.id"), nullable=False, index=True)
+    order_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    template_id: Mapped[str | None] = mapped_column(ForeignKey("template.id"), nullable=True, index=True)
+    template_version_id: Mapped[str] = mapped_column(ForeignKey("templateversion.id"), nullable=False, index=True)
+    header_preset_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    replace_mode: Mapped[ReplaceMode] = mapped_column(
+        Enum(ReplaceMode, name="replace_mode"), nullable=False, default=ReplaceMode.NONE
+    )
+    replace_map_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    output_format: Mapped[OutputFormat] = mapped_column(
+        Enum(OutputFormat, name="package_output_format"), nullable=False, default=OutputFormat.BOTH
+    )
+    is_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    conditions_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    preset: Mapped[PackagePresetConfig] = relationship(backref="items")
+    template: Mapped[Template | None] = relationship("Template", backref="package_preset_items")
+    template_version: Mapped[TemplateVersion] = relationship("TemplateVersion", backref="package_preset_items_v2")
+
+    __table_args__ = (
+        UniqueConstraint("package_preset_id", "order_no", name="uq_package_preset_items_order"),
+        Index("ix_package_preset_items_order", "package_preset_id", "order_no"),
+    )
+
+
+class PackRun(TenantBaseModel):
+    __tablename__ = "pack_runs"
+
+    package_preset_id: Mapped[str] = mapped_column(ForeignKey("package_presets_v2.id"), nullable=False, index=True)
+    package_profile_id: Mapped[str] = mapped_column(ForeignKey("package_profiles_v2.id"), nullable=False, index=True)
+    source_file_id: Mapped[str | None] = mapped_column(ForeignKey("file.id"), nullable=True)
+    source_type: Mapped[PackageSourceType] = mapped_column(Enum(PackageSourceType, name="pack_run_source_type"), nullable=False)
+    source_rows_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    selected_rows_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[PackRunLifecycleStatus] = mapped_column(
+        Enum(PackRunLifecycleStatus, name="pack_run_lifecycle_status"), nullable=False, default=PackRunLifecycleStatus.QUEUED
+    )
+    result_zip_file_id: Mapped[str | None] = mapped_column(ForeignKey("file.id"), nullable=True)
+    stats_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    request_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+
+    __table_args__ = (
+        Index("ix_pack_runs_status_created", "tenant_id", "status", "created_at"),
+        Index("ix_pack_runs_tenant_status_updated", "tenant_id", "status", "updated_at"),
+        UniqueConstraint("tenant_id", "idempotency_key", "request_hash", name="uq_pack_runs_idempotency"),
+    )
+
+
+class PackRunItem(TenantBaseModel):
+    __tablename__ = "pack_run_items"
+
+    pack_run_id: Mapped[str] = mapped_column(ForeignKey("pack_runs.id"), nullable=False, index=True)
+    row_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_record_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[PackRunItemStatus] = mapped_column(
+        Enum(PackRunItemStatus, name="pack_run_item_status"), nullable=False, default=PackRunItemStatus.QUEUED
+    )
+    document_job_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    output_docx_file_id: Mapped[str | None] = mapped_column(ForeignKey("file.id"), nullable=True)
+    output_pdf_file_id: Mapped[str | None] = mapped_column(ForeignKey("file.id"), nullable=True)
+    filename: Mapped[str] = mapped_column(String(512), nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    error_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+
+    __table_args__ = (
+        Index("ix_pack_run_items_run_status", "pack_run_id", "status"),
+    )
+
+
+class PackRunLog(TenantBaseModel):
+    __tablename__ = "pack_run_logs"
+
+    pack_run_id: Mapped[str] = mapped_column(ForeignKey("pack_runs.id"), nullable=False, index=True)
+    level: Mapped[PackLogLevel] = mapped_column(Enum(PackLogLevel, name="pack_log_level"), nullable=False)
+    step: Mapped[str | None] = mapped_column(String(64))
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    payload: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+
+
 class PackageProfile(TenantBaseModel):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(String(1024))

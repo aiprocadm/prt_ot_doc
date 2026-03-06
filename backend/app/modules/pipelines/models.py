@@ -45,4 +45,5 @@ class PipelinePackageProfile(TenantBaseModel):
     __table_args__ = (
         UniqueConstraint("tenant_id", "code", name="uq_package_profile_tenant_code"),
         Index("ix_package_profiles_tenant_code", "tenant_id", "code"),
+        {"extend_existing": True},
     )
