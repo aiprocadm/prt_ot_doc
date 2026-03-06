@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import csv
 import hashlib
 import io
@@ -8,28 +9,26 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import HTTPException, status
-from sqlalchemy import Select, select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.core.idempotency import compute_request_hash
 from app.models.file import File
 from app.models.models import (
-    PackLogLevel,
-    PackRun,
-    PackRunItem,
-    PackRunItemStatus,
-    PackRunLifecycleStatus,
     PackageEntityStatus,
     PackagePresetConfig,
     PackagePresetItem,
     PackageProfileConfig,
-    PackageSourceType,
+    PackRun,
+    PackRunItem,
+    PackRunItemStatus,
+    PackRunLifecycleStatus,
     TemplateUsage,
     TemplateVersion,
     TemplateVersionStatus,
 )
-from app.modules.packs.schemas import PackRunCreate, PackagePresetItemCreate
+from app.modules.packs.schemas import PackagePresetItemCreate, PackRunCreate
+from fastapi import HTTPException, status
+from openpyxl import load_workbook
+from sqlalchemy import Select, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class NamingRuleEngine:
@@ -47,6 +46,27 @@ class NamingRuleEngine:
         value = value[:180] if len(value) > 180 else value
         return f"{value or 'document'}.{ext}"
 
+    def ensure_unique(self, rendered_filename: str, used_filenames: set[str]) -> str:
+        if rendered_filename not in used_filenames:
+            used_filenames.add(rendered_filename)
+            return rendered_filename
+
+        stem, dot, extension = rendered_filename.rpartition(".")
+        if not dot:
+            stem, extension = rendered_filename, ""
+
+        suffix = 2
+        while True:
+            candidate_stem = f"{stem}_{suffix}"
+            if extension:
+                candidate = f"{candidate_stem}.{extension}"
+            else:
+                candidate = candidate_stem
+            if candidate not in used_filenames:
+                used_filenames.add(candidate)
+                return candidate
+            suffix += 1
+
 
 class SourceImportService:
     def parse(self, source_type: str, content: bytes) -> tuple[list[str], list[dict[str, Any]]]:
@@ -61,7 +81,20 @@ class SourceImportService:
             text = content.decode("utf-8-sig")
             reader = csv.DictReader(io.StringIO(text))
             rows = [self._normalize_row(dict(row)) for row in reader]
-            return [self._norm_col(c) for c in (reader.fieldnames or [])], rows
+            return self._normalize_columns(reader.fieldnames or []), rows
+        if source_type == "xlsx":
+            workbook = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+            sheet = workbook.active
+            raw_header = next(sheet.iter_rows(min_row=1, max_row=1, values_only=True), None)
+            if raw_header is None:
+                return [], []
+
+            columns = self._normalize_columns(list(raw_header))
+            rows: list[dict[str, Any]] = []
+            for values in sheet.iter_rows(min_row=2, values_only=True):
+                row_payload = {columns[index]: values[index] for index in range(len(columns))}
+                rows.append(self._normalize_row(row_payload))
+            return columns, rows
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "source type is not supported in this build")
 
     def _norm_col(self, column: str | None) -> str:
@@ -72,6 +105,18 @@ class SourceImportService:
         for key, value in row.items():
             normalized[self._norm_col(key)] = value
         return normalized
+
+    def _normalize_columns(self, columns: list[Any]) -> list[str]:
+        result: list[str] = []
+        seen: dict[str, int] = {}
+        for index, column in enumerate(columns, start=1):
+            normalized = self._norm_col(str(column or "")) or f"column_{index}"
+            counter = seen.get(normalized, 0)
+            if counter > 0:
+                normalized = f"{normalized}_{counter + 1}"
+            seen[self._norm_col(str(column or "")) or f"column_{index}"] = counter + 1
+            result.append(normalized)
+        return result
 
 
 class MappingValidationService:
@@ -236,11 +281,13 @@ class PackRunService:
         )
         self.session.add(run)
         await self.session.flush()
+        used_filenames: set[str] = set()
         for row_no in selected_rows:
             if row_no < 1 or row_no > len(rows):
                 continue
             mapped = self.mapping.apply(preset.mapping_json or {}, rows[row_no - 1])
             filename = self.naming.render(preset.naming_rule, mapped, ext="docx")
+            filename = self.naming.ensure_unique(filename, used_filenames)
             self.session.add(
                 PackRunItem(
                     tenant_id=tenant_id,
@@ -278,10 +325,15 @@ async def load_source_rows(session: AsyncSession, source_file_id: str | None, in
     file = await session.get(File, source_file_id)
     if file is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "source file not found")
-    raw = (file.meta_json or {}).get("inline_content")
-    if not raw:
+    meta = file.meta_json or {}
+    raw = meta.get("inline_content")
+    raw_b64 = meta.get("inline_content_b64")
+    if raw_b64:
+        content = base64.b64decode(raw_b64)
+    elif raw:
+        content = str(raw).encode("utf-8")
+    else:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "source file has no inline content for preview")
-    content = raw.encode("utf-8")
-    source_type = (file.meta_json or {}).get("source_type", "csv")
+    source_type = meta.get("source_type", "csv")
     columns, rows = SourceImportService().parse(source_type=source_type, content=content)
     return source_type, columns, rows
