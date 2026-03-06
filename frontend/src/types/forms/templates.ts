@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const templateSchema = z.object({
+  code: z.string().min(2),
   name: z.string().min(3),
   description: z.string().optional(),
   category: z.string().optional(),

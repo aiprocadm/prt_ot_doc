@@ -45,6 +45,7 @@ def _safe_expr(expr: str) -> bool:
 def parse_docx_placeholders(docx_bytes: bytes) -> dict[str, Any]:
     tokens: list[dict[str, Any]] = []
     field_occurrences: Counter[str] = Counter()
+    field_locations: dict[str, list[dict[str, int]]] = {}
     loops: list[dict[str, Any]] = []
     conditions: list[dict[str, Any]] = []
 
@@ -56,20 +57,34 @@ def parse_docx_placeholders(docx_bytes: bytes) -> dict[str, Any]:
             for field in FIELD_PATH_RE.findall(expr):
                 if field not in ALLOWED_WORDS:
                     field_occurrences[field] += 1
+                    field_locations.setdefault(field, []).append({"source": source, "offset": match.start()})
 
         for match in TAG_RE.finditer(text):
             expr = match.group(1).strip()
             tokens.append({"type": "block", "expr": expr, "source": source, "offset": match.start()})
             if expr.startswith("for ") and " in " in expr:
                 var, _, it = expr[4:].partition(" in ")
-                loops.append({"var": var.strip(), "iter": it.strip(), "locations": [source]})
+                loops.append(
+                    {
+                        "var": var.strip(),
+                        "iter": it.strip(),
+                        "locations": [{"source": source, "offset": match.start()}],
+                    }
+                )
             elif expr.startswith("if "):
-                conditions.append({"expr": expr[3:].strip(), "locations": [source]})
+                conditions.append(
+                    {
+                        "expr": expr[3:].strip(),
+                        "locations": [{"source": source, "offset": match.start()}],
+                    }
+                )
 
     fields = [
         {"name": name, "occurrences": count, "locations": []}
         for name, count in sorted(field_occurrences.items())
     ]
+    for item in fields:
+        item["locations"] = field_locations.get(item["name"], [])
     return {
         "fields": fields,
         "loops": loops,

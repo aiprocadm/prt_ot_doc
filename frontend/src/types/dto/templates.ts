@@ -11,6 +11,7 @@ export interface TemplateVersionDto extends BaseEntityDto {
 }
 
 export interface TemplateDto extends BaseEntityDto {
+  code?: string;
   name: string;
   description?: string;
   category?: string;
@@ -20,6 +21,7 @@ export interface TemplateDto extends BaseEntityDto {
 }
 
 export interface UpdateTemplateDto {
+  code?: string;
   name: string;
   description?: string;
   category?: string;
