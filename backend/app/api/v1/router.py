@@ -974,10 +974,25 @@ async def get_template_version(
 
 
 @router.get("/templates/by-code/{code}", response_model=dict)
-async def get_template_by_code_version(code: str, session: SessionDep, tenant: TenantDep, access: ManagerAccess, version: int = Query(..., ge=1)) -> dict[str, object]:
+async def get_template_by_code_version(
+    code: str,
+    session: SessionDep,
+    tenant: TenantDep,
+    access: ManagerAccess,
+    request: Request,
+    version: int = Query(..., ge=1),
+) -> dict[str, object]:
     row = await get_template_version_by_code(session, tenant_id=tenant.slug, code=code, version=version)
     if row is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Template not found")
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            {
+                "code": "template_version_not_found",
+                "type": "conflict",
+                "message": "Template selection by (code, version) failed",
+                "correlation_id": get_trace_id(request),
+            },
+        )
     template, tv = row
     return {"template_id": template.id, "code": template.code, "name": template.name, "version_id": tv.id, "version": tv.version, "status": tv.status.value, "file_id": tv.file_id}
 
@@ -1010,6 +1025,7 @@ async def delete_template_version(
     session: SessionDep,
     tenant: TenantDep,
     access: EditorAccess,
+    request: Request,
 ) -> None:
     tenant_scope = _tenant_scope(tenant)
     version = await session.get(TemplateVersion, version_id)
@@ -1023,7 +1039,12 @@ async def delete_template_version(
     ):
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            {"code": "template_version_in_use", "message": "Template version is already used and cannot be deleted"},
+            {
+                "code": "template_version_in_use",
+                "type": "conflict",
+                "message": "Template version is already used and cannot be deleted",
+                "correlation_id": get_trace_id(request),
+            },
         )
 
     version.deleted_at = datetime.now(timezone.utc)

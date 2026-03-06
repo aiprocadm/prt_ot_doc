@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import pytest
-from httpx import AsyncClient
-from sqlalchemy import select
-
 from app.models.document import Document, DocumentStatus
 from app.models.models import Template, TemplateVersion, TemplateVersionStatus, Tenant
+from httpx import AsyncClient
+from sqlalchemy import select
 
 
 @pytest.mark.anyio
@@ -62,3 +61,21 @@ async def test_template_version_delete_rejected_when_used(
         headers=headers,
     )
     assert response.status_code == 409
+
+
+@pytest.mark.anyio
+async def test_template_by_code_version_conflict_when_not_found(
+    async_client: AsyncClient,
+    make_auth_headers,
+) -> None:
+    headers = await make_auth_headers()
+    response = await async_client.get(
+        "/api/v1/templates/by-code/missing",
+        params={"version": 1},
+        headers=headers,
+    )
+
+    assert response.status_code == 409
+    body = response.json()
+    assert body["code"] == "template_version_not_found"
+    assert body["message"] == "Template selection by (code, version) failed"
