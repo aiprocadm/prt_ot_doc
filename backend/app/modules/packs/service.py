@@ -32,13 +32,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class NamingRuleEngine:
-    TOKEN_RE = re.compile(r"<([a-zA-Z_]+)>")
+    TOKEN_RE = re.compile(r"<([a-zA-Z0-9_]+)>")
     BAD_CHARS_RE = re.compile(r"[\\/:*?\"<>|]+")
+    TOKEN_ALIASES: dict[str, str] = {
+        "yyyymmdd": "date",
+    }
+
+    def _resolve_token_value(self, key: str, payload: dict[str, Any]) -> str:
+        normalized = key.strip().lower()
+        canonical = self.TOKEN_ALIASES.get(normalized, normalized)
+        if canonical == "date" and canonical not in payload:
+            return datetime.now(timezone.utc).strftime("%Y%m%d")
+
+        for candidate in {canonical, key, key.lower(), key.upper()}:
+            if candidate in payload and payload[candidate] is not None:
+                return str(payload[candidate]).strip()
+        return ""
 
     def render(self, rule: str, payload: dict[str, Any], ext: str = "docx") -> str:
         def _replace(match: re.Match[str]) -> str:
-            key = match.group(1)
-            return str(payload.get(key, "")).strip()
+            return self._resolve_token_value(match.group(1), payload)
 
         value = self.TOKEN_RE.sub(_replace, rule)
         value = self.BAD_CHARS_RE.sub("_", value)
