@@ -20,6 +20,7 @@ from app.modules.packs.schemas import (
     PackagePresetCreate,
     PackagePresetItemCreate,
     PackagePresetItemRead,
+    PackagePresetItemPatch,
     PackagePresetPatch,
     PackagePresetRead,
     PackageProfileCreate,
@@ -29,6 +30,7 @@ from app.modules.packs.schemas import (
 )
 from app.modules.packs.service import (
     MappingValidationService,
+    NamingRuleEngine,
     PackageService,
     PackRunService,
     ensure_template_version_deletable,
@@ -176,6 +178,58 @@ async def create_preset_item(preset_id: str, payload: PackagePresetItemCreate, s
     return _item_read(item)
 
 
+@router.patch("/package-presets/{preset_id}/items/{item_id}", response_model=PackagePresetItemRead)
+async def patch_preset_item(
+    preset_id: str,
+    item_id: str,
+    payload: PackagePresetItemPatch,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> PackagePresetItemRead:
+    service = PackageService(session)
+    item = await service.get_item(str(tenant.id), preset_id, item_id)
+    if item is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "preset item not found")
+    data = payload.model_dump(exclude_unset=True)
+    if "replace_mode" in data and data["replace_mode"] == "dry-run":
+        data["replace_mode"] = "preview"
+    for key, value in data.items():
+        setattr(item, key, value)
+    await session.commit()
+    return _item_read(item)
+
+
+@router.delete("/package-presets/{preset_id}/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_preset_item(
+    preset_id: str,
+    item_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> Response:
+    from datetime import datetime, timezone
+
+    service = PackageService(session)
+    item = await service.get_item(str(tenant.id), preset_id, item_id)
+    if item is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "preset item not found")
+    item.deleted_at = datetime.now(timezone.utc)
+    await session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete("/package-presets/{preset_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_preset(preset_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> Response:
+    from datetime import datetime, timezone
+
+    service = PackageService(session)
+    preset = await service.get_preset(tenant_id=str(tenant.id), preset_id=preset_id)
+    if preset is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "preset not found")
+    preset.deleted_at = datetime.now(timezone.utc)
+    await session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.post("/package-presets/{preset_id}:validate")
 async def validate_preset(preset_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict[str, Any]:
     service = PackageService(session)
@@ -186,16 +240,21 @@ async def validate_preset(preset_id: str, session: AsyncSession = Depends(get_se
         await session.execute(select(PackagePresetItem).where(PackagePresetItem.package_preset_id == preset.id))
     ).scalars().all()
     errors: list[str] = []
+    warnings: list[str] = []
     for item in items:
         tv = await session.get(TemplateVersion, item.template_version_id)
         if tv is None or tv.deleted_at is not None:
             errors.append(f"template_version_id={item.template_version_id} is not available")
-    return {"ok": not errors, "errors": errors, "items_count": len(items)}
+    warnings.extend(NamingRuleEngine().validate_rule(preset.naming_rule))
+    return {"ok": not errors, "errors": errors, "warnings": warnings, "items_count": len(items)}
 
 
 @router.post("/package-presets/{preset_id}:upload-source", response_model=SourcePreviewRead)
 async def upload_source_preview(preset_id: str, payload: MappingPreviewRequest, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> SourcePreviewRead:
-    _ = preset_id
+    service = PackageService(session)
+    preset = await service.get_preset(tenant_id=str(tenant.id), preset_id=preset_id)
+    if preset is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "preset not found")
     source_type, columns, rows = await load_source_rows(session, payload.source_file_id, payload.rows)
     return SourcePreviewRead(source_file_id=payload.source_file_id, source_type=source_type, columns=columns, rows_count=len(rows), sample_rows=rows[:5])
 
@@ -283,7 +342,7 @@ async def list_run_items(run_id: str, session: AsyncSession = Depends(get_sessio
     rows = (
         await session.execute(select(PackRunItem).where(PackRunItem.pack_run_id == run_id, PackRunItem.tenant_id == str(tenant.id)).order_by(PackRunItem.row_no.asc()))
     ).scalars().all()
-    return [PackRunItemRead(id=r.id, row_no=r.row_no, status=r.status.value if hasattr(r.status, "value") else str(r.status), filename=r.filename, error_code=r.error_code) for r in rows]
+    return [PackRunItemRead(id=r.id, row_no=r.row_no, status=r.status.value if hasattr(r.status, "value") else str(r.status), file_name=r.filename, error_code=r.error_code) for r in rows]
 
 
 @router.get("/pack-runs/{run_id}/timeline", response_model=list[PackRunLogRead])
