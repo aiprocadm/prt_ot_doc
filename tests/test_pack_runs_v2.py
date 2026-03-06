@@ -177,3 +177,45 @@ async def test_preview_mapping_supports_xlsx_source(async_client: AsyncClient, s
     assert body["source_type"] == "xlsx"
     assert body["preview"][0]["doc"] == "Иванов И.И."
     assert body["preview"][0]["unit"] == "Цех 1"
+
+
+@pytest.mark.anyio
+async def test_pack_run_naming_rule_supports_yyyymmdd_token(async_client: AsyncClient, make_auth_headers) -> None:
+    headers = {**await make_auth_headers(), **dict(async_client.headers)}
+    profile_payload = {
+        "code": f"pp-{uuid.uuid4().hex[:8]}",
+        "name": "Profile",
+        "pipeline_steps_json": [{"step": "render_docx", "enabled": True}],
+        "status": "active",
+    }
+    p_resp = await async_client.post("/api/v1/package-profiles", json=profile_payload, headers=headers)
+    assert p_resp.status_code == 201, p_resp.text
+    profile_id = p_resp.json()["id"]
+
+    preset_payload = {
+        "code": f"preset-{uuid.uuid4().hex[:8]}",
+        "name": "Preset",
+        "package_profile_id": profile_id,
+        "naming_rule": "<doc>_<YYYYMMDD>",
+        "source_type": "json",
+        "mapping_json": {"doc": {"type": "literal", "value": "акт"}},
+        "status": "active",
+    }
+    preset_resp = await async_client.post("/api/v1/package-presets", json=preset_payload, headers=headers)
+    assert preset_resp.status_code == 201, preset_resp.text
+    preset_id = preset_resp.json()["id"]
+
+    run_resp = await async_client.post(
+        "/api/v1/pack-runs",
+        json={"package_preset_id": preset_id, "rows": [{"fio": "A"}], "selected_rows": [1]},
+        headers={**headers, "Idempotency-Key": f"idem-{uuid.uuid4().hex}"},
+    )
+    assert run_resp.status_code == 202, run_resp.text
+    run_id = run_resp.json()["pack_run_id"]
+
+    items_resp = await async_client.get(f"/api/v1/pack-runs/{run_id}/items", headers=headers)
+    assert items_resp.status_code == 200, items_resp.text
+    filename = items_resp.json()[0]["filename"]
+    assert filename.startswith("акт_")
+    assert filename.endswith(".docx")
+    assert len(filename.split("_")[1].split(".")[0]) == 8
