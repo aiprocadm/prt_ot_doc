@@ -2,6 +2,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
+
+
+_RISK_LEVEL_ORDER = {"low": 0, "medium": 1, "high": 2, "critical": 3}
 
 
 @dataclass(slots=True)
@@ -89,3 +93,104 @@ class RiskMethodologyService:
         if effective_from and effective_to and effective_from > effective_to:
             return False
         return True
+
+
+class HazardService:
+    """Resolve hazard IDs by entity bindings for risk-map generation."""
+
+    @staticmethod
+    def resolve_hazard_ids(
+        *,
+        entity_type: str,
+        position_id: str | None,
+        workplace_id: str | None,
+        site_id: str | None,
+        bindings: list[dict[str, str]],
+    ) -> list[str]:
+        scope: set[str] = set()
+        if entity_type == "person":
+            if position_id:
+                scope.add(f"position:{position_id}")
+            if workplace_id:
+                scope.add(f"workplace:{workplace_id}")
+            if site_id:
+                scope.add(f"site:{site_id}")
+        elif entity_type == "workplace":
+            if workplace_id:
+                scope.add(f"workplace:{workplace_id}")
+            if site_id:
+                scope.add(f"site:{site_id}")
+        elif entity_type == "site" and site_id:
+            scope.add(f"site:{site_id}")
+
+        hazard_ids: list[str] = []
+        for binding in bindings:
+            binding_type = binding.get("binding_type")
+            binding_id = binding.get("binding_id")
+            hazard_id = binding.get("hazard_id")
+            if not (binding_type and binding_id and hazard_id):
+                continue
+            if f"{binding_type}:{binding_id}" not in scope:
+                continue
+            if hazard_id not in hazard_ids:
+                hazard_ids.append(hazard_id)
+        return hazard_ids
+
+
+class RiskMeasureService:
+    """Helpers for residual risk rollup based on measure effectiveness."""
+
+    @staticmethod
+    def residual_from_measures(raw_score: float, effectiveness_scores: list[float]) -> float:
+        score = raw_score
+        for effect in effectiveness_scores:
+            score = RiskCalculationService.calculate_residual(score, effect) or score
+        return round(score, 2)
+
+
+class RiskMapService:
+    """In-memory map item lifecycle helpers used by route and job handlers."""
+
+    @staticmethod
+    def merge_items(
+        *,
+        existing_items: list[dict[str, object]],
+        source_hazard_ids: list[str],
+        methodology: dict[str, object],
+    ) -> list[dict[str, object]]:
+        indexed = {str(item["hazard_id"]): dict(item) for item in existing_items if "hazard_id" in item}
+        now = datetime.now(tz=timezone.utc)
+
+        for hazard_id in source_hazard_ids:
+            item = indexed.get(hazard_id, {"hazard_id": hazard_id, "status": "active"})
+            probability = float(item.get("probability_value") or 0)
+            severity = float(item.get("severity_value") or 0)
+            exposure_value = item.get("exposure_value")
+            exposure = float(exposure_value) if exposure_value is not None else None
+
+            if probability > 0 and severity > 0 and (methodology.get("type") != "fine_kinney" or exposure):
+                calc = RiskCalculationService.calculate_item(
+                    methodology,
+                    probability=probability,
+                    severity=severity,
+                    exposure=exposure,
+                )
+                item["raw_score"] = calc.raw_score
+                item["risk_level"] = calc.risk_level
+            item["status"] = "active"
+            item["updated_at"] = now
+            indexed[hazard_id] = item
+
+        source_set = set(source_hazard_ids)
+        for hazard_id, item in indexed.items():
+            if hazard_id not in source_set:
+                item["status"] = "archived"
+                item["updated_at"] = now
+
+        return list(indexed.values())
+
+    @staticmethod
+    def top_risk_level(levels: list[str]) -> str | None:
+        if not levels:
+            return None
+        return sorted(levels, key=lambda lvl: _RISK_LEVEL_ORDER.get(lvl, -1), reverse=True)[0]
