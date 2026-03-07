@@ -41,6 +41,7 @@ const SettingsPage = lazy(() => import("@/pages/settings/SettingsPage"));
 const ReportsPage = lazy(() => import("@/pages/reports/ReportsPage"));
 const ApprovalsInboxPage = lazy(() => import("@/pages/approvals/ApprovalsInboxPage"));
 const ApprovalsOutboxPage = lazy(() => import("@/pages/approvals/ApprovalsOutboxPage"));
+const ApprovalRoutesPage = lazy(() => import("@/pages/approvals/ApprovalRoutesPage"));
 const SignaturesPage = lazy(() => import("@/pages/signatures/SignaturesPage"));
 const EdoPage = lazy(() => import("@/pages/edo/EdoPage"));
 const PipelineRunsPage = lazy(() => import("@/pages/PipelineRuns"));
@@ -95,6 +96,7 @@ const AppRouter = () => {
               <Route element={<ProtectedRoute permission={PERMISSIONS.DOCUMENT_VIEW} />}>
                 <Route path="/approvals/inbox" element={<ApprovalsInboxPage />} />
                 <Route path="/approvals/outbox" element={<ApprovalsOutboxPage />} />
+                <Route path="/approval-routes" element={<ApprovalRoutesPage />} />
                 <Route path="/signatures" element={<SignaturesPage />} />
                 <Route path="/edo" element={<EdoPage />} />
               </Route>

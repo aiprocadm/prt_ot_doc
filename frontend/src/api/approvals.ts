@@ -17,6 +17,25 @@ export type ApprovalProcess = {
   current_step?: number;
 };
 
+export type ApprovalRoute = {
+  id: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  applies_to: string;
+  status: string;
+};
+
+export type ApprovalRouteCreatePayload = {
+  code: string;
+  name: string;
+  description?: string | null;
+  applies_to: string;
+  conditions_json: Record<string, unknown>;
+  is_default: boolean;
+  status: string;
+};
+
 export const approvalsApi = {
   listMyTasks: async (status = "open") => {
     const { data } = await apiClient.get<{ items: ApprovalTask[] }>("/v1/approvals/tasks", {
@@ -34,6 +53,14 @@ export const approvalsApi = {
   },
   decide: async (approvalId: string, action: "approve" | "reject" | "delegate" | "comment", body: Record<string, unknown>) => {
     const { data } = await apiClient.post(`/approvals/${approvalId}/${action}`, body);
+    return data;
+  },
+  listRoutes: async () => {
+    const { data } = await apiClient.get<{ items: ApprovalRoute[] }>("/approval-routes");
+    return data.items;
+  },
+  createRoute: async (payload: ApprovalRouteCreatePayload) => {
+    const { data } = await apiClient.post<{ id: string }>("/approval-routes", payload);
     return data;
   },
 };
