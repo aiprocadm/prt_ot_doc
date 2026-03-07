@@ -2,31 +2,33 @@ from __future__ import annotations
 
 import logging
 import uuid
-from io import BytesIO
-from datetime import date, datetime, timezone
-from typing import Annotated, Any, Iterable
 import zipfile
+from datetime import date, datetime, timezone
+from io import BytesIO
+from typing import Annotated, Any, Iterable
 from uuid import UUID
-
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
-from fastapi.responses import RedirectResponse, StreamingResponse
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.config import get_settings
+from app.core.idempotency import compute_request_hash
+from app.core.query import (
+    DEFAULT_PER_PAGE,
+    MAX_PER_PAGE,
+    FilterQuery,
+    PageQuery,
+    SortQuery,
+    pagination_meta,
+)
+from app.core.response import list_response
 from app.core.security import AccessContext, abac
-from app.models.file import File as StoredFile, FileScanStatus
 from app.core.tenant import tenant_prefix_path
+from app.core.tracing import get_trace_id
 from app.domains.files import s3
 from app.domains.packs.context import enrich_context
 from app.domains.packs.definitions import DEFAULT_PACKS, PACK_DEFINITIONS_BY_CODE
 from app.domains.packs.seeder import ensure_default_packs, ensure_pack_by_code
-from app.core.tracing import get_trace_id
-from app.core.query import DEFAULT_PER_PAGE, FilterQuery, MAX_PER_PAGE, PageQuery, SortQuery, pagination_meta
-from app.core.response import list_response
-from app.core.idempotency import compute_request_hash
+from app.models.file import File as StoredFile
+from app.models.file import FileScanStatus
 from app.models.models import (
     Company,
     DocumentPack,
@@ -38,16 +40,16 @@ from app.models.models import (
     PPEIssue,
     PPEIssueStatus,
     Site,
-    Template,
     TemplateVersion,
     Tenant,
     Training,
     TrainingStatus,
 )
+from app.models.risk import RiskAssessment
 from app.schemas.pack import (
+    PackFromScenarioRequest,
     PackGenerateRequest,
     PackListItem,
-    PackListMeta,
     PackListResponse,
     PackRunRequest,
     PackRunResponse,
@@ -55,15 +57,19 @@ from app.schemas.pack import (
     PackScenarioDescriptor,
     PackScenarioListResponse,
     PackScenarioTemplate,
-    PackFromScenarioRequest,
 )
 from app.schemas.task import TaskAcceptedResponse
 from app.services.audit import AuditService
 from app.services.file_storage import FileStorageService
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
-from app.services.pipeline import PipelineService
 from app.services.package_pipeline import build_idempotency_key
+from app.services.pipeline import PipelineService
 from app.services.tasks import generate_document_task, generate_pack_task
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
+from fastapi.responses import RedirectResponse, StreamingResponse
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 logger = logging.getLogger(__name__)
 
@@ -958,3 +964,71 @@ async def download_pack_files_archive(
     await session.commit()
 
     return StreamingResponse(BytesIO(payload), media_type="application/zip", headers=headers)
+
+
+@router.get("/{pack_run_id}/safety-summary")
+async def pack_safety_summary(
+    pack_run_id: str,
+    session: SessionDep,
+    tenant: TenantDep,
+    access: PackAccess,
+) -> dict[str, list[dict[str, object]]]:
+    """Return safety summary stub for pack run consumers (risk+PPE completeness)."""
+
+    del access
+    tenant_scope = _tenant_scope_values(tenant)
+
+    people_stmt = select(Person).where(Person.tenant_id.in_(tenant_scope), Person.deleted_at.is_(None)).limit(100)
+    persons = (await session.execute(people_stmt)).scalars().all()
+
+    output: list[dict[str, object]] = []
+    for person in persons:
+        risk_stmt = (
+            select(func.max(RiskAssessment.score_after))
+            .where(RiskAssessment.employee_id == person.id, RiskAssessment.tenant_id.in_(tenant_scope))
+        )
+        max_score = (await session.execute(risk_stmt)).scalar_one_or_none() or 0
+        levels: list[str] = []
+        if max_score >= 16:
+            levels.append("critical")
+        elif max_score >= 10:
+            levels.append("high")
+        elif max_score >= 5:
+            levels.append("medium")
+        elif max_score > 0:
+            levels.append("low")
+
+        ppe_stmt = (
+            select(PPEIssue)
+            .where(PPEIssue.person_id == person.id, PPEIssue.tenant_id.in_(tenant_scope), PPEIssue.deleted_at.is_(None))
+            .order_by(PPEIssue.issued_at.desc())
+        )
+        issues = (await session.execute(ppe_stmt)).scalars().all()
+        issued: dict[str, float] = {}
+        for issue in issues:
+            delta = float(issue.quantity)
+            key = issue.item_id or issue.item_name
+            current = issued.get(key, 0.0)
+            if issue.status in {PPEIssueStatus.ISSUED}:
+                issued[key] = current + delta
+            else:
+                issued[key] = max(0.0, current - delta)
+
+        missing_ppe: list[str] = []
+        has_clearance = not levels or levels[0] in {"low", "medium"}
+        output.append(
+            {
+                "person_id": person.id,
+                "fio": " ".join(filter(None, [person.last_name, person.first_name, person.middle_name])),
+                "position": getattr(person.position, "name", None),
+                "site": getattr(getattr(person.workplace, "site", None), "name", None),
+                "active_risk_map_id": None,
+                "risk_levels": levels,
+                "required_ppe": [],
+                "issued_ppe": [{"ppe_catalog_id": k, "quantity": v} for k, v in issued.items() if v > 0],
+                "missing_ppe": missing_ppe,
+                "has_clearance": has_clearance,
+            }
+        )
+
+    return {"pack_run_id": pack_run_id, "persons": output}

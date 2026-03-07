@@ -88,3 +88,20 @@ pytest -q tests/test_tenancy_enforcement.py
    - `POST /api/v1/webhooks/edo/{operator_code}`.
 
 Все запросы к бизнес-эндпойнтам должны включать `X-Tenant`.
+
+## Safety Core dev flow (employee → risk map → PPE → pack summary)
+
+1. Создайте сотрудника и орг-контекст через существующие CRUD:
+   - `POST /api/v1/companies`
+   - `POST /api/v1/sites`
+   - `POST /api/v1/positions`
+   - `POST /api/v1/persons`
+2. Создайте методику риска (`matrix` или `fine_kinney`) и активируйте её.
+3. Добавьте hazards и bindings к `position/workplace/site`.
+4. Постройте risk map для `person/workplace/site` в режиме `auto_from_binding` и выполните recalculate.
+5. Создайте PPE catalog и PPE norms (scope: `position/workplace/hazard`).
+6. Оформите `issue/return/replacement` в PPE журнале.
+7. Проверьте personal card: required/issued/missing/expiring.
+8. Для пакета «Выход на объект» запросите safety-сводку и используйте данные в шаблонах/контексте рендера.
+
+> Везде обязателен `X-Tenant`; без него API отвечает `400`.
