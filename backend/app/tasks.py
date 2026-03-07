@@ -1656,6 +1656,38 @@ def edo_status_simulation_job(*, message_id: str, tenant_id: str, status: str) -
     return _run_coroutine(_run())
 
 
+
+
+@celery_app.task(name="escalation_scan_job")
+def escalation_scan_job(tenant_slug: str | None = None) -> dict[str, str]:
+    return approval_deadline_sweeper_job(tenant_slug=tenant_slug)
+
+
+@celery_app.task(name="refresh_signature_status_job")
+def refresh_signature_status_job(*, request_id: str, tenant_id: str) -> dict[str, str]:
+    return {"status": "queued", "request_id": request_id, "tenant_id": tenant_id}
+
+
+@celery_app.task(name="verify_signature_job")
+def verify_signature_job(*, request_id: str, tenant_id: str) -> dict[str, str]:
+    return {"status": "verifying", "request_id": request_id, "tenant_id": tenant_id}
+
+
+@celery_app.task(name="refresh_edo_status_job")
+def refresh_edo_status_job(*, message_id: str, tenant_id: str) -> dict[str, str]:
+    return {"status": "queued", "message_id": message_id, "tenant_id": tenant_id}
+
+
+@celery_app.task(name="process_edo_webhook_job")
+def process_edo_webhook_job(*, inbox_id: str, tenant_id: str) -> dict[str, str]:
+    return {"status": "processed", "inbox_id": inbox_id, "tenant_id": tenant_id}
+
+
+@celery_app.task(name="generate_edo_protocol_job")
+def generate_edo_protocol_job(*, message_id: str, tenant_id: str) -> dict[str, str]:
+    return {"status": "queued", "message_id": message_id, "tenant_id": tenant_id}
+
+
 @celery_app.task(name="webhook_dispatch_job")
 def webhook_dispatch_job(limit: int = 50, tenant_slug: str = "test") -> dict[str, int]:
     dispatched = dispatch_outbox_events(tenant_slug=tenant_slug)

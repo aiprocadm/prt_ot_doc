@@ -64,3 +64,27 @@ pytest -q tests/test_tenancy_enforcement.py
 - Upload DOCX version: `POST /api/v1/templates/{template_id}/versions:upload` (`multipart/form-data`, field `file`, optional `Idempotency-Key`).
 - Run linter: `POST /api/v1/templates/{template_id}/versions/{version_id}:lint`.
 - Render preview: `POST /api/v1/templates/{template_id}/versions/{version_id}:preview` with JSON data payload.
+
+## Approval → Sign → EDO flow (dev, mock adapters)
+
+Минимальный сквозной сценарий для локальной проверки (mock providers):
+
+1. Создать маршрут согласования:
+   - `POST /api/v1/approval-routes`
+   - затем шаги `POST /api/v1/approval-routes/{id}/steps`.
+2. Запустить согласование для `document` или `pack`:
+   - `POST /api/v1/approvals/start`.
+3. Принять решение на шаге:
+   - `POST /api/v1/approvals/{id}/approve|reject|delegate|comment`.
+4. Запросить подпись:
+   - `POST /api/v1/sign/requests` c `provider_code=mock`.
+5. Обновить статус/верифицировать подпись:
+   - `POST /api/v1/sign/requests/{id}/refresh-status`
+   - `POST /api/v1/sign/requests/{id}/verify`.
+6. Отправить сущность в ЭДО:
+   - `POST /api/v1/edo/messages` c `operator_code=mock_edo`.
+7. Обновить статус ЭДО вручную или вебхуком:
+   - `POST /api/v1/edo/messages/{id}/refresh-status`
+   - `POST /api/v1/webhooks/edo/{operator_code}`.
+
+Все запросы к бизнес-эндпойнтам должны включать `X-Tenant`.
