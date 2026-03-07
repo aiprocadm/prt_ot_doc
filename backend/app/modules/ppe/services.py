@@ -51,6 +51,18 @@ class PPENormService:
         return totals
 
 
+
+
+class PPEIssueService:
+    @staticmethod
+    def validate_issue_type(issue_type: str) -> str:
+        allowed = {"issue", "return", "writeoff", "replacement"}
+        normalized = issue_type.strip().lower()
+        if normalized not in allowed:
+            raise ValueError("unsupported issue_type")
+        return normalized
+
+
 class PPEPersonalCardService:
     @staticmethod
     def apply_issue_events(events: list[PPEIssueEvent]) -> dict[str, dict[str, datetime | float | None]]:

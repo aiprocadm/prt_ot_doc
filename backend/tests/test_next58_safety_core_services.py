@@ -9,7 +9,13 @@ from app.modules.ppe.services import (
     PPEPersonalCardService,
     RiskPPEProjectionService,
 )
-from app.modules.risk.services import RiskCalculationService, RiskMethodologyService
+from app.modules.risk.services import (
+    HazardService,
+    RiskCalculationService,
+    RiskMapService,
+    RiskMeasureService,
+    RiskMethodologyService,
+)
 
 
 def test_matrix_methodology_calculation() -> None:
@@ -83,3 +89,43 @@ def test_issue_return_updates_personal_card_projection() -> None:
     state = PPEPersonalCardService.apply_issue_events(events)
     assert state["helmet"]["current_quantity"] == 2.0
     assert state["helmet"]["next_due_at"] is not None
+
+
+def test_hazard_binding_resolution_for_person() -> None:
+    hazard_ids = HazardService.resolve_hazard_ids(
+        entity_type="person",
+        position_id="pos-1",
+        workplace_id="wp-1",
+        site_id="site-1",
+        bindings=[
+            {"binding_type": "position", "binding_id": "pos-1", "hazard_id": "h-pos"},
+            {"binding_type": "workplace", "binding_id": "wp-1", "hazard_id": "h-wp"},
+            {"binding_type": "site", "binding_id": "site-1", "hazard_id": "h-site"},
+            {"binding_type": "site", "binding_id": "site-2", "hazard_id": "h-other"},
+        ],
+    )
+    assert hazard_ids == ["h-pos", "h-wp", "h-site"]
+
+
+def test_residual_risk_update() -> None:
+    residual = RiskMeasureService.residual_from_measures(100, [10, 20])
+    assert residual == 72
+
+
+def test_risk_map_generation_archives_removed_bindings() -> None:
+    methodology = {
+        "type": "matrix",
+        "scale_json": {"level_rules": [{"min": 1, "max": 25, "level": "low"}]},
+    }
+    merged = RiskMapService.merge_items(
+        existing_items=[
+            {"hazard_id": "h-1", "probability_value": 2, "severity_value": 2},
+            {"hazard_id": "h-old", "probability_value": 3, "severity_value": 3},
+        ],
+        source_hazard_ids=["h-1", "h-2"],
+        methodology=methodology,
+    )
+    by_id = {item["hazard_id"]: item for item in merged}
+    assert by_id["h-1"]["status"] == "active"
+    assert by_id["h-2"]["status"] == "active"
+    assert by_id["h-old"]["status"] == "archived"
