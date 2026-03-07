@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.models import (
@@ -21,6 +21,47 @@ class ApprovalRouteService:
     def __init__(self, session: AsyncSession, tenant_id: str) -> None:
         self.session = session
         self.tenant_id = tenant_id
+
+    @staticmethod
+    def _value_matches(expected: object, actual: object) -> bool:
+        if isinstance(expected, list):
+            return actual in expected
+        return expected == actual
+
+    @classmethod
+    def _matches_conditions(cls, conditions: dict[str, object], context: dict[str, object]) -> bool:
+        for key, expected in conditions.items():
+            if key == "amount_gte":
+                actual = context.get("amount")
+                if actual is None or not isinstance(actual, (int, float)) or actual < expected:
+                    return False
+                continue
+            if key == "amount_lte":
+                actual = context.get("amount")
+                if actual is None or not isinstance(actual, (int, float)) or actual > expected:
+                    return False
+                continue
+            if not cls._value_matches(expected, context.get(key)):
+                return False
+        return True
+
+    async def resolve_route(
+        self,
+        *,
+        applies_to: str,
+        context: dict[str, object] | None = None,
+    ) -> ApprovalRoute | None:
+        stmt = select(ApprovalRoute).where(
+            ApprovalRoute.tenant_id == self.tenant_id,
+            ApprovalRoute.status == "active",
+            or_(ApprovalRoute.applies_to == applies_to, ApprovalRoute.applies_to == "both"),
+        )
+        rows = (await self.session.execute(stmt)).scalars().all()
+        context = context or {}
+        matching = [row for row in rows if self._matches_conditions(row.conditions_json or {}, context)]
+        if matching:
+            return matching[0]
+        return next((row for row in rows if row.is_default), None)
 
 
 class ApprovalInstanceService:
@@ -54,6 +95,8 @@ class ApprovalInstanceService:
         self.session.add(instance)
         await self.session.flush()
         for step in steps:
+            if not step.user_id and not step.role_code:
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Approval step requires assignee user_id or role_code")
             due_at = datetime.now(tz=timezone.utc) + timedelta(hours=step.deadline_hours) if step.deadline_hours else None
             self.session.add(
                 ApprovalInstanceStep(
@@ -106,9 +149,11 @@ class ApprovalDecisionService:
         if decision == "comment":
             return instance
         if decision == "delegate":
+            if not target_user_id:
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "target_user_id is required for delegate")
             step.delegated_from_user_id = step.assignee_user_id
             step.assignee_user_id = target_user_id
-            step.status = ApprovalInstanceStepStatus.DELEGATED
+            step.status = ApprovalInstanceStepStatus.PENDING
             return instance
         if decision == "reject":
             step.status = ApprovalInstanceStepStatus.REJECTED
@@ -144,3 +189,30 @@ class EscalationService:
     def __init__(self, session: AsyncSession, tenant_id: str) -> None:
         self.session = session
         self.tenant_id = tenant_id
+
+    async def escalate_overdue(self, *, now: datetime | None = None) -> int:
+        now = now or datetime.now(tz=timezone.utc)
+        rows = (
+            await self.session.execute(
+                select(ApprovalInstanceStep, ApprovalRouteStep)
+                .join(ApprovalRouteStep, ApprovalRouteStep.id == ApprovalInstanceStep.route_step_id)
+                .where(
+                    ApprovalInstanceStep.tenant_id == self.tenant_id,
+                    ApprovalInstanceStep.status == ApprovalInstanceStepStatus.PENDING,
+                    ApprovalInstanceStep.due_at.is_not(None),
+                    ApprovalInstanceStep.due_at < now,
+                    or_(ApprovalRouteStep.escalation_user_id.is_not(None), ApprovalRouteStep.escalation_role_code.is_not(None)),
+                )
+            )
+        ).all()
+        updated = 0
+        for step, route_step in rows:
+            step.delegated_from_user_id = step.assignee_user_id
+            if route_step.escalation_user_id:
+                step.assignee_user_id = route_step.escalation_user_id
+            if route_step.escalation_role_code:
+                step.assignee_role_code = route_step.escalation_role_code
+            updated += 1
+        if updated:
+            await self.session.flush()
+        return updated
