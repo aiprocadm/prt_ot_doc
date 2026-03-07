@@ -78,7 +78,7 @@ class RiskLevel(str, enum.Enum):
     CRITICAL = "critical"
 
 
-class RiskMap(TenantBaseModel, SoftDeleteMixin):
+class SafetyRiskMap(TenantBaseModel, SoftDeleteMixin):
     __tablename__ = "risk_maps"
 
     code: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -98,7 +98,7 @@ class RiskMap(TenantBaseModel, SoftDeleteMixin):
     )
 
 
-class RiskMethodology(TenantBaseModel, SoftDeleteMixin):
+class SafetyRiskMethodology(TenantBaseModel, SoftDeleteMixin):
     __tablename__ = "risk_methodologies"
 
     code: Mapped[str] = mapped_column(String(64), nullable=False)

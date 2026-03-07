@@ -132,6 +132,16 @@ def lint_template(docx_bytes: bytes, *, required_fields: list[str] | None = None
         errors.append("Unclosed blocks: " + ", ".join(stack))
 
     found_fields = [item["name"] for item in parsed["fields"]]
+
+    legacy_field_paths = set(found_fields)
+    for condition in parsed["conditions"]:
+        for field in FIELD_PATH_RE.findall(condition["expr"]):
+            if field not in ALLOWED_WORDS:
+                legacy_field_paths.add(field)
+    for loop in parsed["loops"]:
+        for field in FIELD_PATH_RE.findall(loop["iter"]):
+            if field not in ALLOWED_WORDS and field != loop["var"]:
+                legacy_field_paths.add(field)
     if required_fields:
         for name in required_fields:
             if name not in found_fields:
@@ -139,6 +149,9 @@ def lint_template(docx_bytes: bytes, *, required_fields: list[str] | None = None
 
     return {
         "found_fields": found_fields,
+        # Backward-compatible aliases used by older tests/callers.
+        "placeholders": found_fields,
+        "field_paths": sorted(legacy_field_paths),
         "blocks": {
             "loops": parsed["loops"],
             "conditions": parsed["conditions"],
