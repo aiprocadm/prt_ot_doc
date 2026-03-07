@@ -1204,6 +1204,9 @@ class PackRun(TenantBaseModel):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
     request_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    approval_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    signature_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    edo_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     __table_args__ = (
         Index("ix_pack_runs_status_created", "tenant_id", "status", "created_at"),
@@ -2186,11 +2189,73 @@ class EdoStatus(str, enum.Enum):
     FAILED = "failed"
 
 
+class ApprovalRouteAppliesTo(str, enum.Enum):
+    DOCUMENT = "document"
+    PACK = "pack"
+    BOTH = "both"
+
+
+class ApprovalRouteStatus(str, enum.Enum):
+    ACTIVE = "active"
+    DRAFT = "draft"
+    ARCHIVED = "archived"
+
+
+class ApprovalStepType(str, enum.Enum):
+    APPROVE = "approve"
+    SIGN = "sign"
+    REVIEW = "review"
+
+
+class ApprovalInstanceStatus(str, enum.Enum):
+    DRAFT = "draft"
+    RUNNING = "running"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    CANCELED = "canceled"
+    EXPIRED = "expired"
+
+
+class ApprovalInstanceStepStatus(str, enum.Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    SKIPPED = "skipped"
+    EXPIRED = "expired"
+    DELEGATED = "delegated"
+
+
+class SignatureProviderStatus(str, enum.Enum):
+    PENDING = "pending"
+    SIGNED = "signed"
+    FAILED = "failed"
+    CANCELED = "canceled"
+    VERIFYING = "verifying"
+    VERIFIED = "verified"
+
+
+class EdoMessageStatus(str, enum.Enum):
+    DRAFT = "draft"
+    QUEUED = "queued"
+    SENT = "sent"
+    DELIVERED = "delivered"
+    VIEWED = "viewed"
+    SIGNED = "signed"
+    COMPLETED = "completed"
+    REJECTED = "rejected"
+    FAILED = "failed"
+
+
 class ApprovalRoute(TenantBaseModel, SoftDeleteMixin):
     __tablename__ = "approval_routes"
 
     code: Mapped[str] = mapped_column(String(128), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    applies_to: Mapped[ApprovalRouteAppliesTo] = mapped_column(Enum(ApprovalRouteAppliesTo), nullable=False, default=ApprovalRouteAppliesTo.DOCUMENT)
+    conditions_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    status: Mapped[ApprovalRouteStatus] = mapped_column(Enum(ApprovalRouteStatus), nullable=False, default=ApprovalRouteStatus.DRAFT)
     rules_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
@@ -2229,13 +2294,18 @@ class ApprovalRequest(TenantBaseModel):
 class ApprovalDecision(TenantBaseModel):
     __tablename__ = "approval_decisions"
 
-    request_id: Mapped[str] = mapped_column(ForeignKey("approval_requests.id"), nullable=False, index=True)
-    step_index: Mapped[int] = mapped_column(Integer, nullable=False)
-    actor_user_id: Mapped[str] = mapped_column(ForeignKey("user.id"), nullable=False, index=True)
-    decision: Mapped[ApprovalDecisionType] = mapped_column(Enum(ApprovalDecisionType), nullable=False)
+    request_id: Mapped[str | None] = mapped_column(ForeignKey("approval_requests.id"), nullable=True, index=True)
+    approval_instance_id: Mapped[str | None] = mapped_column(ForeignKey("approval_instances.id"), nullable=True, index=True)
+    approval_instance_step_id: Mapped[str | None] = mapped_column(ForeignKey("approval_instance_steps.id"), nullable=True, index=True)
+    step_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    actor_user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    decision: Mapped[str] = mapped_column(String(16), nullable=False)
     comment: Mapped[str | None] = mapped_column(Text)
+    payload_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
-    request: Mapped[ApprovalRequest] = relationship("ApprovalRequest", backref="decisions")
+    request: Mapped[ApprovalRequest | None] = relationship("ApprovalRequest", backref="decisions")
 
 
 class Signature(TenantBaseModel):
@@ -2261,8 +2331,20 @@ class EdoMessage(TenantBaseModel):
     direction: Mapped[EdoDirection] = mapped_column(Enum(EdoDirection), nullable=False)
     document_version_id: Mapped[str | None] = mapped_column(ForeignKey("documentversion.id"), nullable=True, index=True)
     provider_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    entity_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    entity_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    operator_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    message_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
     external_id: Mapped[str | None] = mapped_column(String(255), index=True)
-    status: Mapped[EdoStatus] = mapped_column(Enum(EdoStatus), nullable=False, default=EdoStatus.QUEUED)
+    external_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    external_thread_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    roaming_status: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    last_status_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    request_payload_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    response_payload_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    protocol_file_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default=EdoMessageStatus.DRAFT.value)
     payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
 
     __table_args__ = (
@@ -2354,6 +2436,96 @@ class ApprovalDecisionLog(TenantBaseModel):
     user_agent: Mapped[str | None] = mapped_column(String(512))
 
 
+
+
+class ApprovalRouteStep(TenantBaseModel, SoftDeleteMixin, VersionedMixin):
+    __tablename__ = "approval_route_steps"
+
+    approval_route_id: Mapped[str] = mapped_column(ForeignKey("approval_routes.id", ondelete="CASCADE"), nullable=False, index=True)
+    order_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    step_type: Mapped[ApprovalStepType] = mapped_column(Enum(ApprovalStepType), nullable=False, default=ApprovalStepType.APPROVE)
+    role_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    can_delegate: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    deadline_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    escalation_role_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    escalation_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    conditions_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("approval_route_id", "order_no", name="uq_approval_route_steps_order"),
+        Index("ix_approval_route_steps_route_order", "approval_route_id", "order_no"),
+    )
+
+
+class ApprovalInstance(TenantBaseModel, SoftDeleteMixin, VersionedMixin):
+    __tablename__ = "approval_instances"
+
+    entity_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    entity_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    approval_route_id: Mapped[str] = mapped_column(ForeignKey("approval_routes.id"), nullable=False, index=True)
+    status: Mapped[ApprovalInstanceStatus] = mapped_column(Enum(ApprovalInstanceStatus), nullable=False, default=ApprovalInstanceStatus.DRAFT)
+    started_by: Mapped[str] = mapped_column(String(36), nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    current_step_no: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_approval_instances_entity", "tenant_id", "entity_type", "entity_id"),
+        Index("ix_approval_instances_status", "tenant_id", "status"),
+    )
+
+
+class ApprovalInstanceStep(TenantBaseModel):
+    __tablename__ = "approval_instance_steps"
+
+    approval_instance_id: Mapped[str] = mapped_column(ForeignKey("approval_instances.id", ondelete="CASCADE"), nullable=False, index=True)
+    route_step_id: Mapped[str] = mapped_column(ForeignKey("approval_route_steps.id"), nullable=False, index=True)
+    order_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    assignee_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    assignee_role_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    delegated_from_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    status: Mapped[ApprovalInstanceStepStatus] = mapped_column(Enum(ApprovalInstanceStepStatus), nullable=False, default=ApprovalInstanceStepStatus.PENDING)
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    acted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    payload_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+
+    __table_args__ = (
+        Index("ix_approval_instance_steps_lookup", "approval_instance_id", "status", "order_no"),
+    )
+
+
+class EdoStatusEvent(TenantBaseModel):
+    __tablename__ = "edo_status_events"
+
+    edo_message_id: Mapped[str] = mapped_column(ForeignKey("edo_messages.id", ondelete="CASCADE"), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(64), nullable=False)
+    external_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(tz=timezone.utc))
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    dedupe_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    __table_args__ = (
+        Index("ix_edo_status_events_message_received", "edo_message_id", "received_at"),
+    )
+
+
+class EdoWebhookInbox(TenantBaseModel):
+    __tablename__ = "edo_webhook_inbox"
+
+    operator_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    external_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    dedupe_key: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    headers_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="received")
+    error_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
 class SignatureRequestStatus(str, enum.Enum):
     CREATED = "created"
     REQUESTED = "requested"
@@ -2367,13 +2539,23 @@ class SignatureRequest(TenantBaseModel):
     object_type: Mapped[str] = mapped_column(String(64), nullable=False)
     object_id: Mapped[str] = mapped_column(String(36), nullable=False)
     provider: Mapped[str] = mapped_column(String(64), nullable=False)
-    status: Mapped[SignatureRequestStatus] = mapped_column(Enum(SignatureRequestStatus), nullable=False, default=SignatureRequestStatus.CREATED)
+    requested_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    approval_instance_id: Mapped[str | None] = mapped_column(ForeignKey("approval_instances.id"), nullable=True, index=True)
+    signature_type: Mapped[str] = mapped_column(String(16), nullable=False, default="kep")
+    provider_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default=SignatureProviderStatus.PENDING.value)
+    external_request_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    certificate_thumbprint: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    signer_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    verification_result_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     result_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
 
     __table_args__ = (
         Index("ix_signature_requests_status", "tenant_id", "status"),
         Index("ix_signature_requests_object", "tenant_id", "object_type", "object_id"),
+        Index("ix_signature_requests_entity_status", "tenant_id", "object_type", "object_id", "status"),
     )
 
 

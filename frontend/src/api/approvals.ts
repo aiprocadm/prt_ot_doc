@@ -12,8 +12,9 @@ export type ApprovalTask = {
 export type ApprovalProcess = {
   id: string;
   status: string;
-  object_id: string;
-  current_step: number;
+  object_id?: string;
+  entity_id?: string;
+  current_step?: number;
 };
 
 export const approvalsApi = {
@@ -24,17 +25,15 @@ export const approvalsApi = {
     return data.items;
   },
   listProcesses: async (status?: string) => {
-    const { data } = await apiClient.get<{ items: ApprovalProcess[] }>("/v1/approvals/processes", {
-      params: { status },
-    });
+    const { data } = await apiClient.get<{ items: ApprovalProcess[] }>("/approvals", { params: { status } });
     return data.items;
   },
-  decideTask: async (taskId: string, decision: "approve" | "reject", comment?: string) => {
-    const { data } = await apiClient.post(`/v1/approvals/tasks/${taskId}/decision`, { decision, comment });
+  startApproval: async (entity_type: "document" | "pack", entity_id: string, approval_route_id: string) => {
+    const { data } = await apiClient.post("/approvals/start", { entity_type, entity_id, approval_route_id });
     return data;
   },
-  delegateTask: async (taskId: string, to_user_id: string, reason?: string) => {
-    const { data } = await apiClient.post(`/v1/approvals/tasks/${taskId}:delegate`, { to_user_id, reason });
+  decide: async (approvalId: string, action: "approve" | "reject" | "delegate" | "comment", body: Record<string, unknown>) => {
+    const { data } = await apiClient.post(`/approvals/${approvalId}/${action}`, body);
     return data;
   },
 };

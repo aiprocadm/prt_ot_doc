@@ -168,6 +168,10 @@ class DocumentVersion(TenantBaseModel):
         default=lambda: datetime.now(tz=timezone.utc),
         nullable=False,
     )
+    approval_status: Mapped[str | None] = mapped_column(Text, nullable=True)
+    signature_status: Mapped[str | None] = mapped_column(Text, nullable=True)
+    edo_status: Mapped[str | None] = mapped_column(Text, nullable=True)
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     document = relationship("Document", back_populates="versions")
     snapshot: Mapped["DocumentSnapshot | None"] = relationship(
