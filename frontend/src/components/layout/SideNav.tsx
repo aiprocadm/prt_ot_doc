@@ -31,6 +31,7 @@ const navGroups = [
       { label: "Календарь", to: "/calendar", icon: Activity, permission: PERMISSIONS.TASK_VIEW },
       { label: "Документы", to: "/documents", icon: FileText, permission: PERMISSIONS.DOCUMENT_VIEW },
       { label: "Согласования", to: "/approvals/inbox", icon: ClipboardCheck, permission: PERMISSIONS.DOCUMENT_VIEW },
+      { label: "Маршруты согласования", to: "/approval-routes", icon: ClipboardCheck, permission: PERMISSIONS.DOCUMENT_VIEW },
       { label: "Подписи", to: "/signatures", icon: FileText, permission: PERMISSIONS.DOCUMENT_VIEW },
       { label: "ЭДО", to: "/edo", icon: Archive, permission: PERMISSIONS.DOCUMENT_VIEW },
       { label: "Пайплайны", to: "/pipelines/runs", icon: Archive, permission: PERMISSIONS.DOCUMENT_VIEW },
