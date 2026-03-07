@@ -18,6 +18,7 @@ from app.api.dependencies import get_session, get_tenant_record, require_tenant_
 from app.api.routes import (
     admin_authz,
     admin_users,
+    approval_orchestration,
     approval_signing_v1,
     attestations,
     audit,
@@ -190,6 +191,7 @@ tenant_router.include_router(sites.router, tags=["sites"])
 tenant_router.include_router(documents.router, prefix="/documents", tags=["documents"])
 tenant_router.include_router(edo_workflow.router, tags=["edo-workflow"])
 tenant_router.include_router(approval_signing_v1.router, prefix="/v1", tags=["approval-signing-v1"])
+tenant_router.include_router(approval_orchestration.router, tags=["approval-orchestration"])
 tenant_router.include_router(jobs.router)
 tenant_router.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
 tenant_router.include_router(tenancy.router)
