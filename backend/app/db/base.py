@@ -15,6 +15,7 @@ from app.models import (
     notifications,  # noqa: F401
     npa,  # noqa: F401
     risk,  # noqa: F401
+    safety_ops,  # noqa: F401
 )
 from app.modules.replace import models as replace_models  # noqa: F401
 from app.modules.pipelines import models as pipeline_models  # noqa: F401

@@ -25,6 +25,12 @@ const TrainingPage = lazy(() => import("@/pages/training/TrainingPage"));
 const MedicalPage = lazy(() => import("@/pages/medical/MedicalPage"));
 const IncidentsPage = lazy(() => import("@/pages/incidents/IncidentsPage"));
 const InspectionsPage = lazy(() => import("@/pages/inspections/InspectionsPage"));
+const InspectionPlansPage = lazy(() => import("@/pages/inspection-plans/InspectionPlansPage"));
+const InspectionChecklistsPage = lazy(() => import("@/pages/inspection-checklists/InspectionChecklistsPage"));
+const FindingsPage = lazy(() => import("@/pages/findings/FindingsPage"));
+const PrescriptionsPage = lazy(() => import("@/pages/prescriptions/PrescriptionsPage"));
+const CorrectiveActionsPage = lazy(() => import("@/pages/corrective-actions/CorrectiveActionsPage"));
+const InspectionPrepPackagesPage = lazy(() => import("@/pages/inspection-prep/InspectionPrepPackagesPage"));
 const AuditPrepPage = lazy(() => import("@/pages/audit-prep/AuditPrepPage"));
 const FireSafetyPage = lazy(() => import("@/pages/fire-safety/FireSafetyPage"));
 const FireTrainingPage = lazy(() => import("@/pages/fire-training/FireTrainingPage"));
@@ -132,6 +138,14 @@ const AppRouter = () => {
               </Route>
               <Route element={<ProtectedRoute permission={PERMISSIONS.INSPECTION_VIEW} />}>
                 <Route path="/inspections" element={<InspectionsPage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.INSPECTION_VIEW} />}>
+                <Route path="/inspection-plans" element={<InspectionPlansPage />} />
+                <Route path="/inspection-checklists" element={<InspectionChecklistsPage />} />
+                <Route path="/findings" element={<FindingsPage />} />
+                <Route path="/prescriptions" element={<PrescriptionsPage />} />
+                <Route path="/corrective-actions" element={<CorrectiveActionsPage />} />
+                <Route path="/inspection-prep/packages" element={<InspectionPrepPackagesPage />} />
               </Route>
               <Route element={<ProtectedRoute permission={PERMISSIONS.AUDIT_PREP_VIEW} />}>
                 <Route path="/audit-prep" element={<AuditPrepPage />} />
