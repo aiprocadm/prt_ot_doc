@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -368,10 +368,11 @@ async def get_package(package_id: str, tenant: TenantDep, session: SessionDep) -
 
 
 @router.delete("/inspection-prep/packages/{package_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_package(package_id: str, tenant: TenantDep, session: SessionDep) -> None:
+async def delete_package(package_id: str, tenant: TenantDep, session: SessionDep) -> Response:
     pack = await _get_package(session, str(tenant.id), package_id)
     pack.deleted_at = datetime.now(timezone.utc)
     await session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/inspection-prep/packages/{package_id}/stats")

@@ -29,7 +29,7 @@ class InspectionPrepPackageService:
 
 class GapAnalysisService:
     @staticmethod
-    def detect_gaps(*, missing_documents: int, open_prescriptions: int, overdue_actions: int, high_risks: int) -> list[PrepGap]:
+    def detect_gaps(*, missing_documents: int, open_prescriptions: int, overdue_actions: int, high_risks: int = 0) -> list[PrepGap]:
         gaps: list[PrepGap] = []
         if missing_documents > 0:
             gaps.append(PrepGap("missing_doc", "high", "Missing mandatory documents"))

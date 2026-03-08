@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import enum
 from datetime import date, datetime
 
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint
@@ -62,6 +61,16 @@ class IncidentInvestigation(TenantBaseModel, SoftDeleteMixin):
     recommendations_json: Mapped[dict | list | None] = mapped_column(JSON, nullable=True)
 
 
+class IncidentAttachment(TenantBaseModel):
+    __tablename__ = "incident_attachments"
+
+    incident_case_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("incident_cases.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    file_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    attachment_type: Mapped[str] = mapped_column(Text, nullable=False)
+
+
 class InspectionPlan(TenantBaseModel, SoftDeleteMixin):
     __tablename__ = "inspection_plans"
 
@@ -107,6 +116,66 @@ class OpsInspection(TenantBaseModel, SoftDeleteMixin):
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     inspector_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class InspectionChecklist(TenantBaseModel, SoftDeleteMixin):
+    __tablename__ = "inspection_checklists"
+
+    code: Mapped[str | None] = mapped_column(Text, nullable=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    checklist_type: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="draft")
+
+
+class InspectionChecklistItem(TenantBaseModel):
+    __tablename__ = "inspection_checklist_items"
+
+    inspection_checklist_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("inspection_checklists.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    code: Mapped[str | None] = mapped_column(Text, nullable=True)
+    section: Mapped[str | None] = mapped_column(Text, nullable=True)
+    item_order: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    normative_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
+    severity_if_failed: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class InspectionRun(TenantBaseModel):
+    __tablename__ = "inspection_runs"
+
+    inspection_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("ops_inspections.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    inspection_checklist_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("inspection_checklists.id", ondelete="RESTRICT"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="in_progress")
+
+
+class InspectionRunItem(TenantBaseModel):
+    __tablename__ = "inspection_run_items"
+
+    inspection_run_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("inspection_runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    checklist_item_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("inspection_checklist_items.id", ondelete="RESTRICT"), nullable=False
+    )
+    result: Mapped[str] = mapped_column(Text, nullable=False)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evidence_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
+class InspectionAttachment(TenantBaseModel):
+    __tablename__ = "inspection_attachments"
+
+    inspection_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("ops_inspections.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    file_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    attachment_type: Mapped[str] = mapped_column(Text, nullable=False)
 
 
 class Finding(TenantBaseModel, SoftDeleteMixin):
@@ -178,6 +247,16 @@ class CorrectiveAction(TenantBaseModel, SoftDeleteMixin):
     verification_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(Text, nullable=False, default="open")
     effectiveness_status: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class CorrectiveActionAttachment(TenantBaseModel):
+    __tablename__ = "corrective_action_attachments"
+
+    corrective_action_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("corrective_actions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    file_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    attachment_type: Mapped[str] = mapped_column(Text, nullable=False)
 
 
 class InspectionPrepPackage(TenantBaseModel, SoftDeleteMixin):
