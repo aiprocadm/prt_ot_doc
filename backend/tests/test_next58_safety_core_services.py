@@ -7,6 +7,7 @@ from app.modules.ppe.services import (
     PPEIssueEvent,
     PPENormService,
     PPEPersonalCardService,
+    PackSafetySummaryService,
     RiskPPEProjectionService,
 )
 from app.modules.risk.services import (
@@ -129,3 +130,9 @@ def test_risk_map_generation_archives_removed_bindings() -> None:
     assert by_id["h-1"]["status"] == "active"
     assert by_id["h-2"]["status"] == "active"
     assert by_id["h-old"]["status"] == "archived"
+
+
+def test_pack_safety_clearance_rule() -> None:
+    assert PackSafetySummaryService.has_clearance(risk_levels=["low"], missing_ppe={}) is True
+    assert PackSafetySummaryService.has_clearance(risk_levels=["high"], missing_ppe={}) is False
+    assert PackSafetySummaryService.has_clearance(risk_levels=["medium"], missing_ppe={"helmet": 1}) is False

@@ -101,3 +101,11 @@ class RiskPPEProjectionService:
             for catalog_id, bucket in issued_state.items()
             if isinstance(bucket.get("next_due_at"), datetime) and now <= bucket["next_due_at"] <= threshold
         ]
+
+
+class PackSafetySummaryService:
+    @staticmethod
+    def has_clearance(*, risk_levels: list[str], missing_ppe: dict[str, float]) -> bool:
+        blocked_levels = {"high", "critical"}
+        has_blocking_risk = any(level in blocked_levels for level in risk_levels)
+        return not has_blocking_risk and not missing_ppe
