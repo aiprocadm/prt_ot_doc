@@ -33,7 +33,7 @@ class VerificationResult:
 
 class CorrectiveActionService:
     @staticmethod
-    def is_overdue(*, due_date: date | None, status: str, now: date | None = None) -> bool:
+    def is_overdue(status: str, due_date: date | None, now: date | None = None) -> bool:
         if due_date is None or status in {"done", "verified", "canceled"}:
             return False
         check_date = now or datetime.now(tz=timezone.utc).date()
@@ -41,7 +41,7 @@ class CorrectiveActionService:
 
     @classmethod
     def mark_overdue_if_needed(cls, *, due_date: date | None, status: str) -> str:
-        return "overdue" if cls.is_overdue(due_date=due_date, status=status) else status
+        return "overdue" if cls.is_overdue(status, due_date) else status
 
     @staticmethod
     def apply_verification(*, is_effective: bool, partially_effective: bool = False, comment: str | None = None) -> VerificationResult:
