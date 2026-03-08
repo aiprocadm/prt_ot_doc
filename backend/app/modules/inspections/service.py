@@ -21,6 +21,20 @@ class InspectionService:
             if item.get("result") == "fail"
         ]
 
+    @staticmethod
+    def can_close(*, has_blocking_open_items: bool, policy_requires_resolution: bool = True) -> bool:
+        if not policy_requires_resolution:
+            return True
+        return not has_blocking_open_items
+
 
 class InspectionPlanService:
-    pass
+    @staticmethod
+    def plan_item_status(*, completed: bool, canceled: bool, overdue: bool) -> str:
+        if canceled:
+            return "canceled"
+        if completed:
+            return "completed"
+        if overdue:
+            return "overdue"
+        return "planned"
