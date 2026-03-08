@@ -49,6 +49,7 @@ from app.api.routes import (
     prescriptions,
     reports,
     risk,
+    safety_ops,
     sites,
     tasks,
     tenancy,
@@ -175,6 +176,7 @@ tenant_router.include_router(client_portal.router)
 tenant_router.include_router(incidents.router, tags=["incidents"])
 tenant_router.include_router(inspections.router, tags=["inspections"])
 tenant_router.include_router(prescriptions.router, tags=["prescriptions"])
+tenant_router.include_router(safety_ops.router, tags=["safety-ops"])
 tenant_router.include_router(obligations.router, tags=["obligations"])
 tenant_router.include_router(notifications.router)
 tenant_router.include_router(departments.router, tags=["departments"])
