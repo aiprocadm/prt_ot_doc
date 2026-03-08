@@ -117,11 +117,11 @@ from app.models.safety_core import (
     PPENormItem,
     PPEPersonalCard,
     PPEPersonalCardItem,
-    RiskMap as SafetyRiskMap,
+    SafetyRiskMap,
     RiskMapItem,
     RiskMapItemMeasure,
     RiskMeasure,
-    RiskMethodology as SafetyRiskMethodology,
+    SafetyRiskMethodology,
 )
 
 from app.models.risk import (
