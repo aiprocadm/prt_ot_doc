@@ -13,6 +13,10 @@ class IncidentCaseService:
         except ValueError:
             return False
 
+    @staticmethod
+    def can_close(*, has_open_actions: bool, manual_override: bool) -> bool:
+        return (not has_open_actions) or manual_override
+
 
 class IncidentInvestigationService:
     @staticmethod
