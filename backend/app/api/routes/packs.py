@@ -37,15 +37,13 @@ from app.models.models import (
     Person,
     PipelineRun,
     PipelineRunStatus,
-    PPEIssue,
-    PPEIssueStatus,
     Site,
     TemplateVersion,
     Tenant,
     Training,
     TrainingStatus,
 )
-from app.models.risk import RiskAssessment
+from app.models.safety_core import PPEIssue, PPEPersonalCard, PPEPersonalCardItem, RiskMapItem, SafetyRiskMap
 from app.schemas.pack import (
     PackFromScenarioRequest,
     PackGenerateRequest,
@@ -70,6 +68,8 @@ from fastapi.responses import RedirectResponse, StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+
+from app.modules.ppe.services import PackSafetySummaryService
 
 logger = logging.getLogger(__name__)
 
@@ -973,7 +973,7 @@ async def pack_safety_summary(
     tenant: TenantDep,
     access: PackAccess,
 ) -> dict[str, list[dict[str, object]]]:
-    """Return safety summary stub for pack run consumers (risk+PPE completeness)."""
+    """Return safety summary for pack run consumers (risk+PPE completeness)."""
 
     del access
     tenant_scope = _tenant_scope_values(tenant)
@@ -983,50 +983,68 @@ async def pack_safety_summary(
 
     output: list[dict[str, object]] = []
     for person in persons:
-        risk_stmt = (
-            select(func.max(RiskAssessment.score_after))
-            .where(RiskAssessment.employee_id == person.id, RiskAssessment.tenant_id.in_(tenant_scope))
+        risk_map_stmt = (
+            select(SafetyRiskMap)
+            .where(
+                SafetyRiskMap.tenant_id.in_(tenant_scope),
+                SafetyRiskMap.entity_type == "person",
+                SafetyRiskMap.entity_id == person.id,
+                SafetyRiskMap.status == "active",
+                SafetyRiskMap.deleted_at.is_(None),
+            )
+            .order_by(SafetyRiskMap.updated_at.desc())
+            .limit(1)
         )
-        max_score = (await session.execute(risk_stmt)).scalar_one_or_none() or 0
+        active_risk_map = (await session.execute(risk_map_stmt)).scalar_one_or_none()
+
         levels: list[str] = []
-        if max_score >= 16:
-            levels.append("critical")
-        elif max_score >= 10:
-            levels.append("high")
-        elif max_score >= 5:
-            levels.append("medium")
-        elif max_score > 0:
-            levels.append("low")
+        if active_risk_map is not None:
+            level_stmt = select(RiskMapItem.risk_level).where(
+                RiskMapItem.tenant_id.in_(tenant_scope),
+                RiskMapItem.risk_map_id == active_risk_map.id,
+                RiskMapItem.deleted_at.is_(None),
+                RiskMapItem.risk_level.is_not(None),
+            )
+            raw_levels = [str(level) for level in (await session.execute(level_stmt)).scalars().all()]
+            rank = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+            levels = sorted(set(raw_levels), key=lambda value: rank.get(value, -1))
 
-        ppe_stmt = (
-            select(PPEIssue)
-            .where(PPEIssue.person_id == person.id, PPEIssue.tenant_id.in_(tenant_scope), PPEIssue.deleted_at.is_(None))
-            .order_by(PPEIssue.issued_at.desc())
+        card_stmt = select(PPEPersonalCard).where(
+            PPEPersonalCard.tenant_id.in_(tenant_scope),
+            PPEPersonalCard.person_id == person.id,
+            PPEPersonalCard.deleted_at.is_(None),
         )
-        issues = (await session.execute(ppe_stmt)).scalars().all()
-        issued: dict[str, float] = {}
-        for issue in issues:
-            delta = float(issue.quantity)
-            key = issue.item_id or issue.item_name
-            current = issued.get(key, 0.0)
-            if issue.status in {PPEIssueStatus.ISSUED}:
-                issued[key] = current + delta
-            else:
-                issued[key] = max(0.0, current - delta)
+        card = (await session.execute(card_stmt)).scalar_one_or_none()
+        issued_ppe: list[dict[str, object]] = []
+        if card is not None:
+            card_items_stmt = select(PPEPersonalCardItem).where(
+                PPEPersonalCardItem.tenant_id.in_(tenant_scope),
+                PPEPersonalCardItem.personal_card_id == card.id,
+            )
+            card_items = (await session.execute(card_items_stmt)).scalars().all()
+            issued_ppe = [
+                {"ppe_catalog_id": item.ppe_catalog_id, "quantity": float(item.current_quantity)}
+                for item in card_items
+                if float(item.current_quantity) > 0
+            ]
 
-        missing_ppe: list[str] = []
-        has_clearance = not levels or levels[0] in {"low", "medium"}
+        missing_ppe: dict[str, float] = {}
+        has_clearance = PackSafetySummaryService.has_clearance(risk_levels=levels, missing_ppe=missing_ppe)
+
         output.append(
             {
                 "person_id": person.id,
                 "fio": " ".join(filter(None, [person.last_name, person.first_name, person.middle_name])),
                 "position": getattr(person.position, "name", None),
                 "site": getattr(getattr(person.workplace, "site", None), "name", None),
-                "active_risk_map_id": None,
+                "active_risk_map_id": active_risk_map.id if active_risk_map else None,
                 "risk_levels": levels,
                 "required_ppe": [],
-                "issued_ppe": [{"ppe_catalog_id": k, "quantity": v} for k, v in issued.items() if v > 0],
-                "missing_ppe": missing_ppe,
+                "issued_ppe": issued_ppe,
+                "missing_ppe": [
+                    {"ppe_catalog_id": catalog_id, "quantity": quantity}
+                    for catalog_id, quantity in missing_ppe.items()
+                ],
                 "has_clearance": has_clearance,
             }
         )
