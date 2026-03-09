@@ -367,6 +367,12 @@ async def get_package(package_id: str, tenant: TenantDep, session: SessionDep) -
     return {"id": pack.id, "code": pack.code, "title": pack.title, "status": pack.status}
 
 
+@router.delete(
+    "/inspection-prep/packages/{package_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+)
+async def delete_package(package_id: str, tenant: TenantDep, session: SessionDep) -> None:
 @router.delete("/inspection-prep/packages/{package_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_package(package_id: str, tenant: TenantDep, session: SessionDep) -> Response:
     pack = await _get_package(session, str(tenant.id), package_id)
