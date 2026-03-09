@@ -4,6 +4,7 @@ import asyncio
 from logging.config import fileConfig
 
 from alembic import context
+import sqlalchemy as sa
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
@@ -34,6 +35,7 @@ async def run_migrations_online() -> None:
 
 
 def do_run_migrations(connection) -> None:
+    _ensure_alembic_version_table_can_store_long_revisions(connection)
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
@@ -43,6 +45,29 @@ def do_run_migrations(connection) -> None:
     )
     with context.begin_transaction():
         context.run_migrations()
+
+
+def _ensure_alembic_version_table_can_store_long_revisions(connection) -> None:
+    """Make alembic_version.version_num compatible with long revision IDs.
+
+    Alembic's default table uses VARCHAR(32), which fails for human-readable
+    revision identifiers used in this repository.
+    """
+
+    table = sa.Table(
+        "alembic_version",
+        sa.MetaData(),
+        sa.Column("version_num", sa.Text(), nullable=False, primary_key=True),
+    )
+    table.create(bind=connection, checkfirst=True)
+
+    if connection.dialect.name == "postgresql":
+        connection.execute(
+            sa.text(
+                "ALTER TABLE alembic_version "
+                "ALTER COLUMN version_num TYPE TEXT"
+            )
+        )
 
 
 def run_migrations_offline() -> None:
