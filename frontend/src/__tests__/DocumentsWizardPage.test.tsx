@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 
 import { useTenantStore } from "@/stores/tenant";
+import { useDocumentsWizardStore } from "@/stores/documentsWizard";
 
 vi.mock("@/api/documents", () => ({
   generateDocument: vi.fn(),
@@ -26,6 +27,8 @@ import DocumentsWizardPage from "@/pages/documents/DocumentsWizardPage";
 
 describe("DocumentsWizardPage", () => {
   it("blocks api flow without tenant", async () => {
+    useDocumentsWizardStore.getState().reset();
+    useDocumentsWizardStore.setState({ step: 1 });
     useTenantStore.setState({ tenant: null, tenants: [], setTenant: vi.fn(), clearTenant: vi.fn() });
     const user = userEvent.setup();
 
@@ -37,6 +40,6 @@ describe("DocumentsWizardPage", () => {
 
     expect(screen.getByText(/без x-tenant запросы заблокированы/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /далее/i }));
-    expect(screen.getByRole("heading", { name: /шаг 2: файл/i })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /шаг 2: файл/i })).toBeInTheDocument();
   });
 });
