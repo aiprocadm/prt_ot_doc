@@ -23,9 +23,22 @@ class SearchFilters:
 
 
 class SearchService:
+    _ENTITY_ROUTE_PREFIXES: dict[str, str] = {
+        "documents": "documents",
+        "document": "documents",
+        "risk": "risk",
+        "jobs": "jobs",
+        "templates": "templates",
+    }
+
     def __init__(self, session: AsyncSession, tenant_id: str) -> None:
         self.session = session
         self.tenant_id = tenant_id
+
+    @classmethod
+    def _build_entity_url(cls, entity_type: str, entity_id: str) -> str:
+        prefix = cls._ENTITY_ROUTE_PREFIXES.get(entity_type, entity_type)
+        return f"/{prefix}/{entity_id}"
 
     async def search(
         self,
