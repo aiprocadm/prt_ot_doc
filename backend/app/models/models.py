@@ -377,7 +377,7 @@ class ApiToken(SharedModel, SoftDeleteMixin):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     token_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
     scopes_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
-    created_by_user_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("user.id"), nullable=True)
+    created_by_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_revoked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

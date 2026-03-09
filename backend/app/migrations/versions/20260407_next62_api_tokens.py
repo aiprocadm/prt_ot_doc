@@ -23,7 +23,7 @@ def upgrade() -> None:
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("token_hash", sa.String(length=128), nullable=False),
         sa.Column("scopes_json", sa.JSON(), nullable=False, server_default=sa.text("'[]'")),
-        sa.Column("created_by_user_id", sa.String(length=36), sa.ForeignKey("user.id"), nullable=True),
+        sa.Column("created_by_user_id", sa.String(length=36), nullable=True),
         sa.Column("last_used_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("is_revoked", sa.Boolean(), nullable=False, server_default=sa.false()),

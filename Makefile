@@ -1,4 +1,4 @@
-.PHONY: install install-pip lint format test contract run clean up down migrate tenant-migrate tenant-init seed smoke logs dev env frontend-install lint-frontend format-frontend test-frontend dev-lite test-lite dev-nodocker test-nodocker check-docker demo cs\:dev cs\:test cs\:reset
+.PHONY: install install-pip lint format test contract run clean up down migrate tenant-migrate tenant-init seed smoke logs dev env frontend-install lint-frontend format-frontend test-frontend dev-lite test-lite dev-nodocker test-nodocker check-docker demo cs\:dev cs\:test cs\:reset final-acceptance
 
 LINT_PATHS=backend/app tests scripts
 VENV_BIN=.venv/bin
@@ -114,3 +114,7 @@ tenant-migrate:
 	PYTHONPATH=backend $(PYTHON) scripts/migrate_tenant.py $(TENANT)
 
 tenant-init: tenant-migrate
+
+
+final-acceptance:
+	@./scripts/final_acceptance.sh
