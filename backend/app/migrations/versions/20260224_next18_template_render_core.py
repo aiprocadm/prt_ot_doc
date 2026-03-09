@@ -1,7 +1,7 @@
 """NEXT-18 template core fields and constraints
 
 Revision ID: 20260224_next18
-Revises: 20260223_next15_job_pipeline_orchestrator
+Revises: 20260223_next15
 Create Date: 2026-02-24
 """
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 revision = "20260224_next18"
-down_revision = "20260223_next15_job_pipeline_orchestrator"
+down_revision = "20260223_next15"
 branch_labels = None
 depends_on = None
 

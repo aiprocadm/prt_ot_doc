@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 revision = "20260310_next39"
-down_revision = "20260308_next38"
+down_revision = "20260308_next38_audit_chain_fields"
 branch_labels = None
 depends_on = None
 

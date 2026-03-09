@@ -1,5 +1,17 @@
 # FINAL DEFECT BURNDOWN BACKLOG
 
+## FB-000 (resolved)
+- severity: blocker
+- area: Migrations / release gate
+- symptom: `alembic heads` падал с `KeyError` из-за ссылок `down_revision` на несуществующие revision id.
+- expected behavior by spec: миграции должны быть валидны, `alembic heads`/upgrade выполняются без ошибок.
+- actual behavior: часть `down_revision` ссылалась на имена файлов вместо реальных `revision` значений.
+- likely root cause: drift между именами migration файлов и фактическими `revision` константами.
+- proposed fix: нормализованы `down_revision` в affected migration files на реальные revision id.
+- test to add: включено в `scripts/final_acceptance.sh` шаг `migrations heads` (теперь PASS).
+- migration needed: no
+- frontend/backend/both: backend
+
 ## FB-001
 - severity: critical
 - area: Contract hardening / audit

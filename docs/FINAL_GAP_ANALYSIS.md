@@ -118,7 +118,8 @@
 ---
 
 ## Blocker issues
-1. Не обнаружены явные blocker-дефекты в базовых P0 guardrails (tenant/idempotency/template-delete).
+1. FIXED: migration graph inconsistency (`down_revision` drift) мешала `alembic heads`; исправлено, текущий final gate показывает PASS.
+2. После фикса — активных blocker-дефектов в P0 guardrails (tenant/idempotency/template-delete) не обнаружено.
 
 ## Critical issues
 1. Неполная формализация финального e2e/UAT gate до этой задачи (устранено частично новой командой final-acceptance).

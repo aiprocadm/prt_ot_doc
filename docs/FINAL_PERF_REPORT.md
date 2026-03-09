@@ -18,10 +18,10 @@
 ## Measured values (current run)
 | Check | Target | Measured | Pass/Fail | Notes |
 |---|---:|---:|---|---|
-| Key read APIs p95 | <=1s | N/A in this run | WARN | Нужен k6/locust against stage |
+| Key read APIs p95 | <=1s | N/A in this run | WARN | Нужен k6/locust against stage (в final-acceptance пока функциональный proxy) |
 | 30 DOCX->PDF <=60s | <=60s | N/A in this run | WARN | Есть unit/integration correctness, нет stress profile |
 | Replace 500 files <=3m | <=180s | N/A | WARN | Batch perf profile отсутствует |
-| EDO/webhook propagation <=60s | <=60s | Functional pass | PASS* | Проверка функциональная, не load SLA |
+| EDO/webhook propagation <=60s | <=60s | Functional pass | PASS* | Проверка функциональная, не load SLA; контракт/доставка проходят final-acceptance |
 | Search indexing lag | acceptable | Functional pass | PASS* | Имеются indexing tests |
 | Export queue completion | acceptable | Functional pass | PASS* | Покрыто api/integration тестами |
 
@@ -41,3 +41,9 @@
 - Outbox retry/dedup coverage: present.
 - Health/readiness checks: present.
 - Poison queue / cancel semantics: partial, needs dedicated final scenarios.
+
+
+## Final acceptance gate snapshot
+- `artifacts/final_acceptance/summary.json`: overall_status = `pass`.
+- Migrations sanity (`alembic heads`) переведён из WARN в PASS после правки revision links.
+- Backend/frontend/e2e/openapi/health/schema checks: PASS в последнем прогоне.

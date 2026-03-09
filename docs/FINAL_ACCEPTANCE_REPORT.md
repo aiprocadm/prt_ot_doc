@@ -18,11 +18,11 @@
 | Client cabinet statuses + ZIP/PDF links + history | client_portal module/pages | `tests/test_client_portal_api.py` | PARTIAL | требуется расширенный e2e UX/security |
 | KPI dashboards + XLSX/PDF exports | reports/export modules | `tests/api/test_reports_api.py` | PARTIAL | нужны end-user export journey tests |
 | Import mismatch log | replace/report and import utilities | частичные unit tests | PARTIAL | унифицировать mismatch reporting |
-| Tests green | pytest suites | `make final-acceptance` | PASS* | по подмножеству critical/regression |
+| Tests green | pytest suites | `make final-acceptance` | PASS | critical backend/frontend/e2e/openapi/migrations/health/schema checks green |
 | Coverage target met | CI metric | N/A in current local run | PARTIAL | зафиксировать целевое значение в CI |
 | Backup/restore passed | ops/runbook | docs only in this run | PARTIAL | нужен scripted restore rehearsal |
 | SLA/SLO measured | perf report baseline | `docs/FINAL_PERF_REPORT.md` | PARTIAL | нет stage нагрузочного профиля |
 
 ## 2. Overall conclusion
-- RC готов для UAT/пилота с известными ограничениями (perf SLA instrumentation, full portal e2e leakage matrix, font-embed formal check).
+- RC готов для UAT/пилота с известными ограничениями (perf SLA instrumentation, full portal e2e leakage matrix, font-embed formal check). Migration sanity check в финальном gate исправлен и проходит.
 - P0/Pcritical guardrails по tenant/idempotency/template-delete/health/openapi присутствуют и собраны в единый final-acceptance gate.

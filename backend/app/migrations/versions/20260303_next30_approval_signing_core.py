@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "20260303_next30_approval_signing_core"
-down_revision = "20260302_next29_files_search_v1"
+down_revision = "20260302_next29"
 branch_labels = None
 depends_on = None
 
