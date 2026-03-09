@@ -9,7 +9,7 @@ import sqlalchemy as sa
 
 
 revision = "20260401_next58"
-down_revision = "20260330_next57_approval_sign_edo_orchestration"
+down_revision = "20260330_next57"
 branch_labels = None
 depends_on = None
 

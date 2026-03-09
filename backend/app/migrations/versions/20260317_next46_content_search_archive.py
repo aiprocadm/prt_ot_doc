@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 revision = "20260317_next46_content_search_archive"
-down_revision = "20260316_next45_notifications_autotasks_calendar"
+down_revision = "20260316_next45"
 branch_labels = None
 depends_on = None
 

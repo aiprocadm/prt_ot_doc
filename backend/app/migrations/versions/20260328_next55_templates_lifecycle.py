@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 revision = "20260328_next55"
-down_revision = "20260327_next54_files_core_hardening"
+down_revision = "20260327_next54"
 branch_labels = None
 depends_on = None
 
