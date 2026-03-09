@@ -1,4 +1,4 @@
-.PHONY: install install-pip lint format test contract run clean up down migrate tenant-migrate tenant-init seed smoke logs dev env frontend-install lint-frontend format-frontend test-frontend dev-lite test-lite dev-nodocker test-nodocker check-docker demo cs\:dev cs\:test cs\:reset final-acceptance tenant-bootstrap tenant-demo-bootstrap pilot-smoke pilot-readiness
+.PHONY: install install-pip lint format test contract run clean up down migrate tenant-migrate tenant-init seed smoke logs dev env frontend-install lint-frontend format-frontend test-frontend dev-lite test-lite dev-nodocker test-nodocker check-docker demo cs\:dev cs\:test cs\:reset final-acceptance tenant-bootstrap tenant-demo-bootstrap pilot-smoke pilot-readiness codex-audit
 
 LINT_PATHS=backend/app tests scripts
 VENV_BIN=.venv/bin
@@ -134,3 +134,7 @@ pilot-smoke:
 
 pilot-readiness:
 	PYTHONPATH=backend $(PYTHON) scripts/pilot_readiness.py
+
+
+codex-audit:
+	@./scripts/codex_audit.sh

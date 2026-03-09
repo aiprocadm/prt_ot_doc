@@ -152,11 +152,14 @@ async def patch_tenant_quotas_endpoint(
     tenant_id: str,
     payload: TenantQuotaPatch,
     session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
     credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
     access=Depends(abac(_tenant_resource_id, required_roles=_MANAGEMENT_ROLES, action="write")),
 ) -> TenantQuotaRead:
     _ = access
     _require_admin(credentials)
+    if tenant_id != tenant.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Tenant scope mismatch")
     quota = (
         await session.execute(select(TenantQuota).where(TenantQuota.tenant_id == tenant_id))
     ).scalar_one_or_none()
@@ -175,10 +178,11 @@ async def patch_tenant_quotas_admin_endpoint(
     tenant_id: str,
     payload: TenantQuotaPatch,
     session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
     credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
     access=Depends(abac(_tenant_resource_id, required_roles=_MANAGEMENT_ROLES, action="write")),
 ) -> TenantQuotaRead:
-    return await patch_tenant_quotas_endpoint(tenant_id, payload, session, credentials, access)
+    return await patch_tenant_quotas_endpoint(tenant_id, payload, session, tenant, credentials, access)
 
 
 @router.get("/{tenant_id}", response_model=TenantRead)
