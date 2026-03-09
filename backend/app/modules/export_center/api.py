@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.models.models import Tenant
+from app.modules.export_center.service import ExportCenterService
 from app.modules.projections.models import ExportJob
 
 router = APIRouter(prefix="/exports", tags=["exports"])
@@ -25,12 +26,19 @@ async def list_exports(session: AsyncSession = Depends(get_session), tenant: Ten
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-async def create_export(payload: ExportCreate, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
-    job = ExportJob(tenant_id=str(tenant.id), export_type=payload.export_type, scope_json=payload.scope_json, filters_json=payload.filters_json, status="queued")
-    session.add(job)
-    await session.commit()
-    await session.refresh(job)
-    return job
+async def create_export(
+    payload: ExportCreate,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+):
+    service = ExportCenterService(session, str(tenant.id))
+    return await service.create_job(
+        export_type=payload.export_type,
+        scope_json=payload.scope_json,
+        filters_json=payload.filters_json,
+        idempotency_key=idempotency_key,
+    )
 
 
 @router.get("/{job_id}")

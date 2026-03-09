@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.models.models import Tenant
+from app.modules.client_portal.services import ClientPortalService
 from app.modules.projections.models import ClientPortalReadModel, PortalRequest, PortalRequestMessage
 
 router = APIRouter(prefix="/client-portal", tags=["client-portal-v1"])
@@ -22,25 +25,33 @@ class RequestCreate(BaseModel):
     priority: str = "medium"
 
 
+class RequestPatch(BaseModel):
+    status: str | None = None
+    priority: str | None = None
+
+
 class RequestMessageCreate(BaseModel):
     body: str
     author_role: str = "client"
 
 
 @router.get("/dashboard")
-async def dashboard(session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
-    items = (await session.execute(select(ClientPortalReadModel).where(ClientPortalReadModel.tenant_id == str(tenant.id)).limit(20))).scalars().all()
-    return {"items": items}
+async def dashboard(
+    client_company_id: str | None = Query(default=None),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+):
+    items = await ClientPortalService(session, str(tenant.id)).list_items(client_company_id=client_company_id)
+    return {"items": items[:20]}
 
 
 @router.get("/packages")
-async def packages(session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
-    rows = (
-        await session.execute(
-            select(ClientPortalReadModel).where(ClientPortalReadModel.tenant_id == str(tenant.id), ClientPortalReadModel.item_type == "package")
-        )
-    ).scalars().all()
-    return rows
+async def packages(
+    client_company_id: str | None = Query(default=None),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+):
+    return await ClientPortalService(session, str(tenant.id)).list_items(client_company_id=client_company_id, item_type="package")
 
 
 @router.get("/packages/{package_id}")
@@ -57,6 +68,21 @@ async def package_details(package_id: str, session: AsyncSession = Depends(get_s
     return row
 
 
+@router.get("/documents")
+async def documents(client_company_id: str | None = Query(default=None), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+    return await ClientPortalService(session, str(tenant.id)).list_items(client_company_id=client_company_id, item_type="document_bundle")
+
+
+@router.get("/history")
+async def history(client_company_id: str | None = Query(default=None), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+    return await ClientPortalService(session, str(tenant.id)).list_items(client_company_id=client_company_id)
+
+
+@router.post("/uploads", status_code=status.HTTP_201_CREATED)
+async def uploads(file: UploadFile = File(...), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+    return {"tenant_id": str(tenant.id), "filename": file.filename, "size": len(await file.read())}
+
+
 @router.get("/requests")
 async def list_requests(session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
     return (await session.execute(select(PortalRequest).where(PortalRequest.tenant_id == str(tenant.id), PortalRequest.deleted_at.is_(None)))).scalars().all()
@@ -64,7 +90,15 @@ async def list_requests(session: AsyncSession = Depends(get_session), tenant: Te
 
 @router.post("/requests", status_code=status.HTTP_201_CREATED)
 async def create_request(payload: RequestCreate, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
-    req = PortalRequest(tenant_id=str(tenant.id), title=payload.title, body=payload.body, package_id=payload.package_id, project_id=payload.project_id, client_company_id=payload.client_company_id, priority=payload.priority)
+    req = PortalRequest(
+        tenant_id=str(tenant.id),
+        title=payload.title,
+        body=payload.body,
+        package_id=payload.package_id,
+        project_id=payload.project_id,
+        client_company_id=payload.client_company_id,
+        priority=payload.priority,
+    )
     session.add(req)
     await session.commit()
     await session.refresh(req)
@@ -95,3 +129,30 @@ async def create_request_message(request_id: str, payload: RequestMessageCreate,
 @internal_router.get("")
 async def internal_requests(session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
     return (await session.execute(select(PortalRequest).where(PortalRequest.tenant_id == str(tenant.id), PortalRequest.deleted_at.is_(None)))).scalars().all()
+
+
+@internal_router.get("/{request_id}")
+async def internal_request_by_id(request_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+    req = (await session.execute(select(PortalRequest).where(PortalRequest.id == request_id, PortalRequest.tenant_id == str(tenant.id)))).scalar_one_or_none()
+    if req is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Request not found")
+    return req
+
+
+@internal_router.patch("/{request_id}")
+async def internal_request_patch(request_id: str, payload: RequestPatch, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+    req = (await session.execute(select(PortalRequest).where(PortalRequest.id == request_id, PortalRequest.tenant_id == str(tenant.id)))).scalar_one_or_none()
+    if req is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Request not found")
+    if payload.status:
+        req.status = payload.status
+    if payload.priority:
+        req.priority = payload.priority
+    req.updated_at = datetime.now(timezone.utc)
+    await session.commit()
+    return req
+
+
+@internal_router.post("/{request_id}/messages", status_code=status.HTTP_201_CREATED)
+async def internal_request_message(request_id: str, payload: RequestMessageCreate, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+    return await create_request_message(request_id=request_id, payload=payload, session=session, tenant=tenant)
