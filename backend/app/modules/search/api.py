@@ -8,6 +8,8 @@ from app.api.dependencies import get_session, get_tenant_record
 from app.models.models import Tenant
 from app.modules.files.models import FileContentIndex, FileLink, FileRecord
 from app.modules.search.service import SearchFilters, SearchService
+from app.modules.projections.models import SearchIndexEntry
+from app.modules.projections.services import ProjectionOrchestrator
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -161,3 +163,32 @@ async def search_files(
             for r, idx in rows
         ]
     }
+
+
+@router.get("/search/suggest")
+async def search_suggest(
+    q: str = Query(default=""),
+    limit: int = Query(default=10, ge=1, le=50),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> dict:
+    like = f"%{q}%"
+    stmt = select(SearchIndexEntry).where(SearchIndexEntry.tenant_id == str(tenant.id))
+    if q:
+        stmt = stmt.where(SearchIndexEntry.title.ilike(like))
+    rows = (await session.execute(stmt.order_by(SearchIndexEntry.updated_at.desc()).limit(limit))).scalars().all()
+    return {"items": [{"entity_type": r.entity_type, "entity_id": r.entity_id, "title": r.title, "route": r.route} for r in rows]}
+
+
+@router.post("/search/reindex")
+async def reindex_all(session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict:
+    count = await ProjectionOrchestrator(session, str(tenant.id)).rebuild_search_index()
+    return {"status": "ok", "indexed": count}
+
+
+@router.post("/search/reindex/{entity_type}")
+async def reindex_by_entity(entity_type: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict:
+    if entity_type != "person":
+        return {"status": "skipped", "entity_type": entity_type}
+    count = await ProjectionOrchestrator(session, str(tenant.id)).rebuild_search_index()
+    return {"status": "ok", "indexed": count, "entity_type": entity_type}

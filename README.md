@@ -105,3 +105,11 @@ pytest -q tests/test_tenancy_enforcement.py
 8. Для пакета «Выход на объект» запросите safety-сводку и используйте данные в шаблонах/контексте рендера.
 
 > Везде обязателен `X-Tenant`; без него API отвечает `400`.
+
+## Analytics / Search / Export / Client Portal flows (NEXT-61)
+
+- **Dashboard -> drilldown**: `/api/v1/analytics/dashboard/executive` reads `dashboard_kpi_snapshots`; missing daily snapshot is rebuilt by `ProjectionOrchestrator.rebuild_dashboard_snapshot`.
+- **Export request -> file**: `/api/v1/exports` creates `export_jobs` queue records, `/api/v1/exports/{id}/download-link` returns a short-lived API download route once `file_id` is filled.
+- **Package projection refresh**: use `/api/v1/analytics/recompute` and `/api/v1/search/reindex` to rebuild package/person/search projections idempotently.
+- **Search reindex**: `/api/v1/search/reindex` writes `search_index_entries` from tenant entities, `/api/v1/search/suggest` serves lightweight hints.
+- **Client request/upload flow (v1)**: `/api/v1/client-portal/requests` + `/api/v1/client-portal/requests/{id}/messages` provide client ticket communication; `/api/v1/portal-requests` exposes internal support slice.
