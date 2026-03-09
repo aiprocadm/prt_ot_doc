@@ -19,6 +19,7 @@ from app.api.routes import (
     admin_authz,
     admin_users,
     approval_orchestration,
+    api_tokens,
     approval_signing_v1,
     attestations,
     audit,
@@ -229,6 +230,7 @@ tenant_router.include_router(search_router, tags=["search"])
 tenant_router.include_router(analytics_router, tags=["analytics"])
 tenant_router.include_router(export_center_router, tags=["exports"])
 tenant_router.include_router(client_portal_v1_router)
+tenant_router.include_router(api_tokens.router)
 tenant_router.include_router(portal_requests_router)
 tenant_router.include_router(billing.router)
 

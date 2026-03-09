@@ -106,6 +106,7 @@ __all__ = [
     "BillingInvoiceStatus",
     "BillingEvent",
     "BillingEventType",
+    "ApiToken",
     "TenantRateLimit",
     "TenantLimitOverride",
     "Template",
@@ -367,6 +368,23 @@ class TenantRateLimit(SharedModel):
     burst: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
     rps: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
     queues: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+
+
+class ApiToken(SharedModel, SoftDeleteMixin):
+    __tablename__ = "api_tokens"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
+    scopes_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    created_by_user_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("user.id"), nullable=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_revoked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    __table_args__ = (
+        Index("ix_api_tokens_tenant_created", "tenant_id", "created_at"),
+    )
 
 
 class TenantLimitOverride(SharedModel):
