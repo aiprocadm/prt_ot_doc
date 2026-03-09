@@ -82,7 +82,7 @@ async def get_tenant_record(request: Request) -> Tenant:
     if isinstance(preloaded, Tenant):
         return preloaded
     tenant_slug = _resolve_tenant_slug(request)
-    info = tenant_required(tenant_slug) if tenant_slug is not None else get_current_tenant()
+    info = tenant_required(tenant_slug)
     return await _fetch_tenant_by_identifier(info.slug)
 
 
