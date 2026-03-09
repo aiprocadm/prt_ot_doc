@@ -22,10 +22,8 @@ export const FileUploader = () => {
           size_bytes: file.size,
           metadata_json: { description }
         });
-        await apiClient(session.signed_put_url, {
-          method: "PUT",
-          headers: { "Content-Type": file.type || "application/octet-stream" },
-          body: file
+        await apiClient.put(session.signed_put_url, file, {
+          headers: { "Content-Type": file.type || "application/octet-stream" }
         });
         await finalizeUpload(session.file_id);
         for (let i = 0; i < 20; i += 1) {
