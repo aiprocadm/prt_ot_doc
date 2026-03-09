@@ -1,11 +1,11 @@
 # KNOWN_LIMITATIONS
 
-## Acceptable for pilot
-- Не все enterprise-блоки имеют полную E2E автоматизацию; часть проверок остаётся на smoke/manual уровне.
-- Набор PWA/offline ограничен текущими сценариями синхронизации.
-- Наблюдаются SQLAlchemy warnings в некоторых risk relationships (`overlaps`) — не блокирует pilot, но требует рефакторинга.
+## Приемлемо для пилота
+- Есть предупреждения SQLAlchemy (relationship overlaps) без падения функционала; требуют cleanup.
+- Часть интеграций EDO/подписания работает через mock/provider-stub режим.
+- PWA/offline синхронизация реализована частично (без полной parity сложных сценариев).
 
-## Not acceptable for prod
-- Нестабильность кейса `packs/run` idempotency (локально воспроизводимый 500 в тесте `test_pack_run_idempotency`).
-- Неполная матрица regression-тестов по leakage для search/export/portal edge-cases.
-- Недостаточно формализованы backup/restore drills как регулярная проверка с критериями pass/fail.
+## Неприемлемо для промышленной эксплуатации
+- Нет полностью автоматизированного backup/restore drill с регулярной валидацией.
+- Не завершен full hardening антивирусной/контентной проверки файлов на уровне enterprise политики.
+- Не закрыт весь объем e2e permission-matrix (admin/client/auditor/specialist) для UI + API в едином прогоне.

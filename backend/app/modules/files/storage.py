@@ -5,6 +5,10 @@ from datetime import datetime, timezone
 from app.domains.files import s3
 
 
+_LEGACY_TENANT_PREFIX = "tenant"
+_CURRENT_TENANT_PREFIX = "tenants"
+
+
 def build_tenant_key(
     *,
     tenant_id: str,
@@ -17,17 +21,22 @@ def build_tenant_key(
     safe_name = filename.replace("..", "_").replace("/", "_")
     now = datetime.now(timezone.utc)
     if entity is None and entity_id is None and version_no is None:
-        return f"tenants/{tenant_id}/{now:%Y/%m/%d}/{file_id}/{safe_name}"
+        return f"{_CURRENT_TENANT_PREFIX}/{tenant_id}/{now:%Y/%m/%d}/{file_id}/{safe_name}"
     resolved_entity = str(entity or "files")
     resolved_entity_id = str(entity_id or file_id)
     if version_no is not None:
-        return f"tenants/{tenant_id}/{resolved_entity}/{resolved_entity_id}/{file_id}/v{version_no}/{safe_name}"
-    return f"tenants/{tenant_id}/{resolved_entity}/{resolved_entity_id}/{file_id}_{safe_name}"
+        return f"{_CURRENT_TENANT_PREFIX}/{tenant_id}/{resolved_entity}/{resolved_entity_id}/{file_id}/v{version_no}/{safe_name}"
+    return f"{_CURRENT_TENANT_PREFIX}/{tenant_id}/{resolved_entity}/{resolved_entity_id}/{file_id}_{safe_name}"
 
 
 def assert_tenant_key(*, tenant_id: str, key: str) -> None:
-    expected_prefix = f"tenants/{tenant_id}/"
-    if not key.startswith(expected_prefix):
+    valid_prefixes = (
+        f"{_CURRENT_TENANT_PREFIX}/{tenant_id}/",
+        f"{_LEGACY_TENANT_PREFIX}/{tenant_id}/",
+    )
+    if not any(key.startswith(prefix) for prefix in valid_prefixes):
+        raise PermissionError("tenant_key_forbidden")
+    if "../" in key or "..\\" in key:
         raise PermissionError("tenant_key_forbidden")
 
 
