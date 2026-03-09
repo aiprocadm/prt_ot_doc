@@ -20,8 +20,24 @@ class SafePortalPayloadService:
     }
 
     @classmethod
-    def sanitize(cls, payload: dict) -> dict:
-        return {k: v for k, v in payload.items() if k not in cls._BLOCKED_KEYS}
+    def sanitize(cls, payload: dict | None) -> dict:
+        """Return a deep-copied payload without blocked keys."""
+
+        if not payload:
+            return {}
+        return cls._sanitize_value(payload)
+
+    @classmethod
+    def _sanitize_value(cls, value: object) -> object:
+        if isinstance(value, dict):
+            return {
+                key: cls._sanitize_value(item)
+                for key, item in value.items()
+                if key not in cls._BLOCKED_KEYS
+            }
+        if isinstance(value, list):
+            return [cls._sanitize_value(item) for item in value]
+        return value
 
 
 class ClientPortalService:
@@ -36,4 +52,6 @@ class ClientPortalService:
         if item_type:
             stmt = stmt.where(ClientPortalReadModel.item_type == item_type)
         rows = (await self.session.execute(stmt.order_by(ClientPortalReadModel.last_event_at.desc().nullslast()))).scalars().all()
+        for row in rows:
+            row.safe_payload = SafePortalPayloadService.sanitize(row.safe_payload)
         return rows
