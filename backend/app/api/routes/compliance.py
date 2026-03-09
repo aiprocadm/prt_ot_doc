@@ -1,0 +1,29 @@
+from __future__ import annotations
+
+from app.api.dependencies import get_session, get_tenant_record
+from app.models.models import ComplianceDeadline, Tenant
+from app.modules.compliance_deadlines.services import ComplianceDeadlineService
+from fastapi import APIRouter, Depends
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+router = APIRouter(prefix="/compliance", tags=["compliance"])
+
+
+@router.get("/deadlines")
+async def list_deadlines(tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+    items = (await session.execute(select(ComplianceDeadline).where(ComplianceDeadline.tenant_id == tenant.id).order_by(ComplianceDeadline.due_at.asc()))).scalars().all()
+    return {"items": items, "total": len(items)}
+
+
+@router.post("/deadlines/recompute")
+async def recompute(tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+    count = await ComplianceDeadlineService().recompute_for_certificates(session, tenant.id)
+    return {"created": count}
+
+
+@router.get("/persons/{person_id}/summary")
+async def person_summary(person_id: str, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+    stmt = select(ComplianceDeadline.status, func.count()).where(ComplianceDeadline.tenant_id == tenant.id, ComplianceDeadline.person_id == person_id).group_by(ComplianceDeadline.status)
+    rows = (await session.execute(stmt)).all()
+    return {"person_id": person_id, "statuses": {status: count for status, count in rows}}
