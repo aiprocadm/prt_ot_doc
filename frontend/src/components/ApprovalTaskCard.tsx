@@ -33,16 +33,19 @@ const ApprovalTaskCard = ({ task, onChanged }: Props) => {
       <div className="text-sm text-muted-foreground">Процесс: {task.process_id}</div>
       <Input placeholder="Комментарий" value={comment} onChange={(e) => setComment(e.target.value)} />
       <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-        <Button className="h-12" disabled={busy} onClick={() => run(() => approvalsApi.decideTask(task.id, "approve", comment))}>
+        <Button className="h-12" disabled={busy} onClick={() => run(() => approvalsApi.decide(task.id, "approve", { comment }))}>
           Согласовать
         </Button>
-        <Button className="h-12" variant="destructive" disabled={busy} onClick={() => run(() => approvalsApi.decideTask(task.id, "reject", comment))}>
+        <Button className="h-12" variant="destructive" disabled={busy} onClick={() => run(() => approvalsApi.decide(task.id, "reject", { comment }))}>
           Отклонить
         </Button>
       </div>
       <div className="flex gap-2">
         <Input placeholder="Delegate user id" value={delegateTo} onChange={(e) => setDelegateTo(e.target.value)} />
-        <Button disabled={busy || !delegateTo.trim()} onClick={() => run(() => approvalsApi.delegateTask(task.id, delegateTo, comment))}>
+        <Button
+          disabled={busy || !delegateTo.trim()}
+          onClick={() => run(() => approvalsApi.decide(task.id, "delegate", { delegate_to: delegateTo, comment }))}
+        >
           Delegate
         </Button>
       </div>
