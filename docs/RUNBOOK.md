@@ -2,39 +2,33 @@
 
 ## Локальный запуск
 1. `cp .env.example .env`
-2. `make install`
-3. `make migrate`
-4. `make dev-lite` (или `make up` для docker)
+2. Для Codespaces/dev-lite: `make cs:dev`
+3. Для полного docker-compose: `make up`
 
 ## Backend
-- Запуск API: `make run`
-- Миграции: `make migrate`
-- Tenant migration: `make tenant-migrate TENANT=<slug>`
+- Запуск: `make run` (или через `make cs:dev`).
+- Health: `GET /health`, readiness: `GET /readyz`.
 
 ## Frontend
-- `cd frontend && npm ci`
-- `cd frontend && npm run dev`
-- Проверки: `npm run lint && npm run test && npm run build`
+- Запуск в dev-lite поднимается скриптом `make cs:dev`.
+- Отдельно: `make frontend-install` и `cd frontend && npm run dev`.
 
-## Critical tests
-- `make codex-audit`
-- либо точечно:
-  - `python -m pytest tests/test_tenant_header_required.py tests/test_tenant_security.py -q`
-  - `python -m pytest tests/test_webhooks_dispatch.py -q`
+## Критические тесты
+- Полный критический срез: `make codex-audit`.
+- Базовый regression: `make cs:test`.
 
-## Проверка pipeline
-- API routes в `/api/v1/pipelines/*`, `/api/v1/packs/*`, `/api/v1/replace/*`.
-- Для smoke: `python -m pytest tests/test_next23_pipelines.py -q`
+## Проверка документного pipeline
+- Тесты: `python -m pytest tests/test_templates_pipeline_api.py tests/test_documents_status_flow.py -q`.
+- Проверить dry-run/apply replace и переходы статусов.
 
-## Проверка tenant enforcement
-- Без `x-tenant` на business route должен быть `400`.
-- Тесты: `tests/test_tenant_header_required.py`, `tests/test_next39_tenancy_enforcement.py`.
+## Проверка tenancy требований
+- `python -m pytest tests/test_tenant_header_required.py tests/test_tenant_security.py tests/test_next39_tenancy_enforcement.py -q`.
 
 ## Проверка portal/admin путей
-- FE routes: `/client-portal/*`, `/admin/*`.
-- Убедиться, что `ProtectedRoute` и permissions включены.
+- API: `python -m pytest tests/test_client_portal_api.py tests/test_tenant_security.py -q`.
+- UI: открыть `/client-portal`, `/admin` и убедиться в role guards.
 
-## Health/readiness/logs/jobs
-- Health: `/health`, `/ready`, `/healthz`, `/readyz`.
-- Jobs: `/api/v1/jobs`, `/api/v1/pipelines/runs`.
+## Состояние, логи, задания
 - Логи docker: `make logs`.
+- Очереди/jobs: `python -m pytest tests/test_jobs_api.py tests/test_projection_jobs.py -q`.
+- Фоновый worker: `backend/app/worker.py` (Celery).

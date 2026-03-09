@@ -1,24 +1,17 @@
 # FINAL_CRITICAL_GAPS
 
-## Blocker
-1. **`packs/run` idempotency нестабильность**
-   - Почему важно: может ломать повторяемость и надежность batch generation.
-   - Что делать: отладить traceback в `POST /api/v1/packs/run`, стабилизировать обработку enqueue/fallback path, добавить regression-тесты на duplicate key + payload mismatch.
+1. **ORM relationship overlaps warnings (risk domain)**  
+   - Почему важно: повышает риск скрытых ошибок маппинга и деградации сопровождения.  
+   - Следующий шаг: поправить `overlaps/back_populates` в моделях risk/workplace/position и закрепить тестом без warning-as-error.
 
-## Critical
-1. **Неполная ABAC/RBAC matrix coverage**
-   - Почему важно: риск утечки/неавторизованного доступа через редкие роли.
-   - Что делать: добавить табличный набор тестов по ролям (admin/client_admin/client_user/auditor/specialist).
+2. **Backup/restore не формализован как обязательный периодический drill**  
+   - Почему важно: критично для B2B SaaS SLA и инцидент-готовности.  
+   - Следующий шаг: добавить автоматический сценарий восстановления tenant snapshot + smoke-тест после restore.
 
-2. **Search/Export leakage coverage недостаточно жёсткое**
-   - Почему важно: в multi-tenant SaaS это критично для data isolation.
-   - Что делать: добавить интеграционные tenant-A vs tenant-B тесты на search/export endpoints.
+3. **Неполная e2e матрица ролей на frontend**  
+   - Почему важно: риск утечки видимости/действий в клиентском интерфейсе.  
+   - Следующий шаг: добавить Playwright/Vitest e2e на ключевые restricted routes и action buttons.
 
-3. **File security edge cases покрыты частично**
-   - Почему важно: signed URL / download scope / upload validation напрямую связаны с безопасностью данных.
-   - Что делать: расширить negative tests на истёкшие URL и tenant mismatch download.
-
-## Major
-1. **Observability/Backup/Restore**
-   - Почему важно: готовность к pilot/prod инцидентам.
-   - Что делать: оформить и автоматизировать проверки backup/restore + readiness SLO.
+4. **Enterprise-hardening файлового контура**  
+   - Почему важно: для прома требуется строгая AV/DLP/governance политика и аудит скачиваний/подписанных URL.
+   - Следующий шаг: централизовать policy checks и включить их в обязательный release-gate.

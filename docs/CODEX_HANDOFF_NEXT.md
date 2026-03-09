@@ -1,54 +1,45 @@
 # CODEX_HANDOFF_NEXT
 
 ## Что это за проект
-B2B SaaS-платформа по ОТ/ПБ/документным pipeline/обучению/СИЗ/рискам/инцидентам с multi-tenant изоляцией и клиентским порталом.
+B2B SaaS по ОТ/ПБ/ПромБез с multi-tenant API, документным конвейером (template->replace->pdf->approval/sign/edo), safety вертикалями и клиентским порталом.
 
 ## Фактическое состояние
-- Backend и frontend функционально широкие; ключевые домены и API уже присутствуют.
-- Tenant/RBAC/Idempotency/Audit/Outbox реализованы, но покрытие и стабильность отдельных сценариев неоднородны.
-- В этом проходе добавлен context pack + traceability + hardening правка tenant-scope для изменения квот.
+- Базовый скелет платформы реализован (backend+frontend+tests+docs).
+- Критичные security/reliability проверки присутствуют в тестах и объединены в `make codex-audit`.
+- В этой задаче усилен file-tenant key guard (поддержка legacy + защита от traversal) и обновлен audit-пакет документации.
 
-## Ключевые модули
-- API aggregation: `backend/app/api/v1/router.py`.
-- Tenant guard: `backend/app/middleware/tenant.py`, `backend/app/api/dependencies.py`.
-- Tenants management: `backend/app/api/routes/tenants.py`.
-- Frontend routes/guards: `frontend/src/router/AppRouter.tsx`, `ProtectedRoute.tsx`.
+## Что уже есть (кратко)
+- Tenant middleware, RBAC/ABAC, audit, idempotency, outbox/webhooks.
+- Модули: templates/replace/pdf/pipelines, approvals/sign/edo, files/search/export/analytics, risk/ppe/incidents/inspections/training.
+- Frontend страницы по ключевым доменам и client-portal.
 
 ## Что критично по ТЗ
-1. Невозможность кросс-tenant доступа.
-2. Явные RBAC/ABAC ограничения.
-3. Идемпотентность state-changing endpoint.
-4. Аудит критичных изменений.
-5. Безопасность файлов и экспортов.
+1. Жесткий tenant boundary (`X-Tenant`, scope match, scoped queries).
+2. Идемпотентность для mutating endpoint-ов.
+3. Неизменяемый аудит на чувствительные операции.
+4. Безопасная обработка файлов и webhooks/outbox dedupe.
+5. Стабильный pipeline статусов документов.
 
-## Что найдено в этом проходе
-- Потенциальная tenant-scope дыра в `PATCH /tenants/{tenant_id}/quotas`: отсутствовала жёсткая сверка `tenant_id` из path и текущего tenant context.
-- Нестабильный idempotency кейс в packs run тесте (500) — зафиксировано как критический remaining gap для следующего шага.
+## Что обнаружено и исправлено в этой задаче
+- Исправлен критичный пробел в `assert_tenant_key`: добавлена поддержка legacy-префикса + запрет path traversal.
+- Добавлены/обновлены тесты файлового guard.
+- Усилен агрегированный sanity-run (`scripts/codex_audit.sh`) критическими наборами тестов tenancy/idempotency/audit/pipeline/webhooks.
+- Обновлен контекстный пакет и матрица соответствия.
 
-## Что исправлено
-- Добавлен tenant scope check в `patch_tenant_quotas_endpoint` и `admin`-обёртку.
-- Добавлен тест на запрет изменения квот чужого tenant.
-- Добавлены документы: context pack, traceability matrix, runbook, limitations, final gaps.
-- Добавлена единая команда `make codex-audit`.
-
-## Что осталось сделать
-1. Разобрать и починить `packs/run` idempotency 500 кейс (см. `tests/test_idempotency.py::test_pack_run_idempotency`).
-2. Усилить матрицу permission tests (admin/client/auditor/specialist).
-3. Закрыть search/export leakage regression suite.
-4. Доработать backup/restore drills + observability SLO checks.
-
-## Рекомендуемый порядок продолжения
-1. Стабилизировать packs idempotency.
-2. Допройти security/tenant leakage regression на files/search/export.
-3. Расширить ABAC test matrix.
-4. Перепроверить pilot readiness с `make codex-audit` + `make final-acceptance`.
+## Что делать дальше (порядок)
+1. Устранить SQLAlchemy relationship overlap warnings в risk-моделях.
+2. Расширить e2e role-visibility тесты (admin/client/auditor/specialist).
+3. Усилить AV/DLP политику файлового контура на прод уровне.
+4. Формализовать backup-restore drill в CI/cron.
+5. Синхронизировать оставшиеся legacy docs с фактическим `make codex-audit`.
 
 ## Команды
-- Быстрый аудит: `make codex-audit`
-- Критичные тесты: `python -m pytest tests/test_tenant_header_required.py tests/test_tenant_security.py tests/test_webhooks_dispatch.py -q`
-- Полная приемка (если окружение готово): `make final-acceptance`
+- Локальный старт: `make cs:dev`
+- Базовые тесты: `make cs:test`
+- Критический sanity: `make codex-audit`
+- Финальная приемка: `make final-acceptance`
 
-## Что смотреть в первую очередь
-1. `docs/FINAL_CRITICAL_GAPS.md`
-2. `docs/SPEC_TRACEABILITY_MATRIX.md`
-3. failing tests в блоке idempotency/packs
+## Что проверять в первую очередь
+1. `make codex-audit`
+2. `tests/test_tenant_security.py`, `tests/test_idempotency.py`, `tests/test_documents_status_flow.py`
+3. `backend/tests/test_next42_rbac_abac_audit.py`, `backend/tests/test_files_module_basics.py`
