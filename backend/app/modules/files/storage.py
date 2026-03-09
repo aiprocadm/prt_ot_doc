@@ -17,16 +17,16 @@ def build_tenant_key(
     safe_name = filename.replace("..", "_").replace("/", "_")
     now = datetime.now(timezone.utc)
     if entity is None and entity_id is None and version_no is None:
-        return f"tenant/{tenant_id}/{now:%Y/%m/%d}/{file_id}/{safe_name}"
+        return f"tenants/{tenant_id}/{now:%Y/%m/%d}/{file_id}/{safe_name}"
     resolved_entity = str(entity or "files")
     resolved_entity_id = str(entity_id or file_id)
     if version_no is not None:
-        return f"tenant/{tenant_id}/{resolved_entity}/{resolved_entity_id}/{file_id}/v{version_no}/{safe_name}"
-    return f"tenant/{tenant_id}/{resolved_entity}/{resolved_entity_id}/{file_id}_{safe_name}"
+        return f"tenants/{tenant_id}/{resolved_entity}/{resolved_entity_id}/{file_id}/v{version_no}/{safe_name}"
+    return f"tenants/{tenant_id}/{resolved_entity}/{resolved_entity_id}/{file_id}_{safe_name}"
 
 
 def assert_tenant_key(*, tenant_id: str, key: str) -> None:
-    expected_prefix = f"tenant/{tenant_id}/"
+    expected_prefix = f"tenants/{tenant_id}/"
     if not key.startswith(expected_prefix):
         raise PermissionError("tenant_key_forbidden")
 
