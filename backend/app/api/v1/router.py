@@ -92,6 +92,10 @@ from app.modules.packs import api as packs_v2_api
 from app.modules.pipelines import api as pipelines_api
 from app.modules.replace import api as replace_api
 from app.modules.search.api import router as search_router
+from app.modules.analytics.api import router as analytics_router
+from app.modules.export_center.api import router as export_center_router
+from app.modules.client_portal.api import router as client_portal_v1_router
+from app.modules.client_portal.api import internal_router as portal_requests_router
 from app.modules.templates import build_passport, lint_docx_template, render_preview_docx
 from app.modules.templates.repo import get_template_version_by_code
 from app.modules.templates.schemas import (
@@ -222,6 +226,10 @@ tenant_router.include_router(headers_api.router, tags=["layout-presets"])
 tenant_router.include_router(pipelines_api.router)
 tenant_router.include_router(packs_v2_api.router)
 tenant_router.include_router(search_router, tags=["search"])
+tenant_router.include_router(analytics_router, tags=["analytics"])
+tenant_router.include_router(export_center_router, tags=["exports"])
+tenant_router.include_router(client_portal_v1_router)
+tenant_router.include_router(portal_requests_router)
 tenant_router.include_router(billing.router)
 
 router.include_router(tenant_router)
