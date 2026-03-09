@@ -79,8 +79,11 @@ async def test_resolve_template_returns_active_version() -> None:
     version = SimpleNamespace(status=TemplateVersionStatus.ACTIVE, version=3)
 
     class DummyResult:
-        def scalar_one_or_none(self) -> Any:
-            return version
+        def mappings(self) -> "DummyResult":
+            return self
+
+        def first(self) -> dict[str, str]:
+            return {"id": "ver-001"}
 
     class DummySession:
         async def get(self, model: type[Any], identity: Any) -> Any:
@@ -90,7 +93,8 @@ async def test_resolve_template_returns_active_version() -> None:
                 return version
             raise AssertionError("Unexpected model request")
 
-        async def execute(self, stmt: Any) -> DummyResult:  # noqa: ARG002 - statement unused
+        async def execute(self, stmt: Any, params: dict[str, Any]) -> DummyResult:  # noqa: ARG002 - statement unused
+            assert params["status"] == TemplateVersionStatus.ACTIVE.name
             return DummyResult()
 
     resolved_template, resolved_version = await _resolve_template(
@@ -126,7 +130,10 @@ async def test_resolve_template_without_active_version(
     template = SimpleNamespace(id=template_id)
 
     class DummyResult:
-        def scalar_one_or_none(self) -> None:
+        def mappings(self) -> "DummyResult":
+            return self
+
+        def first(self) -> None:
             return None
 
     class DummySession:
@@ -135,7 +142,8 @@ async def test_resolve_template_without_active_version(
                 return template
             raise AssertionError("Unexpected model request")
 
-        async def execute(self, stmt: Any) -> DummyResult:  # noqa: ARG002
+        async def execute(self, stmt: Any, params: dict[str, Any]) -> DummyResult:  # noqa: ARG002
+            assert params["status"] == TemplateVersionStatus.ACTIVE.name
             return DummyResult()
 
     with pytest.raises(typer.Exit) as exc:

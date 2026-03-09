@@ -46,13 +46,13 @@ async def _resolve_template(session: AsyncSession, template_id: str) -> tuple[Te
 
     stmt = (
         text("""
-        SELECT id FROM template_versions
+        SELECT id FROM templateversion
         WHERE template_id = :template_id AND status = :status
         ORDER BY version DESC
         LIMIT 1
         """)
     )
-    row = (await session.execute(stmt, {"template_id": template.id, "status": TemplateVersionStatus.ACTIVE.value})).mappings().first()
+    row = (await session.execute(stmt, {"template_id": template.id, "status": TemplateVersionStatus.ACTIVE.name})).mappings().first()
     if row is None:
         typer.echo("Template has no active version", err=True)
         raise typer.Exit(code=EXIT_VALIDATION)
