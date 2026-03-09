@@ -44,3 +44,12 @@ class BillingPlanRead(BaseModel):
 
 class BillingStatusMutationRequest(BaseModel):
     grace_days: int = 7
+
+
+class BillingEventRead(BaseModel):
+    id: str
+    event_type: str
+    payload: dict[str, Any]
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
