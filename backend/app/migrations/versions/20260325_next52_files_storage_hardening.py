@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 revision = "20260325_next52"
-down_revision = "20260320_next49_pipeline_lowcode_builder"
+down_revision = "20260320_next49"
 branch_labels = None
 depends_on = None
 

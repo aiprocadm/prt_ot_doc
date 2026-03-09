@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 revision = "20260320_next49"
-down_revision = "20260319_next48"
+down_revision = "20260319_next48_billing_core"
 branch_labels = None
 depends_on = None
 

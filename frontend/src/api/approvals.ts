@@ -55,6 +55,21 @@ export const approvalsApi = {
     const { data } = await apiClient.post(`/approvals/${approvalId}/${action}`, body);
     return data;
   },
+  decideTask: async (taskId: string, action: "approve" | "reject", comment: string) => {
+    const { data } = await apiClient.post(`/v1/approvals/tasks/${taskId}/decision`, {
+      decision: action,
+      comment,
+    });
+    return data;
+  },
+  delegateTask: async (taskId: string, delegateTo: string, comment: string) => {
+    const { data } = await apiClient.post(`/v1/approvals/tasks/${taskId}/decision`, {
+      decision: "delegate",
+      delegate_to_user_id: delegateTo,
+      comment,
+    });
+    return data;
+  },
   listRoutes: async () => {
     const { data } = await apiClient.get<{ items: ApprovalRoute[] }>("/approval-routes");
     return data.items;

@@ -1,4 +1,4 @@
-.PHONY: install install-pip lint format test contract run clean up down migrate tenant-migrate tenant-init seed smoke logs dev env frontend-install lint-frontend format-frontend test-frontend dev-lite test-lite dev-nodocker test-nodocker check-docker demo cs\:dev cs\:test cs\:reset
+.PHONY: install install-pip lint format test contract run clean up down migrate tenant-migrate tenant-init seed smoke logs dev env frontend-install lint-frontend format-frontend test-frontend dev-lite test-lite dev-nodocker test-nodocker check-docker demo cs\:dev cs\:test cs\:reset final-acceptance tenant-bootstrap tenant-demo-bootstrap pilot-smoke pilot-readiness
 
 LINT_PATHS=backend/app tests scripts
 VENV_BIN=.venv/bin
@@ -114,3 +114,23 @@ tenant-migrate:
 	PYTHONPATH=backend $(PYTHON) scripts/migrate_tenant.py $(TENANT)
 
 tenant-init: tenant-migrate
+
+
+final-acceptance:
+	@./scripts/final_acceptance.sh
+
+
+tenant-bootstrap:
+	@test -n "$(TENANT)" || (echo "TENANT is required" && exit 1)
+	@test -n "$(TENANT_NAME)" || (echo "TENANT_NAME is required" && exit 1)
+	@test -n "$(OWNER_EMAIL)" || (echo "OWNER_EMAIL is required" && exit 1)
+	PYTHONPATH=backend $(PYTHON) scripts/bootstrap_tenant.py --tenant $(TENANT) --name "$(TENANT_NAME)" --owner-email $(OWNER_EMAIL)
+
+tenant-demo-bootstrap:
+	PYTHONPATH=backend $(PYTHON) scripts/bootstrap_demo_tenant.py --force
+
+pilot-smoke:
+	$(PYTEST) tests/e2e/pilot_smoke -q
+
+pilot-readiness:
+	PYTHONPATH=backend $(PYTHON) scripts/pilot_readiness.py

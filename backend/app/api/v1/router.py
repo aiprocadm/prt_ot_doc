@@ -19,18 +19,23 @@ from app.api.routes import (
     admin_authz,
     admin_users,
     approval_orchestration,
+    api_tokens,
     approval_signing_v1,
     attestations,
     audit,
     auth,
     billing,
+    briefings,
+    calendar,
     client_portal,
     companies,
+    compliance,
     contracts,
     dashboard,
     departments,
     documents,
     edo_workflow,
+    external_registry,
     files,
     incidents,
     inspections,
@@ -47,6 +52,7 @@ from app.api.routes import (
     persons,
     ppe,
     prescriptions,
+    pwa_sync,
     reports,
     risk,
     safety_ops,
@@ -55,6 +61,7 @@ from app.api.routes import (
     tenancy,
     tenants,
     training,
+    training_next,
     webhooks,
 )
 from app.core.metrics import PipelineStage, PipelineType, StageResult, get_metrics
@@ -82,10 +89,14 @@ from app.models.models import (
 )
 from app.modules.files.api import router as files_v1_router
 from app.modules.headers import api as headers_api
-from app.modules.pipelines import api as pipelines_api
 from app.modules.packs import api as packs_v2_api
+from app.modules.pipelines import api as pipelines_api
 from app.modules.replace import api as replace_api
 from app.modules.search.api import router as search_router
+from app.modules.analytics.api import router as analytics_router
+from app.modules.export_center.api import router as export_center_router
+from app.modules.client_portal.api import router as client_portal_v1_router
+from app.modules.client_portal.api import internal_router as portal_requests_router
 from app.modules.templates import build_passport, lint_docx_template, render_preview_docx
 from app.modules.templates.repo import get_template_version_by_code
 from app.modules.templates.schemas import (
@@ -204,12 +215,23 @@ tenant_router.include_router(tenants.admin_router)
 tenant_router.include_router(companies.router)
 tenant_router.include_router(persons.router)
 tenant_router.include_router(training.router, tags=["training"])
+tenant_router.include_router(training_next.router)
+tenant_router.include_router(briefings.router)
+tenant_router.include_router(calendar.router)
+tenant_router.include_router(compliance.router)
+tenant_router.include_router(pwa_sync.router)
+tenant_router.include_router(external_registry.router)
 tenant_router.include_router(replace_api.router)
 tenant_router.include_router(reports.router, tags=["reports"])
 tenant_router.include_router(headers_api.router, tags=["layout-presets"])
 tenant_router.include_router(pipelines_api.router)
 tenant_router.include_router(packs_v2_api.router)
 tenant_router.include_router(search_router, tags=["search"])
+tenant_router.include_router(analytics_router, tags=["analytics"])
+tenant_router.include_router(export_center_router, tags=["exports"])
+tenant_router.include_router(client_portal_v1_router)
+tenant_router.include_router(api_tokens.router)
+tenant_router.include_router(portal_requests_router)
 tenant_router.include_router(billing.router)
 
 router.include_router(tenant_router)

@@ -106,6 +106,7 @@ __all__ = [
     "BillingInvoiceStatus",
     "BillingEvent",
     "BillingEventType",
+    "ApiToken",
     "TenantRateLimit",
     "TenantLimitOverride",
     "Template",
@@ -367,6 +368,23 @@ class TenantRateLimit(SharedModel):
     burst: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
     rps: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
     queues: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+
+
+class ApiToken(SharedModel, SoftDeleteMixin):
+    __tablename__ = "api_tokens"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
+    scopes_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    created_by_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_revoked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    __table_args__ = (
+        Index("ix_api_tokens_tenant_created", "tenant_id", "created_at"),
+    )
 
 
 class TenantLimitOverride(SharedModel):
@@ -833,11 +851,23 @@ class TrainingSession(TenantBaseModel):
 
 
 class TrainingCertificate(TenantBaseModel, SoftDeleteMixin):
-    __tablename__ = "training_certificate"
+    __tablename__ = "training_certificates"
 
-    person_id: Mapped[str] = mapped_column(ForeignKey("person.id"), nullable=False, index=True)
-    course_id: Mapped[str] = mapped_column(
-        ForeignKey("training_course.id", ondelete="CASCADE"), nullable=False, index=True
+    code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    training_program_id: Mapped[str | None] = mapped_column(
+        ForeignKey("training_programs.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    person_id: Mapped[str | None] = mapped_column(ForeignKey("person.id"), nullable=True, index=True)
+    issued_at: Mapped[date] = mapped_column(Date, nullable=False, default=date.today)
+    valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
+    file_id: Mapped[str | None] = mapped_column(ForeignKey("file.id", ondelete="SET NULL"), nullable=True, index=True)
+    external_registry_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    external_registry_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+
+    # backward-compatible legacy fields
+    course_id: Mapped[str | None] = mapped_column(
+        ForeignKey("training_course.id", ondelete="CASCADE"), nullable=True, index=True
     )
     session_id: Mapped[str | None] = mapped_column(
         ForeignKey("training_session.id", ondelete="SET NULL"), nullable=True, index=True
@@ -845,23 +875,265 @@ class TrainingCertificate(TenantBaseModel, SoftDeleteMixin):
     plan_id: Mapped[str | None] = mapped_column(
         ForeignKey("training_plan.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    file_id: Mapped[str | None] = mapped_column(
-        ForeignKey("file.id", ondelete="SET NULL"), nullable=True, index=True
-    )
     number: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    issued_at: Mapped[date] = mapped_column(Date, nullable=False, default=date.today)
-    valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
 
-    person: Mapped[Person] = relationship(backref="training_certificates")
-    course: Mapped[TrainingCourse] = relationship(backref="training_certificates")
+    person: Mapped[Person | None] = relationship(backref="training_certificates")
+    course: Mapped[TrainingCourse | None] = relationship(backref="training_certificates")
     session: Mapped[TrainingSession | None] = relationship(backref="certificate")
     plan: Mapped[TrainingPlan | None] = relationship(backref="certificates")
     file: Mapped[File | None] = relationship("File", lazy="selectin")
 
     __table_args__ = (
+        UniqueConstraint("tenant_id", "code", name="uq_training_certificates_code"),
         UniqueConstraint("tenant_id", "number", name="uq_training_certificate_number"),
         Index("ix_training_certificate_valid", "tenant_id", "valid_until"),
     )
+
+
+class TrainingProgram(TenantBaseModel, SoftDeleteMixin):
+    __tablename__ = "training_programs"
+
+    code: Mapped[str] = mapped_column(String(128), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    category: Mapped[str] = mapped_column(String(32), nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
+    duration_hours: Mapped[float | None] = mapped_column(Numeric(8, 2), nullable=True)
+    validity_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    external_registry_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    owner_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+    __table_args__ = (UniqueConstraint("tenant_id", "code", name="uq_training_programs_code"),)
+
+
+class TrainingModule(TenantBaseModel):
+    __tablename__ = "training_modules"
+
+    training_program_id: Mapped[str] = mapped_column(
+        ForeignKey("training_programs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    module_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    content_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    content_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
+    required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
+class TrainingTest(TenantBaseModel, SoftDeleteMixin):
+    __tablename__ = "training_tests"
+
+    training_program_id: Mapped[str] = mapped_column(
+        ForeignKey("training_programs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
+    passing_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    time_limit_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    attempts_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    randomize_questions: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
+class TrainingTestQuestion(TenantBaseModel):
+    __tablename__ = "training_test_questions"
+
+    training_test_id: Mapped[str] = mapped_column(
+        ForeignKey("training_tests.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    question_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    question_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    options_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    correct_answer_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    weight: Mapped[float] = mapped_column(Numeric(8, 2), nullable=False, default=1)
+
+
+class TrainingGroup(TenantBaseModel, SoftDeleteMixin):
+    __tablename__ = "training_groups"
+
+    code: Mapped[str] = mapped_column(String(128), nullable=False)
+    training_program_id: Mapped[str] = mapped_column(
+        ForeignKey("training_programs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    teacher_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    planned_start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    planned_end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
+    site_id: Mapped[str | None] = mapped_column(ForeignKey("site.id", ondelete="SET NULL"), nullable=True)
+    company_id: Mapped[str | None] = mapped_column(ForeignKey("company.id", ondelete="SET NULL"), nullable=True)
+
+    __table_args__ = (UniqueConstraint("tenant_id", "code", name="uq_training_groups_code"),)
+
+
+class TrainingEnrollment(TenantBaseModel, SoftDeleteMixin):
+    __tablename__ = "training_enrollments"
+
+    training_group_id: Mapped[str | None] = mapped_column(ForeignKey("training_groups.id", ondelete="SET NULL"), nullable=True, index=True)
+    training_program_id: Mapped[str] = mapped_column(ForeignKey("training_programs.id", ondelete="CASCADE"), nullable=False, index=True)
+    person_id: Mapped[str | None] = mapped_column(ForeignKey("person.id", ondelete="SET NULL"), nullable=True, index=True)
+    assigned_by_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    assignment_source: Mapped[str] = mapped_column(String(32), nullable=False, default="manual")
+    assigned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(tz=timezone.utc))
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="assigned")
+    score: Mapped[float | None] = mapped_column(Numeric(8, 2), nullable=True)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    certificate_id: Mapped[str | None] = mapped_column(ForeignKey("training_certificates.id", ondelete="SET NULL"), nullable=True)
+    protocol_id: Mapped[str | None] = mapped_column(ForeignKey("training_protocols.id", ondelete="SET NULL"), nullable=True)
+
+
+class TrainingAttempt(TenantBaseModel):
+    __tablename__ = "training_attempts"
+
+    training_enrollment_id: Mapped[str] = mapped_column(ForeignKey("training_enrollments.id", ondelete="CASCADE"), nullable=False, index=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    score: Mapped[float | None] = mapped_column(Numeric(8, 2), nullable=True)
+    passed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    answers_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+
+
+class TrainingProtocol(TenantBaseModel, SoftDeleteMixin):
+    __tablename__ = "training_protocols"
+
+    code: Mapped[str] = mapped_column(String(128), nullable=False)
+    training_program_id: Mapped[str] = mapped_column(ForeignKey("training_programs.id", ondelete="CASCADE"), nullable=False, index=True)
+    training_group_id: Mapped[str | None] = mapped_column(ForeignKey("training_groups.id", ondelete="SET NULL"), nullable=True, index=True)
+    protocol_date: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
+    file_id: Mapped[str | None] = mapped_column(ForeignKey("file.id", ondelete="SET NULL"), nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+    __table_args__ = (UniqueConstraint("tenant_id", "code", name="uq_training_protocols_code"),)
+
+
+class TrainingProtocolItem(TenantBaseModel):
+    __tablename__ = "training_protocol_items"
+
+    training_protocol_id: Mapped[str] = mapped_column(ForeignKey("training_protocols.id", ondelete="CASCADE"), nullable=False, index=True)
+    person_id: Mapped[str | None] = mapped_column(ForeignKey("person.id", ondelete="SET NULL"), nullable=True)
+    fio_text: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    result: Mapped[str] = mapped_column(String(32), nullable=False)
+    score: Mapped[float | None] = mapped_column(Numeric(8, 2), nullable=True)
+    enrollment_id: Mapped[str | None] = mapped_column(ForeignKey("training_enrollments.id", ondelete="SET NULL"), nullable=True)
+
+
+class BriefingTemplate(TenantBaseModel, SoftDeleteMixin):
+    __tablename__ = "briefing_templates"
+
+    code: Mapped[str] = mapped_column(String(128), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    briefing_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    validity_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    __table_args__ = (UniqueConstraint("tenant_id", "code", name="uq_briefing_templates_code"),)
+
+
+class BriefingJournal(TenantBaseModel, SoftDeleteMixin):
+    __tablename__ = "briefing_journals"
+
+    code: Mapped[str] = mapped_column(String(128), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    site_id: Mapped[str | None] = mapped_column(ForeignKey("site.id", ondelete="SET NULL"), nullable=True)
+    department_id: Mapped[str | None] = mapped_column(ForeignKey("department.id", ondelete="SET NULL"), nullable=True)
+    journal_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
+
+    __table_args__ = (UniqueConstraint("tenant_id", "code", name="uq_briefing_journals_code"),)
+
+
+class BriefingEntry(TenantBaseModel, SoftDeleteMixin):
+    __tablename__ = "briefing_entries"
+
+    briefing_journal_id: Mapped[str] = mapped_column(ForeignKey("briefing_journals.id", ondelete="CASCADE"), nullable=False, index=True)
+    briefing_template_id: Mapped[str | None] = mapped_column(ForeignKey("briefing_templates.id", ondelete="SET NULL"), nullable=True)
+    person_id: Mapped[str | None] = mapped_column(ForeignKey("person.id", ondelete="SET NULL"), nullable=True, index=True)
+    instructor_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    site_id: Mapped[str | None] = mapped_column(ForeignKey("site.id", ondelete="SET NULL"), nullable=True)
+    department_id: Mapped[str | None] = mapped_column(ForeignKey("department.id", ondelete="SET NULL"), nullable=True)
+    workplace_id: Mapped[str | None] = mapped_column(ForeignKey("workplace.id", ondelete="SET NULL"), nullable=True)
+    briefing_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    briefing_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class BriefingSignature(TenantBaseModel):
+    __tablename__ = "briefing_signatures"
+
+    briefing_entry_id: Mapped[str] = mapped_column(ForeignKey("briefing_entries.id", ondelete="CASCADE"), nullable=False, index=True)
+    signer_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    signer_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    signer_person_id: Mapped[str | None] = mapped_column(ForeignKey("person.id", ondelete="SET NULL"), nullable=True)
+    signature_mode: Mapped[str] = mapped_column(String(32), nullable=False, default="internal_simple")
+    signed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(tz=timezone.utc))
+    signature_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+
+
+class ComplianceDeadline(TenantBaseModel):
+    __tablename__ = "compliance_deadlines"
+
+    entity_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    entity_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    person_id: Mapped[str | None] = mapped_column(ForeignKey("person.id", ondelete="SET NULL"), nullable=True, index=True)
+    site_id: Mapped[str | None] = mapped_column(ForeignKey("site.id", ondelete="SET NULL"), nullable=True)
+    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="upcoming")
+    reminder_policy: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class CalendarEvent(TenantBaseModel):
+    __tablename__ = "calendar_events"
+
+    source_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    site_id: Mapped[str | None] = mapped_column(ForeignKey("site.id", ondelete="SET NULL"), nullable=True)
+    assigned_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
+
+
+class OfflineSyncBatch(TenantBaseModel):
+    __tablename__ = "offline_sync_batches"
+
+    user_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    device_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    entity_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    error_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+
+
+class OfflineMediaQueue(TenantBaseModel):
+    __tablename__ = "offline_media_queue"
+
+    user_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    device_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    local_ref: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_id: Mapped[str | None] = mapped_column(ForeignKey("file.id", ondelete="SET NULL"), nullable=True)
+    upload_status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+
+
+class ExternalRegistryJob(TenantBaseModel):
+    __tablename__ = "external_registry_jobs"
+
+    entity_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    entity_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    registry_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    request_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    response_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
 
 class PermitStatus(str, enum.Enum):
@@ -1887,7 +2159,7 @@ class Incident(TenantBaseModel, SoftDeleteMixin):
         order_by="IncidentLog.created_at",
     )
     participants: Mapped[list["IncidentPerson"]] = relationship(
-        "IncidentPerson",
+        "app.models.models.IncidentPerson",
         back_populates="incident",
         cascade="all, delete-orphan",
         passive_deletes=True,

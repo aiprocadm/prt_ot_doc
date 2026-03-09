@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 revision = "20260313_next42_rbac_abac_audit"
-down_revision = "20260312_next41_files_bus"
+down_revision = "20260312_next41"
 branch_labels = None
 depends_on = None
 

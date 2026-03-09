@@ -8,6 +8,7 @@ from app.core.security import AccessContext, abac
 from app.models.models import BillingSubscription, BillingSubscriptionStatus, Tenant
 from app.schemas.billing import (
     BillingChangePlanRequest,
+    BillingEventRead,
     BillingInvoiceRead,
     BillingPlanRead,
     BillingStatusMutationRequest,
@@ -102,6 +103,27 @@ async def billing_usage(
         "limits": ctx.limits,
         "percentages": percentages,
     }
+
+
+@router.get("/events", response_model=list[BillingEventRead])
+async def billing_events(
+    session: SessionDep,
+    tenant: Tenant = Depends(get_tenant_record),
+    access: OwnerAdminAccess = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[BillingEventRead]:
+    _ = access
+    items = await BillingService(session).list_events(tenant.id, limit=limit, offset=offset)
+    return [
+        BillingEventRead(
+            id=item.id,
+            event_type=item.type.value if hasattr(item.type, "value") else str(item.type),
+            payload=item.payload or {},
+            created_at=item.created_at,
+        )
+        for item in items
+    ]
 
 
 @router.get("/limits")

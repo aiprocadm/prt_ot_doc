@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 revision = "20260321_next50_tenant_limits_billing_events"
-down_revision = "20260320_next49_pipeline_lowcode_builder"
+down_revision = "20260320_next49"
 branch_labels = None
 depends_on = None
 

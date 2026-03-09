@@ -11,7 +11,7 @@ from sqlalchemy.dialects import postgresql
 
 
 revision = "20260302_next29"
-down_revision = "20260301_next26_pipeline_idempotency"
+down_revision = "20260301_next26"
 branch_labels = None
 depends_on = None
 

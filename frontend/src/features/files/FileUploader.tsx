@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { toast } from "sonner";
 
+import { apiClient } from "@/api/client";
 import { createUploadSession, finalizeUpload, getFile } from "@/api/files";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -21,10 +22,8 @@ export const FileUploader = () => {
           size_bytes: file.size,
           metadata_json: { description }
         });
-        await fetch(session.signed_put_url, {
-          method: "PUT",
-          headers: { "Content-Type": file.type || "application/octet-stream" },
-          body: file
+        await apiClient.put(session.signed_put_url, file, {
+          headers: { "Content-Type": file.type || "application/octet-stream" }
         });
         await finalizeUpload(session.file_id);
         for (let i = 0; i < 20; i += 1) {

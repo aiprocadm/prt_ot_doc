@@ -1,7 +1,7 @@
 """next21 pdf conversion runs and file versions
 
 Revision ID: 20260222_next21
-Revises: 20260223_next15_job_pipeline_orchestrator
+Revises: 20260223_next15
 Create Date: 2026-02-22
 """
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 revision = "20260222_next21"
-down_revision = "20260223_next15_job_pipeline_orchestrator"
+down_revision = "20260223_next15"
 branch_labels = None
 depends_on = None
 
