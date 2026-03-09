@@ -25,10 +25,20 @@ def _json_object_default(bind) -> sa.sql.elements.TextClause:
     return sa.text("'{}'")
 
 
+def _resolve_npa_binding_table(bind) -> str | None:
+    inspector = sa.inspect(bind)
+    if inspector.has_table("npa_binding"):
+        return "npa_binding"
+    if inspector.has_table("npabinding"):
+        return "npabinding"
+    return None
+
+
 def upgrade() -> None:
     bind = op.get_bind()
     json_type = _json_type(bind)
     json_default = _json_object_default(bind)
+    npa_binding_table = _resolve_npa_binding_table(bind)
 
     employment_status = sa.Enum(
         "active", "on_leave", "suspended", "terminated", name="employmentstatus"
@@ -251,28 +261,29 @@ def upgrade() -> None:
         unique=False,
     )
 
-    with op.batch_alter_table("npa_binding", schema=None) as batch:
-        batch.add_column(sa.Column("entity_type", npa_binding_target, nullable=True))
-        batch.add_column(sa.Column("entity_id", sa.String(length=36), nullable=True))
-        batch.add_column(
-            sa.Column(
-                "context",
-                json_type,
-                nullable=False,
-                server_default=json_default,
+    if npa_binding_table:
+        with op.batch_alter_table(npa_binding_table, schema=None) as batch:
+            batch.add_column(sa.Column("entity_type", npa_binding_target, nullable=True))
+            batch.add_column(sa.Column("entity_id", sa.String(length=36), nullable=True))
+            batch.add_column(
+                sa.Column(
+                    "context",
+                    json_type,
+                    nullable=False,
+                    server_default=json_default,
+                )
+            )
+            batch.alter_column("context", server_default=None)
+            batch.alter_column("template_version_id", existing_type=sa.String(length=36), nullable=True)
+        op.execute(
+            sa.text(
+                f"UPDATE {npa_binding_table} SET entity_type = 'template_version', entity_id = template_version_id "
+                "WHERE entity_type IS NULL"
             )
         )
-        batch.alter_column("context", server_default=None)
-        batch.alter_column("template_version_id", existing_type=sa.String(length=36), nullable=True)
-    op.execute(
-        sa.text(
-            "UPDATE npa_binding SET entity_type = 'template_version', entity_id = template_version_id "
-            "WHERE entity_type IS NULL"
-        )
-    )
-    with op.batch_alter_table("npa_binding", schema=None) as batch:
-        batch.alter_column("entity_type", nullable=False)
-        batch.alter_column("entity_id", nullable=False)
+        with op.batch_alter_table(npa_binding_table, schema=None) as batch:
+            batch.alter_column("entity_type", nullable=False)
+            batch.alter_column("entity_id", nullable=False)
 
     with op.batch_alter_table("file", schema=None) as batch:
         batch.add_column(
@@ -288,6 +299,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     bind = op.get_bind()
+    npa_binding_table = _resolve_npa_binding_table(bind)
 
     op.drop_index("ix_document_pack_item_template_version_id", table_name="document_pack_item")
     op.drop_constraint("fk_pack_item_template_version", "document_pack_item", type_="foreignkey")
@@ -332,21 +344,22 @@ def downgrade() -> None:
         batch.drop_column("scenario_type")
         batch.drop_column("module")
 
-    op.execute(
-        sa.text("DELETE FROM npa_binding WHERE entity_type <> 'template_version'")
-    )
-    op.execute(
-        sa.text(
-            "UPDATE npa_binding SET template_version_id = entity_id "
-            "WHERE entity_type = 'template_version' AND template_version_id IS NULL"
+    if npa_binding_table:
+        op.execute(
+            sa.text(f"DELETE FROM {npa_binding_table} WHERE entity_type <> 'template_version'")
         )
-    )
+        op.execute(
+            sa.text(
+                f"UPDATE {npa_binding_table} SET template_version_id = entity_id "
+                "WHERE entity_type = 'template_version' AND template_version_id IS NULL"
+            )
+        )
 
-    with op.batch_alter_table("npa_binding", schema=None) as batch:
-        batch.drop_column("context")
-        batch.drop_column("entity_id")
-        batch.drop_column("entity_type")
-        batch.alter_column("template_version_id", existing_type=sa.String(length=36), nullable=False)
+        with op.batch_alter_table(npa_binding_table, schema=None) as batch:
+            batch.drop_column("context")
+            batch.drop_column("entity_id")
+            batch.drop_column("entity_type")
+            batch.alter_column("template_version_id", existing_type=sa.String(length=36), nullable=False)
 
     with op.batch_alter_table("file", schema=None) as batch:
         batch.drop_column("bucket")

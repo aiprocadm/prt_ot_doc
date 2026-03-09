@@ -5,13 +5,21 @@ BASE_URL="${BASE_URL:-http://localhost:8000}"
 TENANT_HEADER_NAME="${TENANT_HEADER_NAME:-X-Tenant}"
 TENANT_SLUG="${DEFAULT_TENANT_SLUG:-demo}"
 
+show_api_logs() {
+  echo "API did not become ready; dumping docker compose api logs" >&2
+  docker compose logs api >&2 || true
+}
+
 for _ in $(seq 1 60); do
   if curl -fsS "${BASE_URL}/readyz" >/dev/null; then
     break
   fi
   sleep 2
 done
-curl -fsS "${BASE_URL}/readyz" >/dev/null
+if ! curl -fsS "${BASE_URL}/readyz" >/dev/null; then
+  show_api_logs
+  exit 1
+fi
 
 PYTHONPATH=backend python -m alembic -c backend/app/migrations/alembic.ini upgrade heads
 PYTHONPATH=backend python scripts/create_tenant.py "${TENANT_SLUG}" "Demo Tenant" "demo@example.local" || true
