@@ -55,6 +55,19 @@ const PipelineRunDetailsPage = lazy(() => import("@/pages/PipelineRunDetails"));
 const PipelineBuilderPage = lazy(() => import("@/pages/PipelineBuilderPage"));
 const ArchiveSearchPage = lazy(() => import("@/pages/ArchiveSearch"));
 const SearchPage = lazy(() => import("@/pages/SearchPage"));
+const ExecutiveDashboardPage = lazy(() => import("@/pages/dashboard/ExecutiveDashboardPage"));
+const SafetyDashboardPage = lazy(() => import("@/pages/dashboard/SafetyDashboardPage"));
+const TrainingDashboardPage = lazy(() => import("@/pages/dashboard/TrainingDashboardPage"));
+const PpeDashboardPage = lazy(() => import("@/pages/dashboard/PpeDashboardPage"));
+const ClientDeliveryDashboardPage = lazy(() => import("@/pages/dashboard/ClientDeliveryDashboardPage"));
+const TrendsPage = lazy(() => import("@/pages/analytics/TrendsPage"));
+const ExportsPage = lazy(() => import("@/pages/exports/ExportsPage"));
+const ClientPortalDashboardPage = lazy(() => import("@/pages/client-portal/ClientPortalDashboardPage"));
+const ClientPortalPackagesPage = lazy(() => import("@/pages/client-portal/ClientPortalPackagesPage"));
+const ClientPortalDocumentsPage = lazy(() => import("@/pages/client-portal/ClientPortalDocumentsPage"));
+const ClientPortalHistoryPage = lazy(() => import("@/pages/client-portal/ClientPortalHistoryPage"));
+const ClientPortalRequestsPage = lazy(() => import("@/pages/client-portal/ClientPortalRequestsPage"));
+const PortalRequestsPage = lazy(() => import("@/pages/portal-requests/PortalRequestsPage"));
 const NotificationsPage = lazy(() => import("@/pages/notifications/NotificationsPage"));
 const CalendarPage = lazy(() => import("@/pages/calendar/CalendarPage"));
 const PackageProfilesPage = lazy(() => import("@/pages/packs/PackageProfilesPage"));
@@ -82,6 +95,11 @@ const AppRouter = () => {
               <Route path="/no-access" element={<AccessDeniedPage />} />
               <Route element={<ProtectedRoute permission={PERMISSIONS.DASHBOARD_VIEW} />}>
                 <Route path="/dashboard" element={<DashboardPage />} />
+                <Route path="/dashboard/executive" element={<ExecutiveDashboardPage />} />
+                <Route path="/dashboard/safety" element={<SafetyDashboardPage />} />
+                <Route path="/dashboard/training" element={<TrainingDashboardPage />} />
+                <Route path="/dashboard/ppe" element={<PpeDashboardPage />} />
+                <Route path="/dashboard/client-delivery" element={<ClientDeliveryDashboardPage />} />
               </Route>
               <Route element={<ProtectedRoute permission={PERMISSIONS.COMPANY_VIEW} />}>
                 <Route path="/companies" element={<CompaniesPage />} />
@@ -182,6 +200,14 @@ const AppRouter = () => {
               </Route>
               <Route element={<ProtectedRoute permission={PERMISSIONS.REPORTS_VIEW} />}>
                 <Route path="/reports" element={<ReportsPage />} />
+                <Route path="/exports" element={<ExportsPage />} />
+                <Route path="/analytics/trends" element={<TrendsPage />} />
+                <Route path="/portal-requests" element={<PortalRequestsPage />} />
+                <Route path="/client-portal/dashboard" element={<ClientPortalDashboardPage />} />
+                <Route path="/client-portal/packages" element={<ClientPortalPackagesPage />} />
+                <Route path="/client-portal/documents" element={<ClientPortalDocumentsPage />} />
+                <Route path="/client-portal/history" element={<ClientPortalHistoryPage />} />
+                <Route path="/client-portal/requests" element={<ClientPortalRequestsPage />} />
               </Route>
               <Route element={<ProtectedRoute permission={PERMISSIONS.DOCUMENT_VIEW} />}>
                 <Route path="/pipelines/profiles" element={<PipelineBuilderPage />} />
