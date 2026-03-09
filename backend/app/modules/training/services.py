@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import calendar
 from datetime import date, datetime, timezone
 
 from app.models.models import (
@@ -14,6 +15,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class TrainingEnrollmentService:
+    @staticmethod
+    def _add_months(value: datetime, months: int) -> datetime:
+        target_month = value.month - 1 + months
+        year = value.year + target_month // 12
+        month = target_month % 12 + 1
+        day = min(value.day, calendar.monthrange(year, month)[1])
+        return value.replace(year=year, month=month, day=day)
+
     async def start(self, session: AsyncSession, enrollment: TrainingEnrollment) -> TrainingEnrollment:
         enrollment.status = "in_progress"
         enrollment.started_at = enrollment.started_at or datetime.now(tz=timezone.utc)
@@ -34,6 +43,8 @@ class TrainingEnrollmentService:
             TrainingTest.deleted_at.is_(None),
         )
         test = (await session.execute(test_stmt)).scalar_one_or_none()
+        if test is not None and test.attempts_limit is not None and enrollment.attempt_count >= test.attempts_limit:
+            raise ValueError("attempts_limit_exceeded")
         if test is not None:
             passed = score >= test.passing_score
         enrollment.attempt_count += 1
@@ -43,7 +54,7 @@ class TrainingEnrollmentService:
             enrollment.completed_at = datetime.now(tz=timezone.utc)
             program = await session.get(TrainingProgram, enrollment.training_program_id)
             if program and program.validity_months:
-                enrollment.expires_at = datetime.now(tz=timezone.utc).replace(microsecond=0)
+                enrollment.expires_at = self._add_months(enrollment.completed_at, program.validity_months).replace(microsecond=0)
         else:
             enrollment.status = "failed"
 
