@@ -1,7 +1,7 @@
 """NEXT-11 tenancy control-plane settings and quota extensions.
 
 Revision ID: 20260221_next11_tenancy_control_plane
-Revises: 20260222_next10_job_engine
+Revises: 20260222_next10
 Create Date: 2026-02-21 00:00:00.000000
 """
 
@@ -14,7 +14,7 @@ import sqlalchemy as sa
 
 
 revision: str = "20260221_next11_tenancy_control_plane"
-down_revision: Union[str, None] = "20260222_next10_job_engine"
+down_revision: Union[str, None] = "20260222_next10"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
