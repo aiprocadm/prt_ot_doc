@@ -833,11 +833,23 @@ class TrainingSession(TenantBaseModel):
 
 
 class TrainingCertificate(TenantBaseModel, SoftDeleteMixin):
-    __tablename__ = "training_certificate"
+    __tablename__ = "training_certificates"
 
-    person_id: Mapped[str] = mapped_column(ForeignKey("person.id"), nullable=False, index=True)
-    course_id: Mapped[str] = mapped_column(
-        ForeignKey("training_course.id", ondelete="CASCADE"), nullable=False, index=True
+    code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    training_program_id: Mapped[str | None] = mapped_column(
+        ForeignKey("training_programs.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    person_id: Mapped[str | None] = mapped_column(ForeignKey("person.id"), nullable=True, index=True)
+    issued_at: Mapped[date] = mapped_column(Date, nullable=False, default=date.today)
+    valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
+    file_id: Mapped[str | None] = mapped_column(ForeignKey("file.id", ondelete="SET NULL"), nullable=True, index=True)
+    external_registry_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    external_registry_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+
+    # backward-compatible legacy fields
+    course_id: Mapped[str | None] = mapped_column(
+        ForeignKey("training_course.id", ondelete="CASCADE"), nullable=True, index=True
     )
     session_id: Mapped[str | None] = mapped_column(
         ForeignKey("training_session.id", ondelete="SET NULL"), nullable=True, index=True
@@ -845,20 +857,16 @@ class TrainingCertificate(TenantBaseModel, SoftDeleteMixin):
     plan_id: Mapped[str | None] = mapped_column(
         ForeignKey("training_plan.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    file_id: Mapped[str | None] = mapped_column(
-        ForeignKey("file.id", ondelete="SET NULL"), nullable=True, index=True
-    )
     number: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    issued_at: Mapped[date] = mapped_column(Date, nullable=False, default=date.today)
-    valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
 
-    person: Mapped[Person] = relationship(backref="training_certificates")
-    course: Mapped[TrainingCourse] = relationship(backref="training_certificates")
+    person: Mapped[Person | None] = relationship(backref="training_certificates")
+    course: Mapped[TrainingCourse | None] = relationship(backref="training_certificates")
     session: Mapped[TrainingSession | None] = relationship(backref="certificate")
     plan: Mapped[TrainingPlan | None] = relationship(backref="certificates")
     file: Mapped[File | None] = relationship("File", lazy="selectin")
 
     __table_args__ = (
+        UniqueConstraint("tenant_id", "code", name="uq_training_certificates_code"),
         UniqueConstraint("tenant_id", "number", name="uq_training_certificate_number"),
         Index("ix_training_certificate_valid", "tenant_id", "valid_until"),
     )
@@ -2133,7 +2141,7 @@ class Incident(TenantBaseModel, SoftDeleteMixin):
         order_by="IncidentLog.created_at",
     )
     participants: Mapped[list["IncidentPerson"]] = relationship(
-        "IncidentPerson",
+        "app.models.models.IncidentPerson",
         back_populates="incident",
         cascade="all, delete-orphan",
         passive_deletes=True,
