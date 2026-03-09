@@ -338,6 +338,17 @@ class BillingService:
             out["generations_per_month"] = out["max_generations_per_month"]
         return out
 
+
+    async def list_events(self, tenant_id: str, *, limit: int = 50, offset: int = 0) -> list[BillingEvent]:
+        stmt = (
+            select(BillingEvent)
+            .where(BillingEvent.tenant_id == tenant_id)
+            .order_by(BillingEvent.created_at.desc())
+            .offset(max(offset, 0))
+            .limit(max(1, min(limit, 200)))
+        )
+        return list((await self.session.execute(stmt)).scalars().all())
+
     async def list_invoices(self, tenant_id: str, period_yyyymm: int | None = None) -> list[BillingInvoice]:
         stmt = select(BillingInvoice).where(BillingInvoice.tenant_id == tenant_id).order_by(BillingInvoice.period_yyyymm.desc())
         if period_yyyymm is not None:
