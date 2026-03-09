@@ -17,3 +17,5 @@
 - Архитектура: [ARCHITECTURE.md](ARCHITECTURE.md)
 - OpenAPI контракт: [openapi.yaml](openapi.yaml)
 - Domain model: [DOMAIN_MODEL.md](DOMAIN_MODEL.md)
+
+- [Analytics + Search + Export + Client Portal flows](analytics_export_search_client_portal_flows.md)
