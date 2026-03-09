@@ -21,7 +21,7 @@ def upgrade() -> None:
         "alembic_version",
         "version_num",
         existing_type=sa.String(length=32),
-        type_=sa.String(length=64),
+        type_=sa.Text(),
         existing_nullable=False,
     )
 
@@ -30,7 +30,7 @@ def downgrade() -> None:
     op.alter_column(
         "alembic_version",
         "version_num",
-        existing_type=sa.String(length=64),
+        existing_type=sa.Text(),
         type_=sa.String(length=32),
         existing_nullable=False,
     )
