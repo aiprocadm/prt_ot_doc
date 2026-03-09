@@ -13,6 +13,8 @@ def test_incident_status_transitions() -> None:
     assert IncidentCaseService.validate_transition("investigating", "registered") is False
     assert IncidentCaseService.can_close(has_open_actions=True, manual_override=False) is False
     assert IncidentCaseService.can_close(has_open_actions=True, manual_override=True) is True
+    assert IncidentCaseService.next_status_on_register("draft") == "registered"
+    assert IncidentCaseService.close_status(has_open_actions=False, manual_override=False) == "closed"
 
 
 def test_inspection_checklist_snapshot_semantics() -> None:

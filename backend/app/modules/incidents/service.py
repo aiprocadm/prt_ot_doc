@@ -17,6 +17,18 @@ class IncidentCaseService:
     def can_close(*, has_open_actions: bool, manual_override: bool) -> bool:
         return (not has_open_actions) or manual_override
 
+    @staticmethod
+    def next_status_on_register(current: str) -> str:
+        if current != "draft":
+            raise ValueError("only draft incidents can be registered")
+        return "registered"
+
+    @classmethod
+    def close_status(cls, *, has_open_actions: bool, manual_override: bool) -> str:
+        if not cls.can_close(has_open_actions=has_open_actions, manual_override=manual_override):
+            raise ValueError("cannot close incident with open actions")
+        return "closed"
+
 
 class IncidentInvestigationService:
     @staticmethod

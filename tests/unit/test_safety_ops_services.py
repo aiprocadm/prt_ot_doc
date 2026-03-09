@@ -9,6 +9,8 @@ from app.modules.inspection_prep import GapAnalysisService
 def test_incident_status_transitions() -> None:
     assert IncidentCaseService.validate_transition("draft", "registered")
     assert not IncidentCaseService.validate_transition("closed", "investigating")
+    assert IncidentCaseService.next_status_on_register("draft") == "registered"
+    assert IncidentCaseService.close_status(has_open_actions=False, manual_override=False) == "closed"
 
 
 def test_checklist_snapshot_semantics() -> None:
