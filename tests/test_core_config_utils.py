@@ -106,3 +106,29 @@ def test_redis_section_reflects_broker_and_result_urls() -> None:
     assert settings.redis.broker_url == "redis://cache:6379/0"
     assert settings.redis.result_url == "redis://cache:6380/1"
     assert settings.redis.has_dedicated_result_backend is True
+
+
+def test_presign_download_ttl_is_bounded() -> None:
+    with pytest.raises(ValueError):
+        config.Settings.model_validate(
+            {
+                "LIBREOFFICE_BIN": "python",
+                "PRESIGN_DOWNLOAD_TTL_SECONDS": 30,
+            }
+        )
+
+    with pytest.raises(ValueError):
+        config.Settings.model_validate(
+            {
+                "LIBREOFFICE_BIN": "python",
+                "PRESIGN_DOWNLOAD_TTL_SECONDS": 7200,
+            }
+        )
+
+    settings = config.Settings.model_validate(
+        {
+            "LIBREOFFICE_BIN": "python",
+            "PRESIGN_DOWNLOAD_TTL_SECONDS": 300,
+        }
+    )
+    assert settings.presign_download_ttl_seconds == 300

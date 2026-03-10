@@ -47,3 +47,7 @@
 ## Проверка защиты от обхода tenant middleware
 - Запуск: `pytest -q tests/test_middleware_tenant.py::test_tenant_middleware_requires_header_for_non_docs_openapi_suffix_path`
 - Ожидаемое: путь `/api/v1/templates/openapi.json` без `X-Tenant` возвращает `400 TENANT_REQUIRED`.
+
+## Проверка безопасного TTL presigned download URL
+- Запуск: `PYTHONPATH=backend pytest -q tests/test_core_config_utils.py::test_presign_download_ttl_is_bounded`
+- Ожидаемое: значения `PRESIGN_DOWNLOAD_TTL_SECONDS` ниже 60 и выше 3600 отклоняются валидацией конфигурации.
