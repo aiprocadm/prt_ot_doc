@@ -638,6 +638,7 @@ class Position(TenantBaseModel, SoftDeleteMixin):
         secondary="position_hazard",
         lazy="selectin",
         back_populates="positions",
+        overlaps="hazard_links,position,hazard",
     )
 
     __table_args__ = (
@@ -724,6 +725,7 @@ class Workplace(TenantBaseModel, SoftDeleteMixin):
         secondary="workplace_hazard",
         lazy="selectin",
         back_populates="workplaces",
+        overlaps="hazard_links,workplace,hazard",
     )
 
     __table_args__ = (
@@ -1853,8 +1855,8 @@ class WorkplaceHazardLink(TenantBaseModel):
         ForeignKey("file.id", ondelete="SET NULL"), nullable=True
     )
 
-    workplace: Mapped[Workplace] = relationship(backref="hazard_links")
-    hazard: Mapped["RiskHazard"] = relationship("RiskHazard")
+    workplace: Mapped[Workplace] = relationship(backref="hazard_links", overlaps="hazards,workplaces")
+    hazard: Mapped["RiskHazard"] = relationship("RiskHazard", overlaps="hazards,workplaces")
     document_file: Mapped["File | None"] = relationship("File")
 
     __table_args__ = (
@@ -1877,8 +1879,8 @@ class PositionHazardLink(TenantBaseModel):
         ForeignKey("file.id", ondelete="SET NULL"), nullable=True
     )
 
-    position: Mapped[Position] = relationship(backref="hazard_links")
-    hazard: Mapped["RiskHazard"] = relationship("RiskHazard")
+    position: Mapped[Position] = relationship(backref="hazard_links", overlaps="hazards,positions")
+    hazard: Mapped["RiskHazard"] = relationship("RiskHazard", overlaps="hazards,positions")
     document_file: Mapped["File | None"] = relationship("File")
 
     __table_args__ = (

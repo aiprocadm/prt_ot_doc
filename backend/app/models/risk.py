@@ -81,12 +81,14 @@ class RiskHazard(TenantBase):
         secondary="position_hazard",
         lazy="selectin",
         back_populates="hazards",
+        overlaps="hazard_links",
     )
     workplaces: Mapped[list["Workplace"]] = relationship(
         "Workplace",
         secondary="workplace_hazard",
         lazy="selectin",
         back_populates="hazards",
+        overlaps="hazard_links",
     )
 
     __table_args__ = (

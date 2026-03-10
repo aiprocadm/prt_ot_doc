@@ -1,11 +1,11 @@
 # KNOWN_LIMITATIONS
 
-## Приемлемо для пилота
-- Есть предупреждения SQLAlchemy (relationship overlaps) без падения функционала; требуют cleanup.
-- Часть интеграций EDO/подписания работает через mock/provider-stub режим.
-- PWA/offline синхронизация реализована частично (без полной parity сложных сценариев).
+## Приемлемо для пилотного запуска
+1. Частичные SAWarning в ORM-моделях risk/workplace/position (после текущих фиксов их меньше, но cleanup не завершен).
+2. Часть EDO/sign-интеграций работает в mock/stub режиме.
+3. Offline/PWA реализован без полной parity для сложных конфликтных сценариев.
 
 ## Неприемлемо для промышленной эксплуатации
-- Нет полностью автоматизированного backup/restore drill с регулярной валидацией.
-- Не завершен full hardening антивирусной/контентной проверки файлов на уровне enterprise политики.
-- Не закрыт весь объем e2e permission-matrix (admin/client/auditor/specialist) для UI + API в едином прогоне.
+1. Нет полностью автоматизированного регулярного backup/restore drill с обязательной валидацией после восстановления.
+2. Нет завершенного enterprise hardening для файлового контура (политики AV/DLP/retention/governance в полном объеме).
+3. Неполная сквозная e2e матрица прав (frontend+api) для всех ролей (admin/client/auditor/specialist).

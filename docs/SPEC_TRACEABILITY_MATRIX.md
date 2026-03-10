@@ -4,7 +4,7 @@
 
 | Блок ТЗ | Ожидаемое | Факт в коде | Статус | Связанные артефакты | Блокеры / следующее исправление |
 |---|---|---|---|---|---|
-| Аренда/Аутентификация/RBAC/ABAC/Аудит | X-Tenant обязателен, изоляция, role+attr checks, immutable audit | Tenant middleware + token scope match, ABAC deps/rules, audit tests есть | частично | `middleware/tenant.py`, `modules/rbac_abac/*`, `tests/test_tenant_security.py`, `tests/test_audit_log_immutability.py` | Закрыть warnings ORM overlaps, усилить policy coverage для edge-cases |
+| Аренда/Аутентификация/RBAC/ABAC/Аудит | X-Tenant обязателен, изоляция, role+attr checks, immutable audit | Tenant middleware + token scope match, ABAC deps/rules, audit tests есть | частично | `middleware/tenant.py`, `modules/rbac_abac/*`, `tests/test_tenant_security.py`, `tests/test_audit_log_immutability.py` | Продолжить cleanup оставшихся ORM overlap warnings (часть закрыта в моделях), усилить policy coverage для edge-cases |
 | Доменные объекты | ОТ/ПБ/ПромБез/экология/доки | Широкий набор моделей/роутов есть | частично | `api/routes/*.py`, `models/*.py`, `frontend/src/pages/*` | Нужна унификация справочников и контроль mandatory полей |
 | Шаблоны/визуализация/замена/PDF | Template->replace->PDF pipeline | Реализовано, есть tests/linter/passport | сделано | `modules/templates/*`, `modules/replace/*`, `modules/pdf/*`, `tests/test_templates_pipeline_api.py` | Добавить нагрузочные тесты и контроль SLA job-очередей |
 | EDO/подписание/утверждения | Approval/sign/edo workflow | Core flow есть, mock-провайдеры и тесты есть | частично | `modules/approval`, `modules/approvals`, `modules/sign`, `modules/edo`, `backend/tests/test_next57_approval_sign_edo_services.py` | Добавить провайдер-специфичные интеграционные контракты |

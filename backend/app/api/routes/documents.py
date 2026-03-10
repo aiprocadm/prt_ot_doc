@@ -382,7 +382,7 @@ async def generate_document(
     if isinstance(payload, DocGeneratePipelineRequest):
         template_code = payload.template.code
         template_version = payload.template.version
-        options = {}
+        options: dict[str, Any] = {}
         if payload.pipeline and payload.pipeline.steps and payload.pipeline.steps.zip:
             options["zip"] = bool(payload.pipeline.steps.zip.get("enabled"))
         engine_payload = {
@@ -393,7 +393,6 @@ async def generate_document(
             "inline_data": payload.data.payload or {},
             "options": options,
         }
-
     try:
         payload_for_checks = payload.data if isinstance(payload, DocGenerateRequest) else (payload.data.payload or {})
         enforce_mapping_constraints(payload_for_checks, field="data")
@@ -617,22 +616,6 @@ async def generate_document_batch(
 ) -> DocumentBatchRunRead:
     settings = get_settings()
     await BillingService(session).assert_allowed(tenant, "documents.generate")
-    engine_payload: dict[str, Any] | None = None
-    if isinstance(payload, DocGeneratePipelineRequest):
-        template_code = payload.template.code
-        template_version = payload.template.version
-        options = {}
-        if payload.pipeline and payload.pipeline.steps and payload.pipeline.steps.zip:
-            options["zip"] = bool(payload.pipeline.steps.zip.get("enabled"))
-        engine_payload = {
-            "template_code": template_code,
-            "template_version": template_version,
-            "pipeline_profile_id": (payload.pipeline.profile_code if payload.pipeline else None),
-            "input_source_id": payload.data.file_id if payload.data.type == "file" else None,
-            "inline_data": payload.data.payload or {},
-            "options": options,
-        }
-
     if template_version is None or not company_id or not template_code:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
