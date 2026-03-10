@@ -24,7 +24,10 @@ class TenantMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self._metrics_enabled = metrics_enabled
         self._system_paths = {"/health", "/ready", "/healthz", "/readyz"}
-        self._public_prefixes = ("/api/v1/auth", "/api/v1/public", "/api/v1/webhooks/incoming")
+        self._public_prefixes = ("/api/v1/public", "/api/v1/webhooks/incoming")
+        self._public_paths = {
+            "/api/v1/auth/login",
+        }
 
     @staticmethod
     def _is_uuid(value: str) -> bool:
@@ -57,6 +60,7 @@ class TenantMiddleware(BaseHTTPMiddleware):
             or (self._metrics_enabled and path == "/metrics")
             or path.startswith("/docs")
             or path.endswith("/openapi.json")
+            or path in self._public_paths
             or any(path.startswith(prefix) for prefix in self._public_prefixes)
         ):
             return await call_next(request)

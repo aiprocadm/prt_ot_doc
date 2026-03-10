@@ -14,6 +14,7 @@ run_check "schema consistency" python scripts/verify_schema_consistency.py
 run_check "tenant isolation and access guards" python -m pytest \
   tests/test_tenant_header_required.py \
   tests/test_tenant_security.py \
+  tests/test_auth_tenant_header_enforcement.py \
   tests/test_next39_tenancy_enforcement.py -q
 run_check "idempotency and immutable audit" python -m pytest \
   tests/test_services_idempotency_unit.py \
