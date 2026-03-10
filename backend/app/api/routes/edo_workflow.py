@@ -606,7 +606,7 @@ async def edo_webhook(
 
     process_inbound_webhook.delay(
         source="edo",
-        tenant_slug=str(tenant.id),
+        tenant_slug=tenant.slug,
         payload={
             "provider_code": provider_code,
             "external_id": payload.external_id,

@@ -39,3 +39,5 @@
 1. `make codex-audit`.
 2. Документные сценарии генерации/батча.
 3. Tenant boundary + idempotency mismatch сценарии.
+
+- Дополнительно закрыт критичный дефект async tenancy: входящие webhook/EDO события отправлялись в Celery с `tenant.id` вместо `tenant.slug`; исправлено и покрыто тестами `tests/test_inbound_webhook_tenant_context.py`.

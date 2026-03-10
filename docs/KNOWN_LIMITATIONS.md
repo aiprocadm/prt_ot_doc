@@ -9,3 +9,5 @@
 1. Нет полностью автоматизированного регулярного backup/restore drill с обязательной валидацией после восстановления.
 2. Нет завершенного enterprise hardening для файлового контура (политики AV/DLP/retention/governance в полном объеме).
 3. Неполная сквозная e2e матрица прав (frontend+api) для всех ролей (admin/client/auditor/specialist).
+
+- (Обновление) Ранее обнаруженный разрыв tenant-контекста для inbound webhook задач устранен; сохраняются общие ограничения по legacy предупреждениям ORM/SQLAlchemy.
