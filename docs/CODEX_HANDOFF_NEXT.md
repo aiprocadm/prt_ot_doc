@@ -1,45 +1,36 @@
 # CODEX_HANDOFF_NEXT
 
-## Что это за проект
-B2B SaaS по ОТ/ПБ/ПромБез с multi-tenant API, документным конвейером (template->replace->pdf->approval/sign/edo), safety вертикалями и клиентским порталом.
+## 1. Что это за проект
+Многопользовательская B2B SaaS-платформа по ОТ/ПБ/ПромБез/экологии с ключевым документным конвейером: шаблон → массовая замена → PDF → согласование/подписание/ЭДО → архив/экспорт.
 
-## Фактическое состояние
-- Базовый скелет платформы реализован (backend+frontend+tests+docs).
-- Критичные security/reliability проверки присутствуют в тестах и объединены в `make codex-audit`.
-- В этой задаче усилен file-tenant key guard (поддержка legacy + защита от traversal) и обновлен audit-пакет документации.
+## 2. Фактическое состояние (по коду)
+- Tenant enforcement на уровне middleware + route dependencies для business API.
+- RBAC/ABAC, audit log, idempotency, outbox/webhook dedupe реализованы и покрыты тестами.
+- Документные эндпоинты `/api/v1/documents/generate` и `/api/v1/documents/batch` активны и используются в тестах.
 
-## Что уже есть (кратко)
-- Tenant middleware, RBAC/ABAC, audit, idempotency, outbox/webhooks.
-- Модули: templates/replace/pdf/pipelines, approvals/sign/edo, files/search/export/analytics, risk/ppe/incidents/inspections/training.
-- Frontend страницы по ключевым доменам и client-portal.
+## 3. Что исправлено в этой задаче
+1. **Исправлен критический runtime сбой в документной генерации**: `UnboundLocalError`/`NameError` в `documents` routes (сломанные ветки для `engine_payload` и `payload` в batch flow).
+2. **Снижен риск ORM-конфликтов**: добавлены `overlaps` для связей risk/workplace/position/link-моделей (частично сняты SAWarning).
+3. **Обновлён операционный контекст**: RUNBOOK/LIMITATIONS/GAPS синхронизированы с фактическим состоянием.
 
-## Что критично по ТЗ
-1. Жесткий tenant boundary (`X-Tenant`, scope match, scoped queries).
-2. Идемпотентность для mutating endpoint-ов.
-3. Неизменяемый аудит на чувствительные операции.
-4. Безопасная обработка файлов и webhooks/outbox dedupe.
-5. Стабильный pipeline статусов документов.
+## 4. Что остаётся критичным по ТЗ
+1. Жёсткое соблюдение tenant isolation (включая async jobs и file/export/search контуры).
+2. Идемпотентность всех mutating API.
+3. Иммутабельный аудит для чувствительных операций.
+4. Безопасная файловая подсистема (signed URL TTL/access checks/audit download).
 
-## Что обнаружено и исправлено в этой задаче
-- Исправлен критичный пробел в `assert_tenant_key`: добавлена поддержка legacy-префикса + запрет path traversal.
-- Добавлены/обновлены тесты файлового guard.
-- Усилен агрегированный sanity-run (`scripts/codex_audit.sh`) критическими наборами тестов tenancy/idempotency/audit/pipeline/webhooks.
-- Обновлен контекстный пакет и матрица соответствия.
+## 5. Что делать дальше (рекомендуемый порядок)
+1. Завершить cleanup всех SAWarning по risk relationships (добавить оставшиеся `overlaps`/`back_populates` + тест с warning gate).
+2. Дожать e2e-матрицу ролей для frontend (admin/client/auditor/specialist).
+3. Формализовать backup/restore drill как обязательный периодический прогон.
+4. Усилить enterprise-политику для файлового контура (AV/DLP/retention/audit).
 
-## Что делать дальше (порядок)
-1. Устранить SQLAlchemy relationship overlap warnings в risk-моделях.
-2. Расширить e2e role-visibility тесты (admin/client/auditor/specialist).
-3. Усилить AV/DLP политику файлового контура на прод уровне.
-4. Формализовать backup-restore drill в CI/cron.
-5. Синхронизировать оставшиеся legacy docs с фактическим `make codex-audit`.
+## 6. Ключевые команды
+- `make cs:dev` — локальный старт.
+- `make codex-audit` — критический sanity срез.
+- `pytest -q tests/test_documents_generate.py tests/test_template_delete.py tests/integration/test_idempotency_generate.py tests/test_tenant_header_required.py` — быстрый регресс document+tenancy+idempotency.
 
-## Команды
-- Локальный старт: `make cs:dev`
-- Базовые тесты: `make cs:test`
-- Критический sanity: `make codex-audit`
-- Финальная приемка: `make final-acceptance`
-
-## Что проверять в первую очередь
-1. `make codex-audit`
-2. `tests/test_tenant_security.py`, `tests/test_idempotency.py`, `tests/test_documents_status_flow.py`
-3. `backend/tests/test_next42_rbac_abac_audit.py`, `backend/tests/test_files_module_basics.py`
+## 7. Что проверять в первую очередь при следующем заходе
+1. `make codex-audit`.
+2. Документные сценарии генерации/батча.
+3. Tenant boundary + idempotency mismatch сценарии.

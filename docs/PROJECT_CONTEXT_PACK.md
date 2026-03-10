@@ -37,3 +37,8 @@
 - Много SQLAlchemy warnings по overlaps в risk models.
 - Есть исторические/legacy key-prefix в файловом модуле; сохранена обратная совместимость, но требуется миграция ключей на единый namespace.
 - Есть большой набор docs/отчетов; риск расхождения «документ vs код» без регулярного прогонов `make codex-audit`.
+
+
+## 11) Что исправлено в финальной стабилизации
+- Устранен критический runtime дефект в API генерации документов: исправлены ветки `engine_payload`/`payload` в `backend/app/api/routes/documents.py`, из-за которых падали `/api/v1/documents/generate` и `/api/v1/documents/batch` под тестами.
+- Частично снижены SQLAlchemy overlap warnings в risk/workplace/position связях (`backend/app/models/models.py`, `backend/app/models/risk.py`).
