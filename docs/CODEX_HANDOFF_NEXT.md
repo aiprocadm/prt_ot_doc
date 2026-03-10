@@ -1,3 +1,8 @@
+## 0. Обновление текущей итерации (tenant hotfix)
+- Исправлен критический дефект изоляции: middleware больше не пропускает все `/api/v1/auth` без `X-Tenant`; публичным оставлен только `/api/v1/auth/login`.
+- Добавлены тесты `tests/test_auth_tenant_header_enforcement.py` (проверка `400 TENANT_REQUIRED` для `/auth/me` и `/auth/refresh` без заголовка).
+- В `scripts/codex_audit.sh` добавлен прогон этого теста в секцию tenant isolation.
+
 # CODEX_HANDOFF_NEXT
 
 ## 1. Что это за проект

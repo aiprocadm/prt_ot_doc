@@ -39,6 +39,7 @@
 - Есть большой набор docs/отчетов; риск расхождения «документ vs код» без регулярного прогонов `make codex-audit`.
 
 
-## 11) Что исправлено в финальной стабилизации
-- Устранен критический runtime дефект в API генерации документов: исправлены ветки `engine_payload`/`payload` в `backend/app/api/routes/documents.py`, из-за которых падали `/api/v1/documents/generate` и `/api/v1/documents/batch` под тестами.
-- Частично снижены SQLAlchemy overlap warnings в risk/workplace/position связях (`backend/app/models/models.py`, `backend/app/models/risk.py`).
+## 11) Что исправлено в этой задаче (критично)
+- Закрыт критический пробел tenant security: `TenantMiddleware` больше не освобождает весь префикс `/api/v1/auth` от `X-Tenant`; публичным оставлен только `/api/v1/auth/login`, а `/auth/me`, `/auth/me/permissions`, `/auth/refresh` теперь принудительно требуют tenant-контекст.
+- Добавлены регрессионные тесты на auth tenant enforcement: без `X-Tenant` для `/auth/me` и `/auth/refresh` возвращается `400 TENANT_REQUIRED`, при этом `/auth/login` остается публичным (контролируемо возвращает `401` без tenant-контекста).
+- `make codex-audit` расширен запуском нового критического тест-пакета `tests/test_auth_tenant_header_enforcement.py`.
