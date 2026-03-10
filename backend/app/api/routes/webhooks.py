@@ -309,5 +309,5 @@ async def inbound_webhook(
     except IntegrityError:
         await session.rollback()
         return {"status": "duplicate"}
-    process_inbound_webhook.delay(source=source, tenant_slug=str(tenant.id), payload=payload)
+    process_inbound_webhook.delay(source=source, tenant_slug=tenant.slug, payload=payload)
     return {"status": "accepted"}
