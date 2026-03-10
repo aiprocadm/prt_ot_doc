@@ -14,3 +14,4 @@
 
 - (Обновление) Критичный public-prefix bypass в tenant middleware закрыт; маршруты вида `/api/v1/publicity` больше не обходят tenant guard.
 - Устранено в этой итерации: bypass tenant guard через суффикс `openapi.json` (неактуально после фикса middleware и регрессионного теста).
+- Устранено в этой итерации: риск слишком длинного TTL для presigned download URL — введены границы `60..3600` на уровне конфигурации.

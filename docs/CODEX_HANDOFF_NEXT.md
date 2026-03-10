@@ -46,3 +46,4 @@
 ## Обновление текущей итерации
 - Закрыт критический tenant bypass: middleware больше не считает публичным любой путь, заканчивающийся на `openapi.json`; разрешены только точные docs-paths.
 - Добавлен regression-test: `tests/test_middleware_tenant.py::test_tenant_middleware_requires_header_for_non_docs_openapi_suffix_path`.
+- Усилен guardrail файлового контура: конфигурация `PRESIGN_DOWNLOAD_TTL_SECONDS` ограничена диапазоном `60..3600`, добавлен тест-валидация (`tests/test_core_config_utils.py::test_presign_download_ttl_is_bounded`).
