@@ -19,3 +19,4 @@
 - Закрыто в этой итерации: критичный разрыв tenant-контекста для inbound webhook задач (Celery tenant slug mismatch).
 
 - Закрыто в этой итерации (дополнительно): критичный public-prefix bypass в tenant middleware (`/api/v1/publicity`) устранен и покрыт тестами.
+- Закрыто в этой итерации: bypass tenant middleware по non-docs URL с суффиксом `openapi.json`.

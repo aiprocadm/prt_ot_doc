@@ -13,3 +13,4 @@
 - (Обновление) Ранее обнаруженный разрыв tenant-контекста для inbound webhook задач устранен; сохраняются общие ограничения по legacy предупреждениям ORM/SQLAlchemy.
 
 - (Обновление) Критичный public-prefix bypass в tenant middleware закрыт; маршруты вида `/api/v1/publicity` больше не обходят tenant guard.
+- Устранено в этой итерации: bypass tenant guard через суффикс `openapi.json` (неактуально после фикса middleware и регрессионного теста).

@@ -43,3 +43,7 @@
 - Ожидаемое: `/api/v1/auth/me` и `/api/v1/auth/refresh` без `X-Tenant` => `400 TENANT_REQUIRED`; `/api/v1/auth/login` без `X-Tenant` остается доступным публичным endpoint (но без tenant-контекста возвращает `401` на валидные tenant-specific credentials).
 
 - Для быстрой проверки tenant-safe inbound webhook контура: `pytest -q tests/test_inbound_webhook_tenant_context.py`.
+
+## Проверка защиты от обхода tenant middleware
+- Запуск: `pytest -q tests/test_middleware_tenant.py::test_tenant_middleware_requires_header_for_non_docs_openapi_suffix_path`
+- Ожидаемое: путь `/api/v1/templates/openapi.json` без `X-Tenant` возвращает `400 TENANT_REQUIRED`.
