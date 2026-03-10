@@ -42,3 +42,7 @@
 3. Tenant boundary + idempotency mismatch сценарии.
 
 - Дополнительно закрыт критичный дефект async tenancy: входящие webhook/EDO события отправлялись в Celery с `tenant.id` вместо `tenant.slug`; исправлено и покрыто тестами `tests/test_inbound_webhook_tenant_context.py`.
+
+## Обновление текущей итерации
+- Закрыт критический tenant bypass: middleware больше не считает публичным любой путь, заканчивающийся на `openapi.json`; разрешены только точные docs-paths.
+- Добавлен regression-test: `tests/test_middleware_tenant.py::test_tenant_middleware_requires_header_for_non_docs_openapi_suffix_path`.

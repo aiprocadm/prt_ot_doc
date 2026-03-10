@@ -25,3 +25,5 @@
 | Тестирование/CI/покрытие | Критический regression gate | Большой набор тестов + `make codex-audit` | сделано | `scripts/codex_audit.sh`, `.github/workflows/ci.yml` | Добавить обязательный publish отчета покрытия |
 
 - [Обновление] Закрыт критический блокер в секции tenancy+webhooks: inbound webhook tasks теперь запускаются в корректном tenant slug-контексте (`webhooks.py`, `edo_workflow.py` + `tests/test_inbound_webhook_tenant_context.py`).
+
+- Дополнение по tenancy-безопасности: закрыт маршрутный bypass через произвольные URL, оканчивающиеся на `openapi.json`; проверка добавлена в `tests/test_middleware_tenant.py`.

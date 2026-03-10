@@ -25,6 +25,7 @@ class TenantMiddleware(BaseHTTPMiddleware):
         self._metrics_enabled = metrics_enabled
         self._system_paths = {"/health", "/ready", "/healthz", "/readyz"}
         self._public_prefixes = ("/api/v1/public", "/api/v1/webhooks/incoming")
+        self._docs_paths = {"/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"}
         self._public_paths = {
             "/api/v1/auth/login",
         }
@@ -66,8 +67,7 @@ class TenantMiddleware(BaseHTTPMiddleware):
         if (
             path in self._system_paths
             or (self._metrics_enabled and path == "/metrics")
-            or path.startswith("/docs")
-            or path.endswith("/openapi.json")
+            or path in self._docs_paths
             or self._is_public_path(path)
         ):
             return await call_next(request)

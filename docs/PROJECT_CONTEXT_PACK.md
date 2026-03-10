@@ -45,3 +45,4 @@
 - `make codex-audit` расширен запуском нового критического тест-пакета `tests/test_auth_tenant_header_enforcement.py`.
 
 - Исправлен критичный tenancy-bug в асинхронной обработке inbound webhooks/EDO: в Celery теперь передается `tenant.slug`, а не `tenant.id`, что устраняет риск обработки событий вне tenant-схемы.
+- Доп. фикс этой итерации: устранен bypass tenant-guard по пути с суффиксом `openapi.json` (например, `/api/v1/templates/openapi.json`) — теперь публичными считаются только точные docs-paths.
