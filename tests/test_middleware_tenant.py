@@ -139,3 +139,54 @@ async def test_tenant_middleware_passes_normalized_slug(monkeypatch: pytest.Monk
     response = await middleware.dispatch(request, call_next)
     assert response.status_code == 200
     assert captured["slug"] == "Acme"
+
+
+@pytest.mark.asyncio
+async def test_tenant_middleware_requires_header_for_similar_public_prefix() -> None:
+    middleware = TenantMiddleware(_dummy_app)
+
+    async def call_next(request: Request) -> Response:
+        return Response(content=b"ok")
+
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/api/v1/publicity",
+        "headers": [],
+        "query_string": b"",
+        "client": ("test", 0),
+        "server": ("test", 80),
+        "scheme": "http",
+        "root_path": "",
+    }
+    request = Request(scope)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await middleware.dispatch(request, call_next)
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail["code"] == "TENANT_REQUIRED"
+
+
+@pytest.mark.asyncio
+async def test_tenant_middleware_allows_exact_public_prefix() -> None:
+    middleware = TenantMiddleware(_dummy_app)
+
+    async def call_next(request: Request) -> Response:
+        return Response(content=b"ok")
+
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/api/v1/public/forms",
+        "headers": [],
+        "query_string": b"",
+        "client": ("test", 0),
+        "server": ("test", 80),
+        "scheme": "http",
+        "root_path": "",
+    }
+    request = Request(scope)
+
+    response = await middleware.dispatch(request, call_next)
+    assert response.status_code == 200
+    assert response.body == b"ok"

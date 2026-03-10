@@ -11,3 +11,5 @@
 3. Неполная сквозная e2e матрица прав (frontend+api) для всех ролей (admin/client/auditor/specialist).
 
 - (Обновление) Ранее обнаруженный разрыв tenant-контекста для inbound webhook задач устранен; сохраняются общие ограничения по legacy предупреждениям ORM/SQLAlchemy.
+
+- (Обновление) Критичный public-prefix bypass в tenant middleware закрыт; маршруты вида `/api/v1/publicity` больше не обходят tenant guard.

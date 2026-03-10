@@ -29,6 +29,14 @@ class TenantMiddleware(BaseHTTPMiddleware):
             "/api/v1/auth/login",
         }
 
+    def _is_public_path(self, path: str) -> bool:
+        if path in self._public_paths:
+            return True
+        for prefix in self._public_prefixes:
+            if path == prefix or path.startswith(f"{prefix}/"):
+                return True
+        return False
+
     @staticmethod
     def _is_uuid(value: str) -> bool:
         try:
@@ -60,8 +68,7 @@ class TenantMiddleware(BaseHTTPMiddleware):
             or (self._metrics_enabled and path == "/metrics")
             or path.startswith("/docs")
             or path.endswith("/openapi.json")
-            or path in self._public_paths
-            or any(path.startswith(prefix) for prefix in self._public_prefixes)
+            or self._is_public_path(path)
         ):
             return await call_next(request)
 
