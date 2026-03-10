@@ -17,3 +17,5 @@
    - Следующий шаг: централизовать policy checks и сделать их обязательной частью release gate.
 
 - Закрыто в этой итерации: критичный разрыв tenant-контекста для inbound webhook задач (Celery tenant slug mismatch).
+
+- Закрыто в этой итерации (дополнительно): критичный public-prefix bypass в tenant middleware (`/api/v1/publicity`) устранен и покрыт тестами.

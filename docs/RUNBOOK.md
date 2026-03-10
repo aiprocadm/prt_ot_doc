@@ -25,7 +25,7 @@
 - Проверять: корректные статусы, dry-run/apply replace, запрет удаления используемой версии шаблона.
 
 ## Проверка требований арендатора
-- `pytest -q tests/test_tenant_header_required.py tests/test_tenant_security.py tests/test_auth_tenant_header_enforcement.py tests/test_next39_tenancy_enforcement.py`
+- `pytest -q tests/test_tenant_header_required.py tests/test_tenant_security.py tests/test_auth_tenant_header_enforcement.py tests/test_middleware_tenant.py tests/test_next39_tenancy_enforcement.py`
 - Ожидаемое: business route без `X-Tenant` → 400; межарендный доступ запрещён.
 
 ## Portal/Admin
