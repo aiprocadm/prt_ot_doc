@@ -51,3 +51,8 @@
 ## Проверка безопасного TTL presigned download URL
 - Запуск: `PYTHONPATH=backend pytest -q tests/test_core_config_utils.py::test_presign_download_ttl_is_bounded`
 - Ожидаемое: значения `PRESIGN_DOWNLOAD_TTL_SECONDS` ниже 60 и выше 3600 отклоняются валидацией конфигурации.
+
+
+## Быстрая проверка hardening client portal
+- `pytest -q tests/test_next62_analytics_search_export_center.py::test_client_user_cannot_patch_internal_portal_requests`
+- Ожидаемое: `403` для роли `client_user` на `PATCH /api/v1/portal-requests/{id}`.

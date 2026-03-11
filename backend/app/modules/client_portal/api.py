@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel
@@ -8,12 +10,28 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.security import AccessContext, abac
 from app.models.models import Tenant
 from app.modules.client_portal.services import ClientPortalService
 from app.modules.projections.models import ClientPortalReadModel, PortalRequest, PortalRequestMessage
 
 router = APIRouter(prefix="/client-portal", tags=["client-portal-v1"])
 internal_router = APIRouter(prefix="/portal-requests", tags=["portal-requests"])
+
+
+def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | None:
+    return getattr(tenant, "id", None)
+
+
+PortalAccess = Annotated[
+    AccessContext,
+    Depends(abac(_tenant_resource_id, required_roles=["admin", "employee", "client_admin", "client_user"], action="access client portal")),
+]
+
+PortalInternalAccess = Annotated[
+    AccessContext,
+    Depends(abac(_tenant_resource_id, required_roles=["admin", "employee"], action="manage client portal requests")),
+]
 
 
 class RequestCreate(BaseModel):
@@ -40,6 +58,8 @@ async def dashboard(
     client_company_id: str | None = Query(default=None),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    *,
+    access: PortalAccess,
 ):
     items = await ClientPortalService(session, str(tenant.id)).list_items(client_company_id=client_company_id)
     return {"items": items[:20]}
@@ -50,12 +70,20 @@ async def packages(
     client_company_id: str | None = Query(default=None),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    *,
+    access: PortalAccess,
 ):
     return await ClientPortalService(session, str(tenant.id)).list_items(client_company_id=client_company_id, item_type="package")
 
 
 @router.get("/packages/{package_id}")
-async def package_details(package_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+async def package_details(
+    package_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    *,
+    access: PortalAccess,
+):
     row = (
         await session.execute(
             select(ClientPortalReadModel).where(
@@ -69,27 +97,56 @@ async def package_details(package_id: str, session: AsyncSession = Depends(get_s
 
 
 @router.get("/documents")
-async def documents(client_company_id: str | None = Query(default=None), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+async def documents(
+    client_company_id: str | None = Query(default=None),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    *,
+    access: PortalAccess,
+):
     return await ClientPortalService(session, str(tenant.id)).list_items(client_company_id=client_company_id, item_type="document_bundle")
 
 
 @router.get("/history")
-async def history(client_company_id: str | None = Query(default=None), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+async def history(
+    client_company_id: str | None = Query(default=None),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    *,
+    access: PortalAccess,
+):
     return await ClientPortalService(session, str(tenant.id)).list_items(client_company_id=client_company_id)
 
 
 @router.post("/uploads", status_code=status.HTTP_201_CREATED)
-async def uploads(file: UploadFile = File(...), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+async def uploads(
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    *,
+    access: PortalAccess,
+):
     return {"tenant_id": str(tenant.id), "filename": file.filename, "size": len(await file.read())}
 
 
 @router.get("/requests")
-async def list_requests(session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+async def list_requests(
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    *,
+    access: PortalAccess,
+):
     return (await session.execute(select(PortalRequest).where(PortalRequest.tenant_id == str(tenant.id), PortalRequest.deleted_at.is_(None)))).scalars().all()
 
 
 @router.post("/requests", status_code=status.HTTP_201_CREATED)
-async def create_request(payload: RequestCreate, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+async def create_request(
+    payload: RequestCreate,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    *,
+    access: PortalAccess,
+):
     req = PortalRequest(
         tenant_id=str(tenant.id),
         title=payload.title,
@@ -106,7 +163,13 @@ async def create_request(payload: RequestCreate, session: AsyncSession = Depends
 
 
 @router.get("/requests/{request_id}")
-async def get_request(request_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+async def get_request(
+    request_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    *,
+    access: PortalAccess,
+):
     req = (await session.execute(select(PortalRequest).where(PortalRequest.id == request_id, PortalRequest.tenant_id == str(tenant.id)))).scalar_one_or_none()
     if req is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Request not found")
@@ -115,7 +178,14 @@ async def get_request(request_id: str, session: AsyncSession = Depends(get_sessi
 
 
 @router.post("/requests/{request_id}/messages", status_code=status.HTTP_201_CREATED)
-async def create_request_message(request_id: str, payload: RequestMessageCreate, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+async def create_request_message(
+    request_id: str,
+    payload: RequestMessageCreate,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    *,
+    access: PortalAccess,
+):
     req = (await session.execute(select(PortalRequest).where(PortalRequest.id == request_id, PortalRequest.tenant_id == str(tenant.id)))).scalar_one_or_none()
     if req is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Request not found")
@@ -127,12 +197,23 @@ async def create_request_message(request_id: str, payload: RequestMessageCreate,
 
 
 @internal_router.get("")
-async def internal_requests(session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+async def internal_requests(
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    *,
+    access: PortalInternalAccess,
+):
     return (await session.execute(select(PortalRequest).where(PortalRequest.tenant_id == str(tenant.id), PortalRequest.deleted_at.is_(None)))).scalars().all()
 
 
 @internal_router.get("/{request_id}")
-async def internal_request_by_id(request_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+async def internal_request_by_id(
+    request_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    *,
+    access: PortalInternalAccess,
+):
     req = (await session.execute(select(PortalRequest).where(PortalRequest.id == request_id, PortalRequest.tenant_id == str(tenant.id)))).scalar_one_or_none()
     if req is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Request not found")
@@ -140,7 +221,14 @@ async def internal_request_by_id(request_id: str, session: AsyncSession = Depend
 
 
 @internal_router.patch("/{request_id}")
-async def internal_request_patch(request_id: str, payload: RequestPatch, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+async def internal_request_patch(
+    request_id: str,
+    payload: RequestPatch,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    *,
+    access: PortalInternalAccess,
+):
     req = (await session.execute(select(PortalRequest).where(PortalRequest.id == request_id, PortalRequest.tenant_id == str(tenant.id)))).scalar_one_or_none()
     if req is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Request not found")
@@ -154,5 +242,18 @@ async def internal_request_patch(request_id: str, payload: RequestPatch, session
 
 
 @internal_router.post("/{request_id}/messages", status_code=status.HTTP_201_CREATED)
-async def internal_request_message(request_id: str, payload: RequestMessageCreate, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
-    return await create_request_message(request_id=request_id, payload=payload, session=session, tenant=tenant)
+async def internal_request_message(
+    request_id: str,
+    payload: RequestMessageCreate,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    *,
+    access: PortalInternalAccess,
+):
+    return await create_request_message(
+        request_id=request_id,
+        payload=payload,
+        session=session,
+        tenant=tenant,
+        access=access,
+    )

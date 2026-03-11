@@ -47,3 +47,5 @@
 - Исправлен критичный tenancy-bug в асинхронной обработке inbound webhooks/EDO: в Celery теперь передается `tenant.slug`, а не `tenant.id`, что устраняет риск обработки событий вне tenant-схемы.
 - Доп. фикс этой итерации: устранен bypass tenant-guard по пути с суффиксом `openapi.json` (например, `/api/v1/templates/openapi.json`) — теперь публичными считаются только точные docs-paths.
 - Усилен файловый security guardrail: `PRESIGN_DOWNLOAD_TTL_SECONDS` теперь валидируется в безопасном диапазоне `60..3600` секунд (исключает бессрочные/чрезмерно долгие presigned URL по ошибочной конфигурации).
+
+- Доп.фикс текущей итерации: `backend/app/modules/client_portal/api.py` переведен на обязательные RBAC/ABAC guards для всех `client-portal` и `portal-requests` маршрутов; внутренние операции (`/portal-requests/**`) ограничены ролями `admin/employee`.

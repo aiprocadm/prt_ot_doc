@@ -27,3 +27,10 @@
 - [Обновление] Закрыт критический блокер в секции tenancy+webhooks: inbound webhook tasks теперь запускаются в корректном tenant slug-контексте (`webhooks.py`, `edo_workflow.py` + `tests/test_inbound_webhook_tenant_context.py`).
 
 - Дополнение по tenancy-безопасности: закрыт маршрутный bypass через произвольные URL, оканчивающиеся на `openapi.json`; проверка добавлена в `tests/test_middleware_tenant.py`.
+
+
+## Update 2026-03-11 (critical patch)
+- Client portal/internal requests: закрыт критический пробел контроля доступа.
+- Было: часть `client-portal-v1` endpoint-ов не имела явного `abac(...)` guard.
+- Стало: добавлены guard-зависимости; `portal-requests` patch/message/list/read доступны только `admin/employee`, клиентские роли получают `403`.
+- Проверка: `tests/test_next62_analytics_search_export_center.py::test_client_user_cannot_patch_internal_portal_requests`.
