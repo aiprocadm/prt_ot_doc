@@ -141,7 +141,6 @@ def _request_hash(*, request: Request, tenant: Tenant, user_id: str | None, body
     payload = {
         "route": request.url.path,
         "tenant": str(tenant.id),
-        "user": user_id,
         "body": body,
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
@@ -168,17 +167,18 @@ async def _idempotent_or_replay(
     key = normalize_idempotency_key(key_header)
     service = IdempotencyService(session=session, tenant_id=str(tenant.id), endpoint=request.url.path)
     digest = _request_hash(request=request, tenant=tenant, user_id=user_id, body=model.model_dump(mode="json"))
-    record, _ = await service.acquire(
+    record, created = await service.acquire(
         key=key,
         request_hash=digest,
         method=request.method.upper(),
         path=request.url.path,
     )
-    if record.status is IdempotencyStatus.SUCCEEDED:
+    if not created and record.status is IdempotencyStatus.SUCCEEDED:
         payload = record.result_json or {}
         response.status_code = int(payload.get("status_code", 200))
         return service, payload.get("body", {})
-    return service, record
+    request.state.idempotency_record = record
+    return service, None
 
 
 @router.post("/approvals/routes")
@@ -288,7 +288,9 @@ async def start_approval_request(
     await session.flush()
     body = {"id": approval_request.id, "status": approval_request.status.value}
     if idem_service is not None:
-        await idem_service.store_success(replay, status_code=200, body=body)
+        record = getattr(request.state, "idempotency_record", None)
+        if record is not None:
+            await idem_service.store_success(record, status_code=200, body=body)
     return body
 
 
@@ -545,7 +547,9 @@ async def send_to_edo(
     edo_status_simulation_job.delay(message_id=message.id, tenant_id=str(tenant.id), status="delivered")
     edo_status_simulation_job.delay(message_id=message.id, tenant_id=str(tenant.id), status="accepted")
     if idem_service is not None:
-        await idem_service.store_success(replay, status_code=200, body=body)
+        record = getattr(request.state, "idempotency_record", None)
+        if record is not None:
+            await idem_service.store_success(record, status_code=200, body=body)
     return body
 
 

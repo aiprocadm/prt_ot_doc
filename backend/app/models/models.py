@@ -1787,7 +1787,6 @@ class IdempotencyKey(TenantBaseModel):
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "endpoint", "key", name="uq_idempotency_keys"),
-        UniqueConstraint("tenant_id", "key", name="uq_idempotency_key_per_tenant"),
         Index("ix_idempotency_keys_lookup", "tenant_id", "endpoint", "key"),
     )
 

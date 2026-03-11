@@ -138,3 +138,17 @@ pilot-readiness:
 
 codex-audit:
 	@./scripts/codex_audit.sh
+
+
+# CI recovery baseline targets
+test-backend:
+	$(PYTEST)
+
+test-smoke:
+	./scripts/smoke.sh
+
+ci-local:
+	$(MAKE) lint
+	$(MAKE) test-backend
+	$(MAKE) test-frontend
+	$(MAKE) test-smoke
