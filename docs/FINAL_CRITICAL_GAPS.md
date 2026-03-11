@@ -22,3 +22,6 @@
 
 - Закрыто в этой итерации (дополнительно): критичный public-prefix bypass в tenant middleware (`/api/v1/publicity`) устранен и покрыт тестами.
 - Закрыто в этой итерации: bypass tenant middleware по non-docs URL с суффиксом `openapi.json`.
+
+
+- Обновление: backend-guard для `client-portal-v1`/`portal-requests` внедрен; в критических разрывах остается только e2e-подтверждение этих ограничений на уровне UI-роутинга и скрытия action-кнопок.

@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.models import RoleEnum
 from app.modules.projections.models import ExportJob, PackageReadModel, SearchIndexEntry
 
 
@@ -64,7 +65,7 @@ async def test_export_center_idempotent_creation(async_client, sessionmaker, dat
 
 
 @pytest.mark.anyio
-async def test_client_portal_internal_requests_patch(async_client, sessionmaker, data_factory):
+async def test_client_portal_internal_requests_patch(async_client, sessionmaker, data_factory, make_auth_headers):
     async with sessionmaker() as session:  # type: AsyncSession
         await data_factory.ensure_tenant(session=session)
         session.add(
@@ -78,9 +79,40 @@ async def test_client_portal_internal_requests_patch(async_client, sessionmaker,
         )
         await session.commit()
 
-    created = await async_client.post("/api/v1/client-portal/requests", json={"title": "Need update", "body": "Please refresh package"})
+    employee_headers = await make_auth_headers(RoleEnum.EMPLOYEE)
+
+    created = await async_client.post(
+        "/api/v1/client-portal/requests",
+        json={"title": "Need update", "body": "Please refresh package"},
+        headers=employee_headers,
+    )
     assert created.status_code == 201
     req_id = created.json()["id"]
-    patched = await async_client.patch(f"/api/v1/portal-requests/{req_id}", json={"status": "in_progress"})
+    patched = await async_client.patch(
+        f"/api/v1/portal-requests/{req_id}",
+        json={"status": "in_progress"},
+        headers=employee_headers,
+    )
     assert patched.status_code == 200
     assert patched.json()["status"] == "in_progress"
+
+
+@pytest.mark.anyio
+async def test_client_user_cannot_patch_internal_portal_requests(async_client, make_auth_headers):
+    employee_headers = await make_auth_headers(RoleEnum.EMPLOYEE)
+    create_response = await async_client.post(
+        "/api/v1/client-portal/requests",
+        json={"title": "Need update", "body": "Please refresh package"},
+        headers=employee_headers,
+    )
+    assert create_response.status_code == 201
+    req_id = create_response.json()["id"]
+
+    client_headers = await make_auth_headers(RoleEnum.CLIENT_USER)
+    patch_response = await async_client.patch(
+        f"/api/v1/portal-requests/{req_id}",
+        json={"status": "in_progress"},
+        headers=client_headers,
+    )
+
+    assert patch_response.status_code == 403

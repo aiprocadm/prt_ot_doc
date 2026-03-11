@@ -33,6 +33,7 @@ run_check "backend module smoke checks" python -m pytest \
   backend/tests/test_tenant_core_mvp.py \
   backend/tests/test_next42_rbac_abac_audit.py \
   backend/tests/test_next39_pipeline_orchestrator.py \
-  backend/tests/test_files_module_basics.py -q
+  backend/tests/test_files_module_basics.py \
+  tests/test_next62_analytics_search_export_center.py -q
 
 echo "[codex-audit] done"
