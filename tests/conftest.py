@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 import types
 from collections.abc import AsyncIterator, Awaitable, Callable
 from uuid import UUID
@@ -11,7 +12,8 @@ os.environ.setdefault("APP_NAME", "TestService")
 os.environ.setdefault("APP_TRUSTED_HOSTS", "localhost,127.0.0.1,testserver")
 os.environ.setdefault("DEFAULT_LOCALE", "en-US")
 os.environ.setdefault("LIBREOFFICE_BIN", sys.executable)
-_SQLITE_TEST_DB = "sqlite+aiosqlite:////tmp/prt_ot_doc_tests.db"
+_DEFAULT_SQLITE_TEST_DB_PATH = os.path.join(tempfile.gettempdir(), "prt_ot_doc_tests.db")
+_SQLITE_TEST_DB = f"sqlite+aiosqlite:///{_DEFAULT_SQLITE_TEST_DB_PATH}"
 os.environ.setdefault("DATABASE_URL", _SQLITE_TEST_DB)
 os.environ.setdefault("REDIS_URL", "memory://")
 os.environ.setdefault("REDIS_RESULT_URL", "cache+memory://")
@@ -56,7 +58,7 @@ def _prepare_sqlite_metadata() -> None:
     for table in SharedBase.metadata.tables.values():
         table.schema = None
     if "tenant" not in Base.metadata.tables:
-        Tenant.__table__.tometadata(Base.metadata, schema=None)
+        Tenant.__table__.to_metadata(Base.metadata, schema=None)
 
 
 @pytest.fixture(autouse=True)
@@ -79,10 +81,12 @@ async def app_fixture():
     os.environ.setdefault("POSTGRES_DB", "test")
 
     _prepare_sqlite_metadata()
-    if os.path.exists("/tmp/prt_ot_doc_tests.db"):
-        os.remove("/tmp/prt_ot_doc_tests.db")
+    db_fd, db_file = tempfile.mkstemp(prefix="prt_ot_doc_tests_", suffix=".db")
+    os.close(db_fd)
+    sqlite_url = f"sqlite+aiosqlite:///{db_file}"
+    configure_engine(database_url=sqlite_url, echo=False)
     engine = create_async_engine(
-        _SQLITE_TEST_DB,
+        sqlite_url,
         future=True,
     )
     async with engine.begin() as conn:
@@ -177,6 +181,8 @@ async def app_fixture():
     yield app
 
     await engine.dispose()
+    if os.path.exists(db_file):
+        os.remove(db_file)
 
 
 @pytest_asyncio.fixture()

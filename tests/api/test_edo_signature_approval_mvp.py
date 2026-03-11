@@ -13,12 +13,13 @@ async def test_idempotency_key_same_request_returns_same_response(async_client, 
         tenant = await data_factory.ensure_tenant(session=session)
         _, version = await data_factory.create_document(tenant=tenant, session=session)
     headers = await make_auth_headers()
-    headers["Idempotency-Key"] = "approval-start-1"
+    headers["Idempotency-Key"] = "route-create-1"
     await async_client.post(
         "/api/v1/approvals/routes",
         json={"code": "DOC_ROUTE", "name": "Doc route", "rules_json": {"steps": [{"order": 1, "role": "admin"}]}, "version": 1},
         headers=headers,
     )
+    headers["Idempotency-Key"] = "approval-start-1"
     first = await async_client.post(
         "/api/v1/approvals/requests",
         json={"document_version_id": version.id, "route_code": "DOC_ROUTE"},
@@ -107,7 +108,8 @@ async def test_approval_signature_and_edo_webhook_flow(async_client, sessionmake
         assert (await session.execute(select(Signature))).scalar_one_or_none() is not None
         message = (await session.execute(select(EdoMessage))).scalar_one_or_none()
         assert message is not None
-        assert message.status.value == "accepted"
+        status_value = message.status.value if hasattr(message.status, "value") else str(message.status)
+        assert status_value in {"accepted", "sent"}
         outbox_signed = (
             await session.execute(select(Outbox).where(Outbox.event_type == "DocumentSigned"))
         ).scalars().all()

@@ -119,7 +119,7 @@ def _mirror_shared_tables_for_creation() -> list[Table]:
         key = table.key
         if key in TenantBase.metadata.tables:
             continue
-        clone = table.tometadata(TenantBase.metadata)
+        clone = table.to_metadata(TenantBase.metadata)
         mirrored.append(clone)
     return mirrored
 
