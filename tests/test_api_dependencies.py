@@ -37,7 +37,7 @@ def test_get_file_storage_service_returns_singleton(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.anyio
-async def test_get_session_uses_async_session_local(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_get_session_uses_tenant_session_factory(monkeypatch: pytest.MonkeyPatch) -> None:
     class DummyContextManager:
         def __init__(self) -> None:
             self.session = object()
@@ -51,24 +51,24 @@ async def test_get_session_uses_async_session_local(monkeypatch: pytest.MonkeyPa
 
     class Recorder:
         def __init__(self) -> None:
-            self.calls: list[tuple[str, bool, bool]] = []
+            self.calls: list[tuple[str, str | None]] = []
             self.contexts: list[DummyContextManager] = []
 
-        def __call__(self, *, tenant: str, include_public: bool = True, create_schema: bool = True):
+        def __call__(self, *, tenant: str, schema_name: str | None = None):
             ctx = DummyContextManager()
-            self.calls.append((tenant, include_public, create_schema))
+            self.calls.append((tenant, schema_name))
             self.contexts.append(ctx)
             return ctx
 
     recorder = Recorder()
-    monkeypatch.setattr(dependencies, "AsyncSessionLocal", recorder)
+    monkeypatch.setattr(dependencies, "get_tenant_session", recorder)
 
-    tenant = SimpleNamespace(slug="acme")
+    tenant = SimpleNamespace(slug="acme", schema_name="tenant_acme", id="tenant-id")
     generator = dependencies.get_session(tenant)
 
     session = await generator.__anext__()
     assert session is recorder.contexts[0].session
-    assert recorder.calls == [("acme", True, True)]
+    assert recorder.calls == [("acme", "tenant_acme")]
 
     await generator.aclose()
     assert recorder.contexts[0].exited is True

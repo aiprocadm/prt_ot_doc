@@ -1,18 +1,22 @@
 # Test Baseline
 
 ## must-pass (блокирующий CI)
-- `lint-and-static` (scoped query guard).
-- `backend-tests` (`pytest`, с JUnit-отчетом).
-- `frontend-tests` (`npm run ci`).
-- `smoke-compose` (`make smoke`).
+- `python scripts/ci/check_scoped_queries.py`
+- `pytest --junitxml=artifacts/backend-junit.xml`
+- `npm --prefix frontend run ci`
+- `make smoke` (в CI только после `docker compose up -d --build`)
 
-## quarantine (временно неблокирующие)
-- Полный e2e beyond smoke (если длительность/флак влияет на PR latency).
-- Любые time-sensitive сценарии, пока не зафиксированы deterministic clock fixtures.
+## quarantine (временный неблокирующий)
+- Полный расширенный e2e beyond smoke (оставлен вне блокировки до стабилизации стенда).
+- Frontend-тесты с шумными предупреждениями `act(...)` не исключены, но вынесены как технический долг (не блокируют, так как тесты зелёные).
 
-> Карантин применяется только по явной причине нестабильности и должен сопровождаться issue/задачей на возврат в must-pass.
+## Критический контур, покрытый/проверенный на этом этапе
+- Idempotency (повтор ключа / конфликт hash) в pipeline flow.
+- Обязательность tenant context через API-заголовки.
+- Header pipeline: watermark + PAGE/NUMPAGES.
+- Подключение и базовая валидация PDF-конвертации endpoint (требование `Idempotency-Key`).
 
-## Недостаточное критическое покрытие (по ТЗ)
-- Явные smoke-тесты на dry-run/apply/rollback replace в обязательном контуре.
-- Дополнительные контрактные тесты signed URL/files/exports на cross-tenant leakage.
-- Формализованный e2e сценарий "RBAC deny" как обязательный gate.
+## Недостаточное критическое покрытие (следующий этап)
+- Расширенный smoke e2e на client-portal data isolation и RBAC deny.
+- Полный dry-run/apply/rollback replace как обязательная блокирующая проверка.
+- Webhook dedup/consistency сценарии в обязательном smoke-наборе.

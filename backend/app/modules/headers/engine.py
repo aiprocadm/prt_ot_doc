@@ -35,7 +35,9 @@ def _container_xml(content: str) -> bytes:
     tc_pr = etree.SubElement(tc, _w("tcPr"))
     etree.SubElement(tc_pr, _w("tcW"), attrib={_w("w"): "9000", _w("type"): "dxa"})
 
-    for align, line in zip(["left", "center", "right"], content.split("\n")[:3] + [""] * 3):
+    lines = content.split("\n") if content else [""]
+    for idx, line in enumerate(lines):
+        align = ["left", "center", "right"][idx] if idx < 3 else "left"
         p = etree.SubElement(tc, _w("p"))
         p_pr = etree.SubElement(p, _w("pPr"))
         etree.SubElement(p_pr, _w("jc"), attrib={_w("val"): align})

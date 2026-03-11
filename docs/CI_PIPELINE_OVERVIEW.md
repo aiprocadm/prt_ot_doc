@@ -1,15 +1,29 @@
 # CI Pipeline Overview
 
-## Stages
-1. `lint-and-static` — базовые статические guard-проверки.
-2. `backend-tests` — backend pytest + `backend-junit.xml` artifact.
-3. `frontend-tests` — lint/typecheck/test/build фронтенда.
-4. `smoke-compose` — docker-compose smoke, выгрузка логов при падении.
+## Workflow
+- `.github/workflows/ci.yml`
 
-## Артефакты
-- Backend JUnit XML: `backend-test-report`.
-- Smoke logs on failure: `smoke-logs`.
+## Jobs
+1. `lint-and-static`
+   - Python setup + deps
+   - `python scripts/ci/check_scoped_queries.py`
+2. `backend-tests`
+   - Python setup + deps
+   - `pytest --junitxml=artifacts/backend-junit.xml`
+   - artifact: `backend-test-report`
+3. `frontend-tests`
+   - Node 20 + npm cache
+   - `npm --prefix frontend ci`
+   - `npm --prefix frontend run ci` (lint + typecheck + test + build)
+4. `smoke-compose`
+   - `docker compose up -d --build`
+   - `make smoke`
+   - logs artifact (`smoke-logs`) on failure
 
-## Цель
-- Быстрый fail-fast по инфраструктурным/контрактным регрессиям.
-- Воспроизводимость локально через `make ci-local`.
+## Что стабилизировано
+- Устранены backend-падения из-за устаревших тестовых контрактов (fixtures/DI/router wiring).
+- Добавлен рабочий путь для PDF API в основном tenant-router.
+
+## Остаточные риски
+- `smoke-compose` чувствителен к инфраструктуре Docker/сервисам.
+- Migration gate не вынесен отдельно в CI с гарантированным Postgres сервисом.

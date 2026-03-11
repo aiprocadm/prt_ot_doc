@@ -1,13 +1,22 @@
 # Schema / Migration Test Audit
 
-## Что проверено
-- Тестовая схема создается с нуля в SQLite через metadata create_all.
-- Критический idempotency-контур приведен к endpoint-scoped uniqueness.
-- Проверен сценарий X-Tenant обязательности и idempotency replay через API-тесты.
+## Выполненные проверки
+- `alembic heads` выполнен: обнаружено несколько head-веток (мульти-ветвление миграций).
+- Backend тесты используют test schema через SQLAlchemy metadata/fixture контур.
+- Проверен критичный DI путь tenant-session (через unit test `test_get_session_uses_tenant_session_factory`).
 
-## Риски/долги
-- Нужно синхронизировать alembic-миграцию для PostgreSQL, чтобы убрать legacy unique `(tenant_id, key)` если она присутствует в DB.
-- Рекомендуется добавить отдельный CI шаг `alembic upgrade heads` на чистой тестовой БД Postgres.
+## Результаты
+- **Heads присутствуют и читаются корректно**, но требуют согласованного migration plan при дальнейшем rebasing.
+- `alembic upgrade heads` в текущем окружении **не воспроизведен** из-за недоступного Postgres host (`socket.gaierror`).
 
-## Следующий шаг
-- Зафиксировать миграцию на idempotency constraints и проверить `alembic heads`/upgrade/downgrade в CI.
+## Обязательные поля/инварианты (проверенные косвенно тестами)
+- Tenant-aware session routing.
+- Idempotency endpoint для PDF с обязательным `Idempotency-Key`.
+- Pipeline idempotency на уровне API.
+
+## Рекомендации
+1. Добавить отдельный CI job `schema-migrations` с сервисом Postgres.
+2. Включить проверки:
+   - `alembic upgrade heads`
+   - (опционально) `alembic downgrade -1 && alembic upgrade heads`
+3. Добавить smoke-проверку обязательных tenant-индексов и soft-delete полей через SQL introspection test.
