@@ -1,31 +1,41 @@
 # CI / Test Recovery Plan
 
 ## Текущие workflow
-- `.github/workflows/ci.yml`: `lint-and-static`, `backend-tests`, `frontend-tests`, `smoke-compose`.
+- `.github/workflows/ci.yml`
+  - `lint-and-static`
+  - `backend-tests`
+  - `frontend-tests`
+  - `smoke-compose`
 
-## Наблюдавшиеся неудачные задания
-- `backend-tests`: падения `pytest` из-за `sqlite3.OperationalError: attempt to write a readonly database`.
-- `backend-tests`: падения критических тестов по idempotency/X-Tenant из-за рассинхрона ожиданий и поведения.
-
-## Группы неудачных заданий
-- Окружение/настройка: общий SQLite-файл в `/tmp` переиспользовался между тестами.
-- Импорт/путь: не обнаружено блокирующих ошибок.
-- Миграции/схема: конфликт idempotency-ограничений на уровне модели и фактического контракта API.
-- Unit/Integration backend: несогласованные ожидания по форме ошибок и enum/string статусам.
-- Frontend/e2e: baseline оставлен в существующем контуре, критический фокус текущего этапа — backend/CI-стабильность.
+## Зафиксированные группы падений
+1. **Проблемы окружения/настройки**
+   - `make test-backend` падал локально до `make install` (не создана `.venv`).
+   - `make test-smoke` падает без поднятого API/Docker Compose (`localhost:8000` недоступен).
+2. **Проблемы миграций/БД**
+   - `alembic upgrade heads` не выполняется в этом окружении без доступного Postgres host из `DATABASE_URL`.
+3. **Проблемы тестов/архитектурного рассинхрона**
+   - Интеграционные pipeline-тесты использовали несуществующие фикстуры (`client`, `tenant_headers`).
+   - Тест зависимостей ожидал устаревший контракт (`AsyncSessionLocal`), тогда как используется `get_tenant_session`.
+   - Тест PDF идемпотентности ожидал маршрут, который не был подключен в API роутере.
+   - Тест header-engine ожидал watermark в `header1.xml`, но генератор обрезал строки после 3.
 
 ## Первопричины
-1. Нестабильная test DB (readonly/lock race).
-2. Слишком широкий idempotency key scope (tenant+key) конфликтовал между разными endpoint.
-3. Несколько тестов ожидали устаревший формат ответов (`detail.code`) и enum-представление.
+- Дрейф тестов относительно фактической архитектуры API и DI.
+- Неполная регистрация критичного PDF-роута в основном v1-роутере.
+- Ограничение в `headers`-движке, которое ломало инвариант watermark.
 
 ## Блокирующие факторы
-- Невозможность получить стабильный прогон backend-тестов.
-- Непредсказуемое поведение CI из-за инфраструктурного шума.
+- Невозможность пройти часть backend-контуров из-за 5 “красных” тестов (`lastfailed`).
+- Непредсказуемость smoke/migration шагов в среде без поднятых зависимостей.
 
-## План восстановления (приоритет)
-1. Изоляция test DB на каждый тестовый app fixture.
-2. Нормализация idempotency scope до `(tenant, endpoint, key)`.
-3. Актуализация тестовых ожиданий под стабильный API-контракт.
-4. Стандартизация CI-джобов + артефактов отчетов.
-5. Документация baseline/quarantine/gaps.
+## Выполненные исправления
+- Исправлены интеграционные тесты pipeline на актуальные фикстуры (`async_client`, `make_auth_headers`).
+- Обновлен DI-тест под фактический вызов `get_tenant_session(tenant, schema_name)`.
+- Подключен PDF API router в `api/v1/router.py` под префикс `/files`.
+- Исправлен `headers` engine: теперь обрабатывает все строки контента (включая watermark-строки сверх первых трех).
+
+## План восстановления (приоритеты)
+1. Must-pass: lint + backend focused + frontend CI.
+2. Stabilize smoke (гарантированный `docker compose up` внутри job).
+3. Отдельный DB migration gate на CI с явным ephemeral Postgres.
+4. Уменьшение предупреждений frontend (`act(...)`, future flags React Router).
