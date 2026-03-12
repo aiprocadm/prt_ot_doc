@@ -134,3 +134,15 @@ Any frontend feature change is complete when:
   - Typecheck
   - ESLint
   - Vitest subset (`ability`, `AppRouterSmoke`)
+
+## Incremental test update (archive/search)
+
+Added component-level regression tests:
+
+1. `ArchiveSearch.test.tsx`
+- verifies filter application updates search query payload.
+- verifies saved view persistence and one-click restoration of filter state.
+
+Covered requirements in this increment:
+- archive/search filter handling.
+- stable UI behavior for saved table/search representations.
