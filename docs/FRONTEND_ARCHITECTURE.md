@@ -1,152 +1,72 @@
 # FRONTEND_ARCHITECTURE
 
-## Goals
+## 1. Модульная структура
 
-- Keep tenant-safe and permission-safe behavior as default.
-- Isolate transport, domain API adapters, and UI concerns.
-- Standardize route guards and operational page states (loading/error/empty).
-- Enable incremental expansion to v1 without broad rewrites.
+Текущая структура во `frontend/src` организована по устойчивой схеме:
 
-## High-level structure
+- `api/` — типизированный клиент API, интерсепторы, общая обработка ошибок, tenant/auth headers;
+- `router/` — маршрутизация и route-guards;
+- `permissions/` — RBAC/ABAC модель (`permissions.ts`, `ability.ts`, `useAbility.ts`);
+- `stores/` — Zustand-сторы по доменам (documents, templates, packs, tasks, risk, files, auth, tenant и т.д.);
+- `pages/` — экранные модули по бизнес-разделам;
+- `features/` — доменные составные компоненты (таблицы, формы, карточки, wizard-потоки);
+- `components/` — shared/ui/layout primitives (`ui/*`, `common/*`, `permissions/*`, `layout/*`);
+- `types/` — DTO/form-контракты;
+- `hooks/`, `utils/`, `config/` — инфраструктурные слои.
 
-Frontend is organized in layered modules:
+## 2. Управление состоянием
 
-1. App shell and routing
-- Router composition and protected route enforcement.
-- Layout split: auth area and main application area.
+- **Глобальное состояние:** Zustand stores по доменам.
+- **Локальное UI-состояние:** `useState`/`useEffect` в страницах и фичах.
+- **Сброс состояния между тестами:** `stores/reset.ts`.
+- **Паттерн загрузки данных:** страницы вызывают доменные store-actions, UI-слой рендерит loading/error/empty.
 
-2. Security and access control
-- Authentication store and session bootstrap.
-- Tenant gate/check and tenant-aware API context.
-- Permission + role model, ability builder, and route/action-level checks.
+## 3. API-уровень
 
-3. API layer
-- Central HTTP client with auth/tenant handling.
-- Domain-specific adapters in src/api for each business module.
+- Центральный клиент: `api/client.ts`.
+- Ключевые свойства:
+  - автоматическое добавление `Authorization`;
+  - tenant-context заголовки через `tenantStorage`;
+  - единая обработка ошибок (`errorHandling.ts`);
+  - поддержка бизнес-модулей (documents, incidents, inspections, approvals, edo, files, pipelines, search, billing).
 
-4. Feature/page layer
-- Page-level containers orchestrating query state.
-- Shared visual states: LoadingScreen, ErrorState, EmptyState.
-- Consistent table/card presentation components.
+## 4. Auth / Session / Tenant
 
-5. Shared primitives and utilities
-- UI component kit and helper utilities (date formatting, className helpers, etc.).
+- `stores/auth.ts` хранит профиль пользователя, роли, разрешения и статус сессии.
+- `api/tokenStorage.ts` — токены доступа/обновления.
+- `stores/tenant.ts` и `api/tenantStorage.ts` — контекст арендатора.
+- Отсутствие tenant-контекста трактуется как блокер для бизнес-вызовов (через клиент/guards).
 
-## Core architectural decisions
+## 5. Уровень разрешений (RBAC/ABAC)
 
-1. Central API client
-- All backend requests route through a shared apiClient.
-- Domain modules expose typed methods and hide endpoint details from pages.
+- Централизация в `permissions/*`.
+- `ROLE_PERMISSIONS` покрывает роли платформы (owner/admin/methodist/lawyer/project_manager/executor/office_manager/trainer/student/ot_pb_head/ot_specialist/pb_engineer/ecologist/hr/accountant/line_manager/client/auditor_ro/contractor_inspector/worker).
+- `ability.ts` дополнительно применяет ABAC-ограничения:
+  - scope checks (`tenant_id`, `company_id`, `site_id`, `project_id`, `contractor_id`);
+  - action checks (пример: подпись/экспорт документа только для релевантного статуса).
+- UI-gates:
+  - `ProtectedRoute` на уровне маршрутов;
+  - `Can`, `PermissionGate`, `ActionButton` на уровне действий/кнопок.
 
-2. Permission-driven composition
-- Route access is controlled by ProtectedRoute + permission constants.
-- Navigation visibility is generated from the same permission source.
+## 6. Зоны маршрутизации
 
-3. Role and permission normalization
-- Ability layer supports aliases to handle naming variance from identity providers and backend role conventions.
-- Effective permissions are computed from either explicit user permissions or role expansion.
+- **Auth-зона:** `/login` + `AuthLayout`.
+- **Core app:** `MainLayout` + защищённые бизнес-маршруты.
+- **Client portal:** отдельный сегмент `/client-portal/*` с отдельными экранами.
+- **Admin:** `/admin/*` маршруты под admin permission.
+- **No-access:** `/access-denied`.
 
-4. Tenant-first behavior
-- Security checks include scope checks (tenant/company/site/project/contractor when provided).
-- Pages rely on guarded route entry and store initialization before interaction.
+## 7. Общие UI-паттерны
 
-## Route and navigation architecture
+В проекте переиспользуются:
 
-- Router includes grouped route blocks by permission domain (documents, operations, reports, admin, integrations).
-- Side navigation is sectioned by business capability and filtered by runtime ability.can(permission).
-- Feature flags are used for selective visibility (example: EDO section visibility toggle).
+- `DataTable`, `RegistryTable`, `SavedViewsBar`, `FilterField`;
+- `LoadingScreen`, `EmptyState`, `ErrorState`, `AccessDeniedPage`;
+- единые `Card`, `Tabs`, `Dialog`, `Badge`, `Button`, `Input`, `Textarea`;
+- layout primitives (`TopNav`, `SideNav`, `RightDrawer`).
 
-## Data flow pattern on operational pages
+## 8. Текущие ограничения архитектуры
 
-Typical page flow:
-
-1. Enter page through permission-guarded route.
-2. Trigger load() on mount (often parallel requests via Promise.all).
-3. Render:
-- loading state while in flight
-- error state with retry callback
-- empty state when dataset is empty
-- table/card views for loaded data
-4. Provide explicit refresh action to re-fetch server state.
-
-## Domain API modules introduced in this cycle
-
-- ppe.ts: item registry, issues, expiring issues.
-- training.ts: courses, expiring certificates.
-- incidents.ts: incidents list, incident logs; **create() added in Cycle 2**.
-- inspections.ts: inspections list, inspection results; **create() added in Cycle 2**.
-- finance.ts: orders and invoices.
-- integrations.ts: webhook endpoints, deliveries, outbox events, endpoint test action.
-
-## Create/mutation flow pattern (Cycle 2)
-
-Transactional create dialogs follow a consistent pattern across IncidentsPage and InspectionsPage:
-
-1. A `Dialog` is triggered by a primary action `Button`.
-2. Local `form` state is managed with `useState`.
-3. On submit: `setCreating(true)`, call `api.create(form)`, show `toast.success()` or `toast.error()`.
-4. On success: close dialog with `setCreateOpen(false)`, reload list with `void load()`.
-5. Required fields are validated before submit; disabled state on submit button while `creating`.
-
-Example stub to replicate for new pages:
-```tsx
-const [createOpen, setCreateOpen] = useState(false);
-const [creating, setCreating] = useState(false);
-// ...
-const handleCreate = async () => {
-  setCreating(true);
-  try {
-    await domainApi.create(form);
-    toast.success("Запись создана");
-    setCreateOpen(false);
-    void load();
-  } catch {
-    toast.error("Ошибка при создании");
-  } finally {
-    setCreating(false);
-  }
-};
-```
-
-## Testing strategy in architecture
-
-- Component/page tests for API-backed rendering and user actions.
-- Mocked API modules to isolate UI behavior and error handling.
-- Role/permission path verification through targeted routing and ability tests (existing and planned).
-
-## Known architectural trade-offs
-
-1. Page-level fetch orchestration is duplicated across some modules.
-- Trade-off accepted for velocity during v1 section completion.
-- Planned: reusable query helpers/composables for list pages.
-
-2. Table behaviors are mostly page-local.
-- Planned: shared DataTable behavior for sorting/pagination/filter state persistence.
-
-3. Some mutation paths are still backlog items.
-- Read-heavy operational visibility is implemented first.
-- Planned: complete transactional create/edit flows with stronger validation.
-
-## Update: RBAC + route normalization for missing v1 sections
-
-- Permission model is now the single source of truth for both navigation and route guards, including v1 business domains:
-  - `generation.view`
-  - `warehouse.view`
-  - `crm_finance.view`
-  - `integrations.view`
-  - `client_portal.view`
-- Route zones extended with dedicated guarded routes for Warehouse, CRM/Finance, and Integrations modules.
-- Role normalization enhanced with alias map in ability layer to support heterogeneous backend role naming.
-
-## Update: Archive/Search UI primitives and state handling
-
-- Introduced `SavedViewsBar` as a shared UI primitive for persisted filter presets.
-  - Location: `frontend/src/components/common/SavedViewsBar.tsx`.
-  - Storage strategy: localStorage keyed by module namespace.
-  - Contract: current URL params in, selected saved params out.
-- Archive module now follows standardized page state envelope:
-  - `loading` -> `LoadingScreen`
-  - `error` -> `ErrorState` with retry callback
-  - `empty` -> `EmptyState`
-  - `data` -> table render
-- URL search params remain the single source of truth for archive filters, enabling deep-linking and deterministic route rehydration.
+- часть сложных потоков пока реализована как list-first без полноценных карточек расследования/жизненного цикла;
+- server-side сортировка/пагинация/сохранённые представления не полностью унифицированы между доменами;
+- для полного production-hardening нужен расширенный e2e-контур поверх текущего component/unit набора.

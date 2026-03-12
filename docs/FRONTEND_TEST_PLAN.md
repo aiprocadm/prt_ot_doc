@@ -1,148 +1,76 @@
 # FRONTEND_TEST_PLAN
 
-## Objectives
+## 1. Цели тестирования
 
-- Keep routing, RBAC, tenant safety, and API-driven page behavior stable.
-- Prevent regressions in newly implemented v1 sections.
-- Define a practical progression from current unit/component tests to broader end-to-end confidence.
+- Гарантировать стабильность маршрутизации, защиты доступа и tenant-aware поведения.
+- Зафиксировать критические пользовательские потоки платформы (документы, шаблоны, задачи, архив/поиск, approvals, client-portal).
+- Удерживать quality gate фронтенда в зелёном состоянии: lint + typecheck + test.
 
-## Current quality gate commands
+## 2. Текущий стек
 
-Run from frontend directory:
+- Unit/component: **Vitest + Testing Library**.
+- Статический контроль: **ESLint**, **TypeScript (strict)**.
+- Текущая команда тестов запускает coverage (`vitest run --coverage`).
 
-1. npm run lint
-2. npm run typecheck
-3. npm run test
+## 3. Базовые команды качества
 
-Current status after this cycle:
+Запускать из `frontend/`:
 
-- lint: pass
-- typecheck: pass
-- test: pass
+1. `npm run lint`
+2. `npm run typecheck`
+3. `npm run test -- --run`
 
-## Newly added tests in this cycle (Cycle 1)
+## 4. Ключевые уже покрытые сценарии
 
-1. src/__tests__/PpePage.test.tsx
-- Verifies data load and rendering for PPE summary/table states.
-- Verifies retry/error paths with mocked API behavior.
+1. **Protected routing / permissions**
+   - `ProtectedRoute.test.tsx`, `Can.test.tsx`, `ability.test.ts`, `RightDrawerPermissions.test.tsx`, `AppRouterSmoke.test.tsx`.
 
-2. src/__tests__/CrmFinancePage.test.tsx
-- Verifies orders/invoices/billing summary rendering with mocked API responses.
-- Verifies empty-state behavior where appropriate.
+2. **Tenant safety / request preparation**
+   - `apiClient.test.ts`, `tenantStore.test.ts`, `TenantGate.test.tsx`.
 
-3. src/__tests__/IntegrationsPage.test.tsx
-- Verifies integrations dashboard rendering for endpoints, deliveries, and outbox events.
-- Verifies webhook endpoint creation action triggers API call.
+3. **Критические экранные потоки**
+   - documents + wizard + diff: `DocumentsPage.test.tsx`, `DocumentsWizardPage.test.tsx`, `ReplaceDiffViewer.test.tsx`;
+   - tasks/timeline: `TasksPage.test.tsx`, `TaskTable.test.tsx`;
+   - archive/search filters + saved views: `ArchiveSearch.test.tsx`;
+   - approvals inbox: `ApprovalsInboxPage.test.tsx`;
+   - incidents/inspections list behavior: `IncidentsPage.test.tsx`, `InspectionsPage.test.tsx`.
 
-## Newly added tests in this cycle (Cycle 2 — MVP+/v1 hardening)
+4. **Новый тест в этом инкременте**
+   - `TemplateDetails.test.tsx`:
+     - рендер версий;
+     - read-only текущей версии;
+     - активация выбранной версии и проверка вызова store action.
 
-4. src/__tests__/IncidentsPage.test.tsx
-- Verifies incidents list renders after API load.
-- Verifies empty state when API returns no data.
-- Verifies "Зарегистрировать инцидент" button opens create dialog and dialog contains title field.
+## 5. Интеграционные проверки (план)
 
-5. src/__tests__/InspectionsPage.test.tsx
-- Verifies inspections list renders with expected row data (authority field).
-- Verifies empty state when API returns no data.
-- Verifies "Создать проверку" button opens create dialog and dialog contains authority field.
+Приоритетно добавить browser-level e2e (Playwright/Cypress, в зависимости от принятого в репозитории контура):
 
-6. src/__tests__/ApprovalsInboxPage.test.tsx
-- Verifies tasks tab renders task cards when `listMyTasks("open")` returns data.
-- Verifies empty state message "Открытых задач нет" shown when all lists are empty.
+1. `RBAC/ABAC matrix`:
+   - запрет/доступ к маршрутам;
+   - скрытие действий;
+   - read-only режимы для `client` и `auditor_ro`.
 
-All Cycle 2 tests use `vi.hoisted()` for correct mock hoisting in Vitest.
+2. `Master package flow`:
+   - preset -> upload -> mapping -> dry-run/diff -> run -> monitor -> export/sign/edo.
 
-## Test suite total
+3. `Client portal isolation`:
+   - проверка отсутствия утечки данных из основного контура.
 
-| Cycle | Tests added | Total |
-|-------|-------------|-------|
-| Before Cycle 1 | — | ~40 |
-| Cycle 1 | ~9 | 49 |
-| Cycle 2 | 8 | 57 |
+4. `Archive global search`:
+   - фильтры, сохранённые представления, переходы в карточки.
 
-## Regression areas covered by existing tests
+## 6. Пробелы покрытия
 
-1. Route shell and protected behavior
-- Existing tests around router/protected paths and layout behavior.
+- Недостаточно e2e-покрытия сложных сквозных процессов.
+- Не везде формализованы негативные backend-контракты (409/422/500 с прикладным payload).
+- Нужна глубже автоматизация сценариев файлового доступа/скачиваний с проверкой прав.
 
-2. Ability/permission logic
-- Existing tests around permission resolution and route access decisions.
+## 7. Definition of Done для изменений фронтенда
 
-3. Core document/domain modules
-- Existing tests for key legacy pages/components remain in suite.
+Изменение считается завершённым, если:
 
-## Gaps in automated testing
-
-1. End-to-end role + tenant matrix
-- Missing full browser-level checks for tenant isolation and no-access redirects across all major route groups.
-
-2. Mutation-heavy workflows
-- Limited test depth for create/edit/approve/sign flows in some sections.
-
-3. Deep edge-case contract handling
-- Additional coverage needed for malformed payloads, partial backend responses, and pagination/filter combinations.
-
-4. Feature flag route/nav visibility
-- Need dedicated tests for feature toggles (example: EDO visibility behavior).
-
-## Planned test expansion (priority order)
-
-1. Critical RBAC E2E suite
-- Scenarios:
-  - user without permission is redirected to no-access
-  - route visible/invisible in side nav based on permission
-  - tenant switch does not leak data across tenants
-
-2. Operational page behavior suite
-- PPE/warehouse/training/incidents/inspections:
-  - load success/error/empty
-  - filter changes trigger re-fetch
-  - refresh action re-requests server data
-
-3. Integrations workflow suite
-- endpoint create/test actions
-- delivery and outbox list refreshes
-- error rendering on failed integration actions
-
-4. CRM/finance workflow suite
-- status categorization for invoices
-- billing summary rendering on different subscription states
-
-## Test data and mocking rules
-
-1. Prefer deterministic fixtures for all list endpoints.
-2. Keep one fixture per domain scenario (happy path, empty, API error).
-3. Use hoisted-safe mock initialization in Vitest files to avoid module-evaluation race issues.
-4. Avoid brittle selectors when duplicate visible labels are valid in UI.
-
-## Definition of done for frontend changes
-
-Any frontend feature change is complete when:
-
-1. Route and permission guard are defined and validated.
-2. Loading/error/empty and success states are implemented.
-3. At least one component/page test exists for primary behavior.
-4. lint, typecheck, and test pass in CI/local.
-5. Route/permission documentation is updated if access model changes.
-
-## Update: added checks in this increment
-
-- Ability unit tests extended with role/permission alias coverage:
-  - role alias `auditor` -> `auditor_ro`
-  - permissions aliases `integrations.read`, `warehouse.read`
-- Regression checks executed:
-  - Typecheck
-  - ESLint
-  - Vitest subset (`ability`, `AppRouterSmoke`)
-
-## Incremental test update (archive/search)
-
-Added component-level regression tests:
-
-1. `ArchiveSearch.test.tsx`
-- verifies filter application updates search query payload.
-- verifies saved view persistence and one-click restoration of filter state.
-
-Covered requirements in this increment:
-- archive/search filter handling.
-- stable UI behavior for saved table/search representations.
+1. маршрут и права корректно описаны/проверены;
+2. есть loading/error/empty/access-denied состояния;
+3. добавлен или обновлён соответствующий тест;
+4. проходят `lint`, `typecheck`, `test`;
+5. обновлены `docs/FRONTEND_*`, если изменилась архитектура/маршруты/матрица доступа.
