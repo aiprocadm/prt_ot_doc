@@ -25,21 +25,38 @@ export const PackWizard = () => {
   const [preset, setPreset] = useState<PackPreset | "">("");
   const [parameters, setParameters] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     listCompanies();
   }, [listCompanies]);
 
   const handleLaunch = async () => {
-    if (!companyId || !preset) return;
+    if (!companyId || !preset) {
+      setSubmitError("Заполните обязательные шаги мастера перед запуском.");
+      return;
+    }
     setIsSubmitting(true);
+    setSubmitError(null);
     try {
       await create({ company_id: companyId, preset, parameters });
       toast.success("Задача на генерацию создана");
       setStep(4);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Не удалось создать задачу генерации";
+      setSubmitError(message);
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const resetWizard = () => {
+    setCompanyId("");
+    setPreset("");
+    setParameters({});
+    setSubmitError(null);
+    setStep(1);
   };
 
   return (
@@ -70,7 +87,7 @@ export const PackWizard = () => {
                 </option>
               ))}
             </select>
-            <Button disabled={!companyId} onClick={() => setStep(2)}>
+            <Button disabled={!companyId} title={!companyId ? "Выберите компанию, чтобы продолжить" : undefined} onClick={() => setStep(2)}>
               Далее
             </Button>
           </div>
@@ -97,7 +114,7 @@ export const PackWizard = () => {
               <Button variant="outline" onClick={() => setStep(1)}>
                 Назад
               </Button>
-              <Button disabled={!preset} onClick={() => setStep(3)}>
+              <Button disabled={!preset} title={!preset ? "Выберите пресет" : undefined} onClick={() => setStep(3)}>
                 Далее
               </Button>
             </div>
@@ -120,12 +137,13 @@ export const PackWizard = () => {
                 {isSubmitting ? "Запуск..." : "Запустить генерацию"}
               </Button>
             </div>
+            {submitError && <p className="text-sm text-destructive">{submitError}</p>}
           </div>
         )}
         {step === 4 && (
           <div className="space-y-2 text-sm">
             <p>Задача создана. Статус можно отслеживать в разделе «Задачи».</p>
-            <Button variant="outline" onClick={() => setStep(1)}>
+            <Button variant="outline" onClick={resetWizard}>
               Создать ещё один пакет
             </Button>
           </div>

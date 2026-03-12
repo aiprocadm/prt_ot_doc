@@ -34,6 +34,21 @@ describe("apiClient", () => {
     mock.restore();
   });
 
+  it("uses актуальный tenant после переключения контура", async () => {
+    const mock = new MockAdapter(apiClient);
+    mock.onGet("/documents").reply((config) => [200, { tenant: config.headers?.["X-Tenant"] }]);
+
+    tenantStorage.setTenant({ slug: "severstroy", site: "Северный кластер" });
+    const first = await apiClient.get<{ tenant: string }>("/documents");
+    expect(first.data.tenant).toBe("severstroy");
+
+    tenantStorage.setTenant({ slug: "uralenergo", site: "Урал" });
+    const second = await apiClient.get<{ tenant: string }>("/documents");
+    expect(second.data.tenant).toBe("uralenergo");
+
+    mock.restore();
+  });
+
   it("blocks requests without tenant for protected routes", async () => {
     const mock = new MockAdapter(apiClient);
     mock.onGet("/documents").reply(200, {});
