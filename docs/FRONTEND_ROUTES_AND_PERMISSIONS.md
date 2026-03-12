@@ -259,3 +259,13 @@ ABAC rules are also applied for selected actions (for example document signing/e
 | `/crm-finance` | `crm_finance.view` | CRM/finance operational registry. |
 | `/integrations` | `integrations.view` | Integration connectivity/status registry. |
 | `/client-portal/*` | `client_portal.view` | Client portal routes moved under dedicated guard. |
+
+## Update: Archive route behavior (this task)
+
+| Route | Permission | Read-only behavior | Hidden actions |
+|---|---|---|---|
+| `/archive` and `/archive/search` | `file.view` | Available for read-only roles (auditor/client) as search + file-open context | No create/edit/delete mutations exposed; only view/download actions are rendered when file is present |
+
+Additional notes:
+- Archive filters are URL-param based and can be persisted as user saved views (local storage).
+- Access denials continue to resolve through protected routes and the global access-denied flow.

@@ -153,3 +153,17 @@ These are not blockers for the current integration milestone, but are the highes
 
 - Replace static table datasets in newly added pages with API-backed stores when backend contracts for CRM/finance and integrations health are finalized.
 - Expand integration tests to validate route-level denial for all newly added permissions.
+
+## Incremental update (archive/search hardening)
+
+Implemented in this task:
+
+- Archive search screen upgraded from basic table rendering to resilient state machine: loading, API error with retry, and empty-result state.
+- Added reusable saved views UI (`SavedViewsBar`) with local persistence and one-click filter restore.
+- Added explicit filter reset flow and improved filter input accessibility (`aria-label`) for deterministic QA automation.
+- Added tests covering archive filter application and saved-view restore behavior.
+
+Still pending in this area:
+
+- Persisted views synchronization with backend user profile (currently localStorage only).
+- Cursor pagination/infinite scrolling for very large archive result sets.

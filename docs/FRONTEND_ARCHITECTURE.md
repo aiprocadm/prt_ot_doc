@@ -137,3 +137,16 @@ const handleCreate = async () => {
   - `client_portal.view`
 - Route zones extended with dedicated guarded routes for Warehouse, CRM/Finance, and Integrations modules.
 - Role normalization enhanced with alias map in ability layer to support heterogeneous backend role naming.
+
+## Update: Archive/Search UI primitives and state handling
+
+- Introduced `SavedViewsBar` as a shared UI primitive for persisted filter presets.
+  - Location: `frontend/src/components/common/SavedViewsBar.tsx`.
+  - Storage strategy: localStorage keyed by module namespace.
+  - Contract: current URL params in, selected saved params out.
+- Archive module now follows standardized page state envelope:
+  - `loading` -> `LoadingScreen`
+  - `error` -> `ErrorState` with retry callback
+  - `empty` -> `EmptyState`
+  - `data` -> table render
+- URL search params remain the single source of truth for archive filters, enabling deep-linking and deterministic route rehydration.
