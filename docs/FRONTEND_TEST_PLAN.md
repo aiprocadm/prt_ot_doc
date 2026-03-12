@@ -1,76 +1,39 @@
 # FRONTEND_TEST_PLAN
 
-## 1. Цели тестирования
+## Стабилизация в рамках финального frontend pass
 
-- Гарантировать стабильность маршрутизации, защиты доступа и tenant-aware поведения.
-- Зафиксировать критические пользовательские потоки платформы (документы, шаблоны, задачи, архив/поиск, approvals, client-portal).
-- Удерживать quality gate фронтенда в зелёном состоянии: lint + typecheck + test.
+Проверены и прогнаны базовые quality gates:
+- lint
+- typecheck
+- unit/integration (vitest)
 
-## 2. Текущий стек
+## Добавленные/обновлённые тестовые зоны
 
-- Unit/component: **Vitest + Testing Library**.
-- Статический контроль: **ESLint**, **TypeScript (strict)**.
-- Текущая команда тестов запускает coverage (`vitest run --coverage`).
+1. **Route guards / access matrix**
+   - `RoutePermissionMatrix.test.tsx`: проверка client portal isolation + admin-only access.
 
-## 3. Базовые команды качества
+2. **Role-based action/rendering**
+   - Existing guard coverage сохранён (`ProtectedRoute`, `Can`, drawer permissions).
 
-Запускать из `frontend/`:
+3. **Tenant-aware request preparation**
+   - `apiClient.test.ts`: добавлен кейс runtime tenant switch с проверкой корректного `X-Tenant`.
 
-1. `npm run lint`
-2. `npm run typecheck`
-3. `npm run test -- --run`
+4. **Package wizard navigation + validation + recovery**
+   - `PackWizard.test.tsx`: happy path и API fail path с сохранением контролируемого состояния шага.
 
-## 4. Ключевые уже покрытые сценарии
+5. **File upload error states**
+   - `FileUploader.test.tsx`: успешная загрузка и отказ AV-проверки.
 
-1. **Protected routing / permissions**
-   - `ProtectedRoute.test.tsx`, `Can.test.tsx`, `ability.test.ts`, `RightDrawerPermissions.test.tsx`, `AppRouterSmoke.test.tsx`.
+6. **Archive/search filters + saved views basics**
+   - Existing coverage сохранён (`ArchiveSearch.test.tsx`).
 
-2. **Tenant safety / request preparation**
-   - `apiClient.test.ts`, `tenantStore.test.ts`, `TenantGate.test.tsx`.
+## Устранённые flaky/нестабильные зоны
 
-3. **Критические экранные потоки**
-   - documents + wizard + diff: `DocumentsPage.test.tsx`, `DocumentsWizardPage.test.tsx`, `ReplaceDiffViewer.test.tsx`;
-   - tasks/timeline: `TasksPage.test.tsx`, `TaskTable.test.tsx`;
-   - archive/search filters + saved views: `ArchiveSearch.test.tsx`;
-   - approvals inbox: `ApprovalsInboxPage.test.tsx`;
-   - incidents/inspections list behavior: `IncidentsPage.test.tsx`, `InspectionsPage.test.tsx`.
+- Усилена предсказуемость UI-веток мастера и загрузчика (явные состояния и ошибки), что снижает недетерминизм тестов.
+- Для tenant-aware кейсов добавлена прямая проверка корректной подстановки tenant после переключения.
 
-4. **Новый тест в этом инкременте**
-   - `TemplateDetails.test.tsx`:
-     - рендер версий;
-     - read-only текущей версии;
-     - активация выбранной версии и проверка вызова store action.
+## Риски, требующие backend/e2e completion
 
-## 5. Интеграционные проверки (план)
-
-Приоритетно добавить browser-level e2e (Playwright/Cypress, в зависимости от принятого в репозитории контура):
-
-1. `RBAC/ABAC matrix`:
-   - запрет/доступ к маршрутам;
-   - скрытие действий;
-   - read-only режимы для `client` и `auditor_ro`.
-
-2. `Master package flow`:
-   - preset -> upload -> mapping -> dry-run/diff -> run -> monitor -> export/sign/edo.
-
-3. `Client portal isolation`:
-   - проверка отсутствия утечки данных из основного контура.
-
-4. `Archive global search`:
-   - фильтры, сохранённые представления, переходы в карточки.
-
-## 6. Пробелы покрытия
-
-- Недостаточно e2e-покрытия сложных сквозных процессов.
-- Не везде формализованы негативные backend-контракты (409/422/500 с прикладным payload).
-- Нужна глубже автоматизация сценариев файлового доступа/скачиваний с проверкой прав.
-
-## 7. Definition of Done для изменений фронтенда
-
-Изменение считается завершённым, если:
-
-1. маршрут и права корректно описаны/проверены;
-2. есть loading/error/empty/access-denied состояния;
-3. добавлен или обновлён соответствующий тест;
-4. проходят `lint`, `typecheck`, `test`;
-5. обновлены `docs/FRONTEND_*`, если изменилась архитектура/маршруты/матрица доступа.
+- Полные browser E2E сценарии для multi-tenant изоляции.
+- Полноценная end-to-end проверка signed-url upload прогресса с реальным storage backend.
+- Расширенная проверка jobs timeline/retry с реальными статусными переходами очереди.
