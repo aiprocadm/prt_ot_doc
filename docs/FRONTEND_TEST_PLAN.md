@@ -124,3 +124,13 @@ Any frontend feature change is complete when:
 3. At least one component/page test exists for primary behavior.
 4. lint, typecheck, and test pass in CI/local.
 5. Route/permission documentation is updated if access model changes.
+
+## Update: added checks in this increment
+
+- Ability unit tests extended with role/permission alias coverage:
+  - role alias `auditor` -> `auditor_ro`
+  - permissions aliases `integrations.read`, `warehouse.read`
+- Regression checks executed:
+  - Typecheck
+  - ESLint
+  - Vitest subset (`ability`, `AppRouterSmoke`)

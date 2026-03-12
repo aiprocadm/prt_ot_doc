@@ -55,4 +55,15 @@ describe("buildAbility", () => {
       })
     ).toBe(true);
   });
+
+  it("нормализует алиасы ролей и прав", () => {
+    const byRole = buildAbility({ ...baseUser, roles: ["auditor"], permissions: [] });
+    expect(byRole.can(PERMISSIONS.AUDIT_VIEW)).toBe(true);
+    expect(byRole.can(PERMISSIONS.DOCUMENT_CREATE)).toBe(false);
+
+    const byPermission = buildAbility({ ...baseUser, roles: [], permissions: ["integrations.read", "warehouse.read"] });
+    expect(byPermission.can(PERMISSIONS.INTEGRATIONS_VIEW)).toBe(true);
+    expect(byPermission.can(PERMISSIONS.WAREHOUSE_VIEW)).toBe(true);
+  });
+
 });

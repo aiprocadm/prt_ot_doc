@@ -248,3 +248,14 @@ In addition to permission checks, scope constraints can be applied on resources:
 - contractor_id
 
 ABAC rules are also applied for selected actions (for example document signing/export and risk/template state conditions).
+
+## Delta: newly normalized routes (this task)
+
+| Route | Permission | Notes |
+|---|---|---|
+| `/generation` | `doc.view` | Alias to document generation wizard flow. |
+| `/archive` | `file.view` | Archive search entrypoint; `/archive/search` kept for compatibility. |
+| `/warehouse` | `warehouse.view` | PPE warehouse registry (stock, batches, certificates). |
+| `/crm-finance` | `crm_finance.view` | CRM/finance operational registry. |
+| `/integrations` | `integrations.view` | Integration connectivity/status registry. |
+| `/client-portal/*` | `client_portal.view` | Client portal routes moved under dedicated guard. |
