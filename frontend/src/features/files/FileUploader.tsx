@@ -28,7 +28,20 @@ const ACCEPTED_FILE_TYPES = {
 
 const sleep = (timeout: number) => new Promise((resolve) => setTimeout(resolve, timeout));
 
-export const FileUploader = () => {
+const statusLabel: Record<UploadStatus, string> = {
+  pending: "В очереди",
+  uploading: "Загрузка",
+  processing: "Проверка",
+  ready: "Готово",
+  error: "Ошибка"
+};
+
+interface FileUploaderProps {
+  pollAttempts?: number;
+  pollIntervalMs?: number;
+}
+
+export const FileUploader = ({ pollAttempts = 20, pollIntervalMs = 500 }: FileUploaderProps) => {
   const [description, setDescription] = useState("");
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -63,7 +76,7 @@ export const FileUploader = () => {
         await finalizeUpload(session.file_id);
 
         let fileReady = false;
-        for (let i = 0; i < 20; i += 1) {
+        for (let i = 0; i < pollAttempts; i += 1) {
           const current = await getFile(session.file_id);
           if (current.status === "ready") {
             fileReady = true;
@@ -72,7 +85,7 @@ export const FileUploader = () => {
           if (current.status === "infected" || current.status === "quarantined") {
             throw new Error(`Файл ${file.name} не прошёл AV-проверку`);
           }
-          await sleep(500);
+          await sleep(pollIntervalMs);
         }
 
         if (!fileReady) {
@@ -87,7 +100,7 @@ export const FileUploader = () => {
         return false;
       }
     },
-    [description, updateUpload]
+    [description, pollAttempts, pollIntervalMs, updateUpload]
   );
 
   const onDrop = useCallback(
@@ -152,12 +165,12 @@ export const FileUploader = () => {
         </div>
         {isUploading && <p className="text-sm text-muted-foreground">Загрузка выполняется, не закрывайте страницу.</p>}
         {uploads.length > 0 && (
-          <div className="space-y-2 rounded-md border p-3">
+          <div className="space-y-2 rounded-md border p-3" aria-live="polite">
             {uploads.map((upload) => (
               <div key={upload.id} className="space-y-1 text-sm">
                 <div className="flex items-center justify-between gap-2">
                   <span className="truncate">{upload.name}</span>
-                  <span className="text-xs text-muted-foreground">{upload.progress}%</span>
+                  <span className="text-xs text-muted-foreground">{statusLabel[upload.status]} · {upload.progress}%</span>
                 </div>
                 <div className="h-2 rounded bg-muted">
                   <div className="h-2 rounded bg-primary transition-all" style={{ width: `${upload.progress}%` }} />
