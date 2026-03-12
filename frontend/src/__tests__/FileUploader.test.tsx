@@ -44,7 +44,7 @@ describe("FileUploader", () => {
     getFileMock.mockResolvedValue({ status: "ready" });
 
     const user = userEvent.setup();
-    render(<FileUploader />);
+    render(<FileUploader pollAttempts={1} pollIntervalMs={0} />);
 
     const input = screen.getByLabelText("Описание файла");
     await user.type(input, "Первичная загрузка");
@@ -66,7 +66,7 @@ describe("FileUploader", () => {
     getFileMock.mockResolvedValue({ status: "infected" });
 
     const user = userEvent.setup();
-    render(<FileUploader />);
+    render(<FileUploader pollAttempts={1} pollIntervalMs={0} />);
 
     const file = new File(["123"], "bad.pdf", { type: "application/pdf" });
     const uploaderInput = screen.getByText(/Перетащите файлы сюда/).parentElement?.querySelector("input[type='file']") as HTMLInputElement;

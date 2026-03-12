@@ -137,12 +137,16 @@ export const PackWizard = () => {
                 {isSubmitting ? "Запуск..." : "Запустить генерацию"}
               </Button>
             </div>
-            {submitError && <p className="text-sm text-destructive">{submitError}</p>}
+            {submitError && (
+              <p className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive" role="alert">
+                {submitError}
+              </p>
+            )}
           </div>
         )}
         {step === 4 && (
-          <div className="space-y-2 text-sm">
-            <p>Задача создана. Статус можно отслеживать в разделе «Задачи».</p>
+          <div className="space-y-2 text-sm" aria-live="polite">
+            <p className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-emerald-700">Задача создана. Статус можно отслеживать в разделе «Задачи».</p>
             <Button variant="outline" onClick={resetWizard}>
               Создать ещё один пакет
             </Button>

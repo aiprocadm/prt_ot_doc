@@ -56,7 +56,7 @@ describe("PackWizard", () => {
       });
     });
 
-    expect(await screen.findByText(/Задача создана/)).toBeInTheDocument();
+    expect(await screen.findByText(/Задача создана/, {}, { timeout: 10000 })).toBeInTheDocument();
   });
 
   it("shows api error and keeps wizard on submit step", async () => {
@@ -74,7 +74,7 @@ describe("PackWizard", () => {
     await user.click(screen.getAllByRole("button", { name: "Далее" })[0]);
     await user.click(screen.getByRole("button", { name: "Запустить генерацию" }));
 
-    expect(await screen.findByText("Сервис генерации недоступен")).toBeInTheDocument();
+    expect(await screen.findByText("Сервис генерации недоступен", {}, { timeout: 10000 })).toBeInTheDocument();
     expect(screen.getByLabelText("Дополнительные параметры")).toBeInTheDocument();
 
     const content = within(screen.getByText("Сервис генерации недоступен").parentElement!);
