@@ -126,3 +126,14 @@ const handleCreate = async () => {
 3. Some mutation paths are still backlog items.
 - Read-heavy operational visibility is implemented first.
 - Planned: complete transactional create/edit flows with stronger validation.
+
+## Update: RBAC + route normalization for missing v1 sections
+
+- Permission model is now the single source of truth for both navigation and route guards, including v1 business domains:
+  - `generation.view`
+  - `warehouse.view`
+  - `crm_finance.view`
+  - `integrations.view`
+  - `client_portal.view`
+- Route zones extended with dedicated guarded routes for Warehouse, CRM/Finance, and Integrations modules.
+- Role normalization enhanced with alias map in ability layer to support heterogeneous backend role naming.

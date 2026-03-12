@@ -137,3 +137,19 @@ These are not blockers for the current integration milestone, but are the highes
 2. Introduce shared server-side pagination/filter state helper for all major tables.
 3. Add route-level e2e suite for tenant+RBAC regression coverage.
 4. Add telemetry for action failures and retry visibility on mutation-heavy pages.
+
+## Incremental update (current task)
+
+- Fixed compile-time RBAC inconsistency: SideNav referenced permissions that were absent in the canonical permission registry (`GENERATION_VIEW`, `WAREHOUSE_VIEW`, `CRM_FINANCE_VIEW`, `INTEGRATIONS_VIEW`, `CLIENT_PORTAL_VIEW`).
+- Added production routes and guarded screens for missing mandatory sections:
+  - `/warehouse`
+  - `/crm-finance`
+  - `/integrations`
+  - alias routes `/generation`, `/archive` (with preserved `/archive/search`).
+- Expanded role catalog and alias normalization for tenant/business roles (`auditor_ro`, `client`, `methodist`, `project_manager`, etc.).
+- Added ability test coverage for role/permission aliases for new modules.
+
+### Remaining work after this increment
+
+- Replace static table datasets in newly added pages with API-backed stores when backend contracts for CRM/finance and integrations health are finalized.
+- Expand integration tests to validate route-level denial for all newly added permissions.

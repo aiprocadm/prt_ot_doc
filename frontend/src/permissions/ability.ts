@@ -38,6 +38,10 @@ const PERMISSION_ALIASES: Record<string, Permission> = {
   "risk.write": PERMISSIONS.RISK_EDIT,
   "ppe.read": PERMISSIONS.PPE_VIEW,
   "ppe.write": PERMISSIONS.PPE_ISSUE,
+  "warehouse.read": PERMISSIONS.WAREHOUSE_VIEW,
+  "crm_finance.read": PERMISSIONS.CRM_FINANCE_VIEW,
+  "integrations.read": PERMISSIONS.INTEGRATIONS_VIEW,
+  "client_portal.read": PERMISSIONS.CLIENT_PORTAL_VIEW,
   "training.read": PERMISSIONS.TRAINING_VIEW,
   "training.write": PERMISSIONS.TRAINING_ASSIGN,
   "incidents.read": PERMISSIONS.INCIDENT_VIEW,
@@ -48,9 +52,23 @@ const PERMISSION_ALIASES: Record<string, Permission> = {
   "billing.read": PERMISSIONS.REPORTS_VIEW
 };
 
+const ROLE_ALIASES: Record<string, Role> = {
+  tenant_owner: "owner",
+  methodology: "methodist",
+  metodist: "methodist",
+  projectlead: "project_manager",
+  projectlead_manager: "project_manager",
+  deloproizvoditel: "office_manager",
+  slushatel: "student",
+  auditor: "auditor_ro",
+  inspector_contractor: "contractor_inspector"
+};
+
 const normalizeRole = (role: string): Role | null => {
   const normalized = role.trim().toLowerCase().replace(/[\s/]+/g, "_");
-  return normalized in ROLE_PERMISSIONS ? (normalized as Role) : null;
+  const alias = ROLE_ALIASES[normalized];
+  const resolved = alias ?? normalized;
+  return resolved in ROLE_PERMISSIONS ? (resolved as Role) : null;
 };
 
 const resolvePermissions = (user: UserDto | null): Set<Permission> => {

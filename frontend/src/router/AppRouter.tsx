@@ -74,6 +74,9 @@ const PackageProfilesPage = lazy(() => import("@/pages/packs/PackageProfilesPage
 const PackagePresetsPage = lazy(() => import("@/pages/packs/PackagePresetsPage"));
 const GeneratePackWizardPage = lazy(() => import("@/pages/packs/GeneratePackWizardPage"));
 const PackRunDetailsPage = lazy(() => import("@/pages/packs/PackRunDetailsPage"));
+const WarehousePage = lazy(() => import("@/pages/warehouse/WarehousePage"));
+const CrmFinancePage = lazy(() => import("@/pages/crm-finance/CrmFinancePage"));
+const IntegrationsPage = lazy(() => import("@/pages/integrations/IntegrationsPage"));
 
 const AppRouter = () => {
   const initialize = useAuthStore((state) => state.initialize);
@@ -116,6 +119,7 @@ const AppRouter = () => {
               <Route element={<ProtectedRoute permission={PERMISSIONS.DOCUMENT_VIEW} />}>
                 <Route path="/documents" element={<DocumentsPage />} />
                 <Route path="/documents/wizard" element={<DocumentsWizardPage />} />
+                <Route path="/generation" element={<DocumentsWizardPage />} />
               </Route>
               <Route element={<ProtectedRoute permission={PERMISSIONS.DOCUMENT_VIEW} />}>
                 <Route path="/approvals/inbox" element={<ApprovalsInboxPage />} />
@@ -127,6 +131,7 @@ const AppRouter = () => {
               <Route element={<ProtectedRoute permission={PERMISSIONS.FILE_VIEW} />}>
                 <Route path="/files" element={<FilesPage />} />
                 <Route path="/archive" element={<ArchiveSearchPage />} />
+                <Route path="/archive/search" element={<ArchiveSearchPage />} />
                 <Route path="/search" element={<SearchPage />} />
               </Route>
               <Route element={<ProtectedRoute permission={PERMISSIONS.TASK_VIEW} />}>
@@ -144,6 +149,9 @@ const AppRouter = () => {
               </Route>
               <Route element={<ProtectedRoute permission={PERMISSIONS.PPE_VIEW} />}>
                 <Route path="/ppe" element={<PpePage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.WAREHOUSE_VIEW} />}>
+                <Route path="/warehouse" element={<WarehousePage />} />
               </Route>
               <Route element={<ProtectedRoute permission={PERMISSIONS.TRAINING_VIEW} />}>
                 <Route path="/training" element={<TrainingPage />} />
@@ -203,11 +211,19 @@ const AppRouter = () => {
                 <Route path="/exports" element={<ExportsPage />} />
                 <Route path="/analytics/trends" element={<TrendsPage />} />
                 <Route path="/portal-requests" element={<PortalRequestsPage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.CLIENT_PORTAL_VIEW} />}>
                 <Route path="/client-portal/dashboard" element={<ClientPortalDashboardPage />} />
                 <Route path="/client-portal/packages" element={<ClientPortalPackagesPage />} />
                 <Route path="/client-portal/documents" element={<ClientPortalDocumentsPage />} />
                 <Route path="/client-portal/history" element={<ClientPortalHistoryPage />} />
                 <Route path="/client-portal/requests" element={<ClientPortalRequestsPage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.CRM_FINANCE_VIEW} />}>
+                <Route path="/crm-finance" element={<CrmFinancePage />} />
+              </Route>
+              <Route element={<ProtectedRoute permission={PERMISSIONS.INTEGRATIONS_VIEW} />}>
+                <Route path="/integrations" element={<IntegrationsPage />} />
               </Route>
               <Route element={<ProtectedRoute permission={PERMISSIONS.DOCUMENT_VIEW} />}>
                 <Route path="/pipelines/profiles" element={<PipelineBuilderPage />} />
