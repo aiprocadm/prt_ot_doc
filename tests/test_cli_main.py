@@ -11,7 +11,7 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
-from app.cli.main import _extract_payload, _resolve_template, cli, load_context
+from app.cli.main import EXIT_VALIDATION, _extract_payload, _resolve_template, cli, load_context
 from app.models.models import Template, TemplateVersion, TemplateVersionStatus
 
 
@@ -117,7 +117,7 @@ async def test_resolve_template_missing_template(capsys: pytest.CaptureFixture[s
     with pytest.raises(typer.Exit) as exc:
         await _resolve_template(DummySession(), "missing")
 
-    assert exc.value.exit_code == 1
+    assert exc.value.exit_code == EXIT_VALIDATION
     captured = capsys.readouterr()
     assert "Template missing not found" in captured.err
 
@@ -149,7 +149,7 @@ async def test_resolve_template_without_active_version(
     with pytest.raises(typer.Exit) as exc:
         await _resolve_template(DummySession(), template_id)
 
-    assert exc.value.exit_code == 1
+    assert exc.value.exit_code == EXIT_VALIDATION
     captured = capsys.readouterr()
     assert "Template has no active version" in captured.err
 
@@ -200,7 +200,7 @@ def test_render_command_invokes_pipeline(monkeypatch: pytest.MonkeyPatch, runner
 
     result = runner.invoke(
         cli,
-        ["render", "tpl-01", str(payload_path), "--tenant", "explicit-tenant"],
+        ["render", "tpl-01", str(payload_path), "--tenant", "explicit-tenant", "--json"],
     )
 
     assert result.exit_code == 0
@@ -288,7 +288,9 @@ def test_pipeline_command_enqueues_task(monkeypatch: pytest.MonkeyPatch, runner:
     result = runner.invoke(cli, ["pipeline", "tpl-02", str(payload_path)])
 
     assert result.exit_code == 0
-    assert "Enqueued pipeline run run-xyz as task celery-123" in result.stdout
+    assert "run_id: run-xyz" in result.stdout
+    assert "task_id: celery-123" in result.stdout
+    assert "status: enqueued" in result.stdout
     assert len(fake_service.calls) == 1
     call = fake_service.calls[0]
     assert call["session"] is sessions[0]
@@ -312,7 +314,7 @@ def test_header_command_outputs_storage_key(runner: CliRunner) -> None:
     result = runner.invoke(cli, ["header", "example"])
 
     assert result.exit_code == 0
-    assert "Template key: templates/example.docx" in result.stdout
+    assert "template_key: templates/example.docx" in result.stdout
 
 
 def test_replace_command_updates_document(monkeypatch: pytest.MonkeyPatch, runner: CliRunner, tmp_path: Path) -> None:
@@ -342,4 +344,5 @@ def test_replace_command_updates_document(monkeypatch: pytest.MonkeyPatch, runne
 
     assert result.exit_code == 0
     assert output_path.read_bytes() == b"Hello, Bob!"
-    assert "Written updated template" in result.stdout
+    assert f"output: {output_path}" in result.stdout
+    assert "status: ok" in result.stdout
