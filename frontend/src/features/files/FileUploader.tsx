@@ -135,7 +135,8 @@ export const FileUploader = ({ pollAttempts = 20, pollIntervalMs = 500 }: FileUp
     onDrop,
     onDropRejected,
     accept: ACCEPTED_FILE_TYPES,
-    maxSize: 50 * 1024 * 1024
+    maxSize: 50 * 1024 * 1024,
+    disabled: isUploading
   });
 
   const hasErrors = useMemo(() => uploads.some((upload) => upload.status === "error"), [uploads]);
@@ -154,13 +155,18 @@ export const FileUploader = ({ pollAttempts = 20, pollIntervalMs = 500 }: FileUp
         />
         <div
           {...getRootProps({
-            className: `flex h-40 cursor-pointer flex-col items-center justify-center rounded-md border border-dashed text-sm ${
-              isDragActive ? "border-primary bg-primary/10" : "border-muted-foreground/40"
+            className: `flex h-40 flex-col items-center justify-center rounded-md border border-dashed text-sm ${
+              isUploading
+                ? "cursor-not-allowed border-muted bg-muted/40 text-muted-foreground"
+                : "cursor-pointer"
+            } ${
+              isDragActive && !isUploading ? "border-primary bg-primary/10" : "border-muted-foreground/40"
             }`
           })}
+          aria-disabled={isUploading}
         >
           <input {...getInputProps()} />
-          <p>Перетащите файлы сюда или нажмите для выбора</p>
+          <p>{isUploading ? "Загрузка в процессе. Дождитесь завершения." : "Перетащите файлы сюда или нажмите для выбора"}</p>
           <p className="mt-1 text-xs text-muted-foreground">Допустимо: PDF, DOCX, XLSX до 50MB</p>
         </div>
         {isUploading && <p className="text-sm text-muted-foreground">Загрузка выполняется, не закрывайте страницу.</p>}

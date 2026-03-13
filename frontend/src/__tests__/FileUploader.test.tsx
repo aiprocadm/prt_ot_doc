@@ -55,8 +55,36 @@ describe("FileUploader", () => {
     await user.upload(uploaderInput, file);
 
     expect(await screen.findByText("test.pdf")).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByText("100%")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/100%/)).toBeInTheDocument());
     expect(createUploadSessionMock).toHaveBeenCalled();
+  });
+
+  it("disables new drops while upload is in progress", async () => {
+    let uploadResolver: (() => void) | null = null;
+    createUploadSessionMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          uploadResolver = () => resolve({ file_id: "f-3", signed_put_url: "https://upload" });
+        })
+    );
+    putMock.mockResolvedValue({});
+    finalizeUploadMock.mockResolvedValue({});
+    getFileMock.mockResolvedValue({ status: "ready" });
+
+    const user = userEvent.setup();
+    render(<FileUploader pollAttempts={1} pollIntervalMs={0} />);
+
+    const file = new File(["123"], "pending.pdf", { type: "application/pdf" });
+    const uploaderInput = screen.getByText(/Перетащите файлы сюда/).parentElement?.querySelector("input[type='file']") as HTMLInputElement;
+
+    await user.upload(uploaderInput, file);
+
+    const uploadingHint = await screen.findByText("Загрузка в процессе. Дождитесь завершения.");
+    expect(uploadingHint).toBeInTheDocument();
+    expect(uploadingHint.parentElement).toHaveAttribute("aria-disabled", "true");
+
+    uploadResolver?.();
+    await waitFor(() => expect(screen.getByText(/100%/)).toBeInTheDocument());
   });
 
   it("shows file processing error", async () => {
