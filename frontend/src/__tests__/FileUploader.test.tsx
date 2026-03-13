@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FileUploader } from "@/features/files/FileUploader";
+import { toast } from "sonner";
 
 const createUploadSessionMock = vi.fn();
 const finalizeUploadMock = vi.fn();
@@ -102,5 +103,21 @@ describe("FileUploader", () => {
     await user.upload(uploaderInput, file);
 
     expect(await screen.findByText(/не прошёл AV-проверку/)).toBeInTheDocument();
+  });
+
+  it("shows explicit error message for unsupported files", async () => {
+    const user = userEvent.setup();
+    render(<FileUploader pollAttempts={1} pollIntervalMs={0} />);
+
+    const invalid = new File(["123"], "malware.exe", { type: "application/octet-stream" });
+    const uploaderInput = screen
+      .getByText(/Перетащите файлы сюда/)
+      .parentElement?.querySelector("input[type='file']") as HTMLInputElement;
+
+    await user.upload(uploaderInput, invalid);
+
+    expect(toast.error).toHaveBeenCalled();
+    const calls = vi.mocked(toast.error).mock.calls.flat().map(String);
+    expect(calls.some((message) => message.includes("Файлы отклонены:") || message.includes("Не удалось загрузить выбранные файлы"))).toBe(true);
   });
 });

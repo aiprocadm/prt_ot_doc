@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { CheckCircle, ChevronRight, ClipboardList, Play, Settings2, Upload } from "lucide-react";
 import { toast } from "sonner";
@@ -44,6 +44,16 @@ const GeneratePackWizardPage = () => {
   const [running, setRunning] = useState(false);
   const [packRunId, setPackRunId] = useState<string | null>(null);
   const [runError, setRunError] = useState<ApiError | null>(null);
+
+  const rowsCount = useMemo(() => {
+    try {
+      const parsed = JSON.parse(rowsJson) as unknown;
+      if (!Array.isArray(parsed)) return null;
+      return parsed.length;
+    } catch {
+      return null;
+    }
+  }, [rowsJson]);
 
   useEffect(() => {
     if (presetIdParam) return;
@@ -246,7 +256,7 @@ const GeneratePackWizardPage = () => {
             </div>
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setStep(2)}>Назад</Button>
-              <Button onClick={() => setStep(4)}>
+              <Button disabled={!idempotencyKey.trim()} onClick={() => setStep(4)}>
                 Далее <ChevronRight className="ml-1 h-4 w-4" />
               </Button>
             </div>
@@ -268,7 +278,7 @@ const GeneratePackWizardPage = () => {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Строк для генерации</span>
-                <span className="font-medium">{JSON.parse(rowsJson).length}</span>
+                <span className="font-medium">{rowsCount ?? "Проверьте JSON на шаге 2"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Режим</span>
@@ -282,7 +292,7 @@ const GeneratePackWizardPage = () => {
             <ErrorState error={runError ?? undefined} onRetry={() => void runPack()} />
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setStep(3)}>Назад</Button>
-              <Button disabled={running} onClick={() => void runPack()}>
+              <Button disabled={running || rowsCount === null || !idempotencyKey.trim() || !selectedPresetId} onClick={() => void runPack()}>
                 {running ? "Запуск…" : dryRun ? "Запустить Dry-run" : "Запустить генерацию"}
               </Button>
             </div>
