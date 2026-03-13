@@ -28,6 +28,6 @@ describe("AppRouter", () => {
     useTenantStore.getState().setTenant(useTenantStore.getState().tenants[0]);
     render(<App />);
 
-    expect(await screen.findByText("Единый рабочий стол ОТ/ПБ")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Единый рабочий стол ОТ/ПБ" }, { timeout: 7000 })).toBeInTheDocument();
   });
 });

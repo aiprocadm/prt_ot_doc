@@ -60,7 +60,7 @@ describe("FileUploader", () => {
   });
 
   it("disables new drops while upload is in progress", async () => {
-    let uploadResolver: (() => void) | null = null;
+    let uploadResolver: (() => void) | undefined;
     createUploadSessionMock.mockImplementation(
       () =>
         new Promise((resolve) => {
