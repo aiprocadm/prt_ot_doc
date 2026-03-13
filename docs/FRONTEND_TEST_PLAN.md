@@ -46,3 +46,11 @@
 ## Update: тесты загрузки файлов
 - Обновлён тест `uploads file and shows ready progress`: проверка прогресса переведена на устойчивый matcher (`/100%/`).
 - Добавлен тест `disables new drops while upload is in progress`, который покрывает блокировку dropzone в процессе активной загрузки.
+
+## Обновление стабилизации (текущий проход)
+- Исправлен `typecheck`-блокер: `frontend/src/__tests__/FileUploader.test.tsx`.
+- Исправлен flaky route smoke test: `frontend/src/__tests__/AppRouterSmoke.test.tsx`.
+- Повторно подтверждено прохождение:
+  - `npm run lint`
+  - `npm run typecheck`
+  - `npm run test`
