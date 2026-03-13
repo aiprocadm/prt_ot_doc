@@ -126,9 +126,13 @@ export const FileUploader = ({ pollAttempts = 20, pollIntervalMs = 500 }: FileUp
 
   const onDropRejected = useCallback((rejections: FileRejection[]) => {
     if (!rejections.length) return;
-    const first = rejections[0];
-    const reason = first.errors[0]?.message || "Неподдерживаемый формат";
-    toast.error(`Файл ${first.file.name}: ${reason}`);
+    const message = rejections
+      .map(({ file, errors }) => {
+        const reason = errors[0]?.message || "Неподдерживаемый формат";
+        return `${file.name}: ${reason}`;
+      })
+      .join("; ");
+    toast.error(`Файлы отклонены: ${message}`);
   }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
