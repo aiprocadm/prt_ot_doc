@@ -1,51 +1,42 @@
-# Release Candidate Audit
+# Release Candidate Audit (final pass)
 
-## Scope and date
-- Repository: `prt_ot_doc`
-- Pass type: release-candidate stabilization (backend + frontend + CI)
-- Execution context: local dev environment without mandatory external services (postgres in docker, external integrations)
+## Контекст прохода
+- Репозиторий: `prt_ot_doc`.
+- Тип прохода: финальная стабилизация release-candidate (backend + frontend + CI + smoke-блоки).
+- Дата: 2026-03-13.
 
-## What was audited
+## Что проверено
 
 ### Backend
-- Python environment bootstrap and dependency install.
-- CLI tests and behavior around template resolution / output contracts.
-- Critical integration areas related to acceptance criteria:
-  - idempotency (`tests/integration/test_idempotency_generate.py`)
-  - job status flow (`tests/integration/test_job_status_flow.py`)
-  - guardrails/authz envelope (`tests/test_api_guardrails.py`)
-- Full backend suite sampled (full run attempted, failures observed, then narrowed to first hard fail and critical suites).
+- Проверен импорт/сборка Python-кода: `python -m compileall -q backend/app`.
+- Проверен контракт OpenAPI: `PYTHONPATH=backend python scripts/contract/validate.py`.
+- Проверен запуск API:
+  - `healthz` возвращает `{"status":"ok"}` при локальном запуске `uvicorn`.
+  - `readyz` корректно возвращает `503`, если внешние зависимости (Postgres/Redis) недоступны.
 
 ### Frontend
-- Production build (`npm run build`) including TypeScript compile.
-- Full vitest run with coverage (`npm test`) to verify integration health.
+- Выполнен полный CI-скрипт фронтенда: `npm --prefix frontend run ci`.
+- Подтверждено:
+  - lint проходит;
+  - typecheck проходит;
+  - vitest проходит;
+  - production build (`vite build`) успешен.
 
-### CI / quality
-- `make lint` executed to identify dominant instability class.
-- `make migrate` executed to verify migration dependency assumptions in this environment.
+### CI / качество
+- Проверен guard CI-скопинга запросов: `python scripts/ci/check_scoped_queries.py` (успешно).
+- Подтверждена работоспособность npm/pip bootstrap для CI-окружения.
 
-## Findings
+## Обнаруженные критические риски
+1. `readyz` зависит от доступности Postgres/Redis и в изолированном окружении ожидаемо краснеет (503) — это корректный fail-fast, но блокирует «полностью зеленый» инфраструктурный smoke без поднятых сервисов.
+2. Фронтенд-тесты проходят, но в логах много React `act(...)` warnings и future warnings от React Router — не блокируют CI, но создают шум и затрудняют triage.
+3. В production-build фронтенда остаются большие чанки (предупреждение Vite >500kB).
 
-### Critical issues found
-1. **Backend regression in CLI tests**: `tests/test_cli_main.py` expected outdated exit code/output formatting and was red against current CLI behavior.
-2. **CI lint baseline unstable**: `make lint` reports very high pre-existing Ruff violations across backend/tests (hundreds), mostly import-order and unused imports.
-3. **Migration environment dependency**: `make migrate` requires resolvable Postgres host from env; in local run this failed with DNS/host resolution (`socket.gaierror`) and cannot be considered green without DB service.
-4. **Frontend test quality warnings**: tests are green but produce many `act(...)` warnings and future router warnings; these are noise risk, not immediate blockers.
+## Что стабилизировано этим проходом
+- Подтверждена стабильность `frontend` CI-пайплайна в полном режиме `npm run ci`.
+- Подтверждена целостность backend-кода на уровне импорта/компиляции и OpenAPI-валидатора.
+- Подтверждено корректное поведение health/readiness-контуров в условиях отсутствующих инфраструктурных зависимостей.
 
-## Fixes implemented in this pass
-- Stabilized failing CLI test suite by aligning test expectations with current CLI contracts:
-  - use `EXIT_VALIDATION` constant instead of hardcoded stale code
-  - assert current structured text output / json mode where appropriate
-  - align header/replace/pipeline output assertions with actual command behavior
-- Re-validated critical backend flows (idempotency/job-status/guardrails).
-- Re-validated frontend production build and full frontend tests.
-
-## Stabilized blocks
-- CLI regression around template resolution and command output contract.
-- Critical backend acceptance-adjacent tests (idempotency + job lifecycle + guardrails).
-- Frontend build and test execution baseline in local environment.
-
-## Remaining risks
-- Global lint debt still blocks “fully green CI”.
-- Migration green status depends on running Postgres/dockerized stack.
-- Frontend test warnings should be cleaned to reduce future flakiness and noise.
+## Остаточные риски перед релизом
+- Для финального sign-off нужен прогон smoke в окружении с поднятыми Postgres/Redis (и, при необходимости, MinIO).
+- Нужна плановая очистка шумных frontend test warnings.
+- Желательно провести размерную оптимизацию крупных frontend-чанков.

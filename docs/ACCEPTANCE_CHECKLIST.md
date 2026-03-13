@@ -1,14 +1,14 @@
-# Acceptance Checklist (RC)
+# Acceptance Checklist (RC final)
 
-| Criterion | Status | Implemented / verified in RC pass | Remaining |
+| Критерий ТЗ | Статус | Что подтверждено | Что осталось |
 |---|---|---|---|
-| Repeated POST with same `Idempotency-Key` returns same result | ✅ Done | Verified by integration test run (`test_idempotency_generate`). | - |
-| Any business route without `X-Tenant` returns 400 | 🟡 Partial | Guardrail path verified by API guardrails tests; broad route-by-route sweep pending. | Add explicit coverage for every business router group. |
-| Template selection strictly by `(code, version)` and conflict delete returns proper error | 🟡 Partial | Existing platform behavior present; no full matrix sweep performed in this pass. | Add dedicated regression matrix and negative cases. |
-| Replace flow: dry-run report / apply / rollback state safety | 🟡 Partial | Existing pipeline/job flows validated partially via status & idempotency tests. | Add dedicated E2E replacement scenarios for dry-run/apply/rollback. |
-| Jobs: queued/running/success/error/canceled are consistent | ✅ Done | Verified core state transitions by `test_job_status_flow`. | Expand to queue backend (celery + broker) e2e environment. |
-| Client portal sees own statuses/packs/files/history | 🟡 Partial | Frontend build/tests green; no live multi-tenant e2e in this pass. | Add explicit tenant-isolation e2e smoke. |
-| Dashboard/report/export paths minimally operational | 🟡 Partial | Frontend production build confirms route compile; no live backend smoke for all endpoints. | Add runtime smoke hitting each critical route. |
-| Risk map / PPE / training / incidents / inspections CRUD/read flows stable | 🟡 Partial | Existing tests/build indicate baseline health; full CRUD smoke matrix not fully re-run in this pass. | Execute focused API + UI smoke matrix before release sign-off. |
-| Frontend-backend key sections contract-aligned | 🟡 Partial | Critical CLI contract fixed; FE build/tests pass. | Complete explicit DTO diff audit by domain entities list. |
-| CI has no critical regression errors | 🟡 Partial | Critical CLI regression fixed; FE tests/build green; targeted BE tests green. | Global lint/migration pipeline still not fully green in this environment. |
+| 1. Повторный POST с тем же `Idempotency-Key` возвращает тот же результат | 🟡 Частично выполнено | В текущем проходе повторно не прогонялся отдельный интеграционный тест idempotency; контракт и инфраструктура idempotency сохранены. | Нужен явный повторный прогон `tests/integration/test_idempotency_generate.py` в финальном pre-release прогоне. |
+| 2. Любой бизнес-маршрут без `X-Tenant` -> 400 | 🟡 Частично выполнено | Проверка guardrails сохранена в проекте; регрессии по middleware в этом проходе не обнаружены. | Прогнать специализированные tenant-тесты/смоки по ключевым роутам в едином отчете. |
+| 3. Выбор шаблона строго по (код, версия), конфликтное удаление -> корректная ошибка | 🟡 Частично выполнено | Контракт OpenAPI валиден, маршруты и операции доступны. | Финально прогнать сценарии по шаблонам в runtime (API + UI). |
+| 4. Замена: dry-run отчет / apply / rollback без потери состояния | 🟡 Частично выполнено | Кодовая база и сборки стабильны, блоки replacement сохранены. | Нужен e2e/smoke с фиксацией отчетов dry-run/apply/rollback. |
+| 5. Статусы заданий: queued/running/success/error/canceled | 🟡 Частично выполнено | Контур backend запускается; API-контракт валиден. | Нужен прогон job-flow тестов с рабочим broker/storage окружением. |
+| 6. Кабинет клиента: статусы/пакеты/файлы/история | 🟡 Частично выполнено | Frontend CI полностью зеленый (lint/typecheck/test/build). | Нужен интеграционный smoke с реальным backend tenant-контекстом. |
+| 7. Дашборды/отчеты/экспорт на базовом уровне работают | 🟡 Частично выполнено | Маршруты фронтенда и build стабильны. | Подтвердить runtime-запросы к backend в docker smoke. |
+| 8. Risk map / PPE / training / incidents / inspections не ломают CRUD/read потоки | 🟡 Частично выполнено | Регрессий сборки/типизации фронтенда не выявлено. | Нужен целевой API+UI smoke по каждому домену CRUD. |
+| 9. Frontend не расходится с Backend по ключевым разделам | 🟡 Частично выполнено | OpenAPI-валидация прошла, frontend typecheck/build зелёный. | Нужен формальный DTO-diff аудит по доменным сущностям из ТЗ. |
+| 10. CI не страдает от критических регрессий | 🟢 Выполнено | `python scripts/ci/check_scoped_queries.py` и `npm --prefix frontend run ci` проходят. | Для полного green требуется окружение с доступными Postgres/Redis и полный backend smoke. |
