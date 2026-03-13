@@ -5,7 +5,9 @@ import { AuthLayout } from "@/layouts/AuthLayout";
 import { MainLayout } from "@/layouts/MainLayout";
 import { AccessDeniedPage } from "@/pages/access/AccessDeniedPage";
 import { PERMISSIONS } from "@/permissions/permissions";
+import { useAbility } from "@/permissions/useAbility";
 import { ProtectedRoute } from "@/router/ProtectedRoute";
+import { getLandingRoute } from "@/router/landing";
 import { useAuthStore } from "@/stores/auth";
 
 const LoginPage = lazy(() => import("@/pages/auth/LoginPage"));
@@ -78,6 +80,11 @@ const WarehousePage = lazy(() => import("@/pages/warehouse/WarehousePage"));
 const CrmFinancePage = lazy(() => import("@/pages/crm-finance/CrmFinancePage"));
 const IntegrationsPage = lazy(() => import("@/pages/integrations/IntegrationsPage"));
 
+const LandingRedirect = () => {
+  const { can } = useAbility();
+  return <Navigate to={getLandingRoute(can)} replace />;
+};
+
 const AppRouter = () => {
   const initialize = useAuthStore((state) => state.initialize);
 
@@ -94,7 +101,7 @@ const AppRouter = () => {
           </Route>
           <Route element={<ProtectedRoute />}>
             <Route element={<MainLayout />}>
-              <Route index element={<Navigate to="/dashboard" replace />} />
+              <Route index element={<LandingRedirect />} />
               <Route path="/no-access" element={<AccessDeniedPage />} />
               <Route element={<ProtectedRoute permission={PERMISSIONS.DASHBOARD_VIEW} />}>
                 <Route path="/dashboard" element={<DashboardPage />} />
@@ -238,7 +245,7 @@ const AppRouter = () => {
               </Route>
             </Route>
           </Route>
-          <Route path="*" element={<Navigate to="/companies" replace />} />
+          <Route path="*" element={<LandingRedirect />} />
         </Routes>
       </Suspense>
     </BrowserRouter>

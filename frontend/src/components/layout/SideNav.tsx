@@ -8,7 +8,6 @@ import {
   Building2,
   Briefcase,
   ClipboardCheck,
-  Database,
   FileArchive,
   FileText,
   Flame,
@@ -107,7 +106,6 @@ const navGroups = [
       { label: "Биллинг", to: "/admin/billing", icon: Briefcase, permission: PERMISSIONS.ADMIN_MANAGE_ROLES },
       { label: "Outbox", to: "/admin/outbox", icon: Archive, permission: PERMISSIONS.ADMIN_MANAGE_ROLES },
       { label: "Журнал аудита", to: "/audit", icon: History, permission: PERMISSIONS.AUDIT_VIEW },
-      { label: "Справочники", to: "/reference", icon: Database, permission: PERMISSIONS.REFERENCE_VIEW },
       { label: "Настройки", to: "/settings", icon: Settings, permission: PERMISSIONS.SETTINGS_VIEW }
     ]
   }
@@ -117,13 +115,40 @@ export const SideNav = () => {
   const { can } = useAbility();
   const [featureFlags, setFeatureFlags] = useState<Record<string, boolean>>({});
 
+  const clientPortalOnlyMode =
+    can(PERMISSIONS.CLIENT_PORTAL_VIEW) &&
+    ![
+      PERMISSIONS.DASHBOARD_VIEW,
+      PERMISSIONS.COMPANY_VIEW,
+      PERMISSIONS.DOCUMENT_VIEW,
+      PERMISSIONS.PACK_VIEW,
+      PERMISSIONS.TASK_VIEW,
+      PERMISSIONS.REPORTS_VIEW,
+      PERMISSIONS.ADMIN_MANAGE_ROLES
+    ].some((permission) => can(permission));
+
   useEffect(() => {
     void getBillingSummary()
       .then((summary) => setFeatureFlags(summary.features ?? {}))
       .catch(() => undefined);
   }, []);
 
-  const visibleGroups = navGroups
+  const scopedGroups = clientPortalOnlyMode
+    ? [
+        {
+          title: "Кабинет клиента",
+          items: [
+            { label: "Обзор", to: "/client-portal/dashboard", icon: Users, permission: PERMISSIONS.CLIENT_PORTAL_VIEW },
+            { label: "Пакеты", to: "/client-portal/packages", icon: Package, permission: PERMISSIONS.CLIENT_PORTAL_VIEW },
+            { label: "Документы", to: "/client-portal/documents", icon: FileText, permission: PERMISSIONS.CLIENT_PORTAL_VIEW },
+            { label: "История", to: "/client-portal/history", icon: History, permission: PERMISSIONS.CLIENT_PORTAL_VIEW },
+            { label: "Запросы", to: "/client-portal/requests", icon: ClipboardCheck, permission: PERMISSIONS.CLIENT_PORTAL_VIEW }
+          ]
+        }
+      ]
+    : navGroups;
+
+  const visibleGroups = scopedGroups
     .map((group) => ({
       ...group,
       items: group.items.filter((item) => {
@@ -137,7 +162,7 @@ export const SideNav = () => {
     <aside className="hidden h-[calc(100vh-4rem)] w-72 flex-shrink-0 border-r bg-background/95 px-4 py-6 lg:sticky lg:top-16 lg:block">
       <div className="flex items-center gap-2 text-lg font-semibold">
         <Building2 className="h-5 w-5 text-primary" />
-        OT/ПБ Контур
+        {clientPortalOnlyMode ? "Кабинет клиента" : "OT/ПБ Контур"}
       </div>
       <nav className="mt-6 space-y-6 text-sm">
         {visibleGroups.map((group) => (
