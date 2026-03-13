@@ -1,17 +1,16 @@
-# Known Limitations (Release Candidate)
+# Known Limitations (RC)
 
-## External integrations / infrastructure
-1. **DB-dependent migration flow** requires configured and reachable Postgres endpoint for full green migration pipeline.
-2. **External integrations** (S3/EDO/other stubs) are environment-sensitive; full resilience validation requires integrated environment.
+## Внешние зависимости
+1. `/readyz` зависит от доступности Postgres и Redis; без них endpoint возвращает `503` (ожидаемое поведение для production-readiness).
+2. Полные smoke-сценарии миграций/очередей/файлов требуют поднятого инфраструктурного контура (docker compose или эквивалент).
 
 ## Backend
-1. Global lint baseline includes extensive pre-existing Ruff issues; not fully remediated in this RC pass.
-2. Full backend suite is large and contains legacy unstable areas outside critical-path fixes completed here.
+1. Локальная проверка backend в этом проходе была выполнена в режиме compile/import + contract sanity; полный долгий прогон всего backend test-suite требует отдельного окна времени и инфраструктурных сервисов.
+2. При локальном запуске без настроенного production-ключа используется development JWT key-pair (лог-предупреждение, не для prod).
 
 ## Frontend
-1. Tests pass but emit significant `act(...)` warnings and React Router future warnings; this can hide real regressions in CI logs.
-2. Bundle warning for large chunks remains in production build output.
+1. `npm run ci` проходит, но тестовый лог содержит множество React `act(...)` warnings.
+2. `vite build` предупреждает о крупных чанках (>500kB), требуется последующая оптимизация code-splitting.
 
-## E2E / DevOps
-1. End-to-end smoke across full stack (with dockerized dependencies and external services) still required before final release sign-off.
-2. Environment parity (local vs CI vs production-like) must be validated for migration and background jobs.
+## DevOps / e2e
+1. Для финального sign-off требуется обязательный end-to-end smoke в среде, близкой к production, с поднятыми зависимостями и tenant-проверками.

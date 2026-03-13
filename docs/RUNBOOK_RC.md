@@ -1,43 +1,45 @@
-# RC Runbook
+# RUNBOOK RC
 
-## 1) Bootstrap
+## 1) Поднятие проекта (локально)
 ```bash
-make install-pip
-cd frontend && npm ci
+python -m pip install -r requirements.txt -r requirements-dev.txt
+npm --prefix frontend ci
 ```
 
-## 2) Backend checks
-### Targeted critical checks
+## 2) Базовые проверки backend
 ```bash
-source .venv/bin/activate
-pytest -q tests/test_cli_main.py
-pytest -q tests/integration/test_idempotency_generate.py tests/integration/test_job_status_flow.py tests/test_api_guardrails.py
+python -m compileall -q backend/app
+PYTHONPATH=backend python scripts/contract/validate.py
 ```
 
-### Full suite (optional, long)
+## 3) Проверки CI-стабильности frontend
 ```bash
-source .venv/bin/activate
-pytest -q
+npm --prefix frontend run ci
 ```
 
-## 3) Frontend checks
+## 4) Smoke health/readiness (локально)
 ```bash
-cd frontend
-npm run build
-npm test
+PYTHONPATH=backend APP_ENV=test uvicorn app.main:app --host 127.0.0.1 --port 18000
+# В отдельном терминале:
+curl -fsS http://127.0.0.1:18000/healthz
+curl -i http://127.0.0.1:18000/readyz
 ```
 
-## 4) Smoke testing (minimum)
-- Backend health + protected route behavior: use API guardrails/tenant tests and local API run.
-- Job pipeline/idempotency: execute integration tests listed above.
-- Frontend critical routes: validated by production build + test suite.
+Ожидание:
+- `healthz` должен быть `200`.
+- `readyz` будет `503`, если не подняты Postgres/Redis (это нормально для локального «без инфраструктуры» прогона).
 
-## 5) Local RC validation flow
-1. Install deps (python + frontend).
-2. Run targeted backend critical tests.
-3. Run frontend build and tests.
-4. If environment has docker/postgres, run migration and full smoke scripts.
-5. Review docs:
+## 5) Полный smoke в инфраструктурном окружении
+```bash
+docker compose up -d --build
+make smoke
+```
+
+## 6) Что проверить перед релизом
+1. Tenant guard (`X-Tenant`) и idempotency smoke.
+2. Job status transitions (queued/running/success/error/canceled).
+3. Сквозные UI-потоки: шаблоны, пакеты, задания, клиентский кабинет.
+4. Обновленные RC-документы:
    - `docs/RELEASE_CANDIDATE_AUDIT.md`
    - `docs/ACCEPTANCE_CHECKLIST.md`
    - `docs/CI_STABILIZATION_REPORT.md`
