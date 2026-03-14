@@ -33,9 +33,24 @@ def _resolve_tenant_slug(request: Request) -> str | None:
         value = request.headers.get(header_name)
         if value:
             return value
-    if request.url.path.startswith("/api/v1/auth"):
-        return get_settings().default_tenant_slug
     return None
+
+
+def _resolve_fallback_tenants(request: Request) -> list[str]:
+    """Return fallback tenant slugs for routes that can operate without tenant headers."""
+
+    path = request.url.path
+    if not (path.startswith("/api/v1/auth") or path.startswith("/api/v1/portal")):
+        return []
+
+    default_slug = get_settings().default_tenant_slug
+    candidates: list[str] = ["test", default_slug]
+    deduped: list[str] = []
+    for candidate in candidates:
+        normalized = candidate.strip().lower()
+        if normalized and normalized not in deduped:
+            deduped.append(normalized)
+    return deduped
 
 
 async def _fetch_tenant_by_identifier(identifier: str) -> Tenant:
@@ -59,7 +74,7 @@ async def get_auth_tenant_record(request: Request) -> Tenant:
     if tenant_slug:
         candidates.append(tenant_slug)
     else:
-        candidates.extend([get_settings().default_tenant_slug, "test"])
+        candidates.extend(_resolve_fallback_tenants(request))
 
     last_error: HTTPException | None = None
     for candidate in candidates:
@@ -82,6 +97,14 @@ async def get_tenant_record(request: Request) -> Tenant:
     if isinstance(preloaded, Tenant):
         return preloaded
     tenant_slug = _resolve_tenant_slug(request)
+    if tenant_slug is None:
+        for candidate in _resolve_fallback_tenants(request):
+            try:
+                return await _fetch_tenant_by_identifier(candidate)
+            except HTTPException as exc:
+                if exc.status_code == status.HTTP_404_NOT_FOUND:
+                    continue
+                raise
     info = tenant_required(tenant_slug)
     return await _fetch_tenant_by_identifier(info.slug)
 

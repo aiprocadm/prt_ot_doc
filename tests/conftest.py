@@ -166,6 +166,8 @@ async def app_fixture():
             return preloaded
 
         tenant_slug = request.headers.get(TENANT_HEADER) or request.headers.get("x-tenant-slug")
+        if not tenant_slug and request.url.path.startswith(("/api/v1/auth", "/api/v1/portal")):
+            tenant_slug = "test"
         info = tenant_required(tenant_slug)
         async with TestSession() as session:
             filters = [Tenant.slug == info.slug, Tenant.code == info.slug]
