@@ -26,6 +26,7 @@ async def test_webhooks_inbound_passes_tenant_slug_to_worker(
     response = await async_client.post(
         "/api/v1/webhooks/inbound/edo",
         json={"event_id": "evt-tenant-slug", "external_id": "ext-1", "status": "accepted"},
+        headers={"X-Tenant": tenant.slug},
     )
 
     assert response.status_code == status.HTTP_202_ACCEPTED
@@ -55,6 +56,7 @@ async def test_edo_webhook_passes_tenant_slug_to_worker(
     response = await async_client.post(
         "/api/v1/edo/webhooks/mock",
         json={"event_id": "evt-edo-tenant", "external_id": "ext-2", "status": "accepted", "raw_payload": {"k": "v"}},
+        headers={"X-Tenant": tenant.slug},
     )
 
     assert response.status_code == status.HTTP_200_OK
