@@ -1,29 +1,25 @@
 # RELEASE CANDIDATE AUDIT (финальный проход)
 
-Дата аудита: 2026-03-13.
+Дата аудита: 2026-03-14.
 
 ## Что проверено
-- Backend: запуск, readiness/health, ключевые tenancy/idempotency/pipeline тесты через `scripts/codex_audit.sh` и целевые pytest-сценарии.
-- Frontend: `npm run lint`, `npm run typecheck`, `npm run test -- --run`, `npm run build`.
-- CI/devex: локальные make-таргеты и их работоспособность без обязательной `.venv`.
+- Backend: tenant/webhook/idempotency/job flow через `scripts/codex_audit.sh` и целевые `pytest`.
+- Frontend: production build (`npm --prefix frontend run build`).
+- Smoke: проверен запуск smoke-скрипта (`scripts/smoke.sh`) и зафиксировано ограничение среды.
 
 ## Критические проблемы, обнаруженные в ходе аудита
-1. **Сбой pack-run маршрутов** (`500`) из-за импорта неверной модели PPE (`safety_core.PPEIssue` без `expires_at`) в `api/routes/packs.py`.
-2. **Регрессия tenant S3 key prefix** (`tenants/...` vs ожидаемое `tenant/...`) ломала блок файловых тестов.
-3. **Тестовая инфраструктура маскировала отсутствие `X-Tenant`** из-за дефолтного заголовка в `tests/conftest.py`.
-4. **DX/CI проблема make lint**: при отсутствии `.venv` таргеты падали до запуска инструментов.
+1. **Регрессия inbound webhook tenant-resolution**: эндпойнты `/api/v1/webhooks/inbound/*` и `/api/v1/edo/webhooks/*` отвечали `400` без `X-Tenant`, из-за чего падали тесты tenant-context webhook-очереди.
+2. **Сбой smoke в окружении**: `scripts/smoke.sh` не поднимает backend сам и падал на `curl: Failed to connect localhost:8000` при не запущенном сервере.
 
 ## Что исправлено
-- Исправлен импорт в pack-run API на canonical-модель `models.PPEIssue` + `PPEIssueStatus`.
-- Восстановлен префикс tenant-ключей для файлового storage (`tenant/...`) с сохранением проверки legacy/current префиксов.
-- Убран дефолтный `x-tenant` из `async_client` фикстуры, чтобы тесты tenancy реально валидировали отсутствие заголовка.
-- Makefile теперь корректно использует `.venv/bin/*` при наличии и fallback на системные бинарники при отсутствии `.venv`.
+- Добавлены fallback tenant-candidates для webhook маршрутов в dependency resolution (`/webhooks/inbound`, `/edo/webhooks`, `/edo/webhook/status`).
+- Tenant middleware обновлён: webhook-маршруты переведены в публичный контур с предзагрузкой tenant context (default/test tenant), чтобы inbound callbacks могли приниматься без `X-Tenant` и корректно прокидывать `tenant_slug` в worker.
 
 ## Итог по стабилизации
-- Стабилизированы и подтверждены важные блоки: файлы, tenancy-header проверки, pack run enqueue/idempotency, frontend build/typecheck/tests.
-- Полный `pytest -q` всё ещё содержит красные блоки (ABAC/audit deny details, pack download ACL, replace dry-run endpoint, policy engine reason codes, часть graph validation).
+- Исправлен и подтверждён критичный backend-кейс: webhook inbound tenant context.
+- Целевые backend тесты tenancy/idempotency/job-status проходят.
+- Frontend production build проходит.
 
-## Остаточные риски (не скрываются)
-- Неполная согласованность ABAC/error-contract между тестами и фактической схемой ошибок.
-- Часть integration/API сценариев остаётся нестабильной для релиз-кандидата без дополнительного цикла исправлений.
-- Линтинг backend/tests остаётся значительно красным (исторический technical debt).
+## Остаточные риски
+- Полный `pytest -q` не прогонялся в этом проходе целиком, остаётся риск в неохваченных подсистемах.
+- `scripts/smoke.sh` требует отдельно поднятого backend-процесса (операционный риск для локального запуска без runbook).

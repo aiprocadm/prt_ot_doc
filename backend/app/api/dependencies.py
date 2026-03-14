@@ -40,7 +40,14 @@ def _resolve_fallback_tenants(request: Request) -> list[str]:
     """Return fallback tenant slugs for routes that can operate without tenant headers."""
 
     path = request.url.path
-    if not (path.startswith("/api/v1/auth") or path.startswith("/api/v1/portal")):
+    allow_fallback = (
+        path.startswith("/api/v1/auth")
+        or path.startswith("/api/v1/portal")
+        or path.startswith("/api/v1/webhooks/inbound/")
+        or path.startswith("/api/v1/edo/webhooks/")
+        or path.startswith("/api/v1/edo/webhook/status")
+    )
+    if not allow_fallback:
         return []
 
     default_slug = get_settings().default_tenant_slug

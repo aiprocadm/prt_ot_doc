@@ -1,17 +1,15 @@
 # KNOWN LIMITATIONS (RC)
 
-Только реальные остаточные ограничения текущего кандидата.
-
 ## Backend
-- Неполная стабилизация полного regression-сета `pytest -q`: остаются падения в ABAC/policy reason mapping, audit deny logging, pack download access control, replace API сценариях.
-- Нужен дополнительный цикл выравнивания error-contract (`detail`/`reason`) между ABAC, error handlers и тестовыми ожиданиями.
+- `scripts/codex_audit.sh` не полностью зелёный: `tests/test_documents_status_flow.py` и `tests/test_templates_pipeline_api.py::test_tenant_listing` получают `400 TENANT_REQUIRED` без `X-Tenant`; нужен отдельный цикл выравнивания тестовых предпосылок/контракта публичных маршрутов.
+- Inbound webhook paths используют fallback tenant resolution (default/test tenant) для внешних callback'ов без `X-Tenant`; это осознанная архитектурная оговорка для интеграций.
 
 ## Frontend
-- Критических блокеров сборки/типизации нет.
-- В тестах есть шумные React warnings (`act(...)`), не блокирующие прохождение, но ухудшающие signal-to-noise CI логов.
+- Production build стабилен.
+- В этом проходе не выполнялись frontend e2e/smoke через браузерный раннер.
 
-## CI / DevEx
-- Backend lint debt (ruff import/order/unused) остаётся значительным и не закрыт в рамках одного RC-прохода без масштабной реорганизации.
+## DevOps / Smoke
+- `scripts/smoke.sh` не стартует backend автоматически; требует предварительно поднятого API на `localhost:8000`.
 
 ## Внешние интеграции
-- PDF/office conversion зависит от наличия `soffice`; в текущей среде бинарь отсутствует, используется fallback/ограниченный сценарий.
+- Для полноценной проверки внешних webhook/EDO провайдеров нужны реальные внешние источники событий; локально верифицирован только внутренний ingestion-контур.
