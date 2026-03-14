@@ -1,42 +1,29 @@
-# Release Candidate Audit (final pass)
+# RELEASE CANDIDATE AUDIT (финальный проход)
 
-## Контекст прохода
-- Репозиторий: `prt_ot_doc`.
-- Тип прохода: финальная стабилизация release-candidate (backend + frontend + CI + smoke-блоки).
-- Дата: 2026-03-13.
+Дата аудита: 2026-03-13.
 
 ## Что проверено
+- Backend: запуск, readiness/health, ключевые tenancy/idempotency/pipeline тесты через `scripts/codex_audit.sh` и целевые pytest-сценарии.
+- Frontend: `npm run lint`, `npm run typecheck`, `npm run test -- --run`, `npm run build`.
+- CI/devex: локальные make-таргеты и их работоспособность без обязательной `.venv`.
 
-### Backend
-- Проверен импорт/сборка Python-кода: `python -m compileall -q backend/app`.
-- Проверен контракт OpenAPI: `PYTHONPATH=backend python scripts/contract/validate.py`.
-- Проверен запуск API:
-  - `healthz` возвращает `{"status":"ok"}` при локальном запуске `uvicorn`.
-  - `readyz` корректно возвращает `503`, если внешние зависимости (Postgres/Redis) недоступны.
+## Критические проблемы, обнаруженные в ходе аудита
+1. **Сбой pack-run маршрутов** (`500`) из-за импорта неверной модели PPE (`safety_core.PPEIssue` без `expires_at`) в `api/routes/packs.py`.
+2. **Регрессия tenant S3 key prefix** (`tenants/...` vs ожидаемое `tenant/...`) ломала блок файловых тестов.
+3. **Тестовая инфраструктура маскировала отсутствие `X-Tenant`** из-за дефолтного заголовка в `tests/conftest.py`.
+4. **DX/CI проблема make lint**: при отсутствии `.venv` таргеты падали до запуска инструментов.
 
-### Frontend
-- Выполнен полный CI-скрипт фронтенда: `npm --prefix frontend run ci`.
-- Подтверждено:
-  - lint проходит;
-  - typecheck проходит;
-  - vitest проходит;
-  - production build (`vite build`) успешен.
+## Что исправлено
+- Исправлен импорт в pack-run API на canonical-модель `models.PPEIssue` + `PPEIssueStatus`.
+- Восстановлен префикс tenant-ключей для файлового storage (`tenant/...`) с сохранением проверки legacy/current префиксов.
+- Убран дефолтный `x-tenant` из `async_client` фикстуры, чтобы тесты tenancy реально валидировали отсутствие заголовка.
+- Makefile теперь корректно использует `.venv/bin/*` при наличии и fallback на системные бинарники при отсутствии `.venv`.
 
-### CI / качество
-- Проверен guard CI-скопинга запросов: `python scripts/ci/check_scoped_queries.py` (успешно).
-- Подтверждена работоспособность npm/pip bootstrap для CI-окружения.
+## Итог по стабилизации
+- Стабилизированы и подтверждены важные блоки: файлы, tenancy-header проверки, pack run enqueue/idempotency, frontend build/typecheck/tests.
+- Полный `pytest -q` всё ещё содержит красные блоки (ABAC/audit deny details, pack download ACL, replace dry-run endpoint, policy engine reason codes, часть graph validation).
 
-## Обнаруженные критические риски
-1. `readyz` зависит от доступности Postgres/Redis и в изолированном окружении ожидаемо краснеет (503) — это корректный fail-fast, но блокирует «полностью зеленый» инфраструктурный smoke без поднятых сервисов.
-2. Фронтенд-тесты проходят, но в логах много React `act(...)` warnings и future warnings от React Router — не блокируют CI, но создают шум и затрудняют triage.
-3. В production-build фронтенда остаются большие чанки (предупреждение Vite >500kB).
-
-## Что стабилизировано этим проходом
-- Подтверждена стабильность `frontend` CI-пайплайна в полном режиме `npm run ci`.
-- Подтверждена целостность backend-кода на уровне импорта/компиляции и OpenAPI-валидатора.
-- Подтверждено корректное поведение health/readiness-контуров в условиях отсутствующих инфраструктурных зависимостей.
-
-## Остаточные риски перед релизом
-- Для финального sign-off нужен прогон smoke в окружении с поднятыми Postgres/Redis (и, при необходимости, MinIO).
-- Нужна плановая очистка шумных frontend test warnings.
-- Желательно провести размерную оптимизацию крупных frontend-чанков.
+## Остаточные риски (не скрываются)
+- Неполная согласованность ABAC/error-contract между тестами и фактической схемой ошибок.
+- Часть integration/API сценариев остаётся нестабильной для релиз-кандидата без дополнительного цикла исправлений.
+- Линтинг backend/tests остаётся значительно красным (исторический technical debt).

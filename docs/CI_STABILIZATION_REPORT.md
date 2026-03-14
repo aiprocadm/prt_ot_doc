@@ -1,29 +1,23 @@
-# CI Stabilization Report (RC final)
+# CI STABILIZATION REPORT (RC)
 
-## Что было проверено в этом проходе
-- `python scripts/ci/check_scoped_queries.py`.
-- `npm --prefix frontend ci`.
-- `npm --prefix frontend run ci` (lint + typecheck + test + build).
-- `python -m compileall -q backend/app`.
-- `PYTHONPATH=backend python scripts/contract/validate.py`.
+## Что ломалось
+- `make lint` падал до запуска проверок при отсутствии `.venv` (жёсткая привязка к `.venv/bin/*`).
+- Полный `pytest -q` показывал каскадные падения:
+  - файлы (tenant key prefix mismatch),
+  - pack run (500 из-за неправильной модели PPE в инвариантах),
+  - tenancy enforcement тесты маскировались дефолтным заголовком в test client.
 
-## Итог по стадиям
+## Что исправлено
+1. **Makefile fallback** на системные `python/pytest/ruff/black/uvicorn/alembic` если `.venv` отсутствует.
+2. **Files storage prefix** восстановлен на `tenant/...` для совместимости контрактов и тестов.
+3. **Pack run API** исправлен импорт PPE-модели/enum, убран 500 в ключевых сценариях enqueue/idempotency.
+4. **Тестовый клиент** больше не подставляет дефолтный `x-tenant`, tenancy проверки валидны.
 
-### Стабильно (green)
-1. **Frontend CI stage**: полностью проходит (`lint`, `typecheck`, `vitest`, `vite build`).
-2. **Scoped query guard**: проходит.
-3. **Backend compile/import sanity**: проходит (`compileall`).
-4. **OpenAPI contract sanity**: проходит (`scripts/contract/validate.py`).
+## Стабильные этапы после правок
+- `scripts/codex_audit.sh` — проходит.
+- Frontend: `lint`, `typecheck`, `test`, `build` — проходят.
+- Целевые backend regression блоки (files/tenancy/pack-idempotency) — проходят.
 
-### Условно стабильно / зависит от окружения
-1. **`/readyz`**: корректно возвращает `503`, если не подняты Postgres/Redis.
-2. **Инфраструктурный smoke с миграциями и джобами**: требует запущенные внешние сервисы (как минимум Postgres/Redis).
-
-## Основные наблюдения по качеству
-- Во frontend тестах есть большой объем `act(...)` warnings и router future warnings. Они не валят pipeline, но ухудшают сигнал в CI-логах.
-- В production build остаются предупреждения Vite по размеру чанков.
-
-## Что осталось для полного «release green»
-1. Прогнать backend smoke/интеграцию в окружении с Postgres/Redis/MinIO.
-2. Отдельно зафиксировать результаты tenant/idempotency/job-state smoke в едином артефакте.
-3. Снизить шум frontend test warnings (приоритизация по наиболее часто повторяющимся тестам).
+## Что остаётся нестабильным
+- Полный `pytest -q` всё ещё красный (ABAC/audit deny, pack download ACL, replace API, policy-engine reason semantics, отдельные graph/profile кейсы).
+- `make lint` теперь запускается, но backend/tests содержат большое историческое число ruff-нарушений (не регрессия текущего прохода, а накопленный долг).

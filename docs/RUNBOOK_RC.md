@@ -1,46 +1,37 @@
 # RUNBOOK RC
 
-## 1) Поднятие проекта (локально)
+## 1) Поднять проект локально
 ```bash
-python -m pip install -r requirements.txt -r requirements-dev.txt
-npm --prefix frontend ci
+cp .env.example .env
+make cs:dev
 ```
 
-## 2) Базовые проверки backend
+Backend: `http://localhost:8000`  
+Frontend: `http://localhost:5173`
+
+## 2) Проверки backend/frontend
 ```bash
-python -m compileall -q backend/app
-PYTHONPATH=backend python scripts/contract/validate.py
+./scripts/codex_audit.sh
+cd frontend && npm ci && npm run lint && npm run typecheck && npm run test -- --run && npm run build
 ```
 
-## 3) Проверки CI-стабильности frontend
+## 3) Smoke-проход RC
 ```bash
-npm --prefix frontend run ci
+# при поднятом backend
+./scripts/smoke.sh
 ```
 
-## 4) Smoke health/readiness (локально)
+## 4) Целевые стабилизированные backend тесты
 ```bash
-PYTHONPATH=backend APP_ENV=test uvicorn app.main:app --host 127.0.0.1 --port 18000
-# В отдельном терминале:
-curl -fsS http://127.0.0.1:18000/healthz
-curl -i http://127.0.0.1:18000/readyz
+pytest -q tests/test_files_bus_service.py tests/test_files_core_next54.py tests/test_next29_files_service.py
+pytest -q tests/test_tenancy_enforcement.py::test_missing_x_tenant_returns_400 tests/test_next23_pipelines.py::test_pipeline_run_requires_x_tenant_header
+pytest -q tests/test_packs_run.py::test_pack_run_enqueue tests/test_pack_listing.py::test_pack_run_idempotency_conflict tests/test_idempotency.py::test_pack_run_idempotency
 ```
 
-Ожидание:
-- `healthz` должен быть `200`.
-- `readyz` будет `503`, если не подняты Postgres/Redis (это нормально для локального «без инфраструктуры» прогона).
-
-## 5) Полный smoke в инфраструктурном окружении
+## 5) Что дополнительно прогнать перед релизом
 ```bash
-docker compose up -d --build
-make smoke
+pytest -q
+make lint
 ```
 
-## 6) Что проверить перед релизом
-1. Tenant guard (`X-Tenant`) и idempotency smoke.
-2. Job status transitions (queued/running/success/error/canceled).
-3. Сквозные UI-потоки: шаблоны, пакеты, задания, клиентский кабинет.
-4. Обновленные RC-документы:
-   - `docs/RELEASE_CANDIDATE_AUDIT.md`
-   - `docs/ACCEPTANCE_CHECKLIST.md`
-   - `docs/CI_STABILIZATION_REPORT.md`
-   - `docs/KNOWN_LIMITATIONS_RC.md`
+Если в пп.5 остаются красные тесты/линт — свериться с `docs/KNOWN_LIMITATIONS_RC.md` и `docs/CI_STABILIZATION_REPORT.md`.

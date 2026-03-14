@@ -191,7 +191,6 @@ async def async_client(app_fixture):
     async with AsyncClient(
         transport=transport,
         base_url="http://testserver",
-        headers={"x-tenant": "test"},
     ) as client:
         yield client
 
