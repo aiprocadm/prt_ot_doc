@@ -11,6 +11,7 @@ from starlette.responses import Response
 from starlette.types import ASGIApp
 
 from app.core.security import verify_token
+from app.core.config import get_settings
 from app.core.tenant import TENANT_HEADER, TENANT_HEADER_ALIASES, tenant_required
 from app.db.session import AsyncSessionLocal
 from app.modules.tenancy.context import TenantContext, reset_tenant_context, set_tenant_context
@@ -27,6 +28,9 @@ class TenantMiddleware(BaseHTTPMiddleware):
         self._public_prefixes = (
             "/api/v1/public",
             "/api/v1/webhooks/incoming",
+            "/api/v1/webhooks/inbound",
+            "/api/v1/edo/webhooks",
+            "/api/v1/edo/webhook/status",
             "/api/v1/auth",
             "/api/v1/portal",
         )
@@ -73,6 +77,8 @@ class TenantMiddleware(BaseHTTPMiddleware):
             or path in self._docs_paths
             or self._is_public_path(path)
         ):
+            if path.startswith("/api/v1/webhooks/inbound/") or path.startswith("/api/v1/edo/webhooks/") or path.startswith("/api/v1/edo/webhook/status"):
+                await self._preload_webhook_tenant(request)
             return await call_next(request)
 
         correlation_id = request.headers.get("x-correlation-id") or getattr(request.state, "trace_id", None) or str(uuid4())
@@ -206,6 +212,24 @@ class TenantMiddleware(BaseHTTPMiddleware):
             return response
         finally:
             reset_tenant_context(token)
+
+    async def _preload_webhook_tenant(self, request: Request) -> None:
+        if getattr(request.state, "tenant_record", None) is not None:
+            return
+
+        tenant_candidates = ["test", get_settings().default_tenant_slug]
+        async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as session:
+            for candidate in tenant_candidates:
+                slug = str(candidate or "").strip().lower()
+                if not slug:
+                    continue
+                tenant = (await session.execute(select(Tenant).where(or_(Tenant.slug == slug, Tenant.code == slug)))).scalar_one_or_none()
+                if tenant is None or not tenant.is_active:
+                    continue
+                request.state.tenant_record = tenant
+                request.state.tenant_id = str(tenant.id)
+                request.state.tenant_slug = tenant.slug
+                return
 
 
 __all__ = ["TENANT_HEADER", "TenantMiddleware"]

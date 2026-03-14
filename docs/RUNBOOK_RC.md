@@ -1,37 +1,40 @@
 # RUNBOOK RC
 
-## 1) Поднять проект локально
+## 1) Поднять проект
 ```bash
 cp .env.example .env
 make cs:dev
 ```
 
-Backend: `http://localhost:8000`  
-Frontend: `http://localhost:5173`
-
-## 2) Проверки backend/frontend
+## 2) Базовые проверки RC
 ```bash
 ./scripts/codex_audit.sh
-cd frontend && npm ci && npm run lint && npm run typecheck && npm run test -- --run && npm run build
+pytest -q tests/test_inbound_webhook_tenant_context.py
+pytest -q tests/test_tenant_header_required.py tests/test_idempotency.py tests/integration/test_job_status_flow.py
+npm --prefix frontend run build
 ```
 
-## 3) Smoke-проход RC
+## 3) Smoke-тестирование
 ```bash
-# при поднятом backend
+# важно: backend уже должен слушать localhost:8000
 ./scripts/smoke.sh
 ```
 
-## 4) Целевые стабилизированные backend тесты
+## 4) Локальная проверка webhook ingress
 ```bash
-pytest -q tests/test_files_bus_service.py tests/test_files_core_next54.py tests/test_next29_files_service.py
-pytest -q tests/test_tenancy_enforcement.py::test_missing_x_tenant_returns_400 tests/test_next23_pipelines.py::test_pipeline_run_requires_x_tenant_header
-pytest -q tests/test_packs_run.py::test_pack_run_enqueue tests/test_pack_listing.py::test_pack_run_idempotency_conflict tests/test_idempotency.py::test_pack_run_idempotency
+# inbound webhook (без X-Tenant)
+curl -X POST http://localhost:8000/api/v1/webhooks/inbound/edo \
+  -H 'Content-Type: application/json' \
+  -d '{"event_id":"evt-local","external_id":"ext-local","status":"accepted"}'
+
+# EDO webhook (без X-Tenant)
+curl -X POST http://localhost:8000/api/v1/edo/webhooks/mock \
+  -H 'Content-Type: application/json' \
+  -d '{"event_id":"evt-edo","external_id":"ext-edo","status":"accepted","raw_payload":{}}'
 ```
 
-## 5) Что дополнительно прогнать перед релизом
+## 5) Перед релизом (рекомендуется)
 ```bash
 pytest -q
 make lint
 ```
-
-Если в пп.5 остаются красные тесты/линт — свериться с `docs/KNOWN_LIMITATIONS_RC.md` и `docs/CI_STABILIZATION_REPORT.md`.
