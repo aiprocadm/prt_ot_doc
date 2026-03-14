@@ -1,36 +1,34 @@
 # RUNBOOK RC
 
-## 1. Подготовка окружения
+## 1) Поднять окружение
 ```bash
 cp .env.example .env
-npm --prefix frontend ci
+python -m venv .venv
+. .venv/bin/activate
+pip install -r requirements.txt -r requirements-dev.txt
+cd frontend && npm ci && cd ..
 ```
 
-## 2. Базовая RC-валидация (локально)
+## 2) Критичный backend gate
 ```bash
-npm --prefix frontend run lint
-npm --prefix frontend run typecheck
-npm --prefix frontend run build
-npm --prefix frontend test -- --run
-
-pytest -q tests/integration/test_ws_stub.py
-pytest -q tests/test_tenant_header_required.py tests/test_idempotency.py tests/integration/test_job_status_flow.py tests/integration/test_pipeline_idempotency.py tests/integration/test_pipeline_steps_happy_path.py
-pytest -q tests/test_health_ready.py
+./scripts/pytest.sh tests/test_tenant_header_required.py tests/test_idempotency.py tests/test_template_delete.py tests/test_health_ready.py
 ```
 
-## 3. Миграции
+## 3) Frontend gate
 ```bash
-PYTHONPATH=backend alembic -c backend/app/migrations/alembic.ini upgrade heads
+cd frontend && npm run lint
+cd frontend && npm run test -- --run
+cd frontend && npm run build
 ```
-Если команда падает с ошибкой резолвинга host, проверьте доступность PostgreSQL и переменные окружения БД.
 
-## 4. Smoke
+## 4) Smoke (RC)
 ```bash
-# backend должен быть запущен и слушать localhost:8000
+# Скрипт поддерживает dockerless авто-подъем API (AUTO_START_API=1 по умолчанию)
 ./scripts/smoke.sh
 ```
+Если smoke падает на миграциях SQLite (`table ... already exists`), это известный RC-блокер (см. `docs/KNOWN_LIMITATIONS_RC.md`).
 
-## 5. Финальный release gate
-1. Прогнать полный `pytest -q` в CI runner.
-2. Прогнать smoke в окружении с реальными зависимостями.
-3. Проверить acceptance checklist и known limitations перед sign-off.
+## 5) Финальная локальная проверка перед релизом
+```bash
+./scripts/final_acceptance.sh
+```

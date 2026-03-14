@@ -1,15 +1,12 @@
 # KNOWN LIMITATIONS (RC)
 
-## Внешние интеграции и инфраструктура
-- В текущем окружении не поднят доступный PostgreSQL хост для alembic-миграций (`socket.gaierror: [Errno -2] Name or service not known`).
-- Полноценный smoke через `scripts/smoke.sh` требует заранее поднятого backend на `localhost:8000` и docker-compose контура.
+## Backend / migrations
+- Локальный smoke-контур в dockerless режиме блокируется конфликтом SQLite-миграций на `initial schema` (`table already exists`) при `alembic upgrade heads`.
+- Полный backend regression (`pytest -q` весь репозиторий) в этом цикле не завершен, поэтому остаются риски вне критичного среза.
 
-## Backend
-- Полный регрессионный `pytest -q` остается долгим и не завершен в этом цикле; возможны невыявленные дефекты вне критического набора.
-- WS endpoint `/ws/v1/events` остается сознательным stub (`501` при валидном tenant), что ожидаемо до реализации real-time слоя.
+## Integrations
+- В окружении отсутствует `soffice`, поэтому PDF-контур зависит от fallback-логики и не эквивалентен production LibreOffice-пайплайну.
+- Полноценные e2e потоки, завязанные на внешний infra-контур, требуют отдельного интеграционного стенда.
 
-## Frontend
-- Базовая стабильность подтверждена (lint/typecheck/tests/build), но e2e браузерный проход фронт+бэк в этом цикле не выполнялся.
-
-## CI/DevOps
-- Для финального release sign-off обязателен полный CI-прогон в целевой среде с поднятыми зависимостями (DB, сервисный контур, smoke).
+## Frontend / e2e
+- Lint/test/build стабильны, но браузерный e2e фронт+бэк сценарий в этом цикле не выполнялся.
