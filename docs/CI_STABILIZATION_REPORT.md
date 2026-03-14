@@ -1,36 +1,26 @@
 # CI STABILIZATION REPORT (RC)
 
-## Что ломалось
-- Падали тесты `tests/test_inbound_webhook_tenant_context.py` (оба кейса) с `400` вместо ожидаемого `202/200`.
-- Корневая причина: webhook callback-маршруты требовали tenant context, но не имели корректного fallback tenant resolution в ingress-пути без `X-Tenant`.
+## Что было нестабильно
+- Интеграционный тест WS-stub конфликтовал с tenancy-контрактом (`400` vs `501`).
+- Потенциально нестабильный backend прогон из-за длинного полного `pytest` и наличия infra-зависимых частей.
+- Миграционный этап зависит от доступности внешнего PostgreSQL хоста в окружении.
 
 ## Что исправлено
-1. В `backend/app/api/dependencies.py` расширены fallback-маршруты tenant lookup для:
-   - `/api/v1/webhooks/inbound/*`
-   - `/api/v1/edo/webhooks/*`
-   - `/api/v1/edo/webhook/status`
-2. В `backend/app/middleware/tenant.py`:
-   - webhook ingress добавлен в public prefixes;
-   - реализована предзагрузка tenant context (`_preload_webhook_tenant`) для inbound webhook.
-- `make lint` падал до запуска проверок при отсутствии `.venv` (жёсткая привязка к `.venv/bin/*`).
-- Полный `pytest -q` показывал каскадные падения:
-  - файлы (tenant key prefix mismatch),
-  - pack run (500 из-за неправильной модели PPE в инвариантах),
-  - tenancy enforcement тесты маскировались дефолтным заголовком в test client.
-  - webhook tenant-context тесты падали после удаления дефолтного tenant header (ожидали неявный tenant).
+1. Обновлен `tests/integration/test_ws_stub.py`:
+   - проверка `400` без `X-Tenant`;
+   - проверка `501` при `X-Tenant`.
+2. Проведен повторный набор критических проверок backend/frontend после правки.
 
-## Что исправлено
-1. **Makefile fallback** на системные `python/pytest/ruff/black/uvicorn/alembic` если `.venv` отсутствует.
-2. **Files storage prefix** восстановлен на `tenant/...` для совместимости контрактов и тестов.
-3. **Pack run API** исправлен импорт PPE-модели/enum, убран 500 в ключевых сценариях enqueue/idempotency.
-4. **Тестовый клиент** больше не подставляет дефолтный `x-tenant`, tenancy проверки валидны.
-5. **Webhook tenant-context tests** обновлены под текущий security-контракт с обязательным `X-Tenant`.
+## Что теперь стабильно (локально)
+- `npm --prefix frontend run lint` — pass.
+- `npm --prefix frontend run typecheck` — pass.
+- `npm --prefix frontend run build` — pass.
+- `npm --prefix frontend test -- --run` — pass.
+- `pytest -q tests/integration/test_ws_stub.py` — pass.
+- `pytest -q tests/test_tenant_header_required.py tests/test_idempotency.py tests/integration/test_job_status_flow.py tests/integration/test_pipeline_idempotency.py tests/integration/test_pipeline_steps_happy_path.py` — pass.
+- `pytest -q tests/test_health_ready.py` — pass.
 
-## Стабильные этапы после правок
-- `pytest -q tests/test_inbound_webhook_tenant_context.py` — зелёный.
-- `pytest -q tests/test_tenant_header_required.py tests/test_idempotency.py tests/integration/test_job_status_flow.py` — зелёный.
-- `npm --prefix frontend run build` — зелёный.
-
-## Что остаётся нестабильным / ограниченным
-- `scripts/smoke.sh` падает без запущенного backend процесса (операционное ограничение запуска).
-- `scripts/codex_audit.sh` остаётся частично красным: падают `tests/test_documents_status_flow.py` и `tests/test_templates_pipeline_api.py::test_tenant_listing` из-за строгого требования `X-Tenant` в запросах без tenant header.
+## Что остается нестабильным/ограниченным
+- `PYTHONPATH=backend alembic -c backend/app/migrations/alembic.ini upgrade heads` падает в текущем окружении (нет доступного Postgres host).
+- Полный `pytest -q` не завершен в этом проходе до конца; требуется отдельный long-run в CI runner.
+- `scripts/smoke.sh` не подтвержден end-to-end без поднятого backend/docker compose.
