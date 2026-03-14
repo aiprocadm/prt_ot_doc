@@ -14,6 +14,18 @@
 ## Что исправлено
 - Добавлены fallback tenant-candidates для webhook маршрутов в dependency resolution (`/webhooks/inbound`, `/edo/webhooks`, `/edo/webhook/status`).
 - Tenant middleware обновлён: webhook-маршруты переведены в публичный контур с предзагрузкой tenant context (default/test tenant), чтобы inbound callbacks могли приниматься без `X-Tenant` и корректно прокидывать `tenant_slug` в worker.
+1. **Сбой pack-run маршрутов** (`500`) из-за импорта неверной модели PPE (`safety_core.PPEIssue` без `expires_at`) в `api/routes/packs.py`.
+2. **Регрессия tenant S3 key prefix** (`tenants/...` vs ожидаемое `tenant/...`) ломала блок файловых тестов.
+3. **Тестовая инфраструктура маскировала отсутствие `X-Tenant`** из-за дефолтного заголовка в `tests/conftest.py`.
+4. **DX/CI проблема make lint**: при отсутствии `.venv` таргеты падали до запуска инструментов.
+5. **Webhook ingress regression**: после удаления дефолтного tenant header тесты webhooks ожидали старое поведение и начали получать `400` без `X-Tenant`.
+
+## Что исправлено
+- Исправлен импорт в pack-run API на canonical-модель `models.PPEIssue` + `PPEIssueStatus`.
+- Восстановлен префикс tenant-ключей для файлового storage (`tenant/...`) с сохранением проверки legacy/current префиксов.
+- Убран дефолтный `x-tenant` из `async_client` фикстуры, чтобы тесты tenancy реально валидировали отсутствие заголовка.
+- Makefile теперь корректно использует `.venv/bin/*` при наличии и fallback на системные бинарники при отсутствии `.venv`.
+- Тесты webhook tenant-context приведены к актуальному контракту: явная передача `X-Tenant` в бизнес webhook-маршруты.
 
 ## Итог по стабилизации
 - Исправлен и подтверждён критичный backend-кейс: webhook inbound tenant context.
