@@ -1,15 +1,15 @@
 # KNOWN LIMITATIONS (RC)
 
+## Внешние интеграции и инфраструктура
+- В текущем окружении не поднят доступный PostgreSQL хост для alembic-миграций (`socket.gaierror: [Errno -2] Name or service not known`).
+- Полноценный smoke через `scripts/smoke.sh` требует заранее поднятого backend на `localhost:8000` и docker-compose контура.
+
 ## Backend
-- `scripts/codex_audit.sh` не полностью зелёный: `tests/test_documents_status_flow.py` и `tests/test_templates_pipeline_api.py::test_tenant_listing` получают `400 TENANT_REQUIRED` без `X-Tenant`; нужен отдельный цикл выравнивания тестовых предпосылок/контракта публичных маршрутов.
-- Inbound webhook paths используют fallback tenant resolution (default/test tenant) для внешних callback'ов без `X-Tenant`; это осознанная архитектурная оговорка для интеграций.
+- Полный регрессионный `pytest -q` остается долгим и не завершен в этом цикле; возможны невыявленные дефекты вне критического набора.
+- WS endpoint `/ws/v1/events` остается сознательным stub (`501` при валидном tenant), что ожидаемо до реализации real-time слоя.
 
 ## Frontend
-- Production build стабилен.
-- В этом проходе не выполнялись frontend e2e/smoke через браузерный раннер.
+- Базовая стабильность подтверждена (lint/typecheck/tests/build), но e2e браузерный проход фронт+бэк в этом цикле не выполнялся.
 
-## DevOps / Smoke
-- `scripts/smoke.sh` не стартует backend автоматически; требует предварительно поднятого API на `localhost:8000`.
-
-## Внешние интеграции
-- Для полноценной проверки внешних webhook/EDO провайдеров нужны реальные внешние источники событий; локально верифицирован только внутренний ingestion-контур.
+## CI/DevOps
+- Для финального release sign-off обязателен полный CI-прогон в целевой среде с поднятыми зависимостями (DB, сервисный контур, smoke).
