@@ -35,6 +35,8 @@ from app.models.models import (
     DocumentPackItem,
     MedicalExam,
     Person,
+    PPEIssue,
+    PPEIssueStatus,
     PipelineRun,
     PipelineRunStatus,
     Site,
@@ -43,7 +45,7 @@ from app.models.models import (
     Training,
     TrainingStatus,
 )
-from app.models.safety_core import PPEIssue, PPEPersonalCard, PPEPersonalCardItem, RiskMapItem, SafetyRiskMap
+from app.models.safety_core import PPEPersonalCard, PPEPersonalCardItem, RiskMapItem, SafetyRiskMap
 from app.schemas.pack import (
     PackFromScenarioRequest,
     PackGenerateRequest,

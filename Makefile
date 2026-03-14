@@ -2,12 +2,12 @@
 
 LINT_PATHS=backend/app tests scripts
 VENV_BIN=.venv/bin
-PYTHON=$(VENV_BIN)/python
-PYTEST=$(VENV_BIN)/pytest
-RUFF=$(VENV_BIN)/ruff
-BLACK=$(VENV_BIN)/black
-UVICORN=$(VENV_BIN)/uvicorn
-ALEMBIC=$(VENV_BIN)/alembic
+PYTHON=$(if $(wildcard $(VENV_BIN)/python),$(VENV_BIN)/python,python)
+PYTEST=$(if $(wildcard $(VENV_BIN)/pytest),$(VENV_BIN)/pytest,pytest)
+RUFF=$(if $(wildcard $(VENV_BIN)/ruff),$(VENV_BIN)/ruff,ruff)
+BLACK=$(if $(wildcard $(VENV_BIN)/black),$(VENV_BIN)/black,black)
+UVICORN=$(if $(wildcard $(VENV_BIN)/uvicorn),$(VENV_BIN)/uvicorn,uvicorn)
+ALEMBIC=$(if $(wildcard $(VENV_BIN)/alembic),$(VENV_BIN)/alembic,alembic)
 
 check-docker:
 	@./scripts/check_docker.sh

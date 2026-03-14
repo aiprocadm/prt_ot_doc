@@ -1,16 +1,17 @@
-# Known Limitations (RC)
+# KNOWN LIMITATIONS (RC)
 
-## Внешние зависимости
-1. `/readyz` зависит от доступности Postgres и Redis; без них endpoint возвращает `503` (ожидаемое поведение для production-readiness).
-2. Полные smoke-сценарии миграций/очередей/файлов требуют поднятого инфраструктурного контура (docker compose или эквивалент).
+Только реальные остаточные ограничения текущего кандидата.
 
 ## Backend
-1. Локальная проверка backend в этом проходе была выполнена в режиме compile/import + contract sanity; полный долгий прогон всего backend test-suite требует отдельного окна времени и инфраструктурных сервисов.
-2. При локальном запуске без настроенного production-ключа используется development JWT key-pair (лог-предупреждение, не для prod).
+- Неполная стабилизация полного regression-сета `pytest -q`: остаются падения в ABAC/policy reason mapping, audit deny logging, pack download access control, replace API сценариях.
+- Нужен дополнительный цикл выравнивания error-contract (`detail`/`reason`) между ABAC, error handlers и тестовыми ожиданиями.
 
 ## Frontend
-1. `npm run ci` проходит, но тестовый лог содержит множество React `act(...)` warnings.
-2. `vite build` предупреждает о крупных чанках (>500kB), требуется последующая оптимизация code-splitting.
+- Критических блокеров сборки/типизации нет.
+- В тестах есть шумные React warnings (`act(...)`), не блокирующие прохождение, но ухудшающие signal-to-noise CI логов.
 
-## DevOps / e2e
-1. Для финального sign-off требуется обязательный end-to-end smoke в среде, близкой к production, с поднятыми зависимостями и tenant-проверками.
+## CI / DevEx
+- Backend lint debt (ruff import/order/unused) остаётся значительным и не закрыт в рамках одного RC-прохода без масштабной реорганизации.
+
+## Внешние интеграции
+- PDF/office conversion зависит от наличия `soffice`; в текущей среде бинарь отсутствует, используется fallback/ограниченный сценарий.
