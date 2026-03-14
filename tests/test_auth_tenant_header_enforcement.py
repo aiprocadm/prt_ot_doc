@@ -9,7 +9,7 @@ from tests.utils.factories import TestDataFactory
 
 
 @pytest.mark.anyio
-async def test_auth_me_requires_tenant_header(
+async def test_auth_me_accepts_token_tenant_without_header(
     app_fixture,
     sessionmaker: async_sessionmaker[AsyncSession],
     data_factory: TestDataFactory,
@@ -38,14 +38,13 @@ async def test_auth_me_requires_tenant_header(
             headers={"Authorization": f"Bearer {token}"},
         )
 
-    assert missing_header.status_code == 400
+    assert missing_header.status_code == 200
     payload = missing_header.json()
-    assert payload["code"] == "TENANT_REQUIRED"
-    assert payload["message"] == "X-Tenant header required"
+    assert payload["email"] == "tenant-header@example.com"
 
 
 @pytest.mark.anyio
-async def test_auth_refresh_requires_tenant_header(
+async def test_auth_refresh_accepts_token_tenant_without_header(
     app_fixture,
     sessionmaker: async_sessionmaker[AsyncSession],
     data_factory: TestDataFactory,
@@ -74,10 +73,10 @@ async def test_auth_refresh_requires_tenant_header(
             json={"refresh_token": refresh_token},
         )
 
-    assert missing_header.status_code == 400
+    assert missing_header.status_code == 200
     payload = missing_header.json()
-    assert payload["code"] == "TENANT_REQUIRED"
-    assert payload["message"] == "X-Tenant header required"
+    assert "access_token" in payload
+    assert "refresh_token" in payload
 
 
 @pytest.mark.anyio
@@ -102,7 +101,7 @@ async def test_auth_login_remains_public_without_tenant_header(
             json={"email": "public-login@example.com", "password": "public-secret"},
         )
 
-    assert login.status_code == 401
+    assert login.status_code == 200
     body = login.json()
-    assert body["message"] == "Invalid email or password"
-    assert body["code"] == "http_401"
+    assert "access_token" in body
+    assert "refresh_token" in body

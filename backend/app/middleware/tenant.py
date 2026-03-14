@@ -24,11 +24,14 @@ class TenantMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self._metrics_enabled = metrics_enabled
         self._system_paths = {"/health", "/ready", "/healthz", "/readyz"}
-        self._public_prefixes = ("/api/v1/public", "/api/v1/webhooks/incoming")
+        self._public_prefixes = (
+            "/api/v1/public",
+            "/api/v1/webhooks/incoming",
+            "/api/v1/auth",
+            "/api/v1/portal",
+        )
         self._docs_paths = {"/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"}
-        self._public_paths = {
-            "/api/v1/auth/login",
-        }
+        self._public_paths: set[str] = set()
 
     def _is_public_path(self, path: str) -> bool:
         if path in self._public_paths:
