@@ -1,30 +1,27 @@
 # RELEASE CANDIDATE AUDIT
 
-Дата прохода: 2026-03-14.
+Дата прохода: 2026-03-15.
 
 ## Что проверено
-- Backend: `tests/test_tenant_header_required.py`, `tests/test_idempotency.py`, `tests/test_template_delete.py`, `tests/test_health_ready.py`.
-- Frontend: `npm ci`, `npm run lint`, `npm run test -- --run`, `npm run build`.
-- Smoke/infra: `scripts/smoke.sh` (после доработки сценария для dockerless-режима).
+- **Backend critical suite**: tenancy, idempotency, jobs API, pipeline idempotency.
+- **Frontend quality gates**: lint, typecheck, unit/integration tests (vitest), production build.
+- **Smoke gate**: `scripts/smoke.sh` в dockerless fallback-режиме с проверками health/tenant enforcement.
 
 ## Критические проблемы, выявленные в финальном проходе
-1. `scripts/smoke.sh` был жестко привязан к docker-compose API-контейнеру и не работал в dockerless RC-режиме.
-2. В локальном smoke-прогоне миграции SQLite падают на `initial schema` из-за PostgreSQL-типа `JSONB` в миграциях (несовместимость диалектов), что блокировало smoke gate.
-3. API startup в локальном контуре ломался из-за bootstrap-эффектов (`DEMO_BOOTSTRAP`) при повторных прогонах и загрязненном состоянии.
+1. Контракт tenant-storage key в файловом модуле был рассогласован: код строил префикс `tenant/...`, а тесты и остальной код ожидали `tenants/...`.
+2. Полный migration smoke в SQLite остается ограничен ревизиями с PostgreSQL-типами (`JSONB`) — это не регрессия текущего цикла, но блокирует полноценный `upgrade` smoke в dockerless.
+3. Frontend тесты проходят, но в логах остаются многочисленные React `act(...)` warnings (нестабильность UX-тестов не приводит к падению, но требует отдельного техдолг-прохода).
 
 ## Что исправлено
-- `scripts/smoke.sh` стабилизирован:
-  - добавлен авто-подъем API в локальном режиме;
-  - добавлены dockerless env-переменные и унификация python/uvicorn бинари;
-  - диагностические логи сделаны безопасными без обязательного `docker compose`;
-  - PDF probe умеет работать как через `docker compose exec`, так и локально, и теперь корректно пропускается при отсутствии `soffice`;
-  - добавлен fallback smoke-gate: при ожидаемой несовместимости SQLite/JSONB выполняется минимальный релизный набор (`healthz/readyz` + tenant header checks) вместо аварийного падения.
+- Исправлен ключевой backend дефект контракта в storage-ключах для tenancy isolation: текущий префикс переведен на `tenants/...`, что выровняло код с тестами/контрактом и устранило падение критичного tenancy-теста.
+- Повторно подтверждена стабильность smoke fallback gate и frontend/CI базовых ворот.
 
-## Что подтверждено
-- Критические backend проверки (tenancy/idempotency/health/template delete) проходят стабильно.
-- Frontend lint/test/build проходит без падений.
+## Что подтверждено в этом проходе
+- Проходят: `tests/test_tenancy_enforcement.py`, `tests/test_idempotency.py`, `tests/test_jobs_api.py`, `tests/integration/test_pipeline_idempotency.py`.
+- Проходят: `npm --prefix frontend run lint`, `typecheck`, `test -- --run`, `build`.
+- Проходит: `bash scripts/smoke.sh` (ожидаемый fallback при SQLite/JSONB несовместимости).
 
 ## Остаточные риски RC
-- Полный smoke поток с миграцией `upgrade heads` в SQLite по-прежнему ограничен несовместимостью `JSONB` в части ревизий; для dockerless используется fallback-gate.
-- Полный `pytest -q` (весь репозиторий) не завершался в рамках прохода: требуется отдельный долгий CI run.
-- PDF-конвертация зависит от наличия `soffice`; в текущей среде бинарь отсутствует, используется fallback-поведение.
+- Полный `alembic upgrade` в SQLite-контуре остается ограничен несовместимостью диалектов для части исторических ревизий.
+- Часть acceptance сценариев требует полноценного Postgres+infra стенда (внешние интеграции и полный e2e).
+- Frontend тестовые предупреждения `act(...)` не блокируют CI, но повышают шум и могут маскировать реальные race-condition регрессии.

@@ -1,28 +1,26 @@
 # CI STABILIZATION REPORT (RC)
 
 ## Что было нестабильно
-- `scripts/smoke.sh` не был пригоден для dockerless CI/RC прогонов.
-- Smoke зависел от заранее поднятого API и docker compose `api exec`.
-- Локальный миграционный шаг smoke падал на SQLite из-за PostgreSQL-типа `JSONB` в ревизиях (`UnsupportedCompilationError`).
+- Падал критичный backend тест tenancy-isolation: контракт префикса storage key (`tenant/...` vs `tenants/...`).
+- Smoke migration path в SQLite по-прежнему уязвим к PostgreSQL-специфике ревизий (`JSONB`).
+- Frontend test run содержит большое количество предупреждений `act(...)` (шум в CI-логах).
 
 ## Что исправлено
-1. Переписан smoke-скрипт на dual-mode (docker-compose и dockerless):
-   - автоподъем API для локального RC;
-   - fallback для PDF probe без `docker compose exec` и безопасный skip при отсутствии `soffice`;
-   - более безопасная диагностика при недоступном API.
-2. Добавлен fallback smoke-gate для dockerless:
-   - при ожидаемой несовместимости SQLite/JSONB в Alembic smoke не падает аварийно;
-   - выполняется минимальный обязательный срез проверок (`tests/test_health_ready.py`, `tests/test_tenant_header_required.py`).
-3. Повторно подтверждена стабильность backend critical test-среза.
-4. Повторно подтверждена стабильность frontend lint/test/build.
+1. Исправлен контракт в `backend/app/modules/files/storage.py`: текущий tenant prefix приведен к `tenants`.
+2. Перепроверен backend critical regression-срез после фикса: tenancy/idempotency/jobs/pipeline-idempotency.
+3. Перепроверены frontend ворота CI:
+   - `npm --prefix frontend run lint`
+   - `npm --prefix frontend run typecheck`
+   - `npm --prefix frontend test -- --run`
+   - `npm --prefix frontend run build`
+4. Переподтвержден `bash scripts/smoke.sh` в dockerless fallback-режиме.
 
 ## Что стабильно в текущем прогоне
-- `./scripts/pytest.sh tests/test_tenant_header_required.py tests/test_idempotency.py tests/test_template_delete.py tests/test_health_ready.py`
-- `cd frontend && npm run lint`
-- `cd frontend && npm run test -- --run`
-- `cd frontend && npm run build`
+- Backend critical tests: green.
+- Frontend lint/typecheck/test/build: green.
+- Smoke gate: green (fallback mode для known SQLite limitation).
 
 ## Что остается нестабильным
-- Полный путь `alembic upgrade heads` в sqlite-контуре остается ограниченным из-за использования `JSONB` в части ревизий; в RC используется fallback-gate.
-- Полный `pytest -q` по всему репозиторию не закрыт в рамках этого цикла и должен быть прогнан в CI runner отдельно.
-- Реальные внешние интеграции (полный PDF/infra слой) зависят от доступности окружения.
+- Полный `alembic upgrade` в SQLite-контуре для всех ревизий (из-за исторических `JSONB` миграций).
+- Полный e2e/интеграционный прогон на внешних сервисах.
+- Шум предупреждений `act(...)` в frontend тестах (не fail, но требует cleanup).

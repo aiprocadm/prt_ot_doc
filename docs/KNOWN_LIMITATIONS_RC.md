@@ -1,12 +1,12 @@
 # KNOWN LIMITATIONS (RC)
 
 ## Backend / migrations
-- Полный путь `alembic upgrade heads` в dockerless SQLite ограничен PostgreSQL-спецификой миграций (`JSONB`), поэтому используется fallback smoke-gate.
-- Полный backend regression (`pytest -q` весь репозиторий) в этом цикле не завершен, поэтому остаются риски вне критичного среза.
+- Полный `alembic upgrade` в SQLite (dockerless) ограничен историческими ревизиями с PostgreSQL-типом `JSONB`.
+- Для release smoke в локальном контуре используется fallback-gate вместо полного migration path.
 
-## Integrations
-- В окружении отсутствует `soffice`, поэтому PDF-контур зависит от fallback-логики и не эквивалентен production LibreOffice-пайплайну.
-- Полноценные e2e потоки, завязанные на внешний infra-контур, требуют отдельного интеграционного стенда.
+## External integrations
+- В текущем окружении отсутствует `soffice`, поэтому PDF-конвертация не эквивалентна production-контуру LibreOffice.
+- Для отдельных бизнес-флоу (полный replace-chain, интеграционные подписи/ЭДО и т.п.) нужен внешний интеграционный стенд.
 
-## Frontend / e2e
-- Lint/test/build стабильны, но браузерный e2e фронт+бэк сценарий в этом цикле не выполнялся.
+## Frontend / test quality
+- Тестовый прогон frontend стабилен по exit-code, но содержит много предупреждений React `act(...)`.
