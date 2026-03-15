@@ -6,7 +6,7 @@ from app.domains.files import s3
 
 
 _LEGACY_TENANT_PREFIX = "tenant"
-_CURRENT_TENANT_PREFIX = "tenant"
+_CURRENT_TENANT_PREFIX = "tenants"
 
 
 def build_tenant_key(
