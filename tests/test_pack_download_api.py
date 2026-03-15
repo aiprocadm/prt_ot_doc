@@ -10,7 +10,7 @@ async def test_pack_download_stream(async_client: AsyncClient, make_auth_headers
     monkeypatch.setenv("S3_BACKEND", "local")
     get_settings.cache_clear()  # type: ignore[attr-defined]
     storage = FileStorageService.default()
-    key = "test/packages/demo/archive.zip"
+    key = "tenants/test/packages/demo/archive.zip"
     payload = b"PK\x03\x04demo"
     storage.put(key, payload, content_type="application/zip")
 
@@ -38,7 +38,7 @@ async def test_pack_download_presigned_redirect(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     storage = FileStorageService.default()
-    key = "test/packages/demo/archive.zip"
+    key = "tenants/test/packages/demo/archive.zip"
     storage.put(key, b"payload", content_type="application/zip")
 
     monkeypatch.setenv("S3_BACKEND", "minio")

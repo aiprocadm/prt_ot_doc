@@ -14,11 +14,11 @@ async def test_analytics_and_trends_endpoints(async_client, sessionmaker, data_f
         session.add(PackageReadModel(tenant_id=tenant.id, package_id="pkg-1", status="in_progress"))
         await session.commit()
 
-    response = await async_client.get("/api/v1/analytics/dashboard/executive")
+    response = await async_client.get("/api/v1/analytics/dashboard/executive", headers={"X-Tenant": "test"})
     assert response.status_code == 200
     assert "dashboard" in response.json()
 
-    trend = await async_client.get("/api/v1/analytics/trends/incidents")
+    trend = await async_client.get("/api/v1/analytics/trends/incidents", headers={"X-Tenant": "test"})
     assert trend.status_code == 200
     assert trend.json()["metric"] == "incidents"
 
@@ -39,7 +39,7 @@ async def test_search_over_projection_index(async_client, sessionmaker, data_fac
         )
         await session.commit()
 
-    response = await async_client.get("/api/v1/search", params={"q": "Иван", "entity_types": "person"})
+    response = await async_client.get("/api/v1/search", params={"q": "Иван", "entity_types": "person"}, headers={"X-Tenant": "test"})
     assert response.status_code == 200
     payload = response.json()
     assert payload["items"]
@@ -54,13 +54,13 @@ async def test_export_center_idempotent_creation(async_client, sessionmaker, dat
 
     headers = {"Idempotency-Key": "same-export"}
     body = {"export_type": "training_matrix", "scope_json": {"scope": "tenant"}, "filters_json": {"status": "all"}}
-    r1 = await async_client.post("/api/v1/exports", json=body, headers=headers)
+    r1 = await async_client.post("/api/v1/exports", json=body, headers={**headers, "X-Tenant": "test"})
     assert r1.status_code == 201
-    r2 = await async_client.post("/api/v1/exports", json=body, headers=headers)
+    r2 = await async_client.post("/api/v1/exports", json=body, headers={**headers, "X-Tenant": "test"})
     assert r2.status_code == 201
     assert r1.json()["id"] == r2.json()["id"]
 
-    details = await async_client.get(f"/api/v1/exports/{r1.json()['id']}")
+    details = await async_client.get(f"/api/v1/exports/{r1.json()['id']}", headers={"X-Tenant": "test"})
     assert details.status_code == 200
 
 

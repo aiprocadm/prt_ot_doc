@@ -1,6 +1,6 @@
 # RUNBOOK RC
 
-## 1) Поднять окружение
+## 1) Подготовка окружения
 ```bash
 cp .env.example .env
 python -m venv .venv
@@ -9,29 +9,35 @@ pip install -r requirements.txt -r requirements-dev.txt
 npm --prefix frontend ci
 ```
 
-## 2) Backend critical regression gate
+## 2) Regression-срез RC (обновленный)
 ```bash
-pytest -q tests/test_tenancy_enforcement.py tests/test_idempotency.py tests/test_jobs_api.py tests/integration/test_pipeline_idempotency.py
+pytest -q \
+  tests/test_documents_status_flow.py \
+  tests/test_files_bus_service.py \
+  tests/test_files_core_next54.py \
+  tests/test_next29_files_service.py \
+  tests/test_next62_analytics_search_export_center.py \
+  tests/test_pack_download_api.py \
+  tests/test_pipeline_profile_graph_and_api.py \
+  tests/test_replace_api.py \
+  tests/test_templates_pipeline_api.py \
+  tests/unit/test_policy_engine.py
 ```
 
-## 3) Frontend CI gate
+## 3) Полный backend прогон (по необходимости)
+```bash
+pytest -q
+```
+
+## 4) Frontend gates
 ```bash
 npm --prefix frontend run lint
 npm --prefix frontend run typecheck
-npm --prefix frontend test -- --run
+npm --prefix frontend run test -- --run
 npm --prefix frontend run build
 ```
 
-## 4) Smoke gate
+## 5) Smoke минимум перед демонстрацией
 ```bash
-bash scripts/smoke.sh
-```
-
-> Примечание: в dockerless/SQLite режиме допускается fallback smoke при известной несовместимости миграций `JSONB`.
-
-## 5) Локальная RC проверка перед демонстрацией
-```bash
-pytest -q tests/test_tenancy_enforcement.py tests/test_idempotency.py tests/test_jobs_api.py
-npm --prefix frontend run build
 bash scripts/smoke.sh
 ```
