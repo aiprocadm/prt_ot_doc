@@ -337,7 +337,7 @@ async def test_pipeline_async_enqueue(
 
 @pytest.mark.anyio
 async def test_tenant_listing(async_client: AsyncClient) -> None:
-    response = await async_client.get("/api/v1/tenants")
+    response = await async_client.get("/api/v1/tenants", headers={"X-Tenant": "test"})
     assert response.status_code == 200
     payload = response.json()
     assert payload["total"] >= 1

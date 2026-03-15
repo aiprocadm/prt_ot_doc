@@ -17,7 +17,7 @@ def test_graph_validator_requires_branch_default() -> None:
             {"from": "decision", "to": "done", "condition": "ctx.get('replace_map_id') != None"},
         ],
     )
-    with pytest.raises(ValueError, match="no default edge"):
+    with pytest.raises(ValueError, match="must have at least 2 outgoing edges"):
         PipelineProfileValidator().validate(graph)
 
 

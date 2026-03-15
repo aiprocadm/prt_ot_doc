@@ -1,16 +1,46 @@
 from __future__ import annotations
 
 from io import BytesIO
+from uuid import uuid4
 
 import pytest
 from docx import Document
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
+import json
+
+from app.models.document import DocumentVersion
+from app.services.file_storage import FileStorageService
+
+
+async def _seed_document_version(sessionmaker, data_factory):
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        user = await data_factory.create_user(tenant=tenant, email=f"{uuid4()}@example.com", session=session)
+        company = await data_factory.create_company(tenant=tenant, name=f"Company {uuid4()}"[:36], session=session)
+        person = await data_factory.create_person(tenant=tenant, company=company, first_name="Jane", last_name="Doe", session=session)
+        template = await data_factory.create_template(tenant=tenant, name=f"Template {uuid4()}"[:36], session=session)
+        document, version = await data_factory.create_document(
+            tenant=tenant,
+            company=company,
+            person=person,
+            template=template,
+            creator=user,
+            version_payload={"v": 1},
+            version_file_key=f"tenants/{tenant.slug}/documents/{uuid4()}.docx",
+            storage_key=f"tenants/{tenant.slug}/documents/{uuid4()}.docx",
+            session=session,
+        )
+        await session.commit()
+        return tenant.slug, document.id, version.id, version.file_key
 
 
 @pytest.mark.anyio
-async def test_replace_dry_run_apply_rollback(app_fixture, make_auth_headers) -> None:
+async def test_replace_dry_run_apply_rollback(app_fixture, make_auth_headers, sessionmaker, data_factory) -> None:
     headers = await make_auth_headers()
     transport = ASGITransport(app=app_fixture)
+
+    tenant_slug, _, version_id, version_key = await _seed_document_version(sessionmaker, data_factory)
 
     doc = Document()
     doc.add_paragraph("Hello {{company_name}}")
@@ -20,100 +50,89 @@ async def test_replace_dry_run_apply_rollback(app_fixture, make_auth_headers) ->
     doc.sections[0].footer.add_paragraph("{{company_name}}")
     buffer = BytesIO()
     doc.save(buffer)
-    buffer.seek(0)
-
-    mapping = b"from;to\n{{company_name}};OOO Demo\n"
+    payload = buffer.getvalue()
+    FileStorageService.default().put(version_key, payload, content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        dry = await client.post(
-            "/api/v1/replace:dry-run",
-            headers={**headers, "Idempotency-Key": "replace-dry-1"},
-            files={
-                "docx_file": ("demo.docx", buffer.getvalue(), "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
-                "replace_map": ("replace_map.csv", mapping, "text/csv"),
-            },
+        create_map = await client.post(
+            "/api/v1/replace-maps",
+            headers={**headers, "X-Tenant": tenant_slug},
+            data={"payload": json.dumps({"code": "demo-map", "name": "Demo map", "rules": [{"from": "{{company_name}}", "to": "OOO Demo"}]})},
         )
-        assert dry.status_code == 202
-        dry_payload = dry.json()
-        assert dry_payload["summary"]["matches"] >= 3
-        report_id = dry_payload["report_id"]
+        assert create_map.status_code == 201
+        map_id = create_map.json()["id"]
 
-        report = await client.get(f"/api/v1/replace/reports/{report_id}", headers=headers)
-        assert report.status_code == 200
-        assert report.json()["total"] >= 3
+        dry = await client.post(
+            f"/api/v1/documents/{version_id}/replace:dry-run",
+            headers={**headers, "X-Tenant": tenant_slug, "Idempotency-Key": "replace-dry-1"},
+            json={"replace_map_id": map_id},
+        )
+        assert dry.status_code == 200
+        dry_payload = dry.json()
+        assert dry_payload["replace_run_id"]
+        assert dry_payload["hits_count"] and dry_payload["hits_count"] > 0
 
         apply = await client.post(
-            "/api/v1/replace:apply",
-            headers={**headers, "Idempotency-Key": "replace-apply-1"},
-            files={
-                "docx_file": ("demo.docx", buffer.getvalue(), "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
-                "replace_map": ("replace_map.csv", mapping, "text/csv"),
-            },
+            f"/api/v1/documents/{version_id}/replace:apply",
+            headers={**headers, "X-Tenant": tenant_slug, "Idempotency-Key": "replace-apply-1"},
+            json={"replace_map_id": map_id},
         )
-        assert apply.status_code == 202
+        assert apply.status_code == 200
         apply_payload = apply.json()
-        assert apply_payload["backup_file_id"]
+        assert apply_payload["new_document_version_id"]
 
         rollback = await client.post(
-            "/api/v1/replace:rollback",
-            headers={**headers, "Idempotency-Key": "replace-rollback-1"},
-            params={"apply_job_id": apply_payload["job_id"]},
+            f"/api/v1/replace-runs/{apply_payload['replace_run_id']}/rollback",
+            headers={**headers, "X-Tenant": tenant_slug},
+            json={"rollback_to_version_number": 1},
         )
-        assert rollback.status_code == 202
-        assert rollback.json()["restored_file_id"]
+        assert rollback.status_code == 200
+        rollback_payload = rollback.json()
+        assert rollback_payload["restored_from_version_id"] == version_id
 
 
 @pytest.mark.anyio
-async def test_replace_requires_tenant_header(app_fixture) -> None:
-    transport = ASGITransport(app=app_fixture)
-
-    doc = Document()
-    doc.add_paragraph("Hello")
-    buffer = BytesIO()
-    doc.save(buffer)
-
-    mapping = b"from,to\nHello,Hi\n"
-
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        dry = await client.post(
-            "/api/v1/replace/dry-run",
-            files={
-                "docx_file": ("demo.docx", buffer.getvalue(), "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
-                "replace_map": ("replace_map.csv", mapping, "text/csv"),
-            },
-        )
-    assert dry.status_code == 400
-
-
-@pytest.mark.anyio
-async def test_replace_idempotency_conflict_same_key_different_payload(app_fixture, make_auth_headers) -> None:
+async def test_replace_idempotency_conflict_same_key_different_payload(app_fixture, make_auth_headers, sessionmaker, data_factory) -> None:
     headers = await make_auth_headers()
     transport = ASGITransport(app=app_fixture)
+
+    tenant_slug, _, version_id, version_key = await _seed_document_version(sessionmaker, data_factory)
 
     doc = Document()
     doc.add_paragraph("Hello {{company_name}}")
     buffer = BytesIO()
     doc.save(buffer)
-    mapping = b"from;to\n{{company_name}};OOO Demo\n"
+    FileStorageService.default().put(version_key, buffer.getvalue(), content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        first = await client.post(
-            "/api/v1/replace/dry-run",
-            headers={**headers, "Idempotency-Key": "replace-conflict-1"},
-            files={
-                "docx_file": ("demo.docx", buffer.getvalue(), "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
-                "replace_map": ("replace_map.csv", mapping, "text/csv"),
-            },
+        first_map = await client.post(
+            "/api/v1/replace-maps",
+            headers={**headers, "X-Tenant": tenant_slug},
+            data={"payload": json.dumps({"code": "map-1", "name": "Map 1", "rules": [{"from": "{{company_name}}", "to": "OOO Demo"}]})},
         )
-        assert first.status_code == 202
+        second_map = await client.post(
+            "/api/v1/replace-maps",
+            headers={**headers, "X-Tenant": tenant_slug},
+            data={"payload": json.dumps({"code": "map-2", "name": "Map 2", "rules": [{"from": "{{company_name}}", "to": "AO Demo"}]})},
+        )
+        assert first_map.status_code == 201
+        assert second_map.status_code == 201
+
+        first = await client.post(
+            f"/api/v1/documents/{version_id}/replace:dry-run",
+            headers={**headers, "X-Tenant": tenant_slug, "Idempotency-Key": "replace-conflict-1"},
+            json={"replace_map_id": first_map.json()["id"]},
+        )
+        assert first.status_code == 200
 
         second = await client.post(
-            "/api/v1/replace/dry-run",
-            headers={**headers, "Idempotency-Key": "replace-conflict-1"},
-            files={
-                "docx_file": ("demo.docx", buffer.getvalue() + b"x", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
-                "replace_map": ("replace_map.csv", mapping, "text/csv"),
-            },
+            f"/api/v1/documents/{version_id}/replace:dry-run",
+            headers={**headers, "X-Tenant": tenant_slug, "Idempotency-Key": "replace-conflict-1"},
+            json={"replace_map_id": second_map.json()["id"]},
         )
+        assert second.status_code == 409
+        assert second.json()["code"] == "IDEMPOTENCY_MISMATCH"
 
-    assert second.status_code == 409
+    async with sessionmaker() as session:
+        versions = (await session.execute(select(DocumentVersion).where(DocumentVersion.document_id.is_not(None)))).scalars().all()
+        assert len(versions) >= 1

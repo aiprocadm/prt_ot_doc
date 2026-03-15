@@ -133,7 +133,7 @@ async def test_create_upload_session_uses_tenant_prefix(monkeypatch: pytest.Monk
 
     monkeypatch.setattr("app.modules.files.service.s3.generate_presigned_put_url", lambda key, **kwargs: "http://put")
     rec, _url, _ttl = await svc.create_upload_session(filename="a.txt", content_type="text/plain", size_bytes=1)
-    assert rec.object_key.startswith("tenant/tenant-xyz/")
+    assert rec.object_key.startswith("tenants/tenant-xyz/")
     get_settings.cache_clear()  # type: ignore[attr-defined]
 
 
@@ -259,8 +259,8 @@ async def test_create_new_version_upload_session_uses_tenant_prefix(monkeypatch:
 
     assert isinstance(version, FileVersion)
     assert version.version_no == 3
-    assert version.s3_key.startswith("tenant/t1/files/f6/f6/v3/")
-    assert upload_url.startswith("http://put/tenant/t1/files/f6/f6/v3/")
+    assert version.s3_key.startswith("tenants/t1/files/f6/f6/v3/")
+    assert upload_url.startswith("http://put/tenants/t1/files/f6/f6/v3/")
     get_settings.cache_clear()  # type: ignore[attr-defined]
 
 

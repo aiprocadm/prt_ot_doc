@@ -36,7 +36,7 @@ class DummySession:
 
 def test_build_tenant_key_date_prefix() -> None:
     key = build_tenant_key(tenant_id="tenant-1", file_id="f1", filename="doc.pdf")
-    assert key.startswith("tenant/tenant-1/")
+    assert key.startswith("tenants/tenant-1/")
     assert key.endswith("/f1/doc.pdf")
 
 

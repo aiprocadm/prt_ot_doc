@@ -8,7 +8,7 @@ from fastapi import HTTPException
 
 def test_build_tenant_key_is_tenant_scoped() -> None:
     key = build_tenant_key(tenant_id="tenant-a", file_id="f1", version_no=2, filename="doc.pdf")
-    assert key.startswith("tenant/tenant-a/")
+    assert key.startswith("tenants/tenant-a/")
     assert "/f1/v2/" in key
 
 

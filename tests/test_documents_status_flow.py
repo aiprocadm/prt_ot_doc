@@ -96,7 +96,10 @@ async def test_document_status_transition_success(
     response = await async_client.patch(
         f"/api/v1/documents/{seeded['document_id']}/status",
         json={"to": DocumentStatus.GENERATED.value},
-        headers={"Authorization": f"Bearer {access_token}"},
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "X-Tenant": seeded["tenant_slug"],
+        },
     )
 
     assert response.status_code == 200
@@ -161,7 +164,10 @@ async def test_document_status_transition_invalid_is_rejected(
     response = await async_client.patch(
         f"/api/v1/documents/{seeded['document_id']}/status",
         json={"to": DocumentStatus.SIGNED.value},
-        headers={"Authorization": f"Bearer {access_token}"},
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "X-Tenant": seeded["tenant_slug"],
+        },
     )
 
     assert response.status_code == 409
@@ -220,7 +226,10 @@ async def test_document_status_transition_forbidden_for_unprivileged_role(
     response = await async_client.patch(
         f"/api/v1/documents/{seeded['document_id']}/status",
         json={"to": DocumentStatus.GENERATED.value},
-        headers={"Authorization": f"Bearer {access_token}"},
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "X-Tenant": seeded["tenant_slug"],
+        },
     )
 
     assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -256,7 +265,10 @@ async def test_document_status_sequential_flow(
         response = await async_client.patch(
             f"/api/v1/documents/{seeded['document_id']}/status",
             json={"to": target_status.value},
-            headers={"Authorization": f"Bearer {access_token}"},
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "X-Tenant": seeded["tenant_slug"],
+            },
         )
         assert response.status_code == 200
 

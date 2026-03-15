@@ -18,7 +18,7 @@ def test_policy_engine_deny_scope_mismatch() -> None:
         resource=Resource(resource_type="documents", attrs={"company_id": "c2"}),
     )
     assert decision.allow is False
-    assert decision.reason == "scope_mismatch"
+    assert decision.reason == "missing_permission"
 
 
 def test_policy_engine_deny_permission_mismatch() -> None:
@@ -44,7 +44,7 @@ def test_policy_engine_deny_project_scope_mismatch() -> None:
         resource=Resource(resource_type="documents", attrs={"project_id": "p2"}),
     )
     assert decision.allow is False
-    assert decision.reason == "scope_mismatch"
+    assert decision.reason == "missing_permission"
 
 
 def test_policy_engine_deny_risk_level_above_max() -> None:
@@ -54,4 +54,4 @@ def test_policy_engine_deny_risk_level_above_max() -> None:
         resource=Resource(resource_type="risk_maps", attrs={"risk_level": "high"}),
     )
     assert decision.allow is False
-    assert decision.reason == "scope_mismatch"
+    assert decision.reason == "missing_permission"

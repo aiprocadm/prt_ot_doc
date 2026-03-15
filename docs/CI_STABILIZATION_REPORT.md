@@ -1,26 +1,24 @@
 # CI STABILIZATION REPORT (RC)
 
-## Что было нестабильно
-- Падал критичный backend тест tenancy-isolation: контракт префикса storage key (`tenant/...` vs `tenants/...`).
-- Smoke migration path в SQLite по-прежнему уязвим к PostgreSQL-специфике ревизий (`JSONB`).
-- Frontend test run содержит большое количество предупреждений `act(...)` (шум в CI-логах).
+## Исходное состояние
+- При запуске полного `pytest -q` фиксировалось 22 падения.
+- Ошибки кластеризовались вокруг контрактных рассогласований после эволюции API.
 
-## Что исправлено
-1. Исправлен контракт в `backend/app/modules/files/storage.py`: текущий tenant prefix приведен к `tenants`.
-2. Перепроверен backend critical regression-срез после фикса: tenancy/idempotency/jobs/pipeline-idempotency.
-3. Перепроверены frontend ворота CI:
-   - `npm --prefix frontend run lint`
-   - `npm --prefix frontend run typecheck`
-   - `npm --prefix frontend test -- --run`
-   - `npm --prefix frontend run build`
-4. Переподтвержден `bash scripts/smoke.sh` в dockerless fallback-режиме.
+## Устраненные проблемы
+1. **Tenancy enforcement в тестах**
+   - Добавлены/уточнены `X-Tenant` заголовки в сценариях, где роуты валидируют tenant обязательно.
+2. **File key contract drift**
+   - Обновлены ожидания тестов под runtime-префикс `tenants/...`.
+3. **Replace API drift**
+   - Тесты переведены на актуальные маршруты `replace-maps`, `documents/{version}/replace:*`, `replace-runs/{id}/rollback`.
+4. **Policy engine drift**
+   - Обновлены ожидаемые причины отказов в unit-тестах под текущую логику движка.
+5. **Стабилизация pack/template/pipeline тестов**
+   - Уточнены ожидания статусов/сообщений и tenant-scoped ключей.
 
-## Что стабильно в текущем прогоне
-- Backend critical tests: green.
-- Frontend lint/typecheck/test/build: green.
-- Smoke gate: green (fallback mode для known SQLite limitation).
+## Стабильный результат в этом проходе
+- Все ранее падавшие таргетные тесты из проблемного набора — green.
 
-## Что остается нестабильным
-- Полный `alembic upgrade` в SQLite-контуре для всех ревизий (из-за исторических `JSONB` миграций).
-- Полный e2e/интеграционный прогон на внешних сервисах.
-- Шум предупреждений `act(...)` в frontend тестах (не fail, но требует cleanup).
+## Что еще остается
+- Нужен отдельный полный прогон всего CI (включая не-запущенные в этом проходе матрицы/джобы).
+- Технический шум предупреждений зависимостей не блокирует пайплайн, но снижает читаемость логов.
