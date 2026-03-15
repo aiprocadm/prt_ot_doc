@@ -4,15 +4,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import UUID
 
-from celery.result import AsyncResult
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, abac
-from app.models.obligations import Task, TaskPriority, TaskStatus
 from app.models.models import PipelineRun, Tenant
+from app.models.obligations import Task, TaskPriority, TaskStatus
 from app.schemas.task import (
     TaskCreate,
     TaskListResponse,
@@ -21,9 +16,13 @@ from app.schemas.task import (
     TaskStatusResponse,
     TaskUpdate,
 )
-from app.services.celery_app import celery_app
 from app.services.audit import AuditService
+from app.services.celery_app import celery_app
 from app.services.obligations import next_task_reminder
+from celery.result import AsyncResult
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()
 
@@ -269,7 +268,7 @@ async def update_task(
     payload: TaskUpdate,
     tenant: Tenant = TenantDep,
     session: AsyncSession = SessionDep,
-    _: AccessContext = TaskWriteAccess,
+    access: AccessContext = TaskWriteAccess,
 ) -> TaskRead:
     stmt = select(Task).where(Task.id == task_id, Task.tenant_id == tenant.id)
     task = (await session.execute(stmt)).scalar_one_or_none()
