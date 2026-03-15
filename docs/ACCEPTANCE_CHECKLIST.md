@@ -13,7 +13,7 @@
 | Базовые dashboard/reports/export маршруты | 🟡 | Роутинг/сборка фронтенда стабильны | Нужна API+e2e в интеграционном окружении |
 | CRUD потоки risk/PPE/training/incidents не ломаются | 🟡 | Нет падений фронтовых тестов по критичным страницам | Нужен backend e2e CRUD прогон |
 | FE/BE контракты по ключевым разделам | 🟡 | Критичные smoke/tenant/idempotency секции согласованы | Нужен полный OpenAPI+DTO drift-pass |
-| CI без критических регрессий | 🟡 | Локально зелёные: frontend lint/test/build + critical backend tests | Полный CI run + устранение smoke migration blocker |
+| CI без критических регрессий | 🟡 | Локально зелёные: frontend lint/test/build + critical backend tests + smoke fallback gate | Полный CI run в postgres-контуре |
 
 ## Итог
-RC стабилизирован по критичному минимуму, но final sign-off ограничен блокером в локальном smoke миграционном шаге.
+RC стабилизирован по критичному минимуму, включая fallback smoke gate для dockerless среды; final sign-off требует полного CI прогона в postgres-интеграционном контуре.

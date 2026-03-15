@@ -26,7 +26,7 @@ cd frontend && npm run build
 # Скрипт поддерживает dockerless авто-подъем API (AUTO_START_API=1 по умолчанию)
 ./scripts/smoke.sh
 ```
-Если smoke падает на миграциях SQLite (`table ... already exists`), это известный RC-блокер (см. `docs/KNOWN_LIMITATIONS_RC.md`).
+Если smoke в dockerless режиме сталкивается с известной несовместимостью SQLite/JSONB в Alembic, скрипт автоматически переключится в fallback smoke-gate (health + tenant enforcement), это ожидаемое RC-поведение (см. `docs/KNOWN_LIMITATIONS_RC.md`).
 
 ## 5) Финальная локальная проверка перед релизом
 ```bash

@@ -1,7 +1,7 @@
 # KNOWN LIMITATIONS (RC)
 
 ## Backend / migrations
-- Локальный smoke-контур в dockerless режиме блокируется конфликтом SQLite-миграций на `initial schema` (`table already exists`) при `alembic upgrade heads`.
+- Полный путь `alembic upgrade heads` в dockerless SQLite ограничен PostgreSQL-спецификой миграций (`JSONB`), поэтому используется fallback smoke-gate.
 - Полный backend regression (`pytest -q` весь репозиторий) в этом цикле не завершен, поэтому остаются риски вне критичного среза.
 
 ## Integrations
