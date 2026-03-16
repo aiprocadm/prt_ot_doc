@@ -310,6 +310,7 @@ def _handle_http_exception(
         trace_id=trace_id,
         trace_header=trace_header,
         headers=exc.headers,
+        detail_payload=exc.detail,
     )
 
 

@@ -446,7 +446,7 @@ def policy_forbidden(reason: str, *, correlation_id: str | None = None) -> HTTPE
         status_code=status.HTTP_403_FORBIDDEN,
         detail={
             "code": "forbidden",
-            "type": "authz",
+            "type": "policy",
             "message": "forbidden",
             "reason_code": reason,
             "correlation-id": correlation_id,

@@ -175,6 +175,7 @@ async def create_company_endpoint(
 
 @router.get("/{company_id}", response_model=CompanyRead)
 async def get_company_endpoint(
+    request: Request,
     company_id: str,
     tenant: TenantDep,
     session: SessionDep,
@@ -183,6 +184,21 @@ async def get_company_endpoint(
     company = await _get_company_or_404(session, tenant, company_id)
     actor = actor_from_claims(dict(access.claims), access.to_auth_context().roles)
     if actor.company_ids and company.id not in actor.company_ids:
+        await AuditService(session).log_event(
+            tenant_id=str(tenant.id),
+            action="access_deny",
+            object_type="companies",
+            object_id=company.id,
+            user_id=access.user.id,
+            ip=request.client.host if request.client else "unknown",
+            request_id=getattr(request.state, "trace_id", None),
+            user_agent=request.headers.get("user-agent"),
+            details={
+                "type": "policy",
+                "reason": "Company scope mismatch for read companies",
+            },
+        )
+        await session.commit()
         raise policy_forbidden("Company scope mismatch for read companies")
     return CompanyRead.model_validate(company)
 
