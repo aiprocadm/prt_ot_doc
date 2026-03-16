@@ -1,27 +1,44 @@
 # CI STABILIZATION REPORT (RC)
 
-## Исходное состояние в этом проходе
-- Локальный `ruff check backend/app tests scripts` фиксирует большой исторический хвост ошибок (в том числе `E402`, `F841`, `E741`, `F401`).
-- Критичный backend-дефект в `tasks` приводил к runtime падению при обновлении задачи.
-- `scripts/smoke.sh` в SQLite fallback упирается в известную несовместимость `JSONB` в миграциях.
+## Наблюдения по пайплайнам
 
-## Что устранено
-1. **Критическая backend ошибка в tasks API**
-   - Добавлена dependency-инъекция `access: AccessContext = TaskWriteAccess` в `update_task`.
-   - Это устранило `NameError` на этапе audit logging при `PATCH /api/v1/tasks/{task_id}`.
+### 1) Интегральный RC-гейт
+- Команда: `./scripts/final_acceptance.sh`.
+- Результат: `overall_status = pass`.
+- Прошедшие этапы:
+  - critical backend tests
+  - critical frontend checks
+  - e2e final regression subset
+  - openapi drift
+  - migrations heads
+  - health and readiness
+  - sample render/pdf/export flow
+  - schema consistency
 
-2. **Базовая валидация backend regression**
-   - Выполнен таргетный прогон `tests/test_task_status.py` — оба теста проходят.
+### 2) Локальный полный CI
+- Команда: `make ci-local`.
+- Результат: fail на этапе lint.
+- Первопричина: массовый исторический lint-долг (`ruff`: сотни ошибок в backend/tests/scripts), а не единичная регрессия текущего RC-прохода.
 
-3. **Frontend gate проверка**
-   - Выполнен `npm run typecheck` — успешно.
+### 3) Smoke
+- Команда: `./scripts/smoke.sh`.
+- Результат: pass в fallback-режиме.
+- Деталь: в SQLite full-migration падает на JSONB (ожидаемое ограничение), затем выполняется fallback smoke и завершается успешно.
+
+### 4) Frontend production build
+- Команда: `cd frontend && npm run build`.
+- Результат: pass.
+- Замечание: предупреждение по размеру чанков (не блокер RC).
+
+## Что стабилизировано
+- Критические release-критерии закрыты и автоматизированно подтверждены через `final_acceptance`.
+- Контрактный слой FE/BE валидирован через openapi drift checks.
+- Smoke-ворота стабильны в документированном fallback-сценарии.
 
 ## Что остается нестабильным
-- Полный lint-контур не зеленый из-за накопленных нарушений стиля/качества в широком наборе файлов.
-- `scripts/smoke.sh` в локальном SQLite режиме не является полным gate из-за JSONB-ограничения миграций.
-- `npm run build` требует отдельной валидации на чистом CI runner (в этом проходе наблюдалось нестабильное/долгое выполнение в текущем окружении).
+- Lint-stage полного CI остается нестабильным из-за legacy-объема нарушений.
 
-## Рекомендации для финального CI sign-off
-1. Запустить full pipeline на PostgreSQL (без SQLite fallback) и зафиксировать migration smoke.
-2. Выделить отдельный технический долг-эпик под массовые lint issues.
-3. Добавить таргетный regression джоб по `tasks` API, чтобы фикс не регрессировал.
+## План до полного «зеленого» CI
+1. Выделить отдельный backlog на поэтапное устранение `ruff`-нарушений по пакетам/директориям.
+2. Закрепить `final_acceptance` как обязательный pre-release gate.
+3. Выполнять финальный sign-off на PostgreSQL-окружении (без SQLite fallback-ограничений).
