@@ -1,16 +1,16 @@
 # ACCEPTANCE CHECKLIST (RC)
 
-Статусы: ✅ выполнено · 🟡 частично · ⛔ заблокировано.
+Статусы: ✅ выполнено · 🟡 частично выполнено · ⛔ заблокировано.
 
-| Критерий | Статус | Что подтверждено в этом проходе | Что осталось |
+| Критерий ТЗ | Статус | Что подтверждено | Что осталось |
 |---|---|---|---|
-| 1) Повторный POST с тем же `Idempotency-Key` возвращает тот же результат | 🟡 | В этом проходе не было отдельного переисполнения idempotency-набора | Прогнать `tests/test_idempotency*` и зафиксировать результат в CI |
-| 2) Любой бизнес-маршрут без `X-Tenant` -> `400` | 🟡 | smoke fallback на tenancy запускался, но полный сценарий не завершен в рамках таймбокса | Повторить smoke на целевом окружении с PostgreSQL |
-| 3) Выбор шаблона по `(code, version)`, конфликтное удаление -> корректная ошибка | 🟡 | Контрактные проверки в этом проходе не регрессировали | Нужен таргетный прогон template API тестов |
-| 4) Replace: dry-run -> apply -> rollback | 🟡 | Регрессий по коду не вносилось | Выполнить таргетный e2e/contract прогон replace сценария |
-| 5) Задания: queued/running/success/error/cancelled | 🟡 | Подтверждены `task status` API сценарии (успех + not found) | Добавить прогон lifecycle задач по всем terminal states |
-| 6) Кабинет клиента: свои статусы/пакеты/файлы/история | ⛔ | UI e2e не выполнялся в этом проходе | Нужен browser e2e прогон с demo tenant |
-| 7) Дашборд/отчеты/экспорт работают на базовом уровне | 🟡 | Backend не менялся в этой зоне, критичных регрессий не выявлено | Нужен smoke API/FE маршрутный прогон |
-| 8) Risk/PPE/training/incidents не ломают CRUD/чтение | 🟡 | Прямых правок в домене не было | Прогнать доменные интеграционные тесты целиком |
-| 9) FE/BE контракты не расходятся по ключевым разделам | 🟡 | Frontend `typecheck` проходит, backend task endpoint приведён в рабочее состояние | Нужен полный contract sweep (OpenAPI + FE API hooks) |
-| 10) CI не содержит критических регрессий | 🟡 | Устранена критическая runtime-ошибка в backend задачах | Полный pipeline остаётся частично нестабильным (lint debt + environment-dependent smoke) |
+| 1) Повторный POST с тем же Idempotency-Key возвращает тот же результат | ✅ | В `final_acceptance` проходит критический backend-набор, включающий `tests/test_idempotency.py`. | Дополнительно зафиксировать в GitHub CI артефактах. |
+| 2) Любой бизнес-маршрут без X-Tenant -> 400 | ✅ | В `codex_audit` проходит блок tenant isolation и access guards. | Поддерживать регрессионный набор в обязательном CI-gate. |
+| 3) Выбор шаблона строго по (код, версия), конфликтное удаление -> корректная ошибка | ✅ | В `final_acceptance` проходит `tests/test_template_delete.py`; в `codex_audit` проходит template/document pipeline safety. | Расширить e2e-покрытие для UI-сценария удаления. |
+| 4) Replace: dry-run -> apply -> rollback | 🟡 | В этом проходе нет отдельного таргетного e2e dry-run/apply/rollback отчета. | Добавить выделенный smoke/e2e маршрут в CI. |
+| 5) Задания: queued/running/success/error/cancelled корректны | 🟡 | В `codex_audit` подтвержден pipeline safety и document status flow. | Дофиксировать единый сценарий со всеми terminal states в одном smoke-тесте. |
+| 6) Кабинет клиента видит свои статусы/пакеты/файлы/историю | 🟡 | В `codex_audit` проходит backend module smoke для portal-related модулей. | Нужен полноценный browser e2e на UI клиентского кабинета. |
+| 7) Дашборд/отчеты/экспорт работают хотя бы базово | ✅ | `final_acceptance` проходит e2e final regression subset + sample render/pdf/export flow + frontend checks. | Расширить нефункциональные проверки производительности. |
+| 8) Риски / СИЗ / обучение / инциденты / проверки не ломают базовые CRUD-потоки | 🟡 | В `codex_audit` проходит backend module smoke, включая соответствующие домены. | Добавить явный агрегированный CRUD-smoke по доменам в release pipeline. |
+| 9) FE/BE контракты не расходятся по ключевым разделам | ✅ | `final_acceptance` подтверждает openapi drift check (`tests/contract/test_openapi_contract.py` + `scripts/contract/validate.py`), frontend test-gate и production build проходят. | Поддерживать snapshot-контроль контрактов как required check. |
+| 10) CI не страдает от критических регрессий | 🟡 | Критические acceptance/check сценарии зеленые. | Полный `make ci-local` красный из-за исторического lint-долга; требуется отдельная стабилизация lint-stage. |
