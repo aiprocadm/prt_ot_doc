@@ -26,6 +26,8 @@ class EventType(str, enum.Enum):
     APPROVAL_COMPLETED = "approval.completed"
     EDO_SENT = "edo.sent"
     EDO_STATUS_CHANGED = "edo.status_changed"
+    INCIDENT_CREATED = "IncidentCreated"
+    INSPECTION_CREATED = "InspectionCreated"
 
 
 class BaseEventPayload(BaseModel):
@@ -140,6 +142,24 @@ class InternalEventPayload(BaseEventPayload):
     metadata: Mapping[str, Any] = Field(default_factory=dict)
 
 
+class IncidentCreatedPayload(BaseEventPayload):
+    incident_id: str
+    company_id: str
+    site_id: str
+    status: str
+    severity: str
+    incident_type: str
+
+
+class InspectionCreatedPayload(BaseEventPayload):
+    inspection_id: str
+    company_id: str
+    site_id: str | None = None
+    status: str
+    inspection_type: str
+    authority: str
+
+
 class TaskDuePayload(BaseEventPayload):
     task_id: str
     title: str
@@ -169,6 +189,8 @@ _PAYLOADS: dict[EventType, type[BaseEventPayload]] = {
     EventType.APPROVAL_COMPLETED: InternalEventPayload,
     EventType.EDO_SENT: InternalEventPayload,
     EventType.EDO_STATUS_CHANGED: InternalEventPayload,
+    EventType.INCIDENT_CREATED: IncidentCreatedPayload,
+    EventType.INSPECTION_CREATED: InspectionCreatedPayload,
 }
 
 
@@ -221,4 +243,8 @@ def dedupe_key_for(event_type: EventType, payload: BaseEventPayload) -> str:
         return payload.task_id
     if isinstance(payload, InternalEventPayload):
         return payload.event_id or f"internal:{event_type.value}:{payload.occurred_at.isoformat()}"
+    if isinstance(payload, IncidentCreatedPayload):
+        return payload.incident_id
+    if isinstance(payload, InspectionCreatedPayload):
+        return payload.inspection_id
     raise ValueError(f"Unsupported event payload for {event_type.value}")

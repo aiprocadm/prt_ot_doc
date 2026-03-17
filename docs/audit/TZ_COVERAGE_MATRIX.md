@@ -13,12 +13,12 @@
 | TZ-6.1 | Risk PxS deterministic | risk domain/services | risk tables | optional async tasks | RiskAssessed | risks pages | `tests/test_risk_engine.py`, `tests/test_risk_assessment_kpi5.py`, `tests/test_domains_risk_calc.py` | OK | P1 | Freeze sort/order invariants |
 | TZ-7.1 | PPE issue/return журнал + нормы | ppe API/domain | ppe issue records | optional | PPEIssued | PPE registry pages | `tests/api/test_ppe_api.py`, `tests/api/test_ppe_events.py` | OK | P1 | Expand warehouse subdomain in v1.1 |
 | TZ-8.1 | Training registry/completion | training API/domain | training entities | optional | TrainingCompleted | training pages | `tests/api/test_training_api.py`, `tests/domains/test_training_domain.py` | OK | P1 | Add certificate template presets |
-| TZ-9.1 | Incidents MVP flow | incidents API/domain | incident entities | optional | n/a | incidents pages | `tests/api/test_incidents_api.py` | OK | P1 | Add investigation depth in v1.1 |
-| TZ-9.2 | Inspections/checklists MVP | inspections API/domain | inspections/checklists | optional | n/a | inspections pages | `tests/api/test_inspections_api.py` | OK | P1 | prescriptions detail to v1.2 |
+| TZ-9.1 | Incidents MVP flow | incidents API/domain | incident entities | optional | `IncidentCreated` outbox event | incidents pages | `backend/tests/test_incident_inspection_outbox_events.py` | OK | P1 | Add investigation depth in v1.1 |
+| TZ-9.2 | Inspections/checklists MVP | inspections API/domain | inspections/checklists | optional | `InspectionCreated` outbox event | inspections pages | `backend/tests/test_incident_inspection_outbox_events.py` | OK | P1 | prescriptions detail to v1.2 |
 | TZ-12.1/B4 | Idempotency keys replay/conflict | idempotency service + guarded endpoints | `idempotency_keys` | n/a | n/a | generation retry UX | `tests/test_idempotency.py`, `tests/test_services_idempotency_unit.py`, `tests/test_documents_generate.py` | OK | P0 | Keep deterministic request hash |
 | TZ-12.2 | Required events emitted | document/risk/ppe/training services | outbox table | dispatcher | DocumentGenerated, RiskAssessed, PPEIssued, etc. | status indicators | `tests/api/test_document_events.py`, `tests/api/test_ppe_events.py`, `tests/test_outbox_service.py` | OK | P0 | Add explicit Signed/Exported contract tests |
 | TZ-12.3/B5 | Outbox retries/dead-letter/metrics | outbox dispatcher/webhook routing | outbox_events/status | dispatcher worker | webhook routing global+tenant | admin integrations view | `tests/test_outbox_dispatch.py`, `tests/test_webhook_routing.py`, `tests/test_webhooks_dispatch.py` | OK | P0 | Continue poison-queue observability |
-| TZ-9.3 | Incident/Inspection events + prescriptions deadlines | incidents/inspections/prescriptions routes + obligations service | incident/inspection/prescription/task tables | n/a | internal events TODO | incidents/inspections screens | `tests/api/test_incidents_api.py`, `tests/api/test_inspections_api.py`, `tests/integration/test_obligation_tasks.py` | Partial | P1 | Add `IncidentCreated` / `InspectionCreated` outbox in next increment |
+| TZ-9.3 | Incident/Inspection events + prescriptions deadlines | incidents/inspections/prescriptions routes + obligations service | incident/inspection/prescription/task tables | n/a | `IncidentCreated` / `InspectionCreated` added via outbox | incidents/inspections screens | `backend/tests/test_incident_inspection_outbox_events.py` | OK | P1 | Add prescription overdue event in next increment |
 | TZ-10.2/E | Unified obligations list/close API | `backend/app/api/routes/obligations.py` | task table | reminder worker existing | n/a | task views (reports/dashboard links) | `tests/integration/test_obligation_tasks.py`, `tests/api/test_obligations_api.py` | Partial | P1 | Add dedicated `/obligations` UI page and site-native filter |
 | TZ-14.1 | KPI reports endpoint | `backend/app/api/routes/reports.py` (`GET /reports/kpi`) | on-the-fly aggregates | n/a | n/a | `frontend/src/pages/reports/ReportsPage.tsx` | `tests/api/test_reports_api.py` | OK | P1 | Expand KPI cards and drill-down filters |
 | TZ-F1 | Feature-based frontend layout | n/a | n/a | n/a | n/a | `frontend/src/features/*`, pages/widgets/shared | smoke route tests | OK | P1 | Keep features as source-of-truth |
@@ -37,7 +37,7 @@
 
 ## TODO / Partial markers
 - **Briefings module**: отдельные API/UI/события пока не реализованы (Partial относительно расширенного TZ §8).
-- **Incident/Inspection outbox events**: планируется добавить `IncidentCreated`, `InspectionCreated`.
+- **Incident/Inspection outbox events**: `IncidentCreated`, `InspectionCreated` реализованы через outbox, без breaking API изменений.
 
 - §4/§12: MVP контур ЭДО/подписей/согласований реализован (routes, requests, decide, signatures, edo send+webhook).
 - Критерий Signed event: реализован через outbox событие `DocumentSigned`.

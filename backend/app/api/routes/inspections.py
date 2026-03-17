@@ -21,6 +21,7 @@ from app.schemas.incidents import (
 )
 from app.services.audit import AuditService
 from app.services.obligations import upsert_inspection_task
+from app.services.outbox import OutboxService
 
 router = APIRouter(tags=["inspections"])
 
@@ -167,6 +168,20 @@ async def create_inspection(
         user_id=getattr(access.user, "id", None),
         ip=ip,
         details={"scheduled_at": inspection.scheduled_at, "status": inspection.status.value},
+    )
+    await OutboxService(session).enqueue(
+        tenant_id=str(tenant.id),
+        event_type="InspectionCreated",
+        payload={
+            "tenant_id": str(tenant.id),
+            "inspection_id": inspection.id,
+            "company_id": inspection.company_id,
+            "site_id": inspection.site_id,
+            "status": inspection.status.value,
+            "inspection_type": inspection.inspection_type.value,
+            "authority": inspection.authority,
+            "actor_id": getattr(access.user, "id", None),
+        },
     )
     await session.commit()
     await session.refresh(inspection)
