@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -183,6 +184,27 @@ class PortalAuth(BaseModel):
     can_download: bool = False
 
 
+def _serialize_package_run(run: ClientPackageRun) -> dict[str, Any]:
+    return {
+        "id": run.id,
+        "tenant_id": run.tenant_id,
+        "preset_id": run.preset_id,
+        "initiated_by_user_id": run.initiated_by_user_id,
+        "client_company_id": run.client_company_id,
+        "status": run.status.value if isinstance(run.status, PackageRunStatus) else run.status,
+        "started_at": run.started_at,
+        "finished_at": run.finished_at,
+        "output_zip_s3_key": run.output_zip_s3_key,
+        "output_pdf_s3_key": run.output_pdf_s3_key,
+        "qc_report_json": run.qc_report_json,
+        "error_payload_json": run.error_payload_json,
+        "created_at": run.created_at,
+        "updated_at": run.updated_at,
+        "deleted_at": run.deleted_at,
+    }
+
+
+
 async def _portal_auth(
     session: Annotated[AsyncSession, Depends(get_session)],
     x_portal_token: Annotated[str | None, Header(alias="X-Portal-Token")] = None,
@@ -281,6 +303,7 @@ async def create_run(
         tenant_id=tenant.id,
         preset_id=preset.id,
         client_company_id=payload.client_company_id,
+        tenant_id=preset.tenant_id,
         status=PackageRunStatus.RUNNING,
         started_at=_utcnow(),
     )
@@ -295,6 +318,7 @@ async def create_run(
             PackageRequirement(
                 tenant_id=tenant.id,
                 package_run_id=run.id,
+                tenant_id=run.tenant_id,
                 key=req.get("key", secrets.token_hex(4)),
                 title=req.get("title", "Required data"),
                 type=PackageRequirementType(req.get("type", "file")),
@@ -308,10 +332,17 @@ async def create_run(
             PackageEvent(tenant_id=tenant.id, package_run_id=run.id, type="package_run.generated", payload_json={"manifest_key": manifest_key, "artifacts": qc_report["artifacts"]}),
             PackageEvent(tenant_id=tenant.id, package_run_id=run.id, type="package_run.published", payload_json={"portal_visible": True}),
         ]
+    session.add(
+        PackageEvent(
+            package_run_id=run.id,
+            type="package_run.started",
+            payload_json={"status": "running"},
+            tenant_id=run.tenant_id,
+        )
     )
     await session.commit()
     await session.refresh(run)
-    return run
+    return _serialize_package_run(run)
 
 
 @internal_router.get("/runs")
@@ -327,6 +358,9 @@ async def list_runs(
             )
         )
     ).scalars().all()
+async def list_runs(session: Annotated[AsyncSession, Depends(get_session)]):
+    rows = (await session.execute(select(ClientPackageRun).where(ClientPackageRun.deleted_at.is_(None)))).scalars().all()
+    return [_serialize_package_run(run) for run in rows]
 
 
 @internal_router.get("/runs/{run_id}")
@@ -338,7 +372,7 @@ async def get_run(
     run = await session.get(ClientPackageRun, run_id)
     if run is None or run.tenant_id != tenant.id or run.deleted_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Run not found")
-    return run
+    return _serialize_package_run(run)
 
 
 @internal_router.post("/runs/{run_id}/portal-link", response_model=PortalLinkResponse)
@@ -359,6 +393,7 @@ async def create_portal_link(
             package_run_id=run.id,
             expires_at=expires_at,
             scope_json={"package_run_ids": [run.id], "download": True, "upload": True, "tickets": True},
+            tenant_id=run.tenant_id,
         )
     )
     await session.commit()
@@ -378,7 +413,7 @@ async def portal_packages(
             )
         )
     ).scalars().all()
-    return rows
+    return [_serialize_package_run(run) for run in rows]
 
 
 @router.get("/packages/{run_id}")
@@ -404,6 +439,11 @@ async def portal_package_details(
         if item
     ]
     return {"run": run, "requirements": reqs, "events": events, "files": files}
+    return {
+        "run": _serialize_package_run(run),
+        "requirements": jsonable_encoder(reqs),
+        "events": jsonable_encoder(events),
+    }
 
 
 @router.get("/packages/{run_id}/files", response_model=PortalFilesResponse)
@@ -449,9 +489,18 @@ async def portal_create_ticket(
         message=payload.message,
         status=ClientRequestTicketStatus.OPEN,
         created_by="portal-token",
+        tenant_id=auth.tenant_id,
     )
     session.add(ticket)
     session.add(PackageEvent(tenant_id=auth.tenant_id, package_run_id=run_id, type="ticket.created", payload_json={"title": payload.title}))
+    session.add(
+        PackageEvent(
+            package_run_id=run_id,
+            type="ticket.created",
+            payload_json={"title": payload.title},
+            tenant_id=auth.tenant_id,
+        )
+    )
     await session.commit()
     await session.refresh(ticket)
     return ticket
