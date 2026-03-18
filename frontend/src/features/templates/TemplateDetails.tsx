@@ -18,7 +18,7 @@ export const TemplateDetails = ({ template }: { template: TemplateDto }) => {
   const { activateVersion } = useTemplatesStore();
   const [isActivating, setIsActivating] = useState(false);
   const [file, setFile] = useState<File | null>(null);
-  const [versionId, setVersionId] = useState("");
+  const [versionId, setVersionId] = useState(template.current_version?.id ?? template.versions?.[0]?.id ?? "");
   const [previewData, setPreviewData] = useState('{"employee": {"name": "Иван"}}');
   const [lintReport, setLintReport] = useState<string>("");
 
@@ -108,10 +108,17 @@ export const TemplateDetails = ({ template }: { template: TemplateDto }) => {
           <TabsContent value="tools" className="space-y-3">
             <Input type="file" accept=".docx" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
             <Button onClick={handleUpload}>Загрузить версию</Button>
-            <Input placeholder="version id" value={versionId} onChange={(e) => setVersionId(e.target.value)} />
+            <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={versionId} onChange={(e) => setVersionId(e.target.value)}>
+              <option value="" disabled>Выберите версию шаблона</option>
+              {(template.versions ?? []).map((version) => (
+                <option key={version.id} value={version.id}>
+                  Версия {version.version} · {version.status}
+                </option>
+              ))}
+            </select>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={handleLint}>Lint</Button>
-              <Button variant="outline" onClick={handlePreview}>Preview</Button>
+              <Button variant="outline" disabled={!versionId} onClick={handleLint}>Lint</Button>
+              <Button variant="outline" disabled={!versionId} onClick={handlePreview}>Preview</Button>
             </div>
             <Textarea rows={8} value={previewData} onChange={(e) => setPreviewData(e.target.value)} />
             {lintReport && <pre className="rounded border p-2 text-xs">{lintReport}</pre>}

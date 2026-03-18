@@ -46,3 +46,10 @@
 
 | TZ-19 | Клиентский кабинет: статусы/история/загрузки/запросы | `backend/app/api/routes/client_portal.py` | package_runs + tickets + events + tokens | package artifact generation in API flow | package_run/ticket events + portal history | `/portal/packages`, `/portal/packages/:id` (API ready) | `tests/test_client_portal_api.py` | OK | P0 | Frontend portal pages now expose package summary/list/detail/files/history/requests; next increment can add ticket composition and filters |
 | TZ-31.1-31.3 | Пакеты-пресеты: выход на объект / НС / проверка | `package_presets`, `backend/app/api/routes/client_portal.py` + `scripts/seed_package_presets.py` | package presets/runs/requirements | preset-driven package artifact generation + portal link/files/tickets flow | package_run.started/generated/published + ticket.created | packages UI wired with list/detail/history/files flow | `tests/test_client_portal_api.py` | OK | P0 | Frontend wizard/detail polish remains |
+
+## P0 coverage updates
+
+- Document core: templating renderer now stores deterministic reproducibility metadata, normalized context summaries, and explicit fallback missing-key warnings; replace engine persists patch history/summary for dry-run/apply/rollback recovery.
+- NPA/compliance: impact analysis now reports effective status, stale/active assessment, impacted entities, and follow-up tasks for missing bindings.
+- Frontend critical UX: document preview no longer exposes stub signing wording and now shows status badges + timeline; template tools use a version selector instead of manual version-id entry.
+

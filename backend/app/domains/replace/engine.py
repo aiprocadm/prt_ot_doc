@@ -22,6 +22,8 @@ class ReplacePatch:
     rolled_back_at: datetime | None = None
     audit: dict[str, Any] = field(default_factory=dict)
     diff: list[dict[str, Any]] = field(default_factory=list)
+    history: list[dict[str, Any]] = field(default_factory=list)
+    summary: dict[str, Any] = field(default_factory=dict)
 
 
 class ReplaceEngine:
@@ -153,17 +155,29 @@ class ReplaceEngine:
                 diff.append({"key": key, "before": before_value, "after": after_value, "replacement": replacement})
         return diff
 
+    @staticmethod
+    def _fingerprint(payload: dict[str, Any]) -> str:
+        return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+
     def _make_patch(self, context: dict[str, Any], replacements: dict[str, str], *, mode: str) -> ReplacePatch:
         before = copy.deepcopy(context)
         after = self.apply(context, replacements)
         diff = self._build_diff(before, after, replacements)
-        patch_id = hashlib.sha256(json.dumps({"before": before, "after": after, "replacements": replacements, "mode": mode}, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+        patch_id = self._fingerprint({"before": before, "after": after, "replacements": replacements, "mode": mode})
         existing = self._patches.get(patch_id)
         if existing is not None:
             return self.get_patch(patch_id) or existing
+        created_at = datetime.now(tz=timezone.utc)
+        summary = {
+            "changed_count": len(diff),
+            "replacements_count": len(replacements),
+            "has_changes": bool(diff),
+            "target_fingerprint_before": self._fingerprint(before),
+            "target_fingerprint_after": self._fingerprint(after),
+        }
         patch = ReplacePatch(
             patch_id=patch_id,
-            created_at=datetime.now(tz=timezone.utc),
+            created_at=created_at,
             before=before,
             after=copy.deepcopy(after),
             replacements=dict(replacements),
@@ -175,8 +189,12 @@ class ReplaceEngine:
                 "changed_keys": sorted(item["key"] for item in diff),
                 "changed_count": len(diff),
                 "idempotency_fingerprint": patch_id,
+                "before_fingerprint": summary["target_fingerprint_before"],
+                "after_fingerprint": summary["target_fingerprint_after"],
             },
             diff=diff,
+            history=[{"at": created_at.isoformat(), "action": mode, "status": "applied" if mode == "apply" else "planned"}],
+            summary=summary,
         )
         self._patches[patch_id] = patch
         self._persist()
@@ -199,10 +217,14 @@ class ReplaceEngine:
     def rollback(self, patch_id: str) -> dict[str, Any]:
         patch = self._patches[patch_id]
         if patch.status == "rolled_back":
+            if not any(item.get("action") == "rollback_noop" for item in patch.history):
+                patch.history.append({"at": datetime.now(tz=timezone.utc).isoformat(), "action": "rollback_noop", "status": patch.status})
+                self._persist()
             return copy.deepcopy(patch.before)
         patch.status = "rolled_back"
         patch.rolled_back_at = datetime.now(tz=timezone.utc)
         patch.audit = {**patch.audit, "rolled_back": True, "rolled_back_at": patch.rolled_back_at.isoformat()}
+        patch.history.append({"at": patch.rolled_back_at.isoformat(), "action": "rollback", "status": patch.status})
         self._persist()
         return copy.deepcopy(patch.before)
 
@@ -222,4 +244,6 @@ class ReplaceEngine:
             rolled_back_at=patch.rolled_back_at,
             audit=copy.deepcopy(patch.audit),
             diff=copy.deepcopy(patch.diff),
+            history=copy.deepcopy(patch.history),
+            summary=copy.deepcopy(patch.summary),
         )

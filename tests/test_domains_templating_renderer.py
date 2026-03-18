@@ -58,3 +58,11 @@ def test_render_docx_metadata_counts_nested_context_keys() -> None:
     assert rendered.metadata["strict_mode"] is True
     assert rendered.metadata["reproducibility"]["context_key_count"] >= 2
     assert "company.name" in rendered.metadata["context_keys"]
+
+
+def test_render_docx_metadata_exposes_missing_keys_and_renderer_version() -> None:
+    template_bytes = _build_template("{{ company.name }} {{ company.missing }}")
+    rendered = render_docx_with_metadata(template_bytes, {"company": {"name": "ACME"}})
+    assert rendered.metadata["renderer_version"] == "templating.renderer.v2"
+    assert rendered.metadata["missing_keys"] == ["company.missing"]
+    assert rendered.metadata["context_summary"]["root_keys"] == ["company"]

@@ -174,3 +174,21 @@ def test_replace_engine_supports_nested_paths_and_idempotent_rollback(tmp_path):
     restored_twice = engine.rollback(patch.patch_id)
     assert restored_once == context
     assert restored_twice == context
+
+
+def test_replace_engine_records_summary_and_history(tmp_path):
+    from app.domains.replace.engine import ReplaceEngine
+
+    storage_path = tmp_path / "patches.json"
+    engine = ReplaceEngine(storage_path=str(storage_path))
+    patch = engine.dry_run({"company": {"name": "Old"}}, {"company.name": "New"})
+
+    assert patch.summary["changed_count"] == 1
+    assert patch.summary["has_changes"] is True
+    assert patch.history[0]["action"] == "dry_run"
+
+    committed = engine.commit({"company": {"name": "Old"}}, {"company.name": "New"})
+    engine.rollback(committed.patch_id)
+    rolled = engine.get_patch(committed.patch_id)
+    assert rolled is not None
+    assert [item["action"] for item in rolled.history] == ["apply", "rollback"]
