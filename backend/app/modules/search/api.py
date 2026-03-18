@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -76,6 +77,8 @@ async def global_search(
     project_id: str | None = None,
     contractor_id: str | None = None,
     risk_level: str | None = None,
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
     access: AccessContext = Depends(rbac()),
@@ -91,6 +94,8 @@ async def global_search(
         project_id=project_id,
         contractor_id=contractor_id,
         risk_level=risk_level,
+        date_from=date_from,
+        date_to=date_to,
     )
     service = SearchService(session=session, tenant_id=str(tenant.id))
     payload = await service.search(q=q, types=requested_types, filters=filters, sort=sort, limit=limit, cursor=cursor)

@@ -14,6 +14,8 @@ type Facets = {
   status_counts?: Record<string, number>;
   company_counts?: Record<string, number>;
   site_counts?: Record<string, number>;
+  project_counts?: Record<string, number>;
+  risk_level_counts?: Record<string, number>;
 };
 
 const SearchPage = () => {
@@ -28,6 +30,8 @@ const SearchPage = () => {
   const status = params.get("status") ?? "";
   const companyId = params.get("company_id") ?? "";
   const siteId = params.get("site_id") ?? "";
+  const projectId = params.get("project_id") ?? "";
+  const riskLevel = params.get("risk_level") ?? "";
 
   const loadMemory = async () => {
     const [recentItems, savedItems] = await Promise.all([fetchRecentSearches(), fetchSavedSearches()]);
@@ -45,7 +49,7 @@ const SearchPage = () => {
   };
 
   const activeTypes = useMemo(() => (type ? [type] : tabs) as SearchType[], [type]);
-  const activeFilterCount = useMemo(() => [status, companyId, siteId].filter(Boolean).length, [status, companyId, siteId]);
+  const activeFilterCount = useMemo(() => [status, companyId, siteId, projectId, riskLevel].filter(Boolean).length, [status, companyId, siteId, projectId, riskLevel]);
 
   useEffect(() => {
     void loadMemory().catch(() => undefined);
@@ -57,7 +61,7 @@ const SearchPage = () => {
       setFacets({});
       return;
     }
-    fetchSearch({ q, types: activeTypes, status: status || undefined, company_id: companyId || undefined, site_id: siteId || undefined })
+    fetchSearch({ q, types: activeTypes, status: status || undefined, company_id: companyId || undefined, site_id: siteId || undefined, project_id: projectId || undefined, risk_level: riskLevel || undefined })
       .then((data) => {
         setItems(data.items);
         setFacets(data.facets ?? {});
@@ -68,11 +72,11 @@ const SearchPage = () => {
         setItems([]);
         setFacets({});
       });
-  }, [q, activeTypes, status, companyId, siteId]);
+  }, [q, activeTypes, status, companyId, siteId, projectId, riskLevel]);
 
   const loadMore = async () => {
     if (!nextCursor) return;
-    const data = await fetchSearch({ q, types: activeTypes, cursor: nextCursor, status: status || undefined, company_id: companyId || undefined, site_id: siteId || undefined });
+    const data = await fetchSearch({ q, types: activeTypes, cursor: nextCursor, status: status || undefined, company_id: companyId || undefined, site_id: siteId || undefined, project_id: projectId || undefined, risk_level: riskLevel || undefined });
     setItems((prev) => [...prev, ...data.items]);
     setNextCursor(data.next_cursor ?? null);
   };
@@ -87,6 +91,8 @@ const SearchPage = () => {
         ...(status ? { status } : {}),
         ...(companyId ? { company_id: companyId } : {}),
         ...(siteId ? { site_id: siteId } : {}),
+        ...(projectId ? { project_id: projectId } : {}),
+        ...(riskLevel ? { risk_level: riskLevel } : {}),
       },
     });
     await loadMemory();
@@ -100,6 +106,8 @@ const SearchPage = () => {
     if (typeof filters.status === "string") next.set("status", filters.status);
     if (typeof filters.company_id === "string") next.set("company_id", filters.company_id);
     if (typeof filters.site_id === "string") next.set("site_id", filters.site_id);
+    if (typeof filters.project_id === "string") next.set("project_id", filters.project_id);
+    if (typeof filters.risk_level === "string") next.set("risk_level", filters.risk_level);
     setParams(next);
   };
 
@@ -124,7 +132,7 @@ const SearchPage = () => {
                     size="sm"
                     onClick={() => patchParams({ type: tab })}
                   >
-                    {tab} ({facets.type_counts?.[tab] ?? 0})
+                    {tab} ({facets.type_counts?.[tab] ?? facets.type_counts?.[tab.replace(/s$/, "")] ?? 0})
                   </Button>
                 ))}
                 <Button variant="outline" size="sm" onClick={() => void saveCurrentSearch()}>
@@ -137,9 +145,9 @@ const SearchPage = () => {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="flex items-center gap-2 text-base"><Filter className="h-4 w-4" /> Faceted filters</CardTitle>
-              <Button variant="ghost" size="sm" onClick={() => patchParams({ status: undefined, company_id: undefined, site_id: undefined })}>Сбросить</Button>
+              <Button variant="ghost" size="sm" onClick={() => patchParams({ status: undefined, company_id: undefined, site_id: undefined, project_id: undefined, risk_level: undefined })}>Сбросить</Button>
             </CardHeader>
-            <CardContent className="grid gap-3 md:grid-cols-3">
+            <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
               <div className="space-y-2">
                 <label className="text-xs font-medium uppercase text-muted-foreground">Status</label>
                 <select className="h-10 rounded-md border px-3" value={status} onChange={(event) => patchParams({ status: event.target.value || undefined })}>
@@ -157,7 +165,17 @@ const SearchPage = () => {
               <div className="space-y-2">
                 <label className="text-xs font-medium uppercase text-muted-foreground">Site scope</label>
                 <Input placeholder="site_id" value={siteId} onChange={(event) => patchParams({ site_id: event.target.value || undefined })} />
-                <div className="text-xs text-muted-foreground">Facet IDs: {Object.keys(facets.site_counts ?? {}).slice(0, 5).join(", ") || "—"}</div>
+                <div className="flex flex-wrap gap-1 text-xs text-muted-foreground">{Object.entries(facets.site_counts ?? {}).slice(0, 5).map(([key, value]) => <button type="button" key={key} className="rounded-full border px-2 py-0.5" onClick={() => patchParams({ site_id: key })}>{key} ({value})</button>)}</div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-medium uppercase text-muted-foreground">Project scope</label>
+                <Input placeholder="project_id" value={projectId} onChange={(event) => patchParams({ project_id: event.target.value || undefined })} />
+                <div className="flex flex-wrap gap-1 text-xs text-muted-foreground">{Object.entries(facets.project_counts ?? {}).slice(0, 5).map(([key, value]) => <button type="button" key={key} className="rounded-full border px-2 py-0.5" onClick={() => patchParams({ project_id: key })}>{key} ({value})</button>)}</div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-medium uppercase text-muted-foreground">Risk level</label>
+                <Input placeholder="risk_level" value={riskLevel} onChange={(event) => patchParams({ risk_level: event.target.value || undefined })} />
+                <div className="flex flex-wrap gap-1 text-xs text-muted-foreground">{Object.entries(facets.risk_level_counts ?? {}).slice(0, 5).map(([key, value]) => <button type="button" key={key} className="rounded-full border px-2 py-0.5" onClick={() => patchParams({ risk_level: key })}>{key} ({value})</button>)}</div>
               </div>
             </CardContent>
           </Card>

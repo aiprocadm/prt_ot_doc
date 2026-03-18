@@ -53,3 +53,10 @@
 Осталось backlog:
 - Scheduled reports, digest notifications scheduler, transport-level notification delivery history и полноценные template registries всё ещё требуют отдельного прохода.
 - Export Center пока даёт foundation/idempotent async jobs, но без full XLSX/PDF generator pipeline и без anonymized export presets.
+
+
+## Delta after 2026-03-18 production-minded pass
+- Search service hardening: `total` now counts the full filtered result-set instead of page size, and faceted filters were extended to `project_id` / `risk_level` for safer enterprise narrowing in a single tenant-scoped query path.
+- Workflow ops hardening: added explicit Celery entrypoint `workflow.sla.tick` so SLA escalations are not only modeled in the service layer but also schedulable via the worker fleet.
+- Shell UX hardening: top navigation badges no longer use static placeholders; they poll live workflow-task and unread-notification counters so operators can trust header quick actions.
+- Search Center UX hardening: added quick facet chips for site/project/risk level and preserved these filters in saved searches, reducing manual copy/paste of identifiers.

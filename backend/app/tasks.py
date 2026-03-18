@@ -1695,6 +1695,18 @@ def webhook_dispatch_job(limit: int = 50, tenant_slug: str = "test") -> dict[str
     return {"dispatched": int(dispatched), "limit": int(limit)}
 
 
+@celery_app.task(name="workflow.sla.tick", autoretry_for=RETRYABLE_EXCEPTIONS, retry_backoff=True, retry_jitter=True, max_retries=5)
+def workflow_sla_tick(tenant_slug: str) -> int:
+    async def _run() -> int:
+        with tenant_context(tenant_slug):
+            ensure_tenant_schema(tenant_slug)
+            async with session_scope(tenant=tenant_slug) as session:
+                tenant = (await session.execute(select(Tenant).where(Tenant.slug == tenant_slug))).scalar_one()
+                processed = await WorkflowService(session, str(tenant.id)).sweep_task_sla()
+                await session.commit()
+                return processed
+    return _run_coroutine(_run())
+
 @celery_app.task(name="workflow.timers.tick", autoretry_for=RETRYABLE_EXCEPTIONS, retry_backoff=True, retry_jitter=True, max_retries=5)
 def workflow_timers_tick(tenant_slug: str) -> int:
     async def _run() -> int:
