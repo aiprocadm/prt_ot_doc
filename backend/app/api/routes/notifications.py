@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, rbac
 from app.models.models import Tenant, TrainingPlan, PPEIssue, Inspection
-from app.models.notifications import Notification, NotificationChannel, NotificationChannelSettings, NotificationPriority, NotificationStatus, PlanTask
+from app.models.notifications import Notification, NotificationChannel, NotificationChannelSettings, NotificationPriority, NotificationStatus, NotificationTemplate, NotificationType, PlanTask
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
@@ -55,6 +55,23 @@ class ChannelSettingsIn(BaseModel):
 
 class ChannelSettingsOut(ChannelSettingsIn):
     user_id: str
+
+
+class NotificationTemplateIn(BaseModel):
+    code: str
+    channel: str
+    type: str
+    locale: str = "ru"
+    subject_template: str | None = None
+    title_template: str | None = None
+    body_template: str
+    is_active: bool = True
+    variables_schema: dict[str, object] | None = None
+    model_config = ConfigDict(extra="forbid")
+
+
+class NotificationTemplateOut(NotificationTemplateIn):
+    id: str
 
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -166,6 +183,87 @@ async def get_settings_alias(session: SessionDep, tenant: TenantDep, access: Acc
 @router.put("/notification-settings/me", response_model=ChannelSettingsOut)
 async def put_settings_alias(payload: ChannelSettingsIn, session: SessionDep, tenant: TenantDep, access: AccessDep) -> ChannelSettingsOut:
     return await put_settings(payload=payload, session=session, tenant=tenant, access=access)
+
+
+@router.get("/templates", response_model=list[NotificationTemplateOut])
+async def list_templates(
+    session: SessionDep,
+    tenant: TenantDep,
+    access: AccessDep,
+    channel: str | None = Query(default=None),
+    type: str | None = Query(default=None),
+) -> list[NotificationTemplateOut]:
+    _ = access
+    stmt = select(NotificationTemplate).where(
+        NotificationTemplate.tenant_id == tenant.id,
+        NotificationTemplate.deleted_at.is_(None),
+    )
+    if channel:
+        stmt = stmt.where(NotificationTemplate.channel == NotificationChannel(channel))
+    if type:
+        stmt = stmt.where(NotificationTemplate.type == NotificationType(type))
+    rows = (await session.execute(stmt.order_by(NotificationTemplate.code.asc(), NotificationTemplate.locale.asc()))).scalars().all()
+    return [
+        NotificationTemplateOut(
+            id=row.id,
+            code=row.code,
+            channel=row.channel.value,
+            type=row.type.value,
+            locale=row.locale,
+            subject_template=row.subject_template,
+            title_template=row.title_template,
+            body_template=row.body_template,
+            is_active=row.is_active,
+            variables_schema=row.variables_schema,
+        )
+        for row in rows
+    ]
+
+
+@router.post("/templates", response_model=NotificationTemplateOut)
+async def upsert_template(payload: NotificationTemplateIn, session: SessionDep, tenant: TenantDep, access: AccessDep) -> NotificationTemplateOut:
+    _ = access
+    existing = (
+        await session.execute(
+            select(NotificationTemplate).where(
+                NotificationTemplate.tenant_id == tenant.id,
+                NotificationTemplate.code == payload.code,
+                NotificationTemplate.channel == NotificationChannel(payload.channel),
+                NotificationTemplate.locale == payload.locale,
+                NotificationTemplate.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    row = existing or NotificationTemplate(
+        tenant_id=tenant.id,
+        code=payload.code,
+        channel=NotificationChannel(payload.channel),
+        locale=payload.locale,
+        type=NotificationType(payload.type),
+        body_template=payload.body_template,
+    )
+    if existing is None:
+        session.add(row)
+    row.type = NotificationType(payload.type)
+    row.subject_template = payload.subject_template
+    row.title_template = payload.title_template
+    row.body_template = payload.body_template
+    row.is_active = payload.is_active
+    row.variables_schema = payload.variables_schema
+    await session.flush()
+    await session.commit()
+    return NotificationTemplateOut(
+        id=row.id,
+        code=row.code,
+        channel=row.channel.value,
+        type=row.type.value,
+        locale=row.locale,
+        subject_template=row.subject_template,
+        title_template=row.title_template,
+        body_template=row.body_template,
+        is_active=row.is_active,
+        variables_schema=row.variables_schema,
+    )
 
 
 

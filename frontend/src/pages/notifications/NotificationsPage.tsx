@@ -33,6 +33,18 @@ type NotificationSettings = {
   digest_mode?: string | null;
 };
 
+type NotificationTemplate = {
+  id: string;
+  code: string;
+  channel: string;
+  type: string;
+  locale: string;
+  title_template?: string | null;
+  subject_template?: string | null;
+  body_template: string;
+  is_active: boolean;
+};
+
 const NotificationsPage = () => {
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [statusFilter, setStatusFilter] = useState<(typeof statuses)[number]>("unread");
@@ -42,6 +54,7 @@ const NotificationsPage = () => {
   const [settings, setSettings] = useState<NotificationSettings | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [templates, setTemplates] = useState<NotificationTemplate[]>([]);
 
   const load = async () => {
     const response = await apiClient.get<{ items: NotificationItem[]; unread_count: number }>("/notifications", {
@@ -62,12 +75,18 @@ const NotificationsPage = () => {
     setSettings(response.data);
   };
 
+  const loadTemplates = async () => {
+    const response = await apiClient.get<NotificationTemplate[]>("/notifications/templates");
+    setTemplates(response.data);
+  };
+
   useEffect(() => {
     void load();
   }, [statusFilter, channel, priority, type]);
 
   useEffect(() => {
     void loadSettings();
+    void loadTemplates();
   }, []);
 
   const selectedUnreadIds = useMemo(() => items.filter((item) => selectedIds.includes(item.id) && !item.is_read).map((item) => item.id), [items, selectedIds]);
@@ -164,6 +183,25 @@ const NotificationsPage = () => {
           <Input placeholder="Quiet hours to (08:00)" value={settings?.quiet_hours?.to ?? ""} onChange={(e) => setSettings((prev) => (prev ? { ...prev, quiet_hours: { ...(prev.quiet_hours ?? {}), to: e.target.value } } : prev))} />
           <Input placeholder="Timezone (Europe/Moscow)" value={settings?.quiet_hours?.tz ?? ""} onChange={(e) => setSettings((prev) => (prev ? { ...prev, quiet_hours: { ...(prev.quiet_hours ?? {}), tz: e.target.value } } : prev))} />
           <Button className="md:col-span-2" onClick={() => void saveSettings()}>Сохранить настройки</Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Notification templates foundation</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          {templates.length ? templates.map((template) => (
+            <div key={template.id} className="rounded border p-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="font-medium">{template.code}</div>
+                  <div className="text-xs text-muted-foreground">{template.type} · {template.channel} · {template.locale}</div>
+                </div>
+                <div className="rounded-full border px-2 py-1 text-xs">{template.is_active ? "active" : "disabled"}</div>
+              </div>
+              <div className="mt-2 text-sm text-muted-foreground">{template.title_template ?? template.subject_template ?? "Без заголовка"}</div>
+              <div className="mt-1 text-xs text-muted-foreground line-clamp-2">{template.body_template}</div>
+            </div>
+          )) : <div className="text-sm text-muted-foreground">Шаблоны пока не настроены — foundation для tenant-scoped templates готов.</div>}
         </CardContent>
       </Card>
     </div>

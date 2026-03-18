@@ -17,12 +17,13 @@ class NpaImpactService:
     session: AsyncSession
     tenant_id: str
 
-    async def detail(self, act_id: str) -> dict[str, Any] | None:
+    async def detail(self, act_id: str, revision_id: str | None = None) -> dict[str, Any] | None:
         act = await self.session.get(NpaAct, act_id)
         if act is None:
             return None
         revisions = (await self.session.execute(select(NpaRevision).where(NpaRevision.act_id == act_id).order_by(NpaRevision.effective_from.desc().nullslast(), NpaRevision.created_at.desc()))).scalars().all()
-        active_revision = next((r for r in revisions if (r.effective_from is None or r.effective_from <= date.today()) and (r.effective_to is None or r.effective_to >= date.today())), None)
+        selected_revision = next((r for r in revisions if r.id == revision_id), None) if revision_id else None
+        active_revision = selected_revision or next((r for r in revisions if (r.effective_from is None or r.effective_from <= date.today()) and (r.effective_to is None or r.effective_to >= date.today())), None)
         binding_rows = (await self.session.execute(select(NPABinding).where(NPABinding.tenant_id == self.tenant_id, NPABinding.npa_id == act_id))).scalars().all()
         linked = {
             "templates": sorted({row.entity_id for row in binding_rows if str(row.entity_type.value if hasattr(row.entity_type, 'value') else row.entity_type) == 'template_version'}),
@@ -42,6 +43,7 @@ class NpaImpactService:
                 for r in revisions
             ],
             "active_revision_id": active_revision.id if active_revision else None,
+            "selected_revision_id": selected_revision.id if selected_revision else None,
             "bindings": linked,
             "summary": summary,
             "tasks_to_create": [
@@ -50,16 +52,31 @@ class NpaImpactService:
             ],
         }
 
-    async def create_update_tasks(self, act_id: str, created_by: str | None) -> list[PlanTask]:
-        payload = await self.detail(act_id)
+    async def create_update_tasks(self, act_id: str, created_by: str | None, revision_id: str | None = None) -> list[PlanTask]:
+        payload = await self.detail(act_id, revision_id=revision_id)
         if payload is None:
             return []
         tasks: list[PlanTask] = []
         for item in payload["tasks_to_create"]:
+            existing = (
+                await self.session.execute(
+                    select(PlanTask).where(
+                        PlanTask.tenant_id == self.tenant_id,
+                        PlanTask.entity_type == "npa",
+                        PlanTask.entity_id == act_id,
+                        PlanTask.title == item["title"],
+                        PlanTask.status == PlanTaskStatus.OPEN,
+                        PlanTask.deleted_at.is_(None),
+                    )
+                )
+            ).scalar_one_or_none()
+            if existing is not None:
+                tasks.append(existing)
+                continue
             task = PlanTask(
                 tenant_id=self.tenant_id,
                 title=item["title"],
-                description=f"NPA impact analysis for act {payload['act']['code']}",
+                description=f"NPA impact analysis for act {payload['act']['code']}" + (f" revision {payload['selected_revision_id']}" if payload.get("selected_revision_id") else ""),
                 entity_type="npa",
                 entity_id=act_id,
                 assignee_id=created_by,
