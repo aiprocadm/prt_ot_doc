@@ -165,6 +165,7 @@ class WorkflowService:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "workflow task not found")
         if task.status != WorkflowTaskStatus.OPEN:
             raise HTTPException(status.HTTP_409_CONFLICT, "workflow task is not open")
+        self._ensure_task_actor_allowed(task=task, actor_user_id=actor_user_id)
         task.status = WorkflowTaskStatus.COMPLETED
         task.completed_at = datetime.now(tz=timezone.utc)
         task.task_payload = {**(task.task_payload or {}), **(payload or {}), "decision": decision}
@@ -182,6 +183,7 @@ class WorkflowService:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "workflow task not found")
         if task.status != WorkflowTaskStatus.OPEN:
             raise HTTPException(status.HTTP_409_CONFLICT, "workflow task is not open")
+        self._ensure_task_actor_allowed(task=task, actor_user_id=actor_user_id, allow_unassigned=True)
         if not assignee_user_id and not assignee_role_code:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "new assignee is required")
         if mode in {"delegate", "escalate"}:
@@ -322,6 +324,20 @@ class WorkflowService:
 
     async def _timeline_like_audit(self, action: str, actor_user_id: str | None, entity_id: str, details: dict[str, Any]) -> None:
         await self.audit.log_event(tenant_id=self.tenant_id, user_id=actor_user_id, action=action, object_type="workflow", object_id=entity_id, ip="system", details=details)
+
+    @staticmethod
+    def _ensure_task_actor_allowed(
+        *,
+        task: WorkflowTask,
+        actor_user_id: str | None,
+        allow_unassigned: bool = False,
+    ) -> None:
+        if actor_user_id is None:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "workflow task requires authenticated actor")
+        if task.assignee_user_id and str(task.assignee_user_id) != str(actor_user_id):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "workflow task assigned to another user")
+        if not task.assignee_user_id and not allow_unassigned and task.assignee_role_code:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "workflow task requires matching role assignee")
 
 
     async def sweep_task_sla(self, *, now: datetime | None = None) -> int:

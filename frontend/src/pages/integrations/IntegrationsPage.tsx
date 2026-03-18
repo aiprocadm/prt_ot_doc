@@ -1,41 +1,200 @@
+import { RotateCcw } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+
+import { apiClient } from "@/api/client";
 import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { StatusBadge } from "@/components/common/StatusBadge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-const connectors = [
-  { name: "ЭДО Контур", direction: "outbound", status: "ready", lastSync: "сегодня 10:42" },
-  { name: "1С ЗУП", direction: "bidirectional", status: "processing", lastSync: "сегодня 10:31" },
-  { name: "SIEM", direction: "outbound", status: "warning", lastSync: "вчера 23:15" }
-] as const;
+type OutboxEntry = {
+  id: string;
+  event_type: string;
+  destination: string;
+  status: string;
+  attempts: number;
+  created_at: string;
+  updated_at: string;
+  next_attempt_at?: string | null;
+  sent_at?: string | null;
+  last_error?: Record<string, unknown> | null;
+};
+
+type OutboxEventEntry = {
+  id: string;
+  event_type: string;
+  status: string;
+  attempts: number;
+  created_at: string;
+  next_attempt_at?: string | null;
+  last_error?: string | null;
+};
+
+const formatDateTime = (value?: string | null) => (value ? new Date(value).toLocaleString() : "—");
 
 const IntegrationsPage = () => {
+  const [deliveries, setDeliveries] = useState<OutboxEntry[]>([]);
+  const [events, setEvents] = useState<OutboxEventEntry[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const [outboxResponse, eventResponse] = await Promise.all([
+        apiClient.get<{ items: OutboxEntry[] }>("/admin/outbox"),
+        apiClient.get<{ items: OutboxEventEntry[] }>("/admin/outbox/events")
+      ]);
+      setDeliveries(outboxResponse.data.items);
+      setEvents(eventResponse.data.items);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  const summary = useMemo(() => {
+    const failedDeliveries = deliveries.filter((item) => item.status === "failed" || item.status === "dead").length;
+    const failedEvents = events.filter((item) => item.status === "failed" || item.status === "poisoned").length;
+    const sent = deliveries.filter((item) => item.status === "sent").length;
+    return {
+      deliveries: deliveries.length,
+      failedDeliveries,
+      failedEvents,
+      sent
+    };
+  }, [deliveries, events]);
+
+  const retryDelivery = async (id: string) => {
+    setRetryingId(id);
+    try {
+      await apiClient.post(`/admin/outbox/${id}/retry`);
+      await load();
+    } finally {
+      setRetryingId(null);
+    }
+  };
+
+  const retryEvent = async (id: string) => {
+    setRetryingId(id);
+    try {
+      await apiClient.post(`/admin/outbox/events/${id}/requeue`);
+      await load();
+    } finally {
+      setRetryingId(null);
+    }
+  };
+
   return (
     <div className="space-y-4">
-      <RegistryPageHeader title="Интеграции" description="Контроль API-интеграций, синхронизации и статусов обмена." />
+      <RegistryPageHeader
+        title="Интеграции"
+        description="Delivery history, retry-safe обработка и прозрачность статусов интеграций через outbox/event pipeline."
+      />
+
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card><CardContent className="py-6"><div className="text-sm text-muted-foreground">Всего доставок</div><div className="text-2xl font-semibold">{summary.deliveries}</div></CardContent></Card>
+        <Card><CardContent className="py-6"><div className="text-sm text-muted-foreground">Успешно отправлено</div><div className="text-2xl font-semibold">{summary.sent}</div></CardContent></Card>
+        <Card><CardContent className="py-6"><div className="text-sm text-muted-foreground">Сбой доставки</div><div className="text-2xl font-semibold">{summary.failedDeliveries}</div></CardContent></Card>
+        <Card><CardContent className="py-6"><div className="text-sm text-muted-foreground">Проблемные события</div><div className="text-2xl font-semibold">{summary.failedEvents}</div></CardContent></Card>
+      </div>
+
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Подключения</CardTitle>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base">Outbound delivery history</CardTitle>
+          <Button variant="outline" onClick={() => void load()} disabled={loading}>Обновить</Button>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Интеграция</TableHead>
-                <TableHead>Направление</TableHead>
+                <TableHead>Событие</TableHead>
+                <TableHead>Назначение</TableHead>
                 <TableHead>Статус</TableHead>
-                <TableHead>Последняя синхронизация</TableHead>
+                <TableHead>Попытки</TableHead>
+                <TableHead>Тайминг</TableHead>
+                <TableHead className="text-right">Действие</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {connectors.map((connector) => (
-                <TableRow key={connector.name}>
-                  <TableCell className="font-medium">{connector.name}</TableCell>
-                  <TableCell>{connector.direction}</TableCell>
+              {deliveries.map((item) => (
+                <TableRow key={item.id}>
                   <TableCell>
-                    <StatusBadge status={connector.status} />
+                    <div className="font-medium">{item.event_type}</div>
+                    <div className="text-xs text-muted-foreground">{item.id}</div>
                   </TableCell>
-                  <TableCell>{connector.lastSync}</TableCell>
+                  <TableCell className="max-w-[320px] truncate">{item.destination}</TableCell>
+                  <TableCell><StatusBadge status={item.status} /></TableCell>
+                  <TableCell>{item.attempts}</TableCell>
+                  <TableCell>
+                    <div className="text-sm">created: {formatDateTime(item.created_at)}</div>
+                    <div className="text-xs text-muted-foreground">next: {formatDateTime(item.next_attempt_at)}</div>
+                    <div className="text-xs text-muted-foreground">sent: {formatDateTime(item.sent_at)}</div>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {(item.status === "failed" || item.status === "dead") ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void retryDelivery(item.id)}
+                        disabled={retryingId === item.id}
+                      >
+                        <RotateCcw className="mr-2 h-4 w-4" /> Retry
+                      </Button>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">{item.last_error ? "есть ошибка" : "—"}</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Integration event pipeline</CardTitle></CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Event</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Attempts</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead>Ошибка</TableHead>
+                <TableHead className="text-right">Действие</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {events.map((item) => (
+                <TableRow key={item.id}>
+                  <TableCell>
+                    <div className="font-medium">{item.event_type}</div>
+                    <div className="text-xs text-muted-foreground">{item.id}</div>
+                  </TableCell>
+                  <TableCell><StatusBadge status={item.status} /></TableCell>
+                  <TableCell>{item.attempts}</TableCell>
+                  <TableCell>{formatDateTime(item.created_at)}</TableCell>
+                  <TableCell className="max-w-[280px] truncate text-xs text-muted-foreground">{item.last_error ?? "—"}</TableCell>
+                  <TableCell className="text-right">
+                    {(item.status === "failed" || item.status === "poisoned") ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void retryEvent(item.id)}
+                        disabled={retryingId === item.id}
+                      >
+                        <RotateCcw className="mr-2 h-4 w-4" /> Requeue
+                      </Button>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">{formatDateTime(item.next_attempt_at)}</span>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

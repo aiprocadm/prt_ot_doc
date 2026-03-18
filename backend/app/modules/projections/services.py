@@ -5,7 +5,18 @@ from datetime import date
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.models import ClientPackageRun, Incident, Inspection, Person
+from app.models.finance import Contract, Order
+from app.models.models import (
+    ClientPackageRun,
+    Company,
+    Incident,
+    Inspection,
+    NPA,
+    Person,
+    Prescription,
+    Site,
+)
+from app.models.notifications import PlanTask
 from app.modules.client_portal.services import SafePortalPayloadService
 from app.modules.projections.models import (
     ClientPortalReadModel,
@@ -16,6 +27,7 @@ from app.modules.projections.models import (
     SearchIndexEntry,
     SiteSafetyReadModel,
 )
+from app.modules.workflow.models import WorkflowTask, WorkflowTaskStatus
 
 
 class PackageProjectionService:
@@ -225,26 +237,233 @@ class ProjectionOrchestrator:
         return await ClientPortalProjectionService(self.session, self.tenant_id).rebuild()
 
     async def rebuild_search_index(self) -> int:
-        persons = (await self.session.execute(select(Person).where(Person.tenant_id == self.tenant_id, Person.deleted_at.is_(None)))).scalars().all()
+        persons = (
+            await self.session.execute(
+                select(Person).where(Person.tenant_id == self.tenant_id, Person.deleted_at.is_(None))
+            )
+        ).scalars().all()
+        companies = (
+            await self.session.execute(
+                select(Company).where(Company.tenant_id == self.tenant_id, Company.deleted_at.is_(None))
+            )
+        ).scalars().all()
+        sites = (
+            await self.session.execute(
+                select(Site).where(Site.tenant_id == self.tenant_id, Site.deleted_at.is_(None))
+            )
+        ).scalars().all()
+        incidents = (
+            await self.session.execute(
+                select(Incident).where(Incident.tenant_id == self.tenant_id, Incident.deleted_at.is_(None))
+            )
+        ).scalars().all()
+        inspections = (
+            await self.session.execute(
+                select(Inspection).where(Inspection.tenant_id == self.tenant_id, Inspection.deleted_at.is_(None))
+            )
+        ).scalars().all()
+        prescriptions = (
+            await self.session.execute(
+                select(Prescription).where(
+                    Prescription.tenant_id == self.tenant_id, Prescription.deleted_at.is_(None)
+                )
+            )
+        ).scalars().all()
+        npa_items = (await self.session.execute(select(NPA).where(NPA.tenant_id == self.tenant_id))).scalars().all()
+        contracts = (
+            await self.session.execute(
+                select(Contract).where(Contract.tenant_id == self.tenant_id, Contract.deleted_at.is_(None))
+            )
+        ).scalars().all()
+        orders = (
+            await self.session.execute(
+                select(Order).where(Order.tenant_id == self.tenant_id, Order.deleted_at.is_(None))
+            )
+        ).scalars().all()
+        plan_tasks = (
+            await self.session.execute(
+                select(PlanTask).where(PlanTask.tenant_id == self.tenant_id, PlanTask.deleted_at.is_(None))
+            )
+        ).scalars().all()
+        workflow_tasks = (
+            await self.session.execute(
+                select(WorkflowTask).where(
+                    WorkflowTask.tenant_id == self.tenant_id,
+                    WorkflowTask.deleted_at.is_(None),
+                    WorkflowTask.status == WorkflowTaskStatus.OPEN,
+                )
+            )
+        ).scalars().all()
         count = 0
-        for person in persons:
-            title = " ".join(filter(None, [person.last_name, person.first_name, person.middle_name]))
+
+        async def upsert_entry(
+            *,
+            entity_type: str,
+            entity_id: str,
+            title: str,
+            subtitle: str | None = None,
+            status: str | None = None,
+            route: str | None = None,
+            preview_payload: dict | None = None,
+            tags_json: dict | None = None,
+            search_text: str | None = None,
+        ) -> None:
+            nonlocal count
             row = (
                 await self.session.execute(
                     select(SearchIndexEntry).where(
                         SearchIndexEntry.tenant_id == self.tenant_id,
-                        SearchIndexEntry.entity_type == "person",
-                        SearchIndexEntry.entity_id == person.id,
+                        SearchIndexEntry.entity_type == entity_type,
+                        SearchIndexEntry.entity_id == entity_id,
                     )
                 )
             ).scalar_one_or_none()
             if row is None:
-                row = SearchIndexEntry(tenant_id=self.tenant_id, entity_type="person", entity_id=person.id, title=title)
+                row = SearchIndexEntry(
+                    tenant_id=self.tenant_id,
+                    entity_type=entity_type,
+                    entity_id=entity_id,
+                    title=title,
+                )
                 self.session.add(row)
             row.title = title
-            row.search_text = title
-            row.route = f"/persons/{person.id}"
+            row.subtitle = subtitle
+            row.status = status
+            row.route = route
+            row.preview_payload = preview_payload or {}
+            row.tags_json = tags_json or {}
+            row.search_text = search_text or " ".join(
+                part for part in [title, subtitle or "", str(preview_payload or "")] if part
+            )
             count += 1
+
+        for person in persons:
+            title = " ".join(filter(None, [person.last_name, person.first_name, person.middle_name]))
+            await upsert_entry(
+                entity_type="person",
+                entity_id=person.id,
+                title=title,
+                subtitle=person.personnel_number,
+                status=person.employment_status.value if hasattr(person.employment_status, "value") else str(person.employment_status),
+                route=f"/persons/{person.id}",
+                preview_payload={"email": person.email, "phone": person.phone},
+                tags_json={"company_id": person.company_id, "site_id": getattr(person, "site_id", None)},
+                search_text=" ".join(
+                    filter(None, [title, person.personnel_number or "", person.email or "", person.phone or ""])
+                ),
+            )
+        for company in companies:
+            await upsert_entry(
+                entity_type="company",
+                entity_id=company.id,
+                title=company.name,
+                subtitle=company.inn or company.ogrn,
+                route=f"/companies/{company.id}",
+                preview_payload={"director": company.director, "activity_type": company.activity_type},
+                search_text=" ".join(
+                    filter(None, [company.name, company.inn or "", company.ogrn or "", company.contact_email or ""])
+                ),
+            )
+        for site in sites:
+            await upsert_entry(
+                entity_type="site",
+                entity_id=site.id,
+                title=site.name,
+                subtitle=site.address,
+                status=site.hazard_class,
+                route=f"/sites/{site.id}",
+                tags_json={"company_id": site.company_id},
+                preview_payload={"site_type": site.site_type, "contact_name": site.contact_name},
+            )
+        for incident in incidents:
+            await upsert_entry(
+                entity_type="incident",
+                entity_id=incident.id,
+                title=incident.title,
+                subtitle=incident.location_description,
+                status=incident.status.value if hasattr(incident.status, "value") else str(incident.status),
+                route=f"/incidents?id={incident.id}",
+                tags_json={"company_id": incident.company_id, "site_id": incident.site_id},
+                preview_payload={"severity": str(incident.severity.value if hasattr(incident.severity, "value") else incident.severity)},
+                search_text=" ".join(filter(None, [incident.title, incident.description or "", incident.location_description or ""])),
+            )
+        for inspection in inspections:
+            await upsert_entry(
+                entity_type="inspection",
+                entity_id=inspection.id,
+                title=inspection.authority,
+                subtitle=inspection.purpose,
+                status=inspection.status.value if hasattr(inspection.status, "value") else str(inspection.status),
+                route=f"/inspections?id={inspection.id}",
+                tags_json={"company_id": inspection.company_id, "site_id": inspection.site_id},
+                preview_payload={"inspection_type": str(inspection.inspection_type.value if hasattr(inspection.inspection_type, "value") else inspection.inspection_type)},
+            )
+        for prescription in prescriptions:
+            await upsert_entry(
+                entity_type="prescription",
+                entity_id=prescription.id,
+                title=(prescription.description or "")[:120] or f"Prescription {prescription.id[:8]}",
+                subtitle=prescription.description,
+                status=prescription.status.value if hasattr(prescription.status, "value") else str(prescription.status),
+                route=f"/prescriptions?id={prescription.id}",
+                preview_payload={"inspection_id": prescription.inspection_id, "incident_id": prescription.incident_id},
+                search_text=prescription.description,
+            )
+        for item in npa_items:
+            await upsert_entry(
+                entity_type="npa",
+                entity_id=item.id,
+                title=item.code,
+                subtitle=item.title,
+                status=item.status.value if hasattr(item.status, "value") else str(item.status),
+                route=f"/npa?selected={item.id}",
+                preview_payload={"edition_date": item.edition_date.isoformat() if item.edition_date else None},
+                search_text=f"{item.code} {item.title}",
+            )
+        for contract in contracts:
+            await upsert_entry(
+                entity_type="contract",
+                entity_id=contract.id,
+                title=contract.title,
+                subtitle=contract.contract_number or contract.counterparty_name,
+                status=contract.status.value if hasattr(contract.status, "value") else str(contract.status),
+                route=f"/contracts/{contract.id}",
+                tags_json={"company_id": contract.company_id, "site_id": contract.site_id},
+                search_text=" ".join(filter(None, [contract.title, contract.contract_number or "", contract.counterparty_name])),
+            )
+        for order in orders:
+            await upsert_entry(
+                entity_type="order",
+                entity_id=order.id,
+                title=order.order_number,
+                subtitle=f"Contract {order.contract_id}",
+                status=order.status.value if hasattr(order.status, "value") else str(order.status),
+                route=f"/orders/{order.id}",
+                preview_payload={"contract_id": order.contract_id},
+                search_text=f"{order.order_number} {order.contract_id}",
+            )
+        for task in plan_tasks:
+            await upsert_entry(
+                entity_type="task",
+                entity_id=task.id,
+                title=task.title,
+                subtitle=task.description,
+                status=task.status.value if hasattr(task.status, "value") else str(task.status),
+                route=f"/tasks?task={task.id}",
+                preview_payload={"entity_type": task.entity_type, "entity_id": task.entity_id},
+                search_text=" ".join(filter(None, [task.title, task.description or "", task.entity_type, task.entity_id])),
+            )
+        for task in workflow_tasks:
+            await upsert_entry(
+                entity_type="workflow_task",
+                entity_id=task.id,
+                title=task.title,
+                subtitle=task.node_id,
+                status=task.status.value if hasattr(task.status, "value") else str(task.status),
+                route=f"/workflow?task={task.id}",
+                preview_payload={"instance_id": task.instance_id, "assignee_role_code": task.assignee_role_code},
+                search_text=" ".join(filter(None, [task.title, task.node_id, task.assignee_role_code or "", task.assignee_user_id or ""])),
+            )
         await self.session.commit()
         return count
 

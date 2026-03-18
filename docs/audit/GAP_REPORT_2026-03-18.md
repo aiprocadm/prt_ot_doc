@@ -26,11 +26,13 @@
 ## Дополнительно в этой волне
 - Workflow/BPM v1 усилен версионированием публикаций: новая published-версия автоматически архивирует прошлую published-версию без ломки уже запущенных инстансов; в UI добавлен JSON-driven editor/validator и более подробная instance timeline.
 - Notifications Center расширен серверным unread counter API и фильтрами по channel/priority/type в едином экране.
-- Global Search получил foundation для recent searches и saved searches: добавлены tenant-scoped таблицы, API и UI блоки в header/Search Center.
+- Global Search получил не только foundation для recent/saved searches, но и расширенную индексацию: компании, площадки, инциденты, проверки, предписания, НПА, договоры, заказы, plan/workflow tasks теперь индексируются в общем search service с facet counts и alias-мэппингом типов.
 - NPA UI доведён до detail/impact режима: ревизии, summary по binding-ам и action на создание update tasks теперь доступны из одной страницы.
+- Integration reliability UX выведен из stub-состояния: экран `Интеграции` теперь показывает реальную delivery history по outbox/outbox-events, failure states и действия retry/requeue без ручного перехода в админские обходные страницы.
 
 ## Осталось backlog после этой волны
 - Workflow: системный beat для SLA sweep + ABAC rule-based assignee resolution + richer condition DSL.
 - Notifications: delivery history по транспортам, digest scheduler, escalation matrix execution.
-- Search: полнота индексации по всем требуемым сущностям и ranking tuning на PostgreSQL FTS.
+- Search: полнота индексации по document/risk/PPE/training read-моделям и ranking tuning на PostgreSQL FTS.
 - NPA: более глубокие binding-и для checklist/package/process scopes и массовая актуализация связанных сущностей.
+- Integrations: connector-specific health metrics, inbound webhook replay/signature visibility и корреляция статусов по адаптерам (EDO/1C/FRDO/EISOT) всё ещё backlog.
