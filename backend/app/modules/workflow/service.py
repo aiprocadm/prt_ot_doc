@@ -159,13 +159,13 @@ class WorkflowService:
             stmt = stmt.where(or_(WorkflowTask.assignee_user_id == user_id, WorkflowTask.assignee_role_code.in_(role_codes)))
         return (await self.session.execute(stmt.order_by(WorkflowTask.due_at.asc().nullslast(), WorkflowTask.created_at.desc()))).scalars().all()
 
-    async def complete_task(self, *, task_id: str, actor_user_id: str | None, decision: str | None, payload: dict[str, Any] | None) -> WorkflowTask:
+    async def complete_task(self, *, task_id: str, actor_user_id: str | None, actor_role_codes: list[str] | None, decision: str | None, payload: dict[str, Any] | None) -> WorkflowTask:
         task = await self.session.get(WorkflowTask, task_id)
         if task is None or task.tenant_id != self.tenant_id:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "workflow task not found")
         if task.status != WorkflowTaskStatus.OPEN:
             raise HTTPException(status.HTTP_409_CONFLICT, "workflow task is not open")
-        self._ensure_task_actor_allowed(task=task, actor_user_id=actor_user_id)
+        self._ensure_task_actor_allowed(task=task, actor_user_id=actor_user_id, actor_role_codes=actor_role_codes)
         task.status = WorkflowTaskStatus.COMPLETED
         task.completed_at = datetime.now(tz=timezone.utc)
         task.task_payload = {**(task.task_payload or {}), **(payload or {}), "decision": decision}
@@ -177,16 +177,16 @@ class WorkflowService:
         await self._advance(instance, actor_user_id=actor_user_id, from_node_id=task.node_id)
         return task
 
-    async def reassign_task(self, *, task_id: str, actor_user_id: str | None, assignee_user_id: str | None, assignee_role_code: str | None, mode: str) -> WorkflowTask:
+    async def reassign_task(self, *, task_id: str, actor_user_id: str | None, actor_role_codes: list[str] | None, assignee_user_id: str | None, assignee_role_code: str | None, mode: str) -> WorkflowTask:
         task = await self.session.get(WorkflowTask, task_id)
         if task is None or task.tenant_id != self.tenant_id:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "workflow task not found")
         if task.status != WorkflowTaskStatus.OPEN:
             raise HTTPException(status.HTTP_409_CONFLICT, "workflow task is not open")
-        self._ensure_task_actor_allowed(task=task, actor_user_id=actor_user_id, allow_unassigned=True)
+        self._ensure_task_actor_allowed(task=task, actor_user_id=actor_user_id, actor_role_codes=actor_role_codes, allow_unassigned=True)
         if not assignee_user_id and not assignee_role_code:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "new assignee is required")
-        if mode in {"delegate", "escalate"}:
+        if mode in {"delegate", "delegated", "escalate", "escalated"}:
             task.delegated_from_user_id = task.assignee_user_id
         task.assignee_user_id = assignee_user_id
         task.assignee_role_code = assignee_role_code
@@ -330,14 +330,17 @@ class WorkflowService:
         *,
         task: WorkflowTask,
         actor_user_id: str | None,
+        actor_role_codes: list[str] | None = None,
         allow_unassigned: bool = False,
     ) -> None:
         if actor_user_id is None:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "workflow task requires authenticated actor")
         if task.assignee_user_id and str(task.assignee_user_id) != str(actor_user_id):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "workflow task assigned to another user")
-        if not task.assignee_user_id and not allow_unassigned and task.assignee_role_code:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "workflow task requires matching role assignee")
+        if not task.assignee_user_id and task.assignee_role_code:
+            actor_role_codes = actor_role_codes or []
+            if task.assignee_role_code not in actor_role_codes and not allow_unassigned:
+                raise HTTPException(status.HTTP_403_FORBIDDEN, "workflow task requires matching role assignee")
 
 
     async def sweep_task_sla(self, *, now: datetime | None = None) -> int:

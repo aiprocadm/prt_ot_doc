@@ -175,28 +175,28 @@ async def list_tasks(session: SessionDep, tenant: TenantDep, access: AccessDep, 
 
 @router.post("/tasks/{task_id}/complete", response_model=WorkflowTaskRead)
 async def complete_task(task_id: str, payload: WorkflowTaskActionIn, session: SessionDep, tenant: TenantDep, access: AccessDep) -> WorkflowTaskRead:
-    task = await _service(session, tenant).complete_task(task_id=task_id, actor_user_id=access.user.id, decision=payload.decision, payload=payload.payload)
+    task = await _service(session, tenant).complete_task(task_id=task_id, actor_user_id=access.user.id, actor_role_codes=[role.code for role in getattr(access.user, 'roles', [])] if getattr(access.user, 'roles', None) else [], decision=payload.decision, payload=payload.payload)
     await session.commit()
     return _serialize_task(task)
 
 
 @router.post("/tasks/{task_id}/reassign", response_model=WorkflowTaskRead)
 async def reassign_task(task_id: str, payload: WorkflowTaskActionIn, session: SessionDep, tenant: TenantDep, access: AccessDep) -> WorkflowTaskRead:
-    task = await _service(session, tenant).reassign_task(task_id=task_id, actor_user_id=access.user.id, assignee_user_id=payload.assignee_user_id, assignee_role_code=payload.assignee_role_code, mode="reassigned")
+    task = await _service(session, tenant).reassign_task(task_id=task_id, actor_user_id=access.user.id, actor_role_codes=[role.code for role in getattr(access.user, 'roles', [])] if getattr(access.user, 'roles', None) else [], assignee_user_id=payload.assignee_user_id, assignee_role_code=payload.assignee_role_code, mode="reassigned")
     await session.commit()
     return _serialize_task(task)
 
 
 @router.post("/tasks/{task_id}/delegate", response_model=WorkflowTaskRead)
 async def delegate_task(task_id: str, payload: WorkflowTaskActionIn, session: SessionDep, tenant: TenantDep, access: AccessDep) -> WorkflowTaskRead:
-    task = await _service(session, tenant).reassign_task(task_id=task_id, actor_user_id=access.user.id, assignee_user_id=payload.assignee_user_id, assignee_role_code=payload.assignee_role_code, mode="delegated")
+    task = await _service(session, tenant).reassign_task(task_id=task_id, actor_user_id=access.user.id, actor_role_codes=[role.code for role in getattr(access.user, 'roles', [])] if getattr(access.user, 'roles', None) else [], assignee_user_id=payload.assignee_user_id, assignee_role_code=payload.assignee_role_code, mode="delegated")
     await session.commit()
     return _serialize_task(task)
 
 
 @router.post("/tasks/{task_id}/escalate", response_model=WorkflowTaskRead)
 async def escalate_task(task_id: str, payload: WorkflowTaskActionIn, session: SessionDep, tenant: TenantDep, access: AccessDep) -> WorkflowTaskRead:
-    task = await _service(session, tenant).reassign_task(task_id=task_id, actor_user_id=access.user.id, assignee_user_id=payload.assignee_user_id, assignee_role_code=payload.assignee_role_code, mode="escalated")
+    task = await _service(session, tenant).reassign_task(task_id=task_id, actor_user_id=access.user.id, actor_role_codes=[role.code for role in getattr(access.user, 'roles', [])] if getattr(access.user, 'roles', None) else [], assignee_user_id=payload.assignee_user_id, assignee_role_code=payload.assignee_role_code, mode="escalated")
     await session.commit()
     return _serialize_task(task)
 

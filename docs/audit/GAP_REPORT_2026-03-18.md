@@ -36,3 +36,9 @@
 - Search: полнота индексации по document/risk/PPE/training read-моделям и ranking tuning на PostgreSQL FTS.
 - NPA: более глубокие binding-и для checklist/package/process scopes и массовая актуализация связанных сущностей.
 - Integrations: connector-specific health metrics, inbound webhook replay/signature visibility и корреляция статусов по адаптерам (EDO/1C/FRDO/EISOT) всё ещё backlog.
+
+- Дополнительно после финального pass: workflow service исправлен для корректных delegate/escalate режимов и role-aware completion/reassignment; добавлен regression test на timeline событий делегирования/эскалации.
+- Search Center расширен enterprise-tabs (`tasks`, `npa`, `contracts`, `orders`) и показом metadata tags/snippets без смены backend contract.
+- Для NPA detail добавлен linked entities panel с явным списком binding-ов, а не только summary-счётчиками.
+- Для integration admin UX добавлен статусный фильтр delivery history.
+- Добавлен PWA/mobile readiness foundation: глобальный offline banner + sync/retry status в shell без перезагрузки приложения.

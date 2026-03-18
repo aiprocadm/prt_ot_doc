@@ -3,6 +3,7 @@ import { Link, Outlet } from "react-router-dom";
 
 import { Toaster } from "sonner";
 
+import { ConnectivityBanner } from "@/components/common/ConnectivityBanner";
 import { RightDrawer } from "@/components/layout/RightDrawer";
 import { SideNav } from "@/components/layout/SideNav";
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -49,6 +50,7 @@ export const MainLayout = () => {
       <TenantGate>
         <div className="min-h-screen bg-background text-foreground">
           <TopNav />
+          <ConnectivityBanner />
           {billingAlert && (
             <div className="border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900">
               {billingAlert === "BILLING_BLOCKED" ? "Доступ ограничен из-за статуса оплаты." : "Достигнут лимит тарифа."}{" "}

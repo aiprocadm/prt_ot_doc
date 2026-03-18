@@ -229,6 +229,64 @@ async def test_workflow_task_cannot_be_completed_by_other_user(async_client, ses
     assert forbidden.status_code == 403
 
 
+async def test_workflow_task_delegate_and_escalate(async_client, sessionmaker, make_auth_headers, data_factory):
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        owner = await data_factory.create_user(tenant=tenant, email="wf-delegate-owner@example.com", session=session)
+        backup = await data_factory.create_user(tenant=tenant, email="wf-delegate-backup@example.com", session=session)
+        await session.commit()
+    headers = await make_auth_headers(email="wf-delegate-owner@example.com")
+
+    payload = {
+        "code": "delegate-doc-approval",
+        "name": "Delegation approval",
+        "entity_type": "document",
+        "graph": {
+            "nodes": [
+                {"id": "start", "type": "start", "name": "Start"},
+                {"id": "approve", "type": "approval", "name": "Approve", "assignee_user_id": owner.id},
+                {"id": "end", "type": "end", "name": "End"},
+            ],
+            "transitions": [
+                {"from": "start", "to": "approve"},
+                {"from": "approve", "to": "end"},
+            ],
+        },
+        "variables_schema": {},
+    }
+    create_response = await async_client.post("/api/v1/workflow/definitions", json=payload, headers=headers)
+    version_id = create_response.json()["id"]
+    await async_client.post(f"/api/v1/workflow/versions/{version_id}/publish", headers=headers)
+    start_response = await async_client.post(
+        "/api/v1/workflow/instances",
+        json={"definition_code": "delegate-doc-approval", "entity_type": "document", "entity_id": "doc-3", "context": {}},
+        headers=headers,
+    )
+    task_id = start_response.json()["tasks"][0]["id"]
+
+    delegated = await async_client.post(
+        f"/api/v1/workflow/tasks/{task_id}/delegate",
+        json={"assignee_user_id": backup.id},
+        headers=headers,
+    )
+    assert delegated.status_code == 200
+    assert delegated.json()["assignee_user_id"] == backup.id
+
+    escalated = await async_client.post(
+        f"/api/v1/workflow/tasks/{task_id}/escalate",
+        json={"assignee_role_code": "admin"},
+        headers=await make_auth_headers(email="wf-delegate-backup@example.com"),
+    )
+    assert escalated.status_code == 200
+    assert escalated.json()["assignee_role_code"] == "admin"
+
+    instance = await async_client.get(f"/api/v1/workflow/instances/{start_response.json()['id']}", headers=headers)
+    assert instance.status_code == 200
+    event_types = [item["event_type"] for item in instance.json()["timeline"]]
+    assert "task_delegated" in event_types
+    assert "task_escalated" in event_types
+
+
 async def test_search_indexes_multiple_registry_types(async_client, sessionmaker, make_auth_headers, data_factory):
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
