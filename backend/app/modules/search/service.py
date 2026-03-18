@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from typing import Any
 
-from sqlalchemy import String, and_, cast, desc, or_, select
+from sqlalchemy import String, and_, cast, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.projections.models import SearchIndexEntry
@@ -24,12 +24,59 @@ class SearchFilters:
 
 
 class SearchService:
+    _TYPE_ALIASES: dict[str, set[str]] = {
+        "documents": {"document"},
+        "document": {"document"},
+        "people": {"person"},
+        "person": {"person"},
+        "employee": {"person"},
+        "employees": {"person"},
+        "sites": {"site"},
+        "site": {"site"},
+        "incidents": {"incident"},
+        "incident": {"incident"},
+        "inspections": {"inspection"},
+        "inspection": {"inspection"},
+        "prescriptions": {"prescription"},
+        "prescription": {"prescription"},
+        "npa": {"npa"},
+        "risk": {"risk", "risk_map"},
+        "risks": {"risk", "risk_map"},
+        "ppe": {"ppe_issue"},
+        "tasks": {"task", "workflow_task"},
+        "task": {"task"},
+        "workflow_tasks": {"workflow_task"},
+        "workflow_task": {"workflow_task"},
+        "jobs": {"task", "workflow_task", "prescription"},
+        "contracts": {"contract"},
+        "contract": {"contract"},
+        "orders": {"order"},
+        "order": {"order"},
+        "packages": {"package"},
+        "package": {"package"},
+        "files": {"file"},
+        "file": {"file"},
+        "templates": {"template"},
+        "template": {"template"},
+        "training": {"training_enrollment"},
+    }
     _ENTITY_ROUTE_PREFIXES: dict[str, str] = {
         "documents": "documents",
         "document": "documents",
         "risk": "risk",
         "jobs": "jobs",
         "templates": "templates",
+        "person": "persons",
+        "site": "sites",
+        "company": "companies",
+        "incident": "incidents",
+        "inspection": "inspections",
+        "prescription": "prescriptions",
+        "task": "tasks",
+        "workflow_task": "workflow",
+        "npa": "npa",
+        "contract": "contracts",
+        "order": "orders",
     }
 
     def __init__(self, session: AsyncSession, tenant_id: str) -> None:
@@ -114,8 +161,9 @@ class SearchService:
                     cast(SearchIndexEntry.search_text, String).ilike(like),
                 )
             )
-        if types:
-            stmt = stmt.where(SearchIndexEntry.entity_type.in_(types))
+        resolved_types = self._resolve_entity_types(types)
+        if resolved_types:
+            stmt = stmt.where(SearchIndexEntry.entity_type.in_(resolved_types))
         if filters.status:
             stmt = stmt.where(SearchIndexEntry.status == filters.status)
         if filters.site_id:
@@ -126,12 +174,16 @@ class SearchService:
             stmt = stmt.where(SearchIndexEntry.tags_json["contractor_id"].astext == filters.contractor_id)
 
         order_by = desc(SearchIndexEntry.updated_at) if sort in {"updated_at", "date", "relevance"} else desc(SearchIndexEntry.updated_at)
+        facet_stmt = (
+            select(SearchIndexEntry.entity_type, func.count())
+            .where(*stmt._where_criteria)
+            .group_by(SearchIndexEntry.entity_type)
+        )
+        facet_rows = (await self.session.execute(facet_stmt)).all()
         rows = (await self.session.execute(stmt.order_by(order_by).offset(offset).limit(limit + 1))).scalars().all()
         has_more = len(rows) > limit
         items = rows[:limit]
-        type_counts: dict[str, int] = {}
-        for row in items:
-            type_counts[row.entity_type] = type_counts.get(row.entity_type, 0) + 1
+        type_counts: dict[str, int] = {str(entity_type): int(total) for entity_type, total in facet_rows}
         return {
             "q": q,
             "total": len(items),
@@ -154,3 +206,10 @@ class SearchService:
             ],
             "next_cursor": str(offset + limit) if has_more else None,
         }
+
+    @classmethod
+    def _resolve_entity_types(cls, types: set[str]) -> set[str]:
+        resolved: set[str] = set()
+        for item in types:
+            resolved.update(cls._TYPE_ALIASES.get(item, {item}))
+        return resolved

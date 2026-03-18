@@ -1,5 +1,5 @@
 from datetime import date, datetime, timezone
-from app.models.models import NPABinding, NPA, NPAStatus
+from app.models.models import Incident, IncidentSeverity, IncidentStatus, IncidentType, NPABinding, NPA, NPAStatus
 from app.models.npa import NpaAct, NpaRevision
 from app.models.notifications import Notification, NotificationChannel, NotificationPriority, NotificationStatus, NotificationType
 
@@ -183,3 +183,79 @@ async def test_search_recent_and_saved_queries(async_client, sessionmaker, make_
     deleted = await async_client.delete(f"/api/v1/search/saved/{saved_id}", headers=headers)
     assert deleted.status_code == 200
     assert deleted.json()["deleted"] is True
+
+
+async def test_workflow_task_cannot_be_completed_by_other_user(async_client, sessionmaker, make_auth_headers, data_factory):
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        assignee = await data_factory.create_user(tenant=tenant, email="wf-owner@example.com", session=session)
+        other_user = await data_factory.create_user(tenant=tenant, email="wf-other@example.com", session=session)
+        await session.commit()
+    owner_headers = await make_auth_headers(email="wf-owner@example.com")
+    other_headers = await make_auth_headers(email="wf-other@example.com")
+
+    payload = {
+        "code": "restricted-doc-approval",
+        "name": "Restricted approval",
+        "entity_type": "document",
+        "graph": {
+            "nodes": [
+                {"id": "start", "type": "start", "name": "Start"},
+                {"id": "approve", "type": "approval", "name": "Approve", "assignee_user_id": assignee.id},
+                {"id": "end", "type": "end", "name": "End"},
+            ],
+            "transitions": [
+                {"from": "start", "to": "approve"},
+                {"from": "approve", "to": "end"},
+            ],
+        },
+        "variables_schema": {},
+    }
+    create_response = await async_client.post("/api/v1/workflow/definitions", json=payload, headers=owner_headers)
+    version_id = create_response.json()["id"]
+    await async_client.post(f"/api/v1/workflow/versions/{version_id}/publish", headers=owner_headers)
+    start_response = await async_client.post(
+        "/api/v1/workflow/instances",
+        json={"definition_code": "restricted-doc-approval", "entity_type": "document", "entity_id": "doc-2", "context": {}},
+        headers=owner_headers,
+    )
+    task_id = start_response.json()["tasks"][0]["id"]
+
+    forbidden = await async_client.post(
+        f"/api/v1/workflow/tasks/{task_id}/complete",
+        json={"decision": "approve", "payload": {}},
+        headers=other_headers,
+    )
+    assert forbidden.status_code == 403
+
+
+async def test_search_indexes_multiple_registry_types(async_client, sessionmaker, make_auth_headers, data_factory):
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        await data_factory.create_user(tenant=tenant, email="search-multi@example.com", session=session)
+        company = await data_factory.create_company(tenant=tenant, session=session, name="Acme Safety")
+        site = await data_factory.create_site(tenant=tenant, session=session, company=company, name="Plant 7")
+        incident = Incident(
+            tenant_id=tenant.id,
+            company_id=company.id,
+            site_id=site.id,
+            title="Forklift near miss",
+            incident_type=IncidentType.NEAR_MISS,
+            severity=IncidentSeverity.MEDIUM,
+            status=IncidentStatus.REPORTED,
+        )
+        session.add(incident)
+        await session.flush()
+        await session.commit()
+
+        from app.modules.projections.services import ProjectionOrchestrator
+
+        await ProjectionOrchestrator(session, str(tenant.id)).rebuild_search_index()
+        await session.commit()
+    headers = await make_auth_headers(email="search-multi@example.com")
+
+    response = await async_client.get("/api/v1/search", headers=headers, params={"q": "Forklift", "types": "incidents,sites,company"})
+    assert response.status_code == 200
+    payload = response.json()
+    assert any(item["entity_type"] == "incident" and item["entity_id"] == incident.id for item in payload["items"])
+    assert payload["facets"]["type_counts"]["incident"] >= 1
