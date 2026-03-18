@@ -2,12 +2,12 @@ import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { apiClient } from "@/api/client";
 import { defaultPagination } from "@/stores/helpers";
-import type { PaginatedState } from "@/stores/types";
+import type { PaginatedState, PaginationParams } from "@/stores/types";
 import type { ApiError, PaginatedResponse } from "@/types/dto/common";
 import type { CompanyDto, CompanyFiltersDto, UpdateCompanyDto } from "@/types/dto/companies";
 
 interface CompaniesState extends PaginatedState<CompanyDto, CompanyFiltersDto> {
-  list: (params?: Partial<CompanyFiltersDto>) => Promise<void>;
+  list: (params?: Partial<CompanyFiltersDto> & PaginationParams) => Promise<void>;
   getById: (id: string) => Promise<CompanyDto | null>;
   create: (payload: UpdateCompanyDto) => Promise<CompanyDto>;
   update: (id: string, payload: UpdateCompanyDto) => Promise<CompanyDto>;
