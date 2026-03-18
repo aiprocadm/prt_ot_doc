@@ -1,7 +1,7 @@
 """notification templates foundation
 
 Revision ID: 20260418_next66_notifications_templates_foundation
-Revises: 20260410_next65_search_memory
+Revises: 20260410_next65
 Create Date: 2026-04-18 00:00:00.000000
 """
 
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 revision = "20260418_next66_notifications_templates_foundation"
-down_revision = "20260410_next65_search_memory"
+down_revision = "20260410_next65"
 branch_labels = None
 depends_on = None
 
