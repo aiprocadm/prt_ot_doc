@@ -38,3 +38,20 @@ def test_inspection_created_payload_is_normalized_and_deduped() -> None:
     assert normalized["tenant_id"] == "t1"
     assert normalized["inspection_id"] == "insp-1"
     assert dedupe_key_for(EventType.INSPECTION_CREATED, payload) == "insp-1"
+
+
+def test_prescription_overdue_payload_is_normalized_and_deduped() -> None:
+    payload, normalized = normalize_payload(
+        event_type=EventType.PRESCRIPTION_OVERDUE,
+        tenant_id="t1",
+        payload={
+            "prescription_id": "pre-1",
+            "inspection_id": "insp-1",
+            "status": "open",
+            "assignee_id": "user-1",
+        },
+    )
+
+    assert normalized["tenant_id"] == "t1"
+    assert normalized["prescription_id"] == "pre-1"
+    assert dedupe_key_for(EventType.PRESCRIPTION_OVERDUE, payload) == "pre-1"

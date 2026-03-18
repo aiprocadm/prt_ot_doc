@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.obligations import Task, TaskPriority, TaskReminderChannel, TaskStatus
-from app.models.models import Attestation, Inspection, Tenant, TrainingCourse, TrainingPlan
+from app.models.models import Attestation, Inspection, Prescription, Tenant, TrainingCourse, TrainingPlan
 from app.services.events import EventType
 from app.services.outbox import OutboxService
 
@@ -274,6 +274,23 @@ async def process_task_reminders(
                 "overdue": overdue,
             },
         )
+        if overdue and task.entity_type == "prescription":
+            prescription = await session.get(Prescription, task.entity_id)
+            if prescription is not None and str(prescription.tenant_id) == str(task.tenant_id):
+                await outbox.enqueue(
+                    tenant_id=task.tenant_id,
+                    event_type=EventType.PRESCRIPTION_OVERDUE.value,
+                    payload={
+                        "tenant_id": task.tenant_id,
+                        "actor_id": task.created_by,
+                        "prescription_id": prescription.id,
+                        "inspection_id": prescription.inspection_id,
+                        "incident_id": prescription.incident_id,
+                        "assignee_id": prescription.assignee_id,
+                        "status": prescription.status.value,
+                        "due_at": prescription.due_at,
+                    },
+                )
         task.next_remind_at = _next_reminder_after_send(
             task.due_at,
             reminder_days=reminder_days,

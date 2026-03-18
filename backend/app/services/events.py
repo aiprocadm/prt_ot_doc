@@ -28,6 +28,7 @@ class EventType(str, enum.Enum):
     EDO_STATUS_CHANGED = "edo.status_changed"
     INCIDENT_CREATED = "IncidentCreated"
     INSPECTION_CREATED = "InspectionCreated"
+    PRESCRIPTION_OVERDUE = "PrescriptionOverdue"
 
 
 class BaseEventPayload(BaseModel):
@@ -160,6 +161,15 @@ class InspectionCreatedPayload(BaseEventPayload):
     authority: str
 
 
+class PrescriptionOverduePayload(BaseEventPayload):
+    prescription_id: str
+    inspection_id: str
+    incident_id: str | None = None
+    assignee_id: str | None = None
+    status: str
+    due_at: date | None = None
+
+
 class TaskDuePayload(BaseEventPayload):
     task_id: str
     title: str
@@ -191,6 +201,7 @@ _PAYLOADS: dict[EventType, type[BaseEventPayload]] = {
     EventType.EDO_STATUS_CHANGED: InternalEventPayload,
     EventType.INCIDENT_CREATED: IncidentCreatedPayload,
     EventType.INSPECTION_CREATED: InspectionCreatedPayload,
+    EventType.PRESCRIPTION_OVERDUE: PrescriptionOverduePayload,
 }
 
 
@@ -239,6 +250,8 @@ def dedupe_key_for(event_type: EventType, payload: BaseEventPayload) -> str:
         return payload.training_event_id
     if isinstance(payload, TrainingAssignedPayload):
         return payload.training_event_id
+    if isinstance(payload, PrescriptionOverduePayload):
+        return payload.prescription_id
     if isinstance(payload, TaskDuePayload):
         return payload.task_id
     if isinstance(payload, InternalEventPayload):

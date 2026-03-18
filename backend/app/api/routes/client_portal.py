@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.config import get_settings
+from app.domains.packs.service import resolve_pipeline_profile
 from app.models.models import (
     ClientPackagePreset,
     ClientPackageRun,
@@ -71,32 +72,13 @@ def _normalize_required_inputs(required_inputs: list[dict[str, Any]]) -> list[di
 def _resolve_pipeline(preset: ClientPackagePreset) -> dict[str, Any]:
     required_inputs = _normalize_required_inputs(preset.required_inputs_json or [])
     steps_json = dict(preset.steps_json or {})
-    steps = list(steps_json.get("steps") or [])
-    if not steps:
-        steps = [
-            {"code": "collect_requirements", "title": "Collect client inputs"},
-            {"code": "generate_documents", "title": "Generate package documents"},
-            {"code": "quality_check", "title": "Quality check"},
-            {"code": "publish_portal", "title": "Publish to client portal"},
-        ]
-    scenario_map = {
-        "OUT_TO_SITE": "Выход на объект",
-        "INCIDENT": "Несчастный случай",
-        "INSPECTION_PREP": "Подготовка к проверке",
-    }
-    return {
-        "scenario": scenario_map.get(preset.code, preset.name),
-        "required_inputs": required_inputs,
-        "steps": steps,
-        "output_artifacts": list(
-            steps_json.get("output_artifacts")
-            or [
-                {"kind": "zip", "title": f"{preset.name} bundle"},
-                {"kind": "pdf", "title": f"{preset.name} summary"},
-                {"kind": "manifest", "title": f"{preset.name} manifest"},
-            ]
-        ),
-    }
+    return resolve_pipeline_profile(
+        preset_code=preset.code,
+        preset_name=preset.name,
+        steps=list(steps_json.get("steps") or []),
+        required_inputs=required_inputs,
+        output_artifacts=list(steps_json.get("output_artifacts") or []),
+    )
 
 
 def _write_package_artifacts(*, run: ClientPackageRun, preset: ClientPackagePreset, pipeline: dict[str, Any]) -> tuple[str, str, str, dict[str, Any]]:
@@ -114,6 +96,7 @@ def _write_package_artifacts(*, run: ClientPackageRun, preset: ClientPackagePres
         "steps": pipeline["steps"],
         "required_inputs": pipeline["required_inputs"],
         "output_artifacts": pipeline["output_artifacts"],
+        "pipeline_fingerprint": pipeline.get("pipeline_fingerprint"),
         "generated_at": _utcnow().isoformat(),
     }
     storage.put(manifest_key, json.dumps(jsonable_encoder(manifest), ensure_ascii=False).encode("utf-8"), content_type="application/json")
@@ -124,6 +107,8 @@ def _write_package_artifacts(*, run: ClientPackageRun, preset: ClientPackagePres
         "steps": [{"name": step.get("code", step.get("title", "step")), "status": "done"} for step in pipeline["steps"]],
         "requirements_total": len(pipeline["required_inputs"]),
         "artifacts": [zip_key, pdf_key, manifest_key],
+        "status_flow": list(pipeline.get("status_flow") or ["running", "generated", "published"]),
+        "pipeline_fingerprint": pipeline.get("pipeline_fingerprint"),
     }
     return zip_key, pdf_key, manifest_key, qc_report
 
@@ -305,7 +290,7 @@ async def create_run(payload: PackageRunCreate, session: Annotated[AsyncSession,
         client_company_id=payload.client_company_id,
         status=PackageRunStatus.RUNNING,
         started_at=_utcnow(),
-        qc_report_json={"status_flow": ["running", "published"], "steps": []},
+        qc_report_json={"status_flow": list(pipeline.get("status_flow") or ["running", "generated", "published"]), "steps": pipeline["steps"]},
     )
     session.add(run)
     await session.flush()
@@ -325,13 +310,44 @@ async def create_run(payload: PackageRunCreate, session: Annotated[AsyncSession,
                 payload_json=req,
             )
         )
+        session.add(
+            PackageEvent(
+                tenant_id=tenant.id,
+                package_run_id=run.id,
+                type="package_run.requirement_registered",
+                payload_json={"key": req.get("key"), "type": req.get("type"), "required": req.get("required", True)},
+            )
+        )
     session.add_all(
         [
-            PackageEvent(tenant_id=tenant.id, package_run_id=run.id, type="package_run.started", payload_json={"status": "running", "scenario": pipeline["scenario"]}),
-            PackageEvent(tenant_id=tenant.id, package_run_id=run.id, type="package_run.generated", payload_json={"manifest_key": manifest_key, "artifacts": qc_report["artifacts"]}),
-            PackageEvent(tenant_id=tenant.id, package_run_id=run.id, type="package_run.published", payload_json={"portal_visible": True, "status": "published"}),
+            PackageEvent(
+                tenant_id=tenant.id,
+                package_run_id=run.id,
+                type="package_run.started",
+                payload_json={"status": "running", "scenario": pipeline["scenario"], "pipeline_fingerprint": pipeline.get("pipeline_fingerprint")},
+            ),
+            PackageEvent(
+                tenant_id=tenant.id,
+                package_run_id=run.id,
+                type="package_run.generated",
+                payload_json={"manifest_key": manifest_key, "artifacts": qc_report["artifacts"], "steps": pipeline["steps"]},
+            ),
+            PackageEvent(
+                tenant_id=tenant.id,
+                package_run_id=run.id,
+                type="package_run.status_changed",
+                payload_json={"from": "running", "to": "published"},
+            ),
+            PackageEvent(
+                tenant_id=tenant.id,
+                package_run_id=run.id,
+                type="package_run.published",
+                payload_json={"portal_visible": True, "status": "published", "output_artifacts": pipeline["output_artifacts"]},
+            ),
         ]
     )
+    run.status = PackageRunStatus.SUCCESS
+    run.finished_at = _utcnow()
     await session.commit()
     await session.refresh(run)
     return _serialize_package_run(run)
