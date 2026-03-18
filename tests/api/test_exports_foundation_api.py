@@ -11,8 +11,9 @@ async def test_exports_schedules_and_kpis(async_client, sessionmaker, data_facto
         await session.commit()
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
-    schedule = await async_client.post("/api/v1/exports/schedules", json={"name": "Daily", "dataset_code": "training", "cron_expr": "0 2 * * *", "anonymized": True}, headers={**headers, "X-Tenant": "test"})
+    schedule = await async_client.post("/api/v1/exports/schedules", json={"name": "Daily", "dataset_code": "training", "schema_version": "v2", "cron_expr": "0 2 * * *", "anonymized": True}, headers={**headers, "X-Tenant": "test"})
     assert schedule.status_code == 201
+    assert schedule.json()["schema_version"] == "v2"
 
     kpi = await async_client.post("/api/v1/exports/kpis", json={"code": "training_completion", "name": "Completion", "dataset_code": "training", "locale_labels": {"ru": "Завершение"}}, headers={**headers, "X-Tenant": "test"})
     assert kpi.status_code == 201

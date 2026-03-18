@@ -67,12 +67,13 @@
 - Export Center moved from async-job-only to BI/DWH-ready foundation: dataset code, schema version, anonymized mode, webhook target contract, schedules and KPI definitions are now persisted.
 - Public/machine access got a tenant-scoped machine-key management slice with usage counters/revoke metadata and stable public read contracts for core registries.
 - RU-first / EN-ready i18n was extended to the new training/export surfaces, and marketplace catalog foundation was added for publish/install/version/compatibility metadata.
+- Follow-up hardening in this pass: public API contracts were normalized around `limit/offset/sort_by/sort_order`, machine-key rotation was added, export schedules became schema-version-aware, custom weighted risk methodologies can be cloned/activated, and package-preset marketplace items can now be materialized into tenant runtime presets.
 
 ## Осталось после этого этапа
 - Реальный worker execution для scheduled exports / webhook callbacks / DWH sinks и более детальная delivery journal UI.
 - Полная material player UX для LMS (video/file viewers, richer learner cabinet timeline, certificate rendering and teacher grading workflows).
 - Глубже автоматизировать влияние incidents / corrective actions / NPA bindings на persisted residual-risk recalculation, а не только на summary/context layer.
-- Marketplace: materialization/import-copy into tenant runtime entities, moderation, public storefront UX.
+- Marketplace: broader materialization/import-copy beyond package presets, moderation, public storefront UX.
 - Backend i18n: локализация structured errors и notification/document templates beyond the new foundation.
 - Workflow governance hardening: graph validation now blocks unreachable/orphan nodes and missing terminal paths before publish/start, and human-task complete/reassign/delegate/escalate actions emit dedicated audit events for immutable transition traceability.
 - Notifications hardening: tenant-scoped notification templates were added as a reusable platform foundation for in-app/email/telegram/webhook channels, and the unified Notifications Center now exposes that registry alongside preferences/read-state controls.

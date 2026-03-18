@@ -42,3 +42,30 @@ async def test_advanced_risk_methodology_and_map(async_client, sessionmaker, dat
     summary = await async_client.get(f"/api/v1/risk/advanced/maps/{risk_map.json()['id']}/summary", headers={**headers, "X-Tenant": "test"})
     assert summary.status_code == 200
     assert summary.json()["items_total"] == 1
+    assert "risk_zones" in summary.json()
+
+    custom = await async_client.post(
+        "/api/v1/risk/advanced/methodologies",
+        json={
+            "code": "custom-1",
+            "name": "Custom Weighted",
+            "type": "custom",
+            "formula_json": {"strategy": "weighted_sum", "coefficients": {"probability": 2, "severity": 3, "exposure": 1}},
+            "scale_json": {"level_rules": [{"min": 0, "max": 10, "level": "low"}, {"min": 10.01, "max": 20, "level": "medium"}, {"min": 20.01, "max": 1000, "level": "high"}]},
+        },
+        headers={**headers, "X-Tenant": "test"},
+    )
+    assert custom.status_code == 201
+
+    clone = await async_client.post(
+        f"/api/v1/risk/advanced/methodologies/{custom.json()['id']}/clone",
+        json={},
+        headers={**headers, "X-Tenant": "test"},
+    )
+    assert clone.status_code == 201
+
+    activated = await async_client.post(
+        f"/api/v1/risk/advanced/methodologies/{clone.json()['id']}/activate",
+        headers={**headers, "X-Tenant": "test"},
+    )
+    assert activated.status_code == 200

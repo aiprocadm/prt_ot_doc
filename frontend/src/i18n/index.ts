@@ -30,13 +30,34 @@ const resources = {
         teacherView: "Кабинет преподавателя",
         learnerView: "Кабинет слушателя",
         registry: "Реестр",
-        completion: "Завершение"
+        completion: "Завершение",
+        groups: "Группы",
+        enrollments: "Назначения",
+        averageProgress: "Средний прогресс",
+        assigned: "Назначено",
+        completed: "Завершено",
+        overdue: "Просрочено",
+        nextDue: "Ближайший срок",
+        materials: "Материалы",
+        lessonStructure: "Структура курса",
+        noSchedule: "Нет запланированной даты",
+        learnerHint: "SCORM/xAPI/proctoring-ready ingestion отражается в статусах завершения и деталях назначения."
       },
       exports: {
         title: "Экспорт и BI",
         jobs: "Задания",
         schedules: "Расписания",
-        kpis: "KPI"
+        kpis: "KPI",
+        schemaVersion: "Версия схемы",
+        anonymized: "Анонимизация",
+        targetType: "Цель доставки"
+      },
+      common: {
+        home: "Главная",
+        loading: "Загрузка",
+        locale: "Язык",
+        localeRu: "Русский",
+        localeEn: "English"
       }
     }
   },
@@ -52,13 +73,34 @@ const resources = {
         teacherView: "Teacher cabinet",
         learnerView: "Learner cabinet",
         registry: "Registry",
-        completion: "Completion"
+        completion: "Completion",
+        groups: "Groups",
+        enrollments: "Assignments",
+        averageProgress: "Average progress",
+        assigned: "Assigned",
+        completed: "Completed",
+        overdue: "Overdue",
+        nextDue: "Next due",
+        materials: "Materials",
+        lessonStructure: "Course structure",
+        noSchedule: "No schedule",
+        learnerHint: "SCORM/xAPI/proctoring-ready ingestion is reflected in completion statuses and enrollment details."
       },
       exports: {
         title: "Exports and BI",
         jobs: "Jobs",
         schedules: "Schedules",
-        kpis: "KPIs"
+        kpis: "KPIs",
+        schemaVersion: "Schema version",
+        anonymized: "Anonymized",
+        targetType: "Delivery target"
+      },
+      common: {
+        home: "Home",
+        loading: "Loading",
+        locale: "Language",
+        localeRu: "Russian",
+        localeEn: "English"
       }
     }
   }

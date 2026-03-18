@@ -9,10 +9,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from app.models.models import ApiKey
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.models.models import ApiKey
 
 API_KEY_PREFIX = "ak"
 API_KEY_DELIMITER = "."
@@ -110,6 +109,25 @@ async def create_api_key(
     return ApiKeySecret(record=record, value=key_value)
 
 
+async def rotate_api_key(
+    session: AsyncSession,
+    *,
+    record: ApiKey,
+) -> ApiKeySecret:
+    record.is_active = False
+    record.revoked_at = datetime.now(timezone.utc)
+    record.last_rotated_at = record.revoked_at
+    session.add(record)
+    await session.flush()
+    return await create_api_key(
+        session,
+        tenant_id=str(record.tenant_id),
+        name=f"{record.name}-rotated-{int(record.last_rotated_at.timestamp())}",
+        scopes=record.scope_list,
+        is_active=True,
+    )
+
+
 async def get_api_key_by_prefix(session: AsyncSession, prefix: str) -> ApiKey | None:
     result = await session.execute(select(ApiKey).where(ApiKey.key_prefix == prefix))
     return result.scalar_one_or_none()
@@ -150,4 +168,5 @@ __all__ = [
     "create_api_key",
     "get_api_key_by_prefix",
     "mask_api_key",
+    "rotate_api_key",
 ]

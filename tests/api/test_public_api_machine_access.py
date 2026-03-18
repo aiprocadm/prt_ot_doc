@@ -20,10 +20,21 @@ async def test_machine_keys_and_public_api(async_client, sessionmaker, data_fact
     auth = await async_client.get("/api/v1/public/auth/machine", headers={"X-Tenant": "test", "X-API-Key": token})
     assert auth.status_code == 200
 
-    people = await async_client.get("/api/v1/public/employees", headers={"X-Tenant": "test", "X-API-Key": token})
+    people = await async_client.get("/api/v1/public/employees?limit=1&offset=0&sort_by=created_at&sort_order=asc", headers={"X-Tenant": "test", "X-API-Key": token})
     assert people.status_code == 200
     assert people.json()["total"] >= 1
+    assert people.json()["limit"] == 1
 
     docs = await async_client.get("/api/v1/public/documents", headers={"X-Tenant": "test", "X-API-Key": token})
     assert docs.status_code == 200
     assert docs.json()["total"] >= 1
+
+    rotated = await async_client.post(f"/api/v1/machine-keys/{created.json()['id']}/rotate", headers={**headers, "X-Tenant": "test"})
+    assert rotated.status_code == 200
+    new_token = rotated.json()["token"]
+
+    old_auth = await async_client.get("/api/v1/public/auth/machine", headers={"X-Tenant": "test", "X-API-Key": token})
+    assert old_auth.status_code == 401
+
+    new_auth = await async_client.get("/api/v1/public/auth/machine", headers={"X-Tenant": "test", "X-API-Key": new_token})
+    assert new_auth.status_code == 200

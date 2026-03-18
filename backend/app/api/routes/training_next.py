@@ -408,6 +408,64 @@ async def create_lesson(module_id: str, payload: dict, tenant: Tenant = Depends(
     return lesson
 
 
+@router.get("/programs/{item_id}/detail")
+async def get_program_detail(item_id: str, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+    program = await get_program(item_id, tenant, session)
+    modules = (
+        await session.execute(
+            select(TrainingModule).where(
+                TrainingModule.tenant_id == tenant.id,
+                TrainingModule.training_program_id == program.id,
+            ).order_by(TrainingModule.module_order.asc(), TrainingModule.created_at.asc())
+        )
+    ).scalars().all()
+    module_ids = [module.id for module in modules]
+    lessons = (
+        await session.execute(
+            select(TrainingLesson).where(
+                TrainingLesson.tenant_id == tenant.id,
+                TrainingLesson.training_module_id.in_(module_ids or ["__none__"]),
+            ).order_by(TrainingLesson.lesson_order.asc(), TrainingLesson.created_at.asc())
+        )
+    ).scalars().all()
+    lessons_by_module: dict[str, list[TrainingLesson]] = {}
+    for lesson in lessons:
+        lessons_by_module.setdefault(lesson.training_module_id, []).append(lesson)
+    return {
+        "program": program,
+        "modules": [
+            {
+                "module": module,
+                "lessons": lessons_by_module.get(module.id, []),
+                "materials": module.materials_json or {},
+            }
+            for module in modules
+        ],
+        "lessons_total": len(lessons),
+    }
+
+
+@router.get("/enrollments/{item_id}/detail")
+async def get_enrollment_detail(item_id: str, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+    enrollment = await get_enrollment(item_id, tenant, session)
+    program = await session.get(TrainingProgram, enrollment.training_program_id)
+    program_detail = await get_program_detail(enrollment.training_program_id, tenant, session)
+    runtime = enrollment.external_runtime_state or {}
+    modules = program_detail["modules"]
+    return {
+        "enrollment": enrollment,
+        "program": program,
+        "modules": modules,
+        "completion": {
+            "status": enrollment.completion_status,
+            "progress_percent": enrollment.progress_percent,
+            "confirmed_at": enrollment.completion_confirmed_at,
+            "certificate_id": enrollment.certificate_id,
+            "runtime": runtime,
+        },
+    }
+
+
 @router.get("/teacher/dashboard")
 async def teacher_dashboard(
     teacher_user_id: str | None = Query(default=None),
@@ -428,6 +486,16 @@ async def teacher_dashboard(
         "completed_total": completed_total,
         "average_progress_percent": round(avg_progress, 2),
         "groups": groups,
+        "items": [
+            {
+                "group_id": group.id,
+                "title": group.title,
+                "status": group.status,
+                "planned_start_at": group.planned_start_at,
+                "planned_end_at": group.planned_end_at,
+            }
+            for group in groups
+        ],
     }
 
 
@@ -437,7 +505,10 @@ async def learner_dashboard(
     tenant: Tenant = Depends(get_tenant_record),
     session: AsyncSession = Depends(get_session),
 ):
-    enrollments = (await session.execute(select(TrainingEnrollment).where(TrainingEnrollment.tenant_id == tenant.id, TrainingEnrollment.person_id == person_id, TrainingEnrollment.deleted_at.is_(None)).order_by(TrainingEnrollment.updated_at.desc()))).scalars().all()
+    stmt = select(TrainingEnrollment).where(TrainingEnrollment.tenant_id == tenant.id, TrainingEnrollment.deleted_at.is_(None))
+    if person_id != "me":
+        stmt = stmt.where(TrainingEnrollment.person_id == person_id)
+    enrollments = (await session.execute(stmt.order_by(TrainingEnrollment.updated_at.desc()))).scalars().all()
     completed = sum(1 for item in enrollments if item.completion_status in {"completed", "confirmed"})
     overdue = sum(1 for item in enrollments if item.due_at and item.due_at < datetime.now(tz=timezone.utc) and item.completion_status not in {"completed", "confirmed"})
     return {
@@ -446,6 +517,7 @@ async def learner_dashboard(
         "completed_total": completed,
         "overdue_total": overdue,
         "items": enrollments,
+        "next_due_at": min((item.due_at for item in enrollments if item.due_at), default=None),
     }
 
 
