@@ -57,3 +57,13 @@ def test_write_temp_file_uses_safe_named_tempfile(tmp_path):
         assert os.path.basename(temp_path).startswith("prt-storage-")
     finally:
         os.unlink(temp_path)
+
+
+
+def test_signed_url_roundtrip_verification() -> None:
+    storage = FileStorageService.default()
+    storage.clear()
+    storage.put("documents/report.txt", b"hello", content_type="text/plain")
+    signed_url = storage.create_signed_url("documents/report.txt", download_name="report.txt")
+    assert storage.verify_signed_url(signed_url) is True
+    assert storage.verify_signed_url(signed_url.replace("signature=", "signature=broken")) is False

@@ -107,7 +107,9 @@ async def test_create_run_generates_pipeline_artifacts_and_history(async_client,
     payload = portal.json()
     assert len(payload["requirements"]) == 2
     assert {event["type"] for event in payload["events"]} >= {"package_run.started", "package_run.generated", "package_run.published"}
-    assert {item["kind"] for item in payload["files"]} == {"zip", "pdf"}
+    assert {item["kind"] for item in payload["files"]} == {"zip", "pdf", "manifest"}
+    assert payload["history"]["events_count"] >= 3
+    assert payload["history"]["requirements_missing"] == 2
     assert payload["tickets"] == []
 
     ticket_resp = await async_client.post(f"/api/v1/portal/packages/{run_id}/tickets", params={"token": token}, json={"title": "Нужен апдейт", "message": "Пришлите новую версию"})

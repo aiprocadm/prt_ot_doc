@@ -41,17 +41,19 @@ def _flatten_context(context: Mapping[str, Any], prefix: str = "") -> dict[str, 
     return flattened
 
 
-def _fallback_context(context: Mapping[str, Any], warnings: list[str]) -> dict[str, Any]:
+def _fallback_context(context: Mapping[str, Any], warnings: list[str], *, path: str = "") -> dict[str, Any]:
     data = _coerce_mapping(context)
 
     class _FallbackDict(dict):
         def __missing__(self, key: str) -> Any:
-            warnings.append(f"missing context key: {key}")
+            qualified = f"{path}.{key}" if path else key
+            warnings.append(f"missing context key: {qualified}")
             return ""
 
     fallback = _FallbackDict()
     for key, value in data.items():
-        fallback[key] = _fallback_context(value, warnings) if isinstance(value, Mapping) else value
+        child_path = f"{path}.{key}" if path else str(key)
+        fallback[key] = _fallback_context(value, warnings, path=child_path) if isinstance(value, Mapping) else value
     return fallback
 
 
@@ -63,9 +65,12 @@ def render_docx_with_metadata(template_bytes: bytes, context: Mapping[str, Any] 
 
     tpl = DocxTemplate(BytesIO(template_bytes))
     strict_env = Environment(undefined=StrictUndefined)
+    strict_mode_ok = True
     try:
         tpl.render(render_context, jinja_env=strict_env)
-    except UndefinedError:
+    except UndefinedError as exc:
+        strict_mode_ok = False
+        warnings.append(f"strict render failed: {exc}")
         fallback = _fallback_context(render_context, warnings)
         tpl = DocxTemplate(BytesIO(template_bytes))
         tpl.render(fallback)
@@ -74,18 +79,26 @@ def render_docx_with_metadata(template_bytes: bytes, context: Mapping[str, Any] 
     tpl.save(buffer)
     content = buffer.getvalue()
     context_json = json.dumps(render_context, ensure_ascii=False, sort_keys=True, default=str)
+    flattened = _flatten_context(render_context)
+    template_sha = hashlib.sha256(template_bytes).hexdigest()
+    context_sha = hashlib.sha256(context_json.encode("utf-8")).hexdigest()
     metadata = {
-        "template_sha256": hashlib.sha256(template_bytes).hexdigest(),
+        "template_sha256": template_sha,
         "output_sha256": hashlib.sha256(content).hexdigest(),
-        "context_sha256": hashlib.sha256(context_json.encode("utf-8")).hexdigest(),
-        "context_keys": sorted(_flatten_context(render_context).keys()),
+        "context_sha256": context_sha,
+        "context_keys": sorted(flattened.keys()),
         "warnings": list(warnings),
+        "warnings_count": len(warnings),
         "engine": "docxtpl",
-        "rendered_at": json.dumps({"utc": "deterministic"}),
+        "strict_mode": strict_mode_ok,
+        "rendered_at": "deterministic",
         "reproducibility": {
-            "context_sha256": hashlib.sha256(context_json.encode("utf-8")).hexdigest(),
-            "template_sha256": hashlib.sha256(template_bytes).hexdigest(),
+            "context_sha256": context_sha,
+            "template_sha256": template_sha,
             "context_bytes": len(context_json.encode("utf-8")),
+            "context_key_count": len(flattened),
+            "template_bytes": len(template_bytes),
+            "output_bytes": len(content),
         },
     }
     return RenderedTemplate(content=content, metadata=metadata, warnings=warnings)

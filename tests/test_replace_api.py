@@ -154,3 +154,23 @@ def test_replace_engine_persists_patch_and_rollback(tmp_path):
     restored = reloaded.rollback(patch.patch_id)
     assert restored == {"company": "Old", "city": "Kazan"}
     assert reloaded.get_patch(patch.patch_id).status == "rolled_back"
+
+
+
+def test_replace_engine_supports_nested_paths_and_idempotent_rollback(tmp_path):
+    from app.domains.replace.engine import ReplaceEngine
+
+    storage_path = tmp_path / "patches.json"
+    engine = ReplaceEngine(storage_path=str(storage_path))
+    context = {"company": {"name": "Old"}, "items": [{"title": "A"}, {"title": "B"}]}
+    patch = engine.commit(context, {"company.name": "New", "items[1].title": "B2"})
+
+    assert patch.changed_keys == ["company.name", "items[1].title"]
+    assert patch.audit["changed_count"] == 2
+    assert patch.after["company"]["name"] == "New"
+    assert patch.after["items"][1]["title"] == "B2"
+
+    restored_once = engine.rollback(patch.patch_id)
+    restored_twice = engine.rollback(patch.patch_id)
+    assert restored_once == context
+    assert restored_twice == context

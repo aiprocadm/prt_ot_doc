@@ -50,3 +50,11 @@ def test_template_renderer_writes_to_path(tmp_path: Path) -> None:
     assert output_path.exists()
     doc = Document(output_path)
     assert doc.paragraphs[0].text == "Hello Bob"
+
+
+def test_render_docx_metadata_counts_nested_context_keys() -> None:
+    template_bytes = _build_template("{{ company.name }}")
+    rendered = render_docx_with_metadata(template_bytes, {"company": {"name": "ACME"}})
+    assert rendered.metadata["strict_mode"] is True
+    assert rendered.metadata["reproducibility"]["context_key_count"] >= 2
+    assert "company.name" in rendered.metadata["context_keys"]

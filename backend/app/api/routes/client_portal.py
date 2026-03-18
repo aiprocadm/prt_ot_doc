@@ -139,7 +139,16 @@ def _artifact_entry(storage: FileStorageService, key: str | None, *, kind: str) 
         "quarantined": meta.get("quarantined", False),
         "sha256": meta.get("sha256"),
         "size": meta.get("size"),
+        "adapter": meta.get("adapter"),
+        "scan_status": meta.get("scan_status"),
     }
+
+
+def _manifest_key_from_run(run: ClientPackageRun) -> str | None:
+    artifacts = (run.qc_report_json or {}).get("artifacts") or []
+    if not artifacts:
+        return None
+    return artifacts[-1]
 
 
 class PackagePresetCreate(BaseModel):
@@ -386,13 +395,22 @@ async def portal_package_details(run_id: str, auth: Annotated[PortalAuth, Depend
     events = (await session.execute(select(PackageEvent).where(PackageEvent.package_run_id == run_id).order_by(PackageEvent.created_at.asc()))).scalars().all()
     tickets = (await session.execute(select(ClientRequestTicket).where(ClientRequestTicket.package_run_id == run_id).order_by(ClientRequestTicket.created_at.asc()))).scalars().all()
     storage = FileStorageService.default()
-    files = [item for item in [_artifact_entry(storage, run.output_zip_s3_key, kind="zip"), _artifact_entry(storage, run.output_pdf_s3_key, kind="pdf")] if item]
+    manifest_key = _manifest_key_from_run(run)
+    files = [item for item in [_artifact_entry(storage, run.output_zip_s3_key, kind="zip"), _artifact_entry(storage, run.output_pdf_s3_key, kind="pdf"), _artifact_entry(storage, manifest_key, kind="manifest")] if item]
+    status_flow = list((run.qc_report_json or {}).get("status_flow") or [run.status.value if hasattr(run.status, "value") else str(run.status)])
     return {
         "run": _serialize_package_run(run),
         "requirements": jsonable_encoder(reqs),
         "events": jsonable_encoder(events),
         "tickets": jsonable_encoder(tickets),
         "files": files,
+        "history": {
+            "status_flow": status_flow,
+            "events_count": len(events),
+            "tickets_count": len(tickets),
+            "requirements_total": len(reqs),
+            "requirements_missing": len([item for item in reqs if getattr(item, "status", None) == PackageRequirementStatus.MISSING]),
+        },
     }
 
 
@@ -403,7 +421,7 @@ async def portal_package_files(run_id: str, auth: Annotated[PortalAuth, Depends(
     run = await _get_run_for_tenant(session, run_id=run_id, tenant_id=auth.tenant_id)
     storage = FileStorageService.default()
     files = [item for item in [_artifact_entry(storage, run.output_zip_s3_key, kind="zip"), _artifact_entry(storage, run.output_pdf_s3_key, kind="pdf")] if item]
-    manifest_key = run.qc_report_json.get("artifacts", [None, None, None])[-1] if run.qc_report_json else None
+    manifest_key = _manifest_key_from_run(run)
     manifest = _artifact_entry(storage, manifest_key, kind="manifest") if manifest_key else None
     if manifest:
         files.append(manifest)

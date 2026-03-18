@@ -18,7 +18,7 @@ class DocumentService:
             "key": key,
             "sha256": hashlib.sha256(data).hexdigest(),
             "storage": meta.to_dict(),
-            "audit": {"operation": "save", "quarantined": quarantined},
+            "audit": {"operation": "save", "quarantined": quarantined, "content_type": content_type},
         }
 
     def load(self, key: str) -> bytes:
@@ -31,4 +31,10 @@ class DocumentService:
         meta = self.head(key)
         if meta is None:
             raise KeyError(key)
-        return {"key": key, "signed_url": self.storage.create_signed_url(key, download_name=download_name), "meta": meta}
+        return {
+            "key": key,
+            "signed_url": self.storage.create_signed_url(key, download_name=download_name),
+            "meta": meta,
+            "download_name": download_name,
+            "audit": {"operation": "signed_download", "quarantined": bool(meta.get("quarantined", False))},
+        }
