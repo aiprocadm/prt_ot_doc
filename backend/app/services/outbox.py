@@ -559,4 +559,3 @@ class OutboxProcessor:
         existing.request_headers = entry.headers
         existing.ended_at = datetime.now(tz=timezone.utc)
         existing.delivered_at = datetime.now(tz=timezone.utc) if success else None
-

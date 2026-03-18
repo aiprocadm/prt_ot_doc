@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -27,6 +27,8 @@ from app.schemas.incidents import (
     IncidentRead,
     IncidentUpdate,
 )
+from app.services.audit import AuditService
+from app.services.outbox import OutboxService
 
 router = APIRouter(tags=["incidents"])
 
@@ -109,10 +111,11 @@ async def list_incidents(
 
 @router.post("/incidents", response_model=IncidentRead, status_code=status.HTTP_201_CREATED)
 async def create_incident(
+    request: Request,
     payload: IncidentCreate,
     tenant: TenantDep,
     session: SessionDep,
-    _: EditorAccess,
+    access: EditorAccess,
 ) -> IncidentRead:
     try:
         incident = await register_incident(
@@ -131,6 +134,31 @@ async def create_incident(
         )
     except ValueError as exc:  # pragma: no cover - defensive conversion to HTTP error
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="create",
+        object_type="incident",
+        object_id=incident.id,
+        user_id=getattr(access.user, "id", None),
+        ip=request.client.host if request.client else "unknown",
+        details={"status": incident.status.value, "severity": incident.severity.value},
+    )
+    await OutboxService(session).enqueue(
+        tenant_id=str(tenant.id),
+        event_type="IncidentCreated",
+        payload={
+            "tenant_id": str(tenant.id),
+            "incident_id": incident.id,
+            "company_id": incident.company_id,
+            "site_id": incident.site_id,
+            "status": incident.status.value,
+            "severity": incident.severity.value,
+            "incident_type": incident.incident_type.value,
+            "actor_id": getattr(access.user, "id", None),
+        },
+    )
+    await session.commit()
 
     return _serialize_incident(incident, victim_ids=payload.victim_ids)
 
