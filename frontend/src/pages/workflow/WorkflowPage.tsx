@@ -47,10 +47,47 @@ type WorkflowTask = {
   due_at?: string | null;
 };
 
+type WorkflowTimelineEvent = {
+  id: string;
+  node_id?: string | null;
+  event_type: string;
+  actor_user_id?: string | null;
+  payload: Record<string, unknown>;
+  created_at: string;
+};
+
+type WorkflowInstance = {
+  id: string;
+  definition_id: string;
+  definition_version_id: string;
+  entity_type: string;
+  entity_id: string;
+  status: string;
+  current_node_id?: string | null;
+  context_json: Record<string, unknown>;
+  correlation_id?: string | null;
+  timeline: WorkflowTimelineEvent[];
+  tasks: WorkflowTask[];
+};
+
+const DEMO_GRAPH = {
+  nodes: [
+    { id: "start", type: "start", name: "Старт" },
+    { id: "approval", type: "approval", name: "Согласование", sla_hours: 24 },
+    { id: "notify", type: "notification", name: "Уведомление" },
+    { id: "end", type: "end", name: "Завершение" }
+  ],
+  transitions: [
+    { from: "start", to: "approval" },
+    { from: "approval", to: "notify" },
+    { from: "notify", to: "end" }
+  ]
+};
+
 const WorkflowPage = () => {
   const [definitions, setDefinitions] = useState<WorkflowDefinition[]>([]);
   const [tasks, setTasks] = useState<WorkflowTask[]>([]);
-  const [selectedInstance, setSelectedInstance] = useState<any | null>(null);
+  const [selectedInstance, setSelectedInstance] = useState<WorkflowInstance | null>(null);
   const [newCode, setNewCode] = useState("document-approval-v1");
   const [graphText, setGraphText] = useState(JSON.stringify(defaultGraph, null, 2));
   const [validation, setValidation] = useState<string | null>(null);
@@ -110,7 +147,7 @@ const WorkflowPage = () => {
   };
 
   const start = async (definitionCode: string) => {
-    const response = await apiClient.post("/workflow/instances", {
+    const response = await apiClient.post<WorkflowInstance>("/workflow/instances", {
       definition_code: definitionCode,
       entity_type: "document",
       entity_id: `doc-${Date.now()}`,
@@ -121,7 +158,7 @@ const WorkflowPage = () => {
   };
 
   const openInstance = async (instanceId: string) => {
-    const response = await apiClient.get(`/workflow/instances/${instanceId}`);
+    const response = await apiClient.get<WorkflowInstance>(`/workflow/instances/${instanceId}`);
     setSelectedInstance(response.data);
   };
 
@@ -218,7 +255,7 @@ const WorkflowPage = () => {
                 <>
                   <div className="text-sm">Entity: {selectedInstance.entity_type} / {selectedInstance.entity_id}</div>
                   <div className="text-sm">Status: {selectedInstance.status}</div>
-                  {(selectedInstance.timeline ?? []).map((event: any) => (
+                  {(selectedInstance.timeline ?? []).map((event) => (
                     <div key={event.id} className="rounded border-l-2 border-primary pl-3 py-2">
                       <div className="text-sm font-medium">{event.event_type}</div>
                       <div className="text-xs text-muted-foreground">{event.node_id ?? "system"} · {new Date(event.created_at).toLocaleString()}</div>
