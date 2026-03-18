@@ -67,6 +67,36 @@ async def client_delivery_dashboard(filters: DashboardFilters = Depends(_filters
     return await KpiDashboardService(session, str(tenant.id)).client_delivery(filters)
 
 
+@router.get("/dashboard/incidents")
+async def incidents_dashboard(filters: DashboardFilters = Depends(_filters), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict:
+    return await KpiDashboardService(session, str(tenant.id)).incidents(filters)
+
+
+@router.get("/dashboard/inspections")
+async def inspections_dashboard(filters: DashboardFilters = Depends(_filters), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict:
+    return await KpiDashboardService(session, str(tenant.id)).inspections(filters)
+
+
+@router.get("/dashboard/prescriptions")
+async def prescriptions_dashboard(filters: DashboardFilters = Depends(_filters), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict:
+    return await KpiDashboardService(session, str(tenant.id)).prescriptions(filters)
+
+
+@router.get("/dashboard/overdue")
+async def overdue_dashboard(filters: DashboardFilters = Depends(_filters), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict:
+    return await KpiDashboardService(session, str(tenant.id)).overdue(filters)
+
+
+@router.get("/dashboard/sla-load")
+async def sla_load_dashboard(filters: DashboardFilters = Depends(_filters), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict:
+    return await KpiDashboardService(session, str(tenant.id)).sla_load(filters)
+
+
+@router.get("/dashboard/edo")
+async def edo_dashboard(filters: DashboardFilters = Depends(_filters), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict:
+    return await KpiDashboardService(session, str(tenant.id)).edo(filters)
+
+
 @router.get("/dashboard/ppe")
 async def ppe_dashboard(filters: DashboardFilters = Depends(_filters), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict:
     return await KpiDashboardService(session, str(tenant.id)).ppe(filters)

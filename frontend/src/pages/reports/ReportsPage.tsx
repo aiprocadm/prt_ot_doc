@@ -9,7 +9,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ApiError } from "@/types/dto/common";
-import { downloadBlob } from "@/utils/download";
 import { toast } from "sonner";
 
 type KpiPayload = {
@@ -34,6 +33,7 @@ const ReportsPage = () => {
   const [dateFrom, setDateFrom] = useState(monthAgo);
   const [dateTo, setDateTo] = useState(today);
   const [exporting, setExporting] = useState(false);
+  const [lastExportId, setLastExportId] = useState<string | null>(null);
 
   const loadKpi = async () => {
     setLoading(true);
@@ -57,15 +57,17 @@ const ReportsPage = () => {
   const exportReport = async (format: "xlsx" | "pdf") => {
     setExporting(true);
     try {
-      const response = await apiClient.get("/reports/export", {
-        params: { date_from: dateFrom, date_to: dateTo, format },
-        responseType: "blob"
+      const { data } = await apiClient.post<{ id: string; status: string }>("/exports", {
+        export_type: `reports:${format}`,
+        scope_json: { page: "reports", format },
+        filters_json: { date_from: dateFrom, date_to: dateTo, format, anonymized: false }
+      }, {
+        headers: { "Idempotency-Key": `reports:${format}:${dateFrom}:${dateTo}` }
       });
-      const ext = format === "xlsx" ? "xlsx" : "pdf";
-      downloadBlob(response.data as Blob, `report-${dateFrom}-${dateTo}.${ext}`);
-      toast.success("Отчёт скачан");
+      setLastExportId(data.id);
+      toast.success(`Экспорт поставлен в очередь: ${data.id.slice(0, 8)}`);
     } catch {
-      toast.error("Не удалось экспортировать отчёт");
+      toast.error("Не удалось создать задачу экспорта");
     } finally {
       setExporting(false);
     }
@@ -110,6 +112,14 @@ const ReportsPage = () => {
 
       <ErrorState error={error ?? undefined} onRetry={loadKpi} />
       {loading ? <LoadingScreen label="Загрузка показателей" /> : null}
+
+      {lastExportId ? (
+        <Card>
+          <CardContent className="py-4 text-sm text-muted-foreground">
+            Последний export job: <a href="/exports" className="text-primary underline">{lastExportId}</a>. Отслеживание статуса и повторный запуск доступны в Export Center.
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {cards.map((item) => (

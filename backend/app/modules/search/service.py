@@ -180,14 +180,20 @@ class SearchService:
             .group_by(SearchIndexEntry.entity_type)
         )
         facet_rows = (await self.session.execute(facet_stmt)).all()
+        status_rows = (await self.session.execute(select(SearchIndexEntry.status, func.count()).where(*stmt._where_criteria).group_by(SearchIndexEntry.status))).all()
+        company_rows = (await self.session.execute(select(SearchIndexEntry.tags_json["company_id"].astext, func.count()).where(*stmt._where_criteria, SearchIndexEntry.tags_json["company_id"].astext.is_not(None)).group_by(SearchIndexEntry.tags_json["company_id"].astext))).all()
+        site_rows = (await self.session.execute(select(SearchIndexEntry.tags_json["site_id"].astext, func.count()).where(*stmt._where_criteria, SearchIndexEntry.tags_json["site_id"].astext.is_not(None)).group_by(SearchIndexEntry.tags_json["site_id"].astext))).all()
         rows = (await self.session.execute(stmt.order_by(order_by).offset(offset).limit(limit + 1))).scalars().all()
         has_more = len(rows) > limit
         items = rows[:limit]
         type_counts: dict[str, int] = {str(entity_type): int(total) for entity_type, total in facet_rows}
+        status_counts: dict[str, int] = {str(status or "unknown"): int(total) for status, total in status_rows}
+        company_counts: dict[str, int] = {str(company_id): int(total) for company_id, total in company_rows if company_id}
+        site_counts: dict[str, int] = {str(site_id): int(total) for site_id, total in site_rows if site_id}
         return {
             "q": q,
             "total": len(items),
-            "facets": {"type_counts": type_counts},
+            "facets": {"type_counts": type_counts, "status_counts": status_counts, "company_counts": company_counts, "site_counts": site_counts},
             "items": [
                 {
                     "kind": "entity",
