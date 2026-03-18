@@ -46,6 +46,9 @@
 - Workflow/BPM: поверх уже реализованного engine добавлен registry/list endpoint для workflow instances с open-task counters и status/entity фильтрами, чтобы карточки/реестры могли показывать живые инстансы без ручной навигации в detail view.
 - Search: глобальный поиск теперь отдаёт не только `type_counts`, но и `status/company/site` facets, что закрывает часть enterprise faceted-search сценариев без смены storage strategy.
 - Analytics/Reporting: расширен backend dashboard layer реальными endpoint-ами `incidents`, `inspections`, `prescriptions`, `overdue`, `sla-load`, `edo`; Reports UI переведён на async Export Center flow вместо вызова отсутствующего `/reports/export`.
+- Notifications Center доведён до более операционного режима: API теперь явно отдаёт `is_read`/`deeplink`, а UI поддерживает фильтр по статусу, выборку нескольких записей и bulk mark-read для unread уведомлений без ручного reload.
+- Search Center получил видимую faceted-search панель для `status/company/site`, а сохранённые поиски теперь сохраняют и восстанавливают активные фильтры tenant-safe способом.
+- Workflow UI закрывает ещё один критичный сценарий enterprise UX: кроме publish доступны archive/reassign действия, а карточка инстанса показывает correlation-id и JSON context для расследования переходов и async-узлов.
 
 Осталось backlog:
 - Scheduled reports, digest notifications scheduler, transport-level notification delivery history и полноценные template registries всё ещё требуют отдельного прохода.
