@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, rbac
 from app.models.models import Tenant, TrainingPlan, PPEIssue, Inspection
-from app.models.notifications import Notification, NotificationChannelSettings, NotificationStatus, PlanTask
+from app.models.notifications import Notification, NotificationChannelSettings, NotificationPriority, NotificationStatus, PlanTask
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
@@ -23,6 +23,7 @@ class NotificationRead(BaseModel):
     title: str
     body: str
     payload: dict[str, object] | None = None
+    priority: str
     status: str
     scheduled_at: datetime
     sent_at: datetime | None = None
@@ -45,6 +46,8 @@ class ChannelSettingsIn(BaseModel):
     email: str | None = None
     telegram_chat_id: str | None = None
     quiet_hours: dict[str, str] | None = None
+    digest_mode: str | None = None
+    channel_preferences: dict[str, object] | None = None
 
 
 class ChannelSettingsOut(ChannelSettingsIn):
@@ -68,6 +71,9 @@ async def list_notifications(
     tenant: TenantDep,
     access: AccessDep,
     status: str | None = Query(default=None),
+    priority: str | None = Query(default=None),
+    channel: str | None = Query(default=None),
+    type: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
     cursor: str | None = Query(default=None),
 ) -> NotificationPage:
@@ -81,6 +87,12 @@ async def list_notifications(
             stmt = stmt.where(Notification.status != NotificationStatus.READ)
         else:
             stmt = stmt.where(Notification.status == NotificationStatus(status))
+    if priority:
+        stmt = stmt.where(Notification.priority == NotificationPriority(priority))
+    if channel:
+        stmt = stmt.where(Notification.channel == channel)
+    if type:
+        stmt = stmt.where(Notification.type == type)
     if cursor:
         stmt = stmt.where(Notification.created_at < datetime.fromisoformat(cursor))
     rows = (await session.execute(stmt.order_by(Notification.created_at.desc()).limit(limit + 1))).scalars().all()
@@ -95,6 +107,7 @@ async def list_notifications(
                 title=item.title,
                 body=item.body,
                 payload=item.payload,
+                priority=item.priority.value if hasattr(item.priority, "value") else str(item.priority),
                 status=item.status.value,
                 scheduled_at=item.scheduled_at,
                 sent_at=item.sent_at,
@@ -122,6 +135,13 @@ async def mark_read(payload: MarkReadRequest, session: SessionDep, tenant: Tenan
                 )
             )
         ).scalars().all()
+        for row in rows:
+            row.status = NotificationStatus.READ
+            row.sent_at = row.sent_at or datetime.now(tz=timezone.utc)
+            updated += 1
+        await session.flush()
+    else:
+        rows = (await session.execute(select(Notification).where(Notification.tenant_id == tenant.id, Notification.user_id == access.user.id, Notification.channel == "inapp", Notification.deleted_at.is_(None), Notification.status != NotificationStatus.READ))).scalars().all()
         for row in rows:
             row.status = NotificationStatus.READ
             row.sent_at = row.sent_at or datetime.now(tz=timezone.utc)

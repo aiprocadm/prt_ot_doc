@@ -80,6 +80,7 @@ const PackRunDetailsPage = lazy(() => import("@/pages/packs/PackRunDetailsPage")
 const WarehousePage = lazy(() => import("@/pages/warehouse/WarehousePage"));
 const CrmFinancePage = lazy(() => import("@/pages/crm-finance/CrmFinancePage"));
 const IntegrationsPage = lazy(() => import("@/pages/integrations/IntegrationsPage"));
+const WorkflowPage = lazy(() => import("@/pages/workflow/WorkflowPage"));
 
 const LandingRedirect = () => {
   const { can } = useAbility();
@@ -144,6 +145,7 @@ const AppRouter = () => {
               </Route>
               <Route element={<ProtectedRoute permission={PERMISSIONS.TASK_VIEW} />}>
                 <Route path="/tasks" element={<TasksPage />} />
+                <Route path="/workflow" element={<WorkflowPage />} />
               </Route>
               <Route element={<ProtectedRoute permission={PERMISSIONS.TASK_VIEW} />}>
                 <Route path="/notifications" element={<NotificationsPage />} />

@@ -10,6 +10,7 @@ from app.models.notifications import (
     Notification,
     NotificationChannel,
     NotificationChannelSettings,
+    NotificationPriority,
     NotificationStatus,
     NotificationType,
 )
@@ -54,6 +55,7 @@ async def send_notification(
     payload: dict[str, object] | None = None,
     scheduled_at: datetime | None = None,
     dedup_key: str | None = None,
+    priority: NotificationPriority = NotificationPriority.MEDIUM,
 ) -> Notification | None:
     scheduled_at = scheduled_at or datetime.now(tz=timezone.utc)
     settings = (
@@ -94,6 +96,7 @@ async def send_notification(
         title=title,
         body=body,
         payload=payload,
+        priority=priority,
         status=NotificationStatus.QUEUED,
         dedup_key=dedup_key or build_dedup_key(
             tenant_id=tenant_id,

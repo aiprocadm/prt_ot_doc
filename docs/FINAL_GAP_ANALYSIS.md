@@ -38,6 +38,7 @@
 
 ## 5) Master data / Presets / NPA
 **Статус:** done/partial
+- Обновление этапа: добавлены NPA revisions и tenant-aware impact analysis с генерацией задач на актуализацию; backlog — richer UI detail tabs и больше типов связей.
 - Реализовано: NPA и пресеты присутствуют (API/pages/scripts seeds).
 - Частично: полнота словарей для всех пилотных сценариев зависит от seed данных окружения.
 
@@ -67,6 +68,7 @@
 
 ## 11) Files / Search
 **Статус:** partial
+- Обновление этапа: search API принял alias `types`, стал возвращать facets/snippets/deeplinks для Search Center; остаётся расширить покрытие сущностей и ранжирование.
 - Реализовано: files module (upload, AV, extractors), search module/indexing tests.
 - Частично: прод-уровень индексационных lag SLA формально не закреплён как автотест.
 
@@ -92,6 +94,7 @@
 
 ## 16) Admin / Low-code
 **Статус:** partial
+- Обновление этапа: добавлен JSON-driven workflow/BPM v1 (definitions, versions, publish/archive, instances, human tasks, timeline, timer foundation); backlog — visual editor UX и SLA/escalation automation through beat.
 - Реализовано: admin pages/outbox/billing/ops screens.
 - Частично: low-code layout presets присутствуют, но без полного конструктора.
 
@@ -139,3 +142,9 @@
 2. Расширить e2e final regression по порталу/EDO/webhooks/SLA.
 3. Довести perf+restore rehearsal до регулярного CI профиля.
 4. Выполнить UX polish по major pages + доступность.
+
+## 21) Notifications center / workflow / impact analysis (new wave)
+**Статус:** partial -> improved
+- Найдено: в репозитории уже были approvals, obligations reminders, search index и базовые notifications, но не было унифицированного workflow runtime/versioning и tenant-aware impact view по НПА.
+- Реализовано: новый модуль `workflow` поверх модульного монолита; расширение notifications API (priority/preferences/mark-all-read filters); NPA impact detail + update tasks; search API compatibility for frontend `types` param.
+- Осталось в backlog: scheduler/beat orchestration для workflow timers/digests, delivery history для notification transports, richer enterprise detail pages for workflow instance/NPA.

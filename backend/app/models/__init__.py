@@ -106,7 +106,7 @@ from app.models.notifications import (
     PlanTask as CalendarPlanTask,
     PlanTaskStatus as CalendarPlanTaskStatus,
 )
-from app.models.npa import NpaAct, NpaClause
+from app.models.npa import NpaAct, NpaClause, NpaRevision
 from app.models.safety_core import (
     Hazard as SafetyHazard,
     HazardBinding,
@@ -174,6 +174,7 @@ __all__ = [
     "NPABinding",
     "NpaAct",
     "NpaClause",
+    "NpaRevision",
     "Outbox",
     "OutboxStatus",
     "PackagePreset",

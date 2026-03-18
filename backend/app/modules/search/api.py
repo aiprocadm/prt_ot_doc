@@ -39,7 +39,8 @@ _ALLOWED_TYPES = {
 @router.get("/search")
 async def global_search(
     q: str = Query(default=""),
-    entity_types: str = Query(default="person,package,document,file,incident,inspection,site"),
+    entity_types: str | None = Query(default=None),
+    types: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
     cursor: str | None = None,
     sort: str = Query(default="relevance", pattern="^(relevance|updated_at|date)$"),
@@ -52,7 +53,8 @@ async def global_search(
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
 ) -> dict:
-    requested_types = {item.strip() for item in entity_types.split(",") if item.strip()}
+    raw_types = entity_types or types or "person,package,document,file,incident,inspection,site"
+    requested_types = {item.strip() for item in raw_types.split(",") if item.strip()}
     requested_types &= _ALLOWED_TYPES
 
     filters = SearchFilters(
