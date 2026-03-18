@@ -20,7 +20,23 @@ const resources = {
         risk: "Риски",
         npa: "НПА",
         audit: "Аудит",
-        settings: "Настройки"
+        settings: "Настройки",
+        training: "Обучение",
+        exports: "Выгрузки",
+        marketplace: "Маркетплейс"
+      },
+      training: {
+        title: "Обучение и инструктажи",
+        teacherView: "Кабинет преподавателя",
+        learnerView: "Кабинет слушателя",
+        registry: "Реестр",
+        completion: "Завершение"
+      },
+      exports: {
+        title: "Экспорт и BI",
+        jobs: "Задания",
+        schedules: "Расписания",
+        kpis: "KPI"
       }
     }
   },
@@ -30,6 +46,19 @@ const resources = {
         login: "Sign in",
         email: "Email",
         password: "Password"
+      },
+      training: {
+        title: "Training",
+        teacherView: "Teacher cabinet",
+        learnerView: "Learner cabinet",
+        registry: "Registry",
+        completion: "Completion"
+      },
+      exports: {
+        title: "Exports and BI",
+        jobs: "Jobs",
+        schedules: "Schedules",
+        kpis: "KPIs"
       }
     }
   }

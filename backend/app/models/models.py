@@ -565,6 +565,9 @@ class ApiKey(TenantBaseModel):
     scopes: Mapped[str] = mapped_column(String(255), nullable=False, default="api:read")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    usage_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    rate_limit_per_minute: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "name", name="uq_api_key_tenant_name"),
@@ -920,6 +923,22 @@ class TrainingModule(TenantBaseModel):
     content_type: Mapped[str] = mapped_column(String(32), nullable=False)
     content_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
     required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    materials_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+
+
+class TrainingLesson(TenantBaseModel):
+    __tablename__ = "training_lessons"
+
+    training_module_id: Mapped[str] = mapped_column(
+        ForeignKey("training_modules.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    lesson_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    content_type: Mapped[str] = mapped_column(String(32), nullable=False, default="document")
+    content_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
+    materials_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 
 class TrainingTest(TenantBaseModel, SoftDeleteMixin):
@@ -986,6 +1005,11 @@ class TrainingEnrollment(TenantBaseModel, SoftDeleteMixin):
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     certificate_id: Mapped[str | None] = mapped_column(ForeignKey("training_certificates.id", ondelete="SET NULL"), nullable=True)
     protocol_id: Mapped[str | None] = mapped_column(ForeignKey("training_protocols.id", ondelete="SET NULL"), nullable=True)
+    progress_percent: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False, default=0)
+    completion_status: Mapped[str] = mapped_column(String(32), nullable=False, default="assigned")
+    completion_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completion_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    external_runtime_state: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
 
 class TrainingAttempt(TenantBaseModel):
@@ -997,6 +1021,9 @@ class TrainingAttempt(TenantBaseModel):
     score: Mapped[float | None] = mapped_column(Numeric(8, 2), nullable=True)
     passed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     answers_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    source_type: Mapped[str] = mapped_column(String(32), nullable=False, default="manual")
+    external_session_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    provider_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
 
 class TrainingProtocol(TenantBaseModel, SoftDeleteMixin):
@@ -1022,6 +1049,29 @@ class TrainingProtocolItem(TenantBaseModel):
     result: Mapped[str] = mapped_column(String(32), nullable=False)
     score: Mapped[float | None] = mapped_column(Numeric(8, 2), nullable=True)
     enrollment_id: Mapped[str | None] = mapped_column(ForeignKey("training_enrollments.id", ondelete="SET NULL"), nullable=True)
+
+
+class MarketplaceCatalogItem(TenantBaseModel, SoftDeleteMixin):
+    __tablename__ = "marketplace_catalog_items"
+
+    item_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    code: Mapped[str] = mapped_column(String(128), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
+    version_label: Mapped[str] = mapped_column(String(64), nullable=False)
+    category: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    tags_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    preview_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    compatibility_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    dependency_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    source_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    usage_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "item_type", "code", "version_label", name="uq_marketplace_catalog_item"),
+        Index("ix_marketplace_catalog_lookup", "tenant_id", "item_type", "status", "updated_at"),
+    )
 
 
 class BriefingTemplate(TenantBaseModel, SoftDeleteMixin):

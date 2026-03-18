@@ -60,3 +60,17 @@
 - Workflow ops hardening: added explicit Celery entrypoint `workflow.sla.tick` so SLA escalations are not only modeled in the service layer but also schedulable via the worker fleet.
 - Shell UX hardening: top navigation badges no longer use static placeholders; they poll live workflow-task and unread-notification counters so operators can trust header quick actions.
 - Search Center UX hardening: added quick facet chips for site/project/risk level and preserved these filters in saved searches, reducing manual copy/paste of identifiers.
+
+## Enterprise v2.0 additions in this increment
+- LMS foundation upgraded from registry-only to teacher/learner cabinet architecture: lessons/materials, progress %, completion confirmation, retake/runtime result ingestion and SCORM/xAPI/proctoring-ready contracts were added on top of existing training entities.
+- Advanced risk layer now exposes dedicated enterprise methodology/map APIs over the existing safety-core tables, including Fine-Kinney scoring, residual-risk recalculation, overdue measure visibility and summary links to incident/corrective pressure.
+- Export Center moved from async-job-only to BI/DWH-ready foundation: dataset code, schema version, anonymized mode, webhook target contract, schedules and KPI definitions are now persisted.
+- Public/machine access got a tenant-scoped machine-key management slice with usage counters/revoke metadata and stable public read contracts for core registries.
+- RU-first / EN-ready i18n was extended to the new training/export surfaces, and marketplace catalog foundation was added for publish/install/version/compatibility metadata.
+
+## Осталось после этого этапа
+- Реальный worker execution для scheduled exports / webhook callbacks / DWH sinks и более детальная delivery journal UI.
+- Полная material player UX для LMS (video/file viewers, richer learner cabinet timeline, certificate rendering and teacher grading workflows).
+- Глубже автоматизировать влияние incidents / corrective actions / NPA bindings на persisted residual-risk recalculation, а не только на summary/context layer.
+- Marketplace: materialization/import-copy into tenant runtime entities, moderation, public storefront UX.
+- Backend i18n: локализация structured errors и notification/document templates beyond the new foundation.

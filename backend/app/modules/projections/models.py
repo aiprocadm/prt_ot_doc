@@ -147,13 +147,51 @@ class ClientPortalReadModel(TenantBaseModel):
 class ExportJob(TenantBaseModel):
     __tablename__ = "export_jobs"
     export_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    dataset_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    schema_version: Mapped[str] = mapped_column(String(32), nullable=False, default="v1")
+    anonymized: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    target_type: Mapped[str] = mapped_column(String(32), nullable=False, default="file")
+    target_config: Mapped[dict[str, Any]] = mapped_column(_json_type(), nullable=False, default=dict)
     scope_json: Mapped[dict[str, Any]] = mapped_column(_json_type(), nullable=False, default=dict)
     filters_json: Mapped[dict[str, Any]] = mapped_column(_json_type(), nullable=False, default=dict)
     file_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     row_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="queued")
+    progress_percent: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False, default=0)
+    delivery_history_json: Mapped[list[dict[str, Any]]] = mapped_column(_json_type(), nullable=False, default=list)
     error_payload: Mapped[dict[str, Any] | None] = mapped_column(_json_type(), nullable=True)
     __table_args__ = (Index("ix_export_jobs_tenant_status_updated", "tenant_id", "status", "updated_at"),)
+
+
+class ExportSchedule(TenantBaseModel):
+    __tablename__ = "export_schedules"
+
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    dataset_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    cron_expr: Mapped[str] = mapped_column(String(128), nullable=False)
+    target_type: Mapped[str] = mapped_column(String(32), nullable=False, default="file")
+    target_config: Mapped[dict[str, Any]] = mapped_column(_json_type(), nullable=False, default=dict)
+    filters_json: Mapped[dict[str, Any]] = mapped_column(_json_type(), nullable=False, default=dict)
+    anonymized: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (Index("ix_export_schedules_tenant_active", "tenant_id", "is_active", "updated_at"),)
+
+
+class KpiDefinition(TenantBaseModel):
+    __tablename__ = "kpi_definitions"
+
+    code: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    dataset_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    formula_json: Mapped[dict[str, Any]] = mapped_column(_json_type(), nullable=False, default=dict)
+    threshold_json: Mapped[dict[str, Any]] = mapped_column(_json_type(), nullable=False, default=dict)
+    locale_labels: Mapped[dict[str, Any]] = mapped_column(_json_type(), nullable=False, default=dict)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    __table_args__ = (Index("ix_kpi_definitions_tenant_code", "tenant_id", "code", unique=True),)
 
 
 class PortalRequest(TenantBaseModel):
