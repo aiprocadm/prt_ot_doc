@@ -23,6 +23,10 @@ export interface SearchResponse {
   facets: {
     type_counts?: Record<string, number>;
     status_counts?: Record<string, number>;
+    company_counts?: Record<string, number>;
+    site_counts?: Record<string, number>;
+    project_counts?: Record<string, number>;
+    risk_level_counts?: Record<string, number>;
   };
   items: SearchItem[];
   next_cursor?: string | null;

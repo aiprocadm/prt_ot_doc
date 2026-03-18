@@ -416,3 +416,58 @@ async def test_notifications_settings_persist_and_expose_deeplink(async_client, 
     list_after = await async_client.get("/api/v1/notifications", headers=headers, params={"status": "read"})
     assert list_after.status_code == 200
     assert list_after.json()["items"][0]["is_read"] is True
+
+
+async def test_workflow_sla_sweep_marks_escalation(async_client, sessionmaker, make_auth_headers, data_factory):
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        user = await data_factory.create_user(tenant=tenant, email="wf-sla@example.com", session=session)
+        await session.commit()
+    headers = await make_auth_headers(email="wf-sla@example.com")
+
+    payload = {
+        "code": "sla-doc-approval",
+        "name": "SLA approval",
+        "entity_type": "document",
+        "graph": {
+            "nodes": [
+                {"id": "start", "type": "start", "name": "Start"},
+                {"id": "approve", "type": "approval", "name": "Approve", "assignee_user_id": user.id, "sla_hours": 1},
+                {"id": "end", "type": "end", "name": "End"},
+            ],
+            "transitions": [
+                {"from": "start", "to": "approve"},
+                {"from": "approve", "to": "end"},
+            ],
+        },
+        "variables_schema": {},
+    }
+    create_response = await async_client.post("/api/v1/workflow/definitions", json=payload, headers=headers)
+    version_id = create_response.json()["id"]
+    await async_client.post(f"/api/v1/workflow/versions/{version_id}/publish", headers=headers)
+    start_response = await async_client.post(
+        "/api/v1/workflow/instances",
+        json={"definition_code": "sla-doc-approval", "entity_type": "document", "entity_id": "doc-sla", "context": {}},
+        headers=headers,
+    )
+    task_id = start_response.json()["tasks"][0]["id"]
+
+    from app.modules.workflow.service import WorkflowService
+    from datetime import datetime, timedelta, timezone
+    from sqlalchemy import select
+    from app.modules.workflow.models import WorkflowTask
+
+    async with sessionmaker() as session:
+        task = (await session.execute(select(WorkflowTask).where(WorkflowTask.id == task_id))).scalar_one()
+        task.due_at = datetime.now(tz=timezone.utc) - timedelta(minutes=5)
+        await session.commit()
+
+    async with sessionmaker() as session:
+        processed = await WorkflowService(session, str(tenant.id)).sweep_task_sla(now=datetime.now(tz=timezone.utc))
+        await session.commit()
+        assert processed == 1
+
+    state_response = await async_client.get(f"/api/v1/workflow/instances/{start_response.json()['id']}", headers=headers)
+    assert state_response.status_code == 200
+    timeline_types = [item["event_type"] for item in state_response.json()["timeline"]]
+    assert "task_sla_escalated" in timeline_types

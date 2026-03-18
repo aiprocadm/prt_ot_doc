@@ -176,3 +176,45 @@ async def test_analytics_extended_dashboards(async_client, sessionmaker, data_fa
         response = await async_client.get(endpoint, headers={**headers, "X-Tenant": "test"})
         assert response.status_code == 200
         assert "widgets" in response.json()
+
+
+@pytest.mark.anyio
+async def test_search_returns_total_and_extended_filters(async_client, sessionmaker, data_factory, make_auth_headers):
+    async with sessionmaker() as session:  # type: AsyncSession
+        tenant = await data_factory.ensure_tenant(session=session)
+        session.add_all([
+            SearchIndexEntry(
+                tenant_id=tenant.id,
+                entity_type="incident",
+                entity_id="incident-prj-1",
+                title="Critical near miss",
+                status="reported",
+                tags_json={"company_id": "company-1", "site_id": "site-1", "project_id": "project-1", "risk_level": "high"},
+                route="/incidents/incident-prj-1",
+                search_text="Critical near miss high risk project one",
+            ),
+            SearchIndexEntry(
+                tenant_id=tenant.id,
+                entity_type="incident",
+                entity_id="incident-prj-2",
+                title="Near miss archive",
+                status="closed",
+                tags_json={"company_id": "company-1", "site_id": "site-2", "project_id": "project-2", "risk_level": "low"},
+                route="/incidents/incident-prj-2",
+                search_text="Near miss archive low risk project two",
+            ),
+        ])
+        await session.commit()
+
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    response = await async_client.get(
+        "/api/v1/search",
+        params={"q": "near miss", "entity_types": "incident", "project_id": "project-1", "risk_level": "high"},
+        headers={**headers, "X-Tenant": "test"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 1
+    assert payload["items"][0]["entity_id"] == "incident-prj-1"
+    assert payload["facets"]["project_counts"]["project-1"] == 1
+    assert payload["facets"]["risk_level_counts"]["high"] == 1

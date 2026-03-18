@@ -1,5 +1,5 @@
 import { Bell, CheckCircle2, ChevronDown, LogOut, Moon, Settings, Sun } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { Badge } from "@/components/ui/badge";
@@ -9,18 +9,38 @@ import { useTenantStore } from "@/stores/tenant";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuthStore } from "@/stores/auth";
 import { GlobalSearch } from "@/components/GlobalSearch";
+import { apiClient } from "@/api/client";
 
 export const TopNav = () => {
   const { user, logout } = useAuthStore();
   const [theme, , toggleTheme] = useTheme();
   const { tenant, tenants, setTenant } = useTenantStore();
-  const kpi = useMemo(
-    () => ({
-      tasks: 12,
-      alerts: 5
-    }),
-    []
-  );
+  const [kpi, setKpi] = useState({ tasks: 0, alerts: 0 });
+
+  useEffect(() => {
+    let mounted = true;
+    const loadCounts = async () => {
+      try {
+        const [taskResponse, notificationResponse] = await Promise.all([
+          apiClient.get<Array<unknown>>("/workflow/tasks", { params: { assignee: "me" } }),
+          apiClient.get<{ unread_count: number }>("/notifications", { params: { status: "unread", limit: 1 } })
+        ]);
+        if (!mounted) return;
+        setKpi({
+          tasks: taskResponse.data.length,
+          alerts: notificationResponse.data.unread_count ?? 0
+        });
+      } catch {
+        if (mounted) setKpi({ tasks: 0, alerts: 0 });
+      }
+    };
+    void loadCounts();
+    const timer = window.setInterval(() => void loadCounts(), 60000);
+    return () => {
+      mounted = false;
+      window.clearInterval(timer);
+    };
+  }, []);
 
   return (
     <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">

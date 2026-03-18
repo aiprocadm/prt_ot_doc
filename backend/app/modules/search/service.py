@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from typing import Any
 
-from sqlalchemy import String, and_, cast, desc, func, or_, select
+from sqlalchemy import String, and_, asc, case, cast, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.projections.models import SearchIndexEntry
@@ -152,8 +152,9 @@ class SearchService:
     ) -> dict[str, Any]:
         offset = int(cursor or "0") if (cursor or "0").isdigit() else 0
         stmt = select(SearchIndexEntry).where(SearchIndexEntry.tenant_id == self.tenant_id)
-        if q.strip():
-            like = f"%{q.strip()}%"
+        query = q.strip()
+        if query:
+            like = f"%{query}%"
             stmt = stmt.where(
                 or_(
                     SearchIndexEntry.title.ilike(like),
@@ -172,8 +173,33 @@ class SearchService:
             stmt = stmt.where(SearchIndexEntry.tags_json["company_id"].astext == filters.company_id)
         if filters.contractor_id:
             stmt = stmt.where(SearchIndexEntry.tags_json["contractor_id"].astext == filters.contractor_id)
+        if filters.project_id:
+            stmt = stmt.where(SearchIndexEntry.tags_json["project_id"].astext == filters.project_id)
+        if filters.risk_level:
+            stmt = stmt.where(SearchIndexEntry.tags_json["risk_level"].astext == filters.risk_level)
+        if filters.date_from:
+            stmt = stmt.where(func.date(SearchIndexEntry.updated_at) >= filters.date_from)
+        if filters.date_to:
+            stmt = stmt.where(func.date(SearchIndexEntry.updated_at) <= filters.date_to)
 
-        order_by = desc(SearchIndexEntry.updated_at) if sort in {"updated_at", "date", "relevance"} else desc(SearchIndexEntry.updated_at)
+        if sort == "updated_at":
+            order_by = desc(SearchIndexEntry.updated_at)
+        elif sort == "date":
+            order_by = asc(SearchIndexEntry.updated_at)
+        else:
+            if query:
+                lower_title = func.lower(func.coalesce(SearchIndexEntry.title, ""))
+                lower_subtitle = func.lower(func.coalesce(SearchIndexEntry.subtitle, ""))
+                lower_text = func.lower(cast(SearchIndexEntry.search_text, String))
+                q_lower = query.lower()
+                order_by = [
+                    case((lower_title == q_lower, 0), (lower_title.like(f"{q_lower}%"), 1), else_=2),
+                    case((lower_subtitle.like(f"{q_lower}%"), 0), else_=1),
+                    func.instr(lower_text, q_lower),
+                    desc(SearchIndexEntry.updated_at),
+                ]
+            else:
+                order_by = desc(SearchIndexEntry.updated_at)
         facet_stmt = (
             select(SearchIndexEntry.entity_type, func.count())
             .where(*stmt._where_criteria)
@@ -183,17 +209,23 @@ class SearchService:
         status_rows = (await self.session.execute(select(SearchIndexEntry.status, func.count()).where(*stmt._where_criteria).group_by(SearchIndexEntry.status))).all()
         company_rows = (await self.session.execute(select(SearchIndexEntry.tags_json["company_id"].astext, func.count()).where(*stmt._where_criteria, SearchIndexEntry.tags_json["company_id"].astext.is_not(None)).group_by(SearchIndexEntry.tags_json["company_id"].astext))).all()
         site_rows = (await self.session.execute(select(SearchIndexEntry.tags_json["site_id"].astext, func.count()).where(*stmt._where_criteria, SearchIndexEntry.tags_json["site_id"].astext.is_not(None)).group_by(SearchIndexEntry.tags_json["site_id"].astext))).all()
-        rows = (await self.session.execute(stmt.order_by(order_by).offset(offset).limit(limit + 1))).scalars().all()
+        project_rows = (await self.session.execute(select(SearchIndexEntry.tags_json["project_id"].astext, func.count()).where(*stmt._where_criteria, SearchIndexEntry.tags_json["project_id"].astext.is_not(None)).group_by(SearchIndexEntry.tags_json["project_id"].astext))).all()
+        risk_rows = (await self.session.execute(select(SearchIndexEntry.tags_json["risk_level"].astext, func.count()).where(*stmt._where_criteria, SearchIndexEntry.tags_json["risk_level"].astext.is_not(None)).group_by(SearchIndexEntry.tags_json["risk_level"].astext))).all()
+        total = int(await self.session.scalar(select(func.count()).select_from(SearchIndexEntry).where(*stmt._where_criteria)) or 0)
+        rows = (await self.session.execute(stmt.order_by(*order_by).offset(offset).limit(limit + 1))) if isinstance(order_by, list) else (await self.session.execute(stmt.order_by(order_by).offset(offset).limit(limit + 1)))
+        rows = rows.scalars().all()
         has_more = len(rows) > limit
         items = rows[:limit]
         type_counts: dict[str, int] = {str(entity_type): int(total) for entity_type, total in facet_rows}
         status_counts: dict[str, int] = {str(status or "unknown"): int(total) for status, total in status_rows}
         company_counts: dict[str, int] = {str(company_id): int(total) for company_id, total in company_rows if company_id}
         site_counts: dict[str, int] = {str(site_id): int(total) for site_id, total in site_rows if site_id}
+        project_counts: dict[str, int] = {str(project_id): int(total) for project_id, total in project_rows if project_id}
+        risk_counts: dict[str, int] = {str(risk_level): int(total) for risk_level, total in risk_rows if risk_level}
         return {
             "q": q,
-            "total": len(items),
-            "facets": {"type_counts": type_counts, "status_counts": status_counts, "company_counts": company_counts, "site_counts": site_counts},
+            "total": total,
+            "facets": {"type_counts": type_counts, "status_counts": status_counts, "company_counts": company_counts, "site_counts": site_counts, "project_counts": project_counts, "risk_level_counts": risk_counts},
             "items": [
                 {
                     "kind": "entity",
