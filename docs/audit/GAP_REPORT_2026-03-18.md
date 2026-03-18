@@ -42,3 +42,11 @@
 - Для NPA detail добавлен linked entities panel с явным списком binding-ов, а не только summary-счётчиками.
 - Для integration admin UX добавлен статусный фильтр delivery history.
 - Добавлен PWA/mobile readiness foundation: глобальный offline banner + sync/retry status в shell без перезагрузки приложения.
+
+- Workflow/BPM: поверх уже реализованного engine добавлен registry/list endpoint для workflow instances с open-task counters и status/entity фильтрами, чтобы карточки/реестры могли показывать живые инстансы без ручной навигации в detail view.
+- Search: глобальный поиск теперь отдаёт не только `type_counts`, но и `status/company/site` facets, что закрывает часть enterprise faceted-search сценариев без смены storage strategy.
+- Analytics/Reporting: расширен backend dashboard layer реальными endpoint-ами `incidents`, `inspections`, `prescriptions`, `overdue`, `sla-load`, `edo`; Reports UI переведён на async Export Center flow вместо вызова отсутствующего `/reports/export`.
+
+Осталось backlog:
+- Scheduled reports, digest notifications scheduler, transport-level notification delivery history и полноценные template registries всё ещё требуют отдельного прохода.
+- Export Center пока даёт foundation/idempotent async jobs, но без full XLSX/PDF generator pipeline и без anonymized export presets.

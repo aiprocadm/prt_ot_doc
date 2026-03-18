@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import HTTPException, status
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.workflow.models import (
@@ -117,6 +117,28 @@ class WorkflowService:
     async def list_definitions(self) -> list[WorkflowDefinition]:
         rows = (await self.session.execute(select(WorkflowDefinition).where(WorkflowDefinition.tenant_id == self.tenant_id, WorkflowDefinition.deleted_at.is_(None)).order_by(WorkflowDefinition.updated_at.desc()))).scalars().all()
         return rows
+
+    async def list_instances(self, *, status_filter: WorkflowInstanceStatus | None = None, entity_type: str | None = None) -> list[tuple[WorkflowInstance, int]]:
+        stmt = (
+            select(WorkflowInstance, func.count(WorkflowTask.id))
+            .outerjoin(
+                WorkflowTask,
+                and_(
+                    WorkflowTask.instance_id == WorkflowInstance.id,
+                    WorkflowTask.tenant_id == self.tenant_id,
+                    WorkflowTask.deleted_at.is_(None),
+                    WorkflowTask.status == WorkflowTaskStatus.OPEN,
+                ),
+            )
+            .where(WorkflowInstance.tenant_id == self.tenant_id, WorkflowInstance.deleted_at.is_(None))
+            .group_by(WorkflowInstance.id)
+            .order_by(WorkflowInstance.updated_at.desc())
+        )
+        if status_filter is not None:
+            stmt = stmt.where(WorkflowInstance.status == status_filter)
+        if entity_type:
+            stmt = stmt.where(WorkflowInstance.entity_type == entity_type)
+        return list((await self.session.execute(stmt)).all())
 
     async def get_versions(self, definition_id: str) -> list[WorkflowDefinitionVersion]:
         rows = (await self.session.execute(select(WorkflowDefinitionVersion).where(WorkflowDefinitionVersion.tenant_id == self.tenant_id, WorkflowDefinitionVersion.definition_id == definition_id, WorkflowDefinitionVersion.deleted_at.is_(None)).order_by(WorkflowDefinitionVersion.version_no.desc()))).scalars().all()

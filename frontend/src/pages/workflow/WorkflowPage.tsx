@@ -57,6 +57,19 @@ type WorkflowTimelineEvent = {
   created_at: string;
 };
 
+type WorkflowInstanceListItem = {
+  id: string;
+  definition_id: string;
+  definition_version_id: string;
+  entity_type: string;
+  entity_id: string;
+  status: string;
+  current_node_id?: string | null;
+  correlation_id?: string | null;
+  open_tasks: number;
+  updated_at: string;
+};
+
 type WorkflowInstance = {
   id: string;
   definition_id: string;
@@ -89,17 +102,20 @@ const WorkflowPage = () => {
   const [definitions, setDefinitions] = useState<WorkflowDefinition[]>([]);
   const [tasks, setTasks] = useState<WorkflowTask[]>([]);
   const [selectedInstance, setSelectedInstance] = useState<WorkflowInstance | null>(null);
+  const [instances, setInstances] = useState<WorkflowInstanceListItem[]>([]);
   const [newCode, setNewCode] = useState("document-approval-v1");
   const [graphText, setGraphText] = useState(JSON.stringify(defaultGraph, null, 2));
   const [validation, setValidation] = useState<string | null>(null);
 
   const load = async () => {
-    const [definitionsResponse, tasksResponse] = await Promise.all([
+    const [definitionsResponse, tasksResponse, instancesResponse] = await Promise.all([
       apiClient.get<WorkflowDefinition[]>("/workflow/definitions"),
-      apiClient.get<WorkflowTask[]>("/workflow/tasks")
+      apiClient.get<WorkflowTask[]>("/workflow/tasks"),
+      apiClient.get<WorkflowInstanceListItem[]>("/workflow/instances")
     ]);
     setDefinitions(definitionsResponse.data);
     setTasks(tasksResponse.data);
+    setInstances(instancesResponse.data);
   };
 
   useEffect(() => {
@@ -236,6 +252,23 @@ const WorkflowPage = () => {
         </Card>
 
         <div className="space-y-6">
+          <Card>
+            <CardHeader><CardTitle>Workflow instances</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              {instances.map((instance) => (
+                <div key={instance.id} className="rounded border p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="font-medium">{instance.entity_type} · {instance.entity_id}</div>
+                      <div className="text-xs text-muted-foreground">node: {instance.current_node_id ?? "—"} · tasks: {instance.open_tasks} · status: {instance.status}</div>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => void openInstance(instance.id)}>Open</Button>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader><CardTitle>Workflow tasks</CardTitle></CardHeader>
             <CardContent className="space-y-3">

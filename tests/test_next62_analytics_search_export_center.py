@@ -8,23 +8,24 @@ from app.modules.projections.models import ExportJob, PackageReadModel, SearchIn
 
 
 @pytest.mark.anyio
-async def test_analytics_and_trends_endpoints(async_client, sessionmaker, data_factory):
+async def test_analytics_and_trends_endpoints(async_client, sessionmaker, data_factory, make_auth_headers):
     async with sessionmaker() as session:  # type: AsyncSession
         tenant = await data_factory.ensure_tenant(session=session)
         session.add(PackageReadModel(tenant_id=tenant.id, package_id="pkg-1", status="in_progress"))
         await session.commit()
 
-    response = await async_client.get("/api/v1/analytics/dashboard/executive", headers={"X-Tenant": "test"})
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    response = await async_client.get("/api/v1/analytics/dashboard/executive", headers={**headers, "X-Tenant": "test"})
     assert response.status_code == 200
     assert "dashboard" in response.json()
 
-    trend = await async_client.get("/api/v1/analytics/trends/incidents", headers={"X-Tenant": "test"})
+    trend = await async_client.get("/api/v1/analytics/trends/incidents", headers={**headers, "X-Tenant": "test"})
     assert trend.status_code == 200
     assert trend.json()["metric"] == "incidents"
 
 
 @pytest.mark.anyio
-async def test_search_over_projection_index(async_client, sessionmaker, data_factory):
+async def test_search_over_projection_index(async_client, sessionmaker, data_factory, make_auth_headers):
     async with sessionmaker() as session:  # type: AsyncSession
         tenant = await data_factory.ensure_tenant(session=session)
         session.add(
@@ -39,7 +40,8 @@ async def test_search_over_projection_index(async_client, sessionmaker, data_fac
         )
         await session.commit()
 
-    response = await async_client.get("/api/v1/search", params={"q": "Иван", "entity_types": "person"}, headers={"X-Tenant": "test"})
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    response = await async_client.get("/api/v1/search", params={"q": "Иван", "entity_types": "person"}, headers={**headers, "X-Tenant": "test"})
     assert response.status_code == 200
     payload = response.json()
     assert payload["items"]
@@ -116,3 +118,61 @@ async def test_client_user_cannot_patch_internal_portal_requests(async_client, m
     )
 
     assert patch_response.status_code == 403
+
+
+@pytest.mark.anyio
+async def test_search_returns_extended_facets(async_client, sessionmaker, data_factory, make_auth_headers):
+    async with sessionmaker() as session:  # type: AsyncSession
+        tenant = await data_factory.ensure_tenant(session=session)
+        session.add_all([
+            SearchIndexEntry(
+                tenant_id=tenant.id,
+                entity_type="incident",
+                entity_id="incident-1",
+                title="Near miss",
+                status="reported",
+                tags_json={"company_id": "company-1", "site_id": "site-1"},
+                route="/incidents/incident-1",
+                search_text="Near miss reported",
+            ),
+            SearchIndexEntry(
+                tenant_id=tenant.id,
+                entity_type="incident",
+                entity_id="incident-2",
+                title="Another miss",
+                status="closed",
+                tags_json={"company_id": "company-1", "site_id": "site-2"},
+                route="/incidents/incident-2",
+                search_text="Another miss closed",
+            ),
+        ])
+        await session.commit()
+
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    response = await async_client.get("/api/v1/search", params={"q": "miss", "entity_types": "incident"}, headers={**headers, "X-Tenant": "test"})
+    assert response.status_code == 200
+    facets = response.json()["facets"]
+    assert facets["status_counts"]["reported"] == 1
+    assert facets["company_counts"]["company-1"] == 2
+    assert facets["site_counts"]["site-1"] == 1
+
+
+@pytest.mark.anyio
+async def test_analytics_extended_dashboards(async_client, sessionmaker, data_factory, make_auth_headers):
+    async with sessionmaker() as session:  # type: AsyncSession
+        tenant = await data_factory.ensure_tenant(session=session)
+        session.add(PackageReadModel(tenant_id=tenant.id, package_id="pkg-analytics", status="in_progress"))
+        await session.commit()
+
+    for endpoint in [
+        "/api/v1/analytics/dashboard/incidents",
+        "/api/v1/analytics/dashboard/inspections",
+        "/api/v1/analytics/dashboard/prescriptions",
+        "/api/v1/analytics/dashboard/overdue",
+        "/api/v1/analytics/dashboard/sla-load",
+        "/api/v1/analytics/dashboard/edo",
+    ]:
+        headers = await make_auth_headers(RoleEnum.ADMIN)
+        response = await async_client.get(endpoint, headers={**headers, "X-Tenant": "test"})
+        assert response.status_code == 200
+        assert "widgets" in response.json()

@@ -317,3 +317,44 @@ async def test_search_indexes_multiple_registry_types(async_client, sessionmaker
     payload = response.json()
     assert any(item["entity_type"] == "incident" and item["entity_id"] == incident.id for item in payload["items"])
     assert payload["facets"]["type_counts"]["incident"] >= 1
+
+
+async def test_workflow_instances_registry_lists_open_task_counts(async_client, sessionmaker, make_auth_headers, data_factory):
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        assignee = await data_factory.create_user(tenant=tenant, email="wf-registry@example.com", session=session)
+        await session.commit()
+    headers = await make_auth_headers(email="wf-registry@example.com")
+
+    payload = {
+        "code": "registry-doc-approval",
+        "name": "Registry approval",
+        "entity_type": "document",
+        "graph": {
+            "nodes": [
+                {"id": "start", "type": "start", "name": "Start"},
+                {"id": "approve", "type": "approval", "name": "Approve", "assignee_user_id": assignee.id},
+                {"id": "end", "type": "end", "name": "End"},
+            ],
+            "transitions": [
+                {"from": "start", "to": "approve"},
+                {"from": "approve", "to": "end"},
+            ],
+        },
+        "variables_schema": {},
+    }
+    create_response = await async_client.post("/api/v1/workflow/definitions", json=payload, headers=headers)
+    version_id = create_response.json()["id"]
+    await async_client.post(f"/api/v1/workflow/versions/{version_id}/publish", headers=headers)
+    await async_client.post(
+        "/api/v1/workflow/instances",
+        json={"definition_code": "registry-doc-approval", "entity_type": "document", "entity_id": "doc-registry", "context": {}},
+        headers=headers,
+    )
+
+    registry_response = await async_client.get("/api/v1/workflow/instances", headers=headers, params={"status": "waiting"})
+    assert registry_response.status_code == 200
+    item = registry_response.json()[0]
+    assert item["entity_id"] == "doc-registry"
+    assert item["open_tasks"] == 1
+    assert item["status"] == "waiting"

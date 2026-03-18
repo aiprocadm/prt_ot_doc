@@ -84,6 +84,20 @@ class WorkflowTimelineRead(BaseModel):
     created_at: str
 
 
+
+class WorkflowInstanceListItem(BaseModel):
+    id: str
+    definition_id: str
+    definition_version_id: str
+    entity_type: str
+    entity_id: str
+    status: str
+    current_node_id: str | None = None
+    correlation_id: str | None = None
+    open_tasks: int = 0
+    updated_at: str
+
+
 class WorkflowInstanceRead(BaseModel):
     id: str
     definition_id: str
@@ -157,6 +171,33 @@ async def start_instance(payload: WorkflowStartIn, response: Response, x_correla
     _, timeline, tasks = await _service(session, tenant).get_instance_history(instance.id)
     response.headers["X-Correlation-ID"] = x_correlation_id or instance.correlation_id or instance.id
     return WorkflowInstanceRead(id=instance.id, definition_id=instance.definition_id, definition_version_id=instance.definition_version_id, entity_type=instance.entity_type, entity_id=instance.entity_id, status=instance.status.value if hasattr(instance.status, 'value') else str(instance.status), current_node_id=instance.current_node_id, context_json=instance.context_json or {}, correlation_id=instance.correlation_id, timeline=[WorkflowTimelineRead(id=e.id, node_id=e.node_id, event_type=e.event_type, actor_user_id=e.actor_user_id, payload=e.payload or {}, created_at=e.created_at.isoformat()) for e in timeline], tasks=[_serialize_task(t) for t in tasks])
+
+
+@router.get("/instances", response_model=list[WorkflowInstanceListItem])
+async def list_instances(
+    session: SessionDep,
+    tenant: TenantDep,
+    access: AccessDep,
+    status_filter: WorkflowInstanceStatus | None = Query(default=None, alias="status"),
+    entity_type: str | None = Query(default=None),
+) -> list[WorkflowInstanceListItem]:
+    _ = access
+    items = await _service(session, tenant).list_instances(status_filter=status_filter, entity_type=entity_type)
+    return [
+        WorkflowInstanceListItem(
+            id=item[0].id,
+            definition_id=item[0].definition_id,
+            definition_version_id=item[0].definition_version_id,
+            entity_type=item[0].entity_type,
+            entity_id=item[0].entity_id,
+            status=item[0].status.value if hasattr(item[0].status, "value") else str(item[0].status),
+            current_node_id=item[0].current_node_id,
+            correlation_id=item[0].correlation_id,
+            open_tasks=item[1],
+            updated_at=item[0].updated_at.isoformat(),
+        )
+        for item in items
+    ]
 
 
 @router.get("/instances/{instance_id}", response_model=WorkflowInstanceRead)
