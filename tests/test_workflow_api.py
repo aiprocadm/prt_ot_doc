@@ -38,6 +38,17 @@ async def test_workflow_definition_publish_start_and_complete(async_client, sess
     assert publish_response.status_code == 200
     assert publish_response.json()["status"] == "published"
 
+    second_create = await async_client.post("/api/v1/workflow/definitions", json=payload, headers=headers)
+    assert second_create.status_code == 201
+    second_version_id = second_create.json()["id"]
+    second_publish = await async_client.post(f"/api/v1/workflow/versions/{second_version_id}/publish", headers=headers)
+    assert second_publish.status_code == 200
+
+    definitions_response = await async_client.get("/api/v1/workflow/definitions", headers=headers)
+    versions = definitions_response.json()[0]["versions"]
+    first_version = next(item for item in versions if item["id"] == version_id)
+    assert first_version["status"] == "archived"
+
     start_response = await async_client.post(
         "/api/v1/workflow/instances",
         json={"definition_code": "doc-approval", "entity_type": "document", "entity_id": "doc-1", "context": {"approved": True}},
@@ -145,3 +156,30 @@ async def test_search_types_alias(async_client, sessionmaker, make_auth_headers,
     response = await async_client.get("/api/v1/search", headers=headers, params={"q": "", "types": "document"})
     assert response.status_code == 200
     assert "facets" in response.json()
+
+
+async def test_search_recent_and_saved_queries(async_client, sessionmaker, make_auth_headers, data_factory):
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        await data_factory.create_user(tenant=tenant, email="search-history@example.com", session=session)
+        await session.commit()
+    headers = await make_auth_headers(email="search-history@example.com")
+
+    response = await async_client.get("/api/v1/search", headers=headers, params={"q": "workflow", "types": "document"})
+    assert response.status_code == 200
+
+    recent = await async_client.get("/api/v1/search/recent", headers=headers)
+    assert recent.status_code == 200
+    assert recent.json()["items"][0]["q"] == "workflow"
+
+    saved = await async_client.post("/api/v1/search/saved", headers=headers, json={"name": "WF docs", "q": "workflow", "types": ["document"], "filters": {"status": "active"}})
+    assert saved.status_code == 201
+    saved_id = saved.json()["id"]
+
+    saved_list = await async_client.get("/api/v1/search/saved", headers=headers)
+    assert saved_list.status_code == 200
+    assert any(item["id"] == saved_id for item in saved_list.json()["items"])
+
+    deleted = await async_client.delete(f"/api/v1/search/saved/{saved_id}", headers=headers)
+    assert deleted.status_code == 200
+    assert deleted.json()["deleted"] is True

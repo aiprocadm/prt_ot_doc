@@ -199,3 +199,16 @@ async def escalate_task(task_id: str, payload: WorkflowTaskActionIn, session: Se
     task = await _service(session, tenant).reassign_task(task_id=task_id, actor_user_id=access.user.id, assignee_user_id=payload.assignee_user_id, assignee_role_code=payload.assignee_role_code, mode="escalated")
     await session.commit()
     return _serialize_task(task)
+
+
+@router.get("/definitions/{definition_id}", response_model=WorkflowDefinitionRead)
+async def get_definition(definition_id: str, session: SessionDep, tenant: TenantDep, access: AccessDep) -> WorkflowDefinitionRead:
+    _ = access
+    service = _service(session, tenant)
+    definitions = await service.list_definitions()
+    item = next((definition for definition in definitions if definition.id == definition_id), None)
+    if item is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="workflow definition not found")
+    versions = await service.get_versions(item.id)
+    return WorkflowDefinitionRead(id=item.id, code=item.code, name=item.name, description=item.description, entity_type=item.entity_type, current_version_id=item.current_version_id, versions=[_serialize_version(v) for v in versions])

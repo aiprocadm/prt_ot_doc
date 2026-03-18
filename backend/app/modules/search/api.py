@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +11,8 @@ from app.models.models import Tenant
 from app.modules.projections.models import SearchIndexEntry
 from app.modules.projections.services import ProjectionOrchestrator
 from app.modules.search.service import SearchFilters, SearchService
+
+from app.core.security import AccessContext, rbac
 
 router = APIRouter()
 
@@ -52,6 +54,7 @@ async def global_search(
     risk_level: str | None = None,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    access: AccessContext = Depends(rbac()),
 ) -> dict:
     raw_types = entity_types or types or "person,package,document,file,incident,inspection,site"
     requested_types = {item.strip() for item in raw_types.split(",") if item.strip()}
@@ -67,6 +70,8 @@ async def global_search(
     )
     service = SearchService(session=session, tenant_id=str(tenant.id))
     payload = await service.search(q=q, types=requested_types, filters=filters, sort=sort, limit=limit, cursor=cursor)
+    await service.track_recent_query(user_id=access.user.id, q=q, entity_types=requested_types, filters=filters)
+    await session.commit()
     payload["correlation_id"] = str(uuid4())
     return payload
 
@@ -77,6 +82,7 @@ async def search_suggest(
     limit: int = Query(default=10, ge=1, le=50),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    access: AccessContext = Depends(rbac()),
 ) -> dict:
     like = f"%{q}%"
     stmt = select(SearchIndexEntry).where(SearchIndexEntry.tenant_id == str(tenant.id))
@@ -98,3 +104,60 @@ async def reindex_by_entity(entity_type: str, session: AsyncSession = Depends(ge
         return {"status": "skipped", "entity_type": entity_type}
     count = await ProjectionOrchestrator(session, str(tenant.id)).rebuild_search_index()
     return {"status": "ok", "indexed": count, "entity_type": entity_type}
+
+
+@router.get("/search/recent")
+async def list_recent_searches(
+    limit: int = Query(default=8, ge=1, le=20),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    access: AccessContext = Depends(rbac()),
+) -> dict:
+    items = await SearchService(session=session, tenant_id=str(tenant.id)).list_recent_queries(user_id=access.user.id, limit=limit)
+    return {"items": items}
+
+
+@router.get("/search/saved")
+async def list_saved_searches(
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    access: AccessContext = Depends(rbac()),
+) -> dict:
+    items = await SearchService(session=session, tenant_id=str(tenant.id)).list_saved_queries(user_id=access.user.id)
+    return {"items": items}
+
+
+@router.post("/search/saved", status_code=status.HTTP_201_CREATED)
+async def create_saved_search(
+    payload: dict,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    access: AccessContext = Depends(rbac()),
+) -> dict:
+    q = str(payload.get("q") or "").strip()
+    name = str(payload.get("name") or q or "Saved search").strip()
+    entity_types = {str(item).strip() for item in (payload.get("types") or []) if str(item).strip()}
+    item = await SearchService(session=session, tenant_id=str(tenant.id)).save_query(
+        user_id=access.user.id,
+        name=name,
+        q=q,
+        entity_types=entity_types,
+        filters=dict(payload.get("filters") or {}),
+        is_shared=bool(payload.get("is_shared") or False),
+    )
+    await session.commit()
+    return {"id": item.id, "name": item.name, "q": item.query_text, "types": item.entity_types or [], "filters": item.filters_json or {}, "is_shared": item.is_shared}
+
+
+@router.delete("/search/saved/{saved_query_id}")
+async def delete_saved_search(
+    saved_query_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    access: AccessContext = Depends(rbac()),
+) -> dict:
+    deleted = await SearchService(session=session, tenant_id=str(tenant.id)).delete_saved_query(user_id=access.user.id, saved_query_id=saved_query_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="saved search not found")
+    await session.commit()
+    return {"deleted": True}

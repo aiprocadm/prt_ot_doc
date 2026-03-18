@@ -29,6 +29,20 @@ export interface SearchResponse {
   correlation_id?: string;
 }
 
+export interface SearchMemoryItem {
+  id: string;
+  q: string;
+  types: string[];
+  hit_count?: number;
+  last_used_at?: string | null;
+}
+
+export interface SavedSearchItem extends SearchMemoryItem {
+  name: string;
+  filters?: Record<string, unknown>;
+  is_shared?: boolean;
+}
+
 export const fetchSearch = async (params: {
   q?: string;
   types?: SearchType[];
@@ -54,6 +68,26 @@ export const fetchSearch = async (params: {
 };
 
 export const searchGlobal = async (q: string) => fetchSearch({ q, limit: 8 });
+
+export const fetchRecentSearches = async () => {
+  const { data } = await apiClient.get<{ items: SearchMemoryItem[] }>("/search/recent");
+  return data.items;
+};
+
+export const fetchSavedSearches = async () => {
+  const { data } = await apiClient.get<{ items: SavedSearchItem[] }>("/search/saved");
+  return data.items;
+};
+
+export const createSavedSearch = async (payload: { name: string; q: string; types: string[]; filters?: Record<string, unknown>; is_shared?: boolean }) => {
+  const { data } = await apiClient.post<SavedSearchItem>("/search/saved", payload);
+  return data;
+};
+
+export const deleteSavedSearch = async (id: string) => {
+  const { data } = await apiClient.delete<{ deleted: boolean }>(`/search/saved/${id}`);
+  return data;
+};
 
 export const fetchArchiveFiles = async (params: {
   cursor?: string;
