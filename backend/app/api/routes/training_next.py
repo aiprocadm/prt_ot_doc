@@ -8,6 +8,7 @@ from app.models.models import (
     TrainingCertificate,
     TrainingEnrollment,
     TrainingGroup,
+    TrainingLesson,
     TrainingModule,
     TrainingProgram,
     TrainingProtocol,
@@ -17,7 +18,7 @@ from app.models.models import (
 from app.modules.external_registry.services import ExternalRegistryDispatchService
 from app.modules.training.services import TrainingCertificateService, TrainingEnrollmentService
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/training", tags=["training-next"])
@@ -394,3 +395,101 @@ async def send_protocol_registry(item_id: str, tenant: Tenant = Depends(get_tena
     service = ExternalRegistryDispatchService()
     job = await service.enqueue(session, tenant.id, "protocol", item_id, "eisot")
     return await service.dispatch(session, job)
+
+
+@router.post("/modules/{module_id}/lessons", status_code=201)
+async def create_lesson(module_id: str, payload: dict, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+    module = await session.get(TrainingModule, module_id)
+    if not module or module.tenant_id != tenant.id:
+        raise HTTPException(404, "Module not found")
+    lesson = TrainingLesson(tenant_id=tenant.id, training_module_id=module_id, **payload)
+    session.add(lesson)
+    await session.flush()
+    return lesson
+
+
+@router.get("/teacher/dashboard")
+async def teacher_dashboard(
+    teacher_user_id: str | None = Query(default=None),
+    tenant: Tenant = Depends(get_tenant_record),
+    session: AsyncSession = Depends(get_session),
+):
+    group_stmt = select(TrainingGroup).where(TrainingGroup.tenant_id == tenant.id, TrainingGroup.deleted_at.is_(None))
+    if teacher_user_id:
+        group_stmt = group_stmt.where(TrainingGroup.teacher_user_id == teacher_user_id)
+    groups = (await session.execute(group_stmt)).scalars().all()
+    group_ids = [group.id for group in groups]
+    enrollment_total = int((await session.execute(select(func.count()).select_from(TrainingEnrollment).where(TrainingEnrollment.tenant_id == tenant.id, TrainingEnrollment.training_group_id.in_(group_ids or ["__none__"]), TrainingEnrollment.deleted_at.is_(None)))).scalar_one())
+    completed_total = int((await session.execute(select(func.count()).select_from(TrainingEnrollment).where(TrainingEnrollment.tenant_id == tenant.id, TrainingEnrollment.training_group_id.in_(group_ids or ["__none__"]), TrainingEnrollment.completion_status.in_(["completed", "confirmed"]), TrainingEnrollment.deleted_at.is_(None)))).scalar_one())
+    avg_progress = float((await session.execute(select(func.avg(TrainingEnrollment.progress_percent)).where(TrainingEnrollment.tenant_id == tenant.id, TrainingEnrollment.training_group_id.in_(group_ids or ["__none__"]), TrainingEnrollment.deleted_at.is_(None)))).scalar() or 0)
+    return {
+        "groups_total": len(groups),
+        "enrollments_total": enrollment_total,
+        "completed_total": completed_total,
+        "average_progress_percent": round(avg_progress, 2),
+        "groups": groups,
+    }
+
+
+@router.get("/learner/dashboard")
+async def learner_dashboard(
+    person_id: str,
+    tenant: Tenant = Depends(get_tenant_record),
+    session: AsyncSession = Depends(get_session),
+):
+    enrollments = (await session.execute(select(TrainingEnrollment).where(TrainingEnrollment.tenant_id == tenant.id, TrainingEnrollment.person_id == person_id, TrainingEnrollment.deleted_at.is_(None)).order_by(TrainingEnrollment.updated_at.desc()))).scalars().all()
+    completed = sum(1 for item in enrollments if item.completion_status in {"completed", "confirmed"})
+    overdue = sum(1 for item in enrollments if item.due_at and item.due_at < datetime.now(tz=timezone.utc) and item.completion_status not in {"completed", "confirmed"})
+    return {
+        "person_id": person_id,
+        "assigned_total": len(enrollments),
+        "completed_total": completed,
+        "overdue_total": overdue,
+        "items": enrollments,
+    }
+
+
+@router.post("/enrollments/{item_id}/progress")
+async def update_enrollment_progress(item_id: str, payload: dict, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+    enrollment = await get_enrollment(item_id, tenant, session)
+    service = TrainingEnrollmentService()
+    updated = await service.update_progress(
+        session,
+        enrollment,
+        completed_lesson_ids=payload.get("completed_lesson_ids") or [],
+        progress_percent=payload.get("progress_percent"),
+        runtime_state={
+            "provider": payload.get("provider"),
+            "session_ref": payload.get("session_ref"),
+            "content_format": payload.get("content_format"),
+            "last_event": payload.get("event"),
+            "proctoring": payload.get("proctoring"),
+        },
+    )
+    return updated
+
+
+@router.post("/enrollments/{item_id}/complete")
+async def confirm_enrollment_completion(item_id: str, payload: dict, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+    enrollment = await get_enrollment(item_id, tenant, session)
+    updated = await TrainingEnrollmentService().confirm_completion(
+        session,
+        enrollment,
+        confirmed_by=payload.get("confirmed_by"),
+        payload=payload,
+    )
+    return updated
+
+
+@router.post("/enrollments/{item_id}/runtime-results")
+async def ingest_runtime_result(item_id: str, payload: dict, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+    enrollment = await get_enrollment(item_id, tenant, session)
+    attempt = await TrainingEnrollmentService().submit_attempt(
+        session,
+        enrollment,
+        {"score": payload.get("score", 0), "passed": payload.get("passed", False), "raw": payload},
+        source_type=payload.get("source_type", payload.get("content_format", "scorm")),
+        external_session_ref=payload.get("session_ref"),
+        provider_payload=payload,
+    )
+    return {"enrollment": enrollment, "attempt": attempt}

@@ -26,3 +26,11 @@
 2. Client creates support request via `/api/v1/client-portal/requests`.
 3. Internal support handles request in `/api/v1/portal-requests/*`.
 4. Message history is available for both slices with tenant boundaries.
+
+
+## BI/DWH export foundation (v2)
+1. `POST /api/v1/exports` теперь принимает `dataset_code`, `schema_version`, `anonymized`, `target_type`, `target_config`.
+2. `ExportCenterService` создает tenant-safe export job с версией схемы и target contract (`file`, `webhook`, future DWH sink).
+3. `GET/POST /api/v1/exports/schedules` дают foundation для scheduled exports.
+4. `GET/POST /api/v1/exports/kpis` хранят tenant KPI definitions и locale labels.
+5. Delivery history пока хранится в payload job'а как foundation и готова к вынесению в отдельный журнал поставки.

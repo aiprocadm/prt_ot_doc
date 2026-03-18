@@ -52,9 +52,11 @@ from app.api.routes import (
     persons,
     ppe,
     prescriptions,
+    public_api,
     pwa_sync,
     reports,
     risk,
+    risk_enterprise,
     safety_ops,
     sites,
     tasks,
@@ -202,6 +204,7 @@ tenant_router.include_router(ppe.router, tags=["ppe"])
 tenant_router.include_router(medical.router, tags=["medical"])
 tenant_router.include_router(journals.router, tags=["journals"])
 tenant_router.include_router(risk.router, tags=["risks"])
+tenant_router.include_router(risk_enterprise.router)
 tenant_router.include_router(sites.router, tags=["sites"])
 tenant_router.include_router(documents.router, prefix="/documents", tags=["documents"])
 tenant_router.include_router(edo_workflow.router, tags=["edo-workflow"])
@@ -234,6 +237,9 @@ tenant_router.include_router(search_router, tags=["search"])
 tenant_router.include_router(analytics_router, tags=["analytics"])
 tenant_router.include_router(export_center_router, tags=["exports"])
 tenant_router.include_router(client_portal_v1_router)
+tenant_router.include_router(public_api.admin_router)
+tenant_router.include_router(public_api.marketplace_router)
+tenant_router.include_router(public_api.router)
 tenant_router.include_router(api_tokens.router)
 tenant_router.include_router(portal_requests_router)
 tenant_router.include_router(billing.router)

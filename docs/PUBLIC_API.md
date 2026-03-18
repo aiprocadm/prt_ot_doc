@@ -23,3 +23,14 @@
   - `subscription_inactive`
   - `feature_disabled`
 - При rate-limit возвращается `429` с retry hints.
+
+
+## Machine access foundation
+- Для machine-to-machine сценариев добавлен tenant-scoped контур `/api/v1/machine-keys` + `/api/v1/public/*`.
+- Ключи создаются на tenant уровне, показываются только один раз, имеют scopes, usage counters, revoke metadata и future-ready `rate_limit_per_minute`.
+- Аутентификация машинных клиентов выполняется заголовком `X-API-Key`, отдельно от JWT user sessions.
+
+## Stable public slices
+- Доступны read-contracts для `employees`, `documents`, `training`, `risks`, `incidents`, `inspections`, `prescriptions`, `notifications`, `reports/exports`, `integrations/webhooks`.
+- Все роуты tenant-safe и продолжают требовать `X-Tenant`.
+- Ошибки сохраняют structured payload с кодом и сообщением.

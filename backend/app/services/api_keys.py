@@ -121,12 +121,13 @@ async def authenticate_api_key(session: AsyncSession, token: str) -> ApiKey | No
         return None
     prefix, secret = parsed
     record = await get_api_key_by_prefix(session, prefix)
-    if record is None or not record.is_active:
+    if record is None or not record.is_active or record.revoked_at is not None:
         return None
     candidate = _hash_secret(secret)
     if not hmac.compare_digest(record.key_hash, candidate):
         return None
     record.last_used_at = datetime.now(timezone.utc)
+    record.usage_count = int(record.usage_count or 0) + 1
     session.add(record)
     await session.commit()
     await session.refresh(record)
