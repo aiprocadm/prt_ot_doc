@@ -1,10 +1,25 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { apiClient } from "@/api/client";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+
+const defaultGraph = {
+  nodes: [
+    { id: "start", type: "start", name: "Старт" },
+    { id: "approval", type: "approval", name: "Согласование", sla_hours: 24 },
+    { id: "notify", type: "notification", name: "Уведомление", destination: "inapp" },
+    { id: "end", type: "end", name: "Завершение" }
+  ],
+  transitions: [
+    { from: "start", to: "approval" },
+    { from: "approval", to: "notify" },
+    { from: "notify", to: "end" }
+  ]
+};
 
 type WorkflowVersion = {
   id: string;
@@ -74,6 +89,8 @@ const WorkflowPage = () => {
   const [tasks, setTasks] = useState<WorkflowTask[]>([]);
   const [selectedInstance, setSelectedInstance] = useState<WorkflowInstance | null>(null);
   const [newCode, setNewCode] = useState("document-approval-v1");
+  const [graphText, setGraphText] = useState(JSON.stringify(defaultGraph, null, 2));
+  const [validation, setValidation] = useState<string | null>(null);
 
   const load = async () => {
     const [definitionsResponse, tasksResponse] = await Promise.all([
@@ -88,16 +105,40 @@ const WorkflowPage = () => {
     void load();
   }, []);
 
-  const createDemo = async () => {
+  const parsedGraph = useMemo(() => {
+    try {
+      return JSON.parse(graphText);
+    } catch {
+      return null;
+    }
+  }, [graphText]);
+
+  const createProcess = async () => {
+    if (!parsedGraph) return;
     await apiClient.post("/workflow/definitions", {
       code: newCode,
       name: "Document approval",
       entity_type: "document",
-      description: "Demo JSON-driven workflow",
-      graph: DEMO_GRAPH,
-      variables_schema: { amount: "number", initiator_id: "string" }
+      description: "JSON-driven workflow definition",
+      graph: parsedGraph,
+      variables_schema: { approved: "boolean", initiator_id: "string", escalation_role: "string" }
     });
     await load();
+  };
+
+  const validateGraph = async () => {
+    if (!parsedGraph) {
+      setValidation("JSON графа невалиден");
+      return;
+    }
+    const response = await apiClient.post("/workflow/definitions/validate", {
+      code: newCode,
+      name: "Validation",
+      entity_type: "document",
+      graph: parsedGraph,
+      variables_schema: {}
+    });
+    setValidation(`OK · узлы: ${(response.data.node_types ?? []).join(", ")}`);
   };
 
   const publish = async (versionId: string) => {
@@ -110,7 +151,7 @@ const WorkflowPage = () => {
       definition_code: definitionCode,
       entity_type: "document",
       entity_id: `doc-${Date.now()}`,
-      context: { approved: true, initiator_id: "current-user" }
+      context: { approved: true, initiator_id: "current-user", escalation_role: "safety_admin" }
     });
     setSelectedInstance(response.data);
     await load();
@@ -130,22 +171,24 @@ const WorkflowPage = () => {
     <div className="space-y-6">
       <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Workflow" }]} />
       <Card>
-        <CardHeader>
-          <CardTitle>Workflow / BPM engine v1</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-wrap items-end gap-3">
-          <div className="w-full max-w-md space-y-2">
-            <label className="text-sm font-medium">Код процесса</label>
-            <Input value={newCode} onChange={(event) => setNewCode(event.target.value)} />
+        <CardHeader><CardTitle>Workflow / BPM engine v1</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid gap-3 xl:grid-cols-[0.5fr,1fr]">
+            <Input value={newCode} onChange={(event) => setNewCode(event.target.value)} placeholder="Код процесса" />
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={() => void validateGraph()}>Validate graph</Button>
+              <Button onClick={() => void createProcess()}>Create draft</Button>
+              <Button variant="outline" onClick={() => void load()}>Refresh</Button>
+            </div>
           </div>
-          <Button onClick={() => void createDemo()}>Создать demo process</Button>
-          <Button variant="outline" onClick={() => void load()}>Обновить</Button>
+          <Textarea value={graphText} onChange={(event) => setGraphText(event.target.value)} rows={14} />
+          {validation ? <div className="text-sm text-muted-foreground">{validation}</div> : null}
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 xl:grid-cols-[1.4fr,1fr]">
+      <div className="grid gap-6 xl:grid-cols-[1.2fr,0.8fr]">
         <Card>
-          <CardHeader><CardTitle>Процессы</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Процессы и версии</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             {definitions.map((definition) => (
               <div key={definition.id} className="rounded-lg border p-4 space-y-3">
@@ -195,6 +238,7 @@ const WorkflowPage = () => {
                   <div className="font-medium">{task.title}</div>
                   <div className="text-sm text-muted-foreground">{task.node_id} · {task.status}</div>
                   <div className="mt-1 text-xs text-muted-foreground">Assignee: {task.assignee_user_id ?? task.assignee_role_code ?? "unassigned"}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">SLA: {task.due_at ? new Date(task.due_at).toLocaleString() : "—"}</div>
                   <div className="mt-3 flex gap-2">
                     <Button size="sm" onClick={() => void completeTask(task.id)}>Complete</Button>
                     <Button size="sm" variant="outline" onClick={() => void openInstance(task.instance_id)}>Timeline</Button>

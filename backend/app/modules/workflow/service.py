@@ -93,6 +93,10 @@ class WorkflowService:
         definition = await self.session.get(WorkflowDefinition, version.definition_id)
         if definition is None or definition.tenant_id != self.tenant_id:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "workflow definition not found")
+        existing_versions = (await self.session.execute(select(WorkflowDefinitionVersion).where(WorkflowDefinitionVersion.tenant_id == self.tenant_id, WorkflowDefinitionVersion.definition_id == definition.id, WorkflowDefinitionVersion.id != version.id, WorkflowDefinitionVersion.status == WorkflowDefinitionStatus.PUBLISHED))).scalars().all()
+        for item in existing_versions:
+            item.status = WorkflowDefinitionStatus.ARCHIVED
+            item.archived_at = datetime.now(tz=timezone.utc)
         version.status = WorkflowDefinitionStatus.PUBLISHED
         version.published_at = datetime.now(tz=timezone.utc)
         definition.current_version_id = version.id
@@ -115,7 +119,7 @@ class WorkflowService:
         return rows
 
     async def get_versions(self, definition_id: str) -> list[WorkflowDefinitionVersion]:
-        rows = (await self.session.execute(select(WorkflowDefinitionVersion).where(WorkflowDefinition.tenant_id == self.tenant_id, WorkflowDefinition.definition_id == definition_id, WorkflowDefinitionVersion.deleted_at.is_(None)).order_by(WorkflowDefinitionVersion.version_no.desc()))).scalars().all()
+        rows = (await self.session.execute(select(WorkflowDefinitionVersion).where(WorkflowDefinitionVersion.tenant_id == self.tenant_id, WorkflowDefinitionVersion.definition_id == definition_id, WorkflowDefinitionVersion.deleted_at.is_(None)).order_by(WorkflowDefinitionVersion.version_no.desc()))).scalars().all()
         return rows
 
     async def start_instance(self, *, definition_code: str | None, version_id: str | None, entity_type: str, entity_id: str, context: dict[str, Any], actor_user_id: str | None, correlation_id: str | None) -> WorkflowInstance:
@@ -318,3 +322,18 @@ class WorkflowService:
 
     async def _timeline_like_audit(self, action: str, actor_user_id: str | None, entity_id: str, details: dict[str, Any]) -> None:
         await self.audit.log_event(tenant_id=self.tenant_id, user_id=actor_user_id, action=action, object_type="workflow", object_id=entity_id, ip="system", details=details)
+
+
+    async def sweep_task_sla(self, *, now: datetime | None = None) -> int:
+        now = now or datetime.now(tz=timezone.utc)
+        rows = (await self.session.execute(select(WorkflowTask).where(WorkflowTask.tenant_id == self.tenant_id, WorkflowTask.status == WorkflowTaskStatus.OPEN, WorkflowTask.due_at.is_not(None), WorkflowTask.due_at <= now))).scalars().all()
+        processed = 0
+        for task in rows:
+            if (task.task_payload or {}).get("sla_escalated"):
+                continue
+            task.task_payload = {**(task.task_payload or {}), "sla_escalated": True, "sla_escalated_at": now.isoformat()}
+            await self._append_event(task.instance_id, task.node_id, "task_sla_escalated", None, {"task_id": task.id, "due_at": task.due_at.isoformat() if task.due_at else None})
+            await self.outbox.add_event(tenant_id=self.tenant_id, event_type="WorkflowTaskEscalated", aggregate_type="workflow_task", aggregate_id=task.id, payload={"workflow_task_id": task.id, "workflow_instance_id": task.instance_id, "node_id": task.node_id, "assignee_user_id": task.assignee_user_id, "assignee_role_code": task.assignee_role_code, "due_at": task.due_at.isoformat() if task.due_at else None})
+            processed += 1
+        await self.session.flush()
+        return processed

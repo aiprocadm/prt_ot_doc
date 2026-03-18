@@ -2,18 +2,20 @@ import { Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { searchGlobal, type SearchItem } from "@/api/search";
+import { fetchRecentSearches, searchGlobal, type SearchItem } from "@/api/search";
 import { Input } from "@/components/ui/input";
 import { useDebounce } from "@/hooks/useDebounce";
 
 const toTabType = (entityType: string): string => {
   const mapping: Record<string, string> = {
-    Document: "documents",
-    Person: "people",
-    Site: "sites",
-    Incident: "incidents",
-    Inspection: "inspections",
-    File: "files",
+    document: "documents",
+    person: "people",
+    site: "sites",
+    incident: "incidents",
+    inspection: "inspections",
+    file: "files",
+    prescription: "jobs",
+    template: "templates"
   };
   return mapping[entityType] ?? "documents";
 };
@@ -21,8 +23,13 @@ const toTabType = (entityType: string): string => {
 export const GlobalSearch = () => {
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<SearchItem[]>([]);
+  const [recent, setRecent] = useState<Array<{ id: string; q: string; types: string[] }>>([]);
   const debounced = useDebounce(query, 300);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    void fetchRecentSearches().then(setRecent).catch(() => setRecent([]));
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -46,14 +53,12 @@ export const GlobalSearch = () => {
       .catch(() => setItems([]));
   }, [debounced]);
 
-  const grouped = useMemo(() => {
-    return items.reduce<Record<string, SearchItem[]>>((acc, item) => {
-      const key = item.entity_type;
-      acc[key] = acc[key] ?? [];
-      acc[key].push(item);
-      return acc;
-    }, {});
-  }, [items]);
+  const grouped = useMemo(() => items.reduce<Record<string, SearchItem[]>>((acc, item) => {
+    const key = item.entity_type;
+    acc[key] = acc[key] ?? [];
+    acc[key].push(item);
+    return acc;
+  }, {}), [items]);
 
   return (
     <div className="relative w-full max-w-xl">
@@ -68,11 +73,11 @@ export const GlobalSearch = () => {
           }
         }}
         className="pl-9"
-        placeholder="Глобальный поиск (/)"
+        placeholder="Глобальный поиск (/): документы, сотрудники, инциденты, НПА, задачи"
       />
-      {items.length > 0 ? (
+      {(items.length > 0 || (!query.trim() && recent.length > 0)) ? (
         <div className="absolute top-11 z-50 w-full rounded-md border bg-background p-2 shadow">
-          {Object.entries(grouped).map(([group, groupItems]) => (
+          {query.trim() ? Object.entries(grouped).map(([group, groupItems]) => (
             <div key={group} className="mb-2 last:mb-0">
               <div className="px-2 py-1 text-xs font-semibold uppercase text-muted-foreground">{group}</div>
               {groupItems.map((item) => (
@@ -87,7 +92,22 @@ export const GlobalSearch = () => {
                 </button>
               ))}
             </div>
-          ))}
+          )) : (
+            <div className="space-y-2">
+              <div className="px-2 py-1 text-xs font-semibold uppercase text-muted-foreground">Недавние запросы</div>
+              {recent.map((item) => (
+                <button
+                  type="button"
+                  key={item.id}
+                  className="block w-full rounded px-2 py-1 text-left text-sm hover:bg-muted"
+                  onClick={() => navigate(`/search?q=${encodeURIComponent(item.q)}${item.types[0] ? `&type=${encodeURIComponent(item.types[0])}` : ""}`)}
+                >
+                  <div className="font-medium">{item.q}</div>
+                  <div className="text-xs text-muted-foreground">{item.types.join(", ") || "all types"}</div>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       ) : null}
     </div>

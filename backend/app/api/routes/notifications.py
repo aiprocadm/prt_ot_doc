@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, rbac
 from app.models.models import Tenant, TrainingPlan, PPEIssue, Inspection
-from app.models.notifications import Notification, NotificationChannelSettings, NotificationPriority, NotificationStatus, PlanTask
+from app.models.notifications import Notification, NotificationChannel, NotificationChannelSettings, NotificationPriority, NotificationStatus, PlanTask
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
@@ -32,6 +32,7 @@ class NotificationRead(BaseModel):
 class NotificationPage(BaseModel):
     items: list[NotificationRead]
     next_cursor: str | None = None
+    unread_count: int = 0
 
 
 class MarkReadRequest(BaseModel):
@@ -98,6 +99,7 @@ async def list_notifications(
     rows = (await session.execute(stmt.order_by(Notification.created_at.desc()).limit(limit + 1))).scalars().all()
     has_more = len(rows) > limit
     items = rows[:limit]
+    unread_count = (await session.execute(select(Notification).where(Notification.tenant_id == tenant.id, Notification.user_id == access.user.id, Notification.channel == NotificationChannel.INAPP, Notification.deleted_at.is_(None), Notification.status != NotificationStatus.READ))).scalars().all()
     return NotificationPage(
         items=[
             NotificationRead(
@@ -115,6 +117,7 @@ async def list_notifications(
             for item in items
         ],
         next_cursor=items[-1].created_at.isoformat() if has_more and items else None,
+        unread_count=len(unread_count),
     )
 
 

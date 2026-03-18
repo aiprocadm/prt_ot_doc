@@ -21,3 +21,16 @@
 - Дотянуть frontend client portal/package wizard до enterprise UX уровня (rich selectors, ticket creation inline, retry UX и richer timeline filters).
 - Довести PDF pipeline до полного acceptance scope по hanging detection/font embedding/retry telemetry.
 - Закрыть prescription overdue / corrective events и углубить briefings до person/site selectors + background reminder worker.
+
+
+## Дополнительно в этой волне
+- Workflow/BPM v1 усилен версионированием публикаций: новая published-версия автоматически архивирует прошлую published-версию без ломки уже запущенных инстансов; в UI добавлен JSON-driven editor/validator и более подробная instance timeline.
+- Notifications Center расширен серверным unread counter API и фильтрами по channel/priority/type в едином экране.
+- Global Search получил foundation для recent searches и saved searches: добавлены tenant-scoped таблицы, API и UI блоки в header/Search Center.
+- NPA UI доведён до detail/impact режима: ревизии, summary по binding-ам и action на создание update tasks теперь доступны из одной страницы.
+
+## Осталось backlog после этой волны
+- Workflow: системный beat для SLA sweep + ABAC rule-based assignee resolution + richer condition DSL.
+- Notifications: delivery history по транспортам, digest scheduler, escalation matrix execution.
+- Search: полнота индексации по всем требуемым сущностям и ranking tuning на PostgreSQL FTS.
+- NPA: более глубокие binding-и для checklist/package/process scopes и массовая актуализация связанных сущностей.

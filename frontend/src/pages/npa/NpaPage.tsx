@@ -1,25 +1,47 @@
 import { useEffect, useState } from "react";
 
+import { apiClient } from "@/api/client";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { NpaTable } from "@/features/npa/NpaTable";
 import { useNpaStore } from "@/stores/npa";
 import type { NpaStatus } from "@/types/dto/npa";
-import { NpaTable } from "@/features/npa/NpaTable";
+
+type NpaDetail = {
+  act: { id: string; code: string; title: string; edition: string };
+  revisions: Array<{ id: string; revision_code: string; title: string; effective_from?: string | null; effective_to?: string | null; change_summary?: string | null }>;
+  bindings: Record<string, string[]>;
+  summary: Record<string, number>;
+  tasks_to_create: Array<{ code: string; title: string; count: number }>;
+};
 
 const NpaPage = () => {
-  const { list, setFilters, filters } = useNpaStore();
+  const { list, setFilters, filters, items } = useNpaStore();
   const [search, setSearch] = useState(filters.search ?? "");
   const [status, setStatus] = useState<NpaStatus | "">(filters.status ?? "");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<NpaDetail | null>(null);
 
   useEffect(() => {
-    list();
+    void list();
   }, [list]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    void apiClient.get<NpaDetail>(`/npa/${selectedId}`).then((response) => setDetail(response.data)).catch(() => setDetail(null));
+  }, [selectedId]);
 
   const applyFilters = () => {
     setFilters({ search: search || undefined, status: status || undefined });
-    list();
+    void list();
+  };
+
+  const createUpdateTasks = async () => {
+    if (!selectedId) return;
+    await apiClient.post(`/npa/${selectedId}/impact/tasks`);
+    await apiClient.get<NpaDetail>(`/npa/${selectedId}`).then((response) => setDetail(response.data));
   };
 
   return (
@@ -28,17 +50,12 @@ const NpaPage = () => {
       <Card>
         <CardContent className="flex flex-wrap items-end gap-4 py-6">
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium" htmlFor="npa-search">
-              Поиск
-            </label>
+            <label className="text-sm font-medium" htmlFor="npa-search">Поиск</label>
             <Input id="npa-search" value={search} onChange={(event) => setSearch(event.target.value)} />
           </div>
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium" htmlFor="npa-status">
-              Статус
-            </label>
-            <select id="npa-status" className="h-10 rounded-md border px-3" value={status} onChange={(event) => setStatus(event.target.value as NpaStatus | "")}
-            >
+            <label className="text-sm font-medium" htmlFor="npa-status">Статус</label>
+            <select id="npa-status" className="h-10 rounded-md border px-3" value={status} onChange={(event) => setStatus(event.target.value as NpaStatus | "")}>
               <option value="">Все</option>
               <option value="active">Действует</option>
               <option value="obsolete">Недействует</option>
@@ -48,7 +65,63 @@ const NpaPage = () => {
           <Button onClick={applyFilters}>Применить</Button>
         </CardContent>
       </Card>
-      <NpaTable />
+      <div className="grid gap-6 xl:grid-cols-[1.2fr,0.8fr]">
+        <div className="space-y-3">
+          <NpaTable />
+          <Card>
+            <CardHeader><CardTitle>Детализация НПА</CardTitle></CardHeader>
+            <CardContent className="space-y-2">
+              {items.slice(0, 10).map((item) => (
+                <Button key={item.id} variant={selectedId === item.id ? "default" : "outline"} className="mr-2 mb-2" onClick={() => setSelectedId(item.id)}>
+                  {item.code ?? item.title}
+                </Button>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Impact analysis</CardTitle>
+            <Button variant="outline" onClick={() => void createUpdateTasks()} disabled={!selectedId}>Create update tasks</Button>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {detail ? (
+              <>
+                <div>
+                  <div className="font-medium">{detail.act.code}</div>
+                  <div className="text-sm text-muted-foreground">{detail.act.title} · {detail.act.edition}</div>
+                </div>
+                <div>
+                  <div className="text-xs font-medium uppercase text-muted-foreground">Revisions</div>
+                  <div className="space-y-2 mt-2">
+                    {detail.revisions.map((revision) => (
+                      <div key={revision.id} className="rounded border p-3">
+                        <div className="font-medium">{revision.revision_code}</div>
+                        <div className="text-sm text-muted-foreground">{revision.title}</div>
+                        <div className="text-xs text-muted-foreground">{revision.effective_from ?? "—"} → {revision.effective_to ?? "∞"}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs font-medium uppercase text-muted-foreground">Linked entities</div>
+                  <div className="mt-2 grid gap-2 md:grid-cols-2">
+                    {Object.entries(detail.summary).map(([key, value]) => (
+                      <div key={key} className="rounded border p-3 text-sm">{key}: <span className="font-medium">{value}</span></div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs font-medium uppercase text-muted-foreground">Tasks foundation</div>
+                  <ul className="mt-2 list-disc pl-5 text-sm text-muted-foreground">
+                    {detail.tasks_to_create.map((task) => <li key={task.code}>{task.title} · {task.count}</li>)}
+                  </ul>
+                </div>
+              </>
+            ) : <div className="text-sm text-muted-foreground">Выберите НПА для просмотра ревизий и impact analysis.</div>}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 };
