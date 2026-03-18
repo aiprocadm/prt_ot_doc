@@ -34,7 +34,7 @@ OwnerAdminAccess = Annotated[
 
 
 @router.get("/plan", response_model=BillingSummaryRead)
-async def billing_plan(session: SessionDep, tenant: Tenant = Depends(get_tenant_record), access: OwnerAdminAccess = None) -> BillingSummaryRead:
+async def billing_plan(session: SessionDep, access: OwnerAdminAccess, tenant: Tenant = Depends(get_tenant_record)) -> BillingSummaryRead:
     _ = access
     service = BillingService(session)
     ctx = await service.get_context(tenant)
@@ -66,8 +66,8 @@ async def billing_plan(session: SessionDep, tenant: Tenant = Depends(get_tenant_
 @router.get("/usage")
 async def billing_usage(
     session: SessionDep,
+    access: OwnerAdminAccess,
     tenant: Tenant = Depends(get_tenant_record),
-    access: OwnerAdminAccess = None,
     period: int | None = None,
 ) -> dict[str, Any]:
     _ = access
@@ -108,8 +108,8 @@ async def billing_usage(
 @router.get("/events", response_model=list[BillingEventRead])
 async def billing_events(
     session: SessionDep,
+    access: OwnerAdminAccess,
     tenant: Tenant = Depends(get_tenant_record),
-    access: OwnerAdminAccess = None,
     limit: int = 50,
     offset: int = 0,
 ) -> list[BillingEventRead]:
@@ -127,14 +127,14 @@ async def billing_events(
 
 
 @router.get("/limits")
-async def billing_limits(session: SessionDep, tenant: Tenant = Depends(get_tenant_record), access: OwnerAdminAccess = None) -> dict[str, Any]:
+async def billing_limits(session: SessionDep, access: OwnerAdminAccess, tenant: Tenant = Depends(get_tenant_record)) -> dict[str, Any]:
     _ = access
     ctx = await BillingService(session).get_context(tenant)
     return {"plan": ctx.plan.code if ctx.plan else "free", "limits": ctx.limits, "features": ctx.features}
 
 
 @router.get("/plans", response_model=list[BillingPlanRead])
-async def billing_plans(session: SessionDep, tenant: Tenant = Depends(get_tenant_record), access: OwnerAdminAccess = None) -> list[BillingPlanRead]:
+async def billing_plans(session: SessionDep, access: OwnerAdminAccess, tenant: Tenant = Depends(get_tenant_record)) -> list[BillingPlanRead]:
     _ = (tenant, access)
     from app.models.models import BillingPlan
 
@@ -146,8 +146,8 @@ async def billing_plans(session: SessionDep, tenant: Tenant = Depends(get_tenant
 async def change_plan(
     payload: BillingChangePlanRequest,
     session: SessionDep,
+    access: OwnerAdminAccess,
     tenant: Tenant = Depends(get_tenant_record),
-    access: OwnerAdminAccess = None,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, Any]:
     if not idempotency_key:
@@ -166,8 +166,8 @@ async def change_plan(
 async def mark_past_due(
     payload: BillingStatusMutationRequest,
     session: SessionDep,
+    access: OwnerAdminAccess,
     tenant: Tenant = Depends(get_tenant_record),
-    access: OwnerAdminAccess = None,
 ) -> dict[str, str]:
     _ = access
     sub = (await session.execute(select(BillingSubscription).where(BillingSubscription.tenant_id == tenant.id).order_by(BillingSubscription.created_at.desc()))).scalars().first()
@@ -180,7 +180,7 @@ async def mark_past_due(
 
 
 @router.post("/subscription/mark_paid")
-async def mark_paid(session: SessionDep, tenant: Tenant = Depends(get_tenant_record), access: OwnerAdminAccess = None) -> dict[str, str]:
+async def mark_paid(session: SessionDep, access: OwnerAdminAccess, tenant: Tenant = Depends(get_tenant_record)) -> dict[str, str]:
     _ = access
     sub = (await session.execute(select(BillingSubscription).where(BillingSubscription.tenant_id == tenant.id).order_by(BillingSubscription.created_at.desc()))).scalars().first()
     if sub is None:
@@ -192,7 +192,7 @@ async def mark_paid(session: SessionDep, tenant: Tenant = Depends(get_tenant_rec
 
 
 @router.post("/subscription/suspend")
-async def suspend(session: SessionDep, tenant: Tenant = Depends(get_tenant_record), access: OwnerAdminAccess = None) -> dict[str, str]:
+async def suspend(session: SessionDep, access: OwnerAdminAccess, tenant: Tenant = Depends(get_tenant_record)) -> dict[str, str]:
     _ = access
     sub = (await session.execute(select(BillingSubscription).where(BillingSubscription.tenant_id == tenant.id).order_by(BillingSubscription.created_at.desc()))).scalars().first()
     if sub is None:
@@ -203,7 +203,7 @@ async def suspend(session: SessionDep, tenant: Tenant = Depends(get_tenant_recor
 
 
 @router.post("/subscription/activate")
-async def activate(session: SessionDep, tenant: Tenant = Depends(get_tenant_record), access: OwnerAdminAccess = None) -> dict[str, str]:
+async def activate(session: SessionDep, access: OwnerAdminAccess, tenant: Tenant = Depends(get_tenant_record)) -> dict[str, str]:
     _ = access
     sub = (await session.execute(select(BillingSubscription).where(BillingSubscription.tenant_id == tenant.id).order_by(BillingSubscription.created_at.desc()))).scalars().first()
     if sub is None:
@@ -216,8 +216,8 @@ async def activate(session: SessionDep, tenant: Tenant = Depends(get_tenant_reco
 @router.get("/invoices", response_model=list[BillingInvoiceRead])
 async def billing_invoices(
     session: SessionDep,
+    access: OwnerAdminAccess,
     tenant: Tenant = Depends(get_tenant_record),
-    access: OwnerAdminAccess = None,
     period: int | None = None,
 ) -> list[BillingInvoiceRead]:
     _ = access

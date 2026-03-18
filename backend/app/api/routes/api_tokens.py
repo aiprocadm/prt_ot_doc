@@ -30,8 +30,8 @@ OwnerAdminAccess = Annotated[
 @router.get("", response_model=list[ApiTokenRead])
 async def list_api_tokens(
     session: SessionDep,
+    access: OwnerAdminAccess,
     tenant: Tenant = Depends(get_tenant_record),
-    access: OwnerAdminAccess = None,
 ) -> list[ApiTokenRead]:
     _ = access
     rows = (
@@ -63,8 +63,8 @@ async def list_api_tokens(
 async def create_api_token(
     payload: ApiTokenCreateRequest,
     session: SessionDep,
+    access: OwnerAdminAccess,
     tenant: Tenant = Depends(get_tenant_record),
-    access: OwnerAdminAccess = None,
 ) -> ApiTokenCreateResponse:
     raw, token = ApiTokenService.issue_token(
         tenant_id=tenant.id,
@@ -90,8 +90,8 @@ async def create_api_token(
 async def revoke_api_token(
     token_id: str,
     session: SessionDep,
+    access: OwnerAdminAccess,
     tenant: Tenant = Depends(get_tenant_record),
-    access: OwnerAdminAccess = None,
 ) -> dict[str, str]:
     _ = access
     token = await session.get(ApiToken, token_id)
