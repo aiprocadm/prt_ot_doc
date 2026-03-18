@@ -6,6 +6,7 @@ import { releaseApi, type ReleaseStatus } from "@/api/release";
 import { approvalsApi } from "@/api/approvals";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
 import { PERMISSIONS } from "@/permissions/permissions";
 import { useAbility } from "@/permissions/useAbility";
 import { useDocumentsStore } from "@/stores/documents";
@@ -63,7 +64,7 @@ export const DocumentPreview = ({ document }: { document: DocumentDto }) => {
 
   const handleQuickSign = async () => {
     await releaseApi.quickSign(document.id);
-    toast.success("Подписано (stub)");
+    toast.success("Подпись отправлена");
     releaseApi.documentReleaseStatus(document.id).then(setRelease).catch(() => undefined);
   };
 
@@ -98,14 +99,14 @@ export const DocumentPreview = ({ document }: { document: DocumentDto }) => {
       </CardHeader>
       <CardContent>
         <div className="mb-4 grid gap-2 rounded-md border p-3 text-sm sm:grid-cols-3">
-          <div><span className="text-muted-foreground">Approval:</span> {release.approval}</div>
-          <div><span className="text-muted-foreground">Signature:</span> {release.signature}</div>
-          <div><span className="text-muted-foreground">EDO:</span> {release.edo}</div>
+          <div><span className="text-muted-foreground">Approval:</span> <Badge variant="secondary">{release.approval}</Badge></div>
+          <div><span className="text-muted-foreground">Signature:</span> <Badge variant="secondary">{release.signature}</Badge></div>
+          <div><span className="text-muted-foreground">EDO:</span> <Badge variant="secondary">{release.edo}</Badge></div>
         </div>
         <div className="mb-4 flex flex-wrap gap-2">
           <ActionButton permission={PERMISSIONS.DOCUMENT_SIGN} abilityResource={resource} variant="outline" onClick={handleQuickApprove}>Согласовать</ActionButton>
           <ActionButton permission={PERMISSIONS.DOCUMENT_SIGN} abilityResource={resource} variant="outline" onClick={handleQuickReject}>Отклонить</ActionButton>
-          <ActionButton permission={PERMISSIONS.DOCUMENT_SIGN} abilityResource={resource} onClick={handleQuickSign}>Подписать (stub)</ActionButton>
+          <ActionButton permission={PERMISSIONS.DOCUMENT_SIGN} abilityResource={resource} onClick={handleQuickSign}>Подписать</ActionButton>
         </div>
         {!can(PERMISSIONS.DOCUMENT_SIGN, resource) && (
           <div className="mb-3 rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
@@ -116,6 +117,7 @@ export const DocumentPreview = ({ document }: { document: DocumentDto }) => {
           <TabsList>
             <TabsTrigger value="preview">Предпросмотр</TabsTrigger>
             <TabsTrigger value="history">История</TabsTrigger>
+            <TabsTrigger value="timeline">Timeline</TabsTrigger>
           </TabsList>
           <TabsContent value="preview" className="space-y-3">
             {current.storage?.url ? (
@@ -141,6 +143,18 @@ export const DocumentPreview = ({ document }: { document: DocumentDto }) => {
             ) : (
               <p className="text-sm text-muted-foreground">История отсутствует.</p>
             )}
+          </TabsContent>
+          <TabsContent value="timeline" className="space-y-3">
+            {[
+              { label: "Согласование", value: release.approval },
+              { label: "Подписание", value: release.signature },
+              { label: "ЭДО", value: release.edo }
+            ].map((item) => (
+              <div key={item.label} className="flex items-center justify-between rounded-md border p-3 text-sm">
+                <span className="text-muted-foreground">{item.label}</span>
+                <Badge>{item.value}</Badge>
+              </div>
+            ))}
           </TabsContent>
         </Tabs>
       </CardContent>

@@ -71,6 +71,8 @@ describe("TemplateDetails", () => {
     const currentButton = screen.getByRole("button", { name: "Текущая" });
     expect(currentButton).toBeDisabled();
 
+    expect(screen.getByRole("tab", { name: "Upload/Lint/Preview" })).toBeInTheDocument();
+
     const activateButton = screen.getByRole("button", { name: "Активировать" });
     expect(activateButton).toBeEnabled();
 
