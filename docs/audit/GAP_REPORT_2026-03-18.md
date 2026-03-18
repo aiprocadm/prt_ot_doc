@@ -60,3 +60,7 @@
 - Workflow ops hardening: added explicit Celery entrypoint `workflow.sla.tick` so SLA escalations are not only modeled in the service layer but also schedulable via the worker fleet.
 - Shell UX hardening: top navigation badges no longer use static placeholders; they poll live workflow-task and unread-notification counters so operators can trust header quick actions.
 - Search Center UX hardening: added quick facet chips for site/project/risk level and preserved these filters in saved searches, reducing manual copy/paste of identifiers.
+- Workflow governance hardening: graph validation now blocks unreachable/orphan nodes and missing terminal paths before publish/start, and human-task complete/reassign/delegate/escalate actions emit dedicated audit events for immutable transition traceability.
+- Notifications hardening: tenant-scoped notification templates were added as a reusable platform foundation for in-app/email/telegram/webhook channels, and the unified Notifications Center now exposes that registry alongside preferences/read-state controls.
+- NPA impact hardening: detail flow now supports revision-scoped analysis, while update-task generation deduplicates already-open tenant tasks to keep actualization queues retry-safe.
+- Regression coverage updated: added focused backend tests for workflow validation, NPA impact task deduplication, and notification template persistence.
