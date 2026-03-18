@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 
 const channels = ["all", "inapp", "email", "telegram", "webhook"] as const;
 const priorities = ["all", "low", "medium", "high", "critical"] as const;
+const statuses = ["all", "unread", "read", "queued", "sent", "failed"] as const;
 
 type NotificationItem = {
   id: string;
@@ -17,6 +18,8 @@ type NotificationItem = {
   status: string;
   channel: string;
   priority: string;
+  is_read: boolean;
+  deeplink?: string | null;
   payload?: { deeplink?: string };
 };
 
@@ -32,17 +35,18 @@ type NotificationSettings = {
 
 const NotificationsPage = () => {
   const [items, setItems] = useState<NotificationItem[]>([]);
-  const [filter, setFilter] = useState<"all" | "unread">("unread");
+  const [statusFilter, setStatusFilter] = useState<(typeof statuses)[number]>("unread");
   const [channel, setChannel] = useState<(typeof channels)[number]>("all");
   const [priority, setPriority] = useState<(typeof priorities)[number]>("all");
   const [type, setType] = useState("");
   const [settings, setSettings] = useState<NotificationSettings | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const load = async () => {
     const response = await apiClient.get<{ items: NotificationItem[]; unread_count: number }>("/notifications", {
       params: {
-        ...(filter === "unread" ? { status: "unread" } : {}),
+        ...(statusFilter !== "all" ? { status: statusFilter } : {}),
         ...(channel !== "all" ? { channel } : {}),
         ...(priority !== "all" ? { priority } : {}),
         ...(type ? { type } : {})
@@ -50,6 +54,7 @@ const NotificationsPage = () => {
     });
     setItems(response.data.items);
     setUnreadCount(response.data.unread_count);
+    setSelectedIds([]);
   };
 
   const loadSettings = async () => {
@@ -59,14 +64,22 @@ const NotificationsPage = () => {
 
   useEffect(() => {
     void load();
-  }, [filter, channel, priority, type]);
+  }, [statusFilter, channel, priority, type]);
 
   useEffect(() => {
     void loadSettings();
   }, []);
 
-  const markAllRead = async () => {
-    await apiClient.post("/notifications/mark-read", { ids: items.map((item) => item.id) });
+  const selectedUnreadIds = useMemo(() => items.filter((item) => selectedIds.includes(item.id) && !item.is_read).map((item) => item.id), [items, selectedIds]);
+  const groupedByType = useMemo(() => Array.from(new Set(items.map((item) => item.type))).sort(), [items]);
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
+  };
+
+  const markRead = async (ids: string[]) => {
+    if (!ids.length) return;
+    await apiClient.post("/notifications/mark-read", { ids });
     await load();
   };
 
@@ -76,23 +89,26 @@ const NotificationsPage = () => {
     await loadSettings();
   };
 
-  const groupedByType = useMemo(() => Array.from(new Set(items.map((item) => item.type))).sort(), [items]);
-
   return (
     <div className="space-y-4">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Центр уведомлений</CardTitle>
-          <div className="flex items-center gap-2">
-            <Button variant={filter === "unread" ? "default" : "outline"} onClick={() => setFilter("unread")}>Непрочитанные</Button>
-            <Button variant={filter === "all" ? "default" : "outline"} onClick={() => setFilter("all")}>Все</Button>
-            <Button variant="outline" onClick={() => void markAllRead()}>
-              Отметить прочитанными ({unreadCount})
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="rounded-full border px-3 py-1 text-xs text-muted-foreground">Unread: {unreadCount}</div>
+            <Button variant="outline" onClick={() => void markRead(items.filter((item) => !item.is_read).map((item) => item.id))}>
+              Отметить все прочитанными
+            </Button>
+            <Button variant="outline" onClick={() => void markRead(selectedUnreadIds)} disabled={!selectedUnreadIds.length}>
+              Отметить выбранные ({selectedUnreadIds.length})
             </Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-4">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+            <select className="h-10 rounded-md border px-3" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as (typeof statuses)[number])}>
+              {statuses.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
             <select className="h-10 rounded-md border px-3" value={channel} onChange={(event) => setChannel(event.target.value as (typeof channels)[number])}>
               {channels.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
@@ -100,27 +116,36 @@ const NotificationsPage = () => {
               {priorities.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
             <Input placeholder="Тип уведомления" value={type} onChange={(event) => setType(event.target.value)} />
-            <div className="rounded-md border px-3 py-2 text-sm text-muted-foreground">Типы в выборке: {groupedByType.join(", ") || "—"}</div>
+            <div className="rounded-md border px-3 py-2 text-sm text-muted-foreground">Типы: {groupedByType.join(", ") || "—"}</div>
           </div>
           {items.map((item) => (
-            <div key={item.id} className="rounded-md border p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="font-medium">{item.title}</div>
-                  <div className="text-sm text-muted-foreground">{item.body}</div>
-                </div>
-                <div className="text-right text-xs text-muted-foreground">
-                  <div>{item.channel}</div>
-                  <div>{item.priority}</div>
-                  <div>{item.status}</div>
+            <div key={item.id} className={`rounded-md border p-3 ${item.is_read ? "bg-muted/30" : "border-primary/40"}`}>
+              <div className="flex items-start gap-3">
+                <input type="checkbox" className="mt-1" checked={selectedIds.includes(item.id)} onChange={() => toggleSelected(item.id)} aria-label={`select-${item.id}`} />
+                <div className="flex-1">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="font-medium">{item.title}</div>
+                      <div className="text-sm text-muted-foreground">{item.body}</div>
+                    </div>
+                    <div className="text-right text-xs text-muted-foreground">
+                      <div>{item.channel}</div>
+                      <div>{item.priority}</div>
+                      <div>{item.status}</div>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                    <span className="rounded-full border px-2 py-1">{item.type}</span>
+                    <span className="rounded-full border px-2 py-1">{item.is_read ? "read" : "unread"}</span>
+                    {!item.is_read ? <Button size="sm" variant="ghost" onClick={() => void markRead([item.id])}>Mark read</Button> : null}
+                    {item.deeplink || item.payload?.deeplink ? (
+                      <Link className="text-primary underline" to={item.deeplink ?? item.payload?.deeplink ?? "#"}>
+                        Открыть связанную сущность
+                      </Link>
+                    ) : null}
+                  </div>
                 </div>
               </div>
-              <div className="mt-2 text-xs">Тип: {item.type}</div>
-              {item.payload?.deeplink ? (
-                <Link className="mt-2 inline-block text-sm text-primary underline" to={item.payload.deeplink}>
-                  Открыть связанную сущность
-                </Link>
-              ) : null}
             </div>
           ))}
         </CardContent>

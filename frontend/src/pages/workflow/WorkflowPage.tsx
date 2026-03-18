@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 const defaultGraph = {
   nodes: [
     { id: "start", type: "start", name: "Старт" },
-    { id: "approval", type: "approval", name: "Согласование", sla_hours: 24 },
+    { id: "approval", type: "approval", name: "Согласование", sla_hours: 24, assignee_role_code: "line_manager" },
     { id: "notify", type: "notification", name: "Уведомление", destination: "inapp" },
     { id: "end", type: "end", name: "Завершение" }
   ],
@@ -84,20 +84,6 @@ type WorkflowInstance = {
   tasks: WorkflowTask[];
 };
 
-const DEMO_GRAPH = {
-  nodes: [
-    { id: "start", type: "start", name: "Старт" },
-    { id: "approval", type: "approval", name: "Согласование", sla_hours: 24 },
-    { id: "notify", type: "notification", name: "Уведомление" },
-    { id: "end", type: "end", name: "Завершение" }
-  ],
-  transitions: [
-    { from: "start", to: "approval" },
-    { from: "approval", to: "notify" },
-    { from: "notify", to: "end" }
-  ]
-};
-
 const WorkflowPage = () => {
   const [definitions, setDefinitions] = useState<WorkflowDefinition[]>([]);
   const [tasks, setTasks] = useState<WorkflowTask[]>([]);
@@ -106,6 +92,8 @@ const WorkflowPage = () => {
   const [newCode, setNewCode] = useState("document-approval-v1");
   const [graphText, setGraphText] = useState(JSON.stringify(defaultGraph, null, 2));
   const [validation, setValidation] = useState<string | null>(null);
+  const [reassignRole, setReassignRole] = useState("admin");
+  const [reassignUserId, setReassignUserId] = useState("");
 
   const load = async () => {
     const [definitionsResponse, tasksResponse, instancesResponse] = await Promise.all([
@@ -163,6 +151,11 @@ const WorkflowPage = () => {
     await load();
   };
 
+  const archive = async (versionId: string) => {
+    await apiClient.post(`/workflow/versions/${versionId}/archive`);
+    await load();
+  };
+
   const start = async (definitionCode: string) => {
     const response = await apiClient.post<WorkflowInstance>("/workflow/instances", {
       definition_code: definitionCode,
@@ -184,8 +177,11 @@ const WorkflowPage = () => {
     await load();
   };
 
-  const moveTask = async (taskId: string, mode: "delegate" | "escalate") => {
-    await apiClient.post(`/workflow/tasks/${taskId}/${mode}`, { assignee_role_code: mode === "delegate" ? "line_manager" : "admin" });
+  const moveTask = async (taskId: string, mode: "delegate" | "escalate" | "reassign") => {
+    await apiClient.post(`/workflow/tasks/${taskId}/${mode}`, {
+      ...(reassignUserId ? { assignee_user_id: reassignUserId } : {}),
+      assignee_role_code: reassignRole || undefined
+    });
     await load();
   };
 
@@ -228,6 +224,7 @@ const WorkflowPage = () => {
                       <div className="flex items-center gap-2">
                         <span className="text-xs uppercase text-muted-foreground">{version.status}</span>
                         {version.status !== "published" ? <Button size="sm" variant="outline" onClick={() => void publish(version.id)}>Publish</Button> : null}
+                        {version.status !== "archived" ? <Button size="sm" variant="ghost" onClick={() => void archive(version.id)}>Archive</Button> : null}
                       </div>
                     </div>
                     <div className="mt-3 grid gap-2 md:grid-cols-2">
@@ -261,6 +258,7 @@ const WorkflowPage = () => {
                     <div>
                       <div className="font-medium">{instance.entity_type} · {instance.entity_id}</div>
                       <div className="text-xs text-muted-foreground">node: {instance.current_node_id ?? "—"} · tasks: {instance.open_tasks} · status: {instance.status}</div>
+                      <div className="text-xs text-muted-foreground">correlation: {instance.correlation_id ?? "—"}</div>
                     </div>
                     <Button size="sm" variant="outline" onClick={() => void openInstance(instance.id)}>Open</Button>
                   </div>
@@ -272,6 +270,10 @@ const WorkflowPage = () => {
           <Card>
             <CardHeader><CardTitle>Workflow tasks</CardTitle></CardHeader>
             <CardContent className="space-y-3">
+              <div className="grid gap-2 md:grid-cols-2">
+                <Input placeholder="Reassign user id" value={reassignUserId} onChange={(event) => setReassignUserId(event.target.value)} />
+                <Input placeholder="Role code" value={reassignRole} onChange={(event) => setReassignRole(event.target.value)} />
+              </div>
               {tasks.map((task) => (
                 <div key={task.id} className="rounded border p-3">
                   <div className="font-medium">{task.title}</div>
@@ -281,6 +283,7 @@ const WorkflowPage = () => {
                   {task.task_payload ? <div className="mt-1 text-xs text-muted-foreground">Payload: {JSON.stringify(task.task_payload)}</div> : null}
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Button size="sm" onClick={() => void completeTask(task.id)}>Complete</Button>
+                    <Button size="sm" variant="outline" onClick={() => void moveTask(task.id, "reassign")}>Reassign</Button>
                     <Button size="sm" variant="outline" onClick={() => void moveTask(task.id, "delegate")}>Delegate</Button>
                     <Button size="sm" variant="outline" onClick={() => void moveTask(task.id, "escalate")}>Escalate</Button>
                     <Button size="sm" variant="outline" onClick={() => void openInstance(task.instance_id)}>Timeline</Button>
@@ -297,11 +300,14 @@ const WorkflowPage = () => {
                 <>
                   <div className="text-sm">Entity: {selectedInstance.entity_type} / {selectedInstance.entity_id}</div>
                   <div className="text-sm">Status: {selectedInstance.status}</div>
+                  <div className="text-sm">Correlation: {selectedInstance.correlation_id ?? "—"}</div>
+                  <div className="rounded border bg-muted/30 p-3 text-xs">Context: {JSON.stringify(selectedInstance.context_json ?? {}, null, 2)}</div>
                   {selectedInstance.current_node_id ? <div className="rounded border bg-muted/30 p-3 text-sm">Current node: <span className="font-medium">{selectedInstance.current_node_id}</span></div> : null}
                   {(selectedInstance.timeline ?? []).map((event) => (
                     <div key={event.id} className="rounded border-l-2 border-primary pl-3 py-2">
                       <div className="text-sm font-medium">{event.event_type}</div>
                       <div className="text-xs text-muted-foreground">{event.node_id ?? "system"} · {new Date(event.created_at).toLocaleString()}</div>
+                      {Object.keys(event.payload ?? {}).length ? <div className="text-xs text-muted-foreground">{JSON.stringify(event.payload)}</div> : null}
                     </div>
                   ))}
                 </>

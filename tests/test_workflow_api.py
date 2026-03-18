@@ -358,3 +358,61 @@ async def test_workflow_instances_registry_lists_open_task_counts(async_client, 
     assert item["entity_id"] == "doc-registry"
     assert item["open_tasks"] == 1
     assert item["status"] == "waiting"
+
+
+async def test_notifications_settings_persist_and_expose_deeplink(async_client, sessionmaker, make_auth_headers, data_factory):
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        user = await data_factory.create_user(tenant=tenant, email="notif-settings@example.com", session=session)
+        session.add(
+            Notification(
+                tenant_id=tenant.id,
+                user_id=user.id,
+                channel=NotificationChannel.INAPP,
+                type=NotificationType.PACKAGE_RUN_COMPLETED,
+                title="Package ready",
+                body="Open generated package",
+                priority=NotificationPriority.HIGH,
+                status=NotificationStatus.QUEUED,
+                payload={"deeplink": "/pack-runs/run-1", "entity_type": "package", "entity_id": "run-1"},
+                dedup_key="notif-settings-1",
+                scheduled_at=datetime.now(tz=timezone.utc),
+            )
+        )
+        await session.commit()
+    headers = await make_auth_headers(email="notif-settings@example.com")
+
+    save_response = await async_client.put(
+        "/api/v1/notifications/settings/me",
+        headers=headers,
+        json={
+            "email_enabled": False,
+            "telegram_enabled": True,
+            "inapp_enabled": True,
+            "email": "alerts@example.com",
+            "telegram_chat_id": "12345",
+            "quiet_hours": {"from": "22:00", "to": "08:00", "tz": "UTC"},
+            "digest_mode": "daily",
+            "channel_preferences": {"PackageRunCompleted": ["inapp", "telegram"]},
+        },
+    )
+    assert save_response.status_code == 200
+    assert save_response.json()["digest_mode"] == "daily"
+
+    get_response = await async_client.get("/api/v1/notifications/settings/me", headers=headers)
+    assert get_response.status_code == 200
+    assert get_response.json()["telegram_enabled"] is True
+    assert get_response.json()["email_enabled"] is False
+
+    list_response = await async_client.get("/api/v1/notifications", headers=headers)
+    assert list_response.status_code == 200
+    item = list_response.json()["items"][0]
+    assert item["deeplink"] == "/pack-runs/run-1"
+    assert item["is_read"] is False
+
+    mark_response = await async_client.post("/api/v1/notifications/mark-read", headers=headers, json={"ids": [item["id"]]})
+    assert mark_response.status_code == 200
+
+    list_after = await async_client.get("/api/v1/notifications", headers=headers, params={"status": "read"})
+    assert list_after.status_code == 200
+    assert list_after.json()["items"][0]["is_read"] is True

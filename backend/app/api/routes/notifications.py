@@ -25,6 +25,8 @@ class NotificationRead(BaseModel):
     payload: dict[str, object] | None = None
     priority: str
     status: str
+    is_read: bool
+    deeplink: str | None = None
     scheduled_at: datetime
     sent_at: datetime | None = None
 
@@ -111,6 +113,8 @@ async def list_notifications(
                 payload=item.payload,
                 priority=item.priority.value if hasattr(item.priority, "value") else str(item.priority),
                 status=item.status.value,
+                is_read=item.status == NotificationStatus.READ,
+                deeplink=str((item.payload or {}).get("deeplink")) if (item.payload or {}).get("deeplink") else None,
                 scheduled_at=item.scheduled_at,
                 sent_at=item.sent_at,
             )
@@ -150,6 +154,7 @@ async def mark_read(payload: MarkReadRequest, session: SessionDep, tenant: Tenan
             row.sent_at = row.sent_at or datetime.now(tz=timezone.utc)
             updated += 1
         await session.flush()
+    await session.commit()
     return {"updated": updated}
 
 
@@ -290,6 +295,7 @@ async def get_settings(session: SessionDep, tenant: TenantDep, access: AccessDep
         settings = NotificationChannelSettings(tenant_id=tenant.id, user_id=access.user.id)
         session.add(settings)
         await session.flush()
+    await session.commit()
     return ChannelSettingsOut.model_validate(settings, from_attributes=True)
 
 
@@ -310,4 +316,5 @@ async def put_settings(payload: ChannelSettingsIn, session: SessionDep, tenant: 
     for key, value in payload.model_dump().items():
         setattr(settings, key, value)
     await session.flush()
+    await session.commit()
     return ChannelSettingsOut.model_validate(settings, from_attributes=True)
