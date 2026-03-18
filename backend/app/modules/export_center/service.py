@@ -69,10 +69,34 @@ class ExportCenterService:
         return job
 
     async def create_schedule(self, *, name: str, dataset_code: str, cron_expr: str, filters_json: dict[str, Any], anonymized: bool, target_type: str, target_config: dict[str, Any]) -> ExportSchedule:
+        return await self.create_schedule_with_schema(
+            name=name,
+            dataset_code=dataset_code,
+            schema_version="v1",
+            cron_expr=cron_expr,
+            filters_json=filters_json,
+            anonymized=anonymized,
+            target_type=target_type,
+            target_config=target_config,
+        )
+
+    async def create_schedule_with_schema(
+        self,
+        *,
+        name: str,
+        dataset_code: str,
+        schema_version: str,
+        cron_expr: str,
+        filters_json: dict[str, Any],
+        anonymized: bool,
+        target_type: str,
+        target_config: dict[str, Any],
+    ) -> ExportSchedule:
         item = ExportSchedule(
             tenant_id=self.tenant_id,
             name=name,
             dataset_code=dataset_code,
+            schema_version=schema_version,
             cron_expr=cron_expr,
             filters_json=filters_json,
             anonymized=anonymized,

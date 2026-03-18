@@ -47,6 +47,11 @@ class MapItemUpsert(BaseModel):
     measure_ids: list[str] = Field(default_factory=list)
 
 
+class MethodologyClone(BaseModel):
+    version_no: int | None = None
+    name: str | None = None
+
+
 @router.get("/methodologies")
 async def list_methodologies(tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
     rows = (await session.execute(select(SafetyRiskMethodology).where(SafetyRiskMethodology.tenant_id == tenant.id, SafetyRiskMethodology.deleted_at.is_(None)).order_by(SafetyRiskMethodology.code, SafetyRiskMethodology.version_no.desc()))).scalars().all()
@@ -60,6 +65,48 @@ async def create_methodology(payload: MethodologyCreate, tenant: Tenant = Depend
     await session.commit()
     await session.refresh(item)
     return item
+
+
+@router.post("/methodologies/{item_id}/clone", status_code=status.HTTP_201_CREATED)
+async def clone_methodology(item_id: str, payload: MethodologyClone, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+    source = await session.get(SafetyRiskMethodology, item_id)
+    if not source or source.tenant_id != tenant.id or source.deleted_at is not None:
+        raise HTTPException(404, "Methodology not found")
+    clone = SafetyRiskMethodology(
+        tenant_id=tenant.id,
+        code=source.code,
+        name=payload.name or source.name,
+        type=source.type,
+        status="draft",
+        version_no=payload.version_no or (source.version_no + 1),
+        formula_json=source.formula_json or {},
+        scale_json=source.scale_json or {},
+    )
+    session.add(clone)
+    await session.commit()
+    await session.refresh(clone)
+    return clone
+
+
+@router.post("/methodologies/{item_id}/activate")
+async def activate_methodology(item_id: str, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+    item = await session.get(SafetyRiskMethodology, item_id)
+    if not item or item.tenant_id != tenant.id or item.deleted_at is not None:
+        raise HTTPException(404, "Methodology not found")
+    rows = (
+        await session.execute(
+            select(SafetyRiskMethodology).where(
+                SafetyRiskMethodology.tenant_id == tenant.id,
+                SafetyRiskMethodology.code == item.code,
+                SafetyRiskMethodology.deleted_at.is_(None),
+            )
+        )
+    ).scalars().all()
+    for row in rows:
+        row.is_default = row.id == item.id
+        row.status = "active" if row.id == item.id else "archived"
+    await session.commit()
+    return {"status": "active", "id": item.id, "affected_versions": len(rows)}
 
 
 @router.get("/maps")
@@ -156,6 +203,13 @@ async def risk_summary(map_id: str, tenant: Tenant = Depends(get_tenant_record),
     open_incidents = int((await session.execute(select(func.count()).select_from(IncidentCase).where(IncidentCase.tenant_id == tenant.id, IncidentCase.status != "closed"))).scalar_one())
     open_actions = int((await session.execute(select(func.count()).select_from(CorrectiveAction).where(CorrectiveAction.tenant_id == tenant.id, CorrectiveAction.deleted_at.is_(None), CorrectiveAction.status != "done"))).scalar_one())
     item_stats = (await session.execute(select(func.count(), func.avg(RiskMapItem.raw_score), func.avg(RiskMapItem.residual_score)).where(RiskMapItem.tenant_id == tenant.id, RiskMapItem.risk_map_id == map_id, RiskMapItem.deleted_at.is_(None)))).one()
+    zone_rows = (
+        await session.execute(
+            select(RiskMapItem.residual_risk_level, func.count())
+            .where(RiskMapItem.tenant_id == tenant.id, RiskMapItem.risk_map_id == map_id, RiskMapItem.deleted_at.is_(None))
+            .group_by(RiskMapItem.residual_risk_level)
+        )
+    ).all()
     return {
         "map_id": map_id,
         "items_total": int(item_stats[0] or 0),
@@ -164,4 +218,5 @@ async def risk_summary(map_id: str, tenant: Tenant = Depends(get_tenant_record),
         "overdue_measures": overdue_measures,
         "incident_pressure": open_incidents,
         "corrective_actions_open": open_actions,
+        "risk_zones": {str(level.value if hasattr(level, "value") else level or "unrated"): int(count) for level, count in zone_rows},
     }

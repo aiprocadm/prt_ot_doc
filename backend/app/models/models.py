@@ -568,6 +568,7 @@ class ApiKey(TenantBaseModel):
     usage_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     rate_limit_per_minute: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_rotated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "name", name="uq_api_key_tenant_name"),

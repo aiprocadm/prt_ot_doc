@@ -168,6 +168,7 @@ class ExportSchedule(TenantBaseModel):
 
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     dataset_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(32), nullable=False, default="v1")
     cron_expr: Mapped[str] = mapped_column(String(128), nullable=False)
     target_type: Mapped[str] = mapped_column(String(32), nullable=False, default="file")
     target_config: Mapped[dict[str, Any]] = mapped_column(_json_type(), nullable=False, default=dict)

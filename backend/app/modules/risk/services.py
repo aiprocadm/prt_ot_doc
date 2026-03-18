@@ -4,7 +4,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-
 _RISK_LEVEL_ORDER = {"low": 0, "medium": 1, "high": 2, "critical": 3}
 
 
@@ -40,6 +39,21 @@ class RiskCalculationService:
                 ranges = formula_json.get("ranges", [])
             rules = RiskCalculationService._normalize_rules(ranges)
             return RiskCalcResult(raw_score=score, risk_level=RiskCalculationService._pick_level(score, rules))
+
+        if method_type == "custom":
+            formula_json = methodology.get("formula_json") if isinstance(methodology.get("formula_json"), dict) else {}
+            strategy = str(formula_json.get("strategy", "weighted_sum"))
+            coefficients = formula_json.get("coefficients", {}) if isinstance(formula_json, dict) else {}
+            probability_weight = float(coefficients.get("probability", 1))
+            severity_weight = float(coefficients.get("severity", 1))
+            exposure_weight = float(coefficients.get("exposure", 1))
+            normalized_exposure = exposure if exposure is not None else 1.0
+            if strategy == "weighted_product":
+                score = (probability * probability_weight) * (severity * severity_weight) * (normalized_exposure * exposure_weight)
+            else:
+                score = (probability * probability_weight) + (severity * severity_weight) + (normalized_exposure * exposure_weight)
+            rules = RiskCalculationService._level_rules(methodology.get("scale_json"))
+            return RiskCalcResult(raw_score=round(score, 2), risk_level=RiskCalculationService._pick_level(score, rules))
 
         raise ValueError(f"Unsupported methodology type: {method_type}")
 

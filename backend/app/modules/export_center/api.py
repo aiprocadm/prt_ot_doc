@@ -26,6 +26,7 @@ class ExportCreate(BaseModel):
 class ExportScheduleCreate(BaseModel):
     name: str
     dataset_code: str
+    schema_version: str = "v1"
     cron_expr: str
     anonymized: bool = False
     target_type: str = "file"
@@ -77,9 +78,10 @@ async def list_schedules(session: AsyncSession = Depends(get_session), tenant: T
 
 @router.post("/schedules", status_code=status.HTTP_201_CREATED)
 async def create_schedule(payload: ExportScheduleCreate, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
-    return await ExportCenterService(session, str(tenant.id)).create_schedule(
+    return await ExportCenterService(session, str(tenant.id)).create_schedule_with_schema(
         name=payload.name,
         dataset_code=payload.dataset_code,
+        schema_version=payload.schema_version,
         cron_expr=payload.cron_expr,
         filters_json=payload.filters_json,
         anonymized=payload.anonymized,
@@ -132,4 +134,3 @@ async def export_download_link(job_id: str, session: AsyncSession = Depends(get_
     if not job.file_id:
         raise HTTPException(status.HTTP_409_CONFLICT, "Export file not ready")
     return {"download_url": f"/api/v1/files/{job.file_id}/download", "expires_in": 300}
-
