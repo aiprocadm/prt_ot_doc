@@ -1,37 +1,13 @@
-import { useEffect, useState } from "react";
-
-import { apiClient } from "@/api/client";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { formatDate } from "@/utils/datetime";
 
-type PortalRun = { id: string; status: string; client_company_id?: string | null; started_at?: string | null; finished_at?: string | null; };
-type PortalDetail = { run: PortalRun; history: { status_flow: string[]; events_count: number; tickets_count: number; requirements_total: number; requirements_missing: number; }; files: Array<{ kind: string; signed_url?: string; sha256?: string; size?: number | null; }>; events: Array<{ id: string; type: string; created_at: string; }>; tickets: Array<{ id: string; title: string; status: string; created_at: string; }>; };
+import { useClientPortalPackages } from "./useClientPortalPackages";
 
 const ClientPortalPackagesPage = () => {
-  const [items, setItems] = useState<PortalRun[]>([]);
-  const [selected, setSelected] = useState<PortalDetail | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const { data } = await apiClient.get<PortalRun[]>("/client-portal/packages");
-      setItems(data);
-      if (data[0]) {
-        const detail = await apiClient.get<PortalDetail>(`/client-portal/packages/${data[0].id}`);
-        setSelected(detail.data);
-      } else {
-        setSelected(null);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { void load(); }, []);
+  const { items, selected, loading, load, selectRun } = useClientPortalPackages();
 
   return (
     <div className="space-y-6">
@@ -44,7 +20,7 @@ const ClientPortalPackagesPage = () => {
           <CardHeader><CardTitle>Список пакетов</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             {items.map((item) => (
-              <button key={item.id} className="w-full rounded-lg border p-3 text-left hover:bg-muted" onClick={() => void apiClient.get<PortalDetail>(`/client-portal/packages/${item.id}`).then((detail) => setSelected(detail.data))}>
+              <button key={item.id} className="w-full rounded-lg border p-3 text-left hover:bg-muted" onClick={() => void selectRun(item.id)}>
                 <div className="flex items-center justify-between gap-2"><div className="font-medium">{item.id}</div><StatusBadge status={item.status} /></div>
                 <div className="mt-1 text-sm text-muted-foreground">Запуск: {item.started_at ? formatDate(item.started_at) : "—"}</div>
               </button>
