@@ -7,7 +7,7 @@
 | TZ-1.3 | ABAC атрибуты и scope filters | policy engine + repositories | scoped entities | n/a | n/a | action gating | `tests/test_rbac_abac.py`, `tests/unit/test_abac_policies.py` | OK | P0 | Extend attribute coverage for contractor/project |
 | TZ-1.4 | Immutable audit + diff | audit services and API | audit_log append-only | n/a | audit side effects | audit views | `tests/test_audit_log_immutability.py`, `tests/test_audit_log_api.py` | OK | P0 | Add DB-level trigger hardening (optional) |
 | TZ-2.1 | Templates strict (code,version), in-use delete=409 | templates API/services | templates + versions constraints | n/a | n/a | templates list | `tests/test_template_delete.py`, `tests/test_templates_pipeline_api.py` | OK | P0 | Maintain unique constraints in migrations |
-| TZ-3.3 | Replace dry-run/apply/rollback | `backend/app/api/routes/replace.py`, docx replace services | in-memory backup (MVP stub) | document pipeline workers | DocumentGenerated for changed docs | Replace UI (MVP route) + wizard integration | `tests/test_replace_api.py`, `tests/test_services_docx_unit.py` | Partial | P0 | Persisted patch/rollback storage in v1.1 |
+| TZ-3.3 | Replace dry-run/apply/rollback | `backend/app/api/routes/replace.py`, `backend/app/domains/replace/engine.py`, docx replace services | persisted patch metadata in service layer + idempotency | document pipeline workers | DocumentGenerated for changed docs | Replace UI (MVP route) + wizard integration | `tests/test_replace_api.py`, `tests/test_services_docx_unit.py` | Partial | P0 | Next: DB-backed patch journal for cross-worker rollback |
 | TZ-3.4/B3 | Pipeline step status/log/retries | documents pipeline services | document_job/step states | pipeline task runners | emits document events | job timeline UI | `tests/test_pipeline_logging.py`, `tests/test_package_pipeline.py`, `tests/test_services_pipeline_extra.py` | OK | P0 | Preserve step-level telemetry |
 | TZ-3.1 | PDF conversion + font embed validation | pdf service | file metadata | docs jobs | Exported/Signed hooks | document download UX | `tests/test_services_pdf_unit.py` | Partial | P0 | Add explicit font-embed verification test in v1.1 |
 | TZ-6.1 | Risk PxS deterministic | risk domain/services | risk tables | optional async tasks | RiskAssessed | risks pages | `tests/test_risk_engine.py`, `tests/test_risk_assessment_kpi5.py`, `tests/test_domains_risk_calc.py` | OK | P1 | Freeze sort/order invariants |
@@ -31,17 +31,17 @@
 
 ## Summary (current)
 - **P0:** mostly **OK**, with explicit partials on PDF font-embed strict check and replace shapes/textboxes coverage.
-- **P1:** core domains **OK**, some UX/client-cabinet depth kept as staged enhancements.
+- **P1:** core domains **OK**, some UX/client-cabinet depth kept as staged enhancements; backend portal package flow is now preset-driven.
 - **P2:** non-blocking improvements remain backlog (v1.1/v1.2).
 
 
 ## TODO / Partial markers
-- **Briefings module**: отдельные API/UI/события пока не реализованы (Partial относительно расширенного TZ §8).
+- **Briefings module**: backend API/services exist, but overdue notifications and richer frontend UX remain partial relative to the extended TZ §8.
 - **Incident/Inspection outbox events**: `IncidentCreated`, `InspectionCreated` реализованы через outbox, без breaking API изменений.
 
 - §4/§12: MVP контур ЭДО/подписей/согласований реализован (routes, requests, decide, signatures, edo send+webhook).
 - Критерий Signed event: реализован через outbox событие `DocumentSigned`.
 - Критерий webhook ЭДО ≤60с: в dev обработка мгновенная через API receiver.
 
-| TZ-19 | Клиентский кабинет: статусы/история/загрузки/запросы | `backend/app/api/routes/client_portal.py` | package_runs + tickets + events + tokens | package run stubs | package_run/ticket events (MVP) | `/portal/packages`, `/portal/packages/:id` (API ready) | `tests/test_client_portal_api.py` | Partial | P0 | Frontend portal pages in next iteration |
-| TZ-31.1-31.3 | Пакеты-пресеты: выход на объект / НС / проверка | `package_presets` + `scripts/seed_package_presets.py` | package presets/runs/requirements | package run stub pipeline | package_run.started | packages UI integration pending | `tests/test_client_portal_api.py` | Partial | P0 | Add real pipeline mapping and e2e download |
+| TZ-19 | Клиентский кабинет: статусы/история/загрузки/запросы | `backend/app/api/routes/client_portal.py` | package_runs + tickets + events + tokens | package artifact generation in API flow | package_run/ticket events + portal history | `/portal/packages`, `/portal/packages/:id` (API ready) | `tests/test_client_portal_api.py` | OK | P0 | Frontend portal pages still need richer enterprise UX |
+| TZ-31.1-31.3 | Пакеты-пресеты: выход на объект / НС / проверка | `package_presets`, `backend/app/api/routes/client_portal.py` + `scripts/seed_package_presets.py` | package presets/runs/requirements | preset-driven package artifact generation | package_run.started/generated/published | packages UI integration pending | `tests/test_client_portal_api.py` | Partial | P0 | Frontend wizard/detail polish remains |
