@@ -1,20 +1,48 @@
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from app.models.models import BriefingEntry, BriefingSignature, BriefingTemplate
+from app.services.events import EventType
+from app.services.outbox import OutboxService
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class BriefingEntryService:
-    async def sign(self, session: AsyncSession, entry: BriefingEntry, signer_type: str, signer_user_id: str | None) -> BriefingSignature:
+    async def sign(
+        self,
+        session: AsyncSession,
+        entry: BriefingEntry,
+        signer_type: str,
+        signer_user_id: str | None,
+        *,
+        signature_payload: dict[str, Any] | None = None,
+    ) -> BriefingSignature:
+        existing = (
+            await session.execute(
+                select(BriefingSignature).where(
+                    BriefingSignature.briefing_entry_id == entry.id,
+                    BriefingSignature.signer_type == signer_type,
+                )
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            if signer_user_id and existing.signer_user_id != signer_user_id:
+                existing.signer_user_id = signer_user_id
+            if signature_payload:
+                existing.signature_payload = {**(existing.signature_payload or {}), **signature_payload}
+            await session.flush()
+            return existing
+
         signature = BriefingSignature(
             tenant_id=entry.tenant_id,
             briefing_entry_id=entry.id,
             signer_type=signer_type,
             signer_user_id=signer_user_id,
             signature_mode="internal_simple",
+            signature_payload=signature_payload or {},
         )
         session.add(signature)
         entry.status = "signed_employee" if signer_type == "employee" else "signed_instructor"
@@ -32,3 +60,46 @@ class BriefingEntryService:
         entry.status = "completed"
         await session.flush()
         return entry
+
+    async def list_overdue(self, session: AsyncSession, *, tenant_id: str, now: datetime | None = None) -> list[BriefingEntry]:
+        resolved_now = now or datetime.now(timezone.utc)
+        stmt = select(BriefingEntry).where(
+            BriefingEntry.tenant_id == tenant_id,
+            BriefingEntry.deleted_at.is_(None),
+            BriefingEntry.valid_until.is_not(None),
+            BriefingEntry.valid_until < resolved_now,
+            BriefingEntry.status != "completed",
+        )
+        return list((await session.execute(stmt.order_by(BriefingEntry.valid_until.asc()))).scalars().all())
+
+    async def notify_overdue(
+        self,
+        session: AsyncSession,
+        *,
+        tenant_id: str,
+        actor_id: str | None = None,
+        now: datetime | None = None,
+    ) -> list[BriefingEntry]:
+        overdue = await self.list_overdue(session, tenant_id=tenant_id, now=now)
+        if not overdue:
+            return []
+        outbox = OutboxService(session)
+        for entry in overdue:
+            due_at = entry.valid_until or entry.briefing_date
+            await outbox.enqueue(
+                tenant_id=tenant_id,
+                event_type=EventType.TASK_OVERDUE.value,
+                idempotency_key=f"briefing-overdue:{entry.id}:{due_at.date().isoformat()}",
+                payload={
+                    "tenant_id": tenant_id,
+                    "actor_id": actor_id,
+                    "task_id": entry.id,
+                    "title": f"Briefing overdue: {entry.briefing_type}",
+                    "due_at": due_at,
+                    "assignee_id": entry.person_id,
+                    "status": entry.status,
+                    "priority": "high",
+                    "overdue": True,
+                },
+            )
+        return overdue

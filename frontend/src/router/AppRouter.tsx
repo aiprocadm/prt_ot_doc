@@ -24,6 +24,7 @@ const RiskPage = lazy(() => import("@/pages/risk/RiskPage"));
 const ActivitiesPage = lazy(() => import("@/pages/activities/ActivitiesPage"));
 const PpePage = lazy(() => import("@/pages/ppe/PpePage"));
 const TrainingPage = lazy(() => import("@/pages/training/TrainingPage"));
+const BriefingsPage = lazy(() => import("@/pages/briefings/BriefingsPage"));
 const MedicalPage = lazy(() => import("@/pages/medical/MedicalPage"));
 const IncidentsPage = lazy(() => import("@/pages/incidents/IncidentsPage"));
 const InspectionsPage = lazy(() => import("@/pages/inspections/InspectionsPage"));
@@ -162,6 +163,7 @@ const AppRouter = () => {
               </Route>
               <Route element={<ProtectedRoute permission={PERMISSIONS.TRAINING_VIEW} />}>
                 <Route path="/training" element={<TrainingPage />} />
+                <Route path="/briefings" element={<BriefingsPage />} />
               </Route>
               <Route element={<ProtectedRoute permission={PERMISSIONS.MEDICAL_VIEW} />}>
                 <Route path="/medical" element={<MedicalPage />} />

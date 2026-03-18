@@ -4,6 +4,7 @@
 - `backend/app/api/routes/client_portal.py` был в аварийном состоянии: дублированные фрагменты, незакрытые скобки и сломанный синтаксис блокировали production-use и тесты.
 - Domain-слой для `templating`, `replace`, `packs`, `files/document`, `npa/compliance` оставался слишком thin/stub и не давал воспроизводимые metadata / persisted patch journal / usable portal artifacts.
 - Тестовое покрытие не фиксировало portal history/tickets и не проверяло явно факт появления `IncidentCreated` / `InspectionCreated` в outbox после API create-flow.
+- CRUD-модуль briefings существовал, но не обеспечивал production-grade lifecycle: typed payloads, идемпотентные подписи, audit trail и overdue reminder flow через outbox отсутствовали.
 
 ## Что исправлено
 - Полностью восстановлен и нормализован `client_portal` API flow: preset -> run -> artifacts -> portal link -> files/history -> tickets.
@@ -12,9 +13,11 @@
 - `FileStorageService` расширен safe temp-file workflow и S3-compatible adapter wiring, при этом dev/test memory/local режимы сохранены без обязательного MinIO.
 - `DocumentService`, `PackAssembler`, `ComplianceChecker` усилены metadata / signed-download / impact-analysis/useful warnings.
 - Добавлены регрессионные тесты на portal artifacts/history/tickets, persisted replace patches и outbox events для incidents/inspections.
+- Briefings переведены из CRUD-only в управляемый lifecycle: typed API payloads, идемпотентные employee/instructor signatures, complete-flow с `valid_until`, overdue listing и `TaskOverdue` reminders через outbox.
+- Frontend получил отдельный экран инструктажей и usable client portal package detail view; incidents/inspections перестали требовать ручной ввод UUID компании в критичном create-flow.
 
 ## Что осталось как осознанный backlog P2
 - Перенести replace patch journal из file-backed domain storage в shared DB storage для multi-worker rollback.
 - Дотянуть frontend client portal/package wizard до enterprise UX уровня (rich selectors, timeline panels, retry UX).
 - Довести PDF pipeline до полного acceptance scope по hanging detection/font embedding/retry telemetry.
-- Расширить briefings по overdue notifications/UI и prescription overdue corrective events.
+- Закрыть prescription overdue / corrective events и углубить briefings до person/site selectors + background reminder worker.
