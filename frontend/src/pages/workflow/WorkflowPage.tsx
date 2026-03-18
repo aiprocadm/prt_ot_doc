@@ -45,6 +45,7 @@ type WorkflowTask = {
   assignee_user_id?: string | null;
   assignee_role_code?: string | null;
   due_at?: string | null;
+  task_payload?: Record<string, unknown>;
 };
 
 type WorkflowTimelineEvent = {
@@ -167,6 +168,11 @@ const WorkflowPage = () => {
     await load();
   };
 
+  const moveTask = async (taskId: string, mode: "delegate" | "escalate") => {
+    await apiClient.post(`/workflow/tasks/${taskId}/${mode}`, { assignee_role_code: mode === "delegate" ? "line_manager" : "admin" });
+    await load();
+  };
+
   return (
     <div className="space-y-6">
       <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Workflow" }]} />
@@ -239,8 +245,11 @@ const WorkflowPage = () => {
                   <div className="text-sm text-muted-foreground">{task.node_id} · {task.status}</div>
                   <div className="mt-1 text-xs text-muted-foreground">Assignee: {task.assignee_user_id ?? task.assignee_role_code ?? "unassigned"}</div>
                   <div className="mt-1 text-xs text-muted-foreground">SLA: {task.due_at ? new Date(task.due_at).toLocaleString() : "—"}</div>
-                  <div className="mt-3 flex gap-2">
+                  {task.task_payload ? <div className="mt-1 text-xs text-muted-foreground">Payload: {JSON.stringify(task.task_payload)}</div> : null}
+                  <div className="mt-3 flex flex-wrap gap-2">
                     <Button size="sm" onClick={() => void completeTask(task.id)}>Complete</Button>
+                    <Button size="sm" variant="outline" onClick={() => void moveTask(task.id, "delegate")}>Delegate</Button>
+                    <Button size="sm" variant="outline" onClick={() => void moveTask(task.id, "escalate")}>Escalate</Button>
                     <Button size="sm" variant="outline" onClick={() => void openInstance(task.instance_id)}>Timeline</Button>
                   </div>
                 </div>
@@ -255,6 +264,7 @@ const WorkflowPage = () => {
                 <>
                   <div className="text-sm">Entity: {selectedInstance.entity_type} / {selectedInstance.entity_id}</div>
                   <div className="text-sm">Status: {selectedInstance.status}</div>
+                  {selectedInstance.current_node_id ? <div className="rounded border bg-muted/30 p-3 text-sm">Current node: <span className="font-medium">{selectedInstance.current_node_id}</span></div> : null}
                   {(selectedInstance.timeline ?? []).map((event) => (
                     <div key={event.id} className="rounded border-l-2 border-primary pl-3 py-2">
                       <div className="text-sm font-medium">{event.event_type}</div>

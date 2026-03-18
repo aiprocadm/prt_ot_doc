@@ -110,6 +110,14 @@ const NpaPage = () => {
                       <div key={key} className="rounded border p-3 text-sm">{key}: <span className="font-medium">{value}</span></div>
                     ))}
                   </div>
+                  <div className="mt-3 grid gap-3">
+                    {Object.entries(detail.bindings).map(([key, values]) => (
+                      <div key={key} className="rounded border bg-muted/30 p-3">
+                        <div className="text-xs font-medium uppercase text-muted-foreground">{key}</div>
+                        <div className="mt-2 text-sm">{values.length ? values.join(", ") : "—"}</div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
                 <div>
                   <div className="text-xs font-medium uppercase text-muted-foreground">Tasks foundation</div>

@@ -38,6 +38,7 @@ const IntegrationsPage = () => {
   const [events, setEvents] = useState<OutboxEventEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState("all");
 
   const load = async () => {
     setLoading(true);
@@ -56,6 +57,8 @@ const IntegrationsPage = () => {
   useEffect(() => {
     void load();
   }, []);
+
+  const filteredDeliveries = useMemo(() => (statusFilter === "all" ? deliveries : deliveries.filter((item) => item.status === statusFilter)), [deliveries, statusFilter]);
 
   const summary = useMemo(() => {
     const failedDeliveries = deliveries.filter((item) => item.status === "failed" || item.status === "dead").length;
@@ -105,7 +108,16 @@ const IntegrationsPage = () => {
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base">Outbound delivery history</CardTitle>
+          <div className="flex items-center gap-3">
+            <CardTitle className="text-base">Outbound delivery history</CardTitle>
+            <select className="h-9 rounded-md border px-3 text-sm" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+              <option value="all">Все статусы</option>
+              <option value="pending">pending</option>
+              <option value="failed">failed</option>
+              <option value="dead">dead</option>
+              <option value="sent">sent</option>
+            </select>
+          </div>
           <Button variant="outline" onClick={() => void load()} disabled={loading}>Обновить</Button>
         </CardHeader>
         <CardContent>
@@ -121,7 +133,7 @@ const IntegrationsPage = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {deliveries.map((item) => (
+              {filteredDeliveries.map((item) => (
                 <TableRow key={item.id}>
                   <TableCell>
                     <div className="font-medium">{item.event_type}</div>

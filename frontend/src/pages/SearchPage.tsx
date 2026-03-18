@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
-const tabs: SearchType[] = ["documents", "files", "people", "sites", "incidents", "inspections", "risk", "ppe", "training", "jobs", "templates"];
+const tabs: Array<SearchType | "tasks" | "npa" | "contracts" | "orders"> = ["documents", "files", "people", "sites", "incidents", "inspections", "risk", "ppe", "training", "jobs", "templates", "tasks", "npa", "contracts", "orders"];
 
 const SearchPage = () => {
   const [params, setParams] = useSearchParams();
@@ -17,7 +17,7 @@ const SearchPage = () => {
   const [recent, setRecent] = useState<Array<{ id: string; q: string; types: string[] }>>([]);
   const [saved, setSaved] = useState<SavedSearchItem[]>([]);
   const q = params.get("q") ?? "";
-  const type = (params.get("type") as SearchType | null) ?? "documents";
+  const type = (params.get("type") as SearchType | "tasks" | "npa" | "contracts" | "orders" | null) ?? "documents";
 
   const loadMemory = async () => {
     const [recentItems, savedItems] = await Promise.all([fetchRecentSearches(), fetchSavedSearches()]);
@@ -31,7 +31,7 @@ const SearchPage = () => {
     setParams(next);
   };
 
-  const activeTypes = useMemo(() => (type ? [type] : tabs), [type]);
+  const activeTypes = useMemo(() => (type ? [type] : tabs) as SearchType[], [type]);
 
   useEffect(() => {
     void loadMemory().catch(() => undefined);
@@ -104,6 +104,7 @@ const SearchPage = () => {
                 <div className="text-sm text-muted-foreground">{item.entity_type}</div>
                 <a className="font-medium text-primary underline" href={item.deeplink ?? "#"}>{item.title}</a>
                 {item.status ? <div className="text-sm">Статус: {item.status}</div> : null}
+                {item.tags ? <div className="mt-1 text-xs text-muted-foreground">{Object.entries(item.tags).slice(0, 3).map(([key, value]) => `${key}: ${String(value)}`).join(" · ")}</div> : null}
                 {item.snippet ? <div className="text-sm text-muted-foreground">{item.snippet}</div> : null}
               </div>
             ))}
