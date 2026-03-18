@@ -80,6 +80,7 @@ from app.services.outbox import OutboxProcessor, OutboxService
 from app.services.notifications import send_notification, build_dedup_key
 from app.services.reminders import evaluate_due_date
 from app.models.notifications import Notification, NotificationChannel, NotificationStatus, NotificationType, ReminderRule, ReminderEntityType, PlanTask, PlanTaskStatus
+from app.modules.workflow.service import WorkflowService
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -1692,3 +1693,16 @@ def generate_edo_protocol_job(*, message_id: str, tenant_id: str) -> dict[str, s
 def webhook_dispatch_job(limit: int = 50, tenant_slug: str = "test") -> dict[str, int]:
     dispatched = dispatch_outbox_events(tenant_slug=tenant_slug)
     return {"dispatched": int(dispatched), "limit": int(limit)}
+
+
+@celery_app.task(name="workflow.timers.tick", autoretry_for=RETRYABLE_EXCEPTIONS, retry_backoff=True, retry_jitter=True, max_retries=5)
+def workflow_timers_tick(tenant_slug: str) -> int:
+    async def _run() -> int:
+        with tenant_context(tenant_slug):
+            ensure_tenant_schema(tenant_slug)
+            async with session_scope(tenant=tenant_slug) as session:
+                tenant = (await session.execute(select(Tenant).where(Tenant.slug == tenant_slug))).scalar_one()
+                processed = await WorkflowService(session, str(tenant.id)).run_due_timers()
+                await session.commit()
+                return processed
+    return _run_coroutine(_run())

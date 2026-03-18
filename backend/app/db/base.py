@@ -45,3 +45,5 @@ from app.modules.files import models as files_models  # noqa: F401
 from app.modules.search import models as search_models  # noqa: F401
 
 from app.modules.projections import models as projections_models  # noqa: F401
+
+from app.modules.workflow import models as workflow_models  # noqa: F401

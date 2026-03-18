@@ -15,6 +15,7 @@ class NotificationChannel(str, enum.Enum):
     EMAIL = "email"
     TELEGRAM = "telegram"
     INAPP = "inapp"
+    WEBHOOK = "webhook"
 
 
 class NotificationStatus(str, enum.Enum):
@@ -23,6 +24,13 @@ class NotificationStatus(str, enum.Enum):
     FAILED = "failed"
     CANCELED = "canceled"
     READ = "read"
+
+
+class NotificationPriority(str, enum.Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
 
 
 class NotificationType(str, enum.Enum):
@@ -41,6 +49,17 @@ class NotificationType(str, enum.Enum):
     INSPECTION_OVERDUE = "InspectionOverdue"
     INCIDENT_ASSIGNED = "IncidentAssigned"
     CA_DUE_SOON = "CADueSoon"
+    APPROVAL_DEADLINE = "ApprovalDeadline"
+    MEDICAL_OVERDUE = "MedicalOverdue"
+    PPE_OVERDUE = "PPEOverdue"
+    INCIDENT_CREATED = "IncidentCreated"
+    INSPECTION_CREATED = "InspectionCreated"
+    PRESCRIPTION_OVERDUE = "PrescriptionOverdue"
+    PACKAGE_RUN_COMPLETED = "PackageRunCompleted"
+    PACKAGE_RUN_FAILED = "PackageRunFailed"
+    INTEGRATION_ERROR = "IntegrationError"
+    EDO_STATUS_CHANGED = "EdoStatusChanged"
+    BILLING_LIMIT_WARNING = "BillingLimitWarning"
 
 
 class NotificationChannelSettings(TenantBaseModel, SoftDeleteMixin):
@@ -53,6 +72,8 @@ class NotificationChannelSettings(TenantBaseModel, SoftDeleteMixin):
     email: Mapped[str | None] = mapped_column(String(255))
     telegram_chat_id: Mapped[str | None] = mapped_column(String(255))
     quiet_hours: Mapped[dict[str, str] | None] = mapped_column(JSON, nullable=True)
+    digest_mode: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    channel_preferences: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
 
     __table_args__ = (UniqueConstraint("tenant_id", "user_id", name="uq_notification_channel_settings_tenant_user"),)
 
@@ -66,6 +87,7 @@ class Notification(TenantBaseModel, SoftDeleteMixin):
     title: Mapped[str] = mapped_column(Text, nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
     payload: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
+    priority: Mapped[NotificationPriority] = mapped_column(Enum(NotificationPriority, name="notificationpriority"), nullable=False, default=NotificationPriority.MEDIUM)
     status: Mapped[NotificationStatus] = mapped_column(Enum(NotificationStatus, name="notificationstatus"), nullable=False, default=NotificationStatus.QUEUED)
     dedup_key: Mapped[str] = mapped_column(String(255), nullable=False)
     scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

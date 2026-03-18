@@ -76,18 +76,25 @@ class SearchService:
         rows = (await self.session.execute(stmt.order_by(order_by).offset(offset).limit(limit + 1))).scalars().all()
         has_more = len(rows) > limit
         items = rows[:limit]
+        type_counts: dict[str, int] = {}
+        for row in items:
+            type_counts[row.entity_type] = type_counts.get(row.entity_type, 0) + 1
         return {
             "q": q,
             "total": len(items),
+            "facets": {"type_counts": type_counts},
             "items": [
                 {
+                    "kind": "entity",
                     "entity_type": row.entity_type,
                     "entity_id": row.entity_id,
                     "title": row.title,
                     "subtitle": row.subtitle,
                     "status": row.status,
                     "route": row.route,
+                    "deeplink": row.route or self._build_entity_url(row.entity_type, row.entity_id),
                     "preview_payload": row.preview_payload,
+                    "snippet": row.subtitle or (str(row.preview_payload)[:180] if row.preview_payload else None),
                     "tags": row.tags_json or {},
                 }
                 for row in items

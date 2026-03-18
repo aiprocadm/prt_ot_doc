@@ -95,6 +95,7 @@ from app.modules.pdf import api as pdf_api
 from app.modules.replace import api as replace_api
 from app.modules.search.api import router as search_router
 from app.modules.analytics.api import router as analytics_router
+from app.modules.workflow.api import router as workflow_router
 from app.modules.export_center.api import router as export_center_router
 from app.modules.client_portal.api import router as client_portal_v1_router
 from app.modules.client_portal.api import internal_router as portal_requests_router
@@ -226,6 +227,7 @@ tenant_router.include_router(replace_api.router)
 tenant_router.include_router(reports.router, tags=["reports"])
 tenant_router.include_router(headers_api.router, tags=["layout-presets"])
 tenant_router.include_router(pipelines_api.router)
+tenant_router.include_router(workflow_router)
 tenant_router.include_router(pdf_api.router, prefix="/files", tags=["pdf"])
 tenant_router.include_router(packs_v2_api.router)
 tenant_router.include_router(search_router, tags=["search"])
