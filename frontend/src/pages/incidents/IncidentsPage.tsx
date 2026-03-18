@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { ApiError } from "@/types/dto/common";
 import { formatDate } from "@/utils/datetime";
 import { toast } from "sonner";
+import { useCompaniesStore } from "@/stores/companies";
 
 const INCIDENT_TYPES = ["near_miss", "micro_trauma", "injury", "fatal", "fire", "environmental", "other"];
 const SEVERITY_LEVELS = ["low", "medium", "high", "critical"];
@@ -23,6 +24,7 @@ const SEVERITY_LEVELS = ["low", "medium", "high", "critical"];
 const IncidentsPage = () => {
   const [items, setItems] = useState<Incident[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("");
+  const { items: companies, list: listCompanies } = useCompaniesStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -57,7 +59,8 @@ const IncidentsPage = () => {
 
   useEffect(() => {
     void load("");
-  }, []);
+    listCompanies({ page_size: 100 }).catch(() => undefined);
+  }, [listCompanies]);
 
   const handleCreate = async () => {
     if (!form.title || !form.company_id) {
@@ -173,13 +176,18 @@ const IncidentsPage = () => {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label htmlFor="inc-company">ID компании *</Label>
-                    <Input
+                    <Label htmlFor="inc-company">Компания *</Label>
+                    <select
                       id="inc-company"
+                      className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
                       value={form.company_id}
                       onChange={(e) => setForm((prev) => ({ ...prev, company_id: e.target.value }))}
-                      placeholder="UUID компании"
-                    />
+                    >
+                      <option value="">Выберите компанию</option>
+                      {companies.map((company) => (
+                        <option key={company.id} value={company.id}>{company.name}</option>
+                      ))}
+                    </select>
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="inc-site">ID площадки</Label>

@@ -15,12 +15,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import type { ApiError } from "@/types/dto/common";
 import { formatDate } from "@/utils/datetime";
 import { toast } from "sonner";
+import { useCompaniesStore } from "@/stores/companies";
 
 const INSPECTION_TYPES = ["planned", "unplanned", "documentary", "on_site", "counter"];
 
 const InspectionsPage = () => {
   const [items, setItems] = useState<Inspection[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("");
+  const { items: companies, list: listCompanies } = useCompaniesStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -54,7 +56,8 @@ const InspectionsPage = () => {
 
   useEffect(() => {
     void load("");
-  }, []);
+    listCompanies({ page_size: 100 }).catch(() => undefined);
+  }, [listCompanies]);
 
   const handleCreate = async () => {
     if (!form.company_id || !form.authority) {
@@ -122,13 +125,18 @@ const InspectionsPage = () => {
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label htmlFor="insp-company">ID компании *</Label>
-                    <Input
+                    <Label htmlFor="insp-company">Компания *</Label>
+                    <select
                       id="insp-company"
+                      className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
                       value={form.company_id}
                       onChange={(e) => setForm((prev) => ({ ...prev, company_id: e.target.value }))}
-                      placeholder="UUID компании"
-                    />
+                    >
+                      <option value="">Выберите компанию</option>
+                      {companies.map((company) => (
+                        <option key={company.id} value={company.id}>{company.name}</option>
+                      ))}
+                    </select>
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="insp-site">ID площадки</Label>
