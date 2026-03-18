@@ -13,13 +13,22 @@ def _load_file_storage_module(settings: SimpleNamespace):
     )
     assert spec and spec.loader
     module = util.module_from_spec(spec)
+    module_name = spec.name
 
-    previous = {key: sys.modules.get(key) for key in ("app", "app.core", "app.core.config")}
+    previous = {
+        key: sys.modules.get(key)
+        for key in ("app", "app.core", "app.core.config", module_name)
+    }
     sys.modules["app"] = ModuleType("app")
     sys.modules["app.core"] = ModuleType("app.core")
     config_module = ModuleType("app.core.config")
-    config_module.settings = settings
+
+    def _get_settings():
+        return settings
+
+    config_module.get_settings = _get_settings  # type: ignore[attr-defined]
     sys.modules["app.core.config"] = config_module
+    sys.modules[module_name] = module
 
     try:
         spec.loader.exec_module(module)
