@@ -506,10 +506,14 @@ class FileStorageService:
         parsed = urlparse(url)
         key = parsed.path.replace("/", "", 1).removeprefix("signed/")
         params = dict(item.split("=", 1) for item in parsed.query.split("&") if "=" in item)
-        expires = int(params.get("expires", "0"))
-        if expires < int(datetime.now(tz=timezone.utc).timestamp()):
+        try:
+            expires = int(params.get("expires", "0"))
+        except ValueError:
+            return False
+        if not key or expires < int(datetime.now(tz=timezone.utc).timestamp()):
             return False
         download = params.get("download", "")
-        expected = self.create_signed_url(key, expires_in=max(expires - int(datetime.now(tz=timezone.utc).timestamp()), 1), download_name=download)
-        expected_params = dict(item.split("=", 1) for item in urlparse(expected).query.split("&") if "=" in item)
-        return hmac.compare_digest(expected_params.get("signature", ""), params.get("signature", ""))
+        payload = f"{self._normalize_key(key)}{JSON_SAFE_SEPARATOR}{expires}{JSON_SAFE_SEPARATOR}{download}"
+        signature = hmac.new(self._signing_secret, payload.encode("utf-8"), hashlib.sha256).digest()
+        expected_signature = base64.urlsafe_b64encode(signature).decode("ascii").rstrip("=")
+        return hmac.compare_digest(expected_signature, params.get("signature", ""))

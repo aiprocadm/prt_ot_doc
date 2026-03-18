@@ -56,11 +56,99 @@ class ReplaceEngine:
         self._storage_path.write_text(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str, indent=2), encoding="utf-8")
 
     @staticmethod
-    def _build_diff(before: dict[str, Any], after: dict[str, Any], replacements: dict[str, str]) -> list[dict[str, Any]]:
+    def _iter_paths(value: Any, prefix: str = "") -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        if isinstance(value, dict):
+            for key, child in value.items():
+                path = f"{prefix}.{key}" if prefix else str(key)
+                result[path] = child
+                result.update(ReplaceEngine._iter_paths(child, path))
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                path = f"{prefix}[{index}]"
+                result[path] = child
+                result.update(ReplaceEngine._iter_paths(child, path))
+        return result
+
+    @staticmethod
+    def _parse_path(path: str) -> list[str | int]:
+        tokens: list[str | int] = []
+        current = ""
+        i = 0
+        while i < len(path):
+            char = path[i]
+            if char == '.':
+                if current:
+                    tokens.append(current)
+                    current = ""
+                i += 1
+                continue
+            if char == '[':
+                if current:
+                    tokens.append(current)
+                    current = ""
+                end = path.index(']', i)
+                tokens.append(int(path[i + 1:end]))
+                i = end + 1
+                continue
+            current += char
+            i += 1
+        if current:
+            tokens.append(current)
+        return tokens
+
+    @classmethod
+    def _get_value(cls, payload: dict[str, Any], path: str) -> Any:
+        current: Any = payload
+        for token in cls._parse_path(path):
+            if isinstance(token, int):
+                if not isinstance(current, list) or token >= len(current):
+                    return None
+                current = current[token]
+            else:
+                if not isinstance(current, dict) or token not in current:
+                    return None
+                current = current[token]
+        return current
+
+    @classmethod
+    def _set_value(cls, payload: dict[str, Any], path: str, value: Any) -> bool:
+        tokens = cls._parse_path(path)
+        if not tokens:
+            return False
+        current: Any = payload
+        for token in tokens[:-1]:
+            if isinstance(token, int):
+                if not isinstance(current, list) or token >= len(current):
+                    return False
+                current = current[token]
+            else:
+                if not isinstance(current, dict) or token not in current:
+                    return False
+                current = current[token]
+        last = tokens[-1]
+        if isinstance(last, int):
+            if not isinstance(current, list) or last >= len(current):
+                return False
+            current[last] = value
+            return True
+        if not isinstance(current, dict) or last not in current:
+            return False
+        current[last] = value
+        return True
+
+    @classmethod
+    def _build_diff(cls, before: dict[str, Any], after: dict[str, Any], replacements: dict[str, str]) -> list[dict[str, Any]]:
         diff: list[dict[str, Any]] = []
+        before_paths = cls._iter_paths(before)
+        after_paths = cls._iter_paths(after)
         for key, replacement in replacements.items():
-            before_value = before.get(key)
-            after_value = after.get(key)
+            before_value = cls._get_value(before, key)
+            after_value = cls._get_value(after, key)
+            if before_value is None and key in before_paths:
+                before_value = before_paths[key]
+            if after_value is None and key in after_paths:
+                after_value = after_paths[key]
             if before_value != after_value:
                 diff.append({"key": key, "before": before_value, "after": after_value, "replacement": replacement})
         return diff
@@ -82,7 +170,12 @@ class ReplaceEngine:
             changed_keys=sorted(item["key"] for item in diff),
             mode=mode,
             status="applied" if mode == "apply" else "planned",
-            audit={"replacements_count": len(replacements), "changed_keys": sorted(item["key"] for item in diff)},
+            audit={
+                "replacements_count": len(replacements),
+                "changed_keys": sorted(item["key"] for item in diff),
+                "changed_count": len(diff),
+                "idempotency_fingerprint": patch_id,
+            },
             diff=diff,
         )
         self._patches[patch_id] = patch
@@ -92,10 +185,11 @@ class ReplaceEngine:
     def dry_run(self, context: dict[str, Any], replacements: dict[str, str]) -> ReplacePatch:
         return self._make_patch(context, replacements, mode="dry_run")
 
-    def apply(self, context: dict[str, Any], replacements: dict[str, str]) -> dict[str, Any]:
+    @classmethod
+    def apply(cls, context: dict[str, Any], replacements: dict[str, str]) -> dict[str, Any]:
         updated = copy.deepcopy(context)
         for key, value in replacements.items():
-            if key in updated:
+            if not cls._set_value(updated, key, value) and key in updated:
                 updated[key] = value
         return updated
 
@@ -104,8 +198,11 @@ class ReplaceEngine:
 
     def rollback(self, patch_id: str) -> dict[str, Any]:
         patch = self._patches[patch_id]
+        if patch.status == "rolled_back":
+            return copy.deepcopy(patch.before)
         patch.status = "rolled_back"
         patch.rolled_back_at = datetime.now(tz=timezone.utc)
+        patch.audit = {**patch.audit, "rolled_back": True, "rolled_back_at": patch.rolled_back_at.isoformat()}
         self._persist()
         return copy.deepcopy(patch.before)
 
