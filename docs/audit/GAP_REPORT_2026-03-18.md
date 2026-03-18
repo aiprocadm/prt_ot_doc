@@ -14,10 +14,10 @@
 - `DocumentService`, `PackAssembler`, `ComplianceChecker` усилены metadata / signed-download / impact-analysis/useful warnings.
 - Добавлены регрессионные тесты на portal artifacts/history/tickets, persisted replace patches и outbox events для incidents/inspections.
 - Briefings переведены из CRUD-only в управляемый lifecycle: typed API payloads, идемпотентные employee/instructor signatures, complete-flow с `valid_until`, overdue listing и `TaskOverdue` reminders через outbox.
-- Frontend получил отдельный экран инструктажей и usable client portal package detail view; incidents/inspections перестали требовать ручной ввод UUID компании в критичном create-flow.
+- Frontend получил отдельный экран инструктажей и usable client portal cabinet по пакетам: summary/files/history/requests теперь питаются от реального package detail API без dashboard-заглушек; incidents/inspections перестали требовать ручной ввод UUID компании в критичном create-flow.
 
 ## Что осталось как осознанный backlog P2
 - Перенести replace patch journal из file-backed domain storage в shared DB storage для multi-worker rollback.
-- Дотянуть frontend client portal/package wizard до enterprise UX уровня (rich selectors, timeline panels, retry UX).
+- Дотянуть frontend client portal/package wizard до enterprise UX уровня (rich selectors, ticket creation inline, retry UX и richer timeline filters).
 - Довести PDF pipeline до полного acceptance scope по hanging detection/font embedding/retry telemetry.
 - Закрыть prescription overdue / corrective events и углубить briefings до person/site selectors + background reminder worker.
