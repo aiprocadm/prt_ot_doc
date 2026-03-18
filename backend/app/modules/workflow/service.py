@@ -70,6 +70,8 @@ class WorkflowService:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "workflow graph requires nodes")
         node_ids = set()
         start_count = 0
+        end_count = 0
+        start_node_id: str | None = None
         for node in nodes:
             node_id = node.get("id")
             node_type = node.get("type")
@@ -79,12 +81,36 @@ class WorkflowService:
                 raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"unsupported workflow node type: {node_type}")
             if node_type == "start":
                 start_count += 1
+                start_node_id = str(node_id)
+            if node_type == "end":
+                end_count += 1
             node_ids.add(node_id)
         if start_count != 1:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "workflow graph requires exactly one start node")
+        if end_count < 1:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "workflow graph requires at least one end node")
         for transition in transitions:
             if transition.get("from") not in node_ids or transition.get("to") not in node_ids:
                 raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "workflow transition references unknown node")
+        if not any(transition.get("from") == start_node_id for transition in transitions):
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "workflow start node must have at least one outgoing transition")
+        adjacency: dict[str, list[str]] = {str(node_id): [] for node_id in node_ids}
+        for transition in transitions:
+            adjacency[str(transition["from"])].append(str(transition["to"]))
+        visited: set[str] = set()
+        queue = [start_node_id] if start_node_id else []
+        while queue:
+            current = queue.pop(0)
+            if current in visited:
+                continue
+            visited.add(current)
+            queue.extend(adjacency.get(current, []))
+        unreachable = node_ids - visited
+        if unreachable:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"workflow graph contains unreachable nodes: {', '.join(sorted(unreachable))}")
+        terminal_nodes = {str(node.get("id")) for node in nodes if node.get("type") == "end"}
+        if not any(end_node in visited for end_node in terminal_nodes):
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "workflow graph must reach an end node")
 
     async def publish_version(self, version_id: str, actor_user_id: str | None) -> WorkflowDefinitionVersion:
         version = await self.session.get(WorkflowDefinitionVersion, version_id)
@@ -157,6 +183,8 @@ class WorkflowService:
         definition = await self.session.get(WorkflowDefinition, version.definition_id)
         if definition is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "workflow definition not found")
+        if entity_type != definition.entity_type:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "workflow entity_type does not match process definition")
         instance = WorkflowInstance(
             tenant_id=self.tenant_id,
             definition_id=definition.id,
@@ -196,6 +224,7 @@ class WorkflowService:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "workflow instance not found")
         instance.context_json = {**(instance.context_json or {}), **(payload or {}), "last_decision": decision}
         await self._append_event(instance.id, task.node_id, "human_task_completed", actor_user_id, {"task_id": task.id, "decision": decision})
+        await self._timeline_like_audit("workflow.task.complete", actor_user_id, task.id, {"instance_id": task.instance_id, "node_id": task.node_id, "decision": decision})
         await self._advance(instance, actor_user_id=actor_user_id, from_node_id=task.node_id)
         return task
 
@@ -216,6 +245,7 @@ class WorkflowService:
         await self.session.flush()
         task.status = WorkflowTaskStatus.OPEN
         await self._append_event(task.instance_id, task.node_id, f"task_{mode}", actor_user_id, {"task_id": task.id, "assignee_user_id": assignee_user_id, "assignee_role_code": assignee_role_code})
+        await self._timeline_like_audit(f"workflow.task.{mode}", actor_user_id, task.id, {"instance_id": task.instance_id, "node_id": task.node_id, "assignee_user_id": assignee_user_id, "assignee_role_code": assignee_role_code})
         return task
 
     async def get_instance_history(self, instance_id: str) -> tuple[WorkflowInstance, list[WorkflowTimelineEvent], list[WorkflowTask]]:

@@ -62,6 +62,25 @@ class NotificationType(str, enum.Enum):
     BILLING_LIMIT_WARNING = "BillingLimitWarning"
 
 
+class NotificationTemplate(TenantBaseModel, SoftDeleteMixin):
+    __tablename__ = "notification_templates"
+
+    code: Mapped[str] = mapped_column(String(128), nullable=False)
+    channel: Mapped[NotificationChannel] = mapped_column(Enum(NotificationChannel, name="notificationtemplatechannel"), nullable=False)
+    type: Mapped[NotificationType] = mapped_column(Enum(NotificationType, name="notificationtemplatetype"), nullable=False)
+    locale: Mapped[str] = mapped_column(String(16), nullable=False, default="ru")
+    subject_template: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    body_template: Mapped[str] = mapped_column(Text, nullable=False)
+    title_template: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    variables_schema: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "code", "channel", "locale", name="uq_notification_templates_scope"),
+        Index("ix_notification_templates_lookup", "tenant_id", "channel", "type", "is_active"),
+    )
+
+
 class NotificationChannelSettings(TenantBaseModel, SoftDeleteMixin):
     __tablename__ = "notification_channel_settings"
 

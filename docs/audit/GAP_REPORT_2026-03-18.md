@@ -74,3 +74,7 @@
 - Глубже автоматизировать влияние incidents / corrective actions / NPA bindings на persisted residual-risk recalculation, а не только на summary/context layer.
 - Marketplace: materialization/import-copy into tenant runtime entities, moderation, public storefront UX.
 - Backend i18n: локализация structured errors и notification/document templates beyond the new foundation.
+- Workflow governance hardening: graph validation now blocks unreachable/orphan nodes and missing terminal paths before publish/start, and human-task complete/reassign/delegate/escalate actions emit dedicated audit events for immutable transition traceability.
+- Notifications hardening: tenant-scoped notification templates were added as a reusable platform foundation for in-app/email/telegram/webhook channels, and the unified Notifications Center now exposes that registry alongside preferences/read-state controls.
+- NPA impact hardening: detail flow now supports revision-scoped analysis, while update-task generation deduplicates already-open tenant tasks to keep actualization queues retry-safe.
+- Regression coverage updated: added focused backend tests for workflow validation, NPA impact task deduplication, and notification template persistence.
