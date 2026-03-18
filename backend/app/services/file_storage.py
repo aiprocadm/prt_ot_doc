@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import BinaryIO, ClassVar, Protocol, Tuple
 from urllib.parse import urlparse
 
@@ -260,6 +261,101 @@ class _LocalAdapter:
             return BlobMeta(**meta.to_dict())
 
 
+
+
+class _S3Adapter:
+    name = "s3"
+
+    def __init__(self) -> None:
+        from app.domains.files import s3 as s3_domain
+
+        self._s3 = s3_domain
+        self._meta: dict[str, BlobMeta] = {}
+        self._lock = threading.RLock()
+
+    def put(self, key: str, data: bytes, *, content_type: str | None = None, quarantined: bool = False) -> BlobMeta:
+        now = datetime.now(tz=timezone.utc)
+        mime = content_type or "application/octet-stream"
+        self._s3.ensure_bucket()
+        etag = self._s3.put_object(data=data, mime=mime, key=key)
+        with self._lock:
+            existing = self._meta.get(key)
+            meta = BlobMeta(
+                key=key,
+                size=len(data),
+                content_type=mime,
+                sha256=hashlib.sha256(data).hexdigest(),
+                created_at=existing.created_at if existing else now,
+                updated_at=now,
+                quarantined=quarantined,
+                adapter=self.name,
+                etag=etag or None,
+                scan_status="quarantined" if quarantined else "clean",
+                tags=dict(existing.tags) if existing else {},
+                last_validated_mime=mime,
+            )
+            self._meta[key] = meta
+            return BlobMeta(**meta.to_dict())
+
+    def get(self, key: str) -> bytes:
+        self._s3.ensure_bucket()
+        with self._s3.stream_object(key=key) as stream:
+            return stream.read()
+
+    def head(self, key: str) -> BlobMeta | None:
+        remote = self._s3.head_object(key=key)
+        if remote is None:
+            return None
+        with self._lock:
+            cached = self._meta.get(key)
+            now = datetime.now(tz=timezone.utc)
+            meta = BlobMeta(
+                key=key,
+                size=int(remote.get("size") or (cached.size if cached else 0)),
+                content_type=remote.get("content_type") or (cached.content_type if cached else None),
+                sha256=cached.sha256 if cached else "",
+                created_at=cached.created_at if cached else now,
+                updated_at=now,
+                quarantined=cached.quarantined if cached else False,
+                adapter=self.name,
+                etag=remote.get("etag") or (cached.etag if cached else None),
+                scan_status=cached.scan_status if cached else "pending",
+                tags=dict(cached.tags) if cached else {},
+                last_validated_mime=cached.last_validated_mime if cached else remote.get("content_type"),
+            )
+            self._meta[key] = meta
+            return BlobMeta(**meta.to_dict())
+
+    def has(self, key: str) -> bool:
+        return self.head(key) is not None
+
+    def delete(self, key: str) -> None:
+        with self._lock:
+            self._meta.pop(key, None)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._meta.clear()
+
+    def ensure_ready(self) -> None:
+        self._s3.ensure_bucket()
+
+    def mark_quarantined(self, key: str, *, quarantined: bool, reason: str | None = None) -> BlobMeta | None:
+        with self._lock:
+            meta = self._meta.get(key)
+            if meta is None:
+                meta = self.head(key)
+                if meta is None:
+                    return None
+                self._meta[key] = meta
+            meta.quarantined = quarantined
+            meta.scan_status = "quarantined" if quarantined else "clean"
+            meta.updated_at = datetime.now(tz=timezone.utc)
+            if reason:
+                meta.tags["quarantine_reason"] = reason
+            return BlobMeta(**meta.to_dict())
+
+
 class FileStorageService:
     """Storage facade with dev/test memory adapter and production-like local/S3 semantics."""
 
@@ -298,8 +394,10 @@ class FileStorageService:
         backend = self._settings.storage_backend
         if backend == "local":
             return _LocalAdapter(self._settings.storage_root)
-        if backend == "s3" and self._settings.s3_backend == "local":
-            return _LocalAdapter(self._settings.storage_root)
+        if backend == "s3":
+            if self._settings.s3_backend == "local":
+                return _LocalAdapter(self._settings.storage_root)
+            return _S3Adapter()
         return _MemoryAdapter()
 
     @classmethod
@@ -350,6 +448,14 @@ class FileStorageService:
     def open_temp(self, key: str) -> BytesIO:
         return BytesIO(self.get(key))
 
+    def write_temp_file(self, key: str, *, suffix: str | None = None) -> str:
+        normalized_key = self._normalize_key(key)
+        payload = self.get(normalized_key)
+        suffix_value = suffix or Path(normalized_key).suffix or ".bin"
+        with NamedTemporaryFile(prefix="prt-storage-", suffix=suffix_value, delete=False) as handle:
+            handle.write(payload)
+            return handle.name
+
     def mark_quarantined(self, key: str, *, quarantined: bool = True, reason: str | None = None) -> dict[str, object] | None:
         normalized_key = self._normalize_key(key)
         meta = self._adapter.mark_quarantined(normalized_key, quarantined=quarantined, reason=reason)
@@ -381,6 +487,15 @@ class FileStorageService:
     def create_signed_url(self, key: str, *, expires_in: int | None = None, download_name: str | None = None) -> str:
         normalized_key = self._normalize_key(key)
         ttl = int(expires_in or self._settings.presign_download_ttl_seconds)
+        if getattr(self._adapter, "name", "") == "s3" and self._settings.s3_backend == "minio":
+            from app.domains.files.s3 import generate_presigned_get_url
+
+            response_headers = {}
+            if download_name:
+                response_headers["ResponseContentDisposition"] = f'attachment; filename="{download_name}"'
+            presigned = generate_presigned_get_url(normalized_key, expires_in=ttl, response_headers=response_headers or None)
+            if presigned:
+                return presigned
         expires_at = int((datetime.now(tz=timezone.utc) + timedelta(seconds=ttl)).timestamp())
         payload = f"{normalized_key}{JSON_SAFE_SEPARATOR}{expires_at}{JSON_SAFE_SEPARATOR}{download_name or ''}"
         signature = hmac.new(self._signing_secret, payload.encode("utf-8"), hashlib.sha256).digest()

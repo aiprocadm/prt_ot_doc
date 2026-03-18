@@ -4,6 +4,9 @@ from datetime import datetime, timezone
 
 import pytest
 from fastapi import status
+from sqlalchemy import select
+
+from app.models.models import Outbox
 
 from app.models.models import IncidentStage, IncidentStatus, IncidentType, IncidentSeverity, RoleEnum
 from tests.utils.factories import TestDataFactory
@@ -69,3 +72,7 @@ async def test_incident_flow(async_client, make_auth_headers, sessionmaker, data
     logs_list = await async_client.get(f"/api/v1/incidents/{created['id']}/logs", headers=headers)
     assert logs_list.status_code == status.HTTP_200_OK
     assert len(logs_list.json()) >= 1
+
+    async with sessionmaker() as session:
+        outbox = (await session.execute(select(Outbox).where(Outbox.event_type == "IncidentCreated"))).scalars().all()
+        assert any(item.payload.get("incident_id") == created["id"] for item in outbox)
