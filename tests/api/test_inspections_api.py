@@ -4,6 +4,9 @@ from datetime import date
 
 import pytest
 from fastapi import status
+from sqlalchemy import select
+
+from app.models.models import Outbox
 
 from app.models.models import InspectionStatus, RoleEnum
 from tests.utils.factories import TestDataFactory
@@ -64,3 +67,7 @@ async def test_inspection_flow(async_client, make_auth_headers, sessionmaker, da
     )
     assert results_list.status_code == status.HTTP_200_OK
     assert len(results_list.json()) >= 1
+
+    async with sessionmaker() as session:
+        outbox = (await session.execute(select(Outbox).where(Outbox.event_type == "InspectionCreated"))).scalars().all()
+        assert any(item.payload.get("inspection_id") == inspection["id"] for item in outbox)

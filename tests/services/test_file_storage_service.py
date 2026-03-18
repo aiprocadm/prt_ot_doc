@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import os
 from io import BytesIO
 
 import pytest
 
-from app.services.file_storage import FileStorageService
+from app.services.file_storage import FileStorageService, _LocalAdapter
 
 
 def test_file_storage_roundtrip():
@@ -42,3 +43,17 @@ def test_file_storage_supports_signed_urls_and_quarantine_metadata():
     assert updated is not None
     assert updated["quarantined"] is False
     assert updated["scan_status"] == "clean"
+
+
+def test_write_temp_file_uses_safe_named_tempfile(tmp_path):
+    storage = FileStorageService(adapter=_LocalAdapter(str(tmp_path / "storage")))
+    storage.ensure_ready()
+    storage.put("documents/report.pdf", b"payload", content_type="application/pdf")
+
+    temp_path = storage.write_temp_file("documents/report.pdf")
+    try:
+        assert os.path.exists(temp_path)
+        assert open(temp_path, "rb").read() == b"payload"
+        assert os.path.basename(temp_path).startswith("prt-storage-")
+    finally:
+        os.unlink(temp_path)

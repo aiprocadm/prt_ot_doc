@@ -6,12 +6,14 @@ import hashlib
 import json
 from dataclasses import dataclass
 from io import BytesIO
+from pathlib import Path
 from typing import Any, Mapping
 
 from docxtpl import DocxTemplate
-from jinja2 import Environment, StrictUndefined
+from jinja2 import Environment, StrictUndefined, UndefinedError
 
 __all__ = ["RenderedTemplate", "TemplateRenderer", "render_docx", "render_docx_with_metadata"]
+
 
 
 def _coerce_mapping(value: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -39,6 +41,20 @@ def _flatten_context(context: Mapping[str, Any], prefix: str = "") -> dict[str, 
     return flattened
 
 
+def _fallback_context(context: Mapping[str, Any], warnings: list[str]) -> dict[str, Any]:
+    data = _coerce_mapping(context)
+
+    class _FallbackDict(dict):
+        def __missing__(self, key: str) -> Any:
+            warnings.append(f"missing context key: {key}")
+            return ""
+
+    fallback = _FallbackDict()
+    for key, value in data.items():
+        fallback[key] = _fallback_context(value, warnings) if isinstance(value, Mapping) else value
+    return fallback
+
+
 def render_docx_with_metadata(template_bytes: bytes, context: Mapping[str, Any] | None) -> RenderedTemplate:
     render_context = _coerce_mapping(context)
     warnings: list[str] = []
@@ -46,19 +62,31 @@ def render_docx_with_metadata(template_bytes: bytes, context: Mapping[str, Any] 
         warnings.append("rendered with empty context")
 
     tpl = DocxTemplate(BytesIO(template_bytes))
-    tpl.render(render_context, jinja_env=Environment(undefined=StrictUndefined))
+    strict_env = Environment(undefined=StrictUndefined)
+    try:
+        tpl.render(render_context, jinja_env=strict_env)
+    except UndefinedError:
+        fallback = _fallback_context(render_context, warnings)
+        tpl = DocxTemplate(BytesIO(template_bytes))
+        tpl.render(fallback)
+        warnings.append("strict render failed; empty-string fallback applied")
     buffer = BytesIO()
     tpl.save(buffer)
     content = buffer.getvalue()
+    context_json = json.dumps(render_context, ensure_ascii=False, sort_keys=True, default=str)
     metadata = {
         "template_sha256": hashlib.sha256(template_bytes).hexdigest(),
         "output_sha256": hashlib.sha256(content).hexdigest(),
-        "context_sha256": hashlib.sha256(
-            json.dumps(render_context, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
-        ).hexdigest(),
+        "context_sha256": hashlib.sha256(context_json.encode("utf-8")).hexdigest(),
         "context_keys": sorted(_flatten_context(render_context).keys()),
         "warnings": list(warnings),
         "engine": "docxtpl",
+        "rendered_at": json.dumps({"utc": "deterministic"}),
+        "reproducibility": {
+            "context_sha256": hashlib.sha256(context_json.encode("utf-8")).hexdigest(),
+            "template_sha256": hashlib.sha256(template_bytes).hexdigest(),
+            "context_bytes": len(context_json.encode("utf-8")),
+        },
     }
     return RenderedTemplate(content=content, metadata=metadata, warnings=warnings)
 
@@ -72,7 +100,6 @@ class TemplateRenderer:
     template_path: str
 
     def render(self, context: Mapping[str, Any], output_path: str) -> str:
-        rendered = render_docx_with_metadata(open(self.template_path, "rb").read(), context)
-        with open(output_path, "wb") as fh:
-            fh.write(rendered.content)
+        rendered = render_docx_with_metadata(Path(self.template_path).read_bytes(), context)
+        Path(output_path).write_bytes(rendered.content)
         return output_path

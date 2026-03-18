@@ -136,3 +136,21 @@ async def test_replace_idempotency_conflict_same_key_different_payload(app_fixtu
     async with sessionmaker() as session:
         versions = (await session.execute(select(DocumentVersion).where(DocumentVersion.document_id.is_not(None)))).scalars().all()
         assert len(versions) >= 1
+
+
+def test_replace_engine_persists_patch_and_rollback(tmp_path):
+    from app.domains.replace.engine import ReplaceEngine
+
+    storage_path = tmp_path / "patches.json"
+    engine = ReplaceEngine(storage_path=str(storage_path))
+    patch = engine.commit({"company": "Old", "city": "Kazan"}, {"company": "New"})
+
+    reloaded = ReplaceEngine(storage_path=str(storage_path))
+    persisted = reloaded.get_patch(patch.patch_id)
+    assert persisted is not None
+    assert persisted.status == "applied"
+    assert persisted.diff == [{"key": "company", "before": "Old", "after": "New", "replacement": "New"}]
+
+    restored = reloaded.rollback(patch.patch_id)
+    assert restored == {"company": "Old", "city": "Kazan"}
+    assert reloaded.get_patch(patch.patch_id).status == "rolled_back"

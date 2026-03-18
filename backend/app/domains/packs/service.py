@@ -14,6 +14,7 @@ class PackAssembler:
         shared_context = dict(context or {})
         assembled: list[dict[str, Any]] = []
         for index, pack in enumerate(packs, start=1):
+            pack_context = {**shared_context, "pack": {"name": pack.name, "description": pack.description or "", "sequence": index}}
             assembled.append(
                 {
                     "name": pack.name,
@@ -21,7 +22,9 @@ class PackAssembler:
                     "template_id": self.template_id,
                     "preset_code": preset_code,
                     "sequence": index,
-                    "context": dict(shared_context),
+                    "context": pack_context,
+                    "warnings": [] if pack.description else ["pack description is empty"],
+                    "idempotency_key": f"{preset_code or 'pack'}:{self.template_id}:{index}:{pack.name}",
                 }
             )
         return assembled
