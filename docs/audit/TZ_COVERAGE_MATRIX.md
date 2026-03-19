@@ -44,6 +44,8 @@
 | TZ-ACCEPT | End-to-end acceptance in codespace | backend+frontend+jobs | db/local storage | eager celery in codespaces | outbox mocked in tests | full UI flows | `make cs:dev`, `make cs:test`, integration tests | Partial | P0 | UI manual scenario checklist in next QA run |
 
 ## RC final-wave audit update
+- Release-candidate evidence is now normalized into repo-root acceptance artifacts: `ACCEPTANCE_TEST_MATRIX.md`, `GAP_REPORT.md`, `RELEASE_READINESS.md`, and `KNOWN_LIMITATIONS.md`.
+- `tests/e2e/test_release_candidate_docs.py` keeps these artifacts executable/visible as part of regression, so acceptance documentation is no longer implicit.
 - Structured error contract stabilized for acceptance: `tests/test_errors.py` and final regression now assert `type`, `field_errors`, `correlation_id`, and `timestamp`.
 - Release evidence set now includes `ACCEPTANCE_TEST_MATRIX.md`, `GAP_REPORT.md`, and `RELEASE_READINESS.md` for pilot/demo sign-off.
 - Lightweight load foundation added via `scripts/perf/api_load.py` and `scripts/perf/README.md` for API/search/worker smoke baselines.

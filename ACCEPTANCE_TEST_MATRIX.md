@@ -1,32 +1,52 @@
-# ACCEPTANCE_TEST_MATRIX
+# ACCEPTANCE TEST MATRIX
 
-## Scope
-Release-candidate acceptance coverage for the final stabilization wave. The matrix below maps critical business scenarios to executable checks already present in the repository and highlights the main evidence path for pilot/demo acceptance.
+Финальная матрица приемки release candidate. Документ фиксирует, каким именно автотестом или smoke/probe-командой подтверждается каждый критичный сценарий из RC-wave.
 
-| Scenario | Backend / integration evidence | Frontend / e2e evidence | Status | Notes |
+## 1. Critical end-to-end scenarios
+
+| Scenario | Backend/API coverage | Frontend / UX / smoke coverage | Acceptance evidence | Status |
 |---|---|---|---|---|
-| Tenant bootstrap / isolation | `tests/test_tenancy_enforcement.py`, `tests/integration/test_tenant_isolation.py`, `tests/e2e/pilot_smoke/test_pilot_smoke_matrix.py` | route smoke via existing frontend suite | Ready | `X-Tenant` remains mandatory and regression-covered. |
-| Employee import / кадровый контур | `tests/api/test_person_crud.py`, `tests/api/test_company_crud.py` | `frontend` persons smoke | Ready with manual import drill | CRUD path is covered; bulk import remains validated via pilot smoke/data seeding. |
-| Document/package generation | `tests/test_documents_generate.py`, `tests/test_package_pipeline.py`, `tests/services/test_pack_generation_pipeline.py` | documents/package pages in frontend smoke | Ready | Includes idempotent generation and package pipeline checks. |
-| Approval -> sign -> EDO | `tests/api/test_edo_signature_approval_mvp.py` | manual UI validation supported, API flow automated | Ready | Mock provider path is acceptance baseline for pilot. |
-| Client portal dispatch | `tests/test_client_portal_api.py` | `ClientPortalPackagesPage.test.tsx`, `ClientPortalHistoryAndRequests.test.tsx` | Ready | Portal package status/history paths are stable. |
-| PPE issuance | `tests/api/test_ppe_api.py`, `tests/api/test_ppe_events.py` | PPE registry page smoke | Ready | Journal/events covered. |
-| Training assignment / completion | `tests/api/test_training_api.py`, `tests/api/test_training_enterprise_api.py` | training page tests | Ready | Overdue/enterprise flows covered by API regression. |
-| Incident registration | `tests/api/test_incidents_api.py` | incident page smoke/manual | Ready | Corrective-action path continued below. |
-| Inspection -> prescription -> closure | `tests/api/test_inspections_api.py`, `tests/integration/test_prescriptions_api.py` | inspection/prescription UI smoke/manual | Ready | Core checklist/finding/closure flow automated on API side. |
-| CRM -> contract/order -> invoice/act | `tests/integration/test_finance_entities.py` | billing/admin UI smoke/manual | Partial-ready | API foundation is present; end-to-end UI contract remains pilot checklist item. |
-| Billing limit enforcement | `tests/test_billing_service.py`, `tests/test_tenant_billing_services.py`, `tests/test_billing_events_api.py` | billing screens manual/UI smoke | Ready | Hard limit behavior remains contract-tested. |
-| Export/report job | `tests/api/test_exports_foundation_api.py`, `tests/integration/test_job_status_flow.py`, `tests/api/test_reports_api.py` | exports page tests/manual | Ready | Job tracking and download-link lifecycle are automated. |
-| Workflow completion / delegation / escalation | `tests/test_workflow_api.py`, `tests/unit/test_task_reminders.py` | workflow page smoke/manual | Ready | Delegation and SLA paths are regression-covered. |
-| Structured errors / API contract | `tests/test_errors.py`, `tests/contract/test_openapi_contract.py`, `tests/e2e/final_regression/test_final_regression_api.py` | n/a | Ready | Error envelope fields are now enforced consistently. |
+| Tenant bootstrap / onboarding | `tests/e2e/pilot_smoke/test_pilot_smoke_matrix.py`, `tests/test_tenant_header_required.py`, `tests/test_tenancy_enforcement.py` | `docs/TENANT_BOOTSTRAP_RUNBOOK.md`, `docs/FIRST_RUN_ONBOARDING.md` | `python scripts/pilot_readiness.py` | Ready for pilot |
+| Employees import / кадровый контур | `tests/api/test_person_crud.py`, `tests/api/test_company_crud.py` | registry UX covered by persons/companies pages and route smoke | `./scripts/pytest.sh tests/api/test_person_crud.py tests/api/test_company_crud.py` | Stable CRUD baseline |
+| Document/package generation | `tests/test_documents_generate.py`, `tests/test_package_pipeline.py`, `tests/integration/test_pipeline_steps_happy_path.py` | document wizard/pages backed by existing frontend smoke suites | `make final-acceptance` → sample render/pdf/export flow | Stable |
+| Approval flow | `tests/api/test_edo_signature_approval_mvp.py`, `tests/services/test_document_workflow.py` | timeline/status widgets in critical pages | backend acceptance + runbook walkthrough | Stable MVP |
+| Signature journal / sign status | `tests/api/test_edo_signature_approval_mvp.py`, `tests/test_outbox_service.py` | sign/approval detail UX via shared status/timeline components | backend acceptance + `docs/runbook/DEMO_WALKTHROUGH_3_EDO_SIGNATURE_APPROVAL.md` | Stable MVP |
+| Send to client portal | `tests/test_client_portal_api.py`, `tests/test_pack_download_api.py` | portal packages/history/request screens smoke-covered by existing route tests | API evidence + portal runbook | Stable MVP |
+| PPE issuance | `tests/api/test_ppe_api.py`, `tests/api/test_ppe_events.py` | PPE registries/pages in existing frontend shell | backend acceptance | Stable |
+| Training assignment / completion | `tests/api/test_training_api.py`, `tests/api/test_training_enterprise_api.py`, `tests/test_training_enrollment_service.py` | learner/training pages covered by app/router smoke baseline | backend acceptance | Stable |
+| Incident registration | `tests/api/test_incidents_api.py` | incident page shell in routed frontend app | backend acceptance | Stable MVP |
+| Inspection / checklist / findings | `tests/api/test_inspections_api.py`, `tests/integration/test_prescriptions_api.py` | inspection page shell in routed frontend app | backend acceptance | Stable MVP |
+| Prescription / corrective action closure | `tests/integration/test_prescriptions_api.py`, `tests/integration/test_obligation_tasks.py` | workflow/task UX via shared task screens | backend acceptance | Stable MVP |
+| CRM -> contract/order -> invoice/act | `tests/integration/test_finance_entities.py`, `tests/test_billing_events_api.py` | finance/admin screens covered by route-level smoke and documented flows | targeted backend integration checks | Stable foundation |
+| Billing limit enforcement | `tests/test_billing_service.py`, `tests/test_tenant_billing_services.py`, `tests/test_document_limits.py` | billing/usage pages documented and route-exposed | backend acceptance | Stable |
+| Export / report job | `tests/api/test_exports_foundation_api.py`, `tests/api/test_reports_api.py`, `tests/integration/test_job_status_flow.py` | export/report screens route through async jobs | `make final-acceptance` + perf notes | Stable |
+| Workflow task completion / delegation / escalation | `tests/test_workflow_api.py`, `tests/unit/test_task_reminders.py` | workflow inbox/detail pages reuse task cards/timeline widgets | backend acceptance | Stable MVP |
 
-## Recommended RC verification commands
+## 2. Cross-cutting release criteria
+
+| Criterion | Primary tests / checks | Command |
+|---|---|---|
+| Tenant isolation | `tests/integration/test_tenant_isolation.py`, `tests/integration/test_abac_query_isolation.py` | `./scripts/pytest.sh tests/integration/test_tenant_isolation.py tests/integration/test_abac_query_isolation.py` |
+| Structured errors contract | `tests/test_errors.py`, `tests/e2e/final_regression/test_final_regression_api.py` | `./scripts/pytest.sh tests/test_errors.py tests/e2e/final_regression/test_final_regression_api.py` |
+| OpenAPI / contract stability | `tests/contract/test_openapi_contract.py`, `scripts/contract/validate.py` | `./scripts/pytest.sh tests/contract/test_openapi_contract.py && PYTHONPATH=backend python scripts/contract/validate.py` |
+| Idempotent generation / writes | `tests/test_idempotency.py`, `tests/integration/test_idempotency_generate.py`, `tests/integration/test_pipeline_idempotency.py` | `./scripts/pytest.sh tests/test_idempotency.py tests/integration/test_idempotency_generate.py tests/integration/test_pipeline_idempotency.py` |
+| Async status transparency | `tests/integration/test_job_status_flow.py`, `tests/test_outbox_dispatch.py`, `tests/test_webhooks_dispatch.py` | `./scripts/pytest.sh tests/integration/test_job_status_flow.py tests/test_outbox_dispatch.py tests/test_webhooks_dispatch.py` |
+| Search / export performance smoke foundation | `scripts/perf/api_load.py`, `scripts/perf/README.md` | `python scripts/perf/api_load.py --help` |
+| Release docs completeness | `tests/e2e/test_release_candidate_docs.py` | `./scripts/pytest.sh tests/e2e/test_release_candidate_docs.py` |
+
+## 3. Acceptance bundle commands
+
 ```bash
+make final-acceptance
 ./scripts/pytest.sh tests/test_errors.py tests/e2e/final_regression/test_final_regression_api.py
 ./scripts/pytest.sh tests/integration/test_tenant_isolation.py tests/integration/test_job_status_flow.py
-./scripts/pytest.sh tests/api/test_edo_signature_approval_mvp.py tests/test_client_portal_api.py
-./scripts/pytest.sh tests/api/test_ppe_api.py tests/api/test_training_enterprise_api.py
-./scripts/pytest.sh tests/api/test_incidents_api.py tests/api/test_inspections_api.py tests/integration/test_prescriptions_api.py
-./scripts/pytest.sh tests/test_workflow_api.py tests/test_billing_service.py tests/api/test_exports_foundation_api.py
-npm --prefix frontend run test
+python scripts/perf/api_load.py --help
+python scripts/pilot_readiness.py
 ```
+
+## 4. Related evidence
+
+- Coverage source of truth: `docs/audit/TZ_COVERAGE_MATRIX.md`
+- Gap analysis: `GAP_REPORT.md`
+- Release decision log: `RELEASE_READINESS.md`
+- Residual risks / accepted limitations: `KNOWN_LIMITATIONS.md`
