@@ -4,16 +4,17 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from http import HTTPStatus
 from typing import Any, Final, Mapping
 
+from app.api.deps.tracing import TRACE_HEADER as DEFAULT_TRACE_HEADER
+from app.api.deps.tracing import get_trace_id
+from app.core.config import Settings, get_settings
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from starlette.exceptions import HTTPException as StarletteHTTPException
-
-from app.api.deps.tracing import TRACE_HEADER as DEFAULT_TRACE_HEADER, get_trace_id
-from app.core.config import Settings, get_settings
 
 try:  # pragma: no cover - optional dependency during docs builds
     from slowapi.errors import RateLimitExceeded
@@ -29,17 +30,24 @@ JSON_MEDIA_TYPE = "application/json"
 @dataclass(slots=True)
 class ErrorPayload:
     code: str
+    error_type: str
     message: str
     details: Mapping[str, Any] | None
+    field_errors: list[dict[str, Any]]
     trace_id: str
+    timestamp: str
 
     def to_dict(self) -> dict[str, Any]:
         payload = {
             "code": self.code,
             "error_code": self.code,
+            "type": self.error_type,
             "message": self.message,
             "trace_id": self.trace_id,
             "request_id": self.trace_id,
+            "correlation_id": self.trace_id,
+            "timestamp": self.timestamp,
+            "field_errors": self.field_errors,
         }
         if self.details:
             payload["details"] = dict(self.details)
@@ -58,7 +66,9 @@ def _status_message(status_code: int) -> str:
 def _extract_message_and_details(exc: StarletteHTTPException) -> tuple[str, Mapping[str, Any]]:
     detail = exc.detail
     if isinstance(detail, Mapping):
-        message = str(detail.get("message") or detail.get("detail") or _status_message(exc.status_code))
+        message = str(
+            detail.get("message") or detail.get("detail") or _status_message(exc.status_code)
+        )
         return message, detail
     if isinstance(detail, list):
         return _status_message(exc.status_code), {"errors": detail}
@@ -79,6 +89,40 @@ def _resolve_error_code(status_code: int) -> str:
     return "internal"
 
 
+def _resolve_error_type(status_code: int, details: Mapping[str, Any] | None = None) -> str:
+    if details:
+        candidate = details.get("type")
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate.strip()
+    if status_code in {status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN}:
+        return "security"
+    if status_code == status.HTTP_404_NOT_FOUND:
+        return "not_found"
+    if status_code == status.HTTP_422_UNPROCESSABLE_ENTITY:
+        return "validation"
+    if status.HTTP_400_BAD_REQUEST <= status_code < 500:
+        return "business"
+    return "server"
+
+
+def _extract_field_errors(errors: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    for error in errors:
+        location = error.get("loc")
+        if isinstance(location, (list, tuple)):
+            field = ".".join(str(part) for part in location if part != "body")
+        else:
+            field = str(location or "")
+        normalized.append(
+            {
+                "field": field or None,
+                "message": str(error.get("msg") or "Invalid value"),
+                "type": str(error.get("type") or "validation_error"),
+            }
+        )
+    return normalized
+
+
 def _is_json_payload_error(exc: RequestValidationError) -> bool:
     json_error_types = {"json_invalid", "type_error.jsondecode"}
     for error in exc.errors():
@@ -93,6 +137,7 @@ def _build_response(
     code: str,
     message: str,
     details: Mapping[str, Any] | None,
+    field_errors: list[dict[str, Any]] | None,
     trace_id: str,
     trace_header: str,
     headers: Mapping[str, str] | None = None,
@@ -100,9 +145,12 @@ def _build_response(
 ) -> JSONResponse:
     payload = ErrorPayload(
         code=code,
+        error_type=_resolve_error_type(status_code, details),
         message=message,
         details=details,
+        field_errors=field_errors or [],
         trace_id=trace_id,
+        timestamp=datetime.now(UTC).isoformat(),
     ).to_dict()
     if detail_payload is not None:
         payload["detail"] = detail_payload
@@ -144,6 +192,7 @@ async def _enforce_json_limit(
         code="payload_too_large",
         message=message,
         details=details,
+        field_errors=[],
         trace_id=trace_id,
         trace_header=trace_header,
     )
@@ -228,7 +277,9 @@ def _handle_validation_error(
     trace_id: str,
     trace_header: str,
 ) -> JSONResponse:
-    details = {"errors": exc.errors()}
+    errors = exc.errors()
+    details = {"errors": errors}
+    field_errors = _extract_field_errors(errors)
     if _is_json_payload_error(exc):
         message = "Invalid JSON payload"
         code = "invalid_json"
@@ -244,7 +295,7 @@ def _handle_validation_error(
             "trace_id": trace_id,
             "path": request.url.path,
             "method": request.method,
-            "errors": exc.errors(),
+            "errors": errors,
         },
     )
     return _build_response(
@@ -252,6 +303,7 @@ def _handle_validation_error(
         code=code,
         message=message,
         details=details,
+        field_errors=field_errors,
         trace_id=trace_id,
         trace_header=trace_header,
         detail_payload=exc.errors(),
@@ -266,6 +318,7 @@ def _handle_http_exception(
 ) -> JSONResponse:
     message, details = _extract_message_and_details(exc)
     custom_details: Mapping[str, Any] | None = details
+    field_errors: list[dict[str, Any]] = []
     code_override: str | None = None
 
     if isinstance(details, Mapping):
@@ -277,6 +330,9 @@ def _handle_http_exception(
             mutable.pop("message")
         if mutable.get("detail") == message:
             mutable.pop("detail")
+        raw_field_errors = mutable.pop("field_errors", [])
+        if isinstance(raw_field_errors, list):
+            field_errors = [item for item in raw_field_errors if isinstance(item, dict)]
         custom_details = mutable
 
     code = code_override or _resolve_error_code(exc.status_code)
@@ -307,6 +363,7 @@ def _handle_http_exception(
         code=code,
         message=message,
         details=custom_details,
+        field_errors=field_errors,
         trace_id=trace_id,
         trace_header=trace_header,
         headers=exc.headers,
@@ -333,6 +390,7 @@ def _handle_unexpected_exception(
         code="internal",
         message="Internal Server Error",
         details={},
+        field_errors=[],
         trace_id=trace_id,
         trace_header=trace_header,
     )

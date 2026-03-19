@@ -1,8 +1,7 @@
 import pytest
+from app.api.error_handlers import TRACE_HEADER, register_exception_handlers
 from fastapi import FastAPI, HTTPException, status
 from httpx import ASGITransport, AsyncClient
-
-from app.api.error_handlers import TRACE_HEADER, register_exception_handlers
 
 
 @pytest.fixture()
@@ -36,7 +35,12 @@ async def test_validation_error_uses_unified_payload(app_with_handlers: FastAPI)
     assert body["code"] == "validation_error"
     assert body["error_code"] == "validation_error"
     assert body["message"] == "Request validation failed"
+    assert body["type"] == "validation"
     assert isinstance(body["details"].get("errors"), list)
+    assert body["field_errors"][0]["field"] == "value"
+    assert body["field_errors"][0]["message"]
+    assert body["correlation_id"] == body["trace_id"]
+    assert body["timestamp"]
     assert response.headers[TRACE_HEADER] == body["trace_id"]
     assert body["request_id"] == body["trace_id"]
 
@@ -52,7 +56,11 @@ async def test_forbidden_error_uses_unified_payload(app_with_handlers: FastAPI) 
     assert body["code"] == "forbidden"
     assert body["error_code"] == "forbidden"
     assert body["message"] == "Access denied"
+    assert body["type"] == "security"
     assert body["details"] == {}
+    assert body["field_errors"] == []
+    assert body["correlation_id"] == body["trace_id"]
+    assert body["timestamp"]
     assert body["trace_id"]
     assert response.headers[TRACE_HEADER] == body["trace_id"]
     assert body["request_id"] == body["trace_id"]
@@ -69,7 +77,11 @@ async def test_internal_error_uses_unified_payload(app_with_handlers: FastAPI) -
     assert body["code"] == "internal"
     assert body["error_code"] == "internal"
     assert body["message"] == "Internal Server Error"
+    assert body["type"] == "server"
     assert body["details"] == {}
+    assert body["field_errors"] == []
+    assert body["correlation_id"] == body["trace_id"]
+    assert body["timestamp"]
     assert body["trace_id"]
     assert response.headers[TRACE_HEADER] == body["trace_id"]
     assert body["request_id"] == body["trace_id"]
@@ -86,7 +98,11 @@ async def test_not_found_error_uses_unified_payload(app_with_handlers: FastAPI) 
     assert body["code"] == "not_found"
     assert body["error_code"] == "not_found"
     assert body["message"] == "Not Found"
+    assert body["type"] == "not_found"
     assert body["details"] == {}
+    assert body["field_errors"] == []
+    assert body["correlation_id"] == body["trace_id"]
+    assert body["timestamp"]
     assert body["trace_id"]
     assert response.headers[TRACE_HEADER] == body["trace_id"]
     assert body["request_id"] == body["trace_id"]

@@ -43,6 +43,11 @@
 | TZ-DEMO | Demo bootstrap + sample presets/data | `backend/app/services/demo_bootstrap.py`, app lifespan bootstrap | tenant/company/site/person/training seed | default pack seeding | n/a | `/documents/wizard`, `samples/*` | `tests/test_demo_bootstrap.py` | Partial | P0 | Expand hazards/PPE norms full seed in v1.1 |
 | TZ-ACCEPT | End-to-end acceptance in codespace | backend+frontend+jobs | db/local storage | eager celery in codespaces | outbox mocked in tests | full UI flows | `make cs:dev`, `make cs:test`, integration tests | Partial | P0 | UI manual scenario checklist in next QA run |
 
+## RC final-wave audit update
+- Structured error contract stabilized for acceptance: `tests/test_errors.py` and final regression now assert `type`, `field_errors`, `correlation_id`, and `timestamp`.
+- Release evidence set now includes `ACCEPTANCE_TEST_MATRIX.md`, `GAP_REPORT.md`, and `RELEASE_READINESS.md` for pilot/demo sign-off.
+- Lightweight load foundation added via `scripts/perf/api_load.py` and `scripts/perf/README.md` for API/search/worker smoke baselines.
+
 ## Summary (current)
 - **P0:** mostly **OK**, with explicit partials only on PDF font-embed strict check and frontend enterprise polish; replace domain now has persisted patch journal + rollback metadata.
 - **P1:** core domains **OK**, some UX/client-cabinet depth kept as staged enhancements; backend portal package flow is now preset-driven.
