@@ -22,6 +22,11 @@
 | Export / report job | `tests/api/test_exports_foundation_api.py`, `tests/api/test_reports_api.py`, `tests/integration/test_job_status_flow.py` | export/report screens route through async jobs | `make final-acceptance` + perf notes | Stable |
 | Workflow task completion / delegation / escalation | `tests/test_workflow_api.py`, `tests/unit/test_task_reminders.py` | workflow inbox/detail pages reuse task cards/timeline widgets | backend acceptance | Stable MVP |
 
+### RC wave additions validated in this change set
+
+- Pack generation wizard retry path now re-requests presets inside the screen instead of forcing `window.location.reload()`. Evidence: `frontend/src/__tests__/GeneratePackWizardPage.test.tsx`.
+- Document wizard archive step no longer ends with a disabled MVP placeholder button: it shows archive readiness status and real navigation to archive/approvals. Evidence: `frontend/src/__tests__/DocumentsWizardPage.test.tsx`.
+
 ## 2. Cross-cutting release criteria
 
 | Criterion | Primary tests / checks | Command |
@@ -33,6 +38,7 @@
 | Async status transparency | `tests/integration/test_job_status_flow.py`, `tests/test_outbox_dispatch.py`, `tests/test_webhooks_dispatch.py` | `./scripts/pytest.sh tests/integration/test_job_status_flow.py tests/test_outbox_dispatch.py tests/test_webhooks_dispatch.py` |
 | Search / export performance smoke foundation | `scripts/perf/api_load.py`, `scripts/perf/README.md` | `python scripts/perf/api_load.py --help` |
 | Release docs completeness | `tests/e2e/test_release_candidate_docs.py` | `./scripts/pytest.sh tests/e2e/test_release_candidate_docs.py` |
+| Frontend no-dead-end wizard actions | `frontend/src/__tests__/GeneratePackWizardPage.test.tsx`, `frontend/src/__tests__/DocumentsWizardPage.test.tsx` | `npm --prefix frontend test -- --runInBand GeneratePackWizardPage DocumentsWizardPage` |
 
 ## 3. Acceptance bundle commands
 
