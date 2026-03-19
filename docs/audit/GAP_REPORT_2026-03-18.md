@@ -68,6 +68,7 @@
 - Public/machine access got a tenant-scoped machine-key management slice with usage counters/revoke metadata and stable public read contracts for core registries.
 - RU-first / EN-ready i18n was extended to the new training/export surfaces, and marketplace catalog foundation was added for publish/install/version/compatibility metadata.
 - Follow-up hardening in this pass: public API contracts were normalized around `limit/offset/sort_by/sort_order`, machine-key rotation was added, export schedules became schema-version-aware, custom weighted risk methodologies can be cloned/activated, and package-preset marketplace items can now be materialized into tenant runtime presets.
+- Stability hotfix after the main enterprise wave: the NPA detail/task endpoints were brought back to valid FastAPI dependency signatures, and the risk methodology enum/migration were aligned with the already-implemented custom weighted methodology flow so the advanced risk API no longer 500s when persisting `custom` methodologies.
 
 ## Осталось после этого этапа
 - Реальный worker execution для scheduled exports / webhook callbacks / DWH sinks и более детальная delivery journal UI.

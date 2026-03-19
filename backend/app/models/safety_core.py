@@ -27,6 +27,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 class RiskMethodologyType(str, enum.Enum):
     MATRIX = "matrix"
     FINE_KINNEY = "fine_kinney"
+    CUSTOM = "custom"
 
 
 class RecordStatus(str, enum.Enum):
