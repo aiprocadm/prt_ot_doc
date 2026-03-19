@@ -35,7 +35,13 @@ async def list_npa(session: SessionDep, access=Depends(rbac())) -> NpaActListRes
 
 
 @router.get("/npa/{act_id}")
-async def get_npa_detail(act_id: str, revision_id: str | None = Query(default=None), session: SessionDep = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), access=Depends(rbac())) -> dict:
+async def get_npa_detail(
+    act_id: str,
+    session: SessionDep,
+    revision_id: str | None = Query(default=None),
+    tenant: Tenant = Depends(get_tenant_record),
+    access=Depends(rbac()),
+) -> dict:
     _ = access
     payload = await NpaImpactService(session, str(tenant.id)).detail(act_id, revision_id=revision_id)
     if payload is None:
@@ -44,7 +50,13 @@ async def get_npa_detail(act_id: str, revision_id: str | None = Query(default=No
 
 
 @router.post("/npa/{act_id}/impact/tasks")
-async def create_npa_update_tasks(act_id: str, revision_id: str | None = Query(default=None), session: SessionDep = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), access=Depends(rbac())) -> dict:
+async def create_npa_update_tasks(
+    act_id: str,
+    session: SessionDep,
+    revision_id: str | None = Query(default=None),
+    tenant: Tenant = Depends(get_tenant_record),
+    access=Depends(rbac()),
+) -> dict:
     tasks = await NpaImpactService(session, str(tenant.id)).create_update_tasks(act_id, getattr(access.user, "id", None), revision_id=revision_id)
     await session.commit()
     return {"created": len(tasks), "items": [{"id": item.id, "title": item.title} for item in tasks]}
