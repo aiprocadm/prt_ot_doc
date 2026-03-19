@@ -1,18 +1,40 @@
-# GAP_REPORT
+# GAP REPORT
 
-## Final RC gap analysis
+Финальный gap analysis для release-candidate волны. Цель — не переписывать платформу, а зафиксировать, что уже стабилизировано, что закрыто в этой волне и что остается осознанным backlog/limitation.
 
-### Closed in this wave
-- Unified error contract now exposes stable RC-ready fields: `code`, `type`, `message`, `details`, `field_errors`, `correlation_id`, and `timestamp` while keeping backward-compatible `trace_id`/`request_id` aliases.
-- Final regression coverage now asserts that tenant-guard failures also follow the same release contract envelope.
-- Reproducible load/smoke foundation now exists in `scripts/perf/api_load.py` with documented commands for API, search, export/document, bulk-import, and worker retry checks.
-- Release documentation set is now explicit and centralized for acceptance, known limitations, and readiness review.
+## Closed in RC wave
 
-### Remaining controlled gaps
-1. Full browser-driven end-to-end coverage for every CRM/billing/admin permutation is still narrower than API-level acceptance coverage.
-2. Performance tooling is pragmatic rather than exhaustive: lightweight async probes exist, but not a full multi-service perf lab with saturation metrics.
-3. Backup/restore remains documented as operational guidance rather than enforced by an automated disaster-recovery drill in CI.
-4. Some external integrations remain mock/stub based for pilot acceptance and require environment-specific certification before production rollout.
+- Сформирован единый acceptance gate: `make final-acceptance`, включая backend critical tests, e2e regression, OpenAPI validation, migration head sanity, health/readiness, schema consistency и release-doc checks.
+- Формализованы точные release artifacts, ожидаемые на приемке: `ACCEPTANCE_TEST_MATRIX.md`, `GAP_REPORT.md`, `RELEASE_READINESS.md`, `KNOWN_LIMITATIONS.md`.
+- Контракт ошибок закреплен тестами на `code`, `type`, `message`, `details`, `field_errors`, `correlation_id`, `timestamp`.
+- Появилась явная проверка наличия RC-docs и perf/load foundation в acceptance regression.
 
-### Recommendation
-Treat the platform as **release-candidate ready for demo/pilot acceptance** provided that the environment-specific checklist in `RELEASE_READINESS.md` is completed and the remaining controlled gaps are accepted for the target rollout mode.
+## Remaining P0/P1 gaps
+
+### 1. True multi-step UI e2e on browser level
+- В репозитории уже есть backend/e2e acceptance и богатый smoke baseline, но нет полного browser-driven сценарного пакета на все 15 критичных сквозных потока.
+- Для pilot/release candidate это компенсируется API/e2e/integration слоями и walkthrough/runbook evidence.
+- Рекомендуемый следующий шаг: расширить Playwright/Cypress suite на onboarding, documents, portal, incident/inspection и billing flows.
+
+### 2. Production-like performance numbers
+- `scripts/perf/api_load.py` дает воспроизводимый smoke/load foundation, но не заменяет stage/perf-lab.
+- Нет зафиксированных stage p95/p99 по search, export queue и PDF generation.
+- В RC это признано ограничением, а не blocker'ом локального acceptance.
+
+### 3. Deep external integrations verification
+- Контракты, webhooks, retry и readiness foundation есть, но production контуры внешних провайдеров требуют отдельного стенда.
+- Это остается отдельным приемочным этапом pilot/on-prem rollout.
+
+### 4. UX/a11y breadth
+- Критичные страницы и shared states уже существенно стабилизированы предыдущими волнами, но полный formal a11y audit на все кабинеты/реестры еще не завершен.
+- Mobile-safe review и keyboard/focus coverage должны расширяться адресно по usage telemetry.
+
+## Hot-path / reliability notes
+
+- Tenant boundary, idempotency, outbox/webhook retry и health/readiness — это текущие release blockers; они закрыты тестами и входят в acceptance gate.
+- Perf/load groundwork присутствует и пригоден для пилотного smoke прогона.
+- Для production cut-over еще нужны stage-specific benchmark artifacts и restore rehearsal evidence.
+
+## Release recommendation
+
+**Recommendation:** candidate is suitable for demo, pilot and formal acceptance rehearsal, with explicit known limitations captured in `KNOWN_LIMITATIONS.md`.
