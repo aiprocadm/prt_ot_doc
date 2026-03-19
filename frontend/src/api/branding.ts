@@ -7,6 +7,19 @@ export interface BrandingContactDto {
   phone?: string | null;
 }
 
+export interface BrandingImageSetDto {
+  logo_file_id?: string | null;
+  stamp_file_id?: string | null;
+  signature_file_id?: string | null;
+}
+
+export interface BrandingPaletteDto {
+  primary?: string | null;
+  secondary?: string | null;
+  accent?: string | null;
+  watermark?: string | null;
+}
+
 export interface BrandingProfileDto {
   company_id: string;
   site_id?: string | null;
@@ -31,6 +44,10 @@ export interface BrandingProfileDto {
     watermark_text?: string | null;
     watermark_enabled: boolean;
     contacts: BrandingContactDto[];
+    images?: BrandingImageSetDto;
+    palette?: BrandingPaletteDto;
+    signatories?: Array<Record<string, unknown>>;
+    metadata?: Record<string, unknown>;
   };
   header_context: Record<string, unknown>;
   reproducibility: Record<string, unknown>;
@@ -41,6 +58,17 @@ export interface BrandingPreviewDto {
   preset_code?: string | null;
   sections: Record<string, string | null>;
   unresolved_placeholders: string[];
+  watermark: Record<string, unknown>;
+}
+
+export interface BrandingPreviewRequestDto {
+  company_id: string;
+  site_id?: string | null;
+  preset_code?: string | null;
+  document_title?: string | null;
+  document_number?: string | null;
+  generated_at?: string | null;
+  watermark_override?: Record<string, unknown> | null;
 }
 
 export const getBrandingProfile = async (companyId: string, siteId?: string) => {
@@ -62,13 +90,43 @@ export const updateBrandingProfile = async (
   return data;
 };
 
-export const previewBranding = async (payload: {
-  company_id: string;
-  site_id?: string | null;
-  preset_code?: string | null;
-  document_title?: string | null;
-  document_number?: string | null;
-}) => {
+export const previewBranding = async (payload: BrandingPreviewRequestDto) => {
   const { data } = await apiClient.post<BrandingPreviewDto>("/branding/preview", payload);
   return data;
+};
+
+export interface LayoutPresetDto {
+  id: string;
+  tenant_id: string;
+  code: string;
+  name: string;
+  different_first: boolean;
+  different_odd_even: boolean;
+  header_first_xml?: string | null;
+  header_odd_xml?: string | null;
+  header_even_xml?: string | null;
+  footer_first_xml?: string | null;
+  footer_odd_xml?: string | null;
+  footer_even_xml?: string | null;
+  watermark: Record<string, unknown>;
+}
+
+export const listLayoutPresets = async () => {
+  const { data } = await apiClient.get<{ items: LayoutPresetDto[] }>("/layout-presets");
+  return data.items;
+};
+
+export interface SiteDto {
+  id: string;
+  company_id: string;
+  name: string;
+  address?: string | null;
+  branding_payload?: Record<string, unknown>;
+}
+
+export const listSites = async (companyId: string) => {
+  const { data } = await apiClient.get<{ items: SiteDto[] }>("/sites", {
+    params: { company_id: companyId, limit: 200, offset: 0 }
+  });
+  return data.items;
 };

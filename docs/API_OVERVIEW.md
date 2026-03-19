@@ -1,16 +1,20 @@
 # API overview
 
-## Public entrypoint
+## Public API prefix
 `/api/v1`
 
-## Core domains relevant to this wave
+## Canonical endpoints for this wave
 - `/companies`
 - `/sites`
 - `/layout-presets`
-- `/branding/*`
+- `/branding/profile`
+- `/branding/preview`
 - `/documents/*`
 - `/pipelines/*`
 - `/files/*`
 
-## Authentication / tenancy
-All business routes require `X-Tenant` and valid auth headers unless explicitly exempted.
+## Important contracts
+- Branding profile is tenant-aware and may be requested for company scope or company+site scope.
+- Branding preview returns rendered sections, unresolved placeholders, resolved watermark and reproducibility metadata.
+- Layout preset management is CRUD-like through `/layout-presets`.
+- `apply-headers` is asynchronous and idempotent.

@@ -1,28 +1,39 @@
 # Branding and letterheads
 
-## Supported profile attributes
-- Legal/short name
-- INN/KPP/OGRN, legal/actual address
-- Email, phones, footer requisites
-- Preferred letterhead preset
-- Watermark text and enable flag
-- Contact/signatory blocks
-- Tenant/company/site inheritance
+## Supported branding profile fields
+- Legal and short name.
+- INN / KPP / OGRN.
+- Legal and actual address.
+- Website / email / phones.
+- Footer requisites and service notes.
+- Branch label.
+- Preferred letterhead preset.
+- Watermark text + enable flag.
+- Image refs for logo / stamp / signature.
+- Palette, metadata and signatories.
+
+## Inheritance model
+- Tenant branding acts as global default.
+- Company branding defines legal entity defaults.
+- Site branding overrides company details for a branch/object.
 
 ## API
 - `GET /api/v1/branding/profile?company_id=...&site_id=...`
 - `PATCH /api/v1/branding/profile/{company_id}`
 - `POST /api/v1/branding/preview`
+- `GET /api/v1/layout-presets`
 - `POST /api/v1/layout-presets`
+- `PATCH /api/v1/layout-presets/{preset_id}`
 - `POST /api/v1/documents/{document_version_id}/apply-headers`
 
 ## UI
-- Branding settings: `/documents/branding`
-- Layout preset editor: `/admin/layout-presets`
+- `/documents/branding` — main operator screen.
+- `/admin/layout-presets` — preset maintenance.
 
-## Operational flow
-1. Choose company/branch.
-2. Maintain canonical requisites in branding profile.
-3. Bind preferred preset code.
-4. Preview generated header/footer.
-5. Use the same preset code in document generation to keep outputs reproducible.
+## Operational scenario
+1. Select organization.
+2. Optionally switch to branch/site scope.
+3. Maintain requisites and image references.
+4. Choose preferred letterhead preset.
+5. Run preview and inspect resolved watermark + reproducibility passport.
+6. Use the same preset code when generating the final document.
