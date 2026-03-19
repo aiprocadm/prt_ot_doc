@@ -95,7 +95,7 @@ export const useCompaniesStore = create<CompaniesState>()(
       return data;
     },
     update: async (id, payload) => {
-      const { data } = await apiClient.put<CompanyDto>(`/companies/${id}`, payload);
+      const { data } = await apiClient.patch<CompanyDto>(`/companies/${id}`, payload);
       set((state) => {
         state.items = state.items.map((company) => (company.id === id ? data : company));
         if (state.item?.id === id) {

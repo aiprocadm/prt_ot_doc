@@ -43,16 +43,16 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 
 const normalizeFieldErrors = (value: unknown): ApiFieldError[] => {
   if (!Array.isArray(value)) return [];
-  return value
-    .map((item) => {
-      if (!isRecord(item) || typeof item.field !== "string" || typeof item.message !== "string") return null;
-      return {
-        field: item.field,
-        message: item.message,
-        code: typeof item.code === "string" ? item.code : undefined
-      } satisfies ApiFieldError;
-    })
-    .filter((item): item is ApiFieldError => item !== null);
+  const items: ApiFieldError[] = [];
+  value.forEach((item) => {
+    if (!isRecord(item) || typeof item.field !== "string" || typeof item.message !== "string") return;
+    items.push({
+      field: item.field,
+      message: item.message,
+      code: typeof item.code === "string" ? item.code : undefined
+    });
+  });
+  return items;
 };
 
 const normalizeApiError = (payload: unknown, fallback: { status: number; message: string; details?: unknown }): ApiError => {

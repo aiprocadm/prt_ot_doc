@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import AliasChoices, EmailStr, Field
 
 from app.schemas.base import BaseSchema
@@ -35,6 +37,8 @@ class CompanyCreate(BaseSchema):
     email: EmailStr | None = None
     logo_file_id: str | None = Field(default=None, min_length=1, max_length=36)
     stamp_file_id: str | None = Field(default=None, min_length=1, max_length=36)
+    branding_payload: dict[str, Any] = Field(default_factory=dict)
+    preferred_header_preset_code: str | None = Field(default=None, max_length=64)
     work_types: list[str] = Field(default_factory=list)
     hazardous_factors: list[str] = Field(default_factory=list)
     is_hazardous_production_facility: bool = False
@@ -62,6 +66,8 @@ class CompanyRead(BaseSchema):
     email: EmailStr | None = None
     logo_file_id: str | None = None
     stamp_file_id: str | None = None
+    branding_payload: dict[str, Any] = Field(default_factory=dict)
+    preferred_header_preset_code: str | None = None
     work_types: list[str] = Field(default_factory=list)
     hazardous_factors: list[str] = Field(default_factory=list)
     is_hazardous_production_facility: bool = False
@@ -103,6 +109,8 @@ class CompanyUpdate(BaseSchema):
     email: EmailStr | None = None
     logo_file_id: str | None = Field(default=None, min_length=1, max_length=36)
     stamp_file_id: str | None = Field(default=None, min_length=1, max_length=36)
+    branding_payload: dict[str, Any] | None = None
+    preferred_header_preset_code: str | None = Field(default=None, max_length=64)
     work_types: list[str] | None = None
     hazardous_factors: list[str] | None = None
     is_hazardous_production_facility: bool | None = None

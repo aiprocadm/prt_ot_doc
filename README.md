@@ -1,115 +1,70 @@
-# prt-ot-doc
+# PRT OT DOC
 
-Платформа управления документами и процессами ОТ/ПБ/ПромБез: FastAPI backend, React/Vite frontend, dockerless-режим для Codespaces и docker-compose для полного локального контура.
+Production-minded modular monolith for B2B OT / ПБ / Промбез / экология / документооборот / ЭДО / client portal scenarios.
 
-## Quick start (Codespaces)
+## Canonical repository layout
+- `backend/` — FastAPI application, domain/application/infrastructure split, Alembic, Celery tasks.
+- `frontend/` — React 18 + TypeScript + Vite application. Canonical frontend root and the only active `package.json` live here.
+- `docs/` — canonical in-repo documentation for architecture, setup, document core and audit artifacts.
+- `scripts/` — bootstrap, smoke and maintenance scripts.
+
+## Verified entrypoints
+- Backend app: `backend/app/main.py` (`app` + `run()`).
+- FastAPI factory: `backend/app/api/app.py`.
+- Frontend app root: `frontend/src/main.tsx`.
+- Vite config: `frontend/vite.config.ts`.
+- Alembic config: `backend/app/migrations/alembic.ini`.
+
+## Local setup
+### Backend
 ```bash
-make cs:reset
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt -r requirements-dev.txt
 cp .env.example .env
-# в .env задайте ADMIN_BOOTSTRAP=1, DEMO_BOOTSTRAP=1 и ADMIN_EMAIL/ADMIN_PASSWORD/ADMIN_TENANT
-make cs:dev
-make cs:test
+uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-После старта:
-- Frontend: `http://localhost:5173`
-- Backend health: `http://localhost:8000/health`
-- Ready probe: `http://localhost:8000/readyz`
-
-## Dev login (без секретов в git)
-Используйте значения **из локального `.env`**:
-```env
-ADMIN_BOOTSTRAP=1
-ADMIN_EMAIL=admin@example.local
-ADMIN_PASSWORD=ChangeMe123!
-ADMIN_TENANT=demo
-```
-
-Bootstrap админа активен только для `APP_ENV=development|test`.
-
-## Tests
+### Frontend
 ```bash
-make cs:test
-./scripts/pytest.sh --collect-only -q
-npm --prefix frontend test
+cd frontend
+npm ci
+npm run dev
 ```
 
-## Source of truth
-- Единое полное ТЗ: [docs/spec/TZ_FULL_UNIFIED.md](docs/spec/TZ_FULL_UNIFIED.md)
-- Матрица покрытия ТЗ: [docs/audit/TZ_COVERAGE_MATRIX.md](docs/audit/TZ_COVERAGE_MATRIX.md)
-- Baseline verification: [docs/audit/BASELINE_VERIFICATION.md](docs/audit/BASELINE_VERIFICATION.md)
-- Runbook для Codespaces: [docs/runbook-codespaces.md](docs/runbook-codespaces.md)
-- Demo walkthrough: [docs/runbook/DEMO_WALKTHROUGH.md](docs/runbook/DEMO_WALKTHROUGH.md)
-- Гайд по тестам: [docs/testing.md](docs/testing.md)
-
-## Multi-tenant bootstrap
-- Все бизнес-эндпойнты требуют заголовок `X-Tenant`.
-- Создать tenant:
+## Core commands
 ```bash
-python scripts/create_tenant.py <slug> "Tenant Name" owner@example.com
+# backend
+pytest -q
+alembic -c backend/app/migrations/alembic.ini upgrade head
+python -m backend.app.main
+
+# frontend
+npm --prefix frontend run dev
+npm --prefix frontend run build
+npm --prefix frontend run lint
+npm --prefix frontend run test
 ```
-- Подготовить tenant-schema:
-```bash
-python scripts/migrate_tenant.py <slug>
-```
-- Тесты tenancy:
-```bash
-pytest -q tests/test_tenancy_enforcement.py
-```
 
+## Branded document flow
+1. Create/update company card in `/api/v1/companies`.
+2. Configure branding profile in `/api/v1/branding/profile/{company_id}` or UI `/documents/branding`.
+3. Create layout preset in `/api/v1/layout-presets`.
+4. Preview merged brand + preset via `/api/v1/branding/preview`.
+5. Apply header/footer preset to a DOCX version through `/api/v1/documents/{document_version_id}/apply-headers`.
+6. Continue through replace → PDF → approval/sign/archive pipeline.
 
-## Templates module quickstart
-
-- Create template card: `POST /api/v1/templates/catalog` with JSON `{ "code": "safety_order", "name": "Safety order" }`.
-- Upload DOCX version: `POST /api/v1/templates/{template_id}/versions:upload` (`multipart/form-data`, field `file`, optional `Idempotency-Key`).
-- Run linter: `POST /api/v1/templates/{template_id}/versions/{version_id}:lint`.
-- Render preview: `POST /api/v1/templates/{template_id}/versions/{version_id}:preview` with JSON data payload.
-
-## Approval → Sign → EDO flow (dev, mock adapters)
-
-Минимальный сквозной сценарий для локальной проверки (mock providers):
-
-1. Создать маршрут согласования:
-   - `POST /api/v1/approval-routes`
-   - затем шаги `POST /api/v1/approval-routes/{id}/steps`.
-2. Запустить согласование для `document` или `pack`:
-   - `POST /api/v1/approvals/start`.
-3. Принять решение на шаге:
-   - `POST /api/v1/approvals/{id}/approve|reject|delegate|comment`.
-4. Запросить подпись:
-   - `POST /api/v1/sign/requests` c `provider_code=mock`.
-5. Обновить статус/верифицировать подпись:
-   - `POST /api/v1/sign/requests/{id}/refresh-status`
-   - `POST /api/v1/sign/requests/{id}/verify`.
-6. Отправить сущность в ЭДО:
-   - `POST /api/v1/edo/messages` c `operator_code=mock_edo`.
-7. Обновить статус ЭДО вручную или вебхуком:
-   - `POST /api/v1/edo/messages/{id}/refresh-status`
-   - `POST /api/v1/webhooks/edo/{operator_code}`.
-
-Все запросы к бизнес-эндпойнтам должны включать `X-Tenant`.
-
-## Safety Core dev flow (employee → risk map → PPE → pack summary)
-
-1. Создайте сотрудника и орг-контекст через существующие CRUD:
-   - `POST /api/v1/companies`
-   - `POST /api/v1/sites`
-   - `POST /api/v1/positions`
-   - `POST /api/v1/persons`
-2. Создайте методику риска (`matrix` или `fine_kinney`) и активируйте её.
-3. Добавьте hazards и bindings к `position/workplace/site`.
-4. Постройте risk map для `person/workplace/site` в режиме `auto_from_binding` и выполните recalculate.
-5. Создайте PPE catalog и PPE norms (scope: `position/workplace/hazard`).
-6. Оформите `issue/return/replacement` в PPE журнале.
-7. Проверьте personal card: required/issued/missing/expiring.
-8. Для пакета «Выход на объект» запросите safety-сводку и используйте данные в шаблонах/контексте рендера.
-
-> Везде обязателен `X-Tenant`; без него API отвечает `400`.
-
-## Analytics / Search / Export / Client Portal flows (NEXT-61)
-
-- **Dashboard -> drilldown**: `/api/v1/analytics/dashboard/executive` reads `dashboard_kpi_snapshots`; missing daily snapshot is rebuilt by `ProjectionOrchestrator.rebuild_dashboard_snapshot`.
-- **Export request -> file**: `/api/v1/exports` creates `export_jobs` queue records, `/api/v1/exports/{id}/download-link` returns a short-lived API download route once `file_id` is filled.
-- **Package projection refresh**: use `/api/v1/analytics/recompute` and `/api/v1/search/reindex` to rebuild package/person/search projections idempotently.
-- **Search reindex**: `/api/v1/search/reindex` writes `search_index_entries` from tenant entities, `/api/v1/search/suggest` serves lightweight hints.
-- **Client request/upload flow (v1)**: `/api/v1/client-portal/requests` + `/api/v1/client-portal/requests/{id}/messages` provide client ticket communication; `/api/v1/portal-requests` exposes internal support slice.
+## Documentation index
+- `docs/ARCHITECTURE.md`
+- `docs/PROJECT_STRUCTURE.md`
+- `docs/SETUP.md`
+- `docs/BACKEND.md`
+- `docs/FRONTEND.md`
+- `docs/DOCUMENT_CORE.md`
+- `docs/BRANDING_AND_LETTERHEADS.md`
+- `docs/API_OVERVIEW.md`
+- `docs/MODULES.md`
+- `docs/audit/TZ_COVERAGE_MATRIX.md`
+- `GAP_REPORT.md`
+- `KNOWN_LIMITATIONS.md`
+- `RELEASE_READINESS.md`

@@ -44,6 +44,7 @@ const AdminPage = lazy(() => import("@/pages/admin/AdminPage"));
 const OutboxPage = lazy(() => import("@/pages/admin/OutboxPage"));
 const BillingPage = lazy(() => import("@/pages/admin/BillingPage"));
 const AdminLayoutPresetsPage = lazy(() => import("@/pages/AdminLayoutPresets/AdminLayoutPresetsPage"));
+const BrandingSettingsPage = lazy(() => import("@/pages/branding/BrandingSettingsPage"));
 const NpaPage = lazy(() => import("@/pages/npa/NpaPage"));
 const AuditPage = lazy(() => import("@/pages/audit/AuditPage"));
 const SettingsPage = lazy(() => import("@/pages/settings/SettingsPage"));
@@ -128,6 +129,7 @@ const AppRouter = () => {
               <Route element={<ProtectedRoute permission={PERMISSIONS.DOCUMENT_VIEW} />}>
                 <Route path="/documents" element={<DocumentsPage />} />
                 <Route path="/documents/wizard" element={<DocumentsWizardPage />} />
+                <Route path="/documents/branding" element={<BrandingSettingsPage />} />
                 <Route path="/generation" element={<DocumentsWizardPage />} />
               </Route>
               <Route element={<ProtectedRoute permission={PERMISSIONS.DOCUMENT_VIEW} />}>

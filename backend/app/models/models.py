@@ -603,6 +603,8 @@ class Company(TenantBaseModel, SoftDeleteMixin):
     stamp_file_id: Mapped[str | None] = mapped_column(
         ForeignKey("file.id", ondelete="SET NULL"), nullable=True
     )
+    branding_payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    preferred_header_preset_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     work_types: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     hazardous_factors: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     is_hazardous_production_facility: Mapped[bool] = mapped_column(
@@ -708,6 +710,7 @@ class Site(TenantBaseModel, SoftDeleteMixin):
         Boolean, nullable=False, default=False
     )
     opo_register_number: Mapped[str | None] = mapped_column(String(64))
+    branding_payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
 
     company: Mapped[Company] = relationship(backref="sites")
 

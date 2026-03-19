@@ -94,6 +94,7 @@ def _apply_company_updates(company: Company, payload: CompanyUpdate) -> None:
         "bank_account",
         "logo_file_id",
         "stamp_file_id",
+        "preferred_header_preset_code",
     ]
     list_fields = ["phone_numbers", "work_types", "hazardous_factors", "okved_codes"]
 
@@ -122,6 +123,8 @@ def _apply_company_updates(company: Company, payload: CompanyUpdate) -> None:
         )
     if "has_dangerous_objects" in data:
         company.has_dangerous_objects = bool(data["has_dangerous_objects"])
+    if "branding_payload" in data and data["branding_payload"] is not None:
+        company.branding_payload = data["branding_payload"]
 
 
 @router.get("", response_model=CompanyPage)

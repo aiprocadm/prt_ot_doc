@@ -49,7 +49,7 @@ describe("DocumentsWizardPage", () => {
       step: 10,
       batch: {
         id: "batch-1",
-        status: "completed",
+        status: "done",
         total: 0,
         processed: 0,
         succeeded: 0,
@@ -60,7 +60,7 @@ describe("DocumentsWizardPage", () => {
         run_id: "run-1",
         status: "done",
         step_runs: [],
-        artifacts: null
+        artifacts: undefined
       }
     });
     useTenantStore.setState({
