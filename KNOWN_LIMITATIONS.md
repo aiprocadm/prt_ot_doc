@@ -13,4 +13,5 @@
 Документация по backup/restore и rollback присутствует, но полноценный scripted restore rehearsal не включен в локальный RC acceptance gate.
 
 ## 5. Frontend polish remains iterative in long-tail screens
+Критичные пользовательские потоки стабилизированы, но для части административных/диагностических/аналитических экранов остается дальнейшая a11y/responsive и bundle-size оптимизация.
 Критичные пользовательские потоки стабилизированы, включая wizard retry/handoff без dead-end placeholder actions, но для части административных/диагностических/аналитических экранов остается дальнейшая a11y/responsive и bundle-size оптимизация.
