@@ -7,6 +7,7 @@
 - Сформирован единый acceptance gate: `make final-acceptance`, включая backend critical tests, e2e regression, OpenAPI validation, migration head sanity, health/readiness, schema consistency и release-doc checks.
 - Формализованы точные release artifacts, ожидаемые на приемке: `ACCEPTANCE_TEST_MATRIX.md`, `GAP_REPORT.md`, `RELEASE_READINESS.md`, `KNOWN_LIMITATIONS.md`.
 - Контракт ошибок закреплен тестами на `code`, `type`, `message`, `details`, `field_errors`, `correlation_id`, `timestamp`.
+- Frontend client теперь нормализует structured error payload без потери `type`, `field_errors`, `correlation_id`, `timestamp`, а shared `ErrorState` показывает эти поля пользователю в критичных экранах.
 - Появилась явная проверка наличия RC-docs и perf/load foundation в acceptance regression.
 - Убраны два явных UX dead end на критичных путях: мастер генерации пакетов повторно грузит пресеты без полного reload страницы, а документный wizard завершает сценарий реальными переходами в архив/согласование вместо disabled placeholder.
 

@@ -47,6 +47,7 @@
 - Release-candidate evidence is now normalized into repo-root acceptance artifacts: `ACCEPTANCE_TEST_MATRIX.md`, `GAP_REPORT.md`, `RELEASE_READINESS.md`, and `KNOWN_LIMITATIONS.md`.
 - `tests/e2e/test_release_candidate_docs.py` keeps these artifacts executable/visible as part of regression, so acceptance documentation is no longer implicit.
 - Structured error contract stabilized for acceptance: `tests/test_errors.py` and final regression now assert `type`, `field_errors`, `correlation_id`, and `timestamp`.
+- Frontend acceptance path now preserves the same structured-error contract in `frontend/src/api/client.ts` and `frontend/src/components/common/ErrorState.tsx`; dedicated UI/client tests assert normalized `field_errors` and `correlation_id` rendering instead of collapsing errors to a generic toast.
 - Release evidence set now includes `ACCEPTANCE_TEST_MATRIX.md`, `GAP_REPORT.md`, and `RELEASE_READINESS.md` for pilot/demo sign-off.
 - Lightweight load foundation added via `scripts/perf/api_load.py` and `scripts/perf/README.md` for API/search/worker smoke baselines.
 - Frontend acceptance hardening removed two remaining critical dead interactions: pack preset retry no longer forces full reload, and the documents wizard archive step now surfaces a real archive/approval handoff instead of a disabled MVP placeholder control.

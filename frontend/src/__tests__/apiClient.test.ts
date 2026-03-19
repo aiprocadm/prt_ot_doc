@@ -97,6 +97,35 @@ describe("apiClient", () => {
     mock.restore();
   });
 
+
+
+  it("normalizes structured backend errors including contract metadata", async () => {
+    tenantStorage.setTenant({ slug: "severstroy", site: "Северный кластер" });
+
+    const mock = new MockAdapter(apiClient);
+    mock.onGet("/documents").reply(422, {
+      code: "VALIDATION_ERROR",
+      type: "validation",
+      message: "Validation failed",
+      details: { entity: "document" },
+      field_errors: [{ field: "template_code", message: "Required", code: "required" }],
+      correlation_id: "corr-123",
+      timestamp: "2026-03-19T00:00:00Z"
+    });
+
+    await expect(apiClient.get("/documents")).rejects.toMatchObject({
+      status: 422,
+      code: "VALIDATION_ERROR",
+      type: "validation",
+      message: "Validation failed",
+      correlation_id: "corr-123",
+      timestamp: "2026-03-19T00:00:00Z",
+      field_errors: [{ field: "template_code", message: "Required", code: "required" }]
+    });
+
+    mock.restore();
+  });
+
   it("calls the backend health endpoint", async () => {
     const mock = new MockAdapter(apiClient);
     mock.onGet("/health").reply(200, { status: "ok" });
