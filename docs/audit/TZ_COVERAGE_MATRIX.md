@@ -49,6 +49,7 @@
 - Structured error contract stabilized for acceptance: `tests/test_errors.py` and final regression now assert `type`, `field_errors`, `correlation_id`, and `timestamp`.
 - Release evidence set now includes `ACCEPTANCE_TEST_MATRIX.md`, `GAP_REPORT.md`, and `RELEASE_READINESS.md` for pilot/demo sign-off.
 - Lightweight load foundation added via `scripts/perf/api_load.py` and `scripts/perf/README.md` for API/search/worker smoke baselines.
+- Frontend acceptance hardening removed two remaining critical dead interactions: pack preset retry no longer forces full reload, and the documents wizard archive step now surfaces a real archive/approval handoff instead of a disabled MVP placeholder control.
 
 ## Summary (current)
 - **P0:** mostly **OK**, with explicit partials only on PDF font-embed strict check and frontend enterprise polish; replace domain now has persisted patch journal + rollback metadata.

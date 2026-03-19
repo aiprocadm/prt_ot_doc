@@ -11,6 +11,7 @@
 - Контракт ошибок и OpenAPI drift покрыты отдельными проверками.
 - Tenant isolation, idempotency, async job transparency и outbox/webhook reliability подтверждаются regression-набором.
 - Release evidence дополнен gap report и явным known-limitations документом.
+- На frontend критичные wizard-пути больше не зависят от full page reload/disabled placeholder controls в финальном шаге: retry и handoff-навигация покрыты отдельными UI tests.
 
 ## Required verification commands
 

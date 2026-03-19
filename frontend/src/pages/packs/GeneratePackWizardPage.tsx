@@ -45,6 +45,19 @@ const GeneratePackWizardPage = () => {
   const [packRunId, setPackRunId] = useState<string | null>(null);
   const [runError, setRunError] = useState<ApiError | null>(null);
 
+  const loadPresets = async () => {
+    setPresetsLoading(true);
+    setPresetsError(null);
+    try {
+      const { data } = await apiClient.get<Preset[]>("/package-presets");
+      setPresets(data);
+    } catch (err) {
+      setPresetsError((err as ApiError) ?? { message: "Не удалось загрузить пресеты" });
+    } finally {
+      setPresetsLoading(false);
+    }
+  };
+
   const rowsCount = useMemo(() => {
     try {
       const parsed = JSON.parse(rowsJson) as unknown;
@@ -57,13 +70,7 @@ const GeneratePackWizardPage = () => {
 
   useEffect(() => {
     if (presetIdParam) return;
-    setPresetsLoading(true);
-    setPresetsError(null);
-    apiClient
-      .get<Preset[]>("/package-presets")
-      .then(({ data }) => setPresets(data))
-      .catch((err: ApiError) => setPresetsError(err ?? { message: "Не удалось загрузить пресеты" }))
-      .finally(() => setPresetsLoading(false));
+    void loadPresets();
   }, [presetIdParam]);
 
   const validateRows = (): Array<Record<string, unknown>> | null => {
@@ -145,7 +152,7 @@ const GeneratePackWizardPage = () => {
             <CardTitle>Шаг 1 — Выбор пресета</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <ErrorState error={presetsError ?? undefined} onRetry={() => window.location.reload()} />
+            <ErrorState error={presetsError ?? undefined} onRetry={() => void loadPresets()} />
             {presetsLoading ? (
               <div className="text-sm text-muted-foreground">Загрузка пресетов…</div>
             ) : presets.length === 0 && !presetsError ? (
