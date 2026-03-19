@@ -1,7 +1,7 @@
 """next67 public api rotation and export schedule schema version
 
 Revision ID: 20260318_next67
-Revises: 20260418_next66
+Revises: 20260418_next66_notifications_templates_foundation
 Create Date: 2026-03-18
 """
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 revision = "20260318_next67"
-down_revision = "20260418_next66"
+down_revision = "20260418_next66_notifications_templates_foundation"
 branch_labels = None
 depends_on = None
 
