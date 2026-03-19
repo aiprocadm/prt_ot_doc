@@ -18,3 +18,8 @@
 
 
 - (Обновление) Ранее критичный пробел RBAC на части маршрутов `client-portal-v1` устранен; ограничения перенесены в раздел e2e-покрытия UI-guards (см. FINAL_CRITICAL_GAPS).
+
+## RC hardening notes
+- Structured API errors are now normalized for critical acceptance paths, but some legacy endpoints still rely on compatibility aliases (`trace_id`, `request_id`) alongside the RC contract fields.
+- Lightweight perf tooling exists for pilot/stage smoke (`scripts/perf/api_load.py`), but sustained queue saturation and long-running document/PDF throughput should still be validated on target infrastructure.
+- CRM-to-billing end-to-end UI acceptance is narrower than API coverage and should remain part of the pilot UAT script.
