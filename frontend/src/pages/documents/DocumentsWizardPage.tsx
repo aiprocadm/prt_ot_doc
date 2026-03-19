@@ -54,6 +54,34 @@ const buildBatchErrors = (items: DocumentBatchItem[]) =>
     .map((item) => `Строка ${item.row_index}: ${item.error ?? "unknown_error"}`)
     .join("\n");
 
+const getArchiveStatusSummary = ({
+  batchStatus,
+  pipelineStatus
+}: {
+  batchStatus?: string | null;
+  pipelineStatus?: string | null;
+}) => {
+  if (pipelineStatus === "done" || batchStatus === "completed") {
+    return {
+      tone: "text-green-700",
+      title: "Архив готов к публикации",
+      description: "Артефакты сформированы, можно открыть архив, проверить документы и продолжить согласование/отправку."
+    };
+  }
+  if (pipelineStatus === "failed" || pipelineStatus === "error" || batchStatus === "failed") {
+    return {
+      tone: "text-destructive",
+      title: "Есть ошибки перед архивированием",
+      description: "Проверьте timeline pipeline или построчные ошибки batch перед передачей документов дальше."
+    };
+  }
+  return {
+    tone: "text-muted-foreground",
+    title: "Архив ожидает завершения фоновых задач",
+    description: "Следите за статусом pipeline и batch: после завершения отсюда можно перейти в архив и на экран согласований без ручной перезагрузки."
+  };
+};
+
 const DocumentsWizardPage = () => {
   const tenant = useTenantStore((s) => s.tenant);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -132,6 +160,10 @@ const DocumentsWizardPage = () => {
     if (rowStatusFilter === "all") return batch.items;
     return batch.items.filter((item) => item.status === rowStatusFilter);
   }, [batch, rowStatusFilter]);
+  const archiveStatus = getArchiveStatusSummary({
+    batchStatus: batch?.status,
+    pipelineStatus: pipelineRun?.status
+  });
 
   const canCallApi = Boolean(tenant);
 
@@ -389,13 +421,26 @@ const DocumentsWizardPage = () => {
 
           {step === 10 ? (
             <div className="space-y-2 text-sm">
-              <p>Готово. Можно перейти в архив и продолжить согласование.</p>
+              <div className={`rounded-lg border bg-muted/30 p-4 ${archiveStatus.tone}`}>
+                <p className="font-medium">{archiveStatus.title}</p>
+                <p className="mt-1 text-sm">{archiveStatus.description}</p>
+                <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
+                  <div>
+                    <span className="text-muted-foreground">Pipeline:</span>{" "}
+                    <span className="font-medium">{pipelineRun?.status ?? "не запускался"}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Batch:</span>{" "}
+                    <span className="font-medium">{batch?.status ?? "не запускался"}</span>
+                  </div>
+                </div>
+              </div>
               <div className="flex gap-2">
                 <Button asChild>
                   <Link to="/archive">Перейти в архив</Link>
                 </Button>
-                <Button variant="outline" disabled>
-                  ЭДО статус (MVP placeholder)
+                <Button asChild variant="outline">
+                  <Link to="/approvals">Открыть согласование / подпись</Link>
                 </Button>
               </div>
             </div>
