@@ -5,7 +5,6 @@ import { apiClient } from "@/api/client";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type Collection = { total: number; items?: Array<{ id: string; dataset_code?: string; schema_version?: string; anonymized?: boolean; target_type?: string }> };
 type DatasetCatalog = { total: number; items?: Array<{ code: string; schema_version: string; targets: string[] }> };
@@ -33,15 +32,18 @@ const ExportsPage = () => {
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <Breadcrumb items={[{ label: t("common.home"), to: "/dashboard" }, { label: t("exports.title") }]} />
         <div className="w-full md:w-48">
-          <Select value={i18n.language} onValueChange={(value) => void i18n.changeLanguage(value)}>
-            <SelectTrigger aria-label={t("common.locale")}>
-              <SelectValue placeholder={t("common.locale")} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ru">{t("common.localeRu")}</SelectItem>
-              <SelectItem value="en">{t("common.localeEn")}</SelectItem>
-            </SelectContent>
-          </Select>
+          <label className="sr-only" htmlFor="exports-language-select">
+            {t("common.locale")}
+          </label>
+          <select
+            id="exports-language-select"
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
+            value={i18n.language}
+            onChange={(event) => void i18n.changeLanguage(event.target.value)}
+          >
+            <option value="ru">{t("common.localeRu")}</option>
+            <option value="en">{t("common.localeEn")}</option>
+          </select>
         </div>
       </div>
       <div className="grid gap-4 md:grid-cols-3">
