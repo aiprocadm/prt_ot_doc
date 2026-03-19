@@ -9,6 +9,7 @@
 - Критичные acceptance-сценарии сопоставлены с автотестами и smoke-командами в `ACCEPTANCE_TEST_MATRIX.md`.
 - Есть единый executable gate: `make final-acceptance`.
 - Контракт ошибок и OpenAPI drift покрыты отдельными проверками.
+- Structured error contract стабилизирован не только на backend, но и в frontend API client/shared error states, чтобы acceptance UI не терял correlation metadata и field-level validation details.
 - Tenant isolation, idempotency, async job transparency и outbox/webhook reliability подтверждаются regression-набором.
 - Release evidence дополнен gap report и явным known-limitations документом.
 - На frontend критичные wizard-пути больше не зависят от full page reload/disabled placeholder controls в финальном шаге: retry и handoff-навигация покрыты отдельными UI tests.

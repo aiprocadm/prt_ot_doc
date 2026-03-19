@@ -9,11 +9,21 @@ export interface PaginatedResponse<T> {
   pagination: PaginationDto;
 }
 
+export interface ApiFieldError {
+  field: string;
+  message: string;
+  code?: string;
+}
+
 export interface ApiError {
   status: number;
   code?: string;
+  type?: string;
   message: string;
   details?: unknown;
+  field_errors?: ApiFieldError[];
+  correlation_id?: string;
+  timestamp?: string;
 }
 
 export interface FileLinkDto {
