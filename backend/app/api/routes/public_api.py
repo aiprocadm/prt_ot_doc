@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import api_key_auth
@@ -64,6 +65,14 @@ class MarketplaceInstallRequest(BaseModel):
     mode: str = "install"
     target_code: str | None = None
     title_suffix: str | None = None
+
+
+class PublicWebhookSubscriptionCreate(BaseModel):
+    name: str
+    url: str
+    subscribed_events: list[str] = Field(default_factory=list)
+    timeout_ms: int = 5000
+    headers: dict[str, Any] = Field(default_factory=dict)
 
 
 def _ensure_scope(record: ApiKey, scope: str) -> None:
@@ -265,6 +274,36 @@ async def public_webhooks(record: ApiKey = Depends(api_key_auth), session: Async
             for row in rows
         ],
         "total": len(rows),
+    }
+
+
+@router.post("/integrations/webhooks/subscriptions", status_code=status.HTTP_201_CREATED)
+async def create_public_webhook_subscription(
+    payload: PublicWebhookSubscriptionCreate,
+    record: ApiKey = Depends(api_key_auth),
+    session: AsyncSession = Depends(get_session),
+):
+    _ensure_scope(record, "integrations:write")
+    row = WebhookEndpoint(
+        tenant_id=str(record.tenant_id),
+        name=payload.name,
+        url=payload.url,
+        is_enabled=True,
+        subscribed_events=payload.subscribed_events,
+        timeout_ms=payload.timeout_ms,
+        headers=payload.headers,
+    )
+    session.add(row)
+    await session.commit()
+    await session.refresh(row)
+    return {
+        "id": row.id,
+        "name": row.name,
+        "url": row.url,
+        "enabled": row.is_enabled,
+        "subscribed_events": row.subscribed_events or [],
+        "timeout_ms": row.timeout_ms,
+        "updated_at": row.updated_at,
     }
 
 

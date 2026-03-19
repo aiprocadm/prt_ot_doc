@@ -46,7 +46,12 @@ class KpiDefinitionCreate(BaseModel):
 @router.get("")
 async def list_exports(session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
     rows = (await session.execute(select(ExportJob).where(ExportJob.tenant_id == str(tenant.id)).order_by(ExportJob.updated_at.desc()))).scalars().all()
-    return rows
+    return {"items": rows, "total": len(rows)}
+
+
+@router.get("/datasets")
+async def list_export_datasets():
+    return {"items": ExportCenterService.dataset_catalog(), "total": len(ExportCenterService.dataset_catalog())}
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -88,6 +93,14 @@ async def create_schedule(payload: ExportScheduleCreate, session: AsyncSession =
         target_type=payload.target_type,
         target_config=payload.target_config,
     )
+
+
+@router.post("/schedules/{schedule_id}/run-now", status_code=status.HTTP_201_CREATED)
+async def run_schedule_now(schedule_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+    schedule = (await session.execute(select(ExportSchedule).where(ExportSchedule.id == schedule_id, ExportSchedule.tenant_id == str(tenant.id)))).scalar_one_or_none()
+    if schedule is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Export schedule not found")
+    return await ExportCenterService(session, str(tenant.id)).run_schedule_now(schedule)
 
 
 @router.get("/kpis")

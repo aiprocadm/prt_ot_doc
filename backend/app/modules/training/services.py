@@ -145,6 +145,75 @@ class TrainingEnrollmentService:
         await session.flush()
         return enrollment
 
+    async def prepare_retake(
+        self,
+        session: AsyncSession,
+        enrollment: TrainingEnrollment,
+        *,
+        reason: str | None = None,
+    ) -> TrainingEnrollment:
+        enrollment.status = "assigned"
+        enrollment.completion_status = "retake_assigned"
+        enrollment.started_at = None
+        enrollment.completed_at = None
+        enrollment.progress_percent = 0
+        enrollment.score = None
+        enrollment.external_runtime_state = {
+            **(enrollment.external_runtime_state or {}),
+            "retake_reason": reason,
+        }
+        await session.flush()
+        return enrollment
+
+    async def build_analytics_overview(self, session: AsyncSession, *, tenant_id: str) -> dict:
+        enrollments = (
+            await session.execute(
+                select(TrainingEnrollment).where(
+                    TrainingEnrollment.tenant_id == tenant_id,
+                    TrainingEnrollment.deleted_at.is_(None),
+                )
+            )
+        ).scalars().all()
+        attempts = (
+            await session.execute(
+                select(TrainingAttempt).where(TrainingAttempt.tenant_id == tenant_id)
+            )
+        ).scalars().all()
+        programs = (
+            await session.execute(
+                select(TrainingProgram).where(TrainingProgram.tenant_id == tenant_id)
+            )
+        ).scalars().all()
+        modules = (
+            await session.execute(
+                select(TrainingModule).where(TrainingModule.tenant_id == tenant_id)
+            )
+        ).scalars().all()
+        lessons = (
+            await session.execute(
+                select(TrainingLesson).where(TrainingLesson.tenant_id == tenant_id)
+            )
+        ).scalars().all()
+
+        completion_total = sum(1 for row in enrollments if row.completion_status in {"completed", "confirmed"})
+        retake_total = sum(1 for row in enrollments if row.completion_status in {"retake_required", "retake_assigned"})
+        avg_progress = round(sum(float(row.progress_percent or 0) for row in enrollments) / len(enrollments), 2) if enrollments else 0.0
+        avg_score = round(sum(float(item.score or 0) for item in attempts) / len(attempts), 2) if attempts else 0.0
+        material_types: dict[str, int] = {}
+        for lesson in lessons:
+            material_types[str(lesson.content_type)] = material_types.get(str(lesson.content_type), 0) + 1
+        return {
+            "programs_total": len(programs),
+            "modules_total": len(modules),
+            "lessons_total": len(lessons),
+            "enrollments_total": len(enrollments),
+            "completed_total": completion_total,
+            "retake_total": retake_total,
+            "average_progress_percent": avg_progress,
+            "average_attempt_score": avg_score,
+            "material_types": material_types,
+        }
+
 
 class TrainingCertificateService:
     async def next_code(self, session: AsyncSession, tenant_id: str) -> str:

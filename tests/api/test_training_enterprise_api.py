@@ -54,3 +54,12 @@ async def test_training_teacher_and_runtime_flow(async_client, sessionmaker, dat
     enrollment_detail = await async_client.get(f"/api/v1/training/enrollments/{enrollment.id}/detail", headers={**headers, "X-Tenant": "test"})
     assert enrollment_detail.status_code == 200
     assert enrollment_detail.json()["completion"]["status"] == "completed"
+
+    analytics = await async_client.get("/api/v1/training/analytics/overview", headers={**headers, "X-Tenant": "test"})
+    assert analytics.status_code == 200
+    assert analytics.json()["completed_total"] == 1
+    assert analytics.json()["material_types"]["document"] == 1
+
+    retake = await async_client.post(f"/api/v1/training/enrollments/{enrollment.id}/retake", json={"reason": "manual review"}, headers={**headers, "X-Tenant": "test"})
+    assert retake.status_code == 200
+    assert retake.json()["completion_status"] == "retake_assigned"

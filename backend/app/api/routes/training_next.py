@@ -553,6 +553,17 @@ async def confirm_enrollment_completion(item_id: str, payload: dict, tenant: Ten
     return updated
 
 
+@router.post("/enrollments/{item_id}/retake")
+async def assign_enrollment_retake(item_id: str, payload: dict, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+    enrollment = await get_enrollment(item_id, tenant, session)
+    updated = await TrainingEnrollmentService().prepare_retake(
+        session,
+        enrollment,
+        reason=payload.get("reason"),
+    )
+    return updated
+
+
 @router.post("/enrollments/{item_id}/runtime-results")
 async def ingest_runtime_result(item_id: str, payload: dict, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
     enrollment = await get_enrollment(item_id, tenant, session)
@@ -565,3 +576,8 @@ async def ingest_runtime_result(item_id: str, payload: dict, tenant: Tenant = De
         provider_payload=payload,
     )
     return {"enrollment": enrollment, "attempt": attempt}
+
+
+@router.get("/analytics/overview")
+async def training_analytics_overview(tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+    return await TrainingEnrollmentService().build_analytics_overview(session, tenant_id=tenant.id)
