@@ -8,6 +8,7 @@
 - Формализованы точные release artifacts, ожидаемые на приемке: `ACCEPTANCE_TEST_MATRIX.md`, `GAP_REPORT.md`, `RELEASE_READINESS.md`, `KNOWN_LIMITATIONS.md`.
 - Контракт ошибок закреплен тестами на `code`, `type`, `message`, `details`, `field_errors`, `correlation_id`, `timestamp`.
 - Появилась явная проверка наличия RC-docs и perf/load foundation в acceptance regression.
+- Убраны два явных UX dead end на критичных путях: мастер генерации пакетов повторно грузит пресеты без полного reload страницы, а документный wizard завершает сценарий реальными переходами в архив/согласование вместо disabled placeholder.
 
 ## Remaining P0/P1 gaps
 
@@ -28,6 +29,7 @@
 ### 4. UX/a11y breadth
 - Критичные страницы и shared states уже существенно стабилизированы предыдущими волнами, но полный formal a11y audit на все кабинеты/реестры еще не завершен.
 - Mobile-safe review и keyboard/focus coverage должны расширяться адресно по usage telemetry.
+- После текущего hardening критичные wizard flows лучше проходят без ручного reload, но по-прежнему остается длинный хвост для унификации labels/ARIA и responsive-first table interactions.
 
 ## Hot-path / reliability notes
 
