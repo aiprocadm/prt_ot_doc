@@ -64,4 +64,27 @@ describe("GeneratePackWizardPage", () => {
     await user.clear(screen.getByLabelText("Ключ идемпотентности (уникальный запуск)"));
     expect(screen.getByRole("button", { name: "Далее" })).toBeDisabled();
   });
+
+  it("retries preset loading without forcing a full page reload", async () => {
+    const user = userEvent.setup();
+    getMock
+      .mockRejectedValueOnce({ message: "preset load failed", status: 500, code: "preset_load_failed" })
+      .mockResolvedValueOnce({
+        data: [{ id: "p-1", code: "P1", name: "Базовый", status: "active" }]
+      });
+
+    render(
+      <MemoryRouter initialEntries={["/generate-pack"]}>
+        <Routes>
+          <Route path="/generate-pack" element={<GeneratePackWizardPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("preset load failed")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Повторить" }));
+
+    expect(await screen.findByRole("button", { name: /Базовый/i })).toBeInTheDocument();
+    expect(getMock).toHaveBeenCalledTimes(2);
+  });
 });
