@@ -1,7 +1,7 @@
 """Add custom risk methodology enum value.
 
 Revision ID: 20260318_next67_risk_custom_enum_hotfix
-Revises: 20260318_next67_public_export_rotation
+Revises: 20260318_next67
 Create Date: 2026-03-18 18:30:00.000000
 """
 
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "20260318_next67_risk_custom_enum_hotfix"
-down_revision = "20260318_next67_public_export_rotation"
+down_revision = "20260318_next67"
 branch_labels = None
 depends_on = None
 
