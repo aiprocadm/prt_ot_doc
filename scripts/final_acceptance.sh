@@ -65,6 +65,8 @@ run_check "migrations heads" "PYTHONPATH=backend python -m alembic -c backend/ap
 run_check "health and readiness" "./scripts/pytest.sh tests/test_health_ready.py"
 run_check "sample render/pdf/export flow" "./scripts/pytest.sh tests/test_package_pipeline.py tests/test_services_pdf_unit.py"
 run_check "schema consistency" "PYTHONPATH=backend python scripts/verify_schema_consistency.py"
+run_check "release docs presence" "./scripts/pytest.sh tests/e2e/test_release_candidate_docs.py"
+run_check "perf tooling foundation" "python scripts/perf/api_load.py --help" false
 
 python - <<PY
 import json
