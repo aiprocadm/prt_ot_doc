@@ -42,4 +42,46 @@ describe("DocumentsWizardPage", () => {
     await user.click(screen.getByRole("button", { name: /далее/i }));
     expect(await screen.findByRole("heading", { name: /шаг 2: файл/i })).toBeInTheDocument();
   });
+
+  it("shows archive readiness summary and real navigation actions instead of placeholder button", () => {
+    useDocumentsWizardStore.getState().reset();
+    useDocumentsWizardStore.setState({
+      step: 10,
+      batch: {
+        id: "batch-1",
+        status: "completed",
+        total: 0,
+        processed: 0,
+        succeeded: 0,
+        failed: 0,
+        items: []
+      },
+      pipelineRun: {
+        run_id: "run-1",
+        status: "done",
+        step_runs: [],
+        artifacts: null
+      }
+    });
+    useTenantStore.setState({
+      tenant: { slug: "demo", name: "Demo tenant" } as never,
+      tenants: [],
+      setTenant: vi.fn(),
+      clearTenant: vi.fn()
+    });
+
+    render(
+      <MemoryRouter>
+        <DocumentsWizardPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/архив готов к публикации/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /перейти в архив/i })).toHaveAttribute("href", "/archive");
+    expect(screen.getByRole("link", { name: /открыть согласование \/ подпись/i })).toHaveAttribute(
+      "href",
+      "/approvals"
+    );
+    expect(screen.queryByRole("button", { name: /mvp placeholder/i })).not.toBeInTheDocument();
+  });
 });
