@@ -69,10 +69,12 @@
 - RU-first / EN-ready i18n was extended to the new training/export surfaces, and marketplace catalog foundation was added for publish/install/version/compatibility metadata.
 - Follow-up hardening in this pass: public API contracts were normalized around `limit/offset/sort_by/sort_order`, machine-key rotation was added, export schedules became schema-version-aware, custom weighted risk methodologies can be cloned/activated, and package-preset marketplace items can now be materialized into tenant runtime presets.
 - Stability hotfix after the main enterprise wave: the NPA detail/task endpoints were brought back to valid FastAPI dependency signatures, and the risk methodology enum/migration were aligned with the already-implemented custom weighted methodology flow so the advanced risk API no longer 500s when persisting `custom` methodologies.
+- Additional enterprise hardening in the current pass: LMS now exposes analytics/retake flows over the existing learner/teacher cabinet foundation, Export Center publishes dataset contracts plus manual schedule triggering, public machine access can create tenant-safe webhook subscriptions, and integrations got a consolidated readiness/diagnostics endpoint with contract-level EPGU/OIDC/LDAP visibility.
 
 ## Осталось после этого этапа
 - Реальный worker execution для scheduled exports / webhook callbacks / DWH sinks и более детальная delivery journal UI.
 - Полная material player UX для LMS (video/file viewers, richer learner cabinet timeline, certificate rendering and teacher grading workflows).
+- Richer machine-write public contracts beyond webhook subscriptions (documents/training/risk mutation scopes with stricter rate limiting and audit enrichment).
 - Глубже автоматизировать влияние incidents / corrective actions / NPA bindings на persisted residual-risk recalculation, а не только на summary/context layer.
 - Marketplace: broader materialization/import-copy beyond package presets, moderation, public storefront UX.
 - Backend i18n: локализация structured errors и notification/document templates beyond the new foundation.

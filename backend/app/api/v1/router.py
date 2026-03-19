@@ -39,6 +39,7 @@ from app.api.routes import (
     files,
     incidents,
     inspections,
+    integration_readiness,
     invoices,
     jobs,
     journals,
@@ -215,6 +216,7 @@ tenant_router.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
 tenant_router.include_router(tenancy.router)
 tenant_router.include_router(outbox_admin.router, prefix="/admin/outbox", tags=["outbox"])
 tenant_router.include_router(webhooks.router)
+tenant_router.include_router(integration_readiness.router)
 tenant_router.include_router(tenants.router)
 tenant_router.include_router(tenants.admin_router)
 tenant_router.include_router(companies.router)

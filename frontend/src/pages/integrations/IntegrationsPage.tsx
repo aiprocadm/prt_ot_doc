@@ -31,6 +31,11 @@ type OutboxEventEntry = {
   last_error?: string | null;
 };
 
+type ReadinessResponse = {
+  providers: Array<{ provider: string; health_status: string; configured: boolean; adapter?: string; reachable?: boolean | null }>;
+  webhooks: { configured_total: number; enabled_total: number; delivery_failed_total: number };
+};
+
 const formatDateTime = (value?: string | null) => (value ? new Date(value).toLocaleString() : "—");
 
 const IntegrationsPage = () => {
@@ -39,16 +44,19 @@ const IntegrationsPage = () => {
   const [loading, setLoading] = useState(false);
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("all");
+  const [readiness, setReadiness] = useState<ReadinessResponse | null>(null);
 
   const load = async () => {
     setLoading(true);
     try {
       const [outboxResponse, eventResponse] = await Promise.all([
         apiClient.get<{ items: OutboxEntry[] }>("/admin/outbox"),
-        apiClient.get<{ items: OutboxEventEntry[] }>("/admin/outbox/events")
+        apiClient.get<{ items: OutboxEventEntry[] }>("/admin/outbox/events"),
       ]);
       setDeliveries(outboxResponse.data.items);
       setEvents(eventResponse.data.items);
+      const readinessResponse = await apiClient.get<ReadinessResponse>("/integrations/readiness");
+      setReadiness(readinessResponse.data);
     } finally {
       setLoading(false);
     }
@@ -105,6 +113,39 @@ const IntegrationsPage = () => {
         <Card><CardContent className="py-6"><div className="text-sm text-muted-foreground">Сбой доставки</div><div className="text-2xl font-semibold">{summary.failedDeliveries}</div></CardContent></Card>
         <Card><CardContent className="py-6"><div className="text-sm text-muted-foreground">Проблемные события</div><div className="text-2xl font-semibold">{summary.failedEvents}</div></CardContent></Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Provider readiness</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-3">
+            <Card><CardContent className="py-4"><div className="text-sm text-muted-foreground">Webhook endpoints</div><div className="text-xl font-semibold">{readiness?.webhooks.configured_total ?? 0}</div></CardContent></Card>
+            <Card><CardContent className="py-4"><div className="text-sm text-muted-foreground">Enabled endpoints</div><div className="text-xl font-semibold">{readiness?.webhooks.enabled_total ?? 0}</div></CardContent></Card>
+            <Card><CardContent className="py-4"><div className="text-sm text-muted-foreground">Failed deliveries</div><div className="text-xl font-semibold">{readiness?.webhooks.delivery_failed_total ?? 0}</div></CardContent></Card>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Provider</TableHead>
+                <TableHead>Adapter</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Configured</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {readiness?.providers.map((item) => (
+                <TableRow key={item.provider}>
+                  <TableCell className="font-medium">{item.provider}</TableCell>
+                  <TableCell>{item.adapter ?? "contract-only"}</TableCell>
+                  <TableCell><StatusBadge status={item.health_status} /></TableCell>
+                  <TableCell>{item.configured ? "yes" : "no"}</TableCell>
+                </TableRow>
+              )) ?? null}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">

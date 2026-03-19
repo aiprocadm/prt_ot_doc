@@ -22,6 +22,14 @@ async def test_exports_schedules_and_kpis(async_client, sessionmaker, data_facto
     assert created.status_code == 201
     assert created.json()["anonymized"] is True
 
+    datasets = await async_client.get("/api/v1/exports/datasets", headers={**headers, "X-Tenant": "test"})
+    assert datasets.status_code == 200
+    assert datasets.json()["total"] >= 8
+
     listing = await async_client.get("/api/v1/exports/schedules", headers={**headers, "X-Tenant": "test"})
     assert listing.status_code == 200
     assert listing.json()["total"] == 1
+
+    run_now = await async_client.post(f"/api/v1/exports/schedules/{schedule.json()['id']}/run-now", headers={**headers, "X-Tenant": "test"})
+    assert run_now.status_code == 201
+    assert run_now.json()["dataset_code"] == "training"

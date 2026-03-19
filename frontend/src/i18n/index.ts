@@ -41,7 +41,11 @@ const resources = {
         materials: "Материалы",
         lessonStructure: "Структура курса",
         noSchedule: "Нет запланированной даты",
-        learnerHint: "SCORM/xAPI/proctoring-ready ingestion отражается в статусах завершения и деталях назначения."
+        learnerHint: "SCORM/xAPI/proctoring-ready ingestion отражается в статусах завершения и деталях назначения.",
+        analytics: "Аналитика обучения",
+        retakes: "Пересдачи",
+        averageScore: "Средний балл",
+        materialTypes: "Типы материалов"
       },
       exports: {
         title: "Экспорт и BI",
@@ -50,11 +54,15 @@ const resources = {
         kpis: "KPI",
         schemaVersion: "Версия схемы",
         anonymized: "Анонимизация",
-        targetType: "Цель доставки"
+        targetType: "Цель доставки",
+        datasets: "Наборы данных",
+        supportedTargets: "Поддерживаемые цели"
       },
       common: {
         home: "Главная",
         loading: "Загрузка",
+        yes: "Да",
+        no: "Нет",
         locale: "Язык",
         localeRu: "Русский",
         localeEn: "English"
@@ -84,7 +92,11 @@ const resources = {
         materials: "Materials",
         lessonStructure: "Course structure",
         noSchedule: "No schedule",
-        learnerHint: "SCORM/xAPI/proctoring-ready ingestion is reflected in completion statuses and enrollment details."
+        learnerHint: "SCORM/xAPI/proctoring-ready ingestion is reflected in completion statuses and enrollment details.",
+        analytics: "Training analytics",
+        retakes: "Retakes",
+        averageScore: "Average score",
+        materialTypes: "Material types"
       },
       exports: {
         title: "Exports and BI",
@@ -93,11 +105,15 @@ const resources = {
         kpis: "KPIs",
         schemaVersion: "Schema version",
         anonymized: "Anonymized",
-        targetType: "Delivery target"
+        targetType: "Delivery target",
+        datasets: "Datasets",
+        supportedTargets: "Supported targets"
       },
       common: {
         home: "Home",
         loading: "Loading",
+        yes: "Yes",
+        no: "No",
         locale: "Language",
         localeRu: "Russian",
         localeEn: "English"

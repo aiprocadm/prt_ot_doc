@@ -122,3 +122,29 @@ class ExportCenterService:
         await self.session.commit()
         await self.session.refresh(item)
         return item
+
+    @staticmethod
+    def dataset_catalog() -> list[dict[str, Any]]:
+        return [
+            {"code": "employees_training", "schema_version": "v1", "targets": ["file", "webhook", "dwh"], "anonymization_profiles": ["none", "basic"]},
+            {"code": "risks", "schema_version": "v1", "targets": ["file", "webhook", "dwh"], "anonymization_profiles": ["none", "basic"]},
+            {"code": "incidents", "schema_version": "v1", "targets": ["file", "webhook", "dwh"], "anonymization_profiles": ["none", "basic"]},
+            {"code": "inspections_prescriptions", "schema_version": "v1", "targets": ["file", "webhook", "dwh"], "anonymization_profiles": ["none", "basic"]},
+            {"code": "documents_edo", "schema_version": "v1", "targets": ["file", "webhook", "dwh"], "anonymization_profiles": ["none", "basic"]},
+            {"code": "ppe_warehouse", "schema_version": "v1", "targets": ["file", "webhook", "dwh"], "anonymization_profiles": ["none", "basic"]},
+            {"code": "billing_usage", "schema_version": "v1", "targets": ["file", "webhook", "dwh"], "anonymization_profiles": ["none", "tenant_only"]},
+            {"code": "workflow_tasks", "schema_version": "v1", "targets": ["file", "webhook", "dwh"], "anonymization_profiles": ["none", "basic"]},
+        ]
+
+    async def run_schedule_now(self, schedule: ExportSchedule) -> ExportJob:
+        return await self.create_job(
+            export_type="analytics",
+            dataset_code=schedule.dataset_code,
+            schema_version=schedule.schema_version,
+            anonymized=schedule.anonymized,
+            target_type=schedule.target_type,
+            target_config=schedule.target_config or {},
+            scope_json={"schedule_id": schedule.id, "trigger": "manual"},
+            filters_json=schedule.filters_json or {},
+            idempotency_key=None,
+        )

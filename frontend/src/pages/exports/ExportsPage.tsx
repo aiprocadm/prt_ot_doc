@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type Collection = { total: number; items?: Array<{ id: string; dataset_code?: string; schema_version?: string; anonymized?: boolean; target_type?: string }> };
+type DatasetCatalog = { total: number; items?: Array<{ code: string; schema_version: string; targets: string[] }> };
 
 const ExportsPage = () => {
   const { t, i18n } = useTranslation();
@@ -15,14 +16,16 @@ const ExportsPage = () => {
   const [schedules, setSchedules] = useState(0);
   const [kpis, setKpis] = useState(0);
   const [jobPreview, setJobPreview] = useState<Collection["items"]>([]);
+  const [datasets, setDatasets] = useState<DatasetCatalog["items"]>([]);
 
   useEffect(() => {
     void apiClient.get<Collection>("/exports").then(({ data }) => {
-      setJobs(Array.isArray(data) ? data.length : data.total);
-      setJobPreview(Array.isArray(data) ? [] : (data.items ?? []));
+      setJobs(data.total);
+      setJobPreview(data.items ?? []);
     }).catch(() => undefined);
     void apiClient.get<Collection>("/exports/schedules").then(({ data }) => setSchedules(data.total)).catch(() => undefined);
     void apiClient.get<Collection>("/exports/kpis").then(({ data }) => setKpis(data.total)).catch(() => undefined);
+    void apiClient.get<DatasetCatalog>("/exports/datasets").then(({ data }) => setDatasets(data.items ?? [])).catch(() => undefined);
   }, []);
 
   return (
@@ -57,7 +60,7 @@ const ExportsPage = () => {
                 <li key={job.id} className="rounded-md border p-3">
                   <div className="font-medium">{job.dataset_code ?? job.id}</div>
                   <div className="text-muted-foreground">
-                    {t("exports.schemaVersion")}: {job.schema_version ?? "v1"} · {t("exports.anonymized")}: {job.anonymized ? "yes" : "no"} · {t("exports.targetType")}: {job.target_type ?? "file"}
+                    {t("exports.schemaVersion")}: {job.schema_version ?? "v1"} · {t("exports.anonymized")}: {job.anonymized ? t("common.yes") : t("common.no")} · {t("exports.targetType")}: {job.target_type ?? "file"}
                   </div>
                 </li>
               ))}
@@ -67,6 +70,23 @@ const ExportsPage = () => {
       ) : (
         <EmptyState title={t("exports.jobs")} description={t("common.loading")} />
       )}
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("exports.datasets")}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ul className="space-y-2 text-sm" aria-live="polite">
+            {datasets?.map((dataset) => (
+              <li key={dataset.code} className="rounded-md border p-3">
+                <div className="font-medium">{dataset.code}</div>
+                <div className="text-muted-foreground">
+                  {t("exports.schemaVersion")}: {dataset.schema_version} · {t("exports.supportedTargets")}: {dataset.targets.join(", ")}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </CardContent>
+      </Card>
     </div>
   );
 };

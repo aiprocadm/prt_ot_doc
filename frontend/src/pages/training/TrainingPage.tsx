@@ -22,6 +22,13 @@ type LearnerDashboard = {
   items?: Array<{ id: string; completion_status: string; progress_percent: number; due_at?: string | null }>;
 };
 
+type TrainingAnalytics = {
+  completed_total: number;
+  retake_total: number;
+  average_attempt_score: number;
+  material_types: Record<string, number>;
+};
+
 const StatCard = ({ title, value }: { title: string; value: number | string }) => (
   <Card>
     <CardHeader className="pb-2">
@@ -39,10 +46,12 @@ const TrainingPage = () => {
   const [learner, setLearner] = useState<LearnerDashboard | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [programDetail, setProgramDetail] = useState<{ modules: Array<{ module: { id: string; title: string }; lessons: Array<{ id: string; title: string }> }> } | null>(null);
+  const [analytics, setAnalytics] = useState<TrainingAnalytics | null>(null);
 
   useEffect(() => {
     void apiClient.get<TeacherDashboard>("/training/teacher/dashboard").then(({ data }) => setTeacher(data)).catch(() => setError("teacher"));
     void apiClient.get<LearnerDashboard>("/training/learner/dashboard", { params: { person_id: "me" } }).then(({ data }) => setLearner(data)).catch(() => setError("learner"));
+    void apiClient.get<TrainingAnalytics>("/training/analytics/overview").then(({ data }) => setAnalytics(data)).catch(() => undefined);
     void apiClient.get<{ items: Array<{ id: string }> }>("/training/programs").then(({ data }) => {
       const firstProgram = data.items?.[0]?.id;
       if (firstProgram) {
@@ -56,7 +65,7 @@ const TrainingPage = () => {
     <div className="space-y-6">
       <Breadcrumb items={[{ label: t("common.home"), to: "/dashboard" }, { label: t("training.title") }]} />
       <Tabs defaultValue="teacher" aria-label={t("training.title")}>
-        <TabsList>
+        <TabsList aria-label={t("training.title")}>
           <TabsTrigger value="teacher">{t("training.teacherView")}</TabsTrigger>
           <TabsTrigger value="learner">{t("training.learnerView")}</TabsTrigger>
         </TabsList>
@@ -65,6 +74,11 @@ const TrainingPage = () => {
             <StatCard title={t("training.groups")} value={teacher?.groups_total ?? 0} />
             <StatCard title={t("training.enrollments")} value={teacher?.enrollments_total ?? 0} />
             <StatCard title={t("training.averageProgress")} value={`${teacher?.average_progress_percent ?? 0}%`} />
+          </div>
+          <div className="grid gap-4 md:grid-cols-3" aria-live="polite">
+            <StatCard title={t("training.completed")} value={analytics?.completed_total ?? 0} />
+            <StatCard title={t("training.retakes")} value={analytics?.retake_total ?? 0} />
+            <StatCard title={t("training.averageScore")} value={analytics?.average_attempt_score ?? 0} />
           </div>
           {programDetail?.modules?.length ? (
             <Card>
@@ -83,6 +97,21 @@ const TrainingPage = () => {
               </CardContent>
             </Card>
           ) : <EmptyState title={t("training.lessonStructure")} description={t("training.noSchedule")} />}
+          <Card>
+            <CardHeader>
+              <CardTitle>{t("training.materialTypes")}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ul className="space-y-2 text-sm" aria-live="polite">
+                {Object.entries(analytics?.material_types ?? {}).map(([key, value]) => (
+                  <li key={key} className="flex items-center justify-between rounded-md border p-3">
+                    <span>{key}</span>
+                    <span className="font-medium">{value}</span>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
         </TabsContent>
         <TabsContent value="learner" className="space-y-4">
           <div className="grid gap-4 md:grid-cols-3">
