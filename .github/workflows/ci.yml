@@ -47,6 +47,12 @@ jobs:
       - name: Install backend dependencies
         run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt -r requirements-dev.txt
 
+      - name: Validate Alembic revision graph
+        env:
+          PYTHONPATH: ${{ github.workspace }}/backend
+          DB_URL: sqlite:///./ci-alembic.db
+        run: alembic -c backend/app/migrations/alembic.ini heads
+
       - name: Backend test suite
         run: pytest --junitxml=artifacts/backend-junit.xml
 
