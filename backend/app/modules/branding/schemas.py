@@ -84,3 +84,4 @@ class BrandingPreviewResponse(BaseModel):
     preset_code: str | None = None
     sections: dict[str, str | None]
     unresolved_placeholders: list[str] = Field(default_factory=list)
+    watermark: dict[str, Any] = Field(default_factory=dict)

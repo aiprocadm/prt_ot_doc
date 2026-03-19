@@ -24,11 +24,14 @@ async def get_branding_profile(company_id: str, site_id: str | None = None, sess
 async def update_branding_profile(company_id: str, payload: BrandingProfilePatch, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> BrandingProfileRead:
     service = BrandingService(session, tenant)
     company = await service.get_company(company_id)
+    branding_payload = payload.branding.model_dump(mode='json')
+    if payload.preferred_header_preset_code is not None:
+        branding_payload['preferred_letterhead_preset'] = payload.preferred_header_preset_code
     if payload.site_id:
         site = await service.get_site(payload.site_id)
-        site.branding_payload = payload.branding.model_dump(mode='json')
+        site.branding_payload = branding_payload
     else:
-        company.branding_payload = payload.branding.model_dump(mode='json')
+        company.branding_payload = branding_payload
         company.preferred_header_preset_code = payload.preferred_header_preset_code
         site = None
     await session.commit()
@@ -48,5 +51,12 @@ async def preview_branding(payload: BrandingPreviewRequest, session: AsyncSessio
         document_title=payload.document_title,
         document_number=payload.document_number,
         generated_at=payload.generated_at,
+        watermark_override=payload.watermark_override,
     )
-    return BrandingPreviewResponse(profile=profile, preset_code=getattr(preset, 'code', None), sections=sections, unresolved_placeholders=unresolved)
+    return BrandingPreviewResponse(
+        profile=profile,
+        preset_code=getattr(preset, 'code', None),
+        sections=sections,
+        unresolved_placeholders=unresolved,
+        watermark=service.resolve_watermark(profile=profile, preset=preset, override=payload.watermark_override),
+    )

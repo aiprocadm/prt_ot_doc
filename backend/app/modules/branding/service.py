@@ -97,17 +97,43 @@ class BrandingService:
             'site_updated_at': site.updated_at.isoformat() if site and getattr(site, 'updated_at', None) else None,
             'generated_at': datetime.now(timezone.utc).isoformat(),
         }
+        effective_preset_code = (
+            branding.preferred_letterhead_preset
+            if site is not None
+            else (company.preferred_header_preset_code or branding.preferred_letterhead_preset)
+        )
+        reproducibility['preferred_header_preset_code'] = effective_preset_code
         return BrandingProfileRead(
             company_id=company.id,
             site_id=site.id if site else None,
             scope=scope,
-            preferred_header_preset_code=(site.branding_payload or {}).get('preferred_header_preset_code') if site else (company.preferred_header_preset_code or branding.preferred_letterhead_preset),
+            preferred_header_preset_code=effective_preset_code,
             branding=branding,
             header_context=header_context,
             reproducibility=reproducibility,
         )
 
-    async def render_preview(self, *, company_id: str, site_id: str | None, preset_code: str | None, document_title: str | None, document_number: str | None, generated_at: str | None) -> tuple[BrandingProfileRead, HeaderFooterPreset | None, dict[str, str | None], list[str]]:
+
+    def resolve_watermark(
+        self,
+        *,
+        profile: BrandingProfileRead,
+        preset: HeaderFooterPreset | None,
+        override: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        preset_watermark = deepcopy(getattr(preset, "watermark", {}) or {})
+        branding_watermark = {
+            "enabled": profile.branding.watermark_enabled,
+            "text": profile.branding.watermark_text,
+        }
+        resolved = self._deep_merge(preset_watermark, branding_watermark)
+        if override:
+            resolved = self._deep_merge(resolved, override)
+        if not resolved.get("text"):
+            resolved["enabled"] = False
+        return resolved
+
+    async def render_preview(self, *, company_id: str, site_id: str | None, preset_code: str | None, document_title: str | None, document_number: str | None, generated_at: str | None, watermark_override: dict[str, Any] | None = None) -> tuple[BrandingProfileRead, HeaderFooterPreset | None, dict[str, str | None], list[str]]:
         company = await self.get_company(company_id)
         site = await self.get_site(site_id)
         profile = self.build_profile(company=company, site=site)
@@ -129,14 +155,21 @@ class BrandingService:
             'footer_even': None,
         }
         unresolved: list[str] = []
+        watermark = self.resolve_watermark(profile=profile, preset=preset, override=watermark_override)
         if effective_preset_code:
             stmt = select(HeaderFooterPreset).where(HeaderFooterPreset.tenant_id == str(self.tenant.id), HeaderFooterPreset.code == effective_preset_code, HeaderFooterPreset.deleted_at.is_(None))
             preset = (await self.session.execute(stmt)).scalar_one_or_none()
             if preset is None:
                 raise HTTPException(status.HTTP_404_NOT_FOUND, 'Layout preset not found')
+            watermark = self.resolve_watermark(profile=profile, preset=preset, override=watermark_override)
+            context['watermark'] = watermark
             for key in sections:
                 raw_value = getattr(preset, f'{key}_xml', None)
                 rendered, missing = render_placeholders(raw_value, context, strict=True)
                 sections[key] = rendered or None
                 unresolved.extend(missing)
+        profile.reproducibility['watermark'] = watermark
+        if preset is not None:
+            profile.reproducibility['preset_id'] = preset.id
+            profile.reproducibility['preset_updated_at'] = preset.updated_at.isoformat() if getattr(preset, 'updated_at', None) else None
         return profile, preset, sections, sorted(set(unresolved))
