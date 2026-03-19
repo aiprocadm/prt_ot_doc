@@ -3,7 +3,7 @@ import { appConfig } from "@/config/env";
 import { handleApiError } from "@/api/errorHandling";
 import { tokenStorage } from "@/api/tokenStorage";
 import { tenantStorage } from "@/api/tenantStorage";
-import type { ApiError } from "@/types/dto/common";
+import type { ApiError, ApiFieldError } from "@/types/dto/common";
 import type { RefreshResponseDto } from "@/types/dto/auth";
 
 const API_BASE_URL = appConfig.apiBaseUrl;
@@ -39,6 +39,45 @@ const isTenantRequiredPath = (path: string) => {
   return !TENANT_WHITELIST.some((pattern) => pattern.test(path));
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
+
+const normalizeFieldErrors = (value: unknown): ApiFieldError[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!isRecord(item) || typeof item.field !== "string" || typeof item.message !== "string") return null;
+      return {
+        field: item.field,
+        message: item.message,
+        code: typeof item.code === "string" ? item.code : undefined
+      } satisfies ApiFieldError;
+    })
+    .filter((item): item is ApiFieldError => item !== null);
+};
+
+const normalizeApiError = (payload: unknown, fallback: { status: number; message: string; details?: unknown }): ApiError => {
+  if (!isRecord(payload)) {
+    return {
+      status: fallback.status,
+      message: fallback.message,
+      details: fallback.details ?? payload,
+      field_errors: []
+    };
+  }
+
+  const details = "details" in payload ? payload.details : fallback.details ?? payload;
+  return {
+    status: fallback.status,
+    code: typeof payload.code === "string" ? payload.code : undefined,
+    type: typeof payload.type === "string" ? payload.type : undefined,
+    message: typeof payload.message === "string" ? payload.message : fallback.message,
+    details,
+    field_errors: normalizeFieldErrors(payload.field_errors),
+    correlation_id: typeof payload.correlation_id === "string" ? payload.correlation_id : undefined,
+    timestamp: typeof payload.timestamp === "string" ? payload.timestamp : undefined
+  };
+};
+
 const notifySubscribers = (token: string | null) => {
   subscribers.splice(0, subscribers.length).forEach((cb) => cb(token));
 };
@@ -64,7 +103,7 @@ const refreshToken = async (): Promise<string | null> => {
         expiresIn: response.data.expires_in
       });
       return response.data.access_token;
-    } catch (error) {
+    } catch {
       tokenStorage.clear();
       return null;
     } finally {
@@ -99,8 +138,10 @@ apiClient.interceptors.request.use((config) => {
     const error = {
       status: 0,
       code: "TENANT_REQUIRED",
+      type: "tenancy",
       message: "Выберите контур перед выполнением запроса.",
-      details: { url: requestUrl, path: requestPath }
+      details: { url: requestUrl, path: requestPath },
+      field_errors: []
     } satisfies ApiError;
     handleApiError(error, requestUrl);
     return Promise.reject(error);
@@ -146,15 +187,11 @@ apiClient.interceptors.response.use(
       }
     }
 
-    const apiError: ApiError = {
+    const apiError = normalizeApiError(error.response?.data, {
       status,
-      code: (error.response?.data as { code?: string })?.code,
-      message:
-        (error.response?.data as { message?: string })?.message ??
-        error.message ??
-        "Unexpected error",
+      message: error.message ?? "Unexpected error",
       details: error.response?.data
-    };
+    });
 
     handleApiError(apiError, originalRequest?.url);
     return Promise.reject(apiError);

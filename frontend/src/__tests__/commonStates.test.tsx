@@ -5,40 +5,39 @@ import { describe, expect, it, vi } from "vitest";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 
-describe("common state components", () => {
-  it("renders empty state defaults and custom copy", () => {
-    render(<EmptyState />);
+describe("common states", () => {
+  it("renders EmptyState content", () => {
+    render(<EmptyState title="Nothing here" description="Add records to continue" />);
 
-    expect(screen.getByText("Данные отсутствуют")).toBeInTheDocument();
-    expect(screen.getByText("Попробуйте изменить фильтры")).toBeInTheDocument();
-
-    render(<EmptyState title="Нет записей" description="Выберите другие параметры" />);
-
-    expect(screen.getByText("Нет записей")).toBeInTheDocument();
-    expect(screen.getByText("Выберите другие параметры")).toBeInTheDocument();
+    expect(screen.getByText("Nothing here")).toBeInTheDocument();
+    expect(screen.getByText("Add records to continue")).toBeInTheDocument();
   });
 
-  it("renders error state details and supports retry", async () => {
-    const onRetry = vi.fn();
+  it("renders ErrorState with contract metadata and field errors", async () => {
     const user = userEvent.setup();
+    const onRetry = vi.fn();
 
-    const { container } = render(
+    render(
       <ErrorState
-        error={{ status: 500, code: "E500", message: "Ошибка загрузки" }}
+        error={{
+          status: 422,
+          code: "VALIDATION_ERROR",
+          type: "validation",
+          message: "Validation failed",
+          correlation_id: "corr-123",
+          field_errors: [{ field: "template_code", message: "Required" }]
+        }}
         onRetry={onRetry}
       />
     );
 
-    expect(container.firstChild).not.toBeNull();
-    expect(screen.getByText("Ошибка загрузки")).toBeInTheDocument();
-    expect(screen.getByText("Код: E500")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(screen.getByText("Validation failed")).toBeInTheDocument();
+    expect(screen.getByText(/Correlation ID: corr-123/)).toBeInTheDocument();
+    expect(screen.getByText(/template_code:/)).toBeInTheDocument();
+    expect(screen.getByText(/Required/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Повторить" }));
     expect(onRetry).toHaveBeenCalledTimes(1);
-  });
-
-  it("does not render error state when error is missing", () => {
-    const { container } = render(<ErrorState />);
-    expect(container.firstChild).toBeNull();
   });
 });

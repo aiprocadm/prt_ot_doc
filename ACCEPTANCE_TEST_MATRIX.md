@@ -32,13 +32,13 @@
 | Criterion | Primary tests / checks | Command |
 |---|---|---|
 | Tenant isolation | `tests/integration/test_tenant_isolation.py`, `tests/integration/test_abac_query_isolation.py` | `./scripts/pytest.sh tests/integration/test_tenant_isolation.py tests/integration/test_abac_query_isolation.py` |
-| Structured errors contract | `tests/test_errors.py`, `tests/e2e/final_regression/test_final_regression_api.py` | `./scripts/pytest.sh tests/test_errors.py tests/e2e/final_regression/test_final_regression_api.py` |
+| Structured errors contract | `tests/test_errors.py`, `tests/e2e/final_regression/test_final_regression_api.py`, `frontend/src/__tests__/apiClient.test.ts`, `frontend/src/__tests__/commonStates.test.tsx` | `./scripts/pytest.sh tests/test_errors.py tests/e2e/final_regression/test_final_regression_api.py && cd frontend && npx vitest run apiClient commonStates` |
 | OpenAPI / contract stability | `tests/contract/test_openapi_contract.py`, `scripts/contract/validate.py` | `./scripts/pytest.sh tests/contract/test_openapi_contract.py && PYTHONPATH=backend python scripts/contract/validate.py` |
 | Idempotent generation / writes | `tests/test_idempotency.py`, `tests/integration/test_idempotency_generate.py`, `tests/integration/test_pipeline_idempotency.py` | `./scripts/pytest.sh tests/test_idempotency.py tests/integration/test_idempotency_generate.py tests/integration/test_pipeline_idempotency.py` |
 | Async status transparency | `tests/integration/test_job_status_flow.py`, `tests/test_outbox_dispatch.py`, `tests/test_webhooks_dispatch.py` | `./scripts/pytest.sh tests/integration/test_job_status_flow.py tests/test_outbox_dispatch.py tests/test_webhooks_dispatch.py` |
 | Search / export performance smoke foundation | `scripts/perf/api_load.py`, `scripts/perf/README.md` | `python scripts/perf/api_load.py --help` |
 | Release docs completeness | `tests/e2e/test_release_candidate_docs.py` | `./scripts/pytest.sh tests/e2e/test_release_candidate_docs.py` |
-| Frontend no-dead-end wizard actions | `frontend/src/__tests__/GeneratePackWizardPage.test.tsx`, `frontend/src/__tests__/DocumentsWizardPage.test.tsx` | `npm --prefix frontend test -- --runInBand GeneratePackWizardPage DocumentsWizardPage` |
+| Frontend no-dead-end wizard actions | `frontend/src/__tests__/GeneratePackWizardPage.test.tsx`, `frontend/src/__tests__/DocumentsWizardPage.test.tsx` | `cd frontend && npx vitest run GeneratePackWizardPage DocumentsWizardPage` |
 
 ## 3. Acceptance bundle commands
 
