@@ -17,6 +17,7 @@ class SiteBase(BaseSchema):
     contact_email: EmailStr | None = None
     is_hazardous_production_facility: bool = False
     opo_register_number: str | None = Field(default=None, max_length=64)
+    branding_payload: dict = Field(default_factory=dict)
 
 
 class SiteCreate(SiteBase):
@@ -34,6 +35,7 @@ class SiteUpdate(BaseSchema):
     contact_email: EmailStr | None = None
     is_hazardous_production_facility: bool | None = None
     opo_register_number: str | None = Field(default=None, max_length=64)
+    branding_payload: dict | None = None
 
 
 class SiteRead(SiteBase):
