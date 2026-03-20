@@ -512,6 +512,12 @@ const BrandingSettingsPage = () => {
                 <div className="font-medium">Resolved watermark</div>
                 <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs">{JSON.stringify(preview?.watermark ?? {}, null, 2)}</pre>
               </div>
+              <div className="rounded-md border bg-muted/30 p-3 text-sm">
+                <div className="font-medium">Resolution chain / preset source</div>
+                <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs">
+                  {JSON.stringify(preview?.profile.resolution ?? profile?.resolution ?? {}, null, 2)}
+                </pre>
+              </div>
               {preview?.unresolved_placeholders?.length ? (
                 <div className="text-sm text-amber-700">
                   Незаполненные placeholders: {preview.unresolved_placeholders.join(", ")}

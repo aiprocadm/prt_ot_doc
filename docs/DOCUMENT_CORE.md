@@ -7,6 +7,7 @@
 - Branding profile inheritance: tenant -> company -> site.
 - Letterhead sections: first / odd / even headers and footers.
 - Watermark resolution: preset + branding profile + request override.
+- Resolution metadata: preset source, inheritance chain, branding presence flags.
 - Reproducibility metadata: tenant/company/site/preset/version timestamps.
 - Wizard integration: branded preview and generation payload enrichment on step 5.
 

@@ -73,8 +73,8 @@ npm --prefix frontend run dev
 2. Create optional branch/site via `/api/v1/sites`.
 3. Create header/footer preset via `/api/v1/layout-presets` or `/admin/layout-presets`.
 4. Maintain tenant/company/site branding in `/documents/branding`.
-5. Build branded preview via `/api/v1/branding/preview` to get rendered header/footer sections, resolved watermark, apply-headers payload and reproducibility metadata.
-6. Use `/documents/wizard` step 5 to select organization/site/preset, preview letterhead and carry reproducibility metadata into generation payloads.
+5. Build branded preview via `/api/v1/branding/preview` to get rendered first/odd/even header/footer sections, resolved watermark, resolution chain, apply-headers payload and reproducibility metadata.
+6. Use `/documents/wizard` step 5 to select organization/site/preset, preview letterhead, inspect preset source/inheritance chain and carry reproducibility metadata into generation payloads.
 7. Branding profile updates merge into existing company/site payloads instead of replacing them wholesale, so saved requisites, images and metadata are preserved across partial edits.
 8. `preferred_header_preset_code` is tenant-validated on update to prevent dangling letterhead references.
 9. Apply headers to generated DOCX via `/api/v1/documents/{document_version_id}/apply-headers`, then continue to PDF / approval / archive.

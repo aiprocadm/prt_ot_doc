@@ -26,6 +26,23 @@ class BrandingPalette(BaseModel):
     watermark: str | None = None
 
 
+class BrandingSignatory(BaseModel):
+    full_name: str | None = None
+    position: str | None = None
+    basis: str | None = None
+    signature_file_id: str | None = None
+    stamp_file_id: str | None = None
+
+
+class BrandingResolutionMeta(BaseModel):
+    scope_chain: list[str] = Field(default_factory=list)
+    company_has_branding: bool = False
+    site_has_branding: bool = False
+    site_branding_applied: bool = False
+    effective_preset_code: str | None = None
+    effective_preset_source: str | None = None
+
+
 class BrandingProfilePayload(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -49,7 +66,7 @@ class BrandingProfilePayload(BaseModel):
     contacts: list[BrandingContact] = Field(default_factory=list)
     images: BrandingImageSet = Field(default_factory=BrandingImageSet)
     palette: BrandingPalette = Field(default_factory=BrandingPalette)
-    signatories: list[dict[str, Any]] = Field(default_factory=list)
+    signatories: list[BrandingSignatory | dict[str, Any]] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -61,6 +78,7 @@ class BrandingProfileRead(BaseModel):
     branding: BrandingProfilePayload
     header_context: dict[str, Any]
     reproducibility: dict[str, Any]
+    resolution: BrandingResolutionMeta = Field(default_factory=BrandingResolutionMeta)
 
 
 class BrandingProfilePatch(BaseModel):

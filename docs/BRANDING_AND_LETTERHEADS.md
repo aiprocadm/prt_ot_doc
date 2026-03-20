@@ -21,6 +21,7 @@
 
 Returns:
 - resolved profile;
+- resolution metadata (`scope_chain`, `effective_preset_source`, presence of company/site branding layers);
 - rendered sections (`header_first`, `header_odd`, `header_even`, `footer_*`);
 - resolved watermark;
 - reproducibility metadata;
