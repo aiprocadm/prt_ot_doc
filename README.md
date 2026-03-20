@@ -56,7 +56,7 @@ pytest -q tests/test_entrypoints.py
 pytest -q tests/api/test_branding_api.py
 pytest -q tests/headers/test_engine.py
 PYTHONPATH=backend python scripts/branded_document_smoke.py
-PYTHONPATH=backend python scripts/repo_audit.py
+PYTHONPATH=backend python scripts/repo_audit.py  # writes docs/audit/REPOSITORY_AUDIT.md and docs/audit/REPOSITORY_AUDIT.json
 
 # frontend
 npm --prefix frontend run typecheck
@@ -98,6 +98,7 @@ npm --prefix frontend run build
 - `docs/TESTING.md`
 - `docs/audit/TZ_COVERAGE_MATRIX.md`
 - `docs/audit/REPOSITORY_AUDIT.md`
+- `docs/audit/REPOSITORY_AUDIT.json`
 - `GAP_REPORT.md`
 - `KNOWN_LIMITATIONS.md`
 - `RELEASE_READINESS.md`

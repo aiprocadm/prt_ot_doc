@@ -1,0 +1,273 @@
+{
+  "backend_paths": [
+    {
+      "label": "ASGI entrypoint",
+      "path": "backend/app/main.py",
+      "description": "Uvicorn/FastAPI runtime entrypoint."
+    },
+    {
+      "label": "App factory",
+      "path": "backend/app/api/app.py",
+      "description": "Application factory and middleware wiring."
+    },
+    {
+      "label": "API router",
+      "path": "backend/app/api/v1/router.py",
+      "description": "Top-level v1 router composition."
+    },
+    {
+      "label": "CLI entrypoint",
+      "path": "backend/app/cli/main.py",
+      "description": "Operator CLI commands."
+    },
+    {
+      "label": "Worker entrypoint",
+      "path": "backend/app/worker.py",
+      "description": "Celery worker bootstrap."
+    },
+    {
+      "label": "Alembic config",
+      "path": "backend/app/migrations/alembic.ini",
+      "description": "Database migration configuration."
+    }
+  ],
+  "frontend_paths": [
+    {
+      "label": "Package manifest",
+      "path": "frontend/package.json",
+      "description": "Single active frontend package manifest."
+    },
+    {
+      "label": "Vite config",
+      "path": "frontend/vite.config.ts",
+      "description": "Frontend bundler/runtime config."
+    },
+    {
+      "label": "TypeScript config",
+      "path": "frontend/tsconfig.json",
+      "description": "Application TypeScript project config."
+    },
+    {
+      "label": "Node TS config",
+      "path": "frontend/tsconfig.node.json",
+      "description": "Node-side TS config for build tooling."
+    },
+    {
+      "label": "React entrypoint",
+      "path": "frontend/src/main.tsx",
+      "description": "Browser bootstrap for the SPA."
+    },
+    {
+      "label": "Route tree",
+      "path": "frontend/src/router/AppRouter.tsx",
+      "description": "Canonical route composition."
+    }
+  ],
+  "docs_paths": [
+    {
+      "label": "Architecture",
+      "path": "docs/ARCHITECTURE.md",
+      "description": "Architecture overview and layering expectations."
+    },
+    {
+      "label": "Project structure",
+      "path": "docs/PROJECT_STRUCTURE.md",
+      "description": "Canonical repository layout."
+    },
+    {
+      "label": "Setup",
+      "path": "docs/SETUP.md",
+      "description": "Reproducible local setup and startup."
+    },
+    {
+      "label": "Backend",
+      "path": "docs/BACKEND.md",
+      "description": "Backend runtime/modules overview."
+    },
+    {
+      "label": "Frontend",
+      "path": "docs/FRONTEND.md",
+      "description": "Frontend structure/routes/data layer overview."
+    },
+    {
+      "label": "Modules",
+      "path": "docs/MODULES.md",
+      "description": "Domain/module inventory."
+    },
+    {
+      "label": "API overview",
+      "path": "docs/API_OVERVIEW.md",
+      "description": "Public/internal API map."
+    },
+    {
+      "label": "Domain model",
+      "path": "docs/DOMAIN_MODEL.md",
+      "description": "Key entities and relationships."
+    },
+    {
+      "label": "Document core",
+      "path": "docs/DOCUMENT_CORE.md",
+      "description": "Generation/template/branding flow."
+    },
+    {
+      "label": "Integrations",
+      "path": "docs/INTEGRATIONS.md",
+      "description": "Webhooks/API/provider integration notes."
+    },
+    {
+      "label": "Security",
+      "path": "docs/SECURITY.md",
+      "description": "Security, tenancy, authz guidance."
+    },
+    {
+      "label": "Testing",
+      "path": "docs/TESTING.md",
+      "description": "Test strategy and command matrix."
+    },
+    {
+      "label": "Coverage matrix",
+      "path": "docs/audit/TZ_COVERAGE_MATRIX.md",
+      "description": "TZ-to-code/test coverage mapping."
+    },
+    {
+      "label": "Acceptance matrix",
+      "path": "ACCEPTANCE_TEST_MATRIX.md",
+      "description": "Acceptance scenarios to checks mapping."
+    },
+    {
+      "label": "Gap report",
+      "path": "GAP_REPORT.md",
+      "description": "Open/closed implementation gaps."
+    },
+    {
+      "label": "Release readiness",
+      "path": "RELEASE_READINESS.md",
+      "description": "Go-live readiness summary."
+    },
+    {
+      "label": "Known limitations",
+      "path": "KNOWN_LIMITATIONS.md",
+      "description": "Residual limitations and follow-up notes."
+    },
+    {
+      "label": "Path renames",
+      "path": "CHANGED_PATHS_AND_RENAMES.md",
+      "description": "Documented structural changes/deprecations."
+    },
+    {
+      "label": "Workflows and events",
+      "path": "docs/WORKFLOWS_AND_EVENTS.md",
+      "description": "Cross-module workflow/event map."
+    },
+    {
+      "label": "Observability",
+      "path": "docs/OBSERVABILITY.md",
+      "description": "Health/readiness/metrics/logging/tracing foundation."
+    }
+  ],
+  "root_expectations": [
+    {
+      "label": "Backend root",
+      "path": "backend",
+      "expected": true,
+      "actual": true,
+      "status": "ok",
+      "description": "Canonical backend source root."
+    },
+    {
+      "label": "Frontend root",
+      "path": "frontend",
+      "expected": true,
+      "actual": true,
+      "status": "ok",
+      "description": "Canonical frontend source root."
+    },
+    {
+      "label": "Docs root",
+      "path": "docs",
+      "expected": true,
+      "actual": true,
+      "status": "ok",
+      "description": "Repository documentation root."
+    },
+    {
+      "label": "Root package.json",
+      "path": "package.json",
+      "expected": false,
+      "actual": false,
+      "status": "ok",
+      "description": "A repo-root frontend manifest should not exist."
+    },
+    {
+      "label": "Frontend package.json",
+      "path": "frontend/package.json",
+      "expected": true,
+      "actual": true,
+      "status": "ok",
+      "description": "The active frontend package manifest must exist here."
+    },
+    {
+      "label": "Compatibility shim",
+      "path": "app/__init__.py",
+      "expected": true,
+      "actual": true,
+      "status": "ok",
+      "description": "Legacy `app.*` imports are intentionally supported through this shim."
+    }
+  ],
+  "inventory": {
+    "package_jsons": [
+      "frontend/package.json"
+    ],
+    "vite_configs": [
+      "frontend/vite.config.ts"
+    ],
+    "tsconfigs": [
+      "frontend/tsconfig.json",
+      "frontend/tsconfig.node.json"
+    ],
+    "eslint_configs": [
+      "frontend/.eslintrc.cjs"
+    ],
+    "backend_entrypoints": [
+      "backend/app/api/app.py",
+      "backend/app/cli/main.py",
+      "backend/app/main.py",
+      "backend/app/worker.py"
+    ],
+    "frontend_entrypoints": [
+      "frontend/src/main.tsx",
+      "frontend/src/router/AppRouter.tsx"
+    ]
+  },
+  "findings": [
+    "Active frontend manifest count: **1**.",
+    "Backend runtime entrypoint present: **yes**.",
+    "Frontend root contains Vite config: **yes**.",
+    "Frontend root contains tsconfig: **yes**.",
+    "Repo-root compatibility package `app/`: **yes**."
+  ],
+  "legacy_pairs": [
+    {
+      "canonical": "docs/TESTING.md",
+      "canonical_exists": true,
+      "legacy": "docs/testing.md",
+      "legacy_exists": true,
+      "guidance": "Prefer `docs/TESTING.md` for new references and keep lowercase `docs/testing.md` as a compatibility pointer."
+    },
+    {
+      "canonical": "docs/ADR",
+      "canonical_exists": true,
+      "legacy": "docs/adr",
+      "legacy_exists": true,
+      "guidance": "Prefer `docs/ADR` for new ADRs and keep `docs/adr` as historical legacy content."
+    },
+    {
+      "canonical": "backend/app/modules/approvals",
+      "canonical_exists": true,
+      "legacy": "backend/app/modules/approval",
+      "legacy_exists": true,
+      "guidance": "Prefer `backend/app/modules/approvals` for active approval APIs; keep singular path as compatibility legacy only."
+    }
+  ]
+}

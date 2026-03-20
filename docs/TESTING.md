@@ -72,7 +72,7 @@ cd frontend && npx vitest run GeneratePackWizardPage DocumentsWizardPage AppRout
 
 ```bash
 PYTHONPATH=backend python scripts/contract/validate.py
-PYTHONPATH=backend python scripts/repo_audit.py
+PYTHONPATH=backend python scripts/repo_audit.py  # regenerates markdown + JSON audit artifacts
 pytest -q tests/e2e/test_release_candidate_docs.py
 ```
 
@@ -108,7 +108,7 @@ make final-acceptance
 - **Contract tests** validate OpenAPI and machine-facing stability.
 - **Tenant/idempotency/outbox tests** validate multi-tenant and reliability guarantees.
 - **Frontend typecheck/test/build** validate route composition, permissions-aware rendering foundations, and production bundling.
-- **Repo audit and docs tests** validate that the repository explains itself and that key documentation artifacts are present.
+- **Repo audit and docs tests** validate that the repository explains itself, that key documentation artifacts are present, and that the machine-readable audit snapshot remains canonical.
 
 ## 8. Discovery and VS Code notes
 
@@ -122,4 +122,5 @@ make final-acceptance
 - Acceptance scenario mapping: `ACCEPTANCE_TEST_MATRIX.md`
 - TZ-to-code coverage mapping: `docs/audit/TZ_COVERAGE_MATRIX.md`
 - Repository structure audit: `docs/audit/REPOSITORY_AUDIT.md`
+- Machine-readable repository audit: `docs/audit/REPOSITORY_AUDIT.json`
 - Release decision record: `RELEASE_READINESS.md`
