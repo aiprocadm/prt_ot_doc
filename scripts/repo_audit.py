@@ -66,7 +66,7 @@ def main() -> None:
             CanonicalPath("Document core", "docs/DOCUMENT_CORE.md", "Generation/template/branding flow."),
             CanonicalPath("Integrations", "docs/INTEGRATIONS.md", "Webhooks/API/provider integration notes."),
             CanonicalPath("Security", "docs/SECURITY.md", "Security, tenancy, authz guidance."),
-            CanonicalPath("Testing", "docs/testing.md", "Test strategy and command matrix."),
+            CanonicalPath("Testing", "docs/TESTING.md", "Test strategy and command matrix."),
             CanonicalPath("Coverage matrix", "docs/audit/TZ_COVERAGE_MATRIX.md", "TZ-to-code/test coverage mapping."),
             CanonicalPath("Acceptance matrix", "ACCEPTANCE_TEST_MATRIX.md", "Acceptance scenarios to checks mapping."),
             CanonicalPath("Gap report", "GAP_REPORT.md", "Open/closed implementation gaps."),
@@ -82,6 +82,7 @@ def main() -> None:
     tsconfigs = find_files("**/tsconfig*.json")
     backend_entrypoints = find_files("backend/app/main.py", "backend/app/api/app.py", "backend/app/worker.py", "backend/app/cli/main.py")
     duplicate_pairs = [
+        ("docs/TESTING.md", "docs/testing.md", "Prefer `docs/TESTING.md` for new references and keep lowercase `docs/testing.md` as a compatibility pointer."),
         ("docs/ADR", "docs/adr", "Prefer `docs/ADR` for new ADRs and keep `docs/adr` as historical legacy content."),
         (
             "backend/app/modules/approval",

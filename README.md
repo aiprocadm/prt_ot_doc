@@ -56,6 +56,7 @@ pytest -q tests/test_entrypoints.py
 pytest -q tests/api/test_branding_api.py
 pytest -q tests/headers/test_engine.py
 PYTHONPATH=backend python scripts/branded_document_smoke.py
+PYTHONPATH=backend python scripts/repo_audit.py
 
 # frontend
 npm --prefix frontend run typecheck
@@ -94,6 +95,7 @@ npm --prefix frontend run build
 - `docs/MODULES.md`
 - `docs/WORKFLOWS_AND_EVENTS.md`
 - `docs/OBSERVABILITY.md`
+- `docs/TESTING.md`
 - `docs/audit/TZ_COVERAGE_MATRIX.md`
 - `docs/audit/REPOSITORY_AUDIT.md`
 - `GAP_REPORT.md`

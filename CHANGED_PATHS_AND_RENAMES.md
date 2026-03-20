@@ -16,6 +16,7 @@
 - Expanded `scripts/repo_audit.py` so the generated audit report now captures canonical entrypoints, config inventory, required docs, and legacy path guidance.
 - Added `docs/WORKFLOWS_AND_EVENTS.md` as the canonical workflow/event map.
 - Added `docs/OBSERVABILITY.md` as the canonical health/metrics/logging/tracing reference.
+- Canonicalized testing documentation to `docs/TESTING.md` and reduced `docs/testing.md` to a compatibility pointer.
 - Updated build configuration in `frontend/vite.config.ts` to split vendor bundles more predictably for production builds.
 
 ## Rename policy going forward
