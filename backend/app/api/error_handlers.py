@@ -265,6 +265,7 @@ def register_exception_handlers(app: FastAPI) -> None:
                 code="rate_limit_exceeded",
                 message=message,
                 details=details,
+                field_errors=[],
                 trace_id=trace_id,
                 trace_header=trace_header,
                 headers=exc.headers,
