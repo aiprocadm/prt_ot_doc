@@ -27,7 +27,7 @@
 
 ## Supporting operator/tooling paths
 - `scripts/branded_document_smoke.py` — smoke check for firm-letterhead resolution and DOCX header/footer application without needing the full UI flow.
-- `scripts/repo_audit.py` — reproducible repository inventory for roots/manifests/configs/docs/legacy-path flags, writing `docs/audit/REPOSITORY_AUDIT.md`.
+- `scripts/repo_audit.py` — reproducible repository inventory for roots/manifests/configs/docs/legacy-path flags, writing both `docs/audit/REPOSITORY_AUDIT.md` and `docs/audit/REPOSITORY_AUDIT.json`.
 - `Makefile` target `branded-smoke` — canonical shell entry for the same smoke check.
 - `scripts/smoke.sh` — broader repo smoke covering migrations/readiness/basic API probes.
 

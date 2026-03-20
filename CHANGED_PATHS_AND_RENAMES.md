@@ -13,7 +13,7 @@
 - `backend/app/modules/approval/` and `backend/app/modules/approvals/` both still exist. New approval work should target the plural `approvals` path.
 
 ## Structural/doc changes in this wave
-- Expanded `scripts/repo_audit.py` so the generated audit report now captures canonical entrypoints, config inventory, required docs, and legacy path guidance.
+- Expanded `scripts/repo_audit.py` so the generated audit report now captures canonical entrypoints, config inventory, repo-root directories, required docs coverage, a consistency watchlist, and a machine-readable `docs/audit/REPOSITORY_AUDIT.json` snapshot.
 - Added `docs/WORKFLOWS_AND_EVENTS.md` as the canonical workflow/event map.
 - Added `docs/OBSERVABILITY.md` as the canonical health/metrics/logging/tracing reference.
 - Canonicalized testing documentation to `docs/TESTING.md` and reduced `docs/testing.md` to a compatibility pointer.
