@@ -21,6 +21,7 @@
 4. Preview returns rendered sections plus reproducibility metadata.
 5. Wizard persists the preview locally so the operator can move across steps without losing the branded context.
 6. Generated DOCX can be sent to `apply-headers` with the exact preview context.
+7. Single-generation launches persist branding reproducibility into `PipelineRun.result_metadata.branding`, which powers `/api/v1/branding/history` for operator-facing issuance history.
 
 ## Current boundary
 Preview preparation and apply-headers handoff are production-ready. Some generation profiles still require explicit chaining of `apply_headers` after DOCX creation rather than automatic inline chaining in every flow.
