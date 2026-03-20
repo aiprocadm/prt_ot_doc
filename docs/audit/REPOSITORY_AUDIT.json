@@ -74,6 +74,7 @@
     }
   ],
   "required_docs": [
+  "docs_paths": [
     {
       "label": "Architecture",
       "path": "docs/ARCHITECTURE.md",
@@ -173,6 +174,61 @@
       "label": "Workflows and events",
       "path": "docs/WORKFLOWS_AND_EVENTS.md",
       "description": "Cross-module workflow/event map."
+    },
+    {
+      "label": "Observability",
+      "path": "docs/OBSERVABILITY.md",
+      "description": "Health/readiness/metrics/logging/tracing foundation."
+    }
+  ],
+  "root_expectations": [
+    {
+      "label": "Backend root",
+      "path": "backend",
+      "expected": true,
+      "actual": true,
+      "status": "ok",
+      "description": "Canonical backend source root."
+    },
+    {
+      "label": "Frontend root",
+      "path": "frontend",
+      "expected": true,
+      "actual": true,
+      "status": "ok",
+      "description": "Canonical frontend source root."
+    },
+    {
+      "label": "Docs root",
+      "path": "docs",
+      "expected": true,
+      "actual": true,
+      "status": "ok",
+      "description": "Repository documentation root."
+    },
+    {
+      "label": "Root package.json",
+      "path": "package.json",
+      "expected": false,
+      "actual": false,
+      "status": "ok",
+      "description": "A repo-root frontend manifest should not exist."
+    },
+    {
+      "label": "Frontend package.json",
+      "path": "frontend/package.json",
+      "expected": true,
+      "actual": true,
+      "status": "ok",
+      "description": "The active frontend package manifest must exist here."
+    },
+    {
+      "label": "Compatibility shim",
+      "path": "app/__init__.py",
+      "expected": true,
+      "actual": true,
+      "status": "ok",
+      "description": "Legacy `app.*` imports are intentionally supported through this shim."
     }
   ],
   "inventory": {
@@ -185,6 +241,9 @@
     "tsconfigs": [
       "frontend/tsconfig.json",
       "frontend/tsconfig.node.json"
+    ],
+    "eslint_configs": [
+      "frontend/.eslintrc.cjs"
     ],
     "backend_entrypoints": [
       "backend/app/api/app.py",
@@ -253,5 +312,39 @@
   "consistency_watchlist": [
     "Keep README.md and docs/README.md aligned when startup commands or canonical paths change.",
     "Keep legacy compatibility paths out of new imports, routes, and docs references."
+    "frontend_entrypoints": [
+      "frontend/src/main.tsx",
+      "frontend/src/router/AppRouter.tsx"
+    ]
+  },
+  "findings": [
+    "Active frontend manifest count: **1**.",
+    "Backend runtime entrypoint present: **yes**.",
+    "Frontend root contains Vite config: **yes**.",
+    "Frontend root contains tsconfig: **yes**.",
+    "Repo-root compatibility package `app/`: **yes**."
+  ],
+  "legacy_pairs": [
+    {
+      "canonical": "docs/TESTING.md",
+      "canonical_exists": true,
+      "legacy": "docs/testing.md",
+      "legacy_exists": true,
+      "guidance": "Prefer `docs/TESTING.md` for new references and keep lowercase `docs/testing.md` as a compatibility pointer."
+    },
+    {
+      "canonical": "docs/ADR",
+      "canonical_exists": true,
+      "legacy": "docs/adr",
+      "legacy_exists": true,
+      "guidance": "Prefer `docs/ADR` for new ADRs and keep `docs/adr` as historical legacy content."
+    },
+    {
+      "canonical": "backend/app/modules/approvals",
+      "canonical_exists": true,
+      "legacy": "backend/app/modules/approval",
+      "legacy_exists": true,
+      "guidance": "Prefer `backend/app/modules/approvals` for active approval APIs; keep singular path as compatibility legacy only."
+    }
   ]
 }

@@ -36,5 +36,6 @@
 - `app/__init__.py` is a repo-root compatibility shim exposing `backend/app` as top-level `app` for legacy imports and entrypoints.
 - Historical parallel names still exist in a few areas (`docs/ADR` + `docs/adr`, `modules/approval` + `modules/approvals`). Canonical active paths are documented above; legacy paths remain only for backward compatibility and should not be used for new work.
 - Canonical workflow/event and observability references now live in `docs/WORKFLOWS_AND_EVENTS.md` and `docs/OBSERVABILITY.md`.
+- The repository audit now records root expectations (including the absence of a repo-root `package.json`) so accidental structural drift is visible in both human-readable and machine-readable outputs.
 - Canonical testing documentation now lives in `docs/TESTING.md`; lowercase `docs/testing.md` remains only as a backward-compatible pointer.
 - There is no separate frontend hidden under `ptd`, `proxy`, or repo root.
