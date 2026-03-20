@@ -51,6 +51,14 @@ export interface BrandingProfileDto {
   };
   header_context: Record<string, unknown>;
   reproducibility: Record<string, unknown>;
+  resolution?: {
+    scope_chain?: string[];
+    company_has_branding?: boolean;
+    site_has_branding?: boolean;
+    site_branding_applied?: boolean;
+    effective_preset_code?: string | null;
+    effective_preset_source?: string | null;
+  };
 }
 
 export interface BrandingPreviewDto {

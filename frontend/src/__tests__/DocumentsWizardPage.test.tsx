@@ -29,7 +29,14 @@ vi.mock("@/api/branding", () => ({
   previewBranding: vi.fn(async () => ({
     preset_code: "company_brand",
     sections: { header_odd: "АО Тест / Main site", footer_odd: "ИНН 123" },
-    profile: { scope: "site", reproducibility: { generated_at: "2026-03-19T00:00:00Z" } },
+    profile: {
+      scope: "site",
+      reproducibility: { generated_at: "2026-03-19T00:00:00Z" },
+      resolution: {
+        scope_chain: ["tenant", "company", "site"],
+        effective_preset_source: "site.branding.preferred_letterhead_preset"
+      }
+    },
     watermark: { text: "PREVIEW" },
     unresolved_placeholders: [],
     apply_headers_payload: { preset_code: "company_brand" },
@@ -133,6 +140,7 @@ describe("DocumentsWizardPage", () => {
 
     expect(await screen.findByText(/АО Тест \/ Main site/i)).toBeInTheDocument();
     expect(screen.getByText(/reproducibility snapshot/i)).toBeInTheDocument();
+    expect(screen.getByText(/site.branding.preferred_letterhead_preset/i)).toBeInTheDocument();
     expect(screen.getAllByText(/company_brand/i).length).toBeGreaterThan(0);
   });
 });

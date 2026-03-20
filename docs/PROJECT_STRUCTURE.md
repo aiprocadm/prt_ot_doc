@@ -21,7 +21,7 @@
 - `frontend/src/main.tsx` — React bootstrap.
 - `frontend/src/router/AppRouter.tsx` — route tree.
 - `frontend/src/pages/branding/BrandingSettingsPage.tsx` — branding/letterhead settings UX.
-- `frontend/src/pages/documents/DocumentsWizardPage.tsx` — branded document generation wizard.
+- `frontend/src/pages/documents/DocumentsWizardPage.tsx` — branded document generation wizard with preset-source and reproducibility preview.
 - `frontend/src/api/branding.ts` — branding API client.
 
 ## Structural audit notes

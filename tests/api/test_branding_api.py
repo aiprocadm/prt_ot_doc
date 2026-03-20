@@ -107,6 +107,8 @@ async def test_branding_profile_preview_and_update(async_client, sessionmaker, d
     assert preview_payload["apply_headers_payload"]["data"]["branch"]["name"] == "Филиал Север"
     assert preview_payload["apply_headers_payload"]["data"]["reproducibility"]["preferred_header_preset_code"] == "company_brand"
     assert preview_payload["wizard_defaults"]["site_id"] == site_id
+    assert preview_payload["profile"]["resolution"]["scope_chain"] == ["tenant", "company", "site"]
+    assert preview_payload["profile"]["resolution"]["effective_preset_source"] == "site.branding.preferred_letterhead_preset"
     assert "organization.short_name" not in preview_payload["unresolved_placeholders"]
 
     async with sessionmaker() as session:
@@ -172,3 +174,4 @@ async def test_branding_patch_merges_existing_payload_and_validates_preset(async
     assert payload["branding"]["metadata"]["source"] == "seed"
     assert payload["branding"]["metadata"]["updated_by"] == "test"
     assert payload["reproducibility"]["branding_payload_hash"]
+    assert payload["resolution"]["effective_preset_source"] == "company.preferred_header_preset_code"

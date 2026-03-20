@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.models import Company, Site, Tenant
 from app.modules.headers.models import HeaderFooterPreset
 from app.modules.headers.placeholders import render_placeholders
-from .schemas import BrandingProfilePayload, BrandingProfileRead
+from .schemas import BrandingProfilePayload, BrandingProfileRead, BrandingResolutionMeta
 
 
 class BrandingService:
@@ -69,7 +69,8 @@ class BrandingService:
         return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
     def build_profile(self, *, company: Company, site: Site | None = None) -> BrandingProfileRead:
-        payload = self._tenant_branding()
+        tenant_branding = self._tenant_branding()
+        payload = tenant_branding
         payload = self._deep_merge(payload, company.branding_payload or {})
         scope = 'company'
         if site is not None:
@@ -124,6 +125,26 @@ class BrandingService:
             else (company.preferred_header_preset_code or branding.preferred_letterhead_preset)
         )
         reproducibility['preferred_header_preset_code'] = effective_preset_code
+        resolution = BrandingResolutionMeta(
+            scope_chain=["tenant", "company", *(['site'] if site is not None else [])],
+            company_has_branding=bool(company.branding_payload),
+            site_has_branding=bool(site.branding_payload) if site is not None else False,
+            site_branding_applied=site is not None,
+            effective_preset_code=effective_preset_code,
+            effective_preset_source=(
+                "company.preferred_header_preset_code"
+                if site is None and company.preferred_header_preset_code
+                else (
+                    "site.branding.preferred_letterhead_preset"
+                    if site is not None and (site.branding_payload or {}).get("preferred_letterhead_preset")
+                    else (
+                        "company.branding.preferred_letterhead_preset"
+                        if (company.branding_payload or {}).get("preferred_letterhead_preset")
+                        else ("tenant.settings.branding.preferred_letterhead_preset" if tenant_branding.get("preferred_letterhead_preset") else None)
+                    )
+                )
+            ),
+        )
         return BrandingProfileRead(
             company_id=company.id,
             site_id=site.id if site else None,
@@ -132,6 +153,7 @@ class BrandingService:
             branding=branding,
             header_context=header_context,
             reproducibility=reproducibility,
+            resolution=resolution,
         )
 
 
@@ -177,6 +199,7 @@ class BrandingService:
         }
         unresolved: list[str] = []
         watermark = self.resolve_watermark(profile=profile, preset=preset, override=watermark_override)
+        context['watermark'] = watermark
         if effective_preset_code:
             preset = await self.get_layout_preset(effective_preset_code)
             if preset is None:
@@ -192,6 +215,9 @@ class BrandingService:
         if preset is not None:
             profile.reproducibility['preset_id'] = preset.id
             profile.reproducibility['preset_updated_at'] = preset.updated_at.isoformat() if getattr(preset, 'updated_at', None) else None
+            profile.resolution.effective_preset_source = profile.resolution.effective_preset_source or "request_or_profile"
+        elif effective_preset_code is None:
+            profile.resolution.effective_preset_source = profile.resolution.effective_preset_source or "none"
         return profile, preset, sections, sorted(set(unresolved))
 
     def build_apply_headers_payload(

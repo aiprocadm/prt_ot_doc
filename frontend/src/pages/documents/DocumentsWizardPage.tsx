@@ -64,6 +64,15 @@ const buildBatchErrors = (items: DocumentBatchItem[]) =>
     .map((item) => `Строка ${item.row_index}: ${item.error ?? "unknown_error"}`)
     .join("\n");
 
+const previewSectionCards = [
+  { key: "header_first", label: "Header first" },
+  { key: "header_odd", label: "Header odd" },
+  { key: "header_even", label: "Header even" },
+  { key: "footer_first", label: "Footer first" },
+  { key: "footer_odd", label: "Footer odd" },
+  { key: "footer_even", label: "Footer even" }
+] as const;
+
 const getArchiveStatusSummary = ({
   batchStatus,
   pipelineStatus
@@ -378,19 +387,15 @@ const DocumentsWizardPage = () => {
               <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
                 <div className="rounded-lg border bg-muted/20 p-4 text-sm">
                   <div className="font-medium">Preview header/footer</div>
-                  <div className="mt-3 whitespace-pre-wrap rounded-md border bg-background p-3">
-                    {brandingPreview?.sections.header_odd ?? "Соберите preview, чтобы проверить фирменный бланк."}
-                  </div>
                   <div className="mt-3 grid gap-3 md:grid-cols-2">
-                    <div className="rounded-md border bg-background p-3">
-                      <div className="text-xs text-muted-foreground">Footer odd</div>
-                      <div className="mt-2 whitespace-pre-wrap">{brandingPreview?.sections.footer_odd ?? "—"}</div>
-                    </div>
-                    <div className="rounded-md border bg-background p-3">
-                      <div className="text-xs text-muted-foreground">Watermark / scope</div>
-                      <div className="mt-2">preset={(brandingPreview?.preset_code ?? headerPreset) || "auto"}</div>
-                      <div>scope={brandingPreview?.profile.scope ?? brandingProfileScope}</div>
-                    </div>
+                    {previewSectionCards.map((section) => (
+                      <div key={section.key} className="rounded-md border bg-background p-3">
+                        <div className="text-xs text-muted-foreground">{section.label}</div>
+                        <div className="mt-2 whitespace-pre-wrap">
+                          {brandingPreview?.sections[section.key] ?? "—"}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
                 <div className="space-y-3 rounded-lg border bg-muted/20 p-4 text-sm">
@@ -399,6 +404,36 @@ const DocumentsWizardPage = () => {
                     <pre className="mt-2 overflow-x-auto rounded-md border bg-background p-3 text-xs">
                       {JSON.stringify(brandingPreview?.profile.reproducibility ?? {}, null, 2)}
                     </pre>
+                  </div>
+                  <div className="rounded-md border bg-background p-3">
+                    <div className="font-medium">Resolution / preset source</div>
+                    <div className="mt-2">preset={(brandingPreview?.preset_code ?? headerPreset) || "auto"}</div>
+                    <div>scope={brandingPreview?.profile.scope ?? brandingProfileScope}</div>
+                    <div>
+                      source=
+                      {String(
+                        brandingPreview?.profile.resolution?.effective_preset_source ??
+                          brandingPreview?.profile.resolution?.effective_preset_code ??
+                          "unknown"
+                      )}
+                    </div>
+                    <div>
+                      chain=
+                      {(brandingPreview?.profile.resolution?.scope_chain ?? []).join(" -> ") || "tenant -> company"}
+                    </div>
+                  </div>
+                  <div className="rounded-md border bg-background p-3">
+                    <div className="font-medium">Watermark / unresolved placeholders</div>
+                    <div className="mt-2 whitespace-pre-wrap">
+                      {JSON.stringify(
+                        {
+                          watermark: brandingPreview?.watermark ?? {},
+                          unresolved_placeholders: brandingPreview?.unresolved_placeholders ?? []
+                        },
+                        null,
+                        2
+                      )}
+                    </div>
                   </div>
                   <div>
                     <div className="font-medium">Recent preview history</div>

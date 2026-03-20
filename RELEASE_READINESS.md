@@ -4,7 +4,7 @@
 - Canonical roots and entrypoints are documented.
 - Frontend package manifest is verified in `frontend/`.
 - Branding profile preview is tenant/company/site aware.
-- Wizard now exposes branded preview before generation.
+- Wizard now exposes branded preview before generation, including first/odd/even sections and preset-source diagnostics.
 - Backend and frontend regression coverage added for branding preview handoff.
 - Repository-root Python entrypoints are hardened via the `app` compatibility package, so docs and operator commands now match runtime reality.
 
