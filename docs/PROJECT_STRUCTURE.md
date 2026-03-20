@@ -25,6 +25,11 @@
 - `frontend/src/pages/documents/DocumentsWizardPage.tsx` — generation wizard with branded preview.
 - `frontend/src/stores/documentsWizard.ts` — persisted wizard state, including branding preview history.
 
+## Supporting operator/tooling paths
+- `scripts/branded_document_smoke.py` — smoke check for firm-letterhead resolution and DOCX header/footer application without needing the full UI flow.
+- `Makefile` target `branded-smoke` — canonical shell entry for the same smoke check.
+- `scripts/smoke.sh` — broader repo smoke covering migrations/readiness/basic API probes.
+
 ## Structural audit conclusions
 - `frontend/package.json` is the **only** active frontend manifest.
 - `app/__init__.py` is a repo-root compatibility shim exposing `backend/app` as top-level `app` for legacy imports and entrypoints.

@@ -14,4 +14,5 @@
 - Branding preview is the canonical API for preparing firm-letterhead generation context.
 - Header application remains idempotent and asynchronous.
 - Branding profile patch calls are merge-based and preserve previously saved branding fields that are omitted in the current request.
+- Branding profile payloads support split header/footer requisites and branch-level display-name overrides for letterheads.
 - Invalid tenant-local layout preset references are rejected during branding profile updates with `404 Layout preset not found`.
