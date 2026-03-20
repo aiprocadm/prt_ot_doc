@@ -2,22 +2,23 @@
 
 Production-minded modular monolith for B2B OT / ПБ / Промбез / экология / документооборот / ЭДО / обучение / СИЗ / риски / инциденты / CRM / billing / client portal.
 
-## Canonical roots and entrypoints
-- Backend root: `backend/`
-- Frontend root: `frontend/`
-- Canonical frontend manifest: `frontend/package.json` (the only active `package.json` in the repo)
-- Backend ASGI entrypoint: `backend/app/main.py`
-- Backend app factory: `backend/app/api/app.py`
-- Frontend app root: `frontend/src/main.tsx`
-- Vite config: `frontend/vite.config.ts`
-- Alembic config: `backend/app/migrations/alembic.ini`
+## Canonical repository map
+- **Backend root:** `backend/`
+- **Frontend root:** `frontend/`
+- **Frontend package manifest:** `frontend/package.json` (canonical and only active `package.json`)
+- **Backend ASGI entrypoint:** `backend/app/main.py`
+- **Backend app factory:** `backend/app/api/app.py`
+- **Frontend entrypoint:** `frontend/src/main.tsx`
+- **Vite config:** `frontend/vite.config.ts`
+- **Alembic config:** `backend/app/migrations/alembic.ini`
 
-## What was audited in this wave
-- Repository roots, package manifest location, Python/JS entrypoints.
-- Branding and letterhead pipeline for tenant/company/site inheritance.
-- Header/footer engine for first/odd/even sections and watermark propagation.
-- Frontend branding UI and admin layout preset editor.
-- Canonical docs and run commands.
+## Repository audit outcome
+This wave re-validated:
+- backend/frontend roots and active entrypoints;
+- `frontend/package.json`, Vite/TS config placement and actual frontend root;
+- branded document flow around organization/site branding, letterheads, preview and reproducibility;
+- wizard path for selecting organization/site/layout preset before generation;
+- canonical in-repo docs so the next task can read repo state directly from code and documentation.
 
 ## Quick start
 ### Backend
@@ -40,30 +41,30 @@ npm --prefix frontend run dev
 celery -A backend.app.worker worker --loglevel=info
 ```
 
-## Verification commands
+## Key commands
 ```bash
 # backend
+pytest -q tests/api/test_branding_api.py
+pytest -q tests/headers/test_engine.py
 pytest -q
-pytest -q tests/api/test_branding_api.py tests/headers/test_engine.py
 alembic -c backend/app/migrations/alembic.ini upgrade head
 python -m backend.app.main
 
 # frontend
-npm --prefix frontend run dev
 npm --prefix frontend run typecheck
-npm --prefix frontend run lint
-npm --prefix frontend run test
+npm --prefix frontend run test -- --runInBand
 npm --prefix frontend run build
+npm --prefix frontend run dev
 ```
 
 ## Branded document flow
-1. Create or update a company in `/api/v1/companies`.
-2. Optionally create branch/site records in `/api/v1/sites`.
-3. Create a header/footer preset in `/api/v1/layout-presets` or UI `/admin/layout-presets`.
-4. Open `/documents/branding`, select organization or branch scope, maintain requisites, images, palette, metadata and signatories.
-5. Run test preview via `/api/v1/branding/preview` to get rendered header/footer sections plus reproducibility metadata.
-6. Apply the chosen preset to a document version through `/api/v1/documents/{document_version_id}/apply-headers`.
-7. Continue through replace → PDF → approval/sign/archive.
+1. Create/update organization via `/api/v1/companies`.
+2. Create optional branch/site via `/api/v1/sites`.
+3. Create header/footer preset via `/api/v1/layout-presets` or `/admin/layout-presets`.
+4. Maintain tenant/company/site branding in `/documents/branding`.
+5. Build branded preview via `/api/v1/branding/preview` to get rendered header/footer sections, resolved watermark, apply-headers payload and reproducibility metadata.
+6. Use `/documents/wizard` step 5 to select organization/site/preset, preview letterhead and carry reproducibility metadata into generation payloads.
+7. Apply headers to generated DOCX via `/api/v1/documents/{document_version_id}/apply-headers`, then continue to PDF / approval / archive.
 
 ## Canonical documentation
 - `docs/ARCHITECTURE.md`

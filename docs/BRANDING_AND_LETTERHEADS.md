@@ -1,39 +1,32 @@
-# Branding and letterheads
+# BRANDING_AND_LETTERHEADS
 
-## Supported branding profile fields
-- Legal and short name.
-- INN / KPP / OGRN.
-- Legal and actual address.
-- Website / email / phones.
-- Footer requisites and service notes.
-- Branch label.
-- Preferred letterhead preset.
-- Watermark text + enable flag.
-- Image refs for logo / stamp / signature.
-- Palette, metadata and signatories.
+## Scope hierarchy
+1. Tenant defaults from `tenant.settings.branding`
+2. Company branding payload
+3. Site branding payload
 
-## Inheritance model
-- Tenant branding acts as global default.
-- Company branding defines legal entity defaults.
-- Site branding overrides company details for a branch/object.
+## Supported profile fields
+- legal and short names
+- INN/KPP/OGRN
+- legal/actual address
+- phones/email/website
+- logo/stamp/signature file ids
+- palette and watermark settings
+- footer requisites and service notes
+- signatories and metadata
+- preferred letterhead preset
 
-## API
-- `GET /api/v1/branding/profile?company_id=...&site_id=...`
-- `PATCH /api/v1/branding/profile/{company_id}`
-- `POST /api/v1/branding/preview`
-- `GET /api/v1/layout-presets`
-- `POST /api/v1/layout-presets`
-- `PATCH /api/v1/layout-presets/{preset_id}`
-- `POST /api/v1/documents/{document_version_id}/apply-headers`
+## Preview API
+`POST /api/v1/branding/preview`
 
-## UI
-- `/documents/branding` — main operator screen.
-- `/admin/layout-presets` — preset maintenance.
+Returns:
+- resolved profile;
+- rendered sections (`header_first`, `header_odd`, `header_even`, `footer_*`);
+- resolved watermark;
+- reproducibility metadata;
+- `apply_headers_payload` ready to pass into header application flow;
+- `wizard_defaults` for UI generation flows.
 
-## Operational scenario
-1. Select organization.
-2. Optionally switch to branch/site scope.
-3. Maintain requisites and image references.
-4. Choose preferred letterhead preset.
-5. Run preview and inspect resolved watermark + reproducibility passport.
-6. Use the same preset code when generating the final document.
+## UI path
+- Settings: `/documents/branding`
+- Wizard preview: `/documents/wizard` step 5

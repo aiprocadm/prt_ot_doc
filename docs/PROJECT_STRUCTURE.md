@@ -1,31 +1,31 @@
-# Project structure
+# PROJECT_STRUCTURE
 
 ## Canonical roots
-- `backend/` — backend root.
-- `frontend/` — frontend root.
-- `docs/` — canonical in-repo documentation.
-- `scripts/` — utility and smoke scripts.
-- `pyproject.toml` — Python tooling configuration.
-- `frontend/package.json` — frontend package manager entrypoint.
+- Backend: `backend/`
+- Frontend: `frontend/`
+- Infra and local orchestration: `infra/`, `docker-compose.yml`, `config/`
+- Tests: `tests/`, `frontend/src/__tests__/`, `integration_tests/`
+- Canonical docs: `docs/`
 
-## Backend layout
-- `backend/app/api/` — app factory, dependencies, routers, HTTP error handling.
-- `backend/app/modules/` — canonical business modules (`branding`, `headers`, `pdf`, `replace`, `workflow`, `files`, `packs`, `search`, etc.).
-- `backend/app/models/` — ORM models.
-- `backend/app/services/` — cross-cutting services and orchestration used by legacy/bridging flows.
-- `backend/app/domains/` — domain logic/helpers.
-- `backend/app/migrations/` — Alembic env and migrations.
+## Backend map
+- `backend/app/main.py` — ASGI entrypoint.
+- `backend/app/api/app.py` — FastAPI factory and middleware registration.
+- `backend/app/api/v1/router.py` — canonical v1 router wiring.
+- `backend/app/modules/branding/` — tenant/company/site branding profile and preview API.
+- `backend/app/modules/headers/` — layout preset CRUD and DOCX header/footer application engine.
+- `backend/app/api/routes/documents.py` — document generation entrypoints and batch routes.
+- `backend/app/services/pipelines_orchestrator.py` — document job orchestration foundation.
 
-## Frontend layout
-- `frontend/src/api/` — API clients.
-- `frontend/src/pages/` — route-level pages.
-- `frontend/src/components/` — reusable UI blocks.
-- `frontend/src/features/` — feature widgets.
-- `frontend/src/stores/` — Zustand stores.
-- `frontend/src/router/` — route map / access control.
+## Frontend map
+- `frontend/package.json` — canonical package manifest.
+- `frontend/src/main.tsx` — React bootstrap.
+- `frontend/src/router/AppRouter.tsx` — route tree.
+- `frontend/src/pages/branding/BrandingSettingsPage.tsx` — branding/letterhead settings UX.
+- `frontend/src/pages/documents/DocumentsWizardPage.tsx` — branded document generation wizard.
+- `frontend/src/api/branding.ts` — branding API client.
 
-## Audit notes from this wave
-- `frontend/package.json` is present and correct in the actual frontend root.
-- No alternate frontend root was activated; top-level repo has no competing active `package.json`.
-- Branding editor now supports company and site scope in the same screen instead of being company-only.
-- Layout preset editor remains under `/admin/layout-presets` and is now list/edit capable, which makes it the canonical preset maintenance UI.
+## Structural audit notes
+- The repository has a single active frontend manifest: `frontend/package.json`.
+- Backend root is not the repository root; commands must target `backend.app.*` or use project-wide `PYTHONPATH` expectations from existing tooling.
+- There are multiple historical docs folders/files; the files listed in README are the canonical operator-facing docs for the next task.
+- `modules/approval` and `modules/approvals` both exist; they remain in place to avoid breaking active imports, but `api/routes/approval_*` remains the active router path.

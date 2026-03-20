@@ -1,20 +1,15 @@
-# API overview
+# API_OVERVIEW
 
-## Public API prefix
-`/api/v1`
+## Document core endpoints
+- `GET /api/v1/branding/profile`
+- `PATCH /api/v1/branding/profile/{company_id}`
+- `POST /api/v1/branding/preview`
+- `POST /api/v1/layout-presets`
+- `GET /api/v1/layout-presets`
+- `POST /api/v1/documents/generate`
+- `POST /api/v1/documents/batch`
+- `POST /api/v1/documents/{document_version_id}/apply-headers`
 
-## Canonical endpoints for this wave
-- `/companies`
-- `/sites`
-- `/layout-presets`
-- `/branding/profile`
-- `/branding/preview`
-- `/documents/*`
-- `/pipelines/*`
-- `/files/*`
-
-## Important contracts
-- Branding profile is tenant-aware and may be requested for company scope or company+site scope.
-- Branding preview returns rendered sections, unresolved placeholders, resolved watermark and reproducibility metadata.
-- Layout preset management is CRUD-like through `/layout-presets`.
-- `apply-headers` is asynchronous and idempotent.
+## Notes
+- Branding preview is the canonical API for preparing firm-letterhead generation context.
+- Header application remains idempotent and asynchronous.

@@ -1,20 +1,13 @@
-# Release readiness
+# RELEASE_READINESS
 
-## Ready now
-- Repository roots and entrypoints are explicit and documented.
-- Frontend root/package manifest location is canonical and verified.
-- Branding → preset → preview → apply-headers flow is implemented and regression-tested.
-- Company/site inheritance and watermark reproducibility are covered by automated backend tests.
-- Operator UI exists for both branding maintenance and layout preset maintenance.
+## Ready
+- Canonical roots and entrypoints are documented.
+- Frontend package manifest is verified in `frontend/`.
+- Branding profile preview is tenant/company/site aware.
+- Wizard now exposes branded preview before generation.
+- Backend and frontend regression coverage added for branding preview handoff.
 
-## Mandatory checks before production cutover
-- Run full backend test suite.
-- Run frontend `typecheck`, `test`, `build`.
-- Apply Alembic migrations against a production-like PostgreSQL instance.
-- Validate Redis/Celery/MinIO/LibreOffice/ClamAV integrations in an integration environment.
-- Execute a branded-document smoke: organization -> branch -> preset -> preview -> apply headers -> PDF.
-
-## Recommended next wave
-- Browser E2E for branded issuance.
-- Richer preview/download artifacts.
-- Preset import/export and revision history.
+## Conditional go-live criteria
+- Run backend/frontend test and build commands from README.
+- Validate one tenant with company + site + layout preset + branded preview + apply-headers smoke.
+- Confirm chosen pipeline profile for production explicitly chains `apply_headers` where required.
