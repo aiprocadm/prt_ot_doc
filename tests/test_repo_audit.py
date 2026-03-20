@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 from scripts import repo_audit
@@ -17,9 +19,13 @@ def test_build_payload_reports_canonical_roots_and_single_frontend_manifest() ->
     assert payload["findings"]["active_frontend_manifest_count"] == 1
     assert "frontend/package.json" in payload["inventory"]["package_jsons"]
     assert payload["findings"]["required_docs_present"] == payload["findings"]["required_docs_expected"]
+    assert any(
+        item["path"] == "package.json" and item["status"] == "ok"
+        for item in payload["root_expectations"]
+    )
 
 
-def test_write_outputs_generates_markdown_and_json_snapshots(tmp_path: Path) -> None:
+def test_write_outputs_generates_markdown_and_json_snapshots() -> None:
     payload = repo_audit.build_payload()
     markdown = repo_audit.render_markdown(payload)
 
@@ -36,9 +42,6 @@ def test_write_outputs_generates_markdown_and_json_snapshots(tmp_path: Path) -> 
     data = json.loads(json_path.read_text(encoding="utf-8"))
     assert data["findings"]["app_compat_shim_present"] is True
     assert any(item["legacy"] == "backend/app/modules/approval" for item in data["legacy_paths"])
-import subprocess
-import sys
-from pathlib import Path
 
 
 def test_repo_audit_generates_markdown_and_json_snapshots() -> None:

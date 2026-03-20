@@ -18,6 +18,9 @@
 - Added `docs/OBSERVABILITY.md` as the canonical health/metrics/logging/tracing reference.
 - Canonicalized testing documentation to `docs/TESTING.md` and reduced `docs/testing.md` to a compatibility pointer.
 - Updated build configuration in `frontend/vite.config.ts` to split vendor bundles more predictably for production builds.
+- Normalized `docs/README.md` to point to the canonical uppercase docs (`PROJECT_STRUCTURE.md`, `TESTING.md`, `SETUP.md`, `BACKEND.md`, `FRONTEND.md`) instead of legacy lowercase aliases.
+- Tightened the persisted document wizard branding-preview history so repeated previews of the same reproducibility snapshot do not create duplicate continuity entries.
+- Simplified `tests/test_repo_audit.py` into a single coherent test module and removed merge-style duplication from the repository-audit acceptance evidence.
 
 ## Rename policy going forward
 - Prefer documenting canonical paths and deprecating legacy paths before performing risky repo-wide moves.
