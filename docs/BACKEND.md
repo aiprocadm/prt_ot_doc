@@ -16,4 +16,6 @@
 - tenant-aware queries for company/site/preset resolution;
 - idempotent header application endpoint;
 - reproducibility metadata returned by branding preview;
+- stable branding payload hash embedded into preview reproducibility metadata;
+- merge-safe branding profile updates so partial edits do not erase existing requisites/assets;
 - additive API evolution: preview now returns `apply_headers_payload` and `wizard_defaults` without breaking existing clients.

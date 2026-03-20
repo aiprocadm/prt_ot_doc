@@ -26,6 +26,7 @@
 
 ## Structural audit notes
 - The repository has a single active frontend manifest: `frontend/package.json`.
+- `ptd` in the repo root is not a frontend directory; it is a small executable wrapper around `python -m app.cli.main`.
 - Backend root is not the repository root; commands must target `backend.app.*` or use project-wide `PYTHONPATH` expectations from existing tooling.
 - There are multiple historical docs folders/files; the files listed in README are the canonical operator-facing docs for the next task.
 - `modules/approval` and `modules/approvals` both exist; they remain in place to avoid breaking active imports, but `api/routes/approval_*` remains the active router path.

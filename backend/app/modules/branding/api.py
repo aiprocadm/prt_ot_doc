@@ -1,7 +1,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
@@ -26,12 +26,15 @@ async def update_branding_profile(company_id: str, payload: BrandingProfilePatch
     company = await service.get_company(company_id)
     branding_payload = payload.branding.model_dump(mode='json')
     if payload.preferred_header_preset_code is not None:
-        branding_payload['preferred_letterhead_preset'] = payload.preferred_header_preset_code
+        preset = await service.get_layout_preset(payload.preferred_header_preset_code)
+        if preset is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Layout preset not found")
+        branding_payload['preferred_letterhead_preset'] = preset.code
     if payload.site_id:
         site = await service.get_site(payload.site_id)
-        site.branding_payload = branding_payload
+        site.branding_payload = service.merge_branding_patch(site.branding_payload, branding_payload)
     else:
-        company.branding_payload = branding_payload
+        company.branding_payload = service.merge_branding_patch(company.branding_payload, branding_payload)
         company.preferred_header_preset_code = payload.preferred_header_preset_code
         site = None
     await session.commit()

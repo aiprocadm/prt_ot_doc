@@ -11,6 +11,7 @@ Production-minded modular monolith for B2B OT / ПБ / Промбез / экол
 - **Frontend entrypoint:** `frontend/src/main.tsx`
 - **Vite config:** `frontend/vite.config.ts`
 - **Alembic config:** `backend/app/migrations/alembic.ini`
+- **CLI wrapper for backend commands:** `./ptd`
 
 ## Repository audit outcome
 This wave re-validated:
@@ -41,6 +42,11 @@ npm --prefix frontend run dev
 celery -A backend.app.worker worker --loglevel=info
 ```
 
+### CLI
+```bash
+./ptd --help
+```
+
 ## Key commands
 ```bash
 # backend
@@ -64,7 +70,9 @@ npm --prefix frontend run dev
 4. Maintain tenant/company/site branding in `/documents/branding`.
 5. Build branded preview via `/api/v1/branding/preview` to get rendered header/footer sections, resolved watermark, apply-headers payload and reproducibility metadata.
 6. Use `/documents/wizard` step 5 to select organization/site/preset, preview letterhead and carry reproducibility metadata into generation payloads.
-7. Apply headers to generated DOCX via `/api/v1/documents/{document_version_id}/apply-headers`, then continue to PDF / approval / archive.
+7. Branding profile updates merge into existing company/site payloads instead of replacing them wholesale, so saved requisites, images and metadata are preserved across partial edits.
+8. `preferred_header_preset_code` is tenant-validated on update to prevent dangling letterhead references.
+9. Apply headers to generated DOCX via `/api/v1/documents/{document_version_id}/apply-headers`, then continue to PDF / approval / archive.
 
 ## Canonical documentation
 - `docs/ARCHITECTURE.md`
