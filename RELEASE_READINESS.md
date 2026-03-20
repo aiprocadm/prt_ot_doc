@@ -6,6 +6,7 @@
 - Branding profile preview is tenant/company/site aware.
 - Wizard now exposes branded preview before generation.
 - Backend and frontend regression coverage added for branding preview handoff.
+- Repository-root Python entrypoints are hardened via the `app` compatibility package, so docs and operator commands now match runtime reality.
 
 ## Conditional go-live criteria
 - Run backend/frontend test and build commands from README.

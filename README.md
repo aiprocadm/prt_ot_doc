@@ -8,6 +8,7 @@ Production-minded modular monolith for B2B OT / ПБ / Промбез / экол
 - **Frontend package manifest:** `frontend/package.json` (canonical and only active `package.json`)
 - **Backend ASGI entrypoint:** `backend/app/main.py`
 - **Backend app factory:** `backend/app/api/app.py`
+- **Repo-root Python compatibility package:** `app/__init__.py`
 - **Frontend entrypoint:** `frontend/src/main.tsx`
 - **Vite config:** `frontend/vite.config.ts`
 - **Alembic config:** `backend/app/migrations/alembic.ini`
@@ -19,7 +20,8 @@ This wave re-validated:
 - `frontend/package.json`, Vite/TS config placement and actual frontend root;
 - branded document flow around organization/site branding, letterheads, preview and reproducibility;
 - wizard path for selecting organization/site/layout preset before generation;
-- canonical in-repo docs so the next task can read repo state directly from code and documentation.
+- canonical in-repo docs so the next task can read repo state directly from code and documentation;
+- repository-root Python compatibility: top-level `app/` now maps to `backend/app`, so both `python -m backend.app.main` and existing `app.*` imports work from repo root without ad-hoc `PYTHONPATH` hacks.
 
 ## Quick start
 ### Backend
@@ -29,6 +31,8 @@ source .venv/bin/activate
 pip install -r requirements.txt -r requirements-dev.txt
 alembic -c backend/app/migrations/alembic.ini upgrade head
 uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
+# alternative module entrypoint
+python -m backend.app.main
 ```
 
 ### Frontend
@@ -50,6 +54,7 @@ celery -A backend.app.worker worker --loglevel=info
 ## Key commands
 ```bash
 # backend
+pytest -q tests/test_entrypoints.py
 pytest -q tests/api/test_branding_api.py
 pytest -q tests/headers/test_engine.py
 pytest -q
