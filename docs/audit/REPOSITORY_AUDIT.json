@@ -74,7 +74,6 @@
     }
   ],
   "required_docs": [
-  "docs_paths": [
     {
       "label": "Architecture",
       "path": "docs/ARCHITECTURE.md",
@@ -174,11 +173,6 @@
       "label": "Workflows and events",
       "path": "docs/WORKFLOWS_AND_EVENTS.md",
       "description": "Cross-module workflow/event map."
-    },
-    {
-      "label": "Observability",
-      "path": "docs/OBSERVABILITY.md",
-      "description": "Health/readiness/metrics/logging/tracing foundation."
     }
   ],
   "root_expectations": [
@@ -251,6 +245,10 @@
       "backend/app/main.py",
       "backend/app/worker.py"
     ],
+    "frontend_entrypoints": [
+      "frontend/src/main.tsx",
+      "frontend/src/router/AppRouter.tsx"
+    ],
     "repo_level_directories": [
       ".devcontainer",
       ".github",
@@ -276,53 +274,45 @@
     "frontend_tsconfig_present": true,
     "app_compat_shim_present": true,
     "required_docs_present": 20,
-    "required_docs_expected": 20
+    "required_docs_expected": 20,
+    "summary_lines": [
+      "Active frontend manifest count: **1**.",
+      "Backend runtime entrypoint present: **yes**.",
+      "Frontend root contains Vite config: **yes**.",
+      "Frontend root contains tsconfig: **yes**.",
+      "Repo-root compatibility package `app/`: **yes**.",
+      "Required docs present: **20/20**."
+    ]
   },
   "legacy_paths": [
     {
       "canonical": "docs/TESTING.md",
-      "legacy": "docs/testing.md",
       "canonical_exists": true,
+      "legacy": "docs/testing.md",
       "legacy_exists": true,
-      "guidance": "Prefer the uppercase testing guide; keep the lowercase path as a compatibility pointer only."
+      "guidance": "Prefer `docs/TESTING.md` for new references and keep lowercase `docs/testing.md` as a compatibility pointer."
     },
     {
       "canonical": "docs/ADR",
-      "legacy": "docs/adr",
       "canonical_exists": true,
+      "legacy": "docs/adr",
       "legacy_exists": true,
-      "guidance": "Prefer `docs/ADR` for new ADRs and treat `docs/adr` as historical legacy content."
+      "guidance": "Prefer `docs/ADR` for new ADRs and keep `docs/adr` as historical legacy content."
     },
     {
       "canonical": "backend/app/modules/approvals",
-      "legacy": "backend/app/modules/approval",
       "canonical_exists": true,
+      "legacy": "backend/app/modules/approval",
       "legacy_exists": true,
-      "guidance": "Prefer the plural approvals module for new orchestration work and keep the singular path only for compatibility imports."
+      "guidance": "Prefer `backend/app/modules/approvals` for active approval APIs; keep singular path as compatibility legacy only."
     },
     {
       "canonical": "docs/PROJECT_STRUCTURE.md",
-      "legacy": "docs/repo-structure.md",
       "canonical_exists": true,
+      "legacy": "docs/repo-structure.md",
       "legacy_exists": true,
-      "guidance": "Prefer the canonical project structure doc and keep the lowercase file only as legacy documentation."
+      "guidance": "Prefer `docs/PROJECT_STRUCTURE.md` and keep `docs/repo-structure.md` only as legacy documentation."
     }
-  ],
-  "generated_from": "scripts/repo_audit.py",
-  "consistency_watchlist": [
-    "Keep README.md and docs/README.md aligned when startup commands or canonical paths change.",
-    "Keep legacy compatibility paths out of new imports, routes, and docs references."
-    "frontend_entrypoints": [
-      "frontend/src/main.tsx",
-      "frontend/src/router/AppRouter.tsx"
-    ]
-  },
-  "findings": [
-    "Active frontend manifest count: **1**.",
-    "Backend runtime entrypoint present: **yes**.",
-    "Frontend root contains Vite config: **yes**.",
-    "Frontend root contains tsconfig: **yes**.",
-    "Repo-root compatibility package `app/`: **yes**."
   ],
   "legacy_pairs": [
     {
@@ -345,6 +335,18 @@
       "legacy": "backend/app/modules/approval",
       "legacy_exists": true,
       "guidance": "Prefer `backend/app/modules/approvals` for active approval APIs; keep singular path as compatibility legacy only."
+    },
+    {
+      "canonical": "docs/PROJECT_STRUCTURE.md",
+      "canonical_exists": true,
+      "legacy": "docs/repo-structure.md",
+      "legacy_exists": true,
+      "guidance": "Prefer `docs/PROJECT_STRUCTURE.md` and keep `docs/repo-structure.md` only as legacy documentation."
     }
+  ],
+  "generated_from": "scripts/repo_audit.py",
+  "consistency_watchlist": [
+    "Keep README.md and docs/README.md aligned when startup commands or canonical paths change.",
+    "Keep legacy compatibility paths out of new imports, routes, and docs references."
   ]
 }
