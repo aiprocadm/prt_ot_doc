@@ -37,6 +37,8 @@ npm --prefix frontend ci
 npm --prefix frontend run dev
 ```
 
+Production build uses explicit vendor chunking in `frontend/vite.config.ts` to keep the entry bundle below the previous warning threshold and improve long-term cache behavior.
+
 ### Workers
 ```bash
 celery -A backend.app.worker worker --loglevel=info
@@ -90,6 +92,8 @@ npm --prefix frontend run build
 - `docs/BRANDING_AND_LETTERHEADS.md`
 - `docs/API_OVERVIEW.md`
 - `docs/MODULES.md`
+- `docs/WORKFLOWS_AND_EVENTS.md`
+- `docs/OBSERVABILITY.md`
 - `docs/audit/TZ_COVERAGE_MATRIX.md`
 - `docs/audit/REPOSITORY_AUDIT.md`
 - `GAP_REPORT.md`
