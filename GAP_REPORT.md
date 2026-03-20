@@ -9,6 +9,9 @@
 - Persisted branded preview/history inside the document wizard store, so operators do not lose preview context while moving through steps.
 - Added server-side branded generation history via `/api/v1/branding/history`, backed by `PipelineRun.result_metadata.branding`.
 - Added a reproducible repository audit script that writes `docs/audit/REPOSITORY_AUDIT.md`.
+- Expanded the audit output so it enumerates canonical backend/frontend entrypoints, config inventory, required docs, and compatibility-path guidance.
+- Added canonical `docs/WORKFLOWS_AND_EVENTS.md` and `docs/OBSERVABILITY.md` references for future implementation waves.
+- Reduced frontend production bundle risk by splitting major vendor groups into predictable manual chunks.
 - Added a dedicated `scripts/branded_document_smoke.py` smoke command and `make branded-smoke` entrypoint for fast verification of the canonical letterhead pipeline.
 - Refreshed canonical repository docs to describe the real active paths and branded document flow.
 
@@ -16,3 +19,4 @@
 - Not every generation route automatically chains `generate -> apply_headers -> pdf`; some flows still require explicit `apply_headers` invocation or pipeline-profile configuration.
 - Branding asset management still uses file IDs rather than a dedicated upload/media picker workflow on the branding screen.
 - Preview history is persisted in frontend state, but not yet materialized as a server-side generation/audit projection.
+- Duplicate legacy path pairs still remain on disk (`docs/ADR` vs `docs/adr`, `modules/approval` vs `modules/approvals`) and are documented rather than physically merged in this wave to avoid risky breakage.

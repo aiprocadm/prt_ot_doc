@@ -27,7 +27,7 @@
 
 ## Supporting operator/tooling paths
 - `scripts/branded_document_smoke.py` — smoke check for firm-letterhead resolution and DOCX header/footer application without needing the full UI flow.
-- `scripts/repo_audit.py` — reproducible repository inventory for roots/manifests/legacy-path flags, writing `docs/audit/REPOSITORY_AUDIT.md`.
+- `scripts/repo_audit.py` — reproducible repository inventory for roots/manifests/configs/docs/legacy-path flags, writing `docs/audit/REPOSITORY_AUDIT.md`.
 - `Makefile` target `branded-smoke` — canonical shell entry for the same smoke check.
 - `scripts/smoke.sh` — broader repo smoke covering migrations/readiness/basic API probes.
 
@@ -35,4 +35,5 @@
 - `frontend/package.json` is the **only** active frontend manifest.
 - `app/__init__.py` is a repo-root compatibility shim exposing `backend/app` as top-level `app` for legacy imports and entrypoints.
 - Historical parallel names still exist in a few areas (`docs/ADR` + `docs/adr`, `modules/approval` + `modules/approvals`). Canonical active paths are documented above; legacy paths remain only for backward compatibility and should not be used for new work.
+- Canonical workflow/event and observability references now live in `docs/WORKFLOWS_AND_EVENTS.md` and `docs/OBSERVABILITY.md`.
 - There is no separate frontend hidden under `ptd`, `proxy`, or repo root.

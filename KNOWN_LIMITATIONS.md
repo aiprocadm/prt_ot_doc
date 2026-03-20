@@ -4,3 +4,4 @@
 - Brand asset selection is ID-based and assumes existing uploaded files.
 - `scripts/branded_document_smoke.py` validates the canonical document-core pipeline on a stub DOCX, not on a full tenant bootstrap with persistent storage/media uploads.
 - Repository still contains historical docs and compatibility modules that remain on disk for backward compatibility, even though the canonical paths are documented separately.
+- Frontend bundle splitting is improved, but route-level chunking can still be refined further as modules grow.
