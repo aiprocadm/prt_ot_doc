@@ -59,4 +59,19 @@ async def preview_branding(payload: BrandingPreviewRequest, session: AsyncSessio
         sections=sections,
         unresolved_placeholders=unresolved,
         watermark=service.resolve_watermark(profile=profile, preset=preset, override=payload.watermark_override),
+        apply_headers_payload=service.build_apply_headers_payload(
+            profile=profile,
+            preset=preset,
+            document_title=payload.document_title,
+            document_number=payload.document_number,
+            generated_at=payload.generated_at,
+            watermark_override=payload.watermark_override,
+        ),
+        wizard_defaults={
+            'company_id': payload.company_id,
+            'site_id': payload.site_id,
+            'preset_code': getattr(preset, 'code', None) or profile.preferred_header_preset_code,
+            'document_title': payload.document_title or 'Untitled document',
+            'document_number': payload.document_number or '—',
+        },
     )

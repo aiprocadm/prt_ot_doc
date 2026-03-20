@@ -1,12 +1,14 @@
-# TZ coverage matrix
+# TZ_COVERAGE_MATRIX
 
-| Area | Status | Canonical implementation | Verification |
-| --- | --- | --- | --- |
-| Structural audit / roots / entrypoints | Done | `backend/`, `frontend/`, `frontend/package.json`, `backend/app/main.py` | manual audit + docs refresh |
-| Branded org + branch profile | Done | `backend/app/modules/branding/*` | `pytest -q tests/api/test_branding_api.py` |
-| Header/footer first/odd/even | Done | `backend/app/modules/headers/engine.py` | `pytest -q tests/headers/test_engine.py` |
-| Watermark resolution + reproducibility | Done | `backend/app/modules/branding/service.py` | `pytest -q tests/api/test_branding_api.py` |
-| Frontend branding UI | Done | `frontend/src/pages/branding/BrandingSettingsPage.tsx` | `npm --prefix frontend run typecheck` |
-| Layout preset editor | Done | `frontend/src/components/LayoutPresetEditor/LayoutPresetEditor.tsx` | `npm --prefix frontend run typecheck` |
-| README / canonical docs | Done | `README.md`, `docs/*.md` | manual review |
-| Full browser e2e branded generation | Partial | existing pipeline modules preserved | backlog / next wave |
+| Area | Status | Canonical implementation |
+|---|---|---|
+| Structural audit / roots / entrypoints | Done | `README.md`, `docs/PROJECT_STRUCTURE.md` |
+| Frontend root and `package.json` verification | Done | `frontend/package.json` |
+| Branding profile inheritance | Done | `backend/app/modules/branding/service.py` |
+| Letterhead first/odd/even sections | Done | `backend/app/modules/headers/engine.py` |
+| Branding preview UX | Done | `frontend/src/pages/branding/BrandingSettingsPage.tsx` |
+| Wizard organization/site/layout selection | Done | `frontend/src/pages/documents/DocumentsWizardPage.tsx` |
+| Reproducibility metadata in preview | Done | `backend/app/modules/branding/service.py` |
+| Apply-headers payload handoff | Done | `backend/app/modules/branding/api.py` |
+| Full auto apply-headers inside every generation pipeline | Partial | dedicated job exists; not all generation paths auto-chain it |
+| PDF/approval/archive continuation | Partial | foundational routes/modules exist; depends on selected pipeline profile |

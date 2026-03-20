@@ -59,6 +59,8 @@ export interface BrandingPreviewDto {
   sections: Record<string, string | null>;
   unresolved_placeholders: string[];
   watermark: Record<string, unknown>;
+  apply_headers_payload: Record<string, unknown>;
+  wizard_defaults: Record<string, unknown>;
 }
 
 export interface BrandingPreviewRequestDto {

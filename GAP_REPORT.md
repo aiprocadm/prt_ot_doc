@@ -1,15 +1,12 @@
-# GAP REPORT
+# GAP_REPORT
 
 ## Closed in this wave
-- Reconfirmed canonical backend/frontend roots and active entrypoints.
-- Kept `frontend/package.json` as the single active frontend manifest and documented it clearly.
-- Fixed branding persistence mismatch for site-scope preferred presets.
-- Added resolved watermark + stronger reproducibility metadata to branding preview.
-- Upgraded branding UI from company-only editor to organization/branch-aware operator console.
-- Upgraded layout preset editor from create-only stub to load/edit workflow.
+- Reconfirmed canonical frontend/backend roots and active entrypoints.
+- Reconfirmed `frontend/package.json` placement.
+- Strengthened branding preview contract with `apply_headers_payload` and `wizard_defaults`.
+- Wired document wizard step 5 to real branding APIs with organization/site/preset selection and reproducibility preview.
 
 ## Remaining gaps
-- No full browser-driven E2E for branded generation → PDF → sign → archive yet.
-- Branding preview remains textual rather than pixel-perfect PDF canvas preview.
-- Layout presets do not yet have version diffing/history UI.
-- Documents wizard still relies on manual IDs in some steps and needs deeper integration with organizations/templates catalogs.
+- Not every generation path automatically triggers `apply_headers`; some flows still require explicit post-generation job invocation.
+- Branding asset upload UX still relies on file IDs rather than a dedicated media picker on the branding page.
+- Preview history in the wizard is UI-local rather than persisted server-side generation history.

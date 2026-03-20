@@ -11,6 +11,15 @@ import {
   replaceDryRun,
   type DocumentBatchItem
 } from "@/api/documents";
+import {
+  getBrandingProfile,
+  listLayoutPresets,
+  listSites,
+  previewBranding,
+  type BrandingPreviewDto,
+  type LayoutPresetDto,
+  type SiteDto
+} from "@/api/branding";
 import { fetchFileDownloadLink } from "@/api/files";
 import { getPipelineRun } from "@/api/pipelines";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
@@ -23,6 +32,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ReplaceDiffViewer } from "@/components/wizard/ReplaceDiffViewer";
 import { WizardJobTimeline } from "@/components/wizard/WizardJobTimeline";
 import { WizardStepper } from "@/components/wizard/WizardStepper";
+import { useCompaniesStore } from "@/stores/companies";
 import { useTenantStore } from "@/stores/tenant";
 import { useDocumentsWizardStore } from "@/stores/documentsWizard";
 
@@ -84,6 +94,7 @@ const getArchiveStatusSummary = ({
 
 const DocumentsWizardPage = () => {
   const tenant = useTenantStore((s) => s.tenant);
+  const { items: companies, list: listCompanies } = useCompaniesStore();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const {
@@ -94,6 +105,7 @@ const DocumentsWizardPage = () => {
     templateCode,
     templateVersion,
     companyId,
+    siteId,
     headerPreset,
     replaceDryRun: replaceDryRunResult,
     batch,
@@ -108,6 +120,40 @@ const DocumentsWizardPage = () => {
   const [replaceMapFile, setReplaceMapFile] = useState<File | null>(null);
   const [docxFile, setDocxFile] = useState<File | null>(null);
   const [batchErrors, setBatchErrors] = useState("");
+  const [sites, setSites] = useState<SiteDto[]>([]);
+  const [layoutPresets, setLayoutPresets] = useState<LayoutPresetDto[]>([]);
+  const [brandingProfileScope, setBrandingProfileScope] = useState<string>("company");
+  const [brandingPreview, setBrandingPreview] = useState<BrandingPreviewDto | null>(null);
+  const [brandingPreviewHistory, setBrandingPreviewHistory] = useState<BrandingPreviewDto[]>([]);
+
+  useEffect(() => {
+    listCompanies().catch(() => undefined);
+    listLayoutPresets().then(setLayoutPresets).catch(() => undefined);
+  }, [listCompanies]);
+
+  useEffect(() => {
+    if (!companyId && companies.length > 0) {
+      setPartial({ companyId: companies[0].id });
+    }
+  }, [companies, companyId, setPartial]);
+
+  useEffect(() => {
+    if (!companyId) {
+      setSites([]);
+      return;
+    }
+    listSites(companyId)
+      .then(setSites)
+      .catch(() => setSites([]));
+    getBrandingProfile(companyId, siteId || undefined)
+      .then((profile) => {
+        setBrandingProfileScope(profile.scope);
+        if (!headerPreset && profile.preferred_header_preset_code) {
+          setPartial({ headerPreset: profile.preferred_header_preset_code });
+        }
+      })
+      .catch(() => undefined);
+  }, [companyId, headerPreset, setPartial, siteId]);
 
   useEffect(() => {
     const stepFromQuery = Number(searchParams.get("step") ?? step);
@@ -257,9 +303,120 @@ const DocumentsWizardPage = () => {
           ) : null}
 
           {step === 5 ? (
-            <div className="space-y-2">
-              <Label>Preset колонтитулов</Label>
-              <Input value={headerPreset} onChange={(e) => setPartial({ headerPreset: e.target.value })} placeholder="default / company_brand" />
+            <div className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="space-y-2">
+                  <Label>Организация</Label>
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={companyId}
+                    onChange={(e) => setPartial({ companyId: e.target.value, siteId: "" })}
+                  >
+                    <option value="">Выберите организацию</option>
+                    {companies.map((company) => (
+                      <option key={company.id} value={company.id}>
+                        {company.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Филиал / объект</Label>
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={siteId}
+                    onChange={(e) => setPartial({ siteId: e.target.value })}
+                  >
+                    <option value="">Уровень организации</option>
+                    {sites.map((site) => (
+                      <option key={site.id} value={site.id}>
+                        {site.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Preset колонтитулов</Label>
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={headerPreset}
+                    onChange={(e) => setPartial({ headerPreset: e.target.value })}
+                  >
+                    <option value="">Авто по brand profile</option>
+                    {layoutPresets.map((preset) => (
+                      <option key={preset.id} value={preset.code}>
+                        {preset.code} — {preset.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  disabled={!canCallApi || !companyId}
+                  onClick={async () => {
+                    if (!companyId) return;
+                    const preview = await previewBranding({
+                      company_id: companyId,
+                      site_id: siteId || undefined,
+                      preset_code: headerPreset || undefined,
+                      document_title: templateCode || "Branded document",
+                      document_number: `preview-${templateVersion}`,
+                      watermark_override: { enabled: true, text: "PREVIEW" }
+                    });
+                    setBrandingPreview(preview);
+                    setBrandingPreviewHistory((prev) => [preview, ...prev].slice(0, 5));
+                  }}
+                >
+                  Собрать branded preview
+                </Button>
+                <Button asChild variant="ghost">
+                  <Link to="/documents/branding">Открыть branding settings</Link>
+                </Button>
+              </div>
+              <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+                <div className="rounded-lg border bg-muted/20 p-4 text-sm">
+                  <div className="font-medium">Preview header/footer</div>
+                  <div className="mt-3 whitespace-pre-wrap rounded-md border bg-background p-3">
+                    {brandingPreview?.sections.header_odd ?? "Соберите preview, чтобы проверить фирменный бланк."}
+                  </div>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    <div className="rounded-md border bg-background p-3">
+                      <div className="text-xs text-muted-foreground">Footer odd</div>
+                      <div className="mt-2 whitespace-pre-wrap">{brandingPreview?.sections.footer_odd ?? "—"}</div>
+                    </div>
+                    <div className="rounded-md border bg-background p-3">
+                      <div className="text-xs text-muted-foreground">Watermark / scope</div>
+                      <div className="mt-2">preset={(brandingPreview?.preset_code ?? headerPreset) || "auto"}</div>
+                      <div>scope={brandingPreview?.profile.scope ?? brandingProfileScope}</div>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-3 rounded-lg border bg-muted/20 p-4 text-sm">
+                  <div>
+                    <div className="font-medium">Reproducibility snapshot</div>
+                    <pre className="mt-2 overflow-x-auto rounded-md border bg-background p-3 text-xs">
+                      {JSON.stringify(brandingPreview?.profile.reproducibility ?? {}, null, 2)}
+                    </pre>
+                  </div>
+                  <div>
+                    <div className="font-medium">Recent preview history</div>
+                    <div className="mt-2 space-y-2">
+                      {brandingPreviewHistory.length === 0 ? (
+                        <div className="text-muted-foreground">История появится после preview.</div>
+                      ) : (
+                        brandingPreviewHistory.map((item, index) => (
+                          <div key={`${String(item.profile.reproducibility.generated_at ?? index)}`} className="rounded-md border bg-background p-2 text-xs">
+                            <div>{String(item.profile.reproducibility.generated_at ?? "unknown")}</div>
+                            <div>preset={item.preset_code ?? "—"}</div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           ) : null}
 
@@ -336,7 +493,14 @@ const DocumentsWizardPage = () => {
                       template_code: templateCode,
                       template_version: templateVersion,
                       company_id: companyId,
-                      data: { preset, mapping, headerPreset }
+                      data: {
+                        preset,
+                        mapping,
+                        headerPreset,
+                        siteId: siteId || null,
+                        branding_preview: brandingPreview?.apply_headers_payload ?? null,
+                        reproducibility: brandingPreview?.profile.reproducibility ?? null
+                      }
                     };
                     const task = await generateDocument(payload, idempotencyKey);
                     const status = await getGenerationTaskStatus(task.task_id);

@@ -10,6 +10,7 @@ export type DocumentsWizardState = {
   step: number;
   preset: string;
   companyId: string;
+  siteId: string;
   sourceFileName: string;
   sourceColumns: string[];
   mapping: Record<string, string>;
@@ -37,6 +38,7 @@ const baseState = {
   step: 1,
   preset: "manual",
   companyId: "",
+  siteId: "",
   sourceFileName: "",
   sourceColumns: [],
   mapping: {},
@@ -66,6 +68,7 @@ export const useDocumentsWizardStore = create<DocumentsWizardState>()(
         step: state.step,
         preset: state.preset,
         companyId: state.companyId,
+        siteId: state.siteId,
         sourceFileName: state.sourceFileName,
         sourceColumns: state.sourceColumns,
         mapping: state.mapping,

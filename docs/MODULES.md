@@ -1,13 +1,16 @@
-# Modules
+# MODULES
 
-## Canonical modules
-- `branding` — effective organization/branch branding profile, inheritance, preview, reproducibility.
-- `headers` — persisted layout presets, first/odd/even sections, DOCX header/footer injection.
-- `templates` — template linting and preview.
-- `replace` — placeholder replacement and diff reports.
-- `pdf` — conversion and PDF-adjacent flows.
-- `pipelines` — orchestration between document stages.
-- `workflow`, `approvals`, `edo`, `client_portal` — downstream delivery and approval path.
+## Canonical document-core modules
+- `app.modules.branding`
+- `app.modules.headers`
+- `app.modules.templates`
+- `app.modules.pdf`
+- `app.modules.pipelines`
+- `app.modules.client_portal`
+- `app.modules.workflow`
 
-## Keep / do not fork
-These modules are the canonical implementation paths for future tasks and should be extended rather than reimplemented in parallel.
+## Frontend counterparts
+- `src/api/branding.ts`
+- `src/pages/branding/BrandingSettingsPage.tsx`
+- `src/pages/documents/DocumentsWizardPage.tsx`
+- `src/components/LayoutPresetEditor/*`

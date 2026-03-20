@@ -173,3 +173,32 @@ class BrandingService:
             profile.reproducibility['preset_id'] = preset.id
             profile.reproducibility['preset_updated_at'] = preset.updated_at.isoformat() if getattr(preset, 'updated_at', None) else None
         return profile, preset, sections, sorted(set(unresolved))
+
+    def build_apply_headers_payload(
+        self,
+        *,
+        profile: BrandingProfileRead,
+        preset: HeaderFooterPreset | None,
+        document_title: str | None,
+        document_number: str | None,
+        generated_at: str | None,
+        watermark_override: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        context = deepcopy(profile.header_context)
+        context["doc"] = {
+            "title": document_title or "Untitled document",
+            "number": document_number or "—",
+            "generated_at": generated_at or datetime.now(timezone.utc).date().isoformat(),
+            "passport": profile.branding.passport_label
+            or f"{context['company']['name']} / {document_title or 'document'}",
+        }
+        context["reproducibility"] = deepcopy(profile.reproducibility)
+        return {
+            "preset_code": getattr(preset, "code", None) or profile.preferred_header_preset_code,
+            "data": context,
+            "watermark_override": self.resolve_watermark(
+                profile=profile,
+                preset=preset,
+                override=watermark_override,
+            ),
+        }

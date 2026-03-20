@@ -1,51 +1,32 @@
-# Setup
+# SETUP
 
-## Required services
-- PostgreSQL
-- Redis
-- S3/MinIO-compatible object storage
-- Celery worker runtime
-- LibreOffice headless for DOCX→PDF
-- ClamAV if file scanning is enabled
-
-## Important environment variables
-- `DATABASE_URL`
-- `REDIS_URL`
-- `REDIS_RESULT_URL`
-- `S3_ENDPOINT`
-- `S3_ACCESS_KEY`
-- `S3_SECRET_KEY`
-- `APP_ENV`
-- `ADMIN_BOOTSTRAP`
-- `ADMIN_EMAIL`
-- `ADMIN_PASSWORD`
-- `ADMIN_TENANT`
-
-## Install
+## Backend
 ```bash
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt -r requirements-dev.txt
-npm --prefix frontend ci
-```
-
-## Run backend
-```bash
 alembic -c backend/app/migrations/alembic.ini upgrade head
-uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn backend.app.main:app --reload
 ```
 
-## Run frontend
+## Frontend
 ```bash
+npm --prefix frontend ci
 npm --prefix frontend run dev
 ```
 
-## Run worker
+## Verification
 ```bash
-celery -A backend.app.worker worker --loglevel=info
-```
-
-## High-value validation
-```bash
-pytest -q tests/api/test_branding_api.py tests/headers/test_engine.py
+pytest -q tests/api/test_branding_api.py
+pytest -q tests/headers/test_engine.py
 npm --prefix frontend run typecheck
+npm --prefix frontend run test
 npm --prefix frontend run build
 ```
+
+## Branding-first smoke path
+1. Create company and optional site.
+2. Create layout preset.
+3. Open `/documents/branding`, maintain requisites and watermark.
+4. Open `/documents/wizard`, step 5, select organization/site/preset.
+5. Run branded preview and verify reproducibility snapshot.
