@@ -120,8 +120,11 @@ const DocumentsWizardPage = () => {
     batch,
     taskId,
     pipelineRun,
+    brandingPreview,
+    brandingPreviewHistory,
     idempotencyKey,
     rowStatusFilter,
+    pushBrandingPreview,
     setPartial
   } = useDocumentsWizardStore();
 
@@ -132,8 +135,6 @@ const DocumentsWizardPage = () => {
   const [sites, setSites] = useState<SiteDto[]>([]);
   const [layoutPresets, setLayoutPresets] = useState<LayoutPresetDto[]>([]);
   const [brandingProfileScope, setBrandingProfileScope] = useState<string>("company");
-  const [brandingPreview, setBrandingPreview] = useState<BrandingPreviewDto | null>(null);
-  const [brandingPreviewHistory, setBrandingPreviewHistory] = useState<BrandingPreviewDto[]>([]);
 
   useEffect(() => {
     listCompanies().catch(() => undefined);
@@ -157,8 +158,9 @@ const DocumentsWizardPage = () => {
     getBrandingProfile(companyId, siteId || undefined)
       .then((profile) => {
         setBrandingProfileScope(profile.scope);
-        if (!headerPreset && profile.preferred_header_preset_code) {
-          setPartial({ headerPreset: profile.preferred_header_preset_code });
+        const nextPreset = headerPreset || profile.preferred_header_preset_code || "";
+        if (nextPreset !== headerPreset) {
+          setPartial({ headerPreset: nextPreset });
         }
       })
       .catch(() => undefined);
@@ -374,8 +376,12 @@ const DocumentsWizardPage = () => {
                       document_number: `preview-${templateVersion}`,
                       watermark_override: { enabled: true, text: "PREVIEW" }
                     });
-                    setBrandingPreview(preview);
-                    setBrandingPreviewHistory((prev) => [preview, ...prev].slice(0, 5));
+                    pushBrandingPreview(preview);
+                    setPartial({
+                      companyId: (preview.wizard_defaults.company_id as string | undefined) ?? companyId,
+                      siteId: (preview.wizard_defaults.site_id as string | undefined) ?? siteId,
+                      headerPreset: (preview.wizard_defaults.preset_code as string | undefined) ?? headerPreset,
+                    });
                   }}
                 >
                   Собрать branded preview

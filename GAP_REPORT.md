@@ -1,12 +1,13 @@
 # GAP_REPORT
 
 ## Closed in this wave
-- Reconfirmed canonical frontend/backend roots and active entrypoints.
-- Reconfirmed `frontend/package.json` placement.
-- Strengthened branding preview contract with `apply_headers_payload`, `wizard_defaults`, preset-source metadata and inheritance resolution chain.
-- Wired document wizard step 5 to real branding APIs with organization/site/preset selection, multi-section letterhead preview and reproducibility preview.
+- Revalidated canonical backend/frontend roots and active entrypoints.
+- Reconfirmed `frontend/package.json` as the only active frontend manifest.
+- Strengthened branding reproducibility with hashes for branding payload, header context, rendered sections, and preset content.
+- Persisted branded preview/history inside the document wizard store, so operators do not lose preview context while moving through steps.
+- Refreshed canonical repository docs to describe the real active paths and branded document flow.
 
 ## Remaining gaps
-- Not every generation path automatically triggers `apply_headers`; some flows still require explicit post-generation job invocation.
-- Branding asset upload UX still relies on file IDs rather than a dedicated media picker on the branding page.
-- Preview history in the wizard is UI-local rather than persisted server-side generation history.
+- Not every generation route automatically chains `generate -> apply_headers -> pdf`; some flows still require explicit `apply_headers` invocation or pipeline-profile configuration.
+- Branding asset management still uses file IDs rather than a dedicated upload/media picker workflow on the branding screen.
+- Preview history is persisted in frontend state, but not yet materialized as a server-side generation/audit projection.

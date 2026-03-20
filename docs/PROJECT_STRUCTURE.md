@@ -1,33 +1,32 @@
 # PROJECT_STRUCTURE
 
 ## Canonical roots
-- Backend: `backend/`
-- Frontend: `frontend/`
-- Infra and local orchestration: `infra/`, `docker-compose.yml`, `config/`
-- Tests: `tests/`, `frontend/src/__tests__/`, `integration_tests/`
-- Canonical docs: `docs/`
+- **Backend:** `backend/`
+- **Frontend:** `frontend/`
+- **Tests:** `tests/`, `frontend/src/__tests__/`, `integration_tests/`
+- **Infrastructure:** `infra/`, `docker-compose.yml`, `config/`
+- **Canonical operator docs:** `README.md` and the documents listed below in `docs/`
 
-## Backend map
+## Backend canonical map
 - `backend/app/main.py` — ASGI entrypoint.
-- `backend/app/api/app.py` — FastAPI factory and middleware registration.
-- `backend/app/api/v1/router.py` — canonical v1 router wiring.
-- `backend/app/modules/branding/` — tenant/company/site branding profile and preview API.
-- `backend/app/modules/headers/` — layout preset CRUD and DOCX header/footer application engine.
-- `backend/app/api/routes/documents.py` — document generation entrypoints and batch routes.
-- `backend/app/services/pipelines_orchestrator.py` — document job orchestration foundation.
+- `backend/app/api/app.py` — FastAPI app factory.
+- `backend/app/api/v1/router.py` — v1 router composition.
+- `backend/app/modules/branding/` — brand profile inheritance, preview, reproducibility context.
+- `backend/app/modules/headers/` — layout preset CRUD and DOCX header/footer application.
+- `backend/app/api/routes/documents.py` — document generation and batch entrypoints.
+- `backend/app/tasks.py` — async orchestration, including `apply_headers_job`.
 
-## Frontend map
-- `frontend/package.json` — canonical package manifest.
+## Frontend canonical map
+- `frontend/package.json` — single active package manifest.
+- `frontend/vite.config.ts` — Vite root config.
 - `frontend/src/main.tsx` — React bootstrap.
 - `frontend/src/router/AppRouter.tsx` — route tree.
-- `frontend/src/pages/branding/BrandingSettingsPage.tsx` — branding/letterhead settings UX.
-- `frontend/src/pages/documents/DocumentsWizardPage.tsx` — branded document generation wizard with preset-source and reproducibility preview.
-- `frontend/src/api/branding.ts` — branding API client.
+- `frontend/src/pages/branding/BrandingSettingsPage.tsx` — branding settings and preview.
+- `frontend/src/pages/documents/DocumentsWizardPage.tsx` — generation wizard with branded preview.
+- `frontend/src/stores/documentsWizard.ts` — persisted wizard state, including branding preview history.
 
-## Structural audit notes
-- The repository has a single active frontend manifest: `frontend/package.json`.
-- `ptd` in the repo root is not a frontend directory; it is a small executable wrapper around `python -m app.cli.main`.
-- Backend root is not the repository root; commands target `backend.app.*`, while legacy imports still use `app.*`.
-- Repo root now contains `app/__init__.py`, a compatibility package exposing `backend/app` as top-level `app`, eliminating the broken import path for `python -m backend.app.main`.
-- There are multiple historical docs folders/files; the files listed in README are the canonical operator-facing docs for the next task.
-- `modules/approval` and `modules/approvals` both exist; they remain in place to avoid breaking active imports, but `api/routes/approval_*` remains the active router path.
+## Structural audit conclusions
+- `frontend/package.json` is the **only** active frontend manifest.
+- `app/__init__.py` is a repo-root compatibility shim exposing `backend/app` as top-level `app` for legacy imports and entrypoints.
+- Historical parallel names still exist in a few areas (`docs/ADR` + `docs/adr`, `modules/approval` + `modules/approvals`). Canonical active paths are documented above; legacy paths remain only for backward compatibility and should not be used for new work.
+- There is no separate frontend hidden under `ptd`, `proxy`, or repo root.

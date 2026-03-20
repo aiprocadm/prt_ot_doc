@@ -68,6 +68,12 @@ class BrandingService:
         normalized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
+    def _hash_optional_payload(self, payload: Any) -> str | None:
+        if payload in (None, "", [], {}):
+            return None
+        normalized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
     def build_profile(self, *, company: Company, site: Site | None = None) -> BrandingProfileRead:
         tenant_branding = self._tenant_branding()
         payload = tenant_branding
@@ -212,9 +218,25 @@ class BrandingService:
                 sections[key] = rendered or None
                 unresolved.extend(missing)
         profile.reproducibility['watermark'] = watermark
+        profile.reproducibility['rendered_sections_hash'] = self._hash_optional_payload(sections)
+        profile.reproducibility['header_context_hash'] = self._hash_optional_payload(context)
         if preset is not None:
             profile.reproducibility['preset_id'] = preset.id
             profile.reproducibility['preset_updated_at'] = preset.updated_at.isoformat() if getattr(preset, 'updated_at', None) else None
+            profile.reproducibility['preset_content_hash'] = self._hash_optional_payload(
+                {
+                    'code': preset.code,
+                    'different_first': preset.different_first,
+                    'different_odd_even': preset.different_odd_even,
+                    'header_first_xml': preset.header_first_xml,
+                    'header_odd_xml': preset.header_odd_xml,
+                    'header_even_xml': preset.header_even_xml,
+                    'footer_first_xml': preset.footer_first_xml,
+                    'footer_odd_xml': preset.footer_odd_xml,
+                    'footer_even_xml': preset.footer_even_xml,
+                    'watermark': preset.watermark or {},
+                }
+            )
             profile.resolution.effective_preset_source = profile.resolution.effective_preset_source or "request_or_profile"
         elif effective_preset_code is None:
             profile.resolution.effective_preset_source = profile.resolution.effective_preset_source or "none"

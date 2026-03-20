@@ -103,6 +103,9 @@ async def test_branding_profile_preview_and_update(async_client, sessionmaker, d
     assert preview_payload["watermark"]["text"] == "FOR-APPROVAL"
     assert preview_payload["profile"]["reproducibility"]["preferred_header_preset_code"] == "company_brand"
     assert preview_payload["profile"]["reproducibility"]["preset_id"]
+    assert preview_payload["profile"]["reproducibility"]["rendered_sections_hash"]
+    assert preview_payload["profile"]["reproducibility"]["header_context_hash"]
+    assert preview_payload["profile"]["reproducibility"]["preset_content_hash"]
     assert preview_payload["apply_headers_payload"]["preset_code"] == "company_brand"
     assert preview_payload["apply_headers_payload"]["data"]["branch"]["name"] == "Филиал Север"
     assert preview_payload["apply_headers_payload"]["data"]["reproducibility"]["preferred_header_preset_code"] == "company_brand"
