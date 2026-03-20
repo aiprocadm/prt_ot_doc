@@ -36,6 +36,7 @@ export interface BrandingProfileDto {
     website?: string | null;
     email?: string | null;
     phones: string[];
+    header_details: string[];
     footer_details: string[];
     service_notes: string[];
     branch_label?: string | null;

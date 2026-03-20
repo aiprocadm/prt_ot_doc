@@ -10,6 +10,7 @@
 - INN / KPP / OGRN;
 - legal and actual addresses;
 - phones / email / website;
+- `header_details` for firm-blank requisites in page headers;
 - logo / stamp / signature image file IDs;
 - signatories;
 - footer requisites and service notes;
@@ -37,4 +38,5 @@ Returns:
 ## Update semantics
 - `PATCH /api/v1/branding/profile/{company_id}` is merge-based, not replace-based.
 - `preferred_header_preset_code` is tenant-validated before save.
+- branch-level `branch_label` overrides are reflected in preview and `apply_headers_payload`, so operators can issue branch-specific output without editing DOCX headers manually.
 - Existing branding metadata and asset references remain intact when omitted from a partial patch.

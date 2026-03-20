@@ -30,6 +30,7 @@ celery -A backend.app.worker worker --loglevel=info
 pytest -q tests/test_entrypoints.py
 pytest -q tests/api/test_branding_api.py
 pytest -q tests/headers/test_engine.py
+PYTHONPATH=backend python scripts/branded_document_smoke.py
 npm --prefix frontend run typecheck
 npm --prefix frontend run test
 npm --prefix frontend run build
@@ -43,3 +44,4 @@ npm --prefix frontend run build
 5. Select company/site/preset and run branded preview.
 6. Verify rendered sections, watermark, resolution chain, and reproducibility snapshot.
 7. Generate DOCX, then apply headers asynchronously through `/api/v1/documents/{document_version_id}/apply-headers`.
+8. For a repo-local smoke without bootstrapping data, run `make branded-smoke` to verify the canonical `branding -> apply_headers` path on a DOCX stub.

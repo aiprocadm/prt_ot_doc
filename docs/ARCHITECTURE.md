@@ -15,10 +15,11 @@
 ## Document core architecture
 1. Template/version selected.
 2. Branding profile resolved via tenant/company/site inheritance.
-3. Layout preset resolved and placeholders rendered.
-4. Preview returns reproducibility metadata and `apply_headers_payload`.
-5. Generated DOCX can be passed to async header application.
-6. Downstream PDF/approval/archive continues through document and pipeline modules.
+3. Effective branch display name, header requisites, footer requisites, watermark, and preset are resolved into a stable header context.
+4. Layout preset resolved and placeholders rendered.
+5. Preview returns reproducibility metadata and `apply_headers_payload`.
+6. Generated DOCX can be passed to async header application.
+7. Downstream PDF/approval/archive continues through document and pipeline modules.
 
 ## Frontend architecture
 - `src/api/` for server contracts.

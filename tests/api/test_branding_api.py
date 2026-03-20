@@ -43,6 +43,7 @@ async def test_branding_profile_preview_and_update(async_client, sessionmaker, d
                 "website": "https://example.test",
                 "email": "office@example.test",
                 "phones": ["+7 800 555-35-35"],
+                "header_details": ["СеверСтрой", "г. Москва, ул. Производственная, 1"],
                 "footer_details": ["ИНН 123", "КПП 456"],
                 "passport_label": "Passport-1",
                 "watermark_text": "DRAFT",
@@ -99,7 +100,7 @@ async def test_branding_profile_preview_and_update(async_client, sessionmaker, d
     )
     assert preview.status_code == 200, preview.text
     preview_payload = preview.json()
-    assert preview_payload["sections"]["header_odd"] == "СеверСтрой / Филиал Север / FOR-APPROVAL / OT-001"
+    assert preview_payload["sections"]["header_odd"] == "СеверСтрой / Северный филиал / FOR-APPROVAL / OT-001"
     assert preview_payload["watermark"]["text"] == "FOR-APPROVAL"
     assert preview_payload["profile"]["reproducibility"]["preferred_header_preset_code"] == "company_brand"
     assert preview_payload["profile"]["reproducibility"]["preset_id"]
@@ -107,11 +108,12 @@ async def test_branding_profile_preview_and_update(async_client, sessionmaker, d
     assert preview_payload["profile"]["reproducibility"]["header_context_hash"]
     assert preview_payload["profile"]["reproducibility"]["preset_content_hash"]
     assert preview_payload["apply_headers_payload"]["preset_code"] == "company_brand"
-    assert preview_payload["apply_headers_payload"]["data"]["branch"]["name"] == "Филиал Север"
+    assert preview_payload["apply_headers_payload"]["data"]["branch"]["name"] == "Северный филиал"
     assert preview_payload["apply_headers_payload"]["data"]["reproducibility"]["preferred_header_preset_code"] == "company_brand"
     assert preview_payload["wizard_defaults"]["site_id"] == site_id
     assert preview_payload["profile"]["resolution"]["scope_chain"] == ["tenant", "company", "site"]
     assert preview_payload["profile"]["resolution"]["effective_preset_source"] == "site.branding.preferred_letterhead_preset"
+    assert preview_payload["profile"]["branding"]["header_details"] == ["СеверСтрой", "г. Москва, ул. Производственная, 1"]
     assert "organization.short_name" not in preview_payload["unresolved_placeholders"]
 
     async with sessionmaker() as session:
