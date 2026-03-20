@@ -7,6 +7,7 @@ source .venv/bin/activate
 pip install -r requirements.txt -r requirements-dev.txt
 alembic -c backend/app/migrations/alembic.ini upgrade head
 uvicorn backend.app.main:app --reload
+python -m backend.app.main
 ```
 
 ## Frontend
@@ -22,6 +23,7 @@ npm --prefix frontend run dev
 
 ## Verification
 ```bash
+pytest -q tests/test_entrypoints.py
 pytest -q tests/api/test_branding_api.py
 pytest -q tests/headers/test_engine.py
 npm --prefix frontend run typecheck

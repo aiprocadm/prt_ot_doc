@@ -5,6 +5,7 @@
 - App factory: `backend/app/api/app.py`
 - CLI: `backend/app/cli/main.py`
 - Alembic: `backend/app/migrations/alembic.ini`
+- Repo-root compatibility package: `app/__init__.py`
 
 ## Document-core related modules
 - `app.modules.branding` — resolves tenant/company/site inheritance into a normalized branding profile.
