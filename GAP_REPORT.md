@@ -9,7 +9,8 @@
 - Persisted branded preview/history inside the document wizard store, so operators do not lose preview context while moving through steps.
 - Added server-side branded generation history via `/api/v1/branding/history`, backed by `PipelineRun.result_metadata.branding`.
 - Added a reproducible repository audit script that writes `docs/audit/REPOSITORY_AUDIT.md`.
-- Expanded the audit output so it enumerates canonical backend/frontend entrypoints, config inventory, required docs, and compatibility-path guidance.
+- Expanded the audit output so it enumerates canonical backend/frontend entrypoints, config inventory, required docs, root expectations, and compatibility-path guidance.
+- Added a machine-readable repository audit snapshot at `docs/audit/REPOSITORY_AUDIT.json` for CI, tooling, and future waves.
 - Added canonical `docs/WORKFLOWS_AND_EVENTS.md` and `docs/OBSERVABILITY.md` references for future implementation waves.
 - Reduced frontend production bundle risk by splitting major vendor groups into predictable manual chunks.
 - Added a dedicated `scripts/branded_document_smoke.py` smoke command and `make branded-smoke` entrypoint for fast verification of the canonical letterhead pipeline.

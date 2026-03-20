@@ -9,7 +9,7 @@
 - Wizard step 5 exposes branded preview, resolution chain, watermark diagnostics, and reproducibility snapshot.
 - Branded preview metadata is durable across wizard navigation through the persisted wizard store.
 - Backend tests and repo-local smoke checks cover the branding preview/apply-headers handoff.
-- Repository audit output is reproducible and captures canonical entrypoints, config inventory, and required docs coverage.
+- Repository audit output is reproducible and captures canonical entrypoints, config inventory, root expectations, and required docs coverage in Markdown and JSON form.
 - Frontend production build emits predictable vendor chunks without the previous oversized main-bundle warning.
 - Organization/branch branding screen now surfaces recent server-side branded generation history for audit/re-issuance.
 

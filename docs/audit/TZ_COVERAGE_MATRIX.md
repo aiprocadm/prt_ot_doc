@@ -2,7 +2,7 @@
 
 | TZ area | Status | Canonical implementation |
 |---|---|---|
-| Structural audit / frontend-backend roots | Done | `README.md`, `docs/PROJECT_STRUCTURE.md`, `docs/audit/REPOSITORY_AUDIT.md`, `scripts/repo_audit.py` |
+| Structural audit / frontend-backend roots | Done | `README.md`, `docs/PROJECT_STRUCTURE.md`, `docs/audit/REPOSITORY_AUDIT.md`, `docs/audit/REPOSITORY_AUDIT.json`, `scripts/repo_audit.py`, `tests/test_repo_audit.py` |
 | Canonical frontend root and `package.json` | Done | `frontend/package.json` |
 | Python entrypoint compatibility | Done | `backend/app/main.py`, `app/__init__.py` |
 | Branding profile inheritance | Done | `backend/app/modules/branding/service.py` |

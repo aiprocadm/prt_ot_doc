@@ -38,7 +38,7 @@
 | Async status transparency | `tests/integration/test_job_status_flow.py`, `tests/test_outbox_dispatch.py`, `tests/test_webhooks_dispatch.py` | `./scripts/pytest.sh tests/integration/test_job_status_flow.py tests/test_outbox_dispatch.py tests/test_webhooks_dispatch.py` |
 | Search / export performance smoke foundation | `scripts/perf/api_load.py`, `scripts/perf/README.md` | `python scripts/perf/api_load.py --help` |
 | Release docs completeness | `tests/e2e/test_release_candidate_docs.py` | `./scripts/pytest.sh tests/e2e/test_release_candidate_docs.py` |
-| Repository audit reproducibility | `scripts/repo_audit.py` | `python scripts/repo_audit.py` |
+| Repository audit reproducibility | `scripts/repo_audit.py`, `tests/test_repo_audit.py` | `python scripts/repo_audit.py && pytest -q tests/test_repo_audit.py` |
 | Frontend production bundle stability | `frontend/vite.config.ts`, `npm --prefix frontend run build` | `npm --prefix frontend run build` |
 | Frontend no-dead-end wizard actions | `frontend/src/__tests__/GeneratePackWizardPage.test.tsx`, `frontend/src/__tests__/DocumentsWizardPage.test.tsx` | `cd frontend && npx vitest run GeneratePackWizardPage DocumentsWizardPage` |
 
