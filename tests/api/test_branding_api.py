@@ -114,5 +114,61 @@ async def test_branding_profile_preview_and_update(async_client, sessionmaker, d
         site = (await session.execute(select(Site).where(Site.id == site_id))).scalar_one()
         assert company.preferred_header_preset_code == "company_brand"
         assert company.branding_payload["short_name"] == "СеверСтрой"
+        assert company.branding_payload["website"] == "https://example.test"
         assert site.branding_payload["preferred_letterhead_preset"] == "company_brand"
         assert site.branding_payload["watermark_text"] == "SITE-DRAFT"
+
+
+async def test_branding_patch_merges_existing_payload_and_validates_preset(async_client, sessionmaker, data_factory, make_auth_headers) -> None:
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        company = await data_factory.create_company(
+            tenant=tenant,
+            session=session,
+            name="ООО Мердж",
+        )
+        company.branding_payload = {
+            "website": "https://before.example",
+            "metadata": {"source": "seed"},
+            "images": {"logo_file_id": "logo-1"},
+        }
+        session.add(
+            HeaderFooterPreset(
+                tenant_id=str(tenant.id),
+                code="gost_brand",
+                name="GOST",
+                header_odd_xml="{{organization.short_name}}",
+            )
+        )
+        await session.commit()
+        company_id = company.id
+
+    missing_preset = await async_client.patch(
+        f"/api/v1/branding/profile/{company_id}",
+        headers=headers,
+        json={
+            "preferred_header_preset_code": "unknown-preset",
+            "branding": {"short_name": "Мердж"},
+        },
+    )
+    assert missing_preset.status_code == 404, missing_preset.text
+
+    merged = await async_client.patch(
+        f"/api/v1/branding/profile/{company_id}",
+        headers=headers,
+        json={
+            "preferred_header_preset_code": "gost_brand",
+            "branding": {
+                "short_name": "Мердж",
+                "metadata": {"updated_by": "test"},
+            },
+        },
+    )
+    assert merged.status_code == 200, merged.text
+    payload = merged.json()
+    assert payload["branding"]["website"] == "https://before.example"
+    assert payload["branding"]["images"]["logo_file_id"] == "logo-1"
+    assert payload["branding"]["metadata"]["source"] == "seed"
+    assert payload["branding"]["metadata"]["updated_by"] == "test"
+    assert payload["reproducibility"]["branding_payload_hash"]

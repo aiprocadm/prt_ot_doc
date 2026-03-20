@@ -15,6 +15,11 @@ npm --prefix frontend ci
 npm --prefix frontend run dev
 ```
 
+## CLI / local operator entrypoint
+```bash
+./ptd --help
+```
+
 ## Verification
 ```bash
 pytest -q tests/api/test_branding_api.py
@@ -29,4 +34,4 @@ npm --prefix frontend run build
 2. Create layout preset.
 3. Open `/documents/branding`, maintain requisites and watermark.
 4. Open `/documents/wizard`, step 5, select organization/site/preset.
-5. Run branded preview and verify reproducibility snapshot.
+5. Run branded preview and verify reproducibility snapshot, branding payload hash and resolved watermark.

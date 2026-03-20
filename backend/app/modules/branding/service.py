@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, timezone
+import hashlib
+import json
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -36,6 +38,16 @@ class BrandingService:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Site not found")
         return site
 
+    async def get_layout_preset(self, preset_code: str | None) -> HeaderFooterPreset | None:
+        if not preset_code:
+            return None
+        stmt = select(HeaderFooterPreset).where(
+            HeaderFooterPreset.tenant_id == str(self.tenant.id),
+            HeaderFooterPreset.code == preset_code,
+            HeaderFooterPreset.deleted_at.is_(None),
+        )
+        return (await self.session.execute(stmt)).scalar_one_or_none()
+
     def _deep_merge(self, base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
         merged = deepcopy(base)
         for key, value in override.items():
@@ -45,9 +57,16 @@ class BrandingService:
                 merged[key] = value
         return merged
 
+    def merge_branding_patch(self, current_payload: dict[str, Any] | None, patch_payload: dict[str, Any]) -> dict[str, Any]:
+        return self._deep_merge(current_payload or {}, patch_payload)
+
     def _tenant_branding(self) -> dict[str, Any]:
         settings = getattr(self.tenant, 'settings', {}) or {}
         return deepcopy(settings.get('branding', {}))
+
+    def _stable_payload_hash(self, payload: dict[str, Any]) -> str:
+        normalized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
     def build_profile(self, *, company: Company, site: Site | None = None) -> BrandingProfileRead:
         payload = self._tenant_branding()
@@ -96,6 +115,8 @@ class BrandingService:
             'company_updated_at': company.updated_at.isoformat() if getattr(company, 'updated_at', None) else None,
             'site_updated_at': site.updated_at.isoformat() if site and getattr(site, 'updated_at', None) else None,
             'generated_at': datetime.now(timezone.utc).isoformat(),
+            'scope': scope,
+            'branding_payload_hash': self._stable_payload_hash(branding.model_dump(mode="json")),
         }
         effective_preset_code = (
             branding.preferred_letterhead_preset
@@ -157,8 +178,7 @@ class BrandingService:
         unresolved: list[str] = []
         watermark = self.resolve_watermark(profile=profile, preset=preset, override=watermark_override)
         if effective_preset_code:
-            stmt = select(HeaderFooterPreset).where(HeaderFooterPreset.tenant_id == str(self.tenant.id), HeaderFooterPreset.code == effective_preset_code, HeaderFooterPreset.deleted_at.is_(None))
-            preset = (await self.session.execute(stmt)).scalar_one_or_none()
+            preset = await self.get_layout_preset(effective_preset_code)
             if preset is None:
                 raise HTTPException(status.HTTP_404_NOT_FOUND, 'Layout preset not found')
             watermark = self.resolve_watermark(profile=profile, preset=preset, override=watermark_override)

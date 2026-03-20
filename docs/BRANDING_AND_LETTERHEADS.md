@@ -24,8 +24,13 @@ Returns:
 - rendered sections (`header_first`, `header_odd`, `header_even`, `footer_*`);
 - resolved watermark;
 - reproducibility metadata;
+- stable `branding_payload_hash` for reproducible reruns and audit comparison;
 - `apply_headers_payload` ready to pass into header application flow;
 - `wizard_defaults` for UI generation flows.
+
+## Update semantics
+- `PATCH /api/v1/branding/profile/{company_id}` validates `preferred_header_preset_code` inside the current tenant before saving.
+- Branding updates merge into the existing company/site payload instead of replacing the whole JSON blob. This preserves logos, stamps, metadata and prior requisites during partial edits from UI or API clients.
 
 ## UI path
 - Settings: `/documents/branding`
