@@ -2,11 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import {
+  getBrandingHistory,
   getBrandingProfile,
   listLayoutPresets,
   listSites,
   previewBranding,
   updateBrandingProfile,
+  type BrandingGenerationHistoryItemDto,
   type BrandingPreviewDto,
   type BrandingProfileDto,
   type LayoutPresetDto,
@@ -46,6 +48,7 @@ const BrandingSettingsPage = () => {
   const [profile, setProfile] = useState<BrandingProfileDto | null>(null);
   const [preview, setPreview] = useState<BrandingPreviewDto | null>(null);
   const [previewHistory, setPreviewHistory] = useState<BrandingPreviewDto[]>([]);
+  const [generationHistory, setGenerationHistory] = useState<BrandingGenerationHistoryItemDto[]>([]);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     legal_name: "",
@@ -106,8 +109,12 @@ const BrandingSettingsPage = () => {
   useEffect(() => {
     if (!companyId) return;
     setLoading(true);
-    getBrandingProfile(companyId, siteId || undefined)
-      .then((data) => {
+    Promise.all([
+      getBrandingProfile(companyId, siteId || undefined),
+      getBrandingHistory(companyId, siteId || undefined, 10).catch(() => [])
+    ])
+      .then(([data, history]) => {
+        setGenerationHistory(history);
         setProfile(data);
         setPreview(null);
         setForm({
@@ -550,6 +557,35 @@ const BrandingSettingsPage = () => {
               <pre className="overflow-x-auto rounded-md bg-muted/30 p-3 text-xs">
                 {JSON.stringify(preview?.profile.reproducibility ?? profile?.reproducibility ?? {}, null, 2)}
               </pre>
+            </CardContent>
+          </Card>
+
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle>История branded generation</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              {generationHistory.length === 0 ? (
+                <div className="text-muted-foreground">Серверная история появится после запуска single pipeline из document wizard.</div>
+              ) : (
+                generationHistory.map((item) => (
+                  <div key={item.pipeline_run_id} className="rounded-lg border p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="font-medium">{item.document_title ?? "Документ"}</div>
+                      <div className="text-xs text-muted-foreground">{item.generated_at ?? "unknown"}</div>
+                    </div>
+                    <div className="mt-2 grid gap-2 text-xs md:grid-cols-2">
+                      <div>pipeline_run_id={item.pipeline_run_id}</div>
+                      <div>status={item.status}</div>
+                      <div>preset={item.preset_code ?? "auto"}</div>
+                      <div>number={item.document_number ?? "—"}</div>
+                    </div>
+                    <pre className="mt-3 overflow-x-auto rounded-md border bg-muted/30 p-2 text-[11px]">
+                      {JSON.stringify(item.reproducibility ?? {}, null, 2)}
+                    </pre>
+                  </div>
+                ))
+              )}
             </CardContent>
           </Card>
 

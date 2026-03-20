@@ -3,6 +3,7 @@
 ## Document core endpoints
 - `GET /api/v1/branding/profile`
 - `PATCH /api/v1/branding/profile/{company_id}`
+- `GET /api/v1/branding/history`
 - `POST /api/v1/branding/preview`
 - `POST /api/v1/layout-presets`
 - `GET /api/v1/layout-presets`

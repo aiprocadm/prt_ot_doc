@@ -67,8 +67,9 @@ npm --prefix frontend run build
 3. Create a letterhead preset via `/api/v1/layout-presets` or `/admin/layout-presets`.
 4. Maintain tenant/company/site branding in `/documents/branding`.
 5. Build a branded preview via `/api/v1/branding/preview` or `/documents/wizard` step 5.
-6. Use the returned `apply_headers_payload` to run `/api/v1/documents/{document_version_id}/apply-headers`.
-7. Continue into PDF / approval / archive flows.
+6. Run single generation from `/documents/wizard` to persist server-side branded generation history in `/api/v1/branding/history`.
+7. Use the returned `apply_headers_payload` to run `/api/v1/documents/{document_version_id}/apply-headers`.
+8. Continue into PDF / approval / archive flows.
 
 ### What is now production-minded in the branded flow
 - tenant → company → site inheritance for requisites and images;
@@ -90,6 +91,7 @@ npm --prefix frontend run build
 - `docs/API_OVERVIEW.md`
 - `docs/MODULES.md`
 - `docs/audit/TZ_COVERAGE_MATRIX.md`
+- `docs/audit/REPOSITORY_AUDIT.md`
 - `GAP_REPORT.md`
 - `KNOWN_LIMITATIONS.md`
 - `RELEASE_READINESS.md`

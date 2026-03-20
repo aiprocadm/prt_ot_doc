@@ -13,6 +13,7 @@
 | Wizard organization/site/layout selection | Done | `frontend/src/pages/documents/DocumentsWizardPage.tsx` |
 | Reproducibility metadata | Done | `backend/app/modules/branding/service.py` |
 | Persisted wizard branding preview/history | Done | `frontend/src/stores/documentsWizard.ts` |
+| Server-side branded generation history | Done | `backend/app/modules/branding/api.py`, `frontend/src/pages/branding/BrandingSettingsPage.tsx` |
 | Apply-headers payload handoff | Done | `backend/app/modules/branding/api.py` |
 | Branded document smoke command | Done | `scripts/branded_document_smoke.py`, `Makefile` |
 | Full automatic apply-headers in every generation route | Partial | dedicated endpoint/job exists, not universally auto-chained |

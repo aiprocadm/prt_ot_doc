@@ -10,7 +10,7 @@
 - `src/router/AppRouter.tsx`
 
 ## Document-core screens
-- `/documents/branding` — organization/site branding settings, preview history, reproducibility snapshot.
+- `/documents/branding` — organization/site branding settings, preview history, server-side branded generation history, reproducibility snapshot.
 - `/documents/wizard` — step-based wizard for template selection, batch generation and branded preview before generation.
 - `/admin/layout-presets` — CRUD/editor for layout presets.
 
