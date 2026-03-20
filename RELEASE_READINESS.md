@@ -1,14 +1,14 @@
 # RELEASE_READINESS
 
-## Ready
-- Canonical roots and entrypoints are documented.
-- Frontend package manifest is verified in `frontend/`.
-- Branding profile preview is tenant/company/site aware.
-- Wizard now exposes branded preview before generation, including first/odd/even sections and preset-source diagnostics.
-- Backend and frontend regression coverage added for branding preview handoff.
-- Repository-root Python entrypoints are hardened via the `app` compatibility package, so docs and operator commands now match runtime reality.
+## Ready now
+- Canonical roots and active entrypoints are documented.
+- `frontend/package.json` is verified in the actual frontend root.
+- Tenant/company/site branding inheritance works through the backend branding module.
+- Wizard step 5 exposes branded preview, resolution chain, watermark diagnostics, and reproducibility snapshot.
+- Branded preview metadata is durable across wizard navigation through the persisted wizard store.
+- Backend tests and frontend tests cover the branding preview handoff.
 
-## Conditional go-live criteria
-- Run backend/frontend test and build commands from README.
-- Validate one tenant with company + site + layout preset + branded preview + apply-headers smoke.
-- Confirm chosen pipeline profile for production explicitly chains `apply_headers` where required.
+## Conditional go-live checks
+- Run backend/frontend verification commands from `README.md`.
+- Validate one tenant end-to-end: company + site + preset + preview + generated DOCX + `apply-headers` smoke.
+- Explicitly verify which production pipeline profiles auto-chain `apply_headers` and which require a separate step.

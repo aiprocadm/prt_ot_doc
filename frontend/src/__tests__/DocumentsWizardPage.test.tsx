@@ -40,7 +40,7 @@ vi.mock("@/api/branding", () => ({
     watermark: { text: "PREVIEW" },
     unresolved_placeholders: [],
     apply_headers_payload: { preset_code: "company_brand" },
-    wizard_defaults: {}
+    wizard_defaults: { company_id: "company-1", site_id: "site-1", preset_code: "company_brand" }
   }))
 }));
 
@@ -142,5 +142,8 @@ describe("DocumentsWizardPage", () => {
     expect(screen.getByText(/reproducibility snapshot/i)).toBeInTheDocument();
     expect(screen.getByText(/site.branding.preferred_letterhead_preset/i)).toBeInTheDocument();
     expect(screen.getAllByText(/company_brand/i).length).toBeGreaterThan(0);
+    expect(useDocumentsWizardStore.getState().brandingPreview?.wizard_defaults.site_id).toBe("site-1");
+    expect(useDocumentsWizardStore.getState().brandingPreviewHistory).toHaveLength(1);
+    expect(useDocumentsWizardStore.getState().siteId).toBe("site-1");
   });
 });

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+import type { BrandingPreviewDto } from "@/api/branding";
 import type { DocumentBatchRun, ReplaceDryRunResponse } from "@/api/documents";
 import type { PipelineRun } from "@/api/pipelines";
 
@@ -23,8 +24,11 @@ export type DocumentsWizardState = {
   batch: DocumentBatchRun | null;
   taskId: string;
   pipelineRun: PipelineRun | null;
+  brandingPreview: BrandingPreviewDto | null;
+  brandingPreviewHistory: BrandingPreviewDto[];
   idempotencyKey: string;
   rowStatusFilter: RowStatusFilter;
+  pushBrandingPreview: (preview: BrandingPreviewDto) => void;
   setPartial: (next: Partial<DocumentsWizardState>) => void;
   reset: () => void;
 };
@@ -51,6 +55,8 @@ const baseState = {
   batch: null,
   taskId: "",
   pipelineRun: null,
+  brandingPreview: null,
+  brandingPreviewHistory: [],
   idempotencyKey: createIdempotencyKey(),
   rowStatusFilter: "all" as RowStatusFilter
 };
@@ -59,6 +65,12 @@ export const useDocumentsWizardStore = create<DocumentsWizardState>()(
   persist(
     (set) => ({
       ...baseState,
+      pushBrandingPreview: (preview) =>
+        set((state) => ({
+          ...state,
+          brandingPreview: preview,
+          brandingPreviewHistory: [preview, ...state.brandingPreviewHistory].slice(0, 5)
+        })),
       setPartial: (next) => set((state) => ({ ...state, ...next })),
       reset: () => set({ ...baseState, idempotencyKey: createIdempotencyKey() })
     }),
@@ -77,6 +89,8 @@ export const useDocumentsWizardStore = create<DocumentsWizardState>()(
         headerPreset: state.headerPreset,
         headerOptions: state.headerOptions,
         replaceMapFileName: state.replaceMapFileName,
+        brandingPreview: state.brandingPreview,
+        brandingPreviewHistory: state.brandingPreviewHistory,
         idempotencyKey: state.idempotencyKey,
         rowStatusFilter: state.rowStatusFilter
       })
