@@ -92,6 +92,21 @@ class BrandingService:
         payload.setdefault('email', company.email or company.contact_email)
         payload.setdefault('website', company.branding_payload.get('website') if company.branding_payload else None)
         payload.setdefault('phones', company.phone_numbers or [])
+        payload.setdefault(
+            'header_details',
+            [
+                item
+                for item in [
+                    payload.get('short_name') or company.name,
+                    site.name if site is not None else None,
+                    company.legal_address,
+                    company.contact_phone,
+                    company.email or company.contact_email,
+                    payload.get('website'),
+                ]
+                if item
+            ],
+        )
         payload.setdefault('images', {})
         payload['images'].setdefault('logo_file_id', company.logo_file_id)
         payload['images'].setdefault('stamp_file_id', company.stamp_file_id)
@@ -109,10 +124,11 @@ class BrandingService:
             if site.address:
                 payload.setdefault('service_notes', [site.address])
         branding = BrandingProfilePayload.model_validate(payload)
+        branch_name = branding.branch_label or (site.name if site is not None else None)
         header_context = {
             'organization': branding.model_dump(),
             'company': {'id': company.id, 'name': company.name},
-            'branch': {'id': site.id, 'name': site.name, 'address': site.address} if site else {},
+            'branch': {'id': site.id, 'name': branch_name, 'address': site.address} if site else {},
             'doc': {},
         }
         reproducibility = {

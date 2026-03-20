@@ -53,6 +53,7 @@ celery -A backend.app.worker worker --loglevel=info
 pytest -q tests/test_entrypoints.py
 pytest -q tests/api/test_branding_api.py
 pytest -q tests/headers/test_engine.py
+PYTHONPATH=backend python scripts/branded_document_smoke.py
 
 # frontend
 npm --prefix frontend run typecheck
@@ -71,6 +72,8 @@ npm --prefix frontend run build
 
 ### What is now production-minded in the branded flow
 - tenant → company → site inheritance for requisites and images;
+- branch-level branded display name now flows into the preview/apply-headers context, so overridden `branch_label` is reflected in generated headers instead of the raw site name;
+- explicit `header_details` and `footer_details` are available in the branding profile for stable letterhead requisites on firm blanks;
 - preset-source diagnostics and scope chain in preview responses;
 - stable reproducibility metadata, including branding payload hash, header context hash, rendered section hash, and preset content hash;
 - wizard preview history persisted in the wizard store for operator continuity;

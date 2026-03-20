@@ -56,6 +56,7 @@ class BrandingProfilePayload(BaseModel):
     website: str | None = None
     email: str | None = None
     phones: list[str] = Field(default_factory=list)
+    header_details: list[str] = Field(default_factory=list)
     footer_details: list[str] = Field(default_factory=list)
     service_notes: list[str] = Field(default_factory=list)
     branch_label: str | None = None
