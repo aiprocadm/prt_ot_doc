@@ -146,4 +146,37 @@ describe("DocumentsWizardPage", () => {
     expect(useDocumentsWizardStore.getState().brandingPreviewHistory).toHaveLength(1);
     expect(useDocumentsWizardStore.getState().siteId).toBe("site-1");
   });
+
+  it("keeps preview history unique when the same reproducibility snapshot is rebuilt", async () => {
+    useDocumentsWizardStore.getState().reset();
+    useDocumentsWizardStore.setState({
+      step: 5,
+      companyId: "company-1",
+      templateCode: "outbound_cover",
+      templateVersion: 3
+    });
+    useTenantStore.setState({
+      tenant: { slug: "demo", name: "Demo tenant" } as never,
+      tenants: [],
+      setTenant: vi.fn(),
+      clearTenant: vi.fn()
+    });
+    useCompaniesStore.setState({ items: [{ id: "company-1", name: "АО Тест" }], list: vi.fn(async () => undefined) } as never);
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <DocumentsWizardPage />
+      </MemoryRouter>
+    );
+
+    const previewButton = screen.getByRole("button", { name: /собрать branded preview/i });
+    await user.click(previewButton);
+    await screen.findByText(/АО Тест \/ Main site/i);
+    await user.click(previewButton);
+
+    const state = useDocumentsWizardStore.getState();
+    expect(state.brandingPreviewHistory).toHaveLength(1);
+    expect(state.brandingPreview?.wizard_defaults.preset_code).toBe("company_brand");
+  });
 });
