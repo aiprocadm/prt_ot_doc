@@ -2,7 +2,7 @@
 """NEXT branding profiles for companies and sites
 
 Revision ID: 20260319_next_branding_profiles
-Revises: 20260330_next57_approval_sign_edo_orchestration
+Revises: 20260330_next57
 Create Date: 2026-03-19 00:00:00.000000
 """
 
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 
 revision = "20260319_next_branding_profiles"
-down_revision = "20260330_next57_approval_sign_edo_orchestration"
+down_revision = "20260330_next57"
 branch_labels = None
 depends_on = None
 
