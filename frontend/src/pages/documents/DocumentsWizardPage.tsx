@@ -16,7 +16,6 @@ import {
   listLayoutPresets,
   listSites,
   previewBranding,
-  type BrandingPreviewDto,
   type LayoutPresetDto,
   type SiteDto
 } from "@/api/branding";
