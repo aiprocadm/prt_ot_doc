@@ -1,4 +1,4 @@
-.PHONY: install install-pip lint format test contract run clean up down migrate tenant-migrate tenant-init seed smoke logs dev env frontend-install lint-frontend format-frontend test-frontend dev-lite test-lite dev-nodocker test-nodocker check-docker demo cs\:dev cs\:test cs\:reset final-acceptance tenant-bootstrap tenant-demo-bootstrap pilot-smoke pilot-readiness codex-audit
+.PHONY: install install-pip lint format test contract run clean up down migrate tenant-migrate tenant-init seed smoke branded-smoke logs dev env frontend-install lint-frontend format-frontend test-frontend dev-lite test-lite dev-nodocker test-nodocker check-docker demo cs\:dev cs\:test cs\:reset final-acceptance tenant-bootstrap tenant-demo-bootstrap pilot-smoke pilot-readiness codex-audit
 
 LINT_PATHS=backend/app tests scripts
 VENV_BIN=.venv/bin
@@ -70,6 +70,9 @@ seed:
 
 smoke:
 	./scripts/smoke.sh
+
+branded-smoke:
+	PYTHONPATH=backend $(PYTHON) scripts/branded_document_smoke.py
 
 logs:
 	docker compose logs -f --tail=200

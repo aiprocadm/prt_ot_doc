@@ -59,6 +59,7 @@ const BrandingSettingsPage = () => {
     email: "",
     branch_label: "",
     phones: "",
+    header_details: "",
     footer_details: "",
     service_notes: "",
     passport_label: "",
@@ -121,6 +122,7 @@ const BrandingSettingsPage = () => {
           email: data.branding.email ?? "",
           branch_label: data.branding.branch_label ?? "",
           phones: data.branding.phones.join("\n"),
+          header_details: data.branding.header_details.join("\n"),
           footer_details: data.branding.footer_details.join("\n"),
           service_notes: data.branding.service_notes.join("\n"),
           passport_label: data.branding.passport_label ?? "",
@@ -166,6 +168,7 @@ const BrandingSettingsPage = () => {
           email: form.email,
           branch_label: form.branch_label,
           phones: splitLines(form.phones),
+          header_details: splitLines(form.header_details),
           footer_details: splitLines(form.footer_details),
           service_notes: splitLines(form.service_notes),
           passport_label: form.passport_label,
@@ -339,6 +342,17 @@ const BrandingSettingsPage = () => {
                   onChange={(e) => setForm((s) => ({ ...s, phones: e.target.value }))}
                 />
               </div>
+              <div>
+                <Label>Header requisites</Label>
+                <Textarea
+                  rows={4}
+                  value={form.header_details}
+                  onChange={(e) => setForm((s) => ({ ...s, header_details: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <Label>Footer requisites</Label>
                 <Textarea
