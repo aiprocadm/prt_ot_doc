@@ -27,6 +27,13 @@ class TemplateCreateRequest(BaseModel):
 
 class TemplatePatchRequest(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    template_type: str | None = None
+    scope: dict[str, Any] | None = None
+    status: str | None = None
+
+
+class TemplatePatchRequest(BaseModel):
+    code: str | None = None
     name: str | None = None
     description: str | None = None
     category: str | None = None
@@ -34,6 +41,8 @@ class TemplatePatchRequest(BaseModel):
     current_version_id: str | None = None
     version: int | None = None
     scope: TemplateScopeDTO | None = None
+    template_type: str | None = None
+    scope: dict[str, Any] | None = None
 
 
 class TemplateDTO(BaseModel):
@@ -49,6 +58,11 @@ class TemplateDTO(BaseModel):
     updated_at: datetime
     created_at: datetime
     version: int
+    metadata_json: dict[str, Any] | None = None
+    template_type: str | None = None
+    scope: dict[str, Any] | None = None
+    current_version: "TemplateVersionDTO | None" = None
+    versions: list["TemplateVersionDTO"] = Field(default_factory=list)
 
 
 class TemplateVersionDTO(BaseModel):
@@ -64,6 +78,10 @@ class TemplateVersionDTO(BaseModel):
     linter_report_json: dict[str, Any] | None = None
     created_at: datetime
     updated_at: datetime
+    document_type: str | None = None
+    applicability_rules: dict[str, Any] | None = None
+    output_types: list[str] | None = None
+    profile: dict[str, Any] | None = None
 
 
 class LintRequest(BaseModel):
@@ -111,3 +129,6 @@ class RenderPreviewResponse(BaseModel):
     passport: dict[str, Any]
     warnings: list[str]
     generated_at: datetime
+
+
+TemplateDTO.model_rebuild()

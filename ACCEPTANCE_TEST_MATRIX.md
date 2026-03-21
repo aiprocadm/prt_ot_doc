@@ -50,3 +50,11 @@ python scripts/pilot_readiness.py
 ### 2026-03-21 notifications hardening evidence
 - `tests/api/test_notifications_calendar_api.py` validates unread filters plus predictable structured 422 behavior for invalid enum, cursor, and calendar-source inputs.
 - `tests/test_workflow_api.py` remains the cross-module regression slice for workflow + notifications + NPA foundations.
+| Scenario | Status | Canonical code/docs |
+|---|---|---|
+| Owner bootstrap | implemented | `scripts/bootstrap_tenant.py`, `docs/OWNER_ADMIN_ACCESS.md` |
+| Demo bootstrap | implemented | `scripts/bootstrap_demo_tenant.py`, `docs/DEMO_ACCESS.md` |
+| Custom template catalog card | implemented | `backend/app/api/v1/router.py`, `frontend/src/features/templates/TemplateFormDialog.tsx` |
+| Template version upload + lint + preview | implemented foundation | `backend/app/api/v1/router.py`, `frontend/src/features/templates/TemplateDetails.tsx` |
+| Org/branch-scoped template metadata | implemented foundation | `backend/app/api/v1/router.py`, `docs/TEMPLATE_UPLOAD_AND_RENDERING.md` |
+| Org-specific document generation | implemented foundation | `backend/app/api/routes/documents.py` |

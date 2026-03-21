@@ -24,3 +24,8 @@
 | Training / LMS canonical doc | Done | `docs/TRAINING_AND_LMS.md` |
 | Risk engine canonical doc | Done | `docs/RISK_ENGINE.md` |
 | Acceptance scenarios canonical doc | Done | `docs/ACCEPTANCE_SCENARIOS.md` |
+| Custom template scope/type DTO alignment | Done | `backend/app/api/v1/router.py`, `backend/app/modules/templates/schemas.py`, `frontend/src/types/dto/templates.ts` |
+| Template upload/version/lint/preview canonical doc | Done | `docs/TEMPLATE_UPLOAD_AND_RENDERING.md` |
+| Demo access canonical doc | Done | `docs/DEMO_ACCESS.md` |
+| Owner bootstrap/access canonical doc | Done | `docs/OWNER_ADMIN_ACCESS.md` |
+| User role issuance and scope assignment doc | Done | `docs/USER_ACCESS_AND_ROLES.md` |

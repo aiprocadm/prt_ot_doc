@@ -19,3 +19,7 @@
 - Expanded notification API acceptance coverage in `tests/api/test_notifications_calendar_api.py`.
 - Reworked unread counting to use aggregate SQL count semantics instead of materializing all unread notifications in memory.
 - Updated acceptance, gap, release-readiness, and architecture docs to reflect the real state of notifications/training/risk hardening.
+- enhanced template DTOs with scope/type/current-version/version-history;
+- added template version patch endpoint for lifecycle updates;
+- updated templates UI to show scope/type and use backend-aligned DTOs;
+- added canonical docs for template upload/rendering, demo access, owner/admin access and user access issuance.
