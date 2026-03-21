@@ -31,3 +31,8 @@ Wizard step 5 now supports:
 - retaining short preview history in UI state.
 
 Branding settings now expose separate `Header requisites` and `Footer requisites` fields, matching the backend profile shape used by the document core.
+
+
+## Static-to-real conversion updates
+- `/crm-finance` now uses live tenant-scoped `/contracts`, `/orders`, `/invoices`, and `/billing/plan` API calls instead of a hardcoded demo deals table.
+- The page now exposes loading, error, empty, and local-search states while keeping the existing route and permission contract unchanged.

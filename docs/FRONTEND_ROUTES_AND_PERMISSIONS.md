@@ -28,6 +28,8 @@
 | Инциденты | `/incidents` | `incident.view` |
 | Проверки/предписания | `/inspections`, `/inspection-plans`, `/inspection-checklists`, `/findings`, `/prescriptions`, `/corrective-actions`, `/inspection-prep/packages` | `inspection.view` |
 | CRM / Финансы | `/crm-finance` | `crm_finance.view` |
+
+Примечание: маршрут `/crm-finance` в этой волне переведён с demo-данных на реальные tenant-scoped вызовы `/contracts`, `/orders`, `/invoices` и `/billing/plan` без изменения permission-модели.
 | Отчеты / Экспорты | `/reports`, `/exports`, `/analytics/trends` | `reports.view` |
 | Интеграции | `/integrations` | `integrations.view` |
 | Админка | `/admin`, `/admin/outbox`, `/admin/billing`, `/admin/layout-presets` | `admin.manage_roles` |
