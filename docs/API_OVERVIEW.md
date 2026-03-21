@@ -26,4 +26,4 @@
 - `GET|POST /api/v1/notifications/templates`
 - `GET /api/v1/notifications/calendar/events`
 
-Notification filter enums are now validated in an application service so invalid values return structured 422 payloads with `details.allowed_values` and `field_errors`.
+Notification filter enums, cursor pagination input, and calendar `source` filters are validated in an application service so malformed values return structured 422 payloads with `details`, `field_errors`, and correlation/trace identifiers.
