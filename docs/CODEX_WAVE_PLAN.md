@@ -38,11 +38,12 @@ _Date:_ 2026-03-21
 
 ## Explicitly deferred, with reasons
 - **True ORM module split** of `backend/app/models/models.py`: deferred to avoid breaking SQLAlchemy/Alembic imports in a broad undifferentiated move.
-- **Dashboard tab conversion**: base summary is real, but task/document/readiness tabs still need backend projections rather than ad hoc aggregation.
+- **Dashboard / Attention Center depth**: dashboard tabs now have a backend projection, but they still need richer filters, linked timelines, and deeper attention-center semantics.
 - **Fire safety/reference/settings/activity overview pages**: still need live APIs or richer projection endpoints; not all have adequate existing backend contracts yet.
 - **PWA/offline, data quality, attention center, workflow SLA timers**: left for next waves because they require deeper cross-module persistence and UX work.
 
 ## Incremental follow-up delivered after the baseline pass
+- Converted the remaining static `dashboard` inner tabs to a shared backend projection (`/dashboard/operational`) and bound the page to a normalized dashboard store instead of inline demo arrays.
 - Normalized real-data operational registries on the frontend using shared async/resource hooks rather than duplicating loading/error state per page.
 - Added another compatibility extraction step on the backend (`document_core`) and pointed `backend/app/api/v1/router.py` at compatibility modules for tenant/document-core imports.
 - Added regression tests for route-group composition and compatibility-layer exports.

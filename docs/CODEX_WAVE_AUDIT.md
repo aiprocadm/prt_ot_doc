@@ -32,7 +32,7 @@ Confirmed static or mostly placeholder pages from direct code audit before/aroun
 - `frontend/src/pages/ppe/PpePage.tsx` — static PPE card rows and KPI cards.
 - `frontend/src/pages/prescriptions/PrescriptionsPage.tsx` — title-only stub.
 - `frontend/src/pages/audit-prep/AuditPrepPage.tsx` — static package table.
-- Still placeholder/foundation after this pass: several fire-safety pages, parts of dashboard tabs, reference/settings/admin showcase blocks, activities/CAPA overview, and inspection-prep package screen.
+- Still placeholder/foundation after this pass: several fire-safety pages, reference/settings/admin showcase blocks, activities/CAPA overview, and inspection-prep package screen.
 
 ## Stub / mock / deferred integrations map
 - WebSocket remains explicitly deferred: `backend/app/api/routes/ws_stub.py` returns HTTP 501.
@@ -42,7 +42,7 @@ Confirmed static or mostly placeholder pages from direct code audit before/aroun
 
 ## TODO / deferred map
 - Full decomposition of `backend/app/models/models.py` into true bounded modules is still pending.
-- Dashboard inner tabs still mix real summary data with placeholder projections.
+- Dashboard tabs now use a real backend projection, but they are still a lightweight operational layer rather than the final Attention Center.
 - Attention center/data quality/PWA maturity/workflow SLA hardening remain next-wave work.
 - Realtime UX is still deferred to a future phase; current supported path is REST + polling.
 
@@ -60,7 +60,7 @@ Confirmed static or mostly placeholder pages from direct code audit before/aroun
 - `backend/app/api/v1/router.py` — still fat, but router registration has now been pulled behind a registry layer.
 - `backend/app/models/models.py` — ~3k LOC mega-model and the highest persistence-compatibility risk.
 - `frontend/src/router/AppRouter.tsx` — still the canonical shell, but materially slimmer after route-cluster extraction; future work should evolve `routeGroups.tsx` clusters rather than re-growing `AppRouter.tsx`.
-- `frontend/src/pages/dashboard/DashboardPage.tsx` — still mixes real KPI summary with static inner-tab projections.
+- `frontend/src/pages/dashboard/DashboardPage.tsx` — KPI and inner tabs are now live, but the page still concentrates several operational concerns and remains a candidate for further slice-by-slice decomposition.
 
 ## Incomplete super-TZ areas still visible
 - Universal task/attention/timeline is partial.
@@ -75,6 +75,7 @@ Confirmed static or mostly placeholder pages from direct code audit before/aroun
 - PPE/inspection/prescription pages depend on manager/admin read permissions; UI conversion to real data now surfaces real authz behavior and must not be mistaken for anonymous showcase access.
 
 ## What changed from static/stub to real in this wave
+- `dashboard` inner tabs now read real tenant-scoped operational projections from `/dashboard/operational` for task inbox, recent document pipeline runs, and inspection-prep readiness instead of static arrays in `DashboardPage.tsx`.
 - `warehouse` now reads real tenant-scoped PPE catalog + expiring-issue data from `/ppe/items` and `/ppe/issues/expiring`.
 - `ppe` now reads real issuance history and person context from `/ppe/issues`, `/ppe/items`, and `/persons`.
 - `prescriptions` now renders a real registry backed by `/prescriptions`.
@@ -83,6 +84,7 @@ Confirmed static or mostly placeholder pages from direct code audit before/aroun
 - `audit-prep` now derives package/readiness-like projections from `/inspections`, `/prescriptions`, and overdue `/tasks` instead of static rows.
 
 ## Additional hardening completed in this pass
+- Added a backend operational dashboard projection (`backend/app/api/routes/dashboard.py`) with explicit tenant/authz enforcement and a stable response contract for dashboard task/document/readiness blocks.
 - Frontend operational registries now share a consistent async loading hook (`frontend/src/hooks/useAsyncResource.ts`) and local pagination/search state (`frontend/src/hooks/useLocalRegistry.ts`) instead of page-local ad hoc loading code.
 - Findings, corrective actions, and prescriptions now use the shared registry table shell with search + pagination while preserving the same route/UI meaning.
 - Frontend route composition now also follows a shared pattern: `frontend/src/router/pageRegistry.tsx` centralizes lazy page loaders and `frontend/src/router/routeGroups.tsx` centralizes permission-aware route clusters.

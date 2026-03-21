@@ -19,6 +19,8 @@
 - Invalid tenant-local layout preset references are rejected during branding profile updates with `404 Layout preset not found`.
 
 ## Notifications and cross-cutting contract notes
+- `GET /api/v1/dashboard/summary`
+- `GET /api/v1/dashboard/operational`
 - `GET /api/v1/notifications`
 - `POST /api/v1/notifications/mark-read`
 - `GET|PUT /api/v1/notifications/settings/me`
@@ -27,3 +29,11 @@
 - `GET /api/v1/notifications/calendar/events`
 
 Notification filter enums, cursor pagination input, and calendar `source` filters are validated in an application service so malformed values return structured 422 payloads with `details`, `field_errors`, and correlation/trace identifiers.
+
+## Dashboard operational projections
+- `GET /api/v1/dashboard/summary` remains the KPI-focused contract for cards and high-level counters.
+- `GET /api/v1/dashboard/operational` is the backend-owned projection for:
+  - task inbox rows,
+  - recent document pipeline runs,
+  - inspection-prep readiness score and explainable reasons.
+- Both endpoints are tenant-scoped and protected by the same dashboard read roles, allowing the frontend dashboard to remove placeholder arrays without changing route contracts.
