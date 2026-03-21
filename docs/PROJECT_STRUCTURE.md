@@ -47,3 +47,5 @@
 - `backend/app/models/document_core.py` — compatibility re-exports for document/template/pipeline ORM entities.
 - `frontend/src/hooks/useAsyncResource.ts` — shared async loading/error/reload pattern for live data pages.
 - `frontend/src/hooks/useLocalRegistry.ts` — shared local search + pagination state for registry pages backed by already-loaded API projections.
+- `frontend/src/router/pageRegistry.tsx` — centralized lazy page registry so route extraction does not duplicate import logic.
+- `frontend/src/router/routeGroups.tsx` — grouped route definitions split by permission cluster, preserving all existing route contracts while shrinking `AppRouter.tsx`.

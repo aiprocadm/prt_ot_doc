@@ -22,9 +22,9 @@ _Date:_ 2026-03-21
 - This wave introduced `backend/app/api/v1/route_groups.py` as a compatibility-safe registry layer so `backend/app/api/v1/router.py` stops owning the entire `include_router(...)` topology directly.
 
 ## Frontend route map baseline
-- Canonical route map remains `frontend/src/router/AppRouter.tsx` with permission-aware groupings.
+- Canonical browser entry remains `frontend/src/router/AppRouter.tsx`, but permission-aware route groupings now live in `frontend/src/router/routeGroups.tsx` and lazy page ownership lives in `frontend/src/router/pageRegistry.tsx`.
 - Route inventory still covers dashboards, registries, document core, approvals, search/archive, operational safety modules, client portal, CRM/finance, integrations, and admin surfaces.
-- `AppRouter.tsx` remains a dense route shell and should be decomposed further by route clusters in a future wave.
+- `AppRouter.tsx` is now a thinner bootstrap shell; future decomposition can proceed cluster-by-cluster without reopening the full route monolith.
 
 ## Static / stub page map
 Confirmed static or mostly placeholder pages from direct code audit before/around this pass:
@@ -59,7 +59,7 @@ Confirmed static or mostly placeholder pages from direct code audit before/aroun
 ## Fat files requiring decomposition
 - `backend/app/api/v1/router.py` — still fat, but router registration has now been pulled behind a registry layer.
 - `backend/app/models/models.py` — ~3k LOC mega-model and the highest persistence-compatibility risk.
-- `frontend/src/router/AppRouter.tsx` — large route shell; suitable for route-cluster extraction.
+- `frontend/src/router/AppRouter.tsx` — still the canonical shell, but materially slimmer after route-cluster extraction; future work should evolve `routeGroups.tsx` clusters rather than re-growing `AppRouter.tsx`.
 - `frontend/src/pages/dashboard/DashboardPage.tsx` — still mixes real KPI summary with static inner-tab projections.
 
 ## Incomplete super-TZ areas still visible
@@ -85,4 +85,5 @@ Confirmed static or mostly placeholder pages from direct code audit before/aroun
 ## Additional hardening completed in this pass
 - Frontend operational registries now share a consistent async loading hook (`frontend/src/hooks/useAsyncResource.ts`) and local pagination/search state (`frontend/src/hooks/useLocalRegistry.ts`) instead of page-local ad hoc loading code.
 - Findings, corrective actions, and prescriptions now use the shared registry table shell with search + pagination while preserving the same route/UI meaning.
+- Frontend route composition now also follows a shared pattern: `frontend/src/router/pageRegistry.tsx` centralizes lazy page loaders and `frontend/src/router/routeGroups.tsx` centralizes permission-aware route clusters.
 - Backend progressive model decomposition now also exposes `backend/app/models/document_core.py` so document pipeline/template imports can move away from `app.models.models` incrementally without changing table ownership.

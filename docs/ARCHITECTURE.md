@@ -34,6 +34,7 @@
 
 ## 2026-03-21 architecture decisions (current wave)
 - The v1 router now uses grouped registrations from `backend/app/api/v1/route_groups.py`, which reduces composition sprawl without changing public API paths.
+- The frontend route shell now follows the same compatibility-first pattern: `frontend/src/router/pageRegistry.tsx` owns lazy page imports and `frontend/src/router/routeGroups.tsx` owns permission-aware route clusters, while `AppRouter.tsx` stays as the thin browser/bootstrap composition root.
 - Progressive model decomposition now starts through narrow compatibility modules (`backend/app/models/tenanting.py`, `backend/app/models/ppe_registry.py`) instead of direct risky extraction of SQLAlchemy declarations from `backend/app/models/models.py`.
 - Operational frontend pages should prefer real tenant-scoped backend projections over showcase arrays; this wave applied that pattern to PPE, Warehouse, Prescriptions, and Audit Prep.
 
@@ -41,4 +42,6 @@
 The platform now uses two explicit compatibility seams for staged decomposition without contract breakage:
 - `backend/app/api/v1/route_groups.py` for router topology.
 - `backend/app/models/document_core.py` and `backend/app/models/tenanting.py` for progressive ORM imports away from `app.models.models`.
+- `frontend/src/router/pageRegistry.tsx` for lazy page ownership.
+- `frontend/src/router/routeGroups.tsx` for permission-aware route clusters.
 On the frontend, operational registries are converging on shared hooks + `RegistryTable` instead of bespoke page-local fetch/search state.
