@@ -33,6 +33,7 @@
 |---|---|---|
 | Tenant isolation | `tests/integration/test_tenant_isolation.py`, `tests/integration/test_abac_query_isolation.py` | `./scripts/pytest.sh tests/integration/test_tenant_isolation.py tests/integration/test_abac_query_isolation.py` |
 | Structured errors contract | `tests/test_errors.py`, `tests/e2e/final_regression/test_final_regression_api.py`, `frontend/src/__tests__/apiClient.test.ts`, `frontend/src/__tests__/commonStates.test.tsx` | `./scripts/pytest.sh tests/test_errors.py tests/e2e/final_regression/test_final_regression_api.py && cd frontend && npx vitest run apiClient commonStates` |
+| Notifications contract hardening | `tests/api/test_notifications_calendar_api.py` | `./scripts/pytest.sh tests/api/test_notifications_calendar_api.py` |
 | OpenAPI / contract stability | `tests/contract/test_openapi_contract.py`, `scripts/contract/validate.py` | `./scripts/pytest.sh tests/contract/test_openapi_contract.py && PYTHONPATH=backend python scripts/contract/validate.py` |
 | Idempotent generation / writes | `tests/test_idempotency.py`, `tests/integration/test_idempotency_generate.py`, `tests/integration/test_pipeline_idempotency.py` | `./scripts/pytest.sh tests/test_idempotency.py tests/integration/test_idempotency_generate.py tests/integration/test_pipeline_idempotency.py` |
 | Async status transparency | `tests/integration/test_job_status_flow.py`, `tests/test_outbox_dispatch.py`, `tests/test_webhooks_dispatch.py` | `./scripts/pytest.sh tests/integration/test_job_status_flow.py tests/test_outbox_dispatch.py tests/test_webhooks_dispatch.py` |
@@ -63,5 +64,5 @@ python scripts/pilot_readiness.py
 - Residual risks / accepted limitations: `KNOWN_LIMITATIONS.md`
 
 ### 2026-03-21 notifications hardening evidence
-- `backend/tests/test_notifications_service.py` validates unread counters, mark-read mutation semantics, and predictable validation failures for invalid enum filters.
-- `backend/tests/test_next66_workflow_notifications_npa.py` remains the cross-module regression slice for workflow + notifications + NPA foundations.
+- `tests/api/test_notifications_calendar_api.py` validates unread filters plus predictable structured 422 behavior for invalid enum, cursor, and calendar-source inputs.
+- `tests/test_workflow_api.py` remains the cross-module regression slice for workflow + notifications + NPA foundations.
