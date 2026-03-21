@@ -81,3 +81,8 @@ Confirmed static or mostly placeholder pages from direct code audit before/aroun
 - `findings` now renders a real registry backed by `/findings`.
 - `corrective-actions` now renders a real registry backed by `/corrective-actions`.
 - `audit-prep` now derives package/readiness-like projections from `/inspections`, `/prescriptions`, and overdue `/tasks` instead of static rows.
+
+## Additional hardening completed in this pass
+- Frontend operational registries now share a consistent async loading hook (`frontend/src/hooks/useAsyncResource.ts`) and local pagination/search state (`frontend/src/hooks/useLocalRegistry.ts`) instead of page-local ad hoc loading code.
+- Findings, corrective actions, and prescriptions now use the shared registry table shell with search + pagination while preserving the same route/UI meaning.
+- Backend progressive model decomposition now also exposes `backend/app/models/document_core.py` so document pipeline/template imports can move away from `app.models.models` incrementally without changing table ownership.

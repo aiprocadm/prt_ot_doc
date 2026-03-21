@@ -36,3 +36,8 @@ _Date:_ 2026-03-21
 - **Dashboard tab conversion**: base summary is real, but task/document/readiness tabs still need backend projections rather than ad hoc aggregation.
 - **Fire safety/reference/settings/activity overview pages**: still need live APIs or richer projection endpoints; not all have adequate existing backend contracts yet.
 - **PWA/offline, data quality, attention center, workflow SLA timers**: left for next waves because they require deeper cross-module persistence and UX work.
+
+## Incremental follow-up delivered after the baseline pass
+- Normalized real-data operational registries on the frontend using shared async/resource hooks rather than duplicating loading/error state per page.
+- Added another compatibility extraction step on the backend (`document_core`) and pointed `backend/app/api/v1/router.py` at compatibility modules for tenant/document-core imports.
+- Added regression tests for route-group composition and compatibility-layer exports.

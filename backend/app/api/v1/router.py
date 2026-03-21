@@ -26,7 +26,7 @@ from app.core.security import AccessContext, abac
 from app.core.tracing import get_trace_id
 from app.domains.files.utils import build_dated_prefix
 from app.models.document import Document
-from app.models.models import (
+from app.models.document_core import (
     DocumentPackItem,
     PipelineRun,
     PipelineRunStatus,
@@ -35,10 +35,8 @@ from app.models.models import (
     TemplateUsage,
     TemplateVersion,
     TemplateVersionStatus,
-    Tenant,
-    TenantCounter,
-    TenantQuota,
 )
+from app.models.tenanting import Tenant, TenantCounter, TenantQuota
 from app.modules.files.api import router as files_v1_router
 from app.modules.headers import api as headers_api
 from app.modules.packs import api as packs_v2_api

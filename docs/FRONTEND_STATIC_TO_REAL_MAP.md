@@ -53,3 +53,9 @@ _Date:_ 2026-03-21
   - `audit-prep` is now *real-data-backed*, but still uses a lightweight derived projection rather than a dedicated backend readiness engine.
   - `findings` and `corrective-actions` are now operational registries, but still need richer linked-entity cards/timeline/task orchestration in future waves.
 
+## Registry UX normalization update (2026-03-21)
+Converted pages that already consume real APIs now also share common operational registry behavior:
+- `prescriptions` -> real `/prescriptions` data + shared search/pagination shell.
+- `findings` -> real `/findings` data + shared search/pagination shell.
+- `corrective-actions` -> real `/corrective-actions` data + shared search/pagination shell.
+This removed repeated page-level async boilerplate and aligned the pages with the common `RegistryTable` pattern.

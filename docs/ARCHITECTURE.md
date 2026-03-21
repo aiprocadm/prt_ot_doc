@@ -37,3 +37,8 @@
 - Progressive model decomposition now starts through narrow compatibility modules (`backend/app/models/tenanting.py`, `backend/app/models/ppe_registry.py`) instead of direct risky extraction of SQLAlchemy declarations from `backend/app/models/models.py`.
 - Operational frontend pages should prefer real tenant-scoped backend projections over showcase arrays; this wave applied that pattern to PPE, Warehouse, Prescriptions, and Audit Prep.
 
+## 2026-03-21 incremental hardening note
+The platform now uses two explicit compatibility seams for staged decomposition without contract breakage:
+- `backend/app/api/v1/route_groups.py` for router topology.
+- `backend/app/models/document_core.py` and `backend/app/models/tenanting.py` for progressive ORM imports away from `app.models.models`.
+On the frontend, operational registries are converging on shared hooks + `RegistryTable` instead of bespoke page-local fetch/search state.

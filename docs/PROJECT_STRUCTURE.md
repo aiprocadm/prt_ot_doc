@@ -42,3 +42,8 @@
 - The repository audit now records root expectations, canonical layout sections, unexpected extra manifests, and README/docs index alignment so accidental structural drift is visible in both human-readable and machine-readable outputs.
 - Canonical testing documentation now lives in `docs/TESTING.md`; lowercase `docs/testing.md` remains only as a backward-compatible pointer.
 - There is no separate frontend hidden under `ptd`, `proxy`, or repo root.
+
+## Incremental structure updates
+- `backend/app/models/document_core.py` — compatibility re-exports for document/template/pipeline ORM entities.
+- `frontend/src/hooks/useAsyncResource.ts` — shared async loading/error/reload pattern for live data pages.
+- `frontend/src/hooks/useLocalRegistry.ts` — shared local search + pagination state for registry pages backed by already-loaded API projections.
