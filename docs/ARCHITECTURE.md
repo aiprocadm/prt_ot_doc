@@ -31,3 +31,9 @@
 - Notifications are now split into transport (`backend/app/api/routes/notifications.py`) and application logic (`backend/app/modules/notifications/service.py` + `schemas.py`).
 - This wave specifically targeted a fat-router defect in notifications and converted it into a thinner API boundary without changing endpoint paths.
 - Training and risk remain coherent domain foundations, but docs now classify them explicitly as partial/extension-ready rather than fully closed product areas.
+
+## 2026-03-21 architecture decisions (current wave)
+- The v1 router now uses grouped registrations from `backend/app/api/v1/route_groups.py`, which reduces composition sprawl without changing public API paths.
+- Progressive model decomposition now starts through narrow compatibility modules (`backend/app/models/tenanting.py`, `backend/app/models/ppe_registry.py`) instead of direct risky extraction of SQLAlchemy declarations from `backend/app/models/models.py`.
+- Operational frontend pages should prefer real tenant-scoped backend projections over showcase arrays; this wave applied that pattern to PPE, Warehouse, Prescriptions, and Audit Prep.
+

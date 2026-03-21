@@ -12,7 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, abac
 from app.domains.ppe import issue_ppe_item, list_expiring_issues
-from app.models.models import PPEIssue, PPEIssueStatus, PPEItem, Tenant
+from app.models.ppe_registry import PPEIssue, PPEIssueStatus, PPEItem
+from app.models.tenanting import Tenant
 from app.schemas.ppe import (
     PPEIssueCreate,
     PPEIssuePage,

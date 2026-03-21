@@ -10,7 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, abac
-from app.models.models import Incident, Inspection, Prescription, PrescriptionStatus, Tenant, User
+from app.models.models import Incident, Inspection, Prescription, PrescriptionStatus, User
+from app.models.tenanting import Tenant
 from app.schemas.prescriptions import (
     PrescriptionCreate,
     PrescriptionPage,

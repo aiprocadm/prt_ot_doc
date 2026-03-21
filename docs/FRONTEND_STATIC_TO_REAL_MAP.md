@@ -27,3 +27,23 @@ _Date:_ 2026-03-21
 - inspection prep and audit prep screens
 - several dashboard variants that still need richer live projections
 - additional registry/settings/reference screens already noted in repo audit docs
+
+### PPE / Warehouse / Prescriptions / Audit Prep
+- Routes: `/ppe`, `/warehouse`, `/prescriptions`, `/audit-prep`
+- Previous state:
+  - `/warehouse` rendered hardcoded stock rows.
+  - `/ppe` rendered hardcoded employee PPE cards.
+  - `/prescriptions` was effectively a title-only stub.
+  - `/audit-prep` rendered a static package table.
+- Current state:
+  - `/warehouse` now uses `GET /ppe/items` + `GET /ppe/issues/expiring`.
+  - `/ppe` now uses `GET /ppe/issues`, `GET /ppe/items`, and `GET /persons`.
+  - `/prescriptions` now uses `GET /prescriptions`.
+  - `/audit-prep` now builds a real projection from `GET /inspections`, `GET /prescriptions`, and overdue `GET /tasks`.
+- UI hardening added:
+  - loading / error / empty states
+  - query filtering where useful
+  - KPI cards derived from live tenant data rather than showcase arrays
+- Honest maturity note:
+  - `audit-prep` is now *real-data-backed*, but still uses a lightweight derived projection rather than a dedicated backend readiness engine.
+

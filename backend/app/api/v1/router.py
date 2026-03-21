@@ -14,59 +14,8 @@ from time import perf_counter
 from typing import Annotated, Any, Mapping
 from uuid import UUID
 
-from app.api.dependencies import get_session, get_tenant_record, require_tenant_slug
-from app.api.routes import (
-    admin_authz,
-    admin_users,
-    approval_orchestration,
-    api_tokens,
-    approval_signing_v1,
-    attestations,
-    audit,
-    auth,
-    billing,
-    briefings,
-    calendar,
-    client_portal,
-    companies,
-    compliance,
-    contracts,
-    dashboard,
-    departments,
-    documents,
-    edo_workflow,
-    external_registry,
-    files,
-    incidents,
-    inspections,
-    integration_readiness,
-    invoices,
-    jobs,
-    journals,
-    medical,
-    notifications,
-    npa,
-    obligations,
-    orders,
-    outbox_admin,
-    packs,
-    persons,
-    ppe,
-    prescriptions,
-    public_api,
-    pwa_sync,
-    reports,
-    risk,
-    risk_enterprise,
-    safety_ops,
-    sites,
-    tasks,
-    tenancy,
-    tenants,
-    training,
-    training_next,
-    webhooks,
-)
+from app.api.dependencies import get_session, get_tenant_record
+from app.api.v1.route_groups import create_public_router, create_tenant_router
 from app.core.metrics import PipelineStage, PipelineType, StageResult, get_metrics
 from app.core.payload_constraints import (
     PayloadConstraintError,
@@ -185,77 +134,8 @@ EditorAccess = Annotated[
     Depends(abac(_tenant_resource_id, required_roles=_EDITOR_ROLES, action="write")),
 ]
 
-router = APIRouter()
-tenant_router = APIRouter(dependencies=[Depends(require_tenant_slug)])
-
-router.include_router(auth.router, prefix="/auth", tags=["auth"])
-router.include_router(client_portal.router)
-tenant_router.include_router(audit.router, prefix="/audit", tags=["audit"])
-tenant_router.include_router(admin_users.router, tags=["admin-users"])
-tenant_router.include_router(admin_authz.router)
-tenant_router.include_router(attestations.router, tags=["attestations"])
-tenant_router.include_router(files.router, prefix="/files", tags=["files"])
-tenant_router.include_router(files_v1_router, prefix="/files", tags=["files-v1"])
-tenant_router.include_router(packs.router, prefix="/packs", tags=["packs"])
-tenant_router.include_router(client_portal.presets_router)
-tenant_router.include_router(client_portal.internal_router)
-tenant_router.include_router(incidents.router, tags=["incidents"])
-tenant_router.include_router(inspections.router, tags=["inspections"])
-tenant_router.include_router(prescriptions.router, tags=["prescriptions"])
-tenant_router.include_router(safety_ops.router, tags=["safety-ops"])
-tenant_router.include_router(obligations.router, tags=["obligations"])
-tenant_router.include_router(notifications.router)
-tenant_router.include_router(departments.router, tags=["departments"])
-tenant_router.include_router(contracts.router, tags=["contracts"])
-tenant_router.include_router(dashboard.router, tags=["dashboard"])
-tenant_router.include_router(orders.router, tags=["orders"])
-tenant_router.include_router(invoices.router, tags=["invoices"])
-tenant_router.include_router(npa.router, tags=["npa"])
-tenant_router.include_router(ppe.router, tags=["ppe"])
-tenant_router.include_router(medical.router, tags=["medical"])
-tenant_router.include_router(journals.router, tags=["journals"])
-tenant_router.include_router(risk.router, tags=["risks"])
-tenant_router.include_router(risk_enterprise.router)
-tenant_router.include_router(sites.router, tags=["sites"])
-tenant_router.include_router(documents.router, prefix="/documents", tags=["documents"])
-tenant_router.include_router(edo_workflow.router, tags=["edo-workflow"])
-tenant_router.include_router(approval_signing_v1.router, prefix="/v1", tags=["approval-signing-v1"])
-tenant_router.include_router(approval_orchestration.router, tags=["approval-orchestration"])
-tenant_router.include_router(jobs.router)
-tenant_router.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
-tenant_router.include_router(tenancy.router)
-tenant_router.include_router(outbox_admin.router, prefix="/admin/outbox", tags=["outbox"])
-tenant_router.include_router(webhooks.router)
-tenant_router.include_router(integration_readiness.router)
-tenant_router.include_router(tenants.router)
-tenant_router.include_router(tenants.admin_router)
-tenant_router.include_router(companies.router)
-tenant_router.include_router(persons.router)
-tenant_router.include_router(training.router, tags=["training"])
-tenant_router.include_router(training_next.router)
-tenant_router.include_router(briefings.router)
-tenant_router.include_router(calendar.router)
-tenant_router.include_router(compliance.router)
-tenant_router.include_router(pwa_sync.router)
-tenant_router.include_router(external_registry.router)
-tenant_router.include_router(replace_api.router)
-tenant_router.include_router(reports.router, tags=["reports"])
-tenant_router.include_router(headers_api.router, tags=["layout-presets"])
-tenant_router.include_router(branding_router)
-tenant_router.include_router(pipelines_api.router)
-tenant_router.include_router(workflow_router)
-tenant_router.include_router(pdf_api.router, prefix="/files", tags=["pdf"])
-tenant_router.include_router(packs_v2_api.router)
-tenant_router.include_router(search_router, tags=["search"])
-tenant_router.include_router(analytics_router, tags=["analytics"])
-tenant_router.include_router(export_center_router, tags=["exports"])
-tenant_router.include_router(client_portal_v1_router)
-tenant_router.include_router(public_api.admin_router)
-tenant_router.include_router(public_api.marketplace_router)
-tenant_router.include_router(public_api.router)
-tenant_router.include_router(api_tokens.router)
-tenant_router.include_router(portal_requests_router)
-tenant_router.include_router(billing.router)
+router = create_public_router()
+tenant_router = create_tenant_router()
 
 router.include_router(tenant_router)
 

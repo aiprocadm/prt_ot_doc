@@ -36,3 +36,9 @@ Branding settings now expose separate `Header requisites` and `Footer requisites
 ## Static-to-real conversion updates
 - `/crm-finance` now uses live tenant-scoped `/contracts`, `/orders`, `/invoices`, and `/billing/plan` API calls instead of a hardcoded demo deals table.
 - The page now exposes loading, error, empty, and local-search states while keeping the existing route and permission contract unchanged.
+
+## 2026-03-21 operational page maturity update
+- `/crm-finance`, `/warehouse`, `/ppe`, `/prescriptions`, and `/audit-prep` now use real backend data flows rather than local demo arrays/stubs.
+- The preferred frontend pattern remains: `src/api/*` wrapper -> page-level loading/error/empty states -> shared table/card shell components.
+- Pages still awaiting similar treatment include findings, corrective actions, parts of dashboard tabs, fire safety pages, and inspection-prep showcase screens.
+
