@@ -21,7 +21,7 @@ from fastapi import (
 )
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
@@ -215,6 +215,25 @@ def _apply_naming_pattern(pattern: str | None, row: dict[str, Any], row_index: i
 
     return pattern.format_map(_SafeDict(row_index=row_index, **row))
 
+def _extract_branding_generation_metadata(payload: DocGenerateRequest) -> dict[str, Any] | None:
+    branding_preview = payload.data.get("branding_preview") if isinstance(payload.data, dict) else None
+    if not isinstance(branding_preview, dict):
+        return None
+    data = branding_preview.get("data") if isinstance(branding_preview.get("data"), dict) else {}
+    doc = data.get("doc") if isinstance(data.get("doc"), dict) else {}
+    reproducibility = payload.data.get("reproducibility")
+    if not isinstance(reproducibility, dict):
+        reproducibility = data.get("reproducibility") if isinstance(data.get("reproducibility"), dict) else {}
+    return {
+        "site_id": payload.data.get("siteId") or data.get("branch", {}).get("id"),
+        "preset_code": branding_preview.get("preset_code") or payload.data.get("headerPreset"),
+        "document_title": doc.get("title") or payload.template_code,
+        "document_number": doc.get("number"),
+        "reproducibility": reproducibility,
+        "apply_headers_payload": branding_preview,
+    }
+
+
 def _extract_document_version_id(run: PipelineRun) -> str | None:
     metadata = run.result_metadata or {}
     outputs = run.outputs or {}
@@ -244,7 +263,7 @@ async def _fetch_template(
         Template.tenant_id == tenant_slug,
         TemplateVersion.tenant_id == tenant_slug,
         TemplateVersion.status == TemplateVersionStatus.ACTIVE,
-        Template.name == template_code,
+        or_(Template.code == template_code, Template.name == template_code),
         TemplateVersion.version == template_version,
     ]
 
@@ -491,6 +510,8 @@ async def generate_document(
         if access.role in {"client_admin", "client_user"}:
             access.ensure_company_access(company.id, action="generate documents")
 
+        branding_generation = _extract_branding_generation_metadata(payload)
+
         run, created_run = await _resolve_run(
             session,
             idempotency_key=normalized_key,
@@ -506,6 +527,11 @@ async def generate_document(
             npa_binding_id=payload.npa_binding_id,
             visible_passport=payload.visible_passport,
         )
+
+        if branding_generation:
+            metadata = dict(run.result_metadata or {})
+            metadata["branding"] = branding_generation
+            run.result_metadata = metadata
 
         if created_run:
             audit_service = AuditService(session)

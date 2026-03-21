@@ -98,6 +98,26 @@ class BrandingPreviewRequest(BaseModel):
     watermark_override: dict[str, Any] | None = None
 
 
+
+
+class BrandingGenerationHistoryItem(BaseModel):
+    pipeline_run_id: str
+    company_id: str
+    site_id: str | None = None
+    template_id: str | None = None
+    template_version_id: str | None = None
+    status: str
+    generated_at: str | None = None
+    preset_code: str | None = None
+    document_title: str | None = None
+    document_number: str | None = None
+    output_name: str | None = None
+    reproducibility: dict[str, Any] = Field(default_factory=dict)
+
+
+class BrandingGenerationHistoryResponse(BaseModel):
+    items: list[BrandingGenerationHistoryItem] = Field(default_factory=list)
+
 class BrandingPreviewResponse(BaseModel):
     profile: BrandingProfileRead
     preset_code: str | None = None

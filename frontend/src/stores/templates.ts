@@ -9,6 +9,9 @@ import type { TemplateDto, TemplateStatus, UpdateTemplateDto } from "@/types/dto
 interface TemplateFilters {
   search?: string;
   status?: TemplateStatus;
+  document_type?: string;
+  company_id?: string;
+  site_id?: string;
 }
 
 interface TemplatesState extends PaginatedState<TemplateDto, TemplateFilters> {
@@ -65,10 +68,12 @@ export const useTemplatesStore = create<TemplatesState>()(
       });
       const query = { ...get().filters, ...params, page: get().pagination.page, page_size: get().pagination.page_size };
       try {
-        const { data } = await apiClient.get<PaginatedResponse<TemplateDto>>("/templates", { params: query });
+        const { data } = await apiClient.get<PaginatedResponse<TemplateDto> | { items: TemplateDto[]; total: number }>("/templates", { params: query });
         set((state) => {
           state.items = data.items;
-          state.pagination = data.pagination;
+          state.pagination = "pagination" in data
+            ? data.pagination
+            : { page: get().pagination.page, page_size: get().pagination.page_size, total: data.total };
         });
       } catch (error) {
         set((state) => {

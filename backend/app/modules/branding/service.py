@@ -8,10 +8,10 @@ import json
 from typing import Any
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.models import Company, Site, Tenant
+from app.models.models import Company, PipelineRun, Site, Tenant
 from app.modules.headers.models import HeaderFooterPreset
 from app.modules.headers.placeholders import render_placeholders
 from .schemas import BrandingProfilePayload, BrandingProfileRead, BrandingResolutionMeta
@@ -257,6 +257,52 @@ class BrandingService:
         elif effective_preset_code is None:
             profile.resolution.effective_preset_source = profile.resolution.effective_preset_source or "none"
         return profile, preset, sections, sorted(set(unresolved))
+
+    async def list_generation_history(
+        self,
+        *,
+        company_id: str,
+        site_id: str | None = None,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        await self.get_company(company_id)
+        if site_id:
+            await self.get_site(site_id)
+        stmt = (
+            select(PipelineRun)
+            .where(PipelineRun.tenant_id == self.tenant.id)
+            .order_by(desc(PipelineRun.created_at))
+            .limit(limit)
+        )
+        rows = (await self.session.execute(stmt)).scalars().all()
+        history: list[dict[str, Any]] = []
+        for row in rows:
+            metadata = dict(row.result_metadata or {})
+            if metadata.get("company_id") != company_id:
+                continue
+            branding_meta = dict(metadata.get("branding") or {})
+            if site_id is not None and branding_meta.get("site_id") != site_id:
+                continue
+            if site_id is None and branding_meta.get("site_id") not in (None, ""):
+                continue
+            history.append(
+                {
+                    "pipeline_run_id": row.id,
+                    "company_id": company_id,
+                    "site_id": branding_meta.get("site_id"),
+                    "template_id": row.template_id,
+                    "template_version_id": row.template_version_id,
+                    "status": row.status.value if hasattr(row.status, "value") else str(row.status),
+                    "generated_at": row.created_at.isoformat() if getattr(row, "created_at", None) else None,
+                    "preset_code": branding_meta.get("preset_code"),
+                    "document_title": branding_meta.get("document_title"),
+                    "document_number": branding_meta.get("document_number"),
+                    "output_name": metadata.get("output_name"),
+                    "reproducibility": dict(branding_meta.get("reproducibility") or {}),
+                }
+            )
+        return history
+
 
     def build_apply_headers_payload(
         self,

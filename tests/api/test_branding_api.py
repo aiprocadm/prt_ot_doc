@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy import select
 
-from app.models.models import Company, RoleEnum, Site
+from app.models.models import Company, PipelineRun, PipelineRunStatus, RoleEnum, Site, TemplateVersion, TemplateVersionStatus
 from app.modules.headers.models import HeaderFooterPreset
 
 
@@ -180,3 +180,84 @@ async def test_branding_patch_merges_existing_payload_and_validates_preset(async
     assert payload["branding"]["metadata"]["updated_by"] == "test"
     assert payload["reproducibility"]["branding_payload_hash"]
     assert payload["resolution"]["effective_preset_source"] == "company.preferred_header_preset_code"
+
+
+async def test_branding_generation_history_lists_recent_runs(async_client, sessionmaker, data_factory, make_auth_headers) -> None:
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        company = await data_factory.create_company(tenant=tenant, session=session, name="АО История")
+        site = await data_factory.create_site(tenant=tenant, company=company, session=session, name="Филиал История")
+        template = await data_factory.create_template(tenant=tenant, session=session, name="Приказ")
+        version = TemplateVersion(
+            tenant_id=tenant.id,
+            template_id=template.id,
+            version=1,
+            status=TemplateVersionStatus.ACTIVE,
+            payload_key="templates/history.docx",
+            checksum=b"history",
+            sha256="hash-history",
+            size_bytes=7,
+        )
+        session.add(version)
+        await session.flush()
+        session.add(
+            PipelineRun(
+                tenant_id=tenant.id,
+                template_id=template.id,
+                template_version_id=version.id,
+                status=PipelineRunStatus.DONE,
+                context={},
+                idempotency_key="branding-history-1",
+                result_metadata={
+                    "company_id": company.id,
+                    "branding": {
+                        "site_id": site.id,
+                        "preset_code": "company_brand",
+                        "document_title": "Приказ по ОТ",
+                        "document_number": "OT-2026-001",
+                        "reproducibility": {"branding_payload_hash": "abc123"},
+                    },
+                },
+            )
+        )
+        session.add(
+            PipelineRun(
+                tenant_id=tenant.id,
+                template_id=template.id,
+                template_version_id=version.id,
+                status=PipelineRunStatus.QUEUED,
+                context={},
+                idempotency_key="branding-history-2",
+                result_metadata={
+                    "company_id": company.id,
+                    "branding": {
+                        "preset_code": "org_brand",
+                        "document_title": "Положение",
+                        "document_number": "POL-1",
+                    },
+                },
+            )
+        )
+        await session.commit()
+
+    site_history = await async_client.get(
+        "/api/v1/branding/history",
+        headers=headers,
+        params={"company_id": company.id, "site_id": site.id, "limit": 10},
+    )
+    assert site_history.status_code == 200, site_history.text
+    site_payload = site_history.json()
+    assert len(site_payload["items"]) == 1
+    assert site_payload["items"][0]["preset_code"] == "company_brand"
+    assert site_payload["items"][0]["reproducibility"]["branding_payload_hash"] == "abc123"
+
+    company_history = await async_client.get(
+        "/api/v1/branding/history",
+        headers=headers,
+        params={"company_id": company.id, "limit": 10},
+    )
+    assert company_history.status_code == 200, company_history.text
+    company_payload = company_history.json()
+    assert len(company_payload["items"]) == 1
+    assert company_payload["items"][0]["preset_code"] == "org_brand"

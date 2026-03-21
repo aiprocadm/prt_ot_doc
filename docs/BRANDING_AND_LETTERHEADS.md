@@ -31,6 +31,11 @@ Returns:
 - resolution metadata (`scope_chain`, `effective_preset_source`, preset source diagnostics);
 - reproducibility metadata including branding payload hash, header context hash, rendered section hash, preset content hash, and source entity timestamps.
 
+## Generation history endpoint
+`GET /api/v1/branding/history?company_id=...&site_id=...`
+
+Returns recent single-generation runs that carried branding reproducibility metadata into the pipeline run. This is the canonical source for operator-visible branded issuance history on the organization/branch profile screen.
+
 ## UI paths
 - `/documents/branding` — maintain organization/site brand profile and preview letterheads.
 - `/documents/wizard` step 5 — resolve company/site/preset, preview letterheads, inspect reproducibility metadata, and carry context into generation.

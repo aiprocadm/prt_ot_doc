@@ -36,6 +36,7 @@ export const TemplateDetails = ({ template }: { template: TemplateDto }) => {
     if (!file) return;
     const form = new FormData();
     form.append("file", file);
+    form.append("document_type", template.template_type ?? "custom");
     await apiClient.post(`/templates/${template.id}/versions:upload`, form, {
       headers: { "Content-Type": "multipart/form-data", "Idempotency-Key": `${template.id}-${file.name}` }
     });
@@ -68,9 +69,15 @@ export const TemplateDetails = ({ template }: { template: TemplateDto }) => {
         <p className="text-sm text-muted-foreground">{template.description ?? "Описание отсутствует"}</p>
         <div className="flex flex-wrap gap-2 text-sm">
           {template.category && <Badge variant="secondary">{template.category}</Badge>}
+          {template.status && <Badge variant="outline">{template.status}</Badge>}
+          {template.scope?.level && <Badge variant="outline">scope: {template.scope.level}</Badge>}
           {template.tags?.map((tag) => (
             <Badge key={tag}>{tag}</Badge>
           ))}
+          {template.template_type && <Badge variant="secondary">{template.template_type}</Badge>}
+          <Badge variant="outline">scope: {template.scope?.type ?? "tenant"}</Badge>
+          {template.scope?.company_id && <Badge variant="outline">org: {template.scope.company_id}</Badge>}
+          {template.scope?.site_id && <Badge variant="outline">branch: {template.scope.site_id}</Badge>}
         </div>
         <Tabs defaultValue="versions">
           <TabsList>
@@ -87,10 +94,11 @@ export const TemplateDetails = ({ template }: { template: TemplateDto }) => {
                     <div className="text-xs text-muted-foreground">
                       {formatDate(version.created_at)} • {version.status}
                     </div>
+                    {version.document_type && <div className="text-xs text-muted-foreground">Тип: {version.document_type}</div>}
                   </div>
                   <ActionButton
                     permission={PERMISSIONS.TEMPLATE_ACTIVATE}
-                    abilityResource={{ template: { current_version: template.current_version }, version }}
+                    abilityResource={{ template: { current_version: template.current_version ?? undefined }, version }}
                     variant={template.current_version?.id === version.id ? "secondary" : "outline"}
                     size="sm"
                     disabled={template.current_version?.id === version.id || isActivating}
@@ -126,6 +134,13 @@ export const TemplateDetails = ({ template }: { template: TemplateDto }) => {
           <TabsContent value="meta" className="grid gap-2 text-sm">
             <div>Создано: {formatDate(template.created_at)}</div>
             <div>Обновлено: {formatDate(template.updated_at)}</div>
+            <div>Scope label: {template.scope?.label ?? "—"}</div>
+            <div>Company ID: {template.scope?.company_id ?? "—"}</div>
+            <div>Site / branch ID: {template.scope?.site_id ?? "—"}</div>
+            <div>Applicability: {template.scope?.applicability ?? "—"}</div>
+            <div>Код: {template.code ?? "—"}</div>
+            <div>Тип шаблона: {template.template_type ?? "—"}</div>
+            <div>Scope: {template.scope?.type ?? "tenant"}</div>
           </TabsContent>
         </Tabs>
       </CardContent>

@@ -92,3 +92,40 @@ async def test_notifications_unread_filter_excludes_read(async_client, make_auth
     titles = {item["title"] for item in payload["items"]}
     assert "Unread" in titles
     assert "Read" not in titles
+
+
+async def test_notifications_invalid_cursor_returns_structured_422(async_client, make_auth_headers) -> None:
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+
+    response = await async_client.get(
+        "/api/v1/notifications",
+        headers=headers,
+        params={"cursor": "definitely-not-a-datetime"},
+    )
+
+    assert response.status_code == 422
+    payload = response.json()
+    assert payload["type"] == "validation"
+    assert payload["code"] == "validation_error"
+    assert payload["details"]["provided"] == "definitely-not-a-datetime"
+    assert payload["field_errors"][0]["field"] == "cursor"
+
+
+async def test_notifications_calendar_invalid_source_returns_structured_422(
+    async_client,
+    make_auth_headers,
+) -> None:
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+
+    response = await async_client.get(
+        "/api/v1/notifications/calendar/events",
+        headers=headers,
+        params={"source": "unknown-source"},
+    )
+
+    assert response.status_code == 422
+    payload = response.json()
+    assert payload["type"] == "validation"
+    assert payload["code"] == "validation_error"
+    assert payload["details"]["allowed_values"] == ["task", "training", "ppe", "inspection"]
+    assert payload["field_errors"][0]["field"] == "source"

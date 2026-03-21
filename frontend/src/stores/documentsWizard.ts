@@ -7,6 +7,14 @@ import type { PipelineRun } from "@/api/pipelines";
 
 type RowStatusFilter = "all" | "success" | "failed";
 
+const getPreviewHistoryKey = (preview: BrandingPreviewDto) => {
+  const generatedAt = String(preview.profile.reproducibility?.generated_at ?? "");
+  const companyId = preview.profile.company_id;
+  const siteId = preview.profile.site_id ?? "";
+  const presetCode = preview.preset_code ?? "";
+  return [companyId, siteId, presetCode, generatedAt].join("::");
+};
+
 export type DocumentsWizardState = {
   step: number;
   preset: string;
@@ -69,7 +77,13 @@ export const useDocumentsWizardStore = create<DocumentsWizardState>()(
         set((state) => ({
           ...state,
           brandingPreview: preview,
-          brandingPreviewHistory: [preview, ...state.brandingPreviewHistory].slice(0, 5)
+          brandingPreviewHistory: [preview, ...state.brandingPreviewHistory]
+            .filter(
+              (item, index, items) =>
+                items.findIndex((candidate) => getPreviewHistoryKey(candidate) === getPreviewHistoryKey(item)) ===
+                index
+            )
+            .slice(0, 5)
         })),
       setPartial: (next) => set((state) => ({ ...state, ...next })),
       reset: () => set({ ...baseState, idempotencyKey: createIdempotencyKey() })

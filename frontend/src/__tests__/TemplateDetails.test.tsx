@@ -32,14 +32,16 @@ describe("TemplateDetails", () => {
           code: "order",
           name: "Приказ",
           description: "Шаблон приказа",
+          template_type: "order",
+          scope: { type: "site", company_id: "cmp-1", site_id: "site-1" },
+          version: 1,
           created_at: "2025-01-01T00:00:00Z",
           updated_at: "2025-01-01T00:00:00Z",
-          tags: ["ot"],
           current_version: {
             id: "ver-1",
             template_id: "tpl-1",
-            version: "1",
-            status: "published",
+            version: 1,
+            status: "active",
             created_at: "2025-01-01T00:00:00Z",
             updated_at: "2025-01-01T00:00:00Z"
           },
@@ -47,16 +49,16 @@ describe("TemplateDetails", () => {
             {
               id: "ver-1",
               template_id: "tpl-1",
-              version: "1",
-              status: "published",
+              version: 1,
+              status: "active",
               created_at: "2025-01-01T00:00:00Z",
               updated_at: "2025-01-01T00:00:00Z"
             },
             {
               id: "ver-2",
               template_id: "tpl-1",
-              version: "2",
-              status: "published",
+              version: 2,
+              status: "active",
               created_at: "2025-01-02T00:00:00Z",
               updated_at: "2025-01-02T00:00:00Z"
             }
