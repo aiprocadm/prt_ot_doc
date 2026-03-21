@@ -13,7 +13,7 @@ import { useTemplatesStore } from "@/stores/templates";
 import type { TemplateDto } from "@/types/dto/templates";
 
 const TemplatesPage = () => {
-  const { list } = useTemplatesStore();
+  const { list, getById } = useTemplatesStore();
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateDto | null>(null);
   const { can } = useAbility();
   const canView = can(PERMISSIONS.TEMPLATE_VIEW);
@@ -55,7 +55,9 @@ const TemplatesPage = () => {
       </div>
       <Card>
         <CardContent className="py-6">
-          <TemplateTable onSelect={setSelectedTemplate} />
+          <TemplateTable onSelect={(template) => {
+            getById(template.id).then((loaded) => setSelectedTemplate(loaded ?? template));
+          }} />
         </CardContent>
       </Card>
       {selectedTemplate && <TemplateDetails template={selectedTemplate} />}

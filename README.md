@@ -113,3 +113,5 @@ npm --prefix frontend run build
 - Invalid notification filters (`status`, `priority`, `channel`, `type`) now return structured 422 responses instead of leaking enum conversion failures.
 - Notification cursor parsing and calendar `source` filtering now also fail with the same structured 422 contract instead of surfacing generic server errors for malformed values.
 - Training/LMS, risk-engine, and acceptance-scenario docs were normalized to clearly distinguish implemented foundations from remaining gaps.
+- Template catalog/version DTOs are now aligned with the frontend and expose canonical scope/type/current-version/version-history metadata for custom template work.
+- Repo-level docs now explicitly describe demo access, owner bootstrap, and user role issuance so the next wave can rely on repository artifacts instead of branch memory.

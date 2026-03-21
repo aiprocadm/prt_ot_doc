@@ -25,3 +25,8 @@
 
 ## Current boundary
 Preview preparation and apply-headers handoff are production-ready. Some generation profiles still require explicit chaining of `apply_headers` after DOCX creation rather than automatic inline chaining in every flow.
+
+## Custom template note
+- canonical upload/versioning/scope contract is documented in `docs/TEMPLATE_UPLOAD_AND_RENDERING.md`;
+- branch-specific template work uses backend `Site` as the concrete branch/facility entity;
+- template DTOs now surface `scope`, `template_type`, `current_version`, and `versions` to keep backend/frontend contracts aligned for operator workflows.
