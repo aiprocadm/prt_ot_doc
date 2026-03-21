@@ -9,6 +9,116 @@
       "frontend/src/__tests__"
     ]
   },
+  "canonical_layout": [
+    {
+      "label": "backend",
+      "description": "Backend runtime, domain/application modules, and backend-local tests.",
+      "paths": [
+        {
+          "path": "backend/app",
+          "exists": true
+        },
+        {
+          "path": "backend/app/api",
+          "exists": true
+        },
+        {
+          "path": "backend/app/modules",
+          "exists": true
+        },
+        {
+          "path": "backend/app/domains",
+          "exists": true
+        },
+        {
+          "path": "backend/app/migrations",
+          "exists": true
+        },
+        {
+          "path": "backend/tests",
+          "exists": true
+        }
+      ]
+    },
+    {
+      "label": "frontend",
+      "description": "SPA runtime, route tree, feature pages, shared components, and frontend tests.",
+      "paths": [
+        {
+          "path": "frontend/src",
+          "exists": true
+        },
+        {
+          "path": "frontend/src/router",
+          "exists": true
+        },
+        {
+          "path": "frontend/src/pages",
+          "exists": true
+        },
+        {
+          "path": "frontend/src/components",
+          "exists": true
+        },
+        {
+          "path": "frontend/src/__tests__",
+          "exists": true
+        }
+      ]
+    },
+    {
+      "label": "docs",
+      "description": "Canonical documentation roots, audit reports, ADRs, runbooks, and spec snapshots.",
+      "paths": [
+        {
+          "path": "docs",
+          "exists": true
+        },
+        {
+          "path": "docs/audit",
+          "exists": true
+        },
+        {
+          "path": "docs/ADR",
+          "exists": true
+        },
+        {
+          "path": "docs/runbook",
+          "exists": true
+        },
+        {
+          "path": "docs/spec",
+          "exists": true
+        }
+      ]
+    },
+    {
+      "label": "tooling",
+      "description": "Operational scripts, infrastructure manifests, environment config, seed data, and proxy assets.",
+      "paths": [
+        {
+          "path": "scripts",
+          "exists": true
+        },
+        {
+          "path": "infra",
+          "exists": true
+        },
+        {
+          "path": "config",
+          "exists": true
+        },
+        {
+          "path": "seed",
+          "exists": true
+        },
+        {
+          "path": "proxy",
+          "exists": true
+        }
+      ]
+    }
+  ],
   "backend_paths": [
     {
       "label": "ASGI entrypoint",
@@ -277,12 +387,47 @@
     "required_docs_expected": 20,
     "summary_lines": [
       "Active frontend manifest count: **1**.",
+      "Unexpected extra frontend manifests: **none**.",
       "Backend runtime entrypoint present: **yes**.",
       "Frontend root contains Vite config: **yes**.",
       "Frontend root contains tsconfig: **yes**.",
       "Repo-root compatibility package `app/`: **yes**.",
       "Required docs present: **20/20**."
     ]
+  },
+  "doc_alignment": {
+    "readme_mentions": {
+      "docs/ARCHITECTURE.md": true,
+      "docs/PROJECT_STRUCTURE.md": true,
+      "docs/SETUP.md": true,
+      "docs/BACKEND.md": true,
+      "docs/FRONTEND.md": true,
+      "docs/MODULES.md": true,
+      "docs/API_OVERVIEW.md": true,
+      "docs/DOMAIN_MODEL.md": true,
+      "docs/DOCUMENT_CORE.md": true,
+      "docs/INTEGRATIONS.md": true,
+      "docs/SECURITY.md": true,
+      "docs/OBSERVABILITY.md": true,
+      "docs/TESTING.md": true,
+      "docs/WORKFLOWS_AND_EVENTS.md": true
+    },
+    "docs_index_mentions": {
+      "docs/ARCHITECTURE.md": true,
+      "docs/PROJECT_STRUCTURE.md": true,
+      "docs/SETUP.md": true,
+      "docs/BACKEND.md": true,
+      "docs/FRONTEND.md": true,
+      "docs/MODULES.md": true,
+      "docs/API_OVERVIEW.md": true,
+      "docs/DOMAIN_MODEL.md": true,
+      "docs/DOCUMENT_CORE.md": true,
+      "docs/INTEGRATIONS.md": true,
+      "docs/SECURITY.md": true,
+      "docs/OBSERVABILITY.md": true,
+      "docs/TESTING.md": true,
+      "docs/WORKFLOWS_AND_EVENTS.md": true
+    }
   },
   "legacy_paths": [
     {
@@ -347,6 +492,7 @@
   "generated_from": "scripts/repo_audit.py",
   "consistency_watchlist": [
     "Keep README.md and docs/README.md aligned when startup commands or canonical paths change.",
+    "Keep `.env.example`, `backend/.env.example`, and docs/SETUP.md aligned when environment variables or startup flags change.",
     "Keep legacy compatibility paths out of new imports, routes, and docs references."
   ]
 }

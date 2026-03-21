@@ -17,6 +17,7 @@ Production-minded modular monolith for B2B охрана труда / промы�
 This wave re-audited the repository and confirmed the following canonical paths:
 - backend runtime lives under `backend/app`, while repo-root `app/__init__.py` is a compatibility package for legacy `app.*` imports;
 - frontend runtime lives under `frontend/`, and there is no second active `package.json` outside that root;
+- repository audit output now records canonical layout sections, unexpected extra manifests, and README/docs-index alignment so structural drift is visible in both Markdown and JSON artifacts;
 - branded document functionality is split canonically between `backend/app/modules/branding`, `backend/app/modules/headers`, `frontend/src/pages/branding`, and `frontend/src/pages/documents/DocumentsWizardPage.tsx`;
 - document wizard preview state is now persisted in the wizard store so brand preview, resolution chain, and reproducibility snapshot survive step navigation/reloads.
 
@@ -87,12 +88,16 @@ npm --prefix frontend run build
 - `docs/ARCHITECTURE.md`
 - `docs/PROJECT_STRUCTURE.md`
 - `docs/SETUP.md`
+- `docs/ENV_REFERENCE.md`
 - `docs/BACKEND.md`
 - `docs/FRONTEND.md`
 - `docs/DOCUMENT_CORE.md`
 - `docs/BRANDING_AND_LETTERHEADS.md`
 - `docs/API_OVERVIEW.md`
 - `docs/MODULES.md`
+- `docs/DOMAIN_MODEL.md`
+- `docs/INTEGRATIONS.md`
+- `docs/SECURITY.md`
 - `docs/WORKFLOWS_AND_EVENTS.md`
 - `docs/OBSERVABILITY.md`
 - `docs/TESTING.md`
