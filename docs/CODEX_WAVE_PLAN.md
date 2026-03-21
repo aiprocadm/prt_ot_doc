@@ -7,7 +7,8 @@ _Date:_ 2026-03-21
 2. **Fat-router hardening without API breakage.** Extract route-registration topology from `backend/app/api/v1/router.py` into compatibility-safe grouped registries.
 3. **Progressive mega-model decomposition.** Introduce narrower compatibility import layers for tenant/PPE ORM usage without moving table declarations.
 4. **Static frontend -> real data conversions.** Replace placeholder operational pages with live tenant-aware data flows for PPE/Warehouse/Prescriptions/Findings/Corrective Actions/Audit Prep.
-5. **Regression coverage and architecture docs.** Add focused tests and ADR/docs updates describing what changed and what remains deferred.
+5. **Frontend route-shell hardening.** Extract lazy page registry and permission-aware route clusters from `AppRouter.tsx` without changing deep-links or guards.
+6. **Regression coverage and architecture docs.** Add focused tests and ADR/docs updates describing what changed and what remains deferred.
 
 ## Executed waves
 ### Wave A — Audit and baseline
@@ -27,7 +28,11 @@ _Date:_ 2026-03-21
 - `findings`: live operational registry via hardened `/findings` projections.
 - `corrective-actions`: live CAPA registry via hardened `/corrective-actions` projections.
 
-### Wave D — Verification and documentation
+### Wave D — Frontend route-shell hardening
+- Extracted `frontend/src/router/pageRegistry.tsx` and `frontend/src/router/routeGroups.tsx` so the browser shell remains thin while every existing route path/permission contract stays intact.
+- Added regression coverage protecting critical deep links during future route-cluster changes.
+
+### Wave E — Verification and documentation
 - Added frontend regression tests covering the new operational page flows.
 - Updated architecture/static-to-real docs and created an ADR documenting the compatibility-safe decomposition pattern.
 

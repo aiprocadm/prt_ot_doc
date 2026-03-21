@@ -56,6 +56,8 @@
 - **Admin:** `/admin/*` маршруты под admin permission.
 - **No-access:** `/access-denied`.
 
+Дополнение текущей волны: `frontend/src/router/AppRouter.tsx` теперь остаётся тонким browser/bootstrap shell, а сами permission-aware route clusters вынесены в `frontend/src/router/routeGroups.tsx`; централизованные lazy imports страниц живут в `frontend/src/router/pageRegistry.tsx`. Это снижает риск новых fat-file regressions без изменения route contracts.
+
 ## 7. Общие UI-паттерны
 
 В проекте переиспользуются:
