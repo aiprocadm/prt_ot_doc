@@ -8,10 +8,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ErrorState } from "@/components/common/ErrorState";
+import { EmptyState } from "@/components/common/EmptyState";
+import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { RiskBadge } from "@/components/common/RiskBadge";
 import { SlaIndicator } from "@/components/common/SlaIndicator";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { useDashboardStore } from "@/stores/dashboard";
+import { formatDate } from "@/utils/datetime";
 
 const trainingStatusLabels: Record<string, string> = {
   ok: "OK",
@@ -19,24 +22,22 @@ const trainingStatusLabels: Record<string, string> = {
   critical: "Критично"
 };
 
-const tasks = [
-  { id: "TSK-1024", title: "Согласование пакета проверки Ростехнадзора", owner: "Иванова О.А.", sla: "overdue", label: "Просрочено 2 д" },
-  { id: "TSK-1031", title: "Назначить обучение по высоте", owner: "Петров И.М.", sla: "warning", label: "До дедлайна 6 ч" },
-  { id: "TSK-1045", title: "Подписание договора на СИЗ", owner: "Кузнецов А.А.", sla: "ok", label: "До дедлайна 3 д" }
-];
-
-const documents = [
-  { id: "DOC-223", title: "Положение о ПБ филиал Урал", status: "processing", route: "Согласование", risk: "medium" },
-  { id: "DOC-245", title: "Журнал инструктажей по ОТ", status: "ready", route: "Подписан", risk: "low" },
-  { id: "DOC-268", title: "План мероприятий CAPA", status: "draft", route: "Черновик", risk: "high" }
-];
-
 export const DashboardPage = () => {
-  const { summary, loading, error, fetchSummary } = useDashboardStore();
+  const {
+    summary,
+    operational,
+    loading,
+    operationalLoading,
+    error,
+    operationalError,
+    fetchSummary,
+    fetchOperational
+  } = useDashboardStore();
 
   useEffect(() => {
     fetchSummary();
-  }, [fetchSummary]);
+    fetchOperational();
+  }, [fetchOperational, fetchSummary]);
 
   const trainingStatus = summary?.training.status ?? "ok";
   const trainingLabel = trainingStatusLabels[trainingStatus] ?? trainingStatus;
@@ -92,6 +93,7 @@ export const DashboardPage = () => {
       </div>
 
       <ErrorState error={error ?? undefined} onRetry={fetchSummary} />
+      <ErrorState error={operationalError ?? undefined} onRetry={fetchOperational} />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {kpis.map((item) => (
@@ -145,16 +147,34 @@ export const DashboardPage = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {tasks.map((task) => (
-                    <TableRow key={task.id}>
-                      <TableCell className="font-medium">{task.id}</TableCell>
-                      <TableCell>{task.title}</TableCell>
-                      <TableCell>{task.owner}</TableCell>
-                      <TableCell>
-                        <SlaIndicator status={task.sla as "ok" | "warning" | "overdue"} label={task.label} />
+                  {operationalLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={4}>
+                        <LoadingScreen label="Загрузка task inbox" />
                       </TableCell>
                     </TableRow>
-                  ))}
+                  ) : operational?.tasks.length ? operational.tasks.map((task) => (
+                    <TableRow key={task.id}>
+                      <TableCell className="font-medium">{task.id.slice(0, 8)}</TableCell>
+                      <TableCell>{task.title}</TableCell>
+                      <TableCell>{task.owner_label ?? "Не назначен"}</TableCell>
+                      <TableCell>
+                        <SlaIndicator
+                          status={task.overdue ? "overdue" : task.priority === "critical" || task.priority === "high" ? "warning" : "ok"}
+                          label={task.due_at ? `Срок: ${formatDate(task.due_at)}` : "Без срока"}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  )) : (
+                    <TableRow>
+                      <TableCell colSpan={4}>
+                        <EmptyState
+                          title="Открытых задач нет"
+                          description="Task inbox по текущему tenant сейчас пуст."
+                        />
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
@@ -177,11 +197,17 @@ export const DashboardPage = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {documents.map((doc) => (
+                  {operationalLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={5}>
+                        <LoadingScreen label="Загрузка document pipeline snapshot" />
+                      </TableCell>
+                    </TableRow>
+                  ) : operational?.documents.length ? operational.documents.map((doc) => (
                     <TableRow key={doc.id}>
-                      <TableCell className="font-medium">{doc.id}</TableCell>
+                      <TableCell className="font-medium">{doc.id.slice(0, 8)}</TableCell>
                       <TableCell>{doc.title}</TableCell>
-                      <TableCell>{doc.route}</TableCell>
+                      <TableCell>{doc.route_label}</TableCell>
                       <TableCell>
                         <StatusBadge status={doc.status} />
                       </TableCell>
@@ -189,7 +215,16 @@ export const DashboardPage = () => {
                         <RiskBadge level={doc.risk} />
                       </TableCell>
                     </TableRow>
-                  ))}
+                  )) : (
+                    <TableRow>
+                      <TableCell colSpan={5}>
+                        <EmptyState
+                          title="Запусков нет"
+                          description="Последние document pipeline runs пока отсутствуют."
+                        />
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
@@ -202,26 +237,30 @@ export const DashboardPage = () => {
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
               <div className="rounded-md border bg-muted/30 p-4">
-                <div className="text-sm font-semibold">Ростехнадзор · Плановая</div>
+                <div className="text-sm font-semibold">Inspection prep readiness</div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  24 документа, 3 просрочены, 2 без подписи, 1 не отправлен.
+                  Пакетов: {operational?.readiness.packages_total ?? 0}, gaps: {operational?.readiness.open_gaps ?? 0}, критичных: {operational?.readiness.critical_gaps ?? 0}.
                 </p>
                 <div className="mt-3 flex gap-2">
-                  <Button size="sm">Сформировать пакет</Button>
-                  <Button size="sm" variant="outline">
-                    Открыть чек-лист
+                  <Button size="sm" asChild>
+                    <Link to="/audit-prep">Открыть сводку</Link>
+                  </Button>
+                  <Button size="sm" variant="outline" asChild>
+                    <Link to="/inspection-prep">Пакеты проверки</Link>
                   </Button>
                 </div>
               </div>
               <div className="rounded-md border bg-muted/30 p-4">
-                <div className="text-sm font-semibold">МЧС · Внеплановая</div>
-                <p className="mt-1 text-xs text-muted-foreground">16 документов, нет 2 актов учений.</p>
+                <div className="text-sm font-semibold">Readiness score: {operational?.readiness.readiness_score ?? 0}%</div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {(operational?.readiness.reasons ?? ["Нет данных о readiness."]).join(" ")}
+                </p>
                 <div className="mt-3 flex gap-2">
-                  <Button size="sm" variant="outline">
-                    Заполнить пробелы
+                  <Button size="sm" variant="outline" asChild>
+                    <Link to="/tasks?overdue=true">Открыть blockers</Link>
                   </Button>
-                  <Button size="sm" variant="ghost">
-                    История
+                  <Button size="sm" variant="ghost" asChild>
+                    <Link to="/prescriptions">Предписания</Link>
                   </Button>
                 </div>
               </div>

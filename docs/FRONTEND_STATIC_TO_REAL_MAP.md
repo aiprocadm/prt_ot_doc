@@ -4,6 +4,21 @@ _Date:_ 2026-03-21
 
 ## Converted in this pass
 
+### Dashboard
+- Route: `/`
+- Previous state: KPI cards already used real `/dashboard/summary`, but task/document/readiness tabs still rendered local demo arrays inside `frontend/src/pages/dashboard/DashboardPage.tsx`.
+- Current state: the whole page is now driven by backend projections:
+  - `GET /dashboard/summary`
+  - `GET /dashboard/operational`
+- UI hardening added:
+  - loading/error/empty handling for inner tabs
+  - real task inbox rows with SLA hints
+  - real recent document pipeline rows
+  - real inspection-prep readiness score/reasons and deep-links to related operational pages
+- Notes on maturity:
+  - This is still a lightweight operational projection, not the final universal Attention Center.
+  - The backend now owns the projection contract, so future enrichment can remain backward-compatible.
+
 ### CRM / Финансы
 - Route: `/crm-finance`
 - Previous state: hardcoded `deals` array rendered directly in `frontend/src/pages/crm-finance/CrmFinancePage.tsx`.

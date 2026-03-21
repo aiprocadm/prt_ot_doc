@@ -1,4 +1,4 @@
-"""Dashboard summary endpoints."""
+"""Dashboard summary and operational projection endpoints."""
 
 from __future__ import annotations
 
@@ -6,16 +6,25 @@ from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, abac
+from app.models.document_core import PipelineRun, PipelineRunStatus, Template
 from app.models.models import Incident, IncidentStatus, TrainingPlan
+from app.models.safety_ops import InspectionPrepGap, InspectionPrepPackage
 from app.models.tenanting import Tenant
 from app.models.obligations import Task, TaskPriority, TaskStatus
 from app.models.risk import RiskAssessment
-from app.schemas.dashboard import DashboardSummary, DashboardTrainingSummary
+from app.schemas.dashboard import (
+    DashboardDocumentInboxItem,
+    DashboardOperationalSnapshot,
+    DashboardReadinessSnapshot,
+    DashboardSummary,
+    DashboardTaskInboxItem,
+    DashboardTrainingSummary,
+)
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -110,6 +119,147 @@ async def dashboard_summary(
             overdue=training_overdue,
             due_soon=training_due_soon,
             status=training_status,
+        ),
+        generated_at=now.isoformat(),
+    )
+
+
+def _task_owner_label(task: Task) -> str | None:
+    if task.assignee_id:
+        return task.assignee_id[:8]
+    return "Не назначен"
+
+
+def _pipeline_route_label(status: PipelineRunStatus) -> str:
+    normalized = status.value if hasattr(status, "value") else str(status)
+    return {
+        "queued": "В очереди",
+        "running": "Генерация",
+        "done": "Готов",
+        "error": "Ошибка",
+        "canceled": "Отменен",
+    }.get(normalized, normalized)
+
+
+def _pipeline_risk(status: PipelineRunStatus) -> str:
+    normalized = status.value if hasattr(status, "value") else str(status)
+    if normalized == "error":
+        return "high"
+    if normalized in {"queued", "running"}:
+        return "medium"
+    return "low"
+
+
+@router.get("/operational", response_model=DashboardOperationalSnapshot)
+async def dashboard_operational_snapshot(
+    tenant: Tenant = TenantDep,
+    session: AsyncSession = SessionDep,
+    _: AccessContext = SummaryAccess,
+) -> DashboardOperationalSnapshot:
+    now = datetime.now(timezone.utc)
+    open_task_statuses = [TaskStatus.OPEN, TaskStatus.IN_PROGRESS]
+
+    task_rows = (
+        await session.execute(
+            select(Task)
+            .where(
+                Task.tenant_id == tenant.id,
+                Task.status.in_(open_task_statuses),
+            )
+            .order_by(
+                case((Task.due_at.is_(None), 1), else_=0),
+                Task.due_at.asc(),
+                Task.created_at.desc(),
+            )
+            .limit(5)
+        )
+    ).scalars().all()
+
+    document_rows = (
+        await session.execute(
+            select(PipelineRun, Template)
+            .join(Template, Template.id == PipelineRun.template_id)
+            .where(PipelineRun.tenant_id == tenant.id)
+            .order_by(PipelineRun.created_at.desc())
+            .limit(5)
+        )
+    ).all()
+
+    packages_total = await _scalar(
+        session,
+        select(func.count()).select_from(InspectionPrepPackage).where(
+            InspectionPrepPackage.tenant_id == str(tenant.id),
+            InspectionPrepPackage.deleted_at.is_(None),
+        ),
+    )
+    open_gaps = await _scalar(
+        session,
+        select(func.count()).select_from(InspectionPrepGap).where(
+            InspectionPrepGap.tenant_id == str(tenant.id),
+            InspectionPrepGap.status == "open",
+        ),
+    )
+    critical_gaps = await _scalar(
+        session,
+        select(func.count()).select_from(InspectionPrepGap).where(
+            InspectionPrepGap.tenant_id == str(tenant.id),
+            InspectionPrepGap.status == "open",
+            InspectionPrepGap.severity == "critical",
+        ),
+    )
+    latest_target_date = await session.scalar(
+        select(func.max(InspectionPrepPackage.target_inspection_date)).where(
+            InspectionPrepPackage.tenant_id == str(tenant.id),
+            InspectionPrepPackage.deleted_at.is_(None),
+        )
+    )
+
+    readiness_score = max(0, 100 - min(70, open_gaps * 10 + critical_gaps * 15))
+    reasons: list[str] = []
+    if packages_total == 0:
+        reasons.append("Нет зарегистрированных inspection-prep пакетов.")
+    if open_gaps > 0:
+        reasons.append(f"Есть незакрытые gaps: {open_gaps}.")
+    if critical_gaps > 0:
+        reasons.append(f"Есть критичные blockers: {critical_gaps}.")
+    if not reasons:
+        reasons.append("Открытых blockers не обнаружено.")
+
+    return DashboardOperationalSnapshot(
+        tasks=[
+            DashboardTaskInboxItem(
+                id=str(task.id),
+                title=task.title,
+                owner_label=_task_owner_label(task),
+                due_at=task.due_at.isoformat() if task.due_at else None,
+                priority=task.priority.value if hasattr(task.priority, "value") else str(task.priority),
+                status=task.status.value if hasattr(task.status, "value") else str(task.status),
+                overdue=bool(task.due_at and task.due_at < now),
+                entity_type=task.entity_type,
+                entity_id=task.entity_id,
+            )
+            for task in task_rows
+        ],
+        documents=[
+            DashboardDocumentInboxItem(
+                id=str(run.id),
+                title=template.name,
+                route_label=_pipeline_route_label(run.status),
+                status=run.status.value if hasattr(run.status, "value") else str(run.status),
+                risk=_pipeline_risk(run.status),
+                created_at=run.created_at.isoformat(),
+                template_code=template.code,
+                template_version=None,
+            )
+            for run, template in document_rows
+        ],
+        readiness=DashboardReadinessSnapshot(
+            packages_total=packages_total,
+            open_gaps=open_gaps,
+            critical_gaps=critical_gaps,
+            latest_target_date=latest_target_date.isoformat() if latest_target_date else None,
+            readiness_score=readiness_score,
+            reasons=reasons,
         ),
         generated_at=now.isoformat(),
     )

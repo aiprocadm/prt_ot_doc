@@ -38,7 +38,7 @@ Branding settings now expose separate `Header requisites` and `Footer requisites
 - The page now exposes loading, error, empty, and local-search states while keeping the existing route and permission contract unchanged.
 
 ## 2026-03-21 operational page maturity update
-- `/crm-finance`, `/warehouse`, `/ppe`, `/prescriptions`, `/findings`, `/corrective-actions`, and `/audit-prep` now use real backend data flows rather than local demo arrays/stubs.
+- `/crm-finance`, `/warehouse`, `/ppe`, `/prescriptions`, `/findings`, `/corrective-actions`, `/audit-prep`, and the dashboard inner tabs now use real backend data flows rather than local demo arrays/stubs.
 - The preferred frontend pattern remains: `src/api/*` wrapper -> page-level loading/error/empty states -> shared table/card shell components.
-- Pages still awaiting similar treatment include parts of dashboard tabs, fire safety pages, activities/CAPA overview aggregations, and inspection-prep showcase screens.
-
+- Dashboard tabs specifically now consume `GET /dashboard/summary` + `GET /dashboard/operational` through `src/stores/dashboard.ts`, so future Attention Center expansion can enrich one backend projection contract instead of reintroducing page-local ad hoc arrays.
+- Pages still awaiting similar treatment include fire safety pages, activities/CAPA overview aggregations, and inspection-prep showcase screens.
