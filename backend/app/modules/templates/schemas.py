@@ -3,29 +3,48 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class TemplateScopeDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    level: str = "tenant"
+    company_id: str | None = None
+    site_id: str | None = None
+    label: str | None = None
+    applicability: str | None = None
 
 
 class TemplateCreateRequest(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
     code: str
     name: str
     description: str | None = None
+    category: str | None = None
+    status: str | None = None
+    scope: TemplateScopeDTO = Field(default_factory=TemplateScopeDTO)
 
 
 class TemplatePatchRequest(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
     name: str | None = None
     description: str | None = None
+    category: str | None = None
     status: str | None = None
     current_version_id: str | None = None
     version: int | None = None
+    scope: TemplateScopeDTO | None = None
 
 
 class TemplateDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
     id: str
     code: str | None = None
     name: str
     description: str | None = None
+    category: str | None = None
     status: str | None = None
+    scope: TemplateScopeDTO = Field(default_factory=TemplateScopeDTO)
     current_version_id: str | None = None
     updated_at: datetime
     created_at: datetime
@@ -33,6 +52,7 @@ class TemplateDTO(BaseModel):
 
 
 class TemplateVersionDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
     id: str
     template_id: str
     version_number: int = Field(alias="version")
@@ -47,11 +67,13 @@ class TemplateVersionDTO(BaseModel):
 
 
 class LintRequest(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
     sample_schema: dict[str, Any] | None = None
     required_fields: list[str] | None = None
 
 
 class LintReportDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
     found_fields: list[str]
     blocks: dict[str, Any]
     errors: list[str]
@@ -60,11 +82,13 @@ class LintReportDTO(BaseModel):
 
 
 class PreviewRequest(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
     data: dict[str, Any]
     render_pdf: bool = False
 
 
 class PreviewResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
     job_id: str
     status: str
     docx_url: str
@@ -72,6 +96,7 @@ class PreviewResponse(BaseModel):
 
 
 class RenderPreviewRequest(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
     code: str
     version: int
     data: dict[str, Any]
@@ -80,6 +105,7 @@ class RenderPreviewRequest(BaseModel):
 
 
 class RenderPreviewResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
     file_id: str
     sha256: str
     passport: dict[str, Any]

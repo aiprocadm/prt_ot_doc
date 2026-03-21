@@ -68,6 +68,8 @@ export const TemplateDetails = ({ template }: { template: TemplateDto }) => {
         <p className="text-sm text-muted-foreground">{template.description ?? "Описание отсутствует"}</p>
         <div className="flex flex-wrap gap-2 text-sm">
           {template.category && <Badge variant="secondary">{template.category}</Badge>}
+          {template.status && <Badge variant="outline">{template.status}</Badge>}
+          {template.scope?.level && <Badge variant="outline">scope: {template.scope.level}</Badge>}
           {template.tags?.map((tag) => (
             <Badge key={tag}>{tag}</Badge>
           ))}
@@ -126,6 +128,10 @@ export const TemplateDetails = ({ template }: { template: TemplateDto }) => {
           <TabsContent value="meta" className="grid gap-2 text-sm">
             <div>Создано: {formatDate(template.created_at)}</div>
             <div>Обновлено: {formatDate(template.updated_at)}</div>
+            <div>Scope label: {template.scope?.label ?? "—"}</div>
+            <div>Company ID: {template.scope?.company_id ?? "—"}</div>
+            <div>Site / branch ID: {template.scope?.site_id ?? "—"}</div>
+            <div>Applicability: {template.scope?.applicability ?? "—"}</div>
           </TabsContent>
         </Tabs>
       </CardContent>

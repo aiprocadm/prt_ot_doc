@@ -2,51 +2,39 @@
 
 ## 2026-03-21 wave
 
-### 1. Notifications API boundary hardening
+### Template contract normalization
 **Changed modules/files**
-- `backend/app/api/routes/notifications.py`
-- `backend/app/modules/notifications/__init__.py`
-- `backend/app/modules/notifications/schemas.py`
-- `backend/app/modules/notifications/service.py`
-- `backend/tests/test_notifications_service.py`
+- `backend/app/modules/templates/schemas.py`
+- `backend/app/api/v1/router.py`
+- `backend/app/schemas/common.py`
+- `frontend/src/types/dto/templates.ts`
+- `frontend/src/types/forms/templates.ts`
+- `frontend/src/features/templates/TemplateFormDialog.tsx`
+- `frontend/src/features/templates/TemplateDetails.tsx`
 
 **Decision**
-- Move notification listing, mark-read mutation, settings CRUD, template CRUD, and calendar-event composition out of the FastAPI router into an application-service layer.
+- Keep storage backward-compatible by persisting scope/category in `metadata_json`, while exposing a normalized API/UI contract now.
 
 **Why**
-- The previous router contained query construction, enum parsing, mutation logic, and calendar aggregation directly in the API layer.
-- Invalid enum-like query parameters could raise inconsistent exceptions.
-- Unread counts were computed by loading rows rather than via aggregate count.
+- Repo already had template entities and working flows; big-bang schema rewrite would be risky.
+- The next wave needs a clear canonical contract in code and docs.
 
-**Result**
-- Router is thinner and closer to transport-only responsibilities.
-- Notification filters now fail predictably with structured validation payloads.
-- Cross-entity notification/calendar behavior remains backward-compatible at the endpoint level.
+### Generation lookup hardening
+**Changed files**
+- `backend/app/api/routes/documents.py`
 
-### 2. Documentation normalization for next-wave self-sufficiency
+**Decision**
+- Resolve templates by `code` or legacy `name`.
+
+**Why**
+- Existing code used both conventions in different places, creating fragile production behavior.
+
+### Access/bootstrap documentation
 **Changed docs**
 - `README.md`
-- `docs/ARCHITECTURE.md`
-- `docs/MODULES.md`
-- `docs/API_OVERVIEW.md`
-- `docs/WORKFLOWS_AND_EVENTS.md`
-- `docs/TESTING.md`
-- `docs/TRAINING_AND_LMS.md`
-- `docs/RISK_ENGINE.md`
-- `docs/ACCEPTANCE_SCENARIOS.md`
-- `docs/audit/TZ_COVERAGE_MATRIX.md`
-- `ACCEPTANCE_TEST_MATRIX.md`
-- `GAP_REPORT.md`
-- `RELEASE_READINESS.md`
-- `KNOWN_LIMITATIONS.md`
-- `CHANGELOG.md`
-
-**Decision**
-- Prefer explicit “full / partial / foundation” wording over optimistic descriptions where modules are real but not yet fully acceptance-closed.
-
-**Why**
-- The next task must be able to infer true repo status from docs alone.
-- Training, risk, and notifications needed clearer canonical-path references and implementation posture.
-
-**Result**
-- The repository now documents the hardened notifications boundary and more accurately describes partial domains without deleting working functionality.
+- `docs/DOCUMENT_CORE.md`
+- `docs/TEMPLATE_UPLOAD_AND_RENDERING.md`
+- `docs/DEMO_ACCESS.md`
+- `docs/OWNER_ADMIN_ACCESS.md`
+- `docs/USER_ACCESS_AND_ROLES.md`
+- root release/gap/acceptance docs.
