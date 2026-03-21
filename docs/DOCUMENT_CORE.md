@@ -8,6 +8,16 @@
 - PDF: `backend/app/modules/pdf/` + celery tasks.
 - Document passport: `backend/app/modules/templates/service.py`, `backend/app/modules/doc_render/passport.py`, `backend/app/core/utils/pdf_passport.py`.
 
+## Implemented building blocks
+- tenant/company/site branding inheritance;
+- branch/site branding overrides feed the effective branch display name used in header/footer rendering;
+- first / odd / even header and footer sections;
+- placeholder rendering with unresolved-placeholder reporting;
+- watermark resolution from preset + profile + request override;
+- explicit `header_details` + `footer_details` fields for stable letterhead requisites;
+- reproducibility metadata for branding payload, header context, rendered sections, preset content, and entity timestamps;
+- async idempotent header application endpoint and Celery job;
+- frontend wizard handoff using backend-returned `apply_headers_payload`.
 ## Current state after audit
 ### Implemented
 - template catalog;
