@@ -24,3 +24,6 @@
 - `app.modules.notifications` — notification listing, mark-read mutation, template/settings CRUD, calendar aggregation boundary, and structured validation for enum/cursor/source query inputs.
 - `app.modules.training` / `app.domains.training` — training/LMS-ready foundations, still partial.
 - `app.modules.risk` / `app.domains.risk` — risk engine foundations, still partial.
+
+## Operational registry normalization
+The prescriptions/findings/corrective-actions frontend modules now follow a common pattern: real tenant-scoped API -> shared async loader -> shared registry shell. This keeps working behavior intact while reducing per-page divergence.
