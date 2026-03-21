@@ -150,7 +150,7 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, ValidationError
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -353,6 +353,47 @@ async def _enforce_tenant_generation_quota(session: AsyncSession, tenant: Tenant
     counter.doc_generations += 1
 
 
+
+
+def _template_scope_from_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
+    payload = metadata or {}
+    scope = payload.get("scope") if isinstance(payload.get("scope"), dict) else {}
+    return {
+        "level": str(scope.get("level") or "tenant"),
+        "company_id": scope.get("company_id"),
+        "site_id": scope.get("site_id"),
+        "label": scope.get("label"),
+        "applicability": scope.get("applicability"),
+    }
+
+
+def _template_metadata_payload(*, category: str | None = None, scope: dict[str, Any] | None = None, extra: dict[str, Any] | None = None) -> dict[str, Any]:
+    metadata: dict[str, Any] = {}
+    if category:
+        metadata["category"] = category
+    normalized_scope = _template_scope_from_metadata({"scope": scope or {}})
+    metadata["scope"] = normalized_scope
+    if extra:
+        metadata.update(extra)
+    return metadata
+
+
+def _template_to_dto(template: Template) -> TemplateDTO:
+    metadata = template.metadata_json or {}
+    payload = {
+        "id": template.id,
+        "code": template.code,
+        "name": template.name,
+        "description": template.description,
+        "category": metadata.get("category"),
+        "status": template.status.value if hasattr(template.status, "value") else str(template.status),
+        "scope": _template_scope_from_metadata(metadata),
+        "current_version_id": template.current_version_id,
+        "updated_at": template.updated_at,
+        "created_at": template.created_at,
+        "version": template.version,
+    }
+    return TemplateDTO.model_validate(payload)
 def _tenant_scope(tenant: Tenant) -> tuple[str, ...]:
     values = [tenant.slug]
     if getattr(tenant, "id", None):
@@ -725,6 +766,8 @@ async def create_template_catalog(
         code=payload.code,
         name=payload.name,
         description=payload.description,
+        metadata_json=_template_metadata_payload(category=payload.category, scope=payload.scope.model_dump(mode="json")),
+        status=TemplateStatus(payload.status) if payload.status else TemplateStatus.DRAFT,
         status=TemplateStatus(payload.status or TemplateStatus.DRAFT.value),
         domain=payload.template_type,
         metadata_json={
@@ -747,6 +790,7 @@ async def create_template_catalog(
     )
     await session.commit()
     await session.refresh(template)
+    return _template_to_dto(template)
     await session.refresh(template)
     return _build_template_dto(template)
 
@@ -756,6 +800,7 @@ async def get_template_details(template_id: str, session: SessionDep, tenant: Te
     template = await session.get(Template, template_id)
     if template is None or template.tenant_id not in _tenant_scope(tenant) or template.deleted_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Template not found")
+    return _template_to_dto(template)
     return _build_template_dto(template, include_versions=True)
 
 
@@ -771,6 +816,10 @@ async def patch_template(
     template = await session.get(Template, template_id)
     if template is None or template.tenant_id not in _tenant_scope(tenant) or template.deleted_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Template not found")
+    before = {"name": template.name, "description": template.description, "status": str(template.status), "current_version_id": template.current_version_id, "version": template.version, "metadata_json": dict(template.metadata_json or {})}
+    if payload.version is not None and payload.version != template.version:
+        raise HTTPException(status.HTTP_409_CONFLICT, {"code": "optimistic_lock_mismatch", "type": "conflict", "message": "template version mismatch"})
+    for key in ("name", "description", "current_version_id"):
     before = {"code": template.code, "name": template.name, "description": template.description, "status": str(template.status), "current_version_id": template.current_version_id, "version": template.version, "domain": template.domain, "metadata_json": dict(template.metadata_json or {})}
     if payload.version is not None and payload.version != template.version:
         raise HTTPException(status.HTTP_409_CONFLICT, {"code": "optimistic_lock_mismatch", "type": "conflict", "message": "template version mismatch"})
@@ -780,6 +829,12 @@ async def patch_template(
             setattr(template, key, value)
     if payload.status is not None:
         template.status = TemplateStatus(payload.status)
+    metadata = dict(template.metadata_json or {})
+    if payload.category is not None:
+        metadata["category"] = payload.category
+    if payload.scope is not None:
+        metadata["scope"] = payload.scope.model_dump(mode="json")
+    template.metadata_json = metadata
     if payload.template_type is not None:
         template.domain = payload.template_type
         template.metadata_json = {**(template.metadata_json or {}), "template_type": payload.template_type}
@@ -798,6 +853,11 @@ async def patch_template(
         ip=request.client.host if request.client else "unknown",
         request_id=get_trace_id(request),
         user_agent=request.headers.get("user-agent"),
+        changed_fields=field_level_diff(before, {"name": template.name, "description": template.description, "status": str(template.status), "current_version_id": template.current_version_id, "version": template.version, "metadata_json": dict(template.metadata_json or {})}),
+    )
+    await session.commit()
+    await session.refresh(template)
+    return _template_to_dto(template)
         changed_fields=field_level_diff(before, {"code": template.code, "name": template.name, "description": template.description, "status": str(template.status), "current_version_id": template.current_version_id, "version": template.version, "domain": template.domain, "metadata_json": dict(template.metadata_json or {})}),
     )
     await session.commit()
@@ -862,8 +922,8 @@ async def upload_template_version(
         profile=_parse_json_object(profile, field="profile"),
     )
     session.add(version)
-    template.current_version_id = version.id
     await session.flush()
+    template.current_version_id = version.id
     dto = TemplateVersionDTO.model_validate(version)
     if idem_service and idem_record:
         await idem_service.store_success(idem_record, status_code=status.HTTP_201_CREATED, body=dto.model_dump(mode="json", by_alias=True))

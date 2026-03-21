@@ -16,6 +16,17 @@ interface TemplateFormDialogProps {
   onSubmitted?: (template: TemplateDto) => void;
 }
 
+const toFormScope = (scope: TemplateDto["scope"] | undefined) => ({
+  level: scope?.level ?? "tenant",
+  company_id: scope?.company_id ?? undefined,
+  site_id: scope?.site_id ?? undefined,
+  label: scope?.label ?? undefined,
+  applicability: scope?.applicability ?? undefined
+});
+
+const toFormStatus = (status: TemplateDto["status"] | undefined): TemplateFormValues["status"] =>
+  status === "active" || status === "archived" ? status : "draft";
+
 export const TemplateFormDialog = ({ trigger, initialData, onSubmitted }: TemplateFormDialogProps) => {
   const form = useForm<TemplateFormValues>({
     resolver: zodResolver(templateSchema),
@@ -23,6 +34,10 @@ export const TemplateFormDialog = ({ trigger, initialData, onSubmitted }: Templa
       code: initialData?.code ?? "",
       name: initialData?.name ?? "",
       description: initialData?.description ?? "",
+      category: initialData?.category ?? "",
+      status: toFormStatus(initialData?.status),
+      scope: toFormScope(initialData?.scope),
+      tags: initialData?.tags ?? []
       template_type: initialData?.template_type ?? "",
       status: initialData?.status === "archived" ? "archived" : initialData?.status === "active" ? "active" : "draft",
       scope: {
@@ -41,6 +56,10 @@ export const TemplateFormDialog = ({ trigger, initialData, onSubmitted }: Templa
         code: initialData.code ?? "",
         name: initialData.name,
         description: initialData.description ?? "",
+        category: initialData.category ?? "",
+        status: toFormStatus(initialData.status),
+        scope: toFormScope(initialData.scope),
+        tags: initialData.tags ?? []
         template_type: initialData.template_type ?? "",
         status: initialData.status === "archived" ? "archived" : initialData.status === "active" ? "active" : "draft",
         scope: {
@@ -111,11 +130,52 @@ export const TemplateFormDialog = ({ trigger, initialData, onSubmitted }: Templa
               <Input id="template-site-id" {...form.register("scope.site_id")} />
             </div>
           </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="template-status">
+                Статус
+              </label>
+              <select id="template-status" className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" {...form.register("status")}>
+                <option value="draft">draft</option>
+                <option value="active">active</option>
+                <option value="archived">archived</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="template-scope-level">
+                Scope
+              </label>
+              <select id="template-scope-level" className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" {...form.register("scope.level")}>
+                <option value="tenant">tenant</option>
+                <option value="company">company</option>
+                <option value="site">site / branch</option>
+                <option value="system">system</option>
+              </select>
+            </div>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="template-scope-company">Company ID</label>
+              <Input id="template-scope-company" {...form.register("scope.company_id")} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="template-scope-site">Site / Branch ID</label>
+              <Input id="template-scope-site" {...form.register("scope.site_id")} />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium" htmlFor="template-scope-label">Подпись scope</label>
+            <Input id="template-scope-label" {...form.register("scope.label")} />
+          </div>
           <div className="space-y-2">
             <label className="text-sm font-medium" htmlFor="template-description">
               Описание
             </label>
             <Textarea id="template-description" rows={4} {...form.register("description")} />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium" htmlFor="template-applicability">Область применения</label>
+            <Textarea id="template-applicability" rows={3} {...form.register("scope.applicability")} />
           </div>
           <DialogFooter>
             <Button type="submit" disabled={form.formState.isSubmitting}>

@@ -1,5 +1,13 @@
 import type { BaseEntityDto } from "./common";
 
+export type TemplateStatus = "draft" | "active" | "published" | "uploaded" | "linted" | "ready" | "archived" | "deprecated";
+
+export interface TemplateScopeDto {
+  level: "system" | "tenant" | "company" | "site" | string;
+  company_id?: string | null;
+  site_id?: string | null;
+  label?: string | null;
+  applicability?: string | null;
 export type TemplateStatus = "draft" | "active" | "archived" | "uploaded" | "linted" | "ready" | "deprecated";
 
 export interface TemplateScopeDto {
@@ -27,6 +35,13 @@ export interface TemplateVersionDto extends BaseEntityDto {
 export interface TemplateDto extends BaseEntityDto {
   code?: string | null;
   name: string;
+  description?: string;
+  category?: string;
+  status?: TemplateStatus;
+  scope?: TemplateScopeDto;
+  tags?: string[];
+  current_version?: TemplateVersionDto;
+  current_version_id?: string;
   description?: string | null;
   status?: TemplateStatus | null;
   current_version_id?: string | null;
@@ -42,6 +57,11 @@ export interface UpdateTemplateDto {
   code?: string;
   name: string;
   description?: string;
+  category?: string;
+  status?: TemplateStatus;
+  scope?: TemplateScopeDto;
+  tags?: string[];
+  version_id?: string;
   template_type?: string;
   scope?: TemplateScopeDto;
   status?: "draft" | "active" | "archived";

@@ -21,7 +21,7 @@ from fastapi import (
 )
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
@@ -263,7 +263,7 @@ async def _fetch_template(
         Template.tenant_id == tenant_slug,
         TemplateVersion.tenant_id == tenant_slug,
         TemplateVersion.status == TemplateVersionStatus.ACTIVE,
-        Template.name == template_code,
+        or_(Template.code == template_code, Template.name == template_code),
         TemplateVersion.version == template_version,
     ]
 
