@@ -6,7 +6,7 @@ _Date:_ 2026-03-21
 1. **Repo audit + baseline docs.** Consolidate canonical entrypoints, active roots, placeholder maps, and compatibility risks in repo docs.
 2. **Fat-router hardening without API breakage.** Extract route-registration topology from `backend/app/api/v1/router.py` into compatibility-safe grouped registries.
 3. **Progressive mega-model decomposition.** Introduce narrower compatibility import layers for tenant/PPE ORM usage without moving table declarations.
-4. **Static frontend -> real data conversions.** Replace placeholder operational pages with live tenant-aware data flows for PPE/Warehouse/Prescriptions/Audit Prep.
+4. **Static frontend -> real data conversions.** Replace placeholder operational pages with live tenant-aware data flows for PPE/Warehouse/Prescriptions/Findings/Corrective Actions/Audit Prep.
 5. **Regression coverage and architecture docs.** Add focused tests and ADR/docs updates describing what changed and what remains deferred.
 
 ## Executed waves
@@ -24,6 +24,8 @@ _Date:_ 2026-03-21
 - `ppe`: live employee issuance cards from PPE + persons APIs.
 - `prescriptions`: live prescriptions registry.
 - `audit-prep`: live package projection derived from inspections + prescriptions + overdue tasks.
+- `findings`: live operational registry via hardened `/findings` projections.
+- `corrective-actions`: live CAPA registry via hardened `/corrective-actions` projections.
 
 ### Wave D — Verification and documentation
 - Added frontend regression tests covering the new operational page flows.
@@ -32,5 +34,5 @@ _Date:_ 2026-03-21
 ## Explicitly deferred, with reasons
 - **True ORM module split** of `backend/app/models/models.py`: deferred to avoid breaking SQLAlchemy/Alembic imports in a broad undifferentiated move.
 - **Dashboard tab conversion**: base summary is real, but task/document/readiness tabs still need backend projections rather than ad hoc aggregation.
-- **Findings/corrective actions/fire safety/reference/settings**: still need live APIs or projection endpoints; not all have adequate existing backend contracts yet.
+- **Fire safety/reference/settings/activity overview pages**: still need live APIs or richer projection endpoints; not all have adequate existing backend contracts yet.
 - **PWA/offline, data quality, attention center, workflow SLA timers**: left for next waves because they require deeper cross-module persistence and UX work.

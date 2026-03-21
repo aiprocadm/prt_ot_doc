@@ -32,7 +32,7 @@ Confirmed static or mostly placeholder pages from direct code audit before/aroun
 - `frontend/src/pages/ppe/PpePage.tsx` — static PPE card rows and KPI cards.
 - `frontend/src/pages/prescriptions/PrescriptionsPage.tsx` — title-only stub.
 - `frontend/src/pages/audit-prep/AuditPrepPage.tsx` — static package table.
-- Still placeholder/foundation after this pass: `findings`, `corrective-actions`, several fire-safety pages, parts of dashboard tabs, reference/settings/admin showcase blocks, and inspection-prep package screen.
+- Still placeholder/foundation after this pass: several fire-safety pages, parts of dashboard tabs, reference/settings/admin showcase blocks, activities/CAPA overview, and inspection-prep package screen.
 
 ## Stub / mock / deferred integrations map
 - WebSocket remains explicitly deferred: `backend/app/api/routes/ws_stub.py` returns HTTP 501.
@@ -49,7 +49,7 @@ Confirmed static or mostly placeholder pages from direct code audit before/aroun
 ## Acceptance coverage baseline
 - Backend already contains broad tests for tenancy, billing, approvals, search, pipelines, incidents/inspections/CAPA prep, notifications, replace, files, portal, and workflow surfaces.
 - Frontend already contains smoke/permission/store tests for dashboards, documents, portal, tasks, CRM/finance, routes, and API client behavior.
-- This wave adds focused frontend coverage for newly-realized operational pages (`warehouse`, `prescriptions`, `audit-prep`).
+- This wave adds focused frontend coverage for newly-realized operational pages (`warehouse`, `prescriptions`, `findings`, `corrective-actions`, `audit-prep`).
 
 ## Repo duplication / legacy map
 - `backend/app/models/models.py` remains the mega-model compatibility module; new canonical imports in this wave start using narrower compatibility layers (`backend/app/models/tenanting.py`, `backend/app/models/ppe_registry.py`).
@@ -78,4 +78,6 @@ Confirmed static or mostly placeholder pages from direct code audit before/aroun
 - `warehouse` now reads real tenant-scoped PPE catalog + expiring-issue data from `/ppe/items` and `/ppe/issues/expiring`.
 - `ppe` now reads real issuance history and person context from `/ppe/issues`, `/ppe/items`, and `/persons`.
 - `prescriptions` now renders a real registry backed by `/prescriptions`.
+- `findings` now renders a real registry backed by `/findings`.
+- `corrective-actions` now renders a real registry backed by `/corrective-actions`.
 - `audit-prep` now derives package/readiness-like projections from `/inspections`, `/prescriptions`, and overdue `/tasks` instead of static rows.
