@@ -5,6 +5,7 @@
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt -r requirements-dev.txt
+cp .env.example .env
 alembic -c backend/app/migrations/alembic.ini upgrade head
 uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
 ```
@@ -24,6 +25,13 @@ celery -A backend.app.worker worker --loglevel=info
 ```bash
 ./ptd --help
 ```
+
+## Environment source of truth
+- Base environment templates: `.env.example` and `backend/.env.example`
+- Human-readable variable reference: `docs/ENV_REFERENCE.md`
+- Multi-tenant defaults to review before first boot: `DEFAULT_TENANT_SLUG`, `ADMIN_TENANT`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`
+- Infra/service endpoints to align with Docker or local services: `DATABASE_URL`, `REDIS_URL`, `CELERY_BROKER_URL`, `S3_ENDPOINT`
+- Document/PDF pipeline settings to review on workstation installs: `LIBREOFFICE_BIN`, `PDF_LIBREOFFICE_TIMEOUT_SECONDS`, `FONTS_PATH`
 
 ## Verification
 ```bash

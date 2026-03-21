@@ -9,6 +9,13 @@
 - `src/main.tsx`
 - `src/router/AppRouter.tsx`
 
+## Canonical frontend layering
+- `src/router/` — route composition, shell wiring, protected navigation.
+- `src/pages/` — feature screens and workflow-specific operator views.
+- `src/components/` — reusable enterprise UI building blocks.
+- `src/stores/` — persisted UI state, including document wizard continuity.
+- `src/__tests__/` — route, screen, and shared client-side regression coverage.
+
 ## Document-core screens
 - `/documents/branding` — organization/site branding settings, preview history, server-side branded generation history, reproducibility snapshot.
 - `/documents/wizard` — step-based wizard for template selection, batch generation and branded preview before generation.

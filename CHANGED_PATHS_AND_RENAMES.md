@@ -14,6 +14,7 @@
 
 ## Structural/doc changes in this wave
 - Rebuilt `scripts/repo_audit.py` into a single canonical implementation after merge corruption, so the generated audit report once again captures canonical entrypoints, config inventory, repo-root directories, root expectations, required docs coverage, and legacy path guidance in both Markdown and JSON formats.
+- Expanded `scripts/repo_audit.py` so the audit snapshot now also records canonical layout sections, unexpected extra manifests, and README/docs index alignment in both Markdown and JSON outputs.
 - Added `docs/WORKFLOWS_AND_EVENTS.md` as the canonical workflow/event map.
 - Added `docs/OBSERVABILITY.md` as the canonical health/metrics/logging/tracing reference.
 - Canonicalized testing documentation to `docs/TESTING.md` and reduced `docs/testing.md` to a compatibility pointer.

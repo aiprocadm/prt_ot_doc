@@ -33,12 +33,55 @@ class ExistenceCheck:
     description: str
 
 
+@dataclass(frozen=True)
+class CanonicalSection:
+    label: str
+    paths: tuple[str, ...]
+    description: str
+
+
 CANONICAL_ROOTS = {
     "backend_root": "backend",
     "frontend_root": "frontend",
     "docs_root": "docs",
     "tests_roots": ["tests", "integration_tests", "frontend/src/__tests__"],
 }
+
+CANONICAL_LAYOUT: tuple[CanonicalSection, ...] = (
+    CanonicalSection(
+        "backend",
+        (
+            "backend/app",
+            "backend/app/api",
+            "backend/app/modules",
+            "backend/app/domains",
+            "backend/app/migrations",
+            "backend/tests",
+        ),
+        "Backend runtime, domain/application modules, and backend-local tests.",
+    ),
+    CanonicalSection(
+        "frontend",
+        (
+            "frontend/src",
+            "frontend/src/router",
+            "frontend/src/pages",
+            "frontend/src/components",
+            "frontend/src/__tests__",
+        ),
+        "SPA runtime, route tree, feature pages, shared components, and frontend tests.",
+    ),
+    CanonicalSection(
+        "docs",
+        ("docs", "docs/audit", "docs/ADR", "docs/runbook", "docs/spec"),
+        "Canonical documentation roots, audit reports, ADRs, runbooks, and spec snapshots.",
+    ),
+    CanonicalSection(
+        "tooling",
+        ("scripts", "infra", "config", "seed", "proxy"),
+        "Operational scripts, infrastructure manifests, environment config, seed data, and proxy assets.",
+    ),
+)
 
 BACKEND_PATHS: tuple[CanonicalPath, ...] = (
     CanonicalPath("ASGI entrypoint", "backend/app/main.py", "Uvicorn/FastAPI runtime entrypoint."),
@@ -154,6 +197,56 @@ def build_inventory() -> dict[str, list[str]]:
     }
 
 
+def build_layout_sections() -> list[dict[str, object]]:
+    sections: list[dict[str, object]] = []
+    for section in CANONICAL_LAYOUT:
+        entries = []
+        for path in section.paths:
+            entries.append(
+                {
+                    "path": path,
+                    "exists": (REPO_ROOT / path).exists(),
+                }
+            )
+        sections.append(
+            {
+                "label": section.label,
+                "description": section.description,
+                "paths": entries,
+            }
+        )
+    return sections
+
+
+def build_doc_alignment() -> dict[str, object]:
+    readme_text = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    docs_index_text = (REPO_ROOT / "docs/README.md").read_text(encoding="utf-8")
+    canonical_links = [
+        "docs/ARCHITECTURE.md",
+        "docs/PROJECT_STRUCTURE.md",
+        "docs/SETUP.md",
+        "docs/BACKEND.md",
+        "docs/FRONTEND.md",
+        "docs/MODULES.md",
+        "docs/API_OVERVIEW.md",
+        "docs/DOMAIN_MODEL.md",
+        "docs/DOCUMENT_CORE.md",
+        "docs/INTEGRATIONS.md",
+        "docs/SECURITY.md",
+        "docs/OBSERVABILITY.md",
+        "docs/TESTING.md",
+        "docs/WORKFLOWS_AND_EVENTS.md",
+    ]
+    return {
+        "readme_mentions": {
+            path: (path in readme_text) for path in canonical_links
+        },
+        "docs_index_mentions": {
+            path: (path.removeprefix("docs/") in docs_index_text) for path in canonical_links
+        },
+    }
+
+
 def build_root_expectations() -> list[dict[str, object]]:
     results: list[dict[str, object]] = []
     for item in ROOT_EXPECTATIONS:
@@ -174,8 +267,10 @@ def build_root_expectations() -> list[dict[str, object]]:
 def build_findings(inventory: dict[str, list[str]]) -> list[str]:
     required_docs_present = len(existing(REQUIRED_DOCS))
     required_docs_expected = len(REQUIRED_DOCS)
+    duplicate_frontend_roots = [path for path in inventory["package_jsons"] if path != "frontend/package.json"]
     return [
         f"Active frontend manifest count: **{len(inventory['package_jsons'])}**.",
+        f"Unexpected extra frontend manifests: **{', '.join(duplicate_frontend_roots) if duplicate_frontend_roots else 'none'}**.",
         f"Backend runtime entrypoint present: **{'yes' if (REPO_ROOT / 'backend/app/main.py').exists() else 'no'}**.",
         f"Frontend root contains Vite config: **{'yes' if (REPO_ROOT / 'frontend/vite.config.ts').exists() else 'no'}**.",
         f"Frontend root contains tsconfig: **{'yes' if (REPO_ROOT / 'frontend/tsconfig.json').exists() else 'no'}**.",
@@ -203,6 +298,7 @@ def build_payload() -> dict[str, object]:
     required_docs_expected = len(REQUIRED_DOCS)
     return {
         "canonical_roots": CANONICAL_ROOTS,
+        "canonical_layout": build_layout_sections(),
         "backend_paths": [asdict(item) for item in existing(BACKEND_PATHS)],
         "frontend_paths": [asdict(item) for item in existing(FRONTEND_PATHS)],
         "required_docs": [asdict(item) for item in existing(REQUIRED_DOCS)],
@@ -218,11 +314,13 @@ def build_payload() -> dict[str, object]:
             "required_docs_expected": required_docs_expected,
             "summary_lines": build_findings(inventory),
         },
+        "doc_alignment": build_doc_alignment(),
         "legacy_paths": build_legacy_pairs(),
         "legacy_pairs": build_legacy_pairs(),
         "generated_from": rel(Path(__file__)),
         "consistency_watchlist": [
             "Keep README.md and docs/README.md aligned when startup commands or canonical paths change.",
+            "Keep `.env.example`, `backend/.env.example`, and docs/SETUP.md aligned when environment variables or startup flags change.",
             "Keep legacy compatibility paths out of new imports, routes, and docs references.",
         ],
     }
@@ -240,8 +338,17 @@ def render_markdown(payload: dict[str, object]) -> str:
         f"- Repository docs root: `{payload['canonical_roots']['docs_root']}` plus root release/audit reports.",
         "- Tests roots: " + ", ".join(f"`{item}`" for item in payload["canonical_roots"]["tests_roots"]) + ".",
         "",
-        "## Active backend entrypoints and configs",
+        "## Canonical layout sections",
     ]
+    for section in payload["canonical_layout"]:
+        lines.append(f"- **{section['label']}:** {section['description']}")
+        lines.extend(
+            f"  - `{item['path']}` exists={item['exists']}" for item in section["paths"]
+        )
+    lines.extend([
+        "",
+        "## Active backend entrypoints and configs",
+    ])
     lines.extend(
         f"- **{item['label']}:** `{item['path']}` — {item['description']}" for item in payload["backend_paths"]
     )
@@ -278,6 +385,13 @@ def render_markdown(payload: dict[str, object]) -> str:
             lines.append("  - _none found_")
     lines.extend(["", "## Structural findings"])
     lines.extend(f"- {item}" for item in payload["findings"]["summary_lines"])
+    lines.extend(["", "## README / docs index alignment"])
+    lines.append("- README.md canonical doc references:")
+    for path, present in payload["doc_alignment"]["readme_mentions"].items():
+        lines.append(f"  - `{path}` present={present}")
+    lines.append("- docs/README.md canonical doc references:")
+    for path, present in payload["doc_alignment"]["docs_index_mentions"].items():
+        lines.append(f"  - `{path.removeprefix('docs/')}` present={present}")
     lines.extend(["", "## Legacy / compatibility paths to keep out of new code"])
     for item in payload["legacy_pairs"]:
         lines.append(
