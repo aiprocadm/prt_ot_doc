@@ -11,7 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, abac
-from app.models.models import Incident, IncidentStatus, Tenant, TrainingPlan
+from app.models.models import Incident, IncidentStatus, TrainingPlan
+from app.models.tenanting import Tenant
 from app.models.obligations import Task, TaskPriority, TaskStatus
 from app.models.risk import RiskAssessment
 from app.schemas.dashboard import DashboardSummary, DashboardTrainingSummary
