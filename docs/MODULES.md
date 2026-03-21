@@ -19,3 +19,8 @@
 - `scripts/branded_document_smoke.py`
 - `tests/api/test_branding_api.py`
 - `tests/headers/test_engine.py`
+
+## Additional canonical modules hardened in this wave
+- `app.modules.notifications` — notification listing, mark-read mutation, template/settings CRUD, and calendar aggregation boundary.
+- `app.modules.training` / `app.domains.training` — training/LMS-ready foundations, still partial.
+- `app.modules.risk` / `app.domains.risk` — risk engine foundations, still partial.

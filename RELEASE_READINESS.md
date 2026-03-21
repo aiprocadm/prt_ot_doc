@@ -18,3 +18,7 @@
 - Validate one tenant end-to-end: company + site + preset + preview + generated DOCX + `apply-headers` smoke.
 - Explicitly verify which production pipeline profiles auto-chain `apply_headers` and which require a separate step.
 - Keep new ADRs under `docs/ADR/` and new approval work under `backend/app/modules/approvals/` until legacy duplicates can be retired safely.
+
+## Additional readiness notes — 2026-03-21
+- Notifications API is now materially closer to production boundaries: thin router, explicit service layer, structured enum validation, aggregate unread counts.
+- Training/LMS and risk docs are now explicit enough for the next wave to continue from repo state without prompt memory.

@@ -26,3 +26,8 @@
 - `src/pages/branding` for brand profile management.
 - `src/pages/documents` for generation wizard.
 - `src/stores/` for persisted wizard state and tenant context.
+
+## 2026-03-21 audit-driven adjustments
+- Notifications are now split into transport (`backend/app/api/routes/notifications.py`) and application logic (`backend/app/modules/notifications/service.py` + `schemas.py`).
+- This wave specifically targeted a fat-router defect in notifications and converted it into a thinner API boundary without changing endpoint paths.
+- Training and risk remain coherent domain foundations, but docs now classify them explicitly as partial/extension-ready rather than fully closed product areas.
