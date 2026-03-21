@@ -70,12 +70,11 @@ export const TemplateDetails = ({ template }: { template: TemplateDto }) => {
         <div className="flex flex-wrap gap-2 text-sm">
           {template.category && <Badge variant="secondary">{template.category}</Badge>}
           {template.status && <Badge variant="outline">{template.status}</Badge>}
-          {template.scope?.level && <Badge variant="outline">scope: {template.scope.level}</Badge>}
+          {template.scope?.type && <Badge variant="outline">scope: {template.scope.type}</Badge>}
           {template.tags?.map((tag) => (
             <Badge key={tag}>{tag}</Badge>
           ))}
           {template.template_type && <Badge variant="secondary">{template.template_type}</Badge>}
-          <Badge variant="outline">scope: {template.scope?.type ?? "tenant"}</Badge>
           {template.scope?.company_id && <Badge variant="outline">org: {template.scope.company_id}</Badge>}
           {template.scope?.site_id && <Badge variant="outline">branch: {template.scope.site_id}</Badge>}
         </div>
@@ -135,6 +134,7 @@ export const TemplateDetails = ({ template }: { template: TemplateDto }) => {
             <div>Создано: {formatDate(template.created_at)}</div>
             <div>Обновлено: {formatDate(template.updated_at)}</div>
             <div>Scope label: {template.scope?.label ?? "—"}</div>
+            <div>Tenant scope: {template.scope?.tenant_id ?? "—"}</div>
             <div>Company ID: {template.scope?.company_id ?? "—"}</div>
             <div>Site / branch ID: {template.scope?.site_id ?? "—"}</div>
             <div>Applicability: {template.scope?.applicability ?? "—"}</div>

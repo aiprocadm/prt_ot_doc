@@ -1,7 +1,8 @@
 import { z } from "zod";
 
 export const templateScopeSchema = z.object({
-  level: z.string().default("tenant"),
+  type: z.enum(["tenant", "organization", "site", "global", "system", "legal_entity"]).default("tenant"),
+  tenant_id: z.string().optional(),
   company_id: z.string().optional(),
   site_id: z.string().optional(),
   label: z.string().optional(),
@@ -14,16 +15,10 @@ export const templateSchema = z.object({
   description: z.string().optional(),
   category: z.string().optional(),
   status: z.enum(["draft", "active", "archived"]).default("draft"),
-  scope: templateScopeSchema.default({ level: "tenant" }),
+  scope: templateScopeSchema.default({ type: "tenant" }),
   tags: z.array(z.string()).optional(),
-  version_id: z.string().optional()
-  template_type: z.string().optional(),
-  status: z.enum(["draft", "active", "archived"]).default("draft"),
-  scope: z.object({
-    type: z.enum(["tenant", "organization", "site", "global"]),
-    company_id: z.string().optional(),
-    site_id: z.string().optional()
-  }).default({ type: "tenant" })
+  version_id: z.string().optional(),
+  template_type: z.string().optional()
 });
 
 export type TemplateFormValues = z.infer<typeof templateSchema>;

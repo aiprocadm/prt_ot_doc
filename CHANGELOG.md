@@ -5,6 +5,8 @@
 - Hardened template catalog contract with category/status/scope fields.
 - Fixed template version upload so the uploaded version becomes `current_version_id` consistently.
 - Normalized generation-time template resolution to support both `code` and legacy `name` lookups.
+- Removed duplicate/broken template schema and router fragments that were causing invalid backend/frontend template contracts.
+- Restored a coherent templates UI contract by fixing DTOs, form schema and the template form dialog around `scope.type`.
 - Added regression tests for template scope metadata and current-version linking.
 
 ### Added

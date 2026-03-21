@@ -88,3 +88,4 @@
 - Normalized template API DTOs so frontend can work with backend-native scope/type/current-version/version-history fields.
 - Added explicit template scope documentation and surfaced scope metadata in the templates UI.
 - Documented canonical demo access, owner bootstrap and user access issuance flows from repo code instead of relying on branch memory.
+- Removed duplicate template router/schema/frontend form fragments so the repository has one coherent custom-template contract again.

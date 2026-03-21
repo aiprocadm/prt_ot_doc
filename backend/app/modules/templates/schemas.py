@@ -8,7 +8,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class TemplateScopeDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
-    level: str = "tenant"
+    type: str = "tenant"
+    tenant_id: str | None = None
     company_id: str | None = None
     site_id: str | None = None
     label: str | None = None
@@ -22,17 +23,12 @@ class TemplateCreateRequest(BaseModel):
     description: str | None = None
     category: str | None = None
     status: str | None = None
+    template_type: str | None = None
     scope: TemplateScopeDTO = Field(default_factory=TemplateScopeDTO)
 
 
 class TemplatePatchRequest(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
-    template_type: str | None = None
-    scope: dict[str, Any] | None = None
-    status: str | None = None
-
-
-class TemplatePatchRequest(BaseModel):
     code: str | None = None
     name: str | None = None
     description: str | None = None
@@ -42,7 +38,6 @@ class TemplatePatchRequest(BaseModel):
     version: int | None = None
     scope: TemplateScopeDTO | None = None
     template_type: str | None = None
-    scope: dict[str, Any] | None = None
 
 
 class TemplateDTO(BaseModel):
@@ -60,7 +55,6 @@ class TemplateDTO(BaseModel):
     version: int
     metadata_json: dict[str, Any] | None = None
     template_type: str | None = None
-    scope: dict[str, Any] | None = None
     current_version: "TemplateVersionDTO | None" = None
     versions: list["TemplateVersionDTO"] = Field(default_factory=list)
 
