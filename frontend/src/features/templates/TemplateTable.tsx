@@ -26,14 +26,19 @@ export const TemplateTable = ({ onSelect }: TemplateTableProps) => {
         )
       },
       {
-        accessorKey: "category",
-        header: "Категория",
-        cell: ({ row }) => row.original.category ?? "—"
+        accessorKey: "template_type",
+        header: "Тип",
+        cell: ({ row }) => row.original.template_type ?? row.original.current_version?.document_type ?? "—"
       },
       {
         accessorKey: "current_version.status",
         header: "Статус",
         cell: ({ row }) => <StatusBadge status={row.original.current_version?.status} />
+      },
+      {
+        accessorKey: "scope.type",
+        header: "Scope",
+        cell: ({ row }) => row.original.scope?.type ?? "tenant"
       },
       {
         accessorKey: "updated_at",

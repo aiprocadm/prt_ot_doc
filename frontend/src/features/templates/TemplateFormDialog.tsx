@@ -23,8 +23,13 @@ export const TemplateFormDialog = ({ trigger, initialData, onSubmitted }: Templa
       code: initialData?.code ?? "",
       name: initialData?.name ?? "",
       description: initialData?.description ?? "",
-      category: initialData?.category ?? "",
-      tags: initialData?.tags ?? []
+      template_type: initialData?.template_type ?? "",
+      status: initialData?.status === "archived" ? "archived" : initialData?.status === "active" ? "active" : "draft",
+      scope: {
+        type: initialData?.scope?.type === "site" ? "site" : initialData?.scope?.type === "organization" || initialData?.scope?.type === "legal_entity" ? "organization" : initialData?.scope?.type === "global" ? "global" : "tenant",
+        company_id: initialData?.scope?.company_id ?? "",
+        site_id: initialData?.scope?.site_id ?? ""
+      }
     }
   });
 
@@ -36,8 +41,13 @@ export const TemplateFormDialog = ({ trigger, initialData, onSubmitted }: Templa
         code: initialData.code ?? "",
         name: initialData.name,
         description: initialData.description ?? "",
-        category: initialData.category ?? "",
-        tags: initialData.tags ?? []
+        template_type: initialData.template_type ?? "",
+        status: initialData.status === "archived" ? "archived" : initialData.status === "active" ? "active" : "draft",
+        scope: {
+          type: initialData.scope?.type === "site" ? "site" : initialData.scope?.type === "organization" || initialData.scope?.type === "legal_entity" ? "organization" : initialData.scope?.type === "global" ? "global" : "tenant",
+          company_id: initialData.scope?.company_id ?? "",
+          site_id: initialData.scope?.site_id ?? ""
+        }
       });
     }
   }, [initialData, form]);
@@ -69,10 +79,37 @@ export const TemplateFormDialog = ({ trigger, initialData, onSubmitted }: Templa
             <Input id="template-name" {...form.register("name")} />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium" htmlFor="template-category">
-              Категория
+            <label className="text-sm font-medium" htmlFor="template-type">
+              Тип шаблона
             </label>
-            <Input id="template-category" {...form.register("category")} />
+            <Input id="template-type" placeholder="order / instruction / protocol" {...form.register("template_type")} />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium" htmlFor="template-status">Статус</label>
+            <select id="template-status" className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" {...form.register("status")}>
+              <option value="draft">draft</option>
+              <option value="active">published/active</option>
+              <option value="archived">archived</option>
+            </select>
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="template-scope-type">Scope</label>
+              <select id="template-scope-type" className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" {...form.register("scope.type")}>
+                <option value="tenant">Tenant</option>
+                <option value="organization">Организация</option>
+                <option value="site">Филиал / площадка</option>
+                <option value="global">Global/System</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="template-company-id">Company ID</label>
+              <Input id="template-company-id" {...form.register("scope.company_id")} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="template-site-id">Site ID</label>
+              <Input id="template-site-id" {...form.register("scope.site_id")} />
+            </div>
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium" htmlFor="template-description">
