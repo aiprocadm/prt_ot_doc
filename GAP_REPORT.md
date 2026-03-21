@@ -26,6 +26,7 @@
 ### Closed
 - Fat-router notification logic was moved into a dedicated application module with reusable schemas/service boundaries.
 - Invalid notification enum filters no longer rely on raw enum casting behavior.
+- Malformed notification cursors and unsupported calendar sources now fail with the same structured 422 contract instead of producing generic failures or ambiguous empty feeds.
 - Training/LMS and risk-engine documentation now clearly state their true maturity and canonical code paths.
 
 ### Remaining

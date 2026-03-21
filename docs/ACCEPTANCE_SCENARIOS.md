@@ -13,6 +13,7 @@ This document is the human-readable companion to `ACCEPTANCE_TEST_MATRIX.md`. It
 ## 3. Workflow / notifications / deadlines
 - Task/deadline surfaces, unread notifications, template-based notifications, and cross-entity calendar events.
 - Verification sources: `backend/app/modules/workflow/`, `backend/app/api/routes/notifications.py`, `backend/app/modules/notifications/service.py`, `backend/app/models/notifications.py`.
+- Contract note: notification query validation is acceptance-relevant because invalid enum values, malformed cursors, and unsupported calendar sources must fail with the canonical structured-error payload rather than a generic 500.
 
 ## 4. Training assignment / due dates / reminders
 - Training plans and due-date visibility through notifications/calendar.

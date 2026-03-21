@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Final
 
 from app.models.models import Inspection, PPEIssue, Tenant, TrainingPlan
 from app.models.notifications import (
@@ -26,6 +27,8 @@ from app.modules.notifications.schemas import (
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+CALENDAR_SOURCES: Final[tuple[str, ...]] = ("task", "training", "ppe", "inspection")
 
 
 class NotificationApplicationService:
@@ -53,6 +56,8 @@ class NotificationApplicationService:
                 detail={
                     "message": f"Unsupported {field_name}: {raw_value}",
                     "type": "validation",
+                    "allowed_values": allowed_values,
+                    "provided": raw_value,
                     "field_errors": [
                         {
                             "field": field_name,
@@ -60,9 +65,77 @@ class NotificationApplicationService:
                             "type": "enum",
                         }
                     ],
-                    "details": {"allowed_values": allowed_values, "provided": raw_value},
                 },
             ) from exc
+
+    @classmethod
+    def _validation_error(
+        cls,
+        *,
+        field_name: str,
+        message: str,
+        allowed_values: list[str] | None = None,
+        provided: str | None = None,
+        error_type: str = "validation",
+        field_error_type: str = "validation_error",
+    ) -> HTTPException:
+        details: dict[str, object] = {}
+        if allowed_values is not None:
+            details["allowed_values"] = allowed_values
+        if provided is not None:
+            details["provided"] = provided
+        payload: dict[str, object] = {
+            "message": message,
+            "type": error_type,
+            "field_errors": [
+                {
+                    "field": field_name,
+                    "message": message,
+                    "type": field_error_type,
+                }
+            ],
+        }
+        payload.update(details)
+        return HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=payload,
+        )
+
+    @classmethod
+    def _parse_cursor(cls, raw_value: str | None) -> datetime | None:
+        if raw_value is None:
+            return None
+        normalized = raw_value.strip()
+        if not normalized:
+            return None
+        if normalized.endswith("Z"):
+            normalized = f"{normalized[:-1]}+00:00"
+        try:
+            return datetime.fromisoformat(normalized)
+        except ValueError as exc:
+            raise cls._validation_error(
+                field_name="cursor",
+                message="Cursor must be a valid ISO-8601 datetime",
+                provided=raw_value,
+                field_error_type="datetime_format",
+            ) from exc
+
+    @classmethod
+    def _parse_calendar_source(cls, raw_value: str | None) -> str | None:
+        if raw_value is None:
+            return None
+        normalized = raw_value.strip().lower()
+        if not normalized:
+            return None
+        if normalized not in CALENDAR_SOURCES:
+            raise cls._validation_error(
+                field_name="source",
+                message=f"Unsupported source: {raw_value}",
+                allowed_values=list(CALENDAR_SOURCES),
+                provided=raw_value,
+                field_error_type="enum",
+            )
+        return normalized
 
     @classmethod
     def _to_notification_read(cls, item: Notification) -> NotificationRead:
@@ -114,6 +187,7 @@ class NotificationApplicationService:
         notification_priority = self._parse_enum(NotificationPriority, priority_value, "priority")
         notification_channel = self._parse_enum(NotificationChannel, channel_value, "channel")
         notification_type = self._parse_enum(NotificationType, type_value, "type")
+        created_before = self._parse_cursor(cursor)
 
         stmt = select(Notification).where(
             Notification.tenant_id == self.tenant.id,
@@ -131,8 +205,8 @@ class NotificationApplicationService:
             stmt = stmt.where(Notification.channel == notification_channel)
         if notification_type is not None:
             stmt = stmt.where(Notification.type == notification_type)
-        if cursor:
-            stmt = stmt.where(Notification.created_at < datetime.fromisoformat(cursor))
+        if created_before is not None:
+            stmt = stmt.where(Notification.created_at < created_before)
 
         rows = (
             await self.session.execute(stmt.order_by(Notification.created_at.desc()).limit(limit + 1))
@@ -274,6 +348,7 @@ class NotificationApplicationService:
     async def list_calendar_events(self, *, status_value: str | None, source: str | None) -> list[CalendarEventRead]:
         events: list[CalendarEventRead] = []
         plan_task_status = self._parse_enum(PlanTaskStatus, status_value, "status") if status_value else None
+        calendar_source = self._parse_calendar_source(source)
 
         task_stmt = select(PlanTask).where(
             PlanTask.tenant_id == self.tenant.id,
@@ -286,7 +361,7 @@ class NotificationApplicationService:
             await self.session.execute(task_stmt.order_by(PlanTask.due_at.asc()).limit(300))
         ).scalars().all()
         for row in task_rows:
-            if source and source != "task":
+            if calendar_source and calendar_source != "task":
                 continue
             if row.due_at is None:
                 continue
@@ -313,7 +388,7 @@ class NotificationApplicationService:
             )
         ).scalars().all()
         for row in training_rows:
-            if source and source != "training":
+            if calendar_source and calendar_source != "training":
                 continue
             if row.due_date is None:
                 continue
@@ -339,7 +414,7 @@ class NotificationApplicationService:
             )
         ).scalars().all()
         for row in ppe_rows:
-            if source and source != "ppe":
+            if calendar_source and calendar_source != "ppe":
                 continue
             if row.expires_at is None:
                 continue
@@ -365,7 +440,7 @@ class NotificationApplicationService:
             )
         ).scalars().all()
         for row in inspection_rows:
-            if source and source != "inspection":
+            if calendar_source and calendar_source != "inspection":
                 continue
             if row.scheduled_at is None:
                 continue

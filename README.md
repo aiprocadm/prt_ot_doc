@@ -111,4 +111,5 @@ npm --prefix frontend run build
 ## 2026-03-21 hardening highlights
 - Notifications API was refactored into `backend/app/modules/notifications/` so routers no longer own query/mutation/calendar aggregation logic.
 - Invalid notification filters (`status`, `priority`, `channel`, `type`) now return structured 422 responses instead of leaking enum conversion failures.
+- Notification cursor parsing and calendar `source` filtering now also fail with the same structured 422 contract instead of surfacing generic server errors for malformed values.
 - Training/LMS, risk-engine, and acceptance-scenario docs were normalized to clearly distinguish implemented foundations from remaining gaps.

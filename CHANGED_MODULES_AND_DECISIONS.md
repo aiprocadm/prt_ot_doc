@@ -8,7 +8,7 @@
 - `backend/app/modules/notifications/__init__.py`
 - `backend/app/modules/notifications/schemas.py`
 - `backend/app/modules/notifications/service.py`
-- `backend/tests/test_notifications_service.py`
+- `tests/api/test_notifications_calendar_api.py`
 
 **Decision**
 - Move notification listing, mark-read mutation, settings CRUD, template CRUD, and calendar-event composition out of the FastAPI router into an application-service layer.
@@ -22,6 +22,25 @@
 - Router is thinner and closer to transport-only responsibilities.
 - Notification filters now fail predictably with structured validation payloads.
 - Cross-entity notification/calendar behavior remains backward-compatible at the endpoint level.
+
+### 1.1. Notification query-contract completion
+**Changed modules/files**
+- `backend/app/modules/notifications/service.py`
+- `tests/api/test_notifications_calendar_api.py`
+- `docs/API_OVERVIEW.md`
+- `docs/ACCEPTANCE_SCENARIOS.md`
+- `ACCEPTANCE_TEST_MATRIX.md`
+
+**Decision**
+- Finish the notification query normalization pass by validating cursor pagination input and calendar `source` filters in the same application service boundary as enum filters.
+
+**Why**
+- The router had already been thinned, but malformed `cursor` values could still bubble into `datetime.fromisoformat(...)` and become generic server errors.
+- Calendar aggregation silently accepted arbitrary `source` strings and returned misleading empty results instead of an explicit contract failure.
+
+**Result**
+- Notifications endpoints now reject malformed cursor and source values with the canonical structured 422 payload.
+- Acceptance evidence and docs now describe the full query-validation surface instead of only enum filters.
 
 ### 2. Documentation normalization for next-wave self-sufficiency
 **Changed docs**
