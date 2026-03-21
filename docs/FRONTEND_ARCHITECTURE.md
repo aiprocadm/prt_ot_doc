@@ -70,3 +70,8 @@
 - часть сложных потоков пока реализована как list-first без полноценных карточек расследования/жизненного цикла;
 - server-side сортировка/пагинация/сохранённые представления не полностью унифицированы между доменами;
 - для полного production-hardening нужен расширенный e2e-контур поверх текущего component/unit набора.
+
+
+## 9. Incremental static-to-real migration note
+- `CRM / Финансы` migrated from a hardcoded page to a real API-backed screen using a page-specific `api/crmFinance.ts` adapter that aggregates existing finance endpoints without changing backend contracts.
+- This keeps migration risk low while establishing the expected pattern for future placeholder-page replacement: reuse existing backend projections first, then add missing backend projections only where necessary.
