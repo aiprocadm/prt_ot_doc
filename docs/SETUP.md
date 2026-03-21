@@ -5,6 +5,7 @@
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt -r requirements-dev.txt
+cp .env.example .env
 alembic -c backend/app/migrations/alembic.ini upgrade head
 uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
 ```
@@ -25,12 +26,20 @@ celery -A backend.app.worker worker --loglevel=info
 ./ptd --help
 ```
 
+## Environment source of truth
+- Base environment templates: `.env.example` and `backend/.env.example`
+- Human-readable variable reference: `docs/ENV_REFERENCE.md`
+- Multi-tenant defaults to review before first boot: `DEFAULT_TENANT_SLUG`, `ADMIN_TENANT`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`
+- Infra/service endpoints to align with Docker or local services: `DATABASE_URL`, `REDIS_URL`, `CELERY_BROKER_URL`, `S3_ENDPOINT`
+- Document/PDF pipeline settings to review on workstation installs: `LIBREOFFICE_BIN`, `PDF_LIBREOFFICE_TIMEOUT_SECONDS`, `FONTS_PATH`
+
 ## Verification
 ```bash
 pytest -q tests/test_entrypoints.py
 pytest -q tests/api/test_branding_api.py
 pytest -q tests/headers/test_engine.py
 PYTHONPATH=backend python scripts/branded_document_smoke.py
+PYTHONPATH=backend python scripts/repo_audit.py  # regenerates docs/audit/REPOSITORY_AUDIT.md and docs/audit/REPOSITORY_AUDIT.json
 npm --prefix frontend run typecheck
 npm --prefix frontend run test
 npm --prefix frontend run build

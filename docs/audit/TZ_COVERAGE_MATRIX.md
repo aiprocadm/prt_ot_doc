@@ -2,7 +2,7 @@
 
 | TZ area | Status | Canonical implementation |
 |---|---|---|
-| Structural audit / frontend-backend roots | Done | `README.md`, `docs/PROJECT_STRUCTURE.md` |
+| Structural audit / frontend-backend roots | Done | `README.md`, `docs/PROJECT_STRUCTURE.md`, `docs/audit/REPOSITORY_AUDIT.md`, `docs/audit/REPOSITORY_AUDIT.json`, `scripts/repo_audit.py`, `tests/test_repo_audit.py` |
 | Canonical frontend root and `package.json` | Done | `frontend/package.json` |
 | Python entrypoint compatibility | Done | `backend/app/main.py`, `app/__init__.py` |
 | Branding profile inheritance | Done | `backend/app/modules/branding/service.py` |
@@ -13,7 +13,19 @@
 | Wizard organization/site/layout selection | Done | `frontend/src/pages/documents/DocumentsWizardPage.tsx` |
 | Reproducibility metadata | Done | `backend/app/modules/branding/service.py` |
 | Persisted wizard branding preview/history | Done | `frontend/src/stores/documentsWizard.ts` |
+| Server-side branded generation history | Done | `backend/app/modules/branding/api.py`, `frontend/src/pages/branding/BrandingSettingsPage.tsx` |
 | Apply-headers payload handoff | Done | `backend/app/modules/branding/api.py` |
 | Branded document smoke command | Done | `scripts/branded_document_smoke.py`, `Makefile` |
 | Full automatic apply-headers in every generation route | Partial | dedicated endpoint/job exists, not universally auto-chained |
 | PDF / approval / archive continuation | Partial | foundation exists, depends on selected profile/orchestration |
+
+| Notifications API boundary hardening | Done | `backend/app/api/routes/notifications.py`, `backend/app/modules/notifications/service.py`, `backend/app/modules/notifications/schemas.py`, `backend/tests/test_notifications_service.py` |
+| Notification enum validation / structured 422 behavior | Done | `backend/app/modules/notifications/service.py`, `backend/app/api/error_handlers.py` |
+| Training / LMS canonical doc | Done | `docs/TRAINING_AND_LMS.md` |
+| Risk engine canonical doc | Done | `docs/RISK_ENGINE.md` |
+| Acceptance scenarios canonical doc | Done | `docs/ACCEPTANCE_SCENARIOS.md` |
+| Custom template scope/type DTO alignment | Done | `backend/app/api/v1/router.py`, `backend/app/modules/templates/schemas.py`, `frontend/src/types/dto/templates.ts` |
+| Template upload/version/lint/preview canonical doc | Done | `docs/TEMPLATE_UPLOAD_AND_RENDERING.md` |
+| Demo access canonical doc | Done | `docs/DEMO_ACCESS.md` |
+| Owner bootstrap/access canonical doc | Done | `docs/OWNER_ADMIN_ACCESS.md` |
+| User role issuance and scope assignment doc | Done | `docs/USER_ACCESS_AND_ROLES.md` |

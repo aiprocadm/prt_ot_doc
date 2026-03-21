@@ -6,7 +6,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.models.models import Tenant
-from .schemas import BrandingPreviewRequest, BrandingPreviewResponse, BrandingProfilePatch, BrandingProfileRead
+from .schemas import (
+    BrandingGenerationHistoryItem,
+    BrandingGenerationHistoryResponse,
+    BrandingPreviewRequest,
+    BrandingPreviewResponse,
+    BrandingProfilePatch,
+    BrandingProfileRead,
+)
 from .service import BrandingService
 
 router = APIRouter(prefix="/branding", tags=["branding"])
@@ -42,6 +49,21 @@ async def update_branding_profile(company_id: str, payload: BrandingProfilePatch
         await session.refresh(site)
     await session.refresh(company)
     return service.build_profile(company=company, site=site)
+
+
+@router.get("/history", response_model=BrandingGenerationHistoryResponse)
+async def get_branding_history(
+    company_id: str,
+    site_id: str | None = None,
+    limit: int = 20,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> BrandingGenerationHistoryResponse:
+    service = BrandingService(session, tenant)
+    items = await service.list_generation_history(company_id=company_id, site_id=site_id, limit=limit)
+    return BrandingGenerationHistoryResponse(
+        items=[BrandingGenerationHistoryItem.model_validate(item) for item in items]
+    )
 
 
 @router.post('/preview', response_model=BrandingPreviewResponse)

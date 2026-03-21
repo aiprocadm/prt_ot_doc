@@ -72,6 +72,22 @@ export interface BrandingPreviewDto {
   wizard_defaults: Record<string, unknown>;
 }
 
+
+export interface BrandingGenerationHistoryItemDto {
+  pipeline_run_id: string;
+  company_id: string;
+  site_id?: string | null;
+  template_id?: string | null;
+  template_version_id?: string | null;
+  status: string;
+  generated_at?: string | null;
+  preset_code?: string | null;
+  document_title?: string | null;
+  document_number?: string | null;
+  output_name?: string | null;
+  reproducibility: Record<string, unknown>;
+}
+
 export interface BrandingPreviewRequestDto {
   company_id: string;
   site_id?: string | null;
@@ -138,6 +154,13 @@ export interface SiteDto {
 export const listSites = async (companyId: string) => {
   const { data } = await apiClient.get<{ items: SiteDto[] }>("/sites", {
     params: { company_id: companyId, limit: 200, offset: 0 }
+  });
+  return data.items;
+};
+
+export const getBrandingHistory = async (companyId: string, siteId?: string, limit = 10) => {
+  const { data } = await apiClient.get<{ items: BrandingGenerationHistoryItemDto[] }>("/branding/history", {
+    params: { company_id: companyId, site_id: siteId, limit }
   });
   return data.items;
 };
