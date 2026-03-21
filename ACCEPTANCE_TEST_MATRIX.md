@@ -61,3 +61,7 @@ python scripts/pilot_readiness.py
 - Gap analysis: `GAP_REPORT.md`
 - Release decision log: `RELEASE_READINESS.md`
 - Residual risks / accepted limitations: `KNOWN_LIMITATIONS.md`
+
+### 2026-03-21 notifications hardening evidence
+- `backend/tests/test_notifications_service.py` validates unread counters, mark-read mutation semantics, and predictable validation failures for invalid enum filters.
+- `backend/tests/test_next66_workflow_notifications_npa.py` remains the cross-module regression slice for workflow + notifications + NPA foundations.

@@ -17,3 +17,13 @@
 - Branding profile patch calls are merge-based and preserve previously saved branding fields that are omitted in the current request.
 - Branding profile payloads support split header/footer requisites and branch-level display-name overrides for letterheads.
 - Invalid tenant-local layout preset references are rejected during branding profile updates with `404 Layout preset not found`.
+
+## Notifications and cross-cutting contract notes
+- `GET /api/v1/notifications`
+- `POST /api/v1/notifications/mark-read`
+- `GET|PUT /api/v1/notifications/settings/me`
+- `GET|PUT /api/v1/notifications/notification-settings/me`
+- `GET|POST /api/v1/notifications/templates`
+- `GET /api/v1/notifications/calendar/events`
+
+Notification filter enums are now validated in an application service so invalid values return structured 422 payloads with `details.allowed_values` and `field_errors`.

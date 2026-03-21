@@ -124,3 +124,11 @@ make final-acceptance
 - Repository structure audit: `docs/audit/REPOSITORY_AUDIT.md`
 - Machine-readable repository audit: `docs/audit/REPOSITORY_AUDIT.json`
 - Release decision record: `RELEASE_READINESS.md`
+
+## 10. 2026-03-21 focused hardening slice
+```bash
+pytest -q backend/tests/test_notifications_service.py
+pytest -q backend/tests/test_next66_workflow_notifications_npa.py
+ruff check backend/app/modules/notifications backend/app/api/routes/notifications.py backend/tests/test_notifications_service.py
+python -m compileall backend/app/modules/notifications backend/app/api/routes/notifications.py backend/tests/test_notifications_service.py
+```

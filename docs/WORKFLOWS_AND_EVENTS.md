@@ -39,3 +39,9 @@ This document is the canonical cross-module map for long-running workflows, appr
 ## Known legacy/compatibility notes
 - `backend/app/modules/approval/` remains in the repository for compatibility, but new work should target `backend/app/modules/approvals/`.
 - Some generation flows still require an explicit `apply_headers` step rather than a fully chained `generate -> apply_headers -> pdf` pipeline. This is tracked in `KNOWN_LIMITATIONS.md` and `GAP_REPORT.md`.
+
+### 4. Notifications / calendar / deadline visibility
+1. Transport entrypoint is `backend/app/api/routes/notifications.py`.
+2. Application orchestration is centralized in `backend/app/modules/notifications/service.py`.
+3. Shared contracts are in `backend/app/modules/notifications/schemas.py`.
+4. Training, PPE, inspection, and workflow task deadlines are aggregated into a common calendar feed instead of each route duplicating deadline composition.
