@@ -55,6 +55,35 @@ export type PpeOverviewSnapshot = {
   persons: PersonDto[];
 };
 
+export type FindingDto = {
+  id: string;
+  title: string;
+  status: string;
+  severity: string;
+  source_type: string;
+  source_id: string;
+  finding_type: string;
+  due_date?: string | null;
+  site_id?: string | null;
+  description?: string | null;
+  created_at?: string | null;
+};
+
+export type CorrectiveActionDto = {
+  id: string;
+  title: string;
+  status: string;
+  source_type: string;
+  source_id: string;
+  action_type: string;
+  due_date?: string | null;
+  responsible_user_id?: string | null;
+  site_id?: string | null;
+  effectiveness_status?: string | null;
+  description?: string | null;
+  completed_at?: string | null;
+};
+
 export type AuditPrepSnapshot = {
   inspections: InspectionDto[];
   prescriptions: PrescriptionDto[];
@@ -81,6 +110,16 @@ export const opsApi = {
   async getPrescriptions(): Promise<PrescriptionDto[]> {
     const response = await apiClient.get<PageResponse<PrescriptionDto>>("/prescriptions", { params: { limit: 100, offset: 0 } });
     return response.data.items ?? [];
+  },
+
+  async getFindings(): Promise<FindingDto[]> {
+    const response = await apiClient.get<FindingDto[]>("/findings");
+    return response.data ?? [];
+  },
+
+  async getCorrectiveActions(): Promise<CorrectiveActionDto[]> {
+    const response = await apiClient.get<CorrectiveActionDto[]>("/corrective-actions");
+    return response.data ?? [];
   },
 
   async getAuditPrepSnapshot(): Promise<AuditPrepSnapshot> {

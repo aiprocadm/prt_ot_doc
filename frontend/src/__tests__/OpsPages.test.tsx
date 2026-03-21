@@ -4,17 +4,23 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import AuditPrepPage from "@/pages/audit-prep/AuditPrepPage";
+import CorrectiveActionsPage from "@/pages/corrective-actions/CorrectiveActionsPage";
+import FindingsPage from "@/pages/findings/FindingsPage";
 import PrescriptionsPage from "@/pages/prescriptions/PrescriptionsPage";
 import WarehousePage from "@/pages/warehouse/WarehousePage";
 
 const getPpeOverviewMock = vi.fn();
 const getPrescriptionsMock = vi.fn();
+const getFindingsMock = vi.fn();
+const getCorrectiveActionsMock = vi.fn();
 const getAuditPrepSnapshotMock = vi.fn();
 
 vi.mock("@/api/ops", () => ({
   opsApi: {
     getPpeOverview: (...args: unknown[]) => getPpeOverviewMock(...args),
     getPrescriptions: (...args: unknown[]) => getPrescriptionsMock(...args),
+    getFindings: (...args: unknown[]) => getFindingsMock(...args),
+    getCorrectiveActions: (...args: unknown[]) => getCorrectiveActionsMock(...args),
     getAuditPrepSnapshot: (...args: unknown[]) => getAuditPrepSnapshotMock(...args)
   }
 }));
@@ -23,6 +29,8 @@ describe("operational pages converted from static to real data", () => {
   beforeEach(() => {
     getPpeOverviewMock.mockReset();
     getPrescriptionsMock.mockReset();
+    getFindingsMock.mockReset();
+    getCorrectiveActionsMock.mockReset();
     getAuditPrepSnapshotMock.mockReset();
   });
 
@@ -56,6 +64,36 @@ describe("operational pages converted from static to real data", () => {
     await waitFor(() => {
       expect(screen.queryByText(/Обновить журнал/)).not.toBeInTheDocument();
     });
+  });
+
+
+  it("renders findings from live API instead of static demo rows", async () => {
+    getFindingsMock.mockResolvedValue([
+      { id: "f-1", title: "Нет ограждения", status: "open", severity: "critical", source_type: "inspection", source_id: "insp-1", finding_type: "nonconformity", due_date: "2026-04-15" },
+      { id: "f-2", title: "Просрочен журнал", status: "resolved", severity: "medium", source_type: "incident", source_id: "inc-1", finding_type: "observation", due_date: null }
+    ]);
+
+    render(<FindingsPage />);
+
+    expect(await screen.findByText("Нет ограждения")).toBeInTheDocument();
+
+    await userEvent.type(screen.getByPlaceholderText(/Поиск по title/), "ограждения");
+
+    await waitFor(() => {
+      expect(screen.queryByText("Просрочен журнал")).not.toBeInTheDocument();
+    });
+  });
+
+  it("renders corrective actions from live API with effectiveness status", async () => {
+    getCorrectiveActionsMock.mockResolvedValue([
+      { id: "ca-1", title: "Поменять СИЗ", status: "overdue", source_type: "prescription", source_id: "pr-1", action_type: "corrective", due_date: "2026-04-10", effectiveness_status: null },
+      { id: "ca-2", title: "Провести инструктаж", status: "verified", source_type: "finding", source_id: "f-1", action_type: "preventive", due_date: "2026-04-20", effectiveness_status: "effective" }
+    ]);
+
+    render(<CorrectiveActionsPage />);
+
+    expect(await screen.findByText("Поменять СИЗ")).toBeInTheDocument();
+    expect(screen.getByText("effective")).toBeInTheDocument();
   });
 
   it("renders audit prep package projection from live snapshot", async () => {
