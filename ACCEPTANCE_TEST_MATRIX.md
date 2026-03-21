@@ -58,3 +58,4 @@ python scripts/pilot_readiness.py
 | Template version upload + lint + preview | implemented foundation | `backend/app/api/v1/router.py`, `frontend/src/features/templates/TemplateDetails.tsx` |
 | Org/branch-scoped template metadata | implemented foundation | `backend/app/api/v1/router.py`, `docs/TEMPLATE_UPLOAD_AND_RENDERING.md` |
 | Org-specific document generation | implemented foundation | `backend/app/api/routes/documents.py` |
+| Template contract coherence (backend + frontend) | hardened | `backend/app/modules/templates/schemas.py`, `backend/app/api/v1/router.py`, `frontend/src/types/dto/templates.ts`, `frontend/src/types/forms/templates.ts` |

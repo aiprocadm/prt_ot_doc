@@ -359,7 +359,8 @@ def _template_scope_from_metadata(metadata: dict[str, Any] | None) -> dict[str, 
     payload = metadata or {}
     scope = payload.get("scope") if isinstance(payload.get("scope"), dict) else {}
     return {
-        "level": str(scope.get("level") or "tenant"),
+        "type": str(scope.get("type") or scope.get("level") or "tenant"),
+        "tenant_id": scope.get("tenant_id"),
         "company_id": scope.get("company_id"),
         "site_id": scope.get("site_id"),
         "label": scope.get("label"),
@@ -766,14 +767,13 @@ async def create_template_catalog(
         code=payload.code,
         name=payload.name,
         description=payload.description,
-        metadata_json=_template_metadata_payload(category=payload.category, scope=payload.scope.model_dump(mode="json")),
-        status=TemplateStatus(payload.status) if payload.status else TemplateStatus.DRAFT,
         status=TemplateStatus(payload.status or TemplateStatus.DRAFT.value),
         domain=payload.template_type,
-        metadata_json={
-            "template_type": payload.template_type,
-            "scope": _normalize_template_scope(payload.scope, tenant=tenant),
-        },
+        metadata_json=_template_metadata_payload(
+            category=payload.category,
+            scope=_normalize_template_scope(payload.scope.model_dump(mode="json"), tenant=tenant),
+            extra={"template_type": payload.template_type} if payload.template_type else None,
+        ),
     )
     session.add(template)
     await session.flush()
@@ -790,9 +790,7 @@ async def create_template_catalog(
     )
     await session.commit()
     await session.refresh(template)
-    return _template_to_dto(template)
-    await session.refresh(template)
-    return _build_template_dto(template)
+    return _build_template_dto(template, include_versions=True)
 
 
 @router.get("/templates/{template_id}", response_model=TemplateDTO)
@@ -800,7 +798,6 @@ async def get_template_details(template_id: str, session: SessionDep, tenant: Te
     template = await session.get(Template, template_id)
     if template is None or template.tenant_id not in _tenant_scope(tenant) or template.deleted_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Template not found")
-    return _template_to_dto(template)
     return _build_template_dto(template, include_versions=True)
 
 
@@ -816,10 +813,6 @@ async def patch_template(
     template = await session.get(Template, template_id)
     if template is None or template.tenant_id not in _tenant_scope(tenant) or template.deleted_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Template not found")
-    before = {"name": template.name, "description": template.description, "status": str(template.status), "current_version_id": template.current_version_id, "version": template.version, "metadata_json": dict(template.metadata_json or {})}
-    if payload.version is not None and payload.version != template.version:
-        raise HTTPException(status.HTTP_409_CONFLICT, {"code": "optimistic_lock_mismatch", "type": "conflict", "message": "template version mismatch"})
-    for key in ("name", "description", "current_version_id"):
     before = {"code": template.code, "name": template.name, "description": template.description, "status": str(template.status), "current_version_id": template.current_version_id, "version": template.version, "domain": template.domain, "metadata_json": dict(template.metadata_json or {})}
     if payload.version is not None and payload.version != template.version:
         raise HTTPException(status.HTTP_409_CONFLICT, {"code": "optimistic_lock_mismatch", "type": "conflict", "message": "template version mismatch"})
@@ -832,8 +825,6 @@ async def patch_template(
     metadata = dict(template.metadata_json or {})
     if payload.category is not None:
         metadata["category"] = payload.category
-    if payload.scope is not None:
-        metadata["scope"] = payload.scope.model_dump(mode="json")
     template.metadata_json = metadata
     if payload.template_type is not None:
         template.domain = payload.template_type
@@ -841,7 +832,7 @@ async def patch_template(
     if payload.scope is not None:
         template.metadata_json = {
             **(template.metadata_json or {}),
-            "scope": _normalize_template_scope(payload.scope, tenant=tenant),
+            "scope": _normalize_template_scope(payload.scope.model_dump(mode="json"), tenant=tenant),
         }
     await session.flush()
     await AuditService(session).log_event(
@@ -854,11 +845,6 @@ async def patch_template(
         request_id=get_trace_id(request),
         user_agent=request.headers.get("user-agent"),
         changed_fields=field_level_diff(before, {"name": template.name, "description": template.description, "status": str(template.status), "current_version_id": template.current_version_id, "version": template.version, "metadata_json": dict(template.metadata_json or {})}),
-    )
-    await session.commit()
-    await session.refresh(template)
-    return _template_to_dto(template)
-        changed_fields=field_level_diff(before, {"code": template.code, "name": template.name, "description": template.description, "status": str(template.status), "current_version_id": template.current_version_id, "version": template.version, "domain": template.domain, "metadata_json": dict(template.metadata_json or {})}),
     )
     await session.commit()
     await session.refresh(template)

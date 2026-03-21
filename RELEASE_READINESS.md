@@ -16,6 +16,7 @@
 - Company-aware document generation.
 - Metadata-backed scope visualization for tenant/company/site templates.
 - Canonical docs for next-wave continuation from repo.
+- Template API/UI contract is again parseable and coherent for custom upload/version/scope flows.
 
 ## Not fully closed
 - Full enterprise lifecycle automation for every document path.

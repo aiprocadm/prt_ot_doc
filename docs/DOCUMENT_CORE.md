@@ -34,6 +34,8 @@
 - catalog API now exposes normalized template scope and category metadata;
 - template version upload now correctly links `current_version_id`;
 - template selection for generation is tolerant to historical `code` vs `name` inconsistencies;
+- backend template handlers and schemas were de-duplicated to remove broken/ambiguous contracts;
+- frontend template forms/DTOs were re-aligned with backend scope/type/version contracts;
 - docs now explicitly describe demo/owner/bootstrap/user-access flows.
 
 ### Still partial

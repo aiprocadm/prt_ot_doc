@@ -13,6 +13,7 @@
 - Исправлена связка upload version -> `current_version_id`.
 - Снижен риск broken generation из-за рассинхрона `Template.code` vs `Template.name`.
 - Repo теперь документирует demo access, owner/admin access и user access issuance.
+- Устранены дубли template schema/router/frontend form contract, мешавшие reproducible template flow.
 
 ## Remaining gaps
 - Scope пока хранится в `metadata_json`, а не в отдельных indexed columns.

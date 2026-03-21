@@ -1,19 +1,9 @@
 # OWNER_ADMIN_ACCESS
 
-## Platform owner / tenant owner
-В repo есть два реальных bootstrap-механизма.
+## Canonical owner/admin bootstrap paths
 
-### 1. Dev admin bootstrap
-Используется для локального development:
-- env: `ADMIN_BOOTSTRAP=true`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_TENANT`;
-- startup hook: `bootstrap_admin_user(settings)`.
-
-### 2. Tenant owner bootstrap
-Используется для реального owner flow аренды:
-```bash
-PYTHONPATH=backend python scripts/bootstrap_tenant.py \
-## Owner bootstrap (canonical)
-Create a real tenant owner using the repo bootstrap flow:
+### 1. Tenant owner bootstrap
+Use the tenant bootstrap script when you need a real owner account for a tenant:
 
 ```bash
 PYTHONPATH=backend .venv/bin/python scripts/bootstrap_tenant.py \
@@ -23,67 +13,55 @@ PYTHONPATH=backend .venv/bin/python scripts/bootstrap_tenant.py \
   --owner-password 'ChangeMe123!'
 ```
 
-Что создаётся:
-- tenant;
-- tenant settings;
-- tenant quota;
-- owner user;
-- owner/admin roles;
-- company profile;
-- starter pack;
-- package presets;
-- audit event.
-
-## Owner права
-Owner bootstrap выдаёт как минимум `owner` и `admin` роли одной учётной записи.
-Это даёт доступ к:
-- админскому управлению ролями;
-- tenant-scoped user access management;
-- billing/admin/API-token flows;
-- audit / outbox / diagnostic screens;
-- document/template operations.
-
-## Как войти
-1. Использовать email/password, созданные bootstrap script/env.
-2. Передавать правильный `X-Tenant` header для tenant scope.
-3. Для local admin bootstrap tenant выбирается из `ADMIN_TENANT`.
-
-## Если пароль нельзя хранить в repo
-Так и должно быть. Используйте:
-- env variables для dev admin bootstrap;
-- CLI/script bootstrap для стендов;
-- vault/secret manager для production secrets.
-Implementation lives in:
+Implemented by:
 - `scripts/bootstrap_tenant.py`
 - `backend/app/services/tenants/bootstrap/service.py`
 
-## What the bootstrap creates
-- tenant
-- tenant settings
-- quota row
-- owner user
-- owner + admin roles for that user
-- base company profile
-- starter pack and package presets
-- audit event for completed bootstrap
+What the bootstrap creates:
+- tenant;
+- tenant settings + quota;
+- owner user;
+- `owner` + `admin` roles for that user;
+- base company profile;
+- starter packs / presets;
+- audit event.
 
-## Login
-Use the regular tenant-aware login endpoint:
-- `POST /api/v1/auth/login`
+### 2. Dev admin bootstrap
+For local development, startup can create an admin automatically:
+- env flags: `ADMIN_BOOTSTRAP=true`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_TENANT`;
+- startup hook: `backend/app/api/app.py` -> `bootstrap_admin_user(settings)`.
 
-The owner logs in with the email/password supplied to `scripts/bootstrap_tenant.py`.
+## How owner/admin logs in
+- API login route: `POST /api/v1/auth/login`
+- Tenant header/context is required: `X-Tenant: <tenant-slug>`
+- Credentials are the email/password passed through bootstrap or env.
 
-## Owner/admin capabilities in repo today
-- assign user roles: `/admin/users/{user_id}/roles`
-- assign ABAC scope attributes: `/admin/users/{user_id}/attributes`
-- access billing, audit, API token and other management endpoints gated by `owner` / `admin`
+## Owner/admin capabilities currently implemented
+- assign user roles: `GET|POST|PATCH /api/v1/admin/users/{user_id}/roles`;
+- assign ABAC scope attributes: `PATCH /api/v1/admin/users/{user_id}/attributes`;
+- manage templates and versions;
+- access billing/admin/API-token flows;
+- inspect audit/admin diagnostics where implemented.
 
-## Password handling
-Do not commit real passwords into the repository.
-For local/stage environments, pass them at bootstrap time or via environment/secret manager.
+## How owner issues access to users
+1. Provision the tenant and owner via bootstrap.
+2. Create/import the user using the project’s current user flow for the environment.
+3. Assign roles via `/api/v1/admin/users/{user_id}/roles`.
+4. Restrict scope via `/api/v1/admin/users/{user_id}/attributes`.
+5. Validate access through `/api/v1/auth/me`, UI route visibility, and audit traces.
+
+## Password and secret handling
+- Real passwords must not be committed to git.
+- For local/stage use CLI args or env.
+- For shared/prod environments use a secret manager / vault.
 
 ## Recommended local bootstrap sequence
 ```bash
 alembic -c backend/app/migrations/alembic.ini upgrade head
-PYTHONPATH=backend .venv/bin/python scripts/bootstrap_tenant.py --tenant demo --name "Demo Tenant" --owner-email owner@example.local --owner-password 'ChangeMe123!' --demo
+PYTHONPATH=backend .venv/bin/python scripts/bootstrap_tenant.py \
+  --tenant demo \
+  --name "Demo Tenant" \
+  --owner-email owner@example.local \
+  --owner-password 'ChangeMe123!' \
+  --demo
 ```

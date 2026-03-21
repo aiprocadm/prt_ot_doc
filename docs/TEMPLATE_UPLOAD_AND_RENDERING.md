@@ -178,3 +178,8 @@ Current foundation supports:
 ## Known boundaries
 - Automatic template resolution by override chain is partially represented by scope metadata and repo conventions; the operator still selects the desired template/version explicitly in the main generation flow.
 - Branch is represented in the backend as `Site`; docs and UI refer to it as branch/site where relevant.
+
+## 2026-03-21 audit-driven fixes in this wave
+- backend template DTO/Pydantic schemas were de-duplicated and aligned around a single `scope.type` contract;
+- template catalog create/patch handlers were cleaned up so scope/category/type/current-version behavior is deterministic;
+- frontend template DTO, form schema, and template form dialog were normalized to the same contract, restoring a working upload/versioning/scope UI path.

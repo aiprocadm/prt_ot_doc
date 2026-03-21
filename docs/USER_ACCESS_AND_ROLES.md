@@ -1,80 +1,62 @@
 # USER_ACCESS_AND_ROLES
 
-## Реальный механизм выдачи доступов
-После создания пользователя owner/admin управляет доступами через admin API:
-- `GET /api/routes/admin/users/{user_id}/roles` — фактически смонтировано под `/api/v1/...`;
-- `POST|PATCH /api/v1/admin/users/{user_id}/roles`;
-- `PATCH /api/v1/admin/users/{user_id}/attributes`.
+## Canonical access-management API
+Owner/admin manages user access through:
+- `GET /api/v1/admin/users/{user_id}/roles`
+- `POST /api/v1/admin/users/{user_id}/roles`
+- `PATCH /api/v1/admin/users/{user_id}/roles`
+- `PATCH /api/v1/admin/users/{user_id}/attributes`
 
-## Что можно выдать
-### Роли
-Нормализуются через `RoleEnum`. На практике repo поддерживает, среди прочих:
-- `owner`
-- `admin`
-- `ot_pb_lead`
-- `ot_specialist`
-- `pb_engineer`
-- `hr`
-- `lawyer`
-- `accountant`
-- `line_manager`
-- `employee`
-- `client_admin`
-- `client_user`
+Canonical implementation:
+- `backend/app/api/routes/admin_users.py`
+- `backend/app/schemas/admin_user.py`
 
-### Scope attributes
-Через `UserAttribute` можно ограничить пользователя по:
-- `company_ids`
-- `site_ids`
-- `project_ids`
-- `contractor_ids`
-
-Для текущего repo сценарий branch scope = `site_ids`.
-
-## Practical flow
-1. Создать tenant owner через `scripts/bootstrap_tenant.py` или dev admin через env bootstrap.
-2. Создать/импортировать пользователя существующим auth/user flow проекта.
-3. Назначить роли через `/api/v1/admin/users/{user_id}/roles`.
-4. Назначить scope через `/api/v1/admin/users/{user_id}/attributes`.
-5. Проверить audit/admin screens и доступ к маршрутам UI.
-
-## Ограничения текущей реализации
-- В этой волне документируется и усиливается role/scope issuance; отдельный invitation self-service flow в repo не является fully-closed canonical path.
-- Включение/выключение доступа зависит от текущего user lifecycle проекта; для production нужно использовать существующий user active flag и password management policy.
-## Canonical user access paths
-- Role assignment API: `backend/app/api/routes/admin_users.py`
-- RBAC/ABAC policy helpers: `backend/app/core/rbac_abac.py`, `backend/app/core/security.py`
-- AuthZ seed/catalog: `backend/app/services/authz_seed.py`
-
-## Core roles seen in repo
+## Roles currently visible in repo
+Normalized through `RoleEnum`. Common roles include:
 - `owner`
 - `admin`
 - `manager`
 - `hr`
 - `line_manager`
-- OT/PB specializations such as `ot_specialist`, `ot_pb_lead`, `pb_engineer`
-- read-only / portal / client roles where implemented
+- `ot_pb_lead`
+- `ot_specialist`
+- `pb_engineer`
+- `employee`
+- `client_admin`
+- `client_user`
 
-## Issue access to a user
-### 1. Create/provision the user
-Use the existing tenant user creation path for the environment or bootstrap/import flow already used by the project.
+## Scope restriction / ABAC attributes
+`UserAttribute` currently supports:
+- `company_ids`
+- `site_ids`
+- `project_ids`
+- `contractor_ids`
 
-### 2. Assign roles
+For the current repo, branch scope maps to `site_ids`.
+
+## Practical issuance flow
+1. Create a tenant owner via `scripts/bootstrap_tenant.py` or a dev admin via bootstrap env.
+2. Provision/import the target user using the environment’s current user flow.
+3. Assign one or more roles via `/api/v1/admin/users/{user_id}/roles`.
+4. Restrict scope with `/api/v1/admin/users/{user_id}/attributes`.
+5. Verify effective access through `/api/v1/auth/me`, UI route visibility, and audit traces.
+
+## Example: assign roles
 ```http
 PATCH /api/v1/admin/users/{user_id}/roles
 ```
-Body example:
+
 ```json
 {
   "roles": ["owner", "admin"]
 }
 ```
 
-### 3. Restrict scope (tenant/company/site)
+## Example: restrict company/site scope
 ```http
 PATCH /api/v1/admin/users/{user_id}/attributes
 ```
-Body example:
+
 ```json
 {
   "company_ids": ["<company-id>"],
@@ -84,11 +66,13 @@ Body example:
 }
 ```
 
-## Practical mapping for document workflows
-- `owner` / `admin`: bootstrap tenant, manage users, manage templates, issue broad access
-- `methodologist` or equivalent document authority role: manage templates and versions
-- `doc officer`: prepare/generate documents and operate pipelines
-- scoped specialists: constrained with company/site attribute sets
+## Document-workflow mapping
+- `owner` / `admin`: broad tenant management, user access issuance, templates, billing, diagnostics;
+- methodologist-equivalent roles: maintain templates and template versions;
+- doc officer-equivalent roles: prepare/generate documents and run document flows;
+- scoped specialists: restricted with company/site attribute sets.
 
-## Audit visibility
-Where implemented, owner/admin can inspect audit-oriented endpoints under `/api/v1/audit` and related admin diagnostics.
+## Current limitations
+- invitation/self-service onboarding is not yet the canonical closed loop in repo;
+- enable/disable and password lifecycle depend on the current user model and deployment policy;
+- scope is attribute-based, so future waves can refine with richer org/branch abstractions without breaking current flows.
