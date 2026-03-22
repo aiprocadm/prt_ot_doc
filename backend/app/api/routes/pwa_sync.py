@@ -1,6 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
+from datetime import date, datetime
+from decimal import Decimal
+from typing import Any
+
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.rbac_abac import ROLE_PERMISSIONS
+from app.core.security import AccessContext, rbac
 from app.models.models import (
     BriefingJournal,
     BriefingTemplate,
@@ -12,14 +19,240 @@ from app.models.models import (
 )
 from app.modules.pwa_sync.services import OfflineSyncService
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/pwa", tags=["pwa"])
 
+PWA_ROUTE_PERMISSION_MAP: dict[str, tuple[str, ...]] = {
+    "dashboard": ("dashboard.read",),
+    "briefings": ("briefings.read", "briefings.write"),
+    "training": ("training.read", "training.write"),
+    "tasks": ("tasks.read", "tasks.write"),
+    "incidents": ("incidents.read", "incidents.write"),
+    "inspections": ("inspections.read", "inspections.write"),
+    "documents": ("documents.read", "documents.write"),
+    "files": ("files.read", "files.write"),
+}
+
+
+class PwaCurrentUser(BaseModel):
+    id: str
+    email: str | None = None
+    role: str
+    roles: list[str] = Field(default_factory=list)
+    permissions: list[str] = Field(default_factory=list)
+    company_id: str | None = None
+    tenant_id: str | None = None
+    tenant_slug: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class PwaTenantBranding(BaseModel):
+    slug: str
+    name: str
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class PwaRoutePermission(BaseModel):
+    route: str
+    allowed: bool
+    permissions: list[str] = Field(default_factory=list)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class PwaBriefingTemplateProjection(BaseModel):
+    id: str
+    code: str
+    title: str
+    briefing_type: str
+    status: str
+    validity_days: int | None = None
+    updated_at: datetime | None = None
+
+
+class PwaBriefingJournalProjection(BaseModel):
+    id: str
+    code: str
+    title: str
+    journal_type: str
+    status: str
+    site_id: str | None = None
+    department_id: str | None = None
+    updated_at: datetime | None = None
+
+
+class PwaTrainingEnrollmentProjection(BaseModel):
+    id: str
+    training_program_id: str
+    training_group_id: str | None = None
+    person_id: str | None = None
+    status: str
+    due_at: datetime | None = None
+    expires_at: datetime | None = None
+    progress_percent: float
+    attempt_count: int
+    updated_at: datetime | None = None
+
+
+class PwaDeadlineProjection(BaseModel):
+    id: str
+    entity_type: str
+    entity_id: str
+    status: str
+    person_id: str | None = None
+    site_id: str | None = None
+    due_at: datetime
+
+
+class PwaBootstrapResponse(BaseModel):
+    current_user: PwaCurrentUser
+    tenant_branding: PwaTenantBranding
+    route_permissions: list[PwaRoutePermission] = Field(default_factory=list)
+    briefing_templates: list[PwaBriefingTemplateProjection] = Field(default_factory=list)
+    active_journals: list[PwaBriefingJournalProjection] = Field(default_factory=list)
+    assigned_training: list[PwaTrainingEnrollmentProjection] = Field(default_factory=list)
+    compliance_deadlines_summary: dict[str, Any] = Field(default_factory=dict)
+    dictionaries: dict[str, Any] = Field(default_factory=dict)
+    sync_state: dict[str, Any] = Field(default_factory=dict)
+    diagnostics: dict[str, Any] = Field(default_factory=dict)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+def _decimal_to_float(value: Decimal | float | int | None) -> float:
+    if value is None:
+        return 0.0
+    if isinstance(value, Decimal):
+        return float(value)
+    return float(value)
+
+
+def _normalize_permissions(access: AccessContext) -> list[str]:
+    roles = access.to_auth_context().roles
+    permissions = {
+        permission.replace(":", ".")
+        for role in roles
+        for permission in ROLE_PERMISSIONS.get(role, set())
+    }
+    return sorted(permissions)
+
+
+def _route_permissions(permission_codes: Iterable[str]) -> list[PwaRoutePermission]:
+    granted = set(permission_codes)
+    projections: list[PwaRoutePermission] = []
+    for route_name, required_permissions in PWA_ROUTE_PERMISSION_MAP.items():
+        matched = sorted(permission for permission in required_permissions if permission in granted)
+        projections.append(
+            PwaRoutePermission(
+                route=route_name,
+                allowed=bool(matched),
+                permissions=matched,
+            )
+        )
+    return projections
+
+
+def _serialize_template(item: BriefingTemplate) -> PwaBriefingTemplateProjection:
+    return PwaBriefingTemplateProjection(
+        id=str(item.id),
+        code=item.code,
+        title=item.title,
+        briefing_type=item.briefing_type,
+        status=item.status,
+        validity_days=item.validity_days,
+        updated_at=item.updated_at,
+    )
+
+
+def _serialize_journal(item: BriefingJournal) -> PwaBriefingJournalProjection:
+    return PwaBriefingJournalProjection(
+        id=str(item.id),
+        code=item.code,
+        title=item.title,
+        journal_type=item.journal_type,
+        status=item.status,
+        site_id=item.site_id,
+        department_id=item.department_id,
+        updated_at=item.updated_at,
+    )
+
+
+def _serialize_enrollment(item: TrainingEnrollment) -> PwaTrainingEnrollmentProjection:
+    return PwaTrainingEnrollmentProjection(
+        id=str(item.id),
+        training_program_id=str(item.training_program_id),
+        training_group_id=item.training_group_id,
+        person_id=item.person_id,
+        status=item.status,
+        due_at=item.due_at,
+        expires_at=item.expires_at,
+        progress_percent=_decimal_to_float(item.progress_percent),
+        attempt_count=int(item.attempt_count or 0),
+        updated_at=item.updated_at,
+    )
+
+
+def _serialize_deadline(item: ComplianceDeadline) -> PwaDeadlineProjection:
+    return PwaDeadlineProjection(
+        id=str(item.id),
+        entity_type=item.entity_type,
+        entity_id=str(item.entity_id),
+        status=item.status,
+        person_id=item.person_id,
+        site_id=item.site_id,
+        due_at=item.due_at,
+    )
+
+
+def _build_dictionaries() -> dict[str, Any]:
+    return {
+        "briefing_types": ["introductory", "primary", "repeat", "target", "unscheduled"],
+        "briefing_statuses": [
+            "draft",
+            "assigned",
+            "signed_employee",
+            "signed_instructor",
+            "completed",
+        ],
+        "training_statuses": ["assigned", "in_progress", "completed", "failed"],
+        "compliance_deadline_statuses": ["upcoming", "due", "overdue"],
+        "offline_batch_statuses": ["pending", "applied", "failed"],
+        "offline_media_statuses": ["pending", "uploaded", "failed"],
+        "sync_conflict_codes": ["conflict_final_record"],
+    }
+
+
+def _build_sync_state(
+    *, pending_batches: int, failed_batches: int, pending_media: int, failed_media: int
+) -> dict[str, Any]:
+    return {
+        "pending_batches": pending_batches,
+        "failed_batches": failed_batches,
+        "pending_media": pending_media,
+        "failed_media": failed_media,
+        "has_blocking_failures": failed_batches > 0 or failed_media > 0,
+    }
+
+
+def _serialize_date(value: date | datetime | None) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return value.isoformat()
+
 
 @router.post("/sync/batch")
-async def create_batch(payload: dict, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+async def create_batch(
+    payload: dict,
+    tenant: Tenant = Depends(get_tenant_record),
+    session: AsyncSession = Depends(get_session),
+):
     batch = OfflineSyncBatch(tenant_id=tenant.id, **payload)
     session.add(batch)
     await session.flush()
@@ -27,7 +260,11 @@ async def create_batch(payload: dict, tenant: Tenant = Depends(get_tenant_record
 
 
 @router.get("/sync/status/{batch_id}")
-async def sync_status(batch_id: str, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+async def sync_status(
+    batch_id: str,
+    tenant: Tenant = Depends(get_tenant_record),
+    session: AsyncSession = Depends(get_session),
+):
     batch = await OfflineSyncService().get_status(session, batch_id)
     if not batch or batch.tenant_id != tenant.id:
         raise HTTPException(404, "Batch not found")
@@ -35,26 +272,165 @@ async def sync_status(batch_id: str, tenant: Tenant = Depends(get_tenant_record)
 
 
 @router.post("/media/commit")
-async def commit_media(payload: dict, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+async def commit_media(
+    payload: dict,
+    tenant: Tenant = Depends(get_tenant_record),
+    session: AsyncSession = Depends(get_session),
+):
     media = OfflineMediaQueue(tenant_id=tenant.id, **payload)
     session.add(media)
     await session.flush()
     return await OfflineSyncService().commit_media(session, media)
 
 
-@router.get("/bootstrap")
-async def bootstrap(tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
-    templates = (await session.execute(select(BriefingTemplate).where(BriefingTemplate.tenant_id == tenant.id, BriefingTemplate.deleted_at.is_(None), BriefingTemplate.status == "active"))).scalars().all()
-    journals = (await session.execute(select(BriefingJournal).where(BriefingJournal.tenant_id == tenant.id, BriefingJournal.deleted_at.is_(None), BriefingJournal.status == "active"))).scalars().all()
-    enrollments = (await session.execute(select(TrainingEnrollment).where(TrainingEnrollment.tenant_id == tenant.id, TrainingEnrollment.deleted_at.is_(None), TrainingEnrollment.status.in_(["assigned", "in_progress"])))).scalars().all()
-    deadlines = (await session.execute(select(ComplianceDeadline).where(ComplianceDeadline.tenant_id == tenant.id, ComplianceDeadline.status.in_(["upcoming", "due", "overdue"])))).scalars().all()
-    return {
-        "current_user": {"id": None},
-        "tenant_branding": {"slug": tenant.slug, "name": tenant.name},
-        "route_permissions": [],
-        "briefing_templates": templates,
-        "active_journals": journals,
-        "assigned_training": enrollments,
-        "compliance_deadlines_summary": {"count": len(deadlines)},
-        "dictionaries": {},
-    }
+@router.get("/bootstrap", response_model=PwaBootstrapResponse)
+async def bootstrap(
+    tenant: Tenant = Depends(get_tenant_record),
+    session: AsyncSession = Depends(get_session),
+    access: AccessContext = Depends(rbac()),
+):
+    permissions = _normalize_permissions(access)
+    templates = (
+        (
+            await session.execute(
+                select(BriefingTemplate).where(
+                    BriefingTemplate.tenant_id == tenant.id,
+                    BriefingTemplate.deleted_at.is_(None),
+                    BriefingTemplate.status == "active",
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    journals = (
+        (
+            await session.execute(
+                select(BriefingJournal).where(
+                    BriefingJournal.tenant_id == tenant.id,
+                    BriefingJournal.deleted_at.is_(None),
+                    BriefingJournal.status == "active",
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    enrollments = (
+        (
+            await session.execute(
+                select(TrainingEnrollment).where(
+                    TrainingEnrollment.tenant_id == tenant.id,
+                    TrainingEnrollment.deleted_at.is_(None),
+                    TrainingEnrollment.status.in_(["assigned", "in_progress"]),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    deadlines = (
+        (
+            await session.execute(
+                select(ComplianceDeadline).where(
+                    ComplianceDeadline.tenant_id == tenant.id,
+                    ComplianceDeadline.status.in_(["upcoming", "due", "overdue"]),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    pending_batches = int(
+        (
+            await session.execute(
+                select(func.count(OfflineSyncBatch.id)).where(
+                    OfflineSyncBatch.tenant_id == tenant.id,
+                    OfflineSyncBatch.user_id == access.user.id,
+                    OfflineSyncBatch.status == "pending",
+                )
+            )
+        ).scalar_one()
+        or 0
+    )
+    failed_batches = int(
+        (
+            await session.execute(
+                select(func.count(OfflineSyncBatch.id)).where(
+                    OfflineSyncBatch.tenant_id == tenant.id,
+                    OfflineSyncBatch.user_id == access.user.id,
+                    OfflineSyncBatch.status == "failed",
+                )
+            )
+        ).scalar_one()
+        or 0
+    )
+    pending_media = int(
+        (
+            await session.execute(
+                select(func.count(OfflineMediaQueue.id)).where(
+                    OfflineMediaQueue.tenant_id == tenant.id,
+                    OfflineMediaQueue.user_id == access.user.id,
+                    OfflineMediaQueue.upload_status == "pending",
+                )
+            )
+        ).scalar_one()
+        or 0
+    )
+    failed_media = int(
+        (
+            await session.execute(
+                select(func.count(OfflineMediaQueue.id)).where(
+                    OfflineMediaQueue.tenant_id == tenant.id,
+                    OfflineMediaQueue.user_id == access.user.id,
+                    OfflineMediaQueue.upload_status == "failed",
+                )
+            )
+        ).scalar_one()
+        or 0
+    )
+
+    deadlines_by_status: dict[str, int] = {"upcoming": 0, "due": 0, "overdue": 0}
+    for item in deadlines:
+        deadlines_by_status[item.status] = deadlines_by_status.get(item.status, 0) + 1
+
+    return PwaBootstrapResponse(
+        current_user=PwaCurrentUser(
+            id=str(access.user.id),
+            email=access.user.email,
+            role=access.user.role.value,
+            roles=access.to_auth_context().roles,
+            permissions=permissions,
+            company_id=(
+                str(access.user.company_id) if getattr(access.user, "company_id", None) else None
+            ),
+            tenant_id=str(tenant.id),
+            tenant_slug=tenant.slug,
+        ),
+        tenant_branding=PwaTenantBranding(slug=tenant.slug, name=tenant.name),
+        route_permissions=_route_permissions(permissions),
+        briefing_templates=[_serialize_template(item) for item in templates],
+        active_journals=[_serialize_journal(item) for item in journals],
+        assigned_training=[_serialize_enrollment(item) for item in enrollments],
+        compliance_deadlines_summary={
+            "count": len(deadlines),
+            "by_status": deadlines_by_status,
+            "items": [_serialize_deadline(item).model_dump(mode="json") for item in deadlines[:25]],
+            "latest_due_at": _serialize_date(
+                min((item.due_at for item in deadlines), default=None)
+            ),
+        },
+        dictionaries=_build_dictionaries(),
+        sync_state=_build_sync_state(
+            pending_batches=pending_batches,
+            failed_batches=failed_batches,
+            pending_media=pending_media,
+            failed_media=failed_media,
+        ),
+        diagnostics={
+            "provider_mode": "projection_api",
+            "bootstrap_version": 2,
+            "auth_required": True,
+            "offline_scope": ["briefings", "training", "tasks", "incidents", "checklists", "media"],
+        },
+    )
