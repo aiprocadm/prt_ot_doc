@@ -72,20 +72,117 @@ from app.modules.search.api import router as search_router
 from app.modules.workflow.api import router as workflow_router
 
 RouterRegistration = tuple[APIRouter, dict[str, object]]
+ROUTER_GROUP_ORDER = (
+    "public",
+    "compliance_and_admin",
+    "operations",
+    "document_core",
+    "platform_extension",
+)
+
+
+PUBLIC_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
+    (auth.router, {"prefix": "/auth", "tags": ["auth"]}),
+    (client_portal.router, {}),
+)
+
+COMPLIANCE_AND_ADMIN_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
+    (audit.router, {"prefix": "/audit", "tags": ["audit"]}),
+    (admin_users.router, {"tags": ["admin-users"]}),
+    (admin_authz.router, {}),
+    (attestations.router, {"tags": ["attestations"]}),
+    (notifications.router, {}),
+    (departments.router, {"tags": ["departments"]}),
+    (contracts.router, {"tags": ["contracts"]}),
+    (dashboard.router, {"tags": ["dashboard"]}),
+    (orders.router, {"tags": ["orders"]}),
+    (invoices.router, {"tags": ["invoices"]}),
+    (npa.router, {"tags": ["npa"]}),
+    (ppe.router, {"tags": ["ppe"]}),
+    (medical.router, {"tags": ["medical"]}),
+    (journals.router, {"tags": ["journals"]}),
+    (risk.router, {"tags": ["risks"]}),
+    (risk_enterprise.router, {}),
+    (sites.router, {"tags": ["sites"]}),
+    (companies.router, {}),
+    (persons.router, {}),
+    (training.router, {"tags": ["training"]}),
+    (training_next.router, {}),
+    (briefings.router, {}),
+    (calendar.router, {}),
+    (compliance.router, {}),
+    (billing.router, {}),
+)
+
+OPERATIONS_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
+    (files.router, {"prefix": "/files", "tags": ["files"]}),
+    (files_v1_router, {"prefix": "/files", "tags": ["files-v1"]}),
+    (packs.router, {"prefix": "/packs", "tags": ["packs"]}),
+    (client_portal.presets_router, {}),
+    (client_portal.internal_router, {}),
+    (incidents.router, {"tags": ["incidents"]}),
+    (inspections.router, {"tags": ["inspections"]}),
+    (prescriptions.router, {"tags": ["prescriptions"]}),
+    (safety_ops.router, {"tags": ["safety-ops"]}),
+    (obligations.router, {"tags": ["obligations"]}),
+    (jobs.router, {}),
+    (tasks.router, {"prefix": "/tasks", "tags": ["tasks"]}),
+    (tenancy.router, {}),
+    (outbox_admin.router, {"prefix": "/admin/outbox", "tags": ["outbox"]}),
+    (webhooks.router, {}),
+    (integration_readiness.router, {}),
+    (tenants.router, {}),
+    (tenants.admin_router, {}),
+    (pwa_sync.router, {}),
+    (external_registry.router, {}),
+    (reports.router, {"tags": ["reports"]}),
+)
+
+DOCUMENT_CORE_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
+    (documents.router, {"prefix": "/documents", "tags": ["documents"]}),
+    (edo_workflow.router, {"tags": ["edo-workflow"]}),
+    (approval_signing_v1.router, {"prefix": "/v1", "tags": ["approval-signing-v1"]}),
+    (approval_orchestration.router, {"tags": ["approval-orchestration"]}),
+    (replace_api.router, {}),
+    (headers_api.router, {"tags": ["layout-presets"]}),
+    (branding_router, {}),
+    (pipelines_api.router, {}),
+    (workflow_router, {}),
+    (pdf_api.router, {"prefix": "/files", "tags": ["pdf"]}),
+    (packs_v2_api.router, {}),
+    (search_router, {"tags": ["search"]}),
+    (analytics_router, {"tags": ["analytics"]}),
+    (export_center_router, {"tags": ["exports"]}),
+)
+
+PLATFORM_EXTENSION_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
+    (client_portal_v1_router, {}),
+    (public_api.admin_router, {}),
+    (public_api.marketplace_router, {}),
+    (public_api.router, {}),
+    (api_tokens.router, {}),
+    (portal_requests_router, {}),
+)
+
+ROUTER_GROUPS: dict[str, tuple[RouterRegistration, ...]] = {
+    "public": PUBLIC_ROUTER_REGISTRATIONS,
+    "compliance_and_admin": COMPLIANCE_AND_ADMIN_ROUTER_REGISTRATIONS,
+    "operations": OPERATIONS_ROUTER_REGISTRATIONS,
+    "document_core": DOCUMENT_CORE_ROUTER_REGISTRATIONS,
+    "platform_extension": PLATFORM_EXTENSION_ROUTER_REGISTRATIONS,
+}
 
 
 def create_public_router() -> APIRouter:
     router = APIRouter()
-    _include_registrations(router, [(auth.router, {"prefix": "/auth", "tags": ["auth"]}), (client_portal.router, {})])
+    _include_registrations(router, ROUTER_GROUPS["public"])
     return router
 
 
 def create_tenant_router() -> APIRouter:
     router = APIRouter(dependencies=[Depends(require_tenant_slug)])
-    _include_registrations(router, _compliance_and_admin_routers())
-    _include_registrations(router, _operations_routers())
-    _include_registrations(router, _document_core_routers())
-    _include_registrations(router, _platform_extension_routers())
+    for group_name in ROUTER_GROUP_ORDER[1:]:
+        _include_registrations(router, ROUTER_GROUPS[group_name])
     return router
 
 
@@ -94,87 +191,15 @@ def _include_registrations(router: APIRouter, registrations: Iterable[RouterRegi
         router.include_router(child, **kwargs)
 
 
-def _compliance_and_admin_routers() -> list[RouterRegistration]:
-    return [
-        (audit.router, {"prefix": "/audit", "tags": ["audit"]}),
-        (admin_users.router, {"tags": ["admin-users"]}),
-        (admin_authz.router, {}),
-        (attestations.router, {"tags": ["attestations"]}),
-        (notifications.router, {}),
-        (departments.router, {"tags": ["departments"]}),
-        (contracts.router, {"tags": ["contracts"]}),
-        (dashboard.router, {"tags": ["dashboard"]}),
-        (orders.router, {"tags": ["orders"]}),
-        (invoices.router, {"tags": ["invoices"]}),
-        (npa.router, {"tags": ["npa"]}),
-        (ppe.router, {"tags": ["ppe"]}),
-        (medical.router, {"tags": ["medical"]}),
-        (journals.router, {"tags": ["journals"]}),
-        (risk.router, {"tags": ["risks"]}),
-        (risk_enterprise.router, {}),
-        (sites.router, {"tags": ["sites"]}),
-        (companies.router, {}),
-        (persons.router, {}),
-        (training.router, {"tags": ["training"]}),
-        (training_next.router, {}),
-        (briefings.router, {}),
-        (calendar.router, {}),
-        (compliance.router, {}),
-        (billing.router, {}),
-    ]
-
-
-def _operations_routers() -> list[RouterRegistration]:
-    return [
-        (files.router, {"prefix": "/files", "tags": ["files"]}),
-        (files_v1_router, {"prefix": "/files", "tags": ["files-v1"]}),
-        (packs.router, {"prefix": "/packs", "tags": ["packs"]}),
-        (client_portal.presets_router, {}),
-        (client_portal.internal_router, {}),
-        (incidents.router, {"tags": ["incidents"]}),
-        (inspections.router, {"tags": ["inspections"]}),
-        (prescriptions.router, {"tags": ["prescriptions"]}),
-        (safety_ops.router, {"tags": ["safety-ops"]}),
-        (obligations.router, {"tags": ["obligations"]}),
-        (jobs.router, {}),
-        (tasks.router, {"prefix": "/tasks", "tags": ["tasks"]}),
-        (tenancy.router, {}),
-        (outbox_admin.router, {"prefix": "/admin/outbox", "tags": ["outbox"]}),
-        (webhooks.router, {}),
-        (integration_readiness.router, {}),
-        (tenants.router, {}),
-        (tenants.admin_router, {}),
-        (pwa_sync.router, {}),
-        (external_registry.router, {}),
-        (reports.router, {"tags": ["reports"]}),
-    ]
-
-
-def _document_core_routers() -> list[RouterRegistration]:
-    return [
-        (documents.router, {"prefix": "/documents", "tags": ["documents"]}),
-        (edo_workflow.router, {"tags": ["edo-workflow"]}),
-        (approval_signing_v1.router, {"prefix": "/v1", "tags": ["approval-signing-v1"]}),
-        (approval_orchestration.router, {"tags": ["approval-orchestration"]}),
-        (replace_api.router, {}),
-        (headers_api.router, {"tags": ["layout-presets"]}),
-        (branding_router, {}),
-        (pipelines_api.router, {}),
-        (workflow_router, {}),
-        (pdf_api.router, {"prefix": "/files", "tags": ["pdf"]}),
-        (packs_v2_api.router, {}),
-        (search_router, {"tags": ["search"]}),
-        (analytics_router, {"tags": ["analytics"]}),
-        (export_center_router, {"tags": ["exports"]}),
-    ]
-
-
-def _platform_extension_routers() -> list[RouterRegistration]:
-    return [
-        (client_portal_v1_router, {}),
-        (public_api.admin_router, {}),
-        (public_api.marketplace_router, {}),
-        (public_api.router, {}),
-        (api_tokens.router, {}),
-        (portal_requests_router, {}),
-    ]
+def describe_router_groups() -> dict[str, list[dict[str, object]]]:
+    description: dict[str, list[dict[str, object]]] = {}
+    for group_name in ROUTER_GROUP_ORDER:
+        description[group_name] = [
+            {
+                "prefix": kwargs.get("prefix", ""),
+                "tags": list(kwargs.get("tags", [])),
+                "routes": len(child.routes),
+            }
+            for child, kwargs in ROUTER_GROUPS[group_name]
+        ]
+    return description

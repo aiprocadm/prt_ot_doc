@@ -2,23 +2,22 @@
 
 _Date:_ 2026-03-22
 
-## P0/P1 gaps still open
-- Repo-wide tenant-context rejection, authz coverage, object-level restrictions, and structured error consistency are still not fully closed.
-- Document readiness score, explainable blockers/actions, dependency graph, diff/compare foundations, and reproducible render snapshots are still partial.
-- Universal task/timeline/attention-center layer is not fully unified across incidents, inspections, prescriptions, training, readiness blockers, and data-quality blockers.
-- Persistent data quality model/service/projection is still missing as a complete layer.
-- Real PWA setup, offline queue, sync/conflict UX, and media lifecycle remain missing.
-- Production-grade approval/sign/EDO adapters are still absent.
+## Still-open P0/P1 gaps
+- Full tenant/authz/audit/correlation-id consistency sweep across all business endpoints.
+- Centralized document readiness scoring and blocker/action explanations.
+- Universal tasks/timeline/attention center operational layer.
+- Data quality persistent issue model and dashboards.
+- Production-grade workflow/sign/EDO provider adapters.
+- Real PWA/offline shell, queue, sync-status, and conflict-resolution UX.
 
-## Known deferred/stub areas
+## Confirmed deferred/stubbed areas
 - `backend/app/api/routes/ws_stub.py`
 - `backend/app/services/integrations/stubs.py`
-- `backend/app/api/routes/approval_signing_v1.py`
-- `backend/app/api/routes/approval_orchestration.py`
-- `backend/app/api/routes/edo_workflow.py`
-- `frontend/vite.config.ts`
+- Mock/stub provider paths inside approval/sign/EDO routes
+- Compatibility document-job wrappers that still bridge older task names
 
-## Structural risks
+## Structural debt
 - `backend/app/api/v1/router.py`
 - `backend/app/models/models.py`
 - `backend/app/services/pipelines_orchestrator.py`
+- `backend/app/tasks.py`
