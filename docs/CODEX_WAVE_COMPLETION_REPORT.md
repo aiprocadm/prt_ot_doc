@@ -2,34 +2,28 @@
 
 _Date:_ 2026-03-22
 
-## What was actually implemented
-- Factual repo audit was refreshed before code changes.
-- Extracted approval/EDO/sign ORM primitives into `backend/app/models/approval_workflow.py` and kept compatibility imports in `backend/app/models/models.py`.
-- Extracted artifact/sign/EDO/index step handlers into `backend/app/services/pipeline_step_handlers.py` and kept `PipelineOrchestrator` backward-compatible.
-- Hardened `backend/app/celery/tasks/document_jobs_required.py` so legacy task wrappers now execute real tenant-aware orchestrator steps for render/build/sign/EDO/index flows.
-- Added backend regression tests for the refactored dispatch path and compatibility bridge behavior.
+## Actually implemented
+- Refreshed repo audit and wave planning documentation.
+- Added a real Vite PWA baseline with manifest/service worker/runtime registration.
+- Hardened compatibility background jobs so report export and integration sync can execute real named internal bridges when available, while keeping backward-compatible envelopes otherwise.
+- Added backend regression coverage for the new bridge behavior.
 
-## What was hardened without rewrite
-- Approval/EDO/sign ORM definitions were decomposed without breaking imports from `backend/app/models/models.py`.
-- Legacy document-job task names remain backward-compatible while now invoking real orchestrator execution for covered step types.
-- Pipeline step handling was reduced in-place without rewriting the surrounding orchestrator/audit/retry flow.
-- Existing frontend real-data conversions were preserved; no disruptive UI rewrite was performed.
+## Hardened without rewrite
+- Kept existing task names and compatibility responses.
+- Kept frontend routing/UI intact while improving installable shell/platform behavior.
 
-## Which frontend pages were confirmed as moved from static to real data
-- Contractors, Reference, Settings, Activities, Medical, Fire Safety, Fire Training, Fire Inspections, Inspection Checklists, Inspection Plans, Inspection Prep Packages, Admin.
-- This wave validated their current real-data status; it did not re-rewrite those screens.
+## Frontend pages moved from static to real data
+- No new page conversion happened in this wave; previously converted operational pages remain documented in `docs/FRONTEND_STATIC_TO_REAL_MAP.md`.
 
-## Which stubs were removed
-- Removed stub-only behavior from the covered document-job compatibility tasks (`render_docx`, `build_zip`, `verify_signature`, `send_edo`, `index_file_content`) by routing them through the real orchestrator bridge.
-- Stub integration providers and explicit deferred endpoints still remain elsewhere.
+## Stubs removed
+- No provider stub was fully removed.
+- Hardcoded envelope-only behavior for `export_report_job` and `sync_integration_job` was reduced into a runtime bridge seam that supports real internal execution when handlers are wired.
 
-## Which gaps remain and why
-- WebSocket events endpoint is still a 501 stub.
-- PWA setup is still incomplete because `frontend/vite.config.ts` has no production-grade PWA/service-worker integration.
-- Approval/sign/EDO provider flows still rely on mock/stub adapters in several routes and integrations.
-- `backend/app/models/models.py` still contains the remaining approval process/task workflow classes plus many non-document domains, and `backend/app/api/v1/router.py` still requires larger staged decomposition work.
+## Remaining gaps and why
+- WebSocket, provider adapters, offline queue/conflict UX, document readiness scoring, universal attention/data-quality layers, and broad tenant/authz consistency still require larger follow-up waves.
+- These areas were not rewritten in this wave to avoid destabilizing working enterprise slices.
 
-## Risks remaining for the next wave
-- Large compatibility files still concentrate too much behavior.
-- Approval/sign/EDO flows remain split across multiple route families.
-- Route and model decomposition will require careful test expansion to avoid regressions.
+## Risks for next wave
+- `backend/app/models/models.py` and `backend/app/api/v1/router.py` remain major compatibility hotspots.
+- Approval/sign/EDO routes still rely on mock/stub provider defaults.
+- PWA shell exists, but offline business transactions still need tenant-aware queue semantics and conflict handling.
