@@ -12,7 +12,8 @@ _Date:_ 2026-03-22
 - Refreshed the repository audit and plan docs based on actual code state.
 - Hardened `backend/app/celery/tasks/document_jobs_required.py` so report export / integration sync compatibility tasks can use named internal runtime bridges while preserving compatibility envelopes when no bridge is configured.
 - Added a real PWA baseline in `frontend/vite.config.ts` with manifest/service worker generation and runtime registration in `frontend/src/pwa/register.ts`.
-- Added/updated focused tests around background bridge behavior and frontend build verification.
+- Added shared provider classification metadata for approval/sign/EDO APIs so non-production mock/stub adapters are explicitly isolated in responses without breaking existing contracts.
+- Added/updated focused tests around background bridge behavior, provider metadata, and frontend build verification.
 
 ## Why this slice was chosen
 - It addresses two explicitly confirmed gaps from the audit.

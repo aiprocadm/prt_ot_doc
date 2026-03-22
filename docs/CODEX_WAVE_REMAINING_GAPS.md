@@ -15,6 +15,7 @@ _Date:_ 2026-03-22
 - `backend/app/services/integrations/stubs.py`
 - Mock/stub provider paths inside approval/sign/EDO routes
 - Compatibility wrapper task names remain for backward compatibility, but only `export_report_job` / `sync_integration_job` are still envelope-only in the audited slice
+- Mock/stub providers are now explicitly marked as non-production metadata, but certified adapters are still absent.
 
 ## Structural debt
 - `backend/app/api/v1/router.py`

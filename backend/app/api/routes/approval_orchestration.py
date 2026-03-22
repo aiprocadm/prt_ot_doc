@@ -24,6 +24,7 @@ from app.models.models import (
 from app.modules.approvals.service import ApprovalDecisionService, ApprovalInstanceService
 from app.modules.edo.service import EdoStatusProjectionService, EdoWebhookService
 from app.modules.sign.service import SignatureRequestService, SignatureVerificationService
+from app.services.provider_registry import provider_response_meta
 
 router = APIRouter()
 
@@ -241,7 +242,7 @@ async def create_sign_request(payload: SignatureRequestIn, session: AsyncSession
         approval_instance_id=payload.approval_instance_id,
     )
     req = await SignatureRequestService(session, str(tenant.id)).create(req)
-    return {"id": req.id, "status": req.status}
+    return {"id": req.id, "status": req.status, **provider_response_meta(payload.provider_code)}
 
 
 @router.get("/sign/requests")
@@ -300,7 +301,7 @@ async def create_edo_message(payload: EdoMessageIn, session: AsyncSession = Depe
     )
     session.add(row)
     await session.flush()
-    return {"id": row.id, "status": row.status}
+    return {"id": row.id, "status": row.status, **provider_response_meta(payload.operator_code)}
 
 
 @router.get("/edo/messages")
@@ -375,4 +376,4 @@ async def sign_webhook(provider_code: str, payload: dict[str, Any], session: Asy
     if not row or row.tenant_id != str(tenant.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
     row.status = payload.get("status", row.status)
-    return {"id": row.id, "status": row.status, "provider": provider_code}
+    return {"id": row.id, "status": row.status, "provider": provider_code, **provider_response_meta(provider_code)}

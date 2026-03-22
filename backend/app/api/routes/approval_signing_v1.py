@@ -31,6 +31,7 @@ from app.models.models import (
 )
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 from app.services.outbox import OutboxService
+from app.services.provider_registry import provider_response_meta
 from app.modules.approval.core import cond_matches, make_request_hash
 
 from app.models.job_engine import InboundWebhookDedup
@@ -256,7 +257,7 @@ async def sign_request(payload: SignRequestIn, request: Request, session: AsyncS
         sig.status = SignatureRequestStatus.SIGNED
         sig.result_json = {"signed_by": x_user_id, "verified": True}
         await OutboxService(session).enqueue(tenant_id=str(tenant.id), event_type="Signed", payload={"event_id": str(uuid4()), "tenant_id": str(tenant.id), "document_id": object_id, "document_version_id": object_id, "status": "signed", "signed_at": datetime.now(timezone.utc).isoformat()})
-    body = {"signature_request_id": sig.id, "status": sig.status.value}
+    body = {"signature_request_id": sig.id, "status": sig.status.value, **provider_response_meta(payload.provider)}
     if idem:
         await idem.store_success(rec, status_code=200, body=body)
     return body
@@ -270,7 +271,12 @@ async def sign_requests(status: str | None = None, object_id: str | None = None,
     if object_id:
         stmt = stmt.where(SignatureRequest.object_id == object_id)
     rows = (await session.execute(stmt.order_by(SignatureRequest.created_at.desc()))).scalars().all()
-    return {"items": [{"id": r.id, "status": r.status.value, "provider": r.provider} for r in rows]}
+    return {
+        "items": [
+            {"id": r.id, "status": r.status.value, "provider": r.provider, **provider_response_meta(r.provider)}
+            for r in rows
+        ]
+    }
 
 
 @router.get("/sign/requests/{request_id}")
