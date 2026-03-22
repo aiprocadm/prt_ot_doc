@@ -16,7 +16,8 @@ from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, abac
 from app.models.document import DocumentVersion
 from app.models.job_engine import InboundWebhookDedup
-from app.models.models import (
+from app.models.models import RoleEnum, Tenant
+from app.models.workflow import (
     ApprovalDecision,
     ApprovalDecisionType,
     ApprovalRequest,
@@ -27,11 +28,9 @@ from app.models.models import (
     EdoReceipt,
     EdoStatus,
     EdoStatusHistory,
-    RoleEnum,
     Signature,
     SignatureStatus,
     SignatureType,
-    Tenant,
 )
 from app.services.events import EventType
 from app.services.file_storage import FileStorageService
@@ -622,7 +621,7 @@ async def edo_webhook(
         await session.flush()
     except Exception:
         await session.rollback()
-        return {"status": "duplicate"}
+        return {"status": "duplicate", **provider_response_meta(provider_code)}
 
     process_inbound_webhook.delay(
         source="edo",
@@ -636,4 +635,4 @@ async def edo_webhook(
             "raw_payload": payload.raw_payload,
         },
     )
-    return {"status": "accepted"}
+    return {"status": "accepted", **provider_response_meta(provider_code)}

@@ -9,7 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.models.document import DocumentVersion
-from app.models.models import (
+from app.models.models import PackRun
+from app.models.workflow import (
     ApprovalDecision,
     ApprovalInstance,
     ApprovalInstanceStep,
@@ -18,7 +19,6 @@ from app.models.models import (
     EdoMessage,
     EdoStatusEvent,
     EdoWebhookInbox,
-    PackRun,
     SignatureRequest,
 )
 from app.modules.approvals.service import ApprovalDecisionService, ApprovalInstanceService
@@ -248,7 +248,7 @@ async def create_sign_request(payload: SignatureRequestIn, session: AsyncSession
 @router.get("/sign/requests")
 async def list_sign_requests(session: AsyncSession = Depends(get_session), tenant=Depends(get_tenant_record)):
     rows = (await session.execute(select(SignatureRequest).where(SignatureRequest.tenant_id == str(tenant.id)))).scalars().all()
-    return {"items": rows}
+    return {"items": [{"id": row.id, "status": row.status, "provider": row.provider, **provider_response_meta(getattr(row, "provider_code", row.provider))} for row in rows]}
 
 
 @router.get("/sign/requests/{request_id}")
@@ -256,7 +256,7 @@ async def get_sign_request(request_id: str, session: AsyncSession = Depends(get_
     row = await session.get(SignatureRequest, request_id)
     if not row or row.tenant_id != str(tenant.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
-    return row
+    return {"id": row.id, "status": row.status, "provider": row.provider, **provider_response_meta(getattr(row, "provider_code", row.provider))}
 
 
 @router.post("/sign/requests/{request_id}/cancel")
@@ -307,7 +307,7 @@ async def create_edo_message(payload: EdoMessageIn, session: AsyncSession = Depe
 @router.get("/edo/messages")
 async def list_edo_messages(session: AsyncSession = Depends(get_session), tenant=Depends(get_tenant_record)):
     rows = (await session.execute(select(EdoMessage).where(EdoMessage.tenant_id == str(tenant.id)))).scalars().all()
-    return {"items": rows}
+    return {"items": [{"id": row.id, "status": row.status, "operator_code": row.operator_code, **provider_response_meta(getattr(row, "provider_code", row.operator_code))} for row in rows]}
 
 
 @router.get("/edo/messages/{message_id}")
@@ -315,7 +315,7 @@ async def get_edo_message(message_id: str, session: AsyncSession = Depends(get_s
     row = await session.get(EdoMessage, message_id)
     if not row or row.tenant_id != str(tenant.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
-    return row
+    return {"id": row.id, "status": row.status, "operator_code": row.operator_code, **provider_response_meta(getattr(row, "provider_code", row.operator_code))}
 
 
 @router.get("/edo/messages/{message_id}/events")
@@ -356,7 +356,7 @@ async def edo_webhook(operator_code: str, payload: dict[str, Any], request: Requ
     dedupe_key = request.headers.get("X-Dedupe-Key") or payload.get("external_event_id") or f"{operator_code}:{hash(str(payload))}"
     exists = (await session.execute(select(EdoWebhookInbox).where(EdoWebhookInbox.dedupe_key == dedupe_key))).scalar_one_or_none()
     if exists:
-        return {"status": "ignored", "dedupe_key": dedupe_key}
+        return {"status": "ignored", "dedupe_key": dedupe_key, **provider_response_meta(operator_code)}
     inbox = await EdoWebhookService(session, str(tenant.id)).ingest(operator_code=operator_code, dedupe_key=dedupe_key, headers_json=dict(request.headers), payload_json=payload)
     message_id = payload.get("message_id")
     if message_id:
@@ -364,7 +364,7 @@ async def edo_webhook(operator_code: str, payload: dict[str, Any], request: Requ
         if row and row.tenant_id == str(tenant.id):
             await EdoStatusProjectionService(session, str(tenant.id)).apply_event(row, payload.get("status", row.status), payload, dedupe_key)
     inbox.status = "processed"
-    return {"status": "processed", "dedupe_key": dedupe_key}
+    return {"status": "processed", "dedupe_key": dedupe_key, **provider_response_meta(operator_code)}
 
 
 @router.post("/webhooks/sign/{provider_code}")
