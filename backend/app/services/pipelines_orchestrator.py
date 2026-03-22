@@ -20,13 +20,17 @@ from app.models.job_engine import (
 )
 from app.models.models import TenantQuota
 from app.modules.files.models import FileEntityType, FileLinkRole
-from app.modules.files.service import FileService, build_artifact_name
+from app.modules.files.service import FileService
 from app.modules.pipelines.graph import safe_eval_condition
 from app.modules.pipelines.models import PipelinePackageProfile, PipelineProfile
 from app.services.audit import AuditService, field_level_diff
 from app.services.file_storage import FileStorageService
-from app.services.integrations.factory import get_edo_integration
-from app.services.integrations.interfaces import IntegrationDisabledError
+from app.services.pipeline_step_handlers import (
+    artifact_step_handler,
+    edo_step_handler,
+    index_projection_step_handler,
+    signature_step_handler,
+)
 from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -591,122 +595,6 @@ class PipelineOrchestrator:
         ]
 
     def _dispatch(self, step_key: str):
-        async def _artifact_handler(*, job: DocumentJob, step: DocumentJobStep) -> dict[str, Any]:
-            payload = f"{step_key}:{job.id}".encode("utf-8")
-            ext = (
-                "pdf"
-                if step_key == "convert_pdf"
-                else ("zip" if step_key == "build_zip" else "bin")
-            )
-            filename = build_artifact_name(job.input_payload_json or {}, ext=ext)
-            svc = FileService(session=self.session, tenant_id=str(job.tenant_id))
-            file_record = await svc.create_artifact_from_bytes(
-                payload=payload,
-                filename=filename,
-                content_type="application/octet-stream",
-                job_id=job.id,
-                step_key=step_key,
-                metadata_json={"job_id": job.id, "step_key": step_key, "display_name": filename},
-                entity_type=FileEntityType.job_step.value,
-                entity_id=step.id,
-                role=FileLinkRole.artifact.value,
-            )
-            await svc.link_file(
-                file_id=file_record.id,
-                entity_type=FileEntityType.job.value,
-                entity_id=job.id,
-                role=FileLinkRole.artifact.value,
-            )
-            self.session.add(
-                DocumentArtifact(
-                    tenant_id=job.tenant_id,
-                    job_id=job.id,
-                    step_code=step.step_code,
-                    kind=step_key,
-                    file_id=file_record.id,
-                    sha256=file_record.sha256,
-                    meta={"file_id": file_record.id, "display_name": filename},
-                )
-            )
-            return {"file_id": file_record.id, "kind": step_key, "display_name": filename}
-
-        async def _signature_handler(*, job: DocumentJob, step: DocumentJobStep) -> dict[str, Any]:
-            payload = job.input_payload_json or {}
-            digest = hashlib.sha256(
-                json.dumps(
-                    {
-                        "job_id": job.id,
-                        "step_id": step.id,
-                        "tenant_id": job.tenant_id,
-                        "payload": payload,
-                    },
-                    sort_keys=True,
-                    default=str,
-                ).encode("utf-8")
-            ).hexdigest()
-            return {
-                "status": "verified",
-                "provider": "internal-orchestrator",
-                "signature_type": "deterministic-snapshot",
-                "verification": {
-                    "verified": True,
-                    "digest": digest,
-                    "correlation_id": job.correlation_id,
-                },
-            }
-
-        async def _edo_handler(*, job: DocumentJob, step: DocumentJobStep) -> dict[str, Any]:
-            provider = get_edo_integration()
-            payload = job.input_payload_json or {}
-            filename = build_artifact_name(payload, ext="pdf")
-            content = json.dumps(
-                {
-                    "job_id": job.id,
-                    "step_id": step.id,
-                    "template_code": job.template_code,
-                    "payload": payload,
-                },
-                sort_keys=True,
-                default=str,
-            ).encode("utf-8")
-            try:
-                status = await provider.send_document(
-                    content=content,
-                    filename=filename,
-                    metadata={
-                        "job_id": job.id,
-                        "step_id": step.id,
-                        "tenant_id": job.tenant_id,
-                        "correlation_id": job.correlation_id,
-                    },
-                )
-            except IntegrationDisabledError:
-                return {
-                    "status": "deferred",
-                    "provider": provider.name,
-                    "reason": "edo_integration_disabled",
-                    "deferred": True,
-                }
-            return {
-                "status": status.status,
-                "provider": provider.name,
-                "external_id": status.external_id,
-                "details": status.details,
-                "deferred": False,
-            }
-
-        async def _index_projection_handler(*, job: DocumentJob, step: DocumentJobStep) -> dict[str, Any]:
-            payload = step.input or {}
-            source_payload = payload.get("payload") if isinstance(payload, dict) else {}
-            serialized = json.dumps(source_payload or job.input_payload_json or {}, sort_keys=True, default=str)
-            tokens = [token for token in serialized.replace("{", " ").replace("}", " ").replace('"', " ").split() if token]
-            return {
-                "status": "indexed",
-                "source": "job_payload_projection",
-                "terms_indexed": len(tokens),
-                "preview_terms": tokens[:10],
-            }
-
         if step_key in {
             "render_docx",
             "apply_headers",
@@ -715,13 +603,15 @@ class PipelineOrchestrator:
             "build_zip",
             "archive",
         }:
-            return _artifact_handler
+            return lambda *, job, step: artifact_step_handler(
+                session=self.session, job=job, step=step, step_key=step_key
+            )
         if step_key == "send_edo":
-            return _edo_handler
+            return edo_step_handler
         if step_key in {"sign", "verify_signature"}:
-            return _signature_handler
+            return lambda *, job, step: signature_step_handler(job=job, step=step, step_key=step_key)
         if step_key == "index_file_content":
-            return _index_projection_handler
+            return index_projection_step_handler
         if step_key in INTERNAL_PROJECTION_STEPS:
             return lambda *, job, step: {"status": "completed", "step": step_key}
         return lambda *, job, step: {"noop": True, "step": step_key}

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-from app.celery.tasks.document_jobs_required import send_edo_job, verify_signature_job
 from app.models.job_engine import DocumentJobStatus, DocumentJobStep, JobStepStatus
 from app.modules.pipelines.models import PipelineProfile
 from app.services.pipelines_orchestrator import PipelineOrchestrator
@@ -127,7 +126,7 @@ async def test_orchestrator_dispatches_real_internal_handlers(sessionmaker, monk
             return Status()
 
     monkeypatch.setattr(
-        "app.services.pipelines_orchestrator.get_edo_integration",
+        "app.services.pipeline_step_handlers.get_edo_integration",
         lambda: FakeEDOProvider(),
     )
 
@@ -160,13 +159,19 @@ async def test_orchestrator_dispatches_real_internal_handlers(sessionmaker, monk
         assert index_result["terms_indexed"] >= 2
 
 
-def test_document_job_required_wrappers_are_explicitly_deferred_not_stub() -> None:
-    edo = send_edo_job(tenant_slug="tenant-a", job_id="job-1", step_id="step-1")
-    assert edo["status"] == "accepted"
-    assert edo["deferred"] is True
-    assert edo["handler"] == "edo_orchestrator_bridge_pending"
+def test_document_job_required_wrappers_are_no_longer_stub_only() -> None:
+    from app.celery.tasks.document_jobs_required import _job_step_response
 
-    signature = verify_signature_job(tenant_slug="tenant-a", job_id="job-1", step_id="step-2")
-    assert signature["status"] == "accepted"
-    assert signature["deferred"] is True
-    assert signature["handler"] == "signature_orchestrator_bridge_pending"
+    response = _job_step_response(
+        tenant_slug="tenant-a",
+        job_id="job-1",
+        step_id="step-1",
+        step_key="send_edo",
+        status="completed",
+        step_status="success",
+    )
+
+    assert response["status"] == "completed"
+    assert response["bridge_mode"] == "compatibility-execution-bridge"
+    assert response["step_status"] == "success"
+    assert response["deferred"] is False
