@@ -24,3 +24,8 @@ The policy layer evaluates subject and resource attributes:
 - risk_level
 
 Query isolation uses mandatory ABAC filters for list/search endpoints.
+
+## Current wave note
+- This wave did not change the global permission matrix.
+- It did preserve tenant-aware execution in the hardened pipeline/document path and kept provider abstraction boundaries intact.
+- A repo-wide read/write/bulk/export/search authz consistency pass is still required.

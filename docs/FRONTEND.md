@@ -42,3 +42,7 @@ Branding settings now expose separate `Header requisites` and `Footer requisites
 - The preferred frontend pattern remains: `src/api/*` wrapper -> page-level loading/error/empty states -> shared table/card shell components.
 - Dashboard tabs specifically now consume `GET /dashboard/summary` + `GET /dashboard/operational` through `src/stores/dashboard.ts`, so future Attention Center expansion can enrich one backend projection contract instead of reintroducing page-local ad hoc arrays.
 - Pages still awaiting similar treatment include fire safety pages, activities/CAPA overview aggregations, and inspection-prep showcase screens.
+
+## 2026-03-22 note
+- No frontend runtime behavior was changed in this wave.
+- `frontend/vite.config.ts` still lacks the production-grade PWA plugin/service worker stack required by the super-TZ.

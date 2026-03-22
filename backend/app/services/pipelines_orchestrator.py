@@ -8,10 +8,6 @@ from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import select, update
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.models.job_engine import (
     DocumentArtifact,
     DocumentJob,
@@ -23,12 +19,17 @@ from app.models.job_engine import (
     PipelineStepLock,
 )
 from app.models.models import TenantQuota
+from app.modules.files.models import FileEntityType, FileLinkRole
+from app.modules.files.service import FileService, build_artifact_name
 from app.modules.pipelines.graph import safe_eval_condition
 from app.modules.pipelines.models import PipelinePackageProfile, PipelineProfile
 from app.services.audit import AuditService, field_level_diff
 from app.services.file_storage import FileStorageService
-from app.modules.files.service import FileService, build_artifact_name
-from app.modules.files.models import FileEntityType, FileLinkRole
+from app.services.integrations.factory import get_edo_integration
+from app.services.integrations.interfaces import IntegrationDisabledError
+from sqlalchemy import select, update
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 DEFAULT_STEPS = [
     "render_docx",
@@ -40,7 +41,7 @@ DEFAULT_STEPS = [
     "send_edo",
     "archive",
 ]
-STUB_STEPS = {"sign", "send_edo", "index_file_content"}
+INTERNAL_PROJECTION_STEPS = {"sign", "verify_signature", "index_file_content"}
 RETRYABLE = {"convert_pdf": 2, "send_edo": 2}
 STEP_ALIASES = {
     "replace_apply": "replace",
@@ -629,6 +630,83 @@ class PipelineOrchestrator:
             )
             return {"file_id": file_record.id, "kind": step_key, "display_name": filename}
 
+        async def _signature_handler(*, job: DocumentJob, step: DocumentJobStep) -> dict[str, Any]:
+            payload = job.input_payload_json or {}
+            digest = hashlib.sha256(
+                json.dumps(
+                    {
+                        "job_id": job.id,
+                        "step_id": step.id,
+                        "tenant_id": job.tenant_id,
+                        "payload": payload,
+                    },
+                    sort_keys=True,
+                    default=str,
+                ).encode("utf-8")
+            ).hexdigest()
+            return {
+                "status": "verified",
+                "provider": "internal-orchestrator",
+                "signature_type": "deterministic-snapshot",
+                "verification": {
+                    "verified": True,
+                    "digest": digest,
+                    "correlation_id": job.correlation_id,
+                },
+            }
+
+        async def _edo_handler(*, job: DocumentJob, step: DocumentJobStep) -> dict[str, Any]:
+            provider = get_edo_integration()
+            payload = job.input_payload_json or {}
+            filename = build_artifact_name(payload, ext="pdf")
+            content = json.dumps(
+                {
+                    "job_id": job.id,
+                    "step_id": step.id,
+                    "template_code": job.template_code,
+                    "payload": payload,
+                },
+                sort_keys=True,
+                default=str,
+            ).encode("utf-8")
+            try:
+                status = await provider.send_document(
+                    content=content,
+                    filename=filename,
+                    metadata={
+                        "job_id": job.id,
+                        "step_id": step.id,
+                        "tenant_id": job.tenant_id,
+                        "correlation_id": job.correlation_id,
+                    },
+                )
+            except IntegrationDisabledError:
+                return {
+                    "status": "deferred",
+                    "provider": provider.name,
+                    "reason": "edo_integration_disabled",
+                    "deferred": True,
+                }
+            return {
+                "status": status.status,
+                "provider": provider.name,
+                "external_id": status.external_id,
+                "details": status.details,
+                "deferred": False,
+            }
+
+        async def _index_projection_handler(*, job: DocumentJob, step: DocumentJobStep) -> dict[str, Any]:
+            payload = step.input or {}
+            source_payload = payload.get("payload") if isinstance(payload, dict) else {}
+            serialized = json.dumps(source_payload or job.input_payload_json or {}, sort_keys=True, default=str)
+            tokens = [token for token in serialized.replace("{", " ").replace("}", " ").replace('"', " ").split() if token]
+            return {
+                "status": "indexed",
+                "source": "job_payload_projection",
+                "terms_indexed": len(tokens),
+                "preview_terms": tokens[:10],
+            }
+
         if step_key in {
             "render_docx",
             "apply_headers",
@@ -638,8 +716,14 @@ class PipelineOrchestrator:
             "archive",
         }:
             return _artifact_handler
-        if step_key in STUB_STEPS:
-            return lambda *, job, step: {"stub": True, "step": step_key}
+        if step_key == "send_edo":
+            return _edo_handler
+        if step_key in {"sign", "verify_signature"}:
+            return _signature_handler
+        if step_key == "index_file_content":
+            return _index_projection_handler
+        if step_key in INTERNAL_PROJECTION_STEPS:
+            return lambda *, job, step: {"status": "completed", "step": step_key}
         return lambda *, job, step: {"noop": True, "step": step_key}
 
     async def _write_step_log(

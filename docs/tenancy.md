@@ -40,3 +40,7 @@ Per-tenant quotas are enforced by `tenant_quotas` and used for:
 ```bash
 curl -H "Authorization: Bearer <token>" -H "X-Tenant: acme" http://localhost:8000/api/v1/tenants
 ```
+
+## Current wave note
+- The hardened pipeline/document tasks in this wave continue to carry `tenant_id` / `tenant_slug` through orchestrator and Celery compatibility wrappers.
+- Repo-wide tenant enforcement is still uneven outside the audited slice and remains a follow-up priority.

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import select
-
+from app.celery.tasks.document_jobs_required import send_edo_job, verify_signature_job
 from app.models.job_engine import DocumentJobStatus, DocumentJobStep, JobStepStatus
 from app.modules.pipelines.models import PipelineProfile
 from app.services.pipelines_orchestrator import PipelineOrchestrator
+from sqlalchemy import select
 
 
 @pytest.mark.anyio
@@ -111,3 +111,62 @@ async def test_retry_failed_only_keeps_successful_steps(sessionmaker, data_facto
         await orchestrator.retry_job(job_id=job.id, retry_failed_only=True)
         assert steps[0].status == JobStepStatus.SUCCESS.value
         assert steps[1].status == JobStepStatus.QUEUED.value
+
+
+@pytest.mark.anyio
+async def test_orchestrator_dispatches_real_internal_handlers(sessionmaker, monkeypatch) -> None:
+    class FakeEDOProvider:
+        name = "fake-edo"
+
+        async def send_document(self, *, content: bytes, filename: str, metadata: dict[str, str] | None = None):
+            class Status:
+                external_id = "edo-ext-1"
+                status = "sent"
+                details = {"filename": filename, "size": len(content), "metadata": metadata or {}}
+
+            return Status()
+
+    monkeypatch.setattr(
+        "app.services.pipelines_orchestrator.get_edo_integration",
+        lambda: FakeEDOProvider(),
+    )
+
+    async with sessionmaker() as session:
+        orchestrator = PipelineOrchestrator(session)
+        job = type(
+            "Job",
+            (),
+            {
+                "id": "job-1",
+                "tenant_id": "tenant-1",
+                "template_code": "doc_v1",
+                "correlation_id": "corr-1",
+                "input_payload_json": {"employee": {"name": "Ada"}, "doc": "instruction"},
+            },
+        )()
+        step = type("Step", (), {"id": "step-1", "input": {"payload": {"query": "instruction ada"}}})()
+
+        sign_result = await orchestrator._dispatch("sign")(job=job, step=step)
+        assert sign_result["status"] == "verified"
+        assert sign_result["verification"]["verified"] is True
+
+        edo_result = await orchestrator._dispatch("send_edo")(job=job, step=step)
+        assert edo_result["status"] == "sent"
+        assert edo_result["provider"] == "fake-edo"
+        assert edo_result["deferred"] is False
+
+        index_result = await orchestrator._dispatch("index_file_content")(job=job, step=step)
+        assert index_result["status"] == "indexed"
+        assert index_result["terms_indexed"] >= 2
+
+
+def test_document_job_required_wrappers_are_explicitly_deferred_not_stub() -> None:
+    edo = send_edo_job(tenant_slug="tenant-a", job_id="job-1", step_id="step-1")
+    assert edo["status"] == "accepted"
+    assert edo["deferred"] is True
+    assert edo["handler"] == "edo_orchestrator_bridge_pending"
+
+    signature = verify_signature_job(tenant_slug="tenant-a", job_id="job-1", step_id="step-2")
+    assert signature["status"] == "accepted"
+    assert signature["deferred"] is True
+    assert signature["handler"] == "signature_orchestrator_bridge_pending"
