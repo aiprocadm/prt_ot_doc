@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { opsApi } from "@/api/ops";
+import { opsApi, type AuditPrepSnapshot } from "@/api/ops";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -14,7 +14,7 @@ import { formatDate } from "@/utils/datetime";
 const AuditPrepPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
-  const [snapshot, setSnapshot] = useState<{ inspections: any[]; prescriptions: any[]; overdueTasks: any[] }>({ inspections: [], prescriptions: [], overdueTasks: [] });
+  const [snapshot, setSnapshot] = useState<AuditPrepSnapshot>({ inspections: [], prescriptions: [], overdueTasks: [] });
 
   const load = async () => {
     setLoading(true);

@@ -24,7 +24,7 @@ const InspectionChecklistsPage = () => {
       current.inspections += 1;
       grouped.set(code, current);
     });
-    data.prescriptions.forEach((item) => {
+    data.prescriptions.forEach(() => {
       const current = grouped.get("general") ?? { code: "general", inspections: 0, prescriptions: 0 };
       current.prescriptions += 1;
       grouped.set("general", current);
