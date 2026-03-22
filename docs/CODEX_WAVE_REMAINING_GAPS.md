@@ -14,7 +14,7 @@ _Date:_ 2026-03-22
 - `backend/app/api/routes/ws_stub.py`
 - `backend/app/services/integrations/stubs.py`
 - Mock/stub provider paths inside approval/sign/EDO routes
-- Compatibility wrapper task names remain for backward compatibility; `export_report_job` / `sync_integration_job` now have a real runtime bridge seam, but remain envelope-only unless internal handlers are actually wired
+- Compatibility wrapper task names remain for backward compatibility; `export_report_job` / `sync_integration_job` now have an explicit runtime bridge registry seam, but remain envelope-only unless internal handlers are actually wired
 - Mock/stub providers are now explicitly marked as non-production metadata, but certified adapters are still absent.
 
 ## Structural debt

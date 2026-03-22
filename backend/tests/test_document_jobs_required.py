@@ -6,9 +6,12 @@ from app.celery.tasks.document_jobs_required import (
     build_zip_job,
     export_report_job,
     index_file_content_job,
+    list_compatibility_bridges,
+    register_compatibility_bridge,
     render_docx_job,
     send_edo_job,
     sync_integration_job,
+    unregister_compatibility_bridge,
     verify_signature_job,
 )
 
@@ -72,7 +75,7 @@ def test_document_job_named_bridges_execute_runtime_handler(monkeypatch) -> None
         captured.append((tenant_slug, report_id))
         return {"status": "exported", "artifact_id": f"artifact:{report_id}"}
 
-    monkeypatch.setitem(module._COMPATIBILITY_BRIDGES, "export_report", fake_export)
+    register_compatibility_bridge("export_report", fake_export)
 
     monkeypatch.setattr(module, "tenant_context", lambda tenant_slug: __import__('contextlib').nullcontext())
     monkeypatch.setattr(module, "ensure_tenant_schema", lambda tenant_slug: None)
@@ -91,6 +94,19 @@ def test_document_job_named_bridges_execute_runtime_handler(monkeypatch) -> None
     assert response["bridge_mode"] == "compatibility-execution-bridge"
     assert response["deferred"] is False
     assert response["artifact_id"] == "artifact:report-42"
+
+    unregister_compatibility_bridge("export_report")
+
+
+def test_document_job_bridge_registry_rejects_unknown_names() -> None:
+    assert list_compatibility_bridges() == ("export_report", "sync_integration")
+
+    try:
+        register_compatibility_bridge("unknown_bridge", lambda **_: {})
+    except ValueError as exc:
+        assert "Unknown compatibility bridge" in str(exc)
+    else:  # pragma: no cover - defensive
+        raise AssertionError("register_compatibility_bridge accepted an unknown bridge name")
 
 
 def test_route_group_description_matches_declared_group_order() -> None:

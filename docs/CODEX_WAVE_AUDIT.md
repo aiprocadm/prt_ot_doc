@@ -36,7 +36,7 @@ _Date:_ 2026-03-22
 
 ## Active module map
 - Router decomposition is already partially in place via `route_groups.py`; `router.py` remains the compatibility-heavy composition file.
-- ORM decomposition is partial: focused modules exist, `backend/app/models/tenanting.py` already re-exports tenant entities, and this wave adds `backend/app/models/workflow.py` as a compatibility layer for approval/sign/EDO entities while `backend/app/models/models.py` remains the large aggregator.
+- ORM decomposition is partial: focused modules exist, `backend/app/models/tenanting.py` already re-exports tenant entities, `backend/app/models/workflow.py` covers approval/sign/EDO entities, and this wave adds `backend/app/models/approval_signing.py` so the legacy approval-signing v1 routes can stop importing those ORM types directly from `backend/app/models/models.py` while the large aggregator remains in place.
 - Pipeline/document orchestration centers on `backend/app/services/pipelines_orchestrator.py`, `backend/app/tasks.py`, `backend/app/celery/tasks/document_jobs_required.py`, and extracted `backend/app/services/pipeline_step_handlers.py`.
 - Frontend operational data flows aggregate through `frontend/src/api/*.ts` and page-level hooks such as `useAsyncResource` / `useLocalRegistry`.
 
@@ -114,5 +114,6 @@ Factually confirmed problems:
 - Added a real Vite PWA baseline with manifest, service worker generation, runtime registration, and asset/runtime caching strategy.
 - Hardened `document_jobs_required.py` so compatibility task names can execute named internal bridges for report export and integration sync instead of being permanently hardcoded stubs.
 - Added additive provider metadata to approval/sign/EDO responses so stub/mock/disabled providers are explicitly marked as non-production.
-- Added regression tests for the bridge behavior and provider classification seam.
+- Added explicit compatibility-bridge registration/listing helpers for document jobs and a dedicated `approval_signing.py` compatibility import layer to continue safe model decomposition.
+- Added regression tests for the bridge behavior, provider classification seam, and bridge registry guardrails.
 - Refreshed wave docs to clearly separate implemented hardening from remaining gaps.

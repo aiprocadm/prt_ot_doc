@@ -12,7 +12,7 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
-from app.models.models import (
+from app.models.approval_signing import (
     ApprovalDecisionLog,
     ApprovalProcess,
     ApprovalProcessStatus,
@@ -21,14 +21,12 @@ from app.models.models import (
     ApprovalTaskStatus,
     EdoEnvelope,
     EdoEnvelopeStatus,
-    IdempotencyStatus,
     SignatureRequest,
     SignatureRequestStatus,
-    Tenant,
-    User,
-    UserRole,
     WebhookEndpoint,
 )
+from app.models.models import IdempotencyStatus, User, UserRole
+from app.models.tenanting import Tenant
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 from app.services.outbox import OutboxService
 from app.services.provider_registry import provider_response_meta
