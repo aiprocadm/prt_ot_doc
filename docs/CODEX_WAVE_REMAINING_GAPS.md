@@ -14,7 +14,7 @@ _Date:_ 2026-03-22
 - `backend/app/api/routes/ws_stub.py`
 - `backend/app/services/integrations/stubs.py`
 - Mock/stub provider paths inside approval/sign/EDO routes
-- Compatibility document-job wrappers that still bridge older task names
+- Compatibility wrapper task names remain for backward compatibility, but only `export_report_job` / `sync_integration_job` are still envelope-only in the audited slice
 
 ## Structural debt
 - `backend/app/api/v1/router.py`

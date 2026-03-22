@@ -2,9 +2,9 @@
 
 _Date:_ 2026-03-22
 
-1. Extract pipeline step handlers from `backend/app/services/pipelines_orchestrator.py` into focused modules with compatibility imports.
-2. Start decomposing `backend/app/models/models.py` by carving out an approvals/EDO/sign compatibility module.
+1. Continue extracting approval process/task/status models from `backend/app/models/models.py` now that approval/EDO/sign primitives live in `backend/app/models/approval_workflow.py`.
+2. Keep shrinking `backend/app/services/pipelines_orchestrator.py` by extracting audit/retry/state helpers after the new `pipeline_step_handlers.py` split.
 3. Normalize approval/sign/EDO route families onto clearer canonical paths while preserving existing compatibility routes.
-4. Use `describe_router_groups()` to automate route-audit docs/tests and detect risky path drift.
+4. Expand the runtime bridge pattern to the remaining compatibility-only jobs only when a real orchestrator path exists.
 5. Begin a dedicated tenant/authz/audit/correlation-id sweep for high-risk business endpoints.
 6. Plan the real PWA plugin/service-worker/offline queue wave separately instead of overstating readiness.

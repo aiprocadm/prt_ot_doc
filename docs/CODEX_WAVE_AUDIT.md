@@ -5,7 +5,7 @@ _Date:_ 2026-03-22
 ## Scope of this audit wave
 - Performed a factual repository audit before changing code.
 - Kept changes incremental and backward-compatible.
-- Focused this wave on safer API route composition metadata and document/pipeline compatibility wrappers.
+- Focused this wave on safe decomposition of approval/EDO/sign models plus replacing legacy document-job step stubs with real orchestrator execution bridges.
 
 ## Canonical backend/frontend roots
 - Backend app bootstrap: `backend/app/main.py`, `backend/app/api/app.py`.
@@ -34,7 +34,7 @@ _Date:_ 2026-03-22
 
 ## Active module map
 - API route grouping is now explicitly described by `ROUTER_GROUP_ORDER`, `ROUTER_GROUPS`, and `describe_router_groups()` in `backend/app/api/v1/route_groups.py`.
-- ORM decomposition is partial: focused modules already exist (`document.py`, `document_core.py`, `tenanting.py`, `safety_core.py`, `risk.py`), but `backend/app/models/models.py` remains the compatibility mega-module.
+- ORM decomposition is partial: focused modules already exist (`document.py`, `document_core.py`, `tenanting.py`, `safety_core.py`, `risk.py`), and this wave extracted approval/EDO/sign primitives into `backend/app/models/approval_workflow.py` while keeping `backend/app/models/models.py` as the compatibility mega-module.
 - Document pipeline orchestration spans `backend/app/services/pipelines_orchestrator.py`, `backend/app/tasks.py`, `backend/app/celery/tasks/job_steps.py`, and `backend/app/celery/tasks/document_jobs_required.py`.
 - Frontend operational projections are largely aggregated through `frontend/src/api/operations.ts` and page-level hooks.
 
@@ -72,8 +72,8 @@ Still remaining as broader gaps vs super-TZ:
 ## Stub / mock / deferred backend map
 Confirmed problems and current state:
 - `backend/app/api/routes/ws_stub.py` -> WebSocket 501 stub remains deferred.
-- `backend/app/celery/tasks/document_jobs_required.py` -> legacy task wrappers remain compatibility bridges; this wave made them explicit compatibility-wrapper envelopes instead of ambiguous stub-like payloads.
-- `backend/app/services/pipelines_orchestrator.py` -> partial stub/deferred semantics remain in a large file even though internal deterministic handlers exist for sign/verify/index and provider-backed dispatch exists for EDO.
+- `backend/app/celery/tasks/document_jobs_required.py` -> legacy task wrappers now execute real internal orchestrator steps for render/build/sign/EDO/index flows through a tenant-aware compatibility bridge; report/integration sync wrappers remain compatibility-only envelopes.
+- `backend/app/services/pipelines_orchestrator.py` -> still a fat orchestration file, but this wave extracted artifact/sign/EDO/index step handlers into `backend/app/services/pipeline_step_handlers.py` to reduce bloat without changing contracts.
 - `backend/app/services/integrations/stubs.py` -> 1C/ЭДО/ФРДО/ЕИСОТ stubs remain non-production by design.
 - `backend/app/api/routes/approval_signing_v1.py`, `approval_orchestration.py`, `edo_workflow.py` -> still expose mock/stub provider flows and need future production-adapter hardening.
 - `frontend/vite.config.ts` -> no production-grade PWA plugin setup.
@@ -109,6 +109,7 @@ Confirmed problems and current state:
 - Real certified provider adapters.
 
 ## What changed in this wave
-- Added explicit route-group metadata/description helpers in `backend/app/api/v1/route_groups.py` to support safe progressive decomposition.
-- Hardened `backend/app/celery/tasks/document_jobs_required.py` so compatibility wrappers now declare orchestrator/bridge metadata and clearly mark deferred bridges.
-- Added regression tests covering those compatibility surfaces.
+- Extracted approval/EDO/sign ORM primitives into `backend/app/models/approval_workflow.py` with compatibility imports preserved through `backend/app/models/models.py`.
+- Extracted pipeline step handlers into `backend/app/services/pipeline_step_handlers.py` and wired `PipelineOrchestrator` to the focused module.
+- Replaced stub-like document-job Celery wrappers with tenant-aware runtime compatibility bridges that execute real orchestrator steps for render/build/sign/EDO/index flows.
+- Added regression tests covering both the step-handler dispatch path and the document-job compatibility bridge behavior.
