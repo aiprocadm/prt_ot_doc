@@ -79,5 +79,6 @@
 - This keeps migration risk low while establishing the expected pattern for future placeholder-page replacement: reuse existing backend projections first, then add missing backend projections only where necessary.
 
 ## Current wave note
-- Frontend architecture was audited but not materially changed in this wave.
-- The biggest confirmed frontend platform gap remains PWA/offline infrastructure in the Vite build and runtime shell.
+- Frontend architecture was audited and the platform shell was hardened additively in this wave.
+- `frontend/vite.config.ts` now provides a real PWA baseline with manifest + generated service worker, and `frontend/src/pwa/register.ts` registers it from `frontend/src/main.tsx`.
+- The biggest confirmed frontend platform gaps now move one layer higher: offline queue semantics, sync/conflict UX, draft persistence, and stronger field/offline operational flows.

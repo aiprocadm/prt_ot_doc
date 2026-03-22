@@ -8,4 +8,4 @@ _Date:_ 2026-03-22
 4. Expand the runtime bridge pattern to the remaining compatibility-only jobs only when a real orchestrator path exists.
 5. Begin a dedicated tenant/authz/audit/correlation-id sweep for high-risk business endpoints.
 6. Replace non-production provider adapters with certified integrations behind the explicit provider registry seam.
-7. Plan the real PWA plugin/service-worker/offline queue wave separately instead of overstating readiness.
+7. Build the next PWA wave on top of the installed baseline: tenant-aware offline queue, sync status UI, retry/resume flows, and conflict resolution instead of overstating current readiness.
