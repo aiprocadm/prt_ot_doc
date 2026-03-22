@@ -1,48 +1,67 @@
-import { Breadcrumb } from "@/components/ui/breadcrumb";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useCallback, useMemo } from "react";
 
-const medicalChecks = [
-  { employee: "Рябова Н.В.", position: "Оператор", status: "Просрочено", due: "02.09.2024" },
-  { employee: "Титов А.С.", position: "Слесарь", status: "Назначено", due: "12.10.2024" },
-  { employee: "Кудряшова И.А.", position: "Инженер", status: "Пройдено", due: "20.12.2024" }
-];
+import { operationsApi } from "@/api/operations";
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { LoadingScreen } from "@/components/common/LoadingScreen";
+import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
+import { RegistryTable } from "@/components/common/RegistryTable";
+import { StatusBadge } from "@/components/common/StatusBadge";
+import { useAsyncResource } from "@/hooks/useAsyncResource";
+import { useLocalRegistry } from "@/hooks/useLocalRegistry";
+import { formatDate } from "@/utils/datetime";
 
-const MedicalPage = () => (
-  <div className="space-y-6">
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Медосмотры/допуски" }]} />
-      <Button>Назначить медосмотр</Button>
+const MedicalPage = () => {
+  const { data, loading, error, reload } = useAsyncResource({
+    loader: useCallback(() => operationsApi.getMedicalSnapshot(), []),
+    initialData: { exams: [], persons: [], tasks: [] },
+    errorMessage: "Не удалось загрузить медосмотры"
+  });
+
+  const items = useMemo(() => data.exams.map((exam) => ({ ...exam, person: data.persons.find((person) => person.id === exam.person_id) })), [data]);
+  const registry = useLocalRegistry({ items, match: (item, query) => [item.person?.full_name, item.exam_type, item.conclusion].filter(Boolean).join(" ").toLowerCase().includes(query) });
+
+  return (
+    <div className="space-y-4">
+      <RegistryPageHeader
+        title="Медосмотры и допуски"
+        description="Реестр теперь использует реальный backend endpoint `/medical/exams` и связывает его с людьми и обязательствами."
+        stats={[
+          { label: "Медосмотров", value: data.exams.length },
+          { label: "Просрочено", value: data.exams.filter((item) => new Date(item.valid_until) < new Date()).length },
+          { label: "Medical tasks", value: data.tasks.length }
+        ]}
+      />
+      <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
+      {loading ? <LoadingScreen label="Загрузка медосмотров" /> : null}
+      {!loading && !error && registry.total === 0 ? <EmptyState title="Медосмотры не найдены" description="Добавьте записи медосмотров или создайте требования." /> : null}
+      {!loading && !error && registry.total > 0 ? (
+        <RegistryTable
+          columns={[
+            { id: "person", header: "Сотрудник", cell: ({ row }) => row.original.person?.full_name || row.original.person_id },
+            { accessorKey: "exam_type", header: "Тип" },
+            { accessorKey: "exam_date", header: "Дата", cell: ({ row }) => formatDate(row.original.exam_date) },
+            { accessorKey: "valid_until", header: "Действует до", cell: ({ row }) => formatDate(row.original.valid_until) },
+            {
+              id: "state",
+              header: "Состояние",
+              cell: ({ row }) => <StatusBadge status={new Date(row.original.valid_until) < new Date() ? "overdue" : "ready"} />
+            },
+            { accessorKey: "conclusion", header: "Заключение", cell: ({ row }) => row.original.conclusion || "—" }
+          ]}
+          data={registry.pagedItems}
+          pageIndex={registry.pageIndex}
+          pageSize={registry.pageSize}
+          total={registry.total}
+          onPageChange={registry.onPageChange}
+          onPageSizeChange={registry.onPageSizeChange}
+          onSearchChange={registry.onSearchChange}
+          searchPlaceholder="Поиск по сотруднику, типу, заключению"
+          caption="Реестр медицинских осмотров"
+        />
+      ) : null}
     </div>
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-lg">График медосмотров</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Сотрудник</TableHead>
-              <TableHead>Должность</TableHead>
-              <TableHead>Статус</TableHead>
-              <TableHead>Следующий срок</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {medicalChecks.map((row) => (
-              <TableRow key={row.employee}>
-                <TableCell className="font-medium">{row.employee}</TableCell>
-                <TableCell>{row.position}</TableCell>
-                <TableCell>{row.status}</TableCell>
-                <TableCell>{row.due}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
-  </div>
-);
+  );
+};
 
 export default MedicalPage;

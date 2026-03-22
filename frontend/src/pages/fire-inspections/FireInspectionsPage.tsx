@@ -1,48 +1,61 @@
-import { Breadcrumb } from "@/components/ui/breadcrumb";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useCallback } from "react";
 
-const fireInspections = [
-  { id: "FS-11", site: "Цех 2", checklist: "ПБ-ЧЛ-01", status: "В работе" },
-  { id: "FS-12", site: "Склад ГСМ", checklist: "ПБ-ЧЛ-03", status: "Назначено" },
-  { id: "FS-13", site: "Офис", checklist: "ПБ-ЧЛ-07", status: "Завершено" }
-];
+import { operationsApi } from "@/api/operations";
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { LoadingScreen } from "@/components/common/LoadingScreen";
+import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
+import { RegistryTable } from "@/components/common/RegistryTable";
+import { StatusBadge } from "@/components/common/StatusBadge";
+import { useAsyncResource } from "@/hooks/useAsyncResource";
+import { useLocalRegistry } from "@/hooks/useLocalRegistry";
+import { formatDate } from "@/utils/datetime";
 
-const FireInspectionsPage = () => (
-  <div className="space-y-6">
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "ПБ · Проверки/предписания" }]} />
-      <Button>Новая проверка</Button>
+const FireInspectionsPage = () => {
+  const { data, loading, error, reload } = useAsyncResource({
+    loader: useCallback(() => operationsApi.getInspectionWorkspaceSnapshot(), []),
+    initialData: { inspections: [], prescriptions: [], tasks: [], templates: [], packRuns: [] },
+    errorMessage: "Не удалось загрузить проверки ПБ"
+  });
+
+  const registry = useLocalRegistry({ items: data.inspections, match: (item, query) => [item.authority, item.purpose, item.status, item.inspection_type].filter(Boolean).join(" ").toLowerCase().includes(query) });
+
+  return (
+    <div className="space-y-4">
+      <RegistryPageHeader
+        title="Пожарная безопасность · проверки и предписания"
+        description="Реестр показывает реальные inspections, а также связанную нагрузку по предписаниям и задачам."
+        stats={[
+          { label: "Проверок", value: data.inspections.length },
+          { label: "Предписаний", value: data.prescriptions.length },
+          { label: "Открытых tasks", value: data.tasks.filter((item) => item.status !== "done").length }
+        ]}
+      />
+      <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
+      {loading ? <LoadingScreen label="Загрузка проверок" /> : null}
+      {!loading && !error && registry.total === 0 ? <EmptyState title="Проверки не найдены" description="Создайте inspections или загрузите данные." /> : null}
+      {!loading && !error && registry.total > 0 ? (
+        <RegistryTable
+          columns={[
+            { accessorKey: "authority", header: "Орган" },
+            { accessorKey: "inspection_type", header: "Тип" },
+            { accessorKey: "purpose", header: "Цель", cell: ({ row }) => row.original.purpose || "—" },
+            { accessorKey: "scheduled_at", header: "Дата", cell: ({ row }) => formatDate(row.original.scheduled_at) },
+            { accessorKey: "status", header: "Статус", cell: ({ row }) => <StatusBadge status={row.original.status} /> }
+          ]}
+          data={registry.pagedItems}
+          pageIndex={registry.pageIndex}
+          pageSize={registry.pageSize}
+          total={registry.total}
+          onPageChange={registry.onPageChange}
+          onPageSizeChange={registry.onPageSizeChange}
+          onSearchChange={registry.onSearchChange}
+          searchPlaceholder="Поиск по органу, цели, типу"
+          caption="Проверки пожарной безопасности"
+        />
+      ) : null}
     </div>
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-lg">Проверки ПБ</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>ID</TableHead>
-              <TableHead>Площадка</TableHead>
-              <TableHead>Чек-лист</TableHead>
-              <TableHead>Статус</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {fireInspections.map((row) => (
-              <TableRow key={row.id}>
-                <TableCell className="font-medium">{row.id}</TableCell>
-                <TableCell>{row.site}</TableCell>
-                <TableCell>{row.checklist}</TableCell>
-                <TableCell>{row.status}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
-  </div>
-);
+  );
+};
 
 export default FireInspectionsPage;

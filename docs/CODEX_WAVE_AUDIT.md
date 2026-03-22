@@ -2,90 +2,78 @@
 
 _Date:_ 2026-03-21
 
-## Canonical entrypoints
-- Backend ASGI/bootstrap: `backend/app/main.py` and `backend/app/api/app.py`.
-- Backend v1 composition root: `backend/app/api/v1/router.py`.
-- Worker bootstrap: `backend/app/worker.py`.
-- Frontend browser bootstrap: `frontend/src/main.tsx` -> `frontend/src/App.tsx` -> `frontend/src/router/AppRouter.tsx`.
+## Canonical backend/frontend roots
+- Backend API/bootstrap roots: `backend/app/main.py`, `backend/app/api/app.py`, `backend/app/api/v1/router.py`, `backend/app/api/v1/route_groups.py`.
+- Backend module roots: `backend/app/api/routes`, `backend/app/modules`, `backend/app/services`, `backend/app/models`, `backend/app/schemas`.
+- Frontend roots: `frontend/src/main.tsx`, `frontend/src/App.tsx`, `frontend/src/router/AppRouter.tsx`, `frontend/src/router/routeGroups.tsx`, `frontend/src/pages`, `frontend/src/api`, `frontend/src/hooks`.
 
-## Active roots
-- Backend active roots: `backend/app/api`, `backend/app/modules`, `backend/app/services`, `backend/app/models`, `backend/app/schemas`, `backend/app/domains`.
-- Frontend active roots: `frontend/src/pages`, `frontend/src/components`, `frontend/src/api`, `frontend/src/stores`, `frontend/src/router`.
-- Documentation roots used as source of truth for this wave: `docs`, `docs/audit`, `docs/ADR`, `GAP_REPORT.md`, `KNOWN_LIMITATIONS.md`, `ACCEPTANCE_TEST_MATRIX.md`.
+## Active entrypoints
+- ASGI app: `backend/app/main.py` -> `backend/app/api/app.py`.
+- Worker: `backend/app/worker.py`.
+- Browser app: `frontend/src/main.tsx` -> `frontend/src/App.tsx`.
+- Router shell: `frontend/src/router/AppRouter.tsx` with permission-aware decomposition in `frontend/src/router/routeGroups.tsx`.
 
-## Migration head baseline
-- Alembic configuration is active at `backend/app/migrations/alembic.ini` and revisions live under `backend/app/migrations/versions`.
-- This wave intentionally avoided schema changes; migration head remains unchanged and therefore backwards-compatible by design.
+## Backend route map
+- Platform/admin: auth, tenancy, audit, admin RBAC/users, notifications, billing, outbox, webhooks, API tokens.
+- Master data: companies, sites, persons, departments, contracts, orders, invoices, NPA, PPE, training, briefings, medical.
+- Operational flows: incidents, inspections, prescriptions, tasks, obligations, dashboard, reports, PWA sync.
+- Document core: documents, templates, replace, branding, headers/layouts, pdf, pipelines, packs, workflow, approvals/sign/EDO.
 
-## Active router/module map
-- The backend router surface remains broad and tenant-scoped. Major active groups include auth, admin/authz, audit, dashboard, companies/persons, inspections/incidents/prescriptions, PPE, documents/templates/branding/replace/pdf/pipelines, tasks/workflow, outbox/webhooks, client portal, billing, analytics, reports, and PWA sync.
-- This wave introduced `backend/app/api/v1/route_groups.py` as a compatibility-safe registry layer so `backend/app/api/v1/router.py` stops owning the entire `include_router(...)` topology directly.
+## Frontend route/page map
+- Core routes are grouped in `frontend/src/router/routeGroups.tsx` and remain permission-aware.
+- The following pages were confirmed as actively mounted and in scope this wave: contractors, reference, settings, activities, medical, fire-safety, fire-training, fire-inspections, inspection-checklists, inspection-plans, inspection-prep/packages, admin.
 
-## Frontend route map baseline
-- Canonical browser entry remains `frontend/src/router/AppRouter.tsx`, but permission-aware route groupings now live in `frontend/src/router/routeGroups.tsx` and lazy page ownership lives in `frontend/src/router/pageRegistry.tsx`.
-- Route inventory still covers dashboards, registries, document core, approvals, search/archive, operational safety modules, client portal, CRM/finance, integrations, and admin surfaces.
-- `AppRouter.tsx` is now a thinner bootstrap shell; future decomposition can proceed cluster-by-cluster without reopening the full route monolith.
+## Active module map
+- Canonical backend registration now stays in `backend/app/api/v1/route_groups.py`; `router.py` remains compatibility composition root.
+- `backend/app/models/models.py` remains the ORM mega-module, but compatibility-safe extraction continues around it.
+- Frontend data access for the converted operational pages is now centralized in `frontend/src/api/operations.ts`.
 
-## Static / stub page map
-Confirmed static or mostly placeholder pages from direct code audit before/around this pass:
-- `frontend/src/pages/warehouse/WarehousePage.tsx` — static stock rows.
-- `frontend/src/pages/ppe/PpePage.tsx` — static PPE card rows and KPI cards.
-- `frontend/src/pages/prescriptions/PrescriptionsPage.tsx` — title-only stub.
-- `frontend/src/pages/audit-prep/AuditPrepPage.tsx` — static package table.
-- Still placeholder/foundation after this pass: several fire-safety pages, reference/settings/admin showcase blocks, activities/CAPA overview, and inspection-prep package screen.
+## Migration heads
+- No schema migration was introduced in this pass.
+- Alembic head remains whatever is already present under `backend/app/migrations/versions`; this wave stayed compatibility-safe.
 
-## Stub / mock / deferred integrations map
-- WebSocket remains explicitly deferred: `backend/app/api/routes/ws_stub.py` returns HTTP 501.
-- Approval/sign routes still support explicit `stub` providers for non-certified signature flows.
-- Integration readiness and external provider layers still contain documented placeholder/stub contracts for future certified adapters.
-- PWA/offline remains foundation-level; the repo has `/pwa/*` backend contracts but not yet a mature frontend offline queue/service-worker package.
+## Tests map
+- Backend tenancy regression remains covered by `tests/test_tenant_header_required.py` and `tests/test_tenancy_enforcement.py`.
+- Frontend operational conversion coverage now includes `frontend/src/__tests__/OpsPages.test.tsx` and `frontend/src/__tests__/OperationsRealPages.test.tsx`.
 
-## TODO / deferred map
-- Full decomposition of `backend/app/models/models.py` into true bounded modules is still pending.
-- Dashboard tabs now use a real backend projection, but they are still a lightweight operational layer rather than the final Attention Center.
-- Attention center/data quality/PWA maturity/workflow SLA hardening remain next-wave work.
-- Realtime UX is still deferred to a future phase; current supported path is REST + polling.
+## Static / placeholder frontend pages map
+Previously static and now switched to real data in this pass:
+- `frontend/src/pages/contractors/ContractorsPage.tsx`
+- `frontend/src/pages/reference/ReferencePage.tsx`
+- `frontend/src/pages/settings/SettingsPage.tsx`
+- `frontend/src/pages/activities/ActivitiesPage.tsx`
+- `frontend/src/pages/medical/MedicalPage.tsx`
+- `frontend/src/pages/fire-safety/FireSafetyPage.tsx`
+- `frontend/src/pages/fire-training/FireTrainingPage.tsx`
+- `frontend/src/pages/fire-inspections/FireInspectionsPage.tsx`
+- `frontend/src/pages/inspection-checklists/InspectionChecklistsPage.tsx`
+- `frontend/src/pages/inspection-plans/InspectionPlansPage.tsx`
+- `frontend/src/pages/inspection-prep/InspectionPrepPackagesPage.tsx`
+- `frontend/src/pages/admin/AdminPage.tsx`
 
-## Acceptance coverage baseline
-- Backend already contains broad tests for tenancy, billing, approvals, search, pipelines, incidents/inspections/CAPA prep, notifications, replace, files, portal, and workflow surfaces.
-- Frontend already contains smoke/permission/store tests for dashboards, documents, portal, tasks, CRM/finance, routes, and API client behavior.
-- This wave adds focused frontend coverage for newly-realized operational pages (`warehouse`, `prescriptions`, `findings`, `corrective-actions`, `audit-prep`).
+## Stub / mock / deferred backend map
+Confirmed and still explicitly deferred after this wave:
+- `backend/app/api/routes/ws_stub.py` -> WebSocket 501 stub.
+- `backend/app/celery/tasks/document_jobs_required.py` -> stub responses remain.
+- `backend/app/services/pipelines_orchestrator.py` -> partial stub step handlers remain.
+- `backend/app/services/integrations/stubs.py` -> 1C/ЭДО/ФРДО/ЕИСОТ stubs remain.
+- `backend/app/api/routes/approval_signing_v1.py`, `approval_orchestration.py`, `edo_workflow.py` -> stub/mock providers remain isolated as non-production adapters.
+- `frontend/vite.config.ts` still has no full production-grade PWA plugin/service-worker stack.
 
-## Repo duplication / legacy map
-- `backend/app/models/models.py` remains the mega-model compatibility module; new canonical imports in this wave start using narrower compatibility layers (`backend/app/models/tenanting.py`, `backend/app/models/ppe_registry.py`).
-- `backend/app/modules/approval` vs `backend/app/modules/approvals` remains a red-flag naming split; keep singular as legacy compatibility and prefer plural for active approval API flows.
-- `docs/ADR` vs `docs/adr` remains a documentation canonicalization risk; new ADRs in this wave are placed under `docs/ADR`.
+## Factually confirmed problems and gaps vs super-TZ
+- Real PWA/offline shell, queue, conflict UI, media sync lifecycle: not implemented yet.
+- Universal attention center/data quality center: still partial foundations, not full persistent product layer.
+- Full decomposition of `backend/app/models/models.py`: still pending due compatibility/Alembic risk.
+- Approval/sign/EDO provider abstraction still relies on non-certified stub/mock providers.
+- Several backend document/pipeline/background-job internals still require deeper hardening beyond this wave.
 
-## Fat files requiring decomposition
-- `backend/app/api/v1/router.py` — still fat, but router registration has now been pulled behind a registry layer.
-- `backend/app/models/models.py` — ~3k LOC mega-model and the highest persistence-compatibility risk.
-- `frontend/src/router/AppRouter.tsx` — still the canonical shell, but materially slimmer after route-cluster extraction; future work should evolve `routeGroups.tsx` clusters rather than re-growing `AppRouter.tsx`.
-- `frontend/src/pages/dashboard/DashboardPage.tsx` — KPI and inner tabs are now live, but the page still concentrates several operational concerns and remains a candidate for further slice-by-slice decomposition.
+## Fat files / risky compatibility paths
+- `backend/app/api/v1/router.py` remains compatibility-sensitive even after grouped extraction.
+- `backend/app/models/models.py` remains the heaviest persistence risk.
+- `backend/app/services/pipelines_orchestrator.py` remains bloated and partly deferred.
+- `frontend/vite.config.ts` remains a PWA hardening gap.
 
-## Incomplete super-TZ areas still visible
-- Universal task/attention/timeline is partial.
-- Data Quality Center is not yet implemented as a dedicated persisted layer.
-- PWA/offline maturity is not yet production-grade.
-- Workflow/sign/EDO providers remain partially mocked.
-- Several frontend registries still need conversion from showcase mode to real projections.
-
-## Risky compatibility areas
-- `backend/app/api/v1/router.py` must continue to preserve existing path contracts; only registry extraction or compatibility imports are safe.
-- `backend/app/models/models.py` cannot be split by moving SQLAlchemy table declarations abruptly without carefully preserving Alembic import paths.
-- PPE/inspection/prescription pages depend on manager/admin read permissions; UI conversion to real data now surfaces real authz behavior and must not be mistaken for anonymous showcase access.
-
-## What changed from static/stub to real in this wave
-- `dashboard` inner tabs now read real tenant-scoped operational projections from `/dashboard/operational` for task inbox, recent document pipeline runs, and inspection-prep readiness instead of static arrays in `DashboardPage.tsx`.
-- `warehouse` now reads real tenant-scoped PPE catalog + expiring-issue data from `/ppe/items` and `/ppe/issues/expiring`.
-- `ppe` now reads real issuance history and person context from `/ppe/issues`, `/ppe/items`, and `/persons`.
-- `prescriptions` now renders a real registry backed by `/prescriptions`.
-- `findings` now renders a real registry backed by `/findings`.
-- `corrective-actions` now renders a real registry backed by `/corrective-actions`.
-- `audit-prep` now derives package/readiness-like projections from `/inspections`, `/prescriptions`, and overdue `/tasks` instead of static rows.
-
-## Additional hardening completed in this pass
-- Added a backend operational dashboard projection (`backend/app/api/routes/dashboard.py`) with explicit tenant/authz enforcement and a stable response contract for dashboard task/document/readiness blocks.
-- Frontend operational registries now share a consistent async loading hook (`frontend/src/hooks/useAsyncResource.ts`) and local pagination/search state (`frontend/src/hooks/useLocalRegistry.ts`) instead of page-local ad hoc loading code.
-- Findings, corrective actions, and prescriptions now use the shared registry table shell with search + pagination while preserving the same route/UI meaning.
-- Frontend route composition now also follows a shared pattern: `frontend/src/router/pageRegistry.tsx` centralizes lazy page loaders and `frontend/src/router/routeGroups.tsx` centralizes permission-aware route clusters.
-- Backend progressive model decomposition now also exposes `backend/app/models/document_core.py` so document pipeline/template imports can move away from `app.models.models` incrementally without changing table ownership.
+## This wave’s concrete hardening delta
+- Added real backend registry endpoint `GET /medical/exams` with tenant-aware filtering and role checks.
+- Converted the targeted placeholder frontend pages to real API-backed operational views using shared async/resource hooks and permission-preserving routes.
+- Added focused frontend regression coverage for the newly-converted operational pages.

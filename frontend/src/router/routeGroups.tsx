@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { Route } from "react-router-dom";
 
-import { PERMISSIONS } from "@/permissions/permissions";
+import { PERMISSIONS, type Permission } from "@/permissions/permissions";
 import { ProtectedRoute } from "@/router/ProtectedRoute";
 import {
   ActivitiesPage,
@@ -78,7 +78,7 @@ import {
 } from "@/router/pageRegistry";
 
 type GuardedRouteGroup = {
-  permission: string;
+  permission: Permission;
   routes: ReactElement[];
 };
 

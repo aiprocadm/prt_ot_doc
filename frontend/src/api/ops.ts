@@ -35,6 +35,8 @@ export type PrescriptionDto = {
 
 export type InspectionDto = {
   id: string;
+  company_id?: string;
+  site_id?: string | null;
   authority?: string | null;
   purpose?: string | null;
   scheduled_at?: string | null;

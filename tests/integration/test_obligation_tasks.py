@@ -64,6 +64,37 @@ async def test_medical_requirement_creates_task(
     assert body["entity_type"] == "medical_requirement"
 
 
+
+
+@pytest.mark.anyio
+async def test_medical_exams_registry_returns_tenant_scoped_rows(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
+    headers = await make_auth_headers(RoleEnum.HR)
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        company = await data_factory.create_company(tenant=tenant, session=session)
+        person = await data_factory.create_person(tenant=tenant, company=company, session=session)
+        from app.models.models import MedicalExam
+        session.add(
+            MedicalExam(
+                tenant_id=tenant.id,
+                person_id=person.id,
+                exam_type="periodic",
+                exam_date=date.today(),
+                valid_until=date.today() + timedelta(days=30),
+                conclusion="fit",
+            )
+        )
+        await session.commit()
+
+    response = await async_client.get("/api/v1/medical/exams", headers=headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["items"][0]["person_id"] == person.id
+    assert body["items"][0]["exam_type"] == "periodic"
+
 @pytest.mark.anyio
 async def test_inspection_creates_task(
     async_client, sessionmaker, data_factory, make_auth_headers
