@@ -39,6 +39,7 @@ from app.models.models import IdempotencyStatus
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 from app.services.billing import BillingService
 from app.services.outbox import OutboxService
+from app.services.provider_registry import provider_response_meta
 from app.tasks import edo_status_simulation_job, process_inbound_webhook, send_edo_job
 
 router = APIRouter()
@@ -542,7 +543,12 @@ async def send_to_edo(
         idempotency_key=f"edo.sent:{message.id}",
     )
     await BillingService(session).add_usage(tenant_id=str(tenant.id), edo_outgoing=1)
-    body = {"id": message.id, "external_id": message.external_id, "status": message.status.value}
+    body = {
+        "id": message.id,
+        "external_id": message.external_id,
+        "status": message.status.value,
+        **provider_response_meta(payload.resolved_provider()),
+    }
     send_edo_job.delay(message_id=message.id, tenant_id=str(tenant.id), provider_code=payload.resolved_provider())
     edo_status_simulation_job.delay(message_id=message.id, tenant_id=str(tenant.id), status="delivered")
     edo_status_simulation_job.delay(message_id=message.id, tenant_id=str(tenant.id), status="accepted")
@@ -564,7 +570,17 @@ async def edo_messages(
     if document_version_id:
         stmt = stmt.where(EdoMessage.document_version_id == document_version_id)
     rows = (await session.execute(stmt.order_by(EdoMessage.created_at.desc()))).scalars().all()
-    return {"items": [{"id": row.id, "external_id": row.external_id, "status": row.status.value} for row in rows]}
+    return {
+        "items": [
+            {
+                "id": row.id,
+                "external_id": row.external_id,
+                "status": row.status.value,
+                **provider_response_meta(getattr(row, "provider_code", None)),
+            }
+            for row in rows
+        ]
+    }
 
 
 @router.post("/edo/webhook/status")

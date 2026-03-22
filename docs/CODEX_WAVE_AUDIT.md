@@ -5,7 +5,7 @@ _Date:_ 2026-03-22
 ## Scope of this audit wave
 - Performed a factual repository audit before changing code.
 - Kept the wave incremental and backward-compatible.
-- Focused implementation on two verified hardening seams: background job compatibility wrappers and frontend PWA bootstrap.
+- Focused implementation on three verified hardening seams: background job compatibility wrappers, frontend PWA bootstrap, and explicit non-production provider isolation metadata for approval/sign/EDO flows.
 
 ## Canonical backend/frontend roots
 - Backend bootstraps: `backend/app/main.py`, `backend/app/api/app.py`.
@@ -27,6 +27,7 @@ _Date:_ 2026-03-22
 - `operations`: files, packs, incidents, inspections, prescriptions, safety ops, obligations, jobs, tasks, tenancy, outbox admin, webhooks, integration readiness, tenants, PWA sync, external registry, reports.
 - `document_core`: documents, EDO workflow, approval/signing v1, approval orchestration, replace, headers, branding, pipelines, workflow, PDF, packs v2, search, analytics, export center.
 - `platform_extension`: client portal v1/internal, public API, API tokens, portal requests.
+- Router grouping is factually declared in `backend/app/api/v1/route_groups.py`, while `backend/app/api/v1/router.py` remains the compatibility-heavy composition layer.
 
 ## Frontend route/page map
 - Router registry is centered in `frontend/src/router/pageRegistry.tsx`, grouped by `routeGroups.tsx`, enforced by `ProtectedRoute.tsx`.
@@ -75,7 +76,7 @@ Factually confirmed problems:
 - `backend/app/celery/tasks/document_jobs_required.py` -> document step wrappers are real tenant-aware bridges for render/build/sign/EDO/index; `export_report_job` and `sync_integration_job` now support real internal bridge handlers when wired, but still preserve deferred compatibility envelopes by default.
 - `backend/app/services/pipelines_orchestrator.py` -> still a fat orchestrator with partial internal decomposition.
 - `backend/app/services/integrations/stubs.py` -> 1C/ЭДО/ФРДО/ЕИСОТ stubs remain clearly non-production.
-- `backend/app/api/routes/approval_signing_v1.py`, `approval_orchestration.py`, `edo_workflow.py` -> still rely on stub/mock provider defaults and need production adapter hardening later.
+- `backend/app/api/routes/approval_signing_v1.py`, `approval_orchestration.py`, `edo_workflow.py` -> still rely on stub/mock provider defaults and need production adapter hardening later; this wave adds explicit provider metadata so non-production adapters are no longer silently indistinguishable from certified ones.
 - `frontend/vite.config.ts` had no real PWA plugin setup before this wave; this wave adds a real plugin/manifest/service-worker baseline, but not the full offline queue/conflict stack requested in the super-TZ.
 - Several pages are still foundational/aggregated rather than domain-complete operational consoles.
 
@@ -112,5 +113,6 @@ Factually confirmed problems:
 ## What changed in this wave
 - Added a real Vite PWA baseline with manifest, service worker generation, runtime registration, and asset/runtime caching strategy.
 - Hardened `document_jobs_required.py` so compatibility task names can execute named internal bridges for report export and integration sync instead of being permanently hardcoded stubs.
-- Added regression tests for the bridge behavior.
+- Added additive provider metadata to approval/sign/EDO responses so stub/mock/disabled providers are explicitly marked as non-production.
+- Added regression tests for the bridge behavior and provider classification seam.
 - Refreshed wave docs to clearly separate implemented hardening from remaining gaps.

@@ -7,4 +7,5 @@ _Date:_ 2026-03-22
 3. Normalize approval/sign/EDO route families onto clearer canonical paths while preserving existing compatibility routes.
 4. Expand the runtime bridge pattern to the remaining compatibility-only jobs only when a real orchestrator path exists.
 5. Begin a dedicated tenant/authz/audit/correlation-id sweep for high-risk business endpoints.
-6. Plan the real PWA plugin/service-worker/offline queue wave separately instead of overstating readiness.
+6. Replace non-production provider adapters with certified integrations behind the explicit provider registry seam.
+7. Plan the real PWA plugin/service-worker/offline queue wave separately instead of overstating readiness.
