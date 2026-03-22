@@ -44,5 +44,6 @@ Branding settings now expose separate `Header requisites` and `Footer requisites
 - Pages still awaiting similar treatment include fire safety pages, activities/CAPA overview aggregations, and inspection-prep showcase screens.
 
 ## 2026-03-22 note
-- No frontend runtime behavior was changed in this wave.
-- `frontend/vite.config.ts` still lacks the production-grade PWA plugin/service worker stack required by the super-TZ.
+- This wave did change frontend platform behavior additively: `frontend/vite.config.ts` now uses `vite-plugin-pwa`, and `frontend/src/main.tsx` registers the generated service worker through `frontend/src/pwa/register.ts`.
+- The platform now has a real installable PWA baseline: manifest generation, service worker generation, runtime registration, and cache rules for shell/static/API-read traffic.
+- This is still only a baseline. The super-TZ gaps remain open for tenant-aware offline queues, sync/conflict UX, media lifecycle handling, stronger `/pwa/bootstrap`, and hardened `/pwa/sync/*` semantics.
