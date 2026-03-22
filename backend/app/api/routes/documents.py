@@ -23,6 +23,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.payload_constraints import PayloadConstraintError, enforce_mapping_constraints
@@ -782,7 +783,13 @@ async def get_document_batch(
     access: AccessContext = AccessDep,
 ) -> DocumentBatchRunRead:
     access.ensure_tenant_access(tenant.id, action="read document batch")
-    batch = await session.get(DocumentBatchRun, batch_id)
+    batch = (
+        await session.execute(
+            select(DocumentBatchRun)
+            .where(DocumentBatchRun.id == batch_id)
+            .options(selectinload(DocumentBatchRun.items))
+        )
+    ).scalar_one_or_none()
     if batch is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Batch not found")
     items = batch.items

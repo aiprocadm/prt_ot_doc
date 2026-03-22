@@ -16,6 +16,7 @@ from app.domains.packs.seeder import ensure_default_packs
 from app.models.models import (
     Company,
     DocumentPack,
+    DocumentPackItem,
     MedicalExam,
     PPEIssue,
     PPEIssueStatus,
@@ -311,6 +312,9 @@ async def _load_pack(
         DocumentPack.tenant_id.in_(tenant_scope),
         DocumentPack.is_active.is_(True),
         DocumentPack.deleted_at.is_(None),
+    ).options(
+        selectinload(DocumentPack.items).selectinload(DocumentPackItem.template),
+        selectinload(DocumentPack.items).selectinload(DocumentPackItem.template_version),
     )
     pack = (await session.execute(stmt)).scalar_one_or_none()
     if pack is None:
