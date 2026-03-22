@@ -25,7 +25,7 @@ interface TemplateFormDialogProps {
 }
 
 const toFormScope = (scope: TemplateDto["scope"] | undefined): TemplateFormValues["scope"] => ({
-  type: scope?.type === "legal_entity" ? "organization" : (scope?.type ?? "tenant"),
+  type: (scope?.type === "legal_entity" ? "organization" : (scope?.type ?? "tenant")) as TemplateFormValues["scope"]["type"],
   tenant_id: scope?.tenant_id ?? undefined,
   company_id: scope?.company_id ?? undefined,
   site_id: scope?.site_id ?? undefined,

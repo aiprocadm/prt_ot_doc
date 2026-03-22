@@ -1,76 +1,21 @@
-# Frontend Static to Real Map
+# Frontend Static -> Real Map
 
 _Date:_ 2026-03-21
 
-## Converted in this pass
+## Converted in this wave
+- `ContractorsPage` -> `/companies`, `/sites`, `/contracts`.
+- `ReferencePage` -> `/npa`, `/ppe/items`, `/training/programs`, `/templates`, `/briefings/templates`.
+- `SettingsPage` -> `/tenancy/context`, `/notifications/settings/me`, `/api-tokens`.
+- `ActivitiesPage` -> `/tasks`, `/corrective-actions`.
+- `MedicalPage` -> `/medical/exams`, `/persons`, `/tasks?type=medical_requirement`.
+- `FireSafetyPage` -> `/sites`, `/inspections`, `/tasks?type=inspection`.
+- `FireTrainingPage` -> `/briefings/templates`, `/briefings/journals`, `/briefings/entries/overdue`, `/training/programs`.
+- `FireInspectionsPage` -> `/inspections`, `/prescriptions`, `/tasks`.
+- `InspectionChecklistsPage` -> projection over `/inspections` + `/prescriptions`.
+- `InspectionPlansPage` -> `/inspections`.
+- `InspectionPrepPackagesPage` -> projection over `/inspections`, `/prescriptions`, `/tasks`, `/templates`.
+- `AdminPage` -> `/tenancy/context`, `/admin/outbox`, `/webhooks/endpoints`, `/api-tokens`, `/audit`.
 
-### Dashboard
-- Route: `/`
-- Previous state: KPI cards already used real `/dashboard/summary`, but task/document/readiness tabs still rendered local demo arrays inside `frontend/src/pages/dashboard/DashboardPage.tsx`.
-- Current state: the whole page is now driven by backend projections:
-  - `GET /dashboard/summary`
-  - `GET /dashboard/operational`
-- UI hardening added:
-  - loading/error/empty handling for inner tabs
-  - real task inbox rows with SLA hints
-  - real recent document pipeline rows
-  - real inspection-prep readiness score/reasons and deep-links to related operational pages
-- Notes on maturity:
-  - This is still a lightweight operational projection, not the final universal Attention Center.
-  - The backend now owns the projection contract, so future enrichment can remain backward-compatible.
-
-### CRM / Финансы
-- Route: `/crm-finance`
-- Previous state: hardcoded `deals` array rendered directly in `frontend/src/pages/crm-finance/CrmFinancePage.tsx`.
-- Current state: real tenant-scoped data flow using existing backend APIs:
-  - `GET /contracts`
-  - `GET /orders`
-  - `GET /invoices`
-  - `GET /billing/plan` (best-effort for contextual billing status/plan badge)
-- UI hardening added:
-  - loading state
-  - error state with retry
-  - empty state
-  - local search over contract/client/order/invoice identifiers
-  - summary KPI cards derived from actual returned entities
-- Notes on maturity:
-  - The page is now operationally backed by real data, but it still projects CRM/finance through contracts/orders/invoices rather than a dedicated deals pipeline.
-  - This is an honest V1 improvement, not a claim of full CRM maturity.
-
-## Confirmed remaining candidates for future conversion
-- `/warehouse`
-- inspection prep and audit prep screens
-- several dashboard variants that still need richer live projections
-- additional registry/settings/reference screens already noted in repo audit docs
-
-### PPE / Warehouse / Prescriptions / Findings / Corrective Actions / Audit Prep
-- Routes: `/ppe`, `/warehouse`, `/prescriptions`, `/findings`, `/corrective-actions`, `/audit-prep`
-- Previous state:
-  - `/warehouse` rendered hardcoded stock rows.
-  - `/ppe` rendered hardcoded employee PPE cards.
-  - `/prescriptions` was effectively a title-only stub.
-  - `/findings` rendered a local three-row demo table.
-  - `/corrective-actions` rendered a local CAPA array.
-  - `/audit-prep` rendered a static package table.
-- Current state:
-  - `/warehouse` now uses `GET /ppe/items` + `GET /ppe/issues/expiring`.
-  - `/ppe` now uses `GET /ppe/issues`, `GET /ppe/items`, and `GET /persons`.
-  - `/prescriptions` now uses `GET /prescriptions`.
-  - `/findings` now uses `GET /findings`.
-  - `/corrective-actions` now uses `GET /corrective-actions`.
-  - `/audit-prep` now builds a real projection from `GET /inspections`, `GET /prescriptions`, and overdue `GET /tasks`.
-- UI hardening added:
-  - loading / error / empty states
-  - query filtering where useful
-  - real status / severity / due-date / effectiveness projections where available
-  - KPI cards derived from live tenant data rather than showcase arrays
-- Honest maturity note:
-  - `audit-prep` is now *real-data-backed*, but still uses a lightweight derived projection rather than a dedicated backend readiness engine.
-  - `findings` and `corrective-actions` are now operational registries, but still need richer linked-entity cards/timeline/task orchestration in future waves.
-
-## Registry UX normalization update (2026-03-21)
-Converted pages that already consume real APIs now also share common operational registry behavior:
-- `prescriptions` -> real `/prescriptions` data + shared search/pagination shell.
-- `findings` -> real `/findings` data + shared search/pagination shell.
-- `corrective-actions` -> real `/corrective-actions` data + shared search/pagination shell.
-This removed repeated page-level async boilerplate and aligned the pages with the common `RegistryTable` pattern.
+## Still remaining
+- Full PWA/offline UX remains not-realized.
+- Some pages still aggregate from adjacent registries instead of having first-class backend projection endpoints.
