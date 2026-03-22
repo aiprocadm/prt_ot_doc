@@ -11,6 +11,26 @@ from app.services.pipelines_orchestrator import PipelineOrchestrator
 _INTERNAL_ORCHESTRATOR = "document_pipeline_orchestrator"
 _RUNTIME_BRIDGE = "compatibility-execution-bridge"
 _COMPATIBILITY_BRIDGES: dict[str, Callable[..., Awaitable[dict[str, str | bool]] | dict[str, str | bool]]] = {}
+_KNOWN_BRIDGES = frozenset({"export_report", "sync_integration"})
+
+
+def list_compatibility_bridges() -> tuple[str, ...]:
+    return tuple(sorted(_KNOWN_BRIDGES))
+
+
+def register_compatibility_bridge(
+    bridge_name: str,
+    handler: Callable[..., Awaitable[dict[str, str | bool]] | dict[str, str | bool]],
+) -> None:
+    normalized = bridge_name.strip()
+    if normalized not in _KNOWN_BRIDGES:
+        known = ", ".join(sorted(_KNOWN_BRIDGES))
+        raise ValueError(f"Unknown compatibility bridge '{bridge_name}'. Expected one of: {known}.")
+    _COMPATIBILITY_BRIDGES[normalized] = handler
+
+
+def unregister_compatibility_bridge(bridge_name: str) -> None:
+    _COMPATIBILITY_BRIDGES.pop(bridge_name.strip(), None)
 
 
 def _job_step_response(

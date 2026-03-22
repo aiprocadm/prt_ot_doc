@@ -13,7 +13,8 @@ _Date:_ 2026-03-22
 - Hardened `backend/app/celery/tasks/document_jobs_required.py` so report export / integration sync compatibility tasks can use named internal runtime bridges while preserving compatibility envelopes when no bridge is configured.
 - Added a real PWA baseline in `frontend/vite.config.ts` with manifest/service worker generation and runtime registration in `frontend/src/pwa/register.ts`.
 - Added shared provider classification metadata for approval/sign/EDO APIs so non-production mock/stub adapters are explicitly isolated in responses without breaking existing contracts.
-- Added/updated focused tests around background bridge behavior, provider metadata, and frontend build verification.
+- Added `backend/app/models/approval_signing.py` and switched the legacy approval-signing v1 route to the new compatibility import layer instead of pulling those workflow entities directly from `backend/app/models/models.py`.
+- Formalized the document-job runtime bridge seam with explicit registration/listing helpers and added focused tests around bridge behavior, provider metadata, and frontend build verification.
 
 ## Why this slice was chosen
 - It addresses two explicitly confirmed gaps from the audit.
@@ -21,7 +22,7 @@ _Date:_ 2026-03-22
 - It improves platform hardening while leaving room for deeper future decomposition.
 
 ## Intentionally deferred
-- Massive refactors of `router.py`, `models.py`, and `pipelines_orchestrator.py`; only additive compatibility extraction was done for workflow-related ORM imports in this wave.
+- Massive refactors of `router.py`, `models.py`, and `pipelines_orchestrator.py`; only additive compatibility extraction was done for workflow-related and approval-signing-related ORM imports in this wave.
 - Production provider adapters for approval/sign/EDO and external integrations.
 - Full offline queue/conflict UX and attention/data-quality centers.
 
