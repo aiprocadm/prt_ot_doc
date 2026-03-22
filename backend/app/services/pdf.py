@@ -4,6 +4,7 @@ import logging
 import math
 import shutil
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter, sleep
@@ -25,6 +26,7 @@ MINI_PDF_BYTES: Final[bytes] = (
     b"0000000200 00000 n \n0000000330 00000 n \n"
     b"trailer<</Size 6/Root 1 0 R>>\nstartxref\n420\n%%EOF"
 )
+
 
 @dataclass(frozen=True)
 class PdfConversionResult:
@@ -49,6 +51,7 @@ class PdfConverter:
     def __init__(self, settings: Settings | None = None) -> None:
         self._settings = settings or get_settings()
         self.bin = self._settings.libreoffice_bin
+        self._resolved_bin = self._resolve_bin(self.bin)
         self._fallback_mode = self._settings.pdf_fallback
         self._timeout = self._settings.pdf_libreoffice_timeout_seconds
         self._max_attempts = max(1, self._settings.pdf_libreoffice_max_attempts)
@@ -156,9 +159,11 @@ class PdfConverter:
         raise PdfConversionError("pdf_conversion_failed")
 
     def _invoke_libreoffice(self, input_path: Path, output_dir: Path) -> float:
+        profile_dir = Path(tempfile.mkdtemp(prefix="lo-profile-"))
         cmd: list[str] = [
-            str(self.bin),
+            str(self._resolved_bin),
             "--headless",
+            f"-env:UserInstallation=file://{profile_dir.as_posix()}",
             "--convert-to",
             "pdf",
             str(input_path),
@@ -176,7 +181,7 @@ class PdfConverter:
             )
         except FileNotFoundError as exc:
             duration = perf_counter() - started
-            logger.exception("LibreOffice binary not found", extra={"bin": self.bin})
+            logger.exception("LibreOffice binary not found", extra={"bin": self._resolved_bin})
             self._record_attempt(duration, "pdf_converter_not_found")
             raise PdfConversionError("pdf_converter_not_found") from exc
         except subprocess.TimeoutExpired as exc:
@@ -195,12 +200,39 @@ class PdfConverter:
             )
             self._record_attempt(duration, "pdf_conversion_failed")
             raise PdfConversionError("pdf_conversion_failed") from exc
+        finally:
+            shutil.rmtree(profile_dir, ignore_errors=True)
         duration = perf_counter() - started
         return duration
 
     def _compute_backoff(self, attempt: int) -> float:
         raw_delay = self._backoff * math.pow(2.0, attempt - 1)
         return min(raw_delay, self._backoff_max)
+
+    @staticmethod
+    def _resolve_bin(configured_bin: str) -> str:
+        candidate = str(configured_bin).strip()
+        if not candidate:
+            return ""
+        looks_like_python = Path(candidate).name.lower().startswith("python")
+        if not looks_like_python and PdfConverter._binary_exists(candidate):
+            return candidate
+        for fallback in ("soffice", "libreoffice"):
+            if PdfConverter._binary_exists(fallback):
+                logger.warning(
+                    "Resolved LibreOffice binary override",
+                    extra={"configured_bin": candidate, "resolved_bin": fallback},
+                )
+                return fallback
+        return "soffice" if looks_like_python else candidate
+
+    @staticmethod
+    def _binary_exists(candidate: str) -> bool:
+        if not candidate:
+            return False
+        if any(sep in candidate for sep in ("/", "\\")):
+            return Path(candidate).exists()
+        return shutil.which(candidate) is not None
 
     def _should_retry(self, error_code: str, attempt: int) -> bool:
         if attempt >= self._max_attempts:
@@ -226,9 +258,4 @@ class PdfConverter:
         )
 
     def _bin_available(self) -> bool:
-        if not self.bin:
-            return False
-        bin_str = str(self.bin)
-        if any(sep in bin_str for sep in ("/", "\\")):
-            return Path(bin_str).exists()
-        return shutil.which(bin_str) is not None
+        return self._binary_exists(str(self._resolved_bin))

@@ -1653,6 +1653,7 @@ class DocumentPack(TenantBaseModel, SoftDeleteMixin):
         back_populates="pack",
         cascade="all, delete-orphan",
         order_by="DocumentPackItem.order",
+        lazy="selectin",
     )
 
     __table_args__ = (
@@ -1673,9 +1674,9 @@ class DocumentPackItem(TenantBaseModel, SoftDeleteMixin):
     condition: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
 
     pack: Mapped[DocumentPack] = relationship(back_populates="items")
-    template: Mapped[Template] = relationship(backref="document_pack_items")
+    template: Mapped[Template] = relationship(backref="document_pack_items", lazy="selectin")
     template_version: Mapped[TemplateVersion | None] = relationship(
-        "TemplateVersion", backref="document_pack_items"
+        "TemplateVersion", backref="document_pack_items", lazy="selectin"
     )
 
 

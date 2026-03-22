@@ -112,6 +112,7 @@ class Document(TenantBaseModel):
         back_populates="document",
         cascade="all, delete-orphan",
         order_by="DocumentVersion.created_at",
+        lazy="selectin",
     )
     generation_jobs = relationship(
         "DocumentGenerationJob",
@@ -379,6 +380,7 @@ class DocumentBatchRun(TenantBaseModel):
         "DocumentBatchItem",
         back_populates="batch",
         cascade="all, delete-orphan",
+        lazy="selectin",
     )
 
     __table_args__ = (
