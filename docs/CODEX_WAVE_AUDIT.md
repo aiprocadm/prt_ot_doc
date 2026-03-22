@@ -36,13 +36,13 @@ _Date:_ 2026-03-22
 
 ## Active module map
 - Router decomposition is already partially in place via `route_groups.py`; `router.py` remains the compatibility-heavy composition file.
-- ORM decomposition is partial: focused modules exist, but `backend/app/models/models.py` remains a large compatibility aggregator.
+- ORM decomposition is partial: focused modules exist, `backend/app/models/tenanting.py` already re-exports tenant entities, and this wave adds `backend/app/models/workflow.py` as a compatibility layer for approval/sign/EDO entities while `backend/app/models/models.py` remains the large aggregator.
 - Pipeline/document orchestration centers on `backend/app/services/pipelines_orchestrator.py`, `backend/app/tasks.py`, `backend/app/celery/tasks/document_jobs_required.py`, and extracted `backend/app/services/pipeline_step_handlers.py`.
 - Frontend operational data flows aggregate through `frontend/src/api/*.ts` and page-level hooks such as `useAsyncResource` / `useLocalRegistry`.
 
 ## Migration heads
-- No migration changes were made in this wave.
-- Migration state still needs explicit audit against `backend/app/migrations/versions` in a dedicated schema wave.
+- Migration head files currently visible in `backend/app/migrations/versions` are topped by the `202603*` series (latest filename in this repo audit: `20260314_next62_analytics_search_export_center.py`).
+- No migration changes were made in this wave; a dedicated schema consistency pass is still needed to confirm the live Alembic head chain.
 
 ## Tests map
 - Backend tests: `backend/tests`, `integration_tests`, plus focused regression coverage for compatibility bridges.
@@ -76,7 +76,7 @@ Factually confirmed problems:
 - `backend/app/celery/tasks/document_jobs_required.py` -> document step wrappers are real tenant-aware bridges for render/build/sign/EDO/index; `export_report_job` and `sync_integration_job` now support real internal bridge handlers when wired, but still preserve deferred compatibility envelopes by default.
 - `backend/app/services/pipelines_orchestrator.py` -> still a fat orchestrator with partial internal decomposition.
 - `backend/app/services/integrations/stubs.py` -> 1C/ЭДО/ФРДО/ЕИСОТ stubs remain clearly non-production.
-- `backend/app/api/routes/approval_signing_v1.py`, `approval_orchestration.py`, `edo_workflow.py` -> still rely on stub/mock provider defaults and need production adapter hardening later; this wave adds explicit provider metadata so non-production adapters are no longer silently indistinguishable from certified ones.
+- `backend/app/api/routes/approval_signing_v1.py`, `approval_orchestration.py`, `edo_workflow.py` -> still rely on stub/mock provider defaults and need production adapter hardening later; responses now expose additive provider metadata so non-production adapters are no longer silently indistinguishable from certified ones.
 - `frontend/vite.config.ts` had no real PWA plugin setup before this wave; this wave adds a real plugin/manifest/service-worker baseline, but not the full offline queue/conflict stack requested in the super-TZ.
 - Several pages are still foundational/aggregated rather than domain-complete operational consoles.
 

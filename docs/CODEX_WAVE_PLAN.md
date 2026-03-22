@@ -21,7 +21,7 @@ _Date:_ 2026-03-22
 - It improves platform hardening while leaving room for deeper future decomposition.
 
 ## Intentionally deferred
-- Massive refactors of `router.py`, `models.py`, and `pipelines_orchestrator.py`.
+- Massive refactors of `router.py`, `models.py`, and `pipelines_orchestrator.py`; only additive compatibility extraction was done for workflow-related ORM imports in this wave.
 - Production provider adapters for approval/sign/EDO and external integrations.
 - Full offline queue/conflict UX and attention/data-quality centers.
 
