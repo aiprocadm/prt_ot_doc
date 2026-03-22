@@ -3,31 +3,39 @@
 _Date:_ 2026-03-22
 
 ## What was strengthened without rewrite
-- Refreshed the repo assessment into a corporate-readiness audit and plan set so the next wave can work from repository truth instead of implicit memory.
-- Hardened `backend/app/api/routes/pwa_sync.py` so `/api/pwa/bootstrap` now returns authenticated user identity, role and permission projections, route-level permission visibility, curated offline dictionaries, sync counters, and bootstrap diagnostics instead of the previous simplified placeholder payload.
+- Re-ran the repository assessment specifically through a corporate-readiness lens instead of a generic backlog lens.
+- Updated the corporate-readiness document set so the next wave can start from repo-truth about foundations, blockers, and phased priorities.
+- Preserved the existing document core, tenancy, and broad module surface instead of destabilizing them with architectural rewrites.
+- Confirmed and documented that `backend/app/api/routes/pwa_sync.py` now exposes a materially stronger `/api/pwa/bootstrap` projection than the earlier simplified payload.
 
-## Stub/mock/deferred areas addressed in this wave
-- No large stub family was removed in this wave.
-- Instead, the wave made one enterprise blocker more explicit and less misleading: the PWA bootstrap is no longer effectively anonymous/simplified.
-- Remaining non-production seams are explicitly tracked in the audit and remaining-gaps docs.
+## Stub/mock/deferred areas explicitly confirmed or narrowed
+- Confirmed `backend/app/api/routes/ws_stub.py` remains deferred.
+- Confirmed `backend/app/celery/tasks/document_jobs_required.py` still contains deferred compatibility behavior when named bridges are not configured.
+- Confirmed `backend/app/services/pipeline_step_handlers.py` still contains deferred pipeline-stage semantics when integrations are disabled.
+- Confirmed `backend/app/services/integrations/stubs.py` still contains stub and disabled providers for 1C, EDO, FRDO, and EISOT.
+- Confirmed `backend/app/api/routes/approval_signing_v1.py`, `backend/app/api/routes/approval_orchestration.py`, and `backend/app/api/routes/edo_workflow.py` still expose important non-production semantics that must be isolated in a follow-up wave.
+- Narrowed one misleading area by documenting that `/api/pwa/bootstrap` is no longer just an anonymous/simplified placeholder seam.
 
-## Operational screens improved to a more usable corporate state
-- No broad frontend screen rewrite was performed.
-- The mobile/PWA foundation improved because frontend clients now have enough bootstrap data to implement real role-aware offline experiences in the next wave.
+## Operational screens or platform surfaces improved to a more usable corporate state
+- No broad visual rewrite was performed in this wave.
+- The practical improvement is at the platform contract level: the mobile/PWA frontend now has a stronger bootstrap API foundation for role-aware offline work, dictionaries, and sync diagnostics.
+- The documentation now clearly distinguishes screens and modules that are operational foundations from areas that are still thin wrappers, partial pages, or workflow-incomplete.
 
 ## Remaining gaps
-- WebSocket realtime route is still deferred.
-- Approval/sign/EDO still rely on mock/stub provider behavior in important paths.
-- Offline queue/conflict UI still does not exist end-to-end on the frontend.
-- Attention center, readiness blockers, and role-based workspace layer are still partial.
-- Data quality persistence and blocker-driven operational UX remain open.
+- No full consistency sweep has yet been completed across all route families for tenancy, authz, errors, correlation, and audit.
+- Role-based workspace UX, attention center, task inbox, readiness blockers, and recent/recommended work surfaces remain incomplete.
+- Approval/sign/EDO still carry mock/stub/deferred behavior in critical paths.
+- The data-quality blocker layer is not yet persisted platform-wide.
+- Mobile/offline still lacks queue UX, conflict resolution UX, retry/resume UX, robust drafts, and full field scenarios.
+- Admin/governance diagnostics and reliability/runbook maturity still require dedicated follow-up waves.
 
 ## Why these gaps still remain
-- The repo is large and already contains many working modules; forcing a broad rewrite would create unnecessary regression risk.
-- The next value-maximizing move is platform consistency and enterprise operational UX, not feature breadth.
-- Several gaps require coordinated backend + frontend work and should be done as focused follow-up waves with tests.
+- The codebase is already large and functionally broad; a rewrite-first strategy would create avoidable regression risk.
+- The highest-value next step is consistency and operational hardening across existing modules, not adding more module breadth.
+- Several critical gaps require coordinated backend, frontend, diagnostics, and test work, so they are better handled as focused waves.
 
 ## Risks for the next wave
-- Inconsistent permission/audit/error patterns across endpoints can create rollout surprises even when individual modules appear functional.
-- Stub/mock provider defaults may be mistaken for production readiness if admin diagnostics and API exposure are not kept explicit.
-- PWA/mobile readiness could be overstated unless queue, retry, resume, conflict, and draft semantics are implemented in the frontend using the new bootstrap contract.
+- Inconsistent cross-module permission or tenant behavior can create enterprise rollout failures even if individual modules look feature-complete.
+- Mock/stub provider defaults can be misread as production-ready unless diagnostics and API semantics stay explicit.
+- PWA/mobile readiness could be overstated if the strengthened bootstrap is not followed by real queue/conflict/draft UX.
+- Document-core strength can be undermined if follow-up work tries to rewrite rather than incrementally harden the existing lifecycle.
