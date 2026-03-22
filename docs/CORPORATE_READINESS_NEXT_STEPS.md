@@ -2,20 +2,30 @@
 
 _Date:_ 2026-03-22
 
-## Immediate next wave
-1. Do a route-family consistency sweep for tenant enforcement, authz, structured errors, correlation-id propagation, and audit logging.
-2. Build the first operational workspace projection APIs: attention center, task inbox, readiness blockers, recent drafts, recommendation blocks.
-3. Consume the hardened `/api/pwa/bootstrap` contract from the frontend and implement offline queue state, retry/resume, and conflict UI.
-4. Separate production orchestration from mock/stub providers in approval/sign/EDO and expose provider mode clearly in diagnostics.
+## Immediate implementation wave
+1. Execute a route-family consistency sweep covering tenant enforcement, authz normalization, structured errors, correlation-id propagation, and audit logging.
+2. Build the first real operational workspace projection APIs: attention center, task inbox, readiness blockers, recent drafts/items, and recommendations.
+3. Start frontend consumption of the hardened `/api/pwa/bootstrap` contract and add offline queue state, sync state UX, retry/resume UX, and conflict handling.
+4. Separate internal production orchestration from mock/stub providers in approval/sign/EDO and make provider mode explicit in diagnostics and API metadata.
 
-## Second wave after that
+## Second implementation wave
 1. Add persisted data-quality issues and blocker severity models for employees, companies/sites, templates/documents, training, PPE, and contractors.
-2. Strengthen document lifecycle readiness, dependency map foundations, rerun progress semantics, and deterministic render snapshot metadata.
-3. Turn admin into a true operational console for tenants, providers, queues/jobs, data quality, and readiness diagnostics.
-4. Expand observability, cleanup jobs, watchdogs, and runbooks.
+2. Strengthen document lifecycle readiness, scope resolution, dependency mapping, rerun semantics, deterministic snapshots, and document passport completeness.
+3. Turn admin into a real operational governance console for tenant readiness, provider modes, jobs, data quality, usage/billing, and environment diagnostics.
+4. Normalize retries, poison handling, watchdogs, cleanup tasks, integrity checks, and update the main operational runbooks.
 
-## Guardrails
-- Keep document core stable; strengthen it without radical redesign.
+## Acceptance focus
+- Tenant isolation.
+- Authz consistency.
+- Document lifecycle and readiness.
+- Task/attention/readiness projections.
+- Approval/sign/EDO orchestration.
+- Offline sync edge cases.
+- Converted operational pages.
+
+## Guardrails for all next waves
+- Keep the existing document core stable and strengthen it incrementally.
 - Preserve tenancy/authz invariants.
-- Never present mock/stub integrations as production-ready.
-- Document every remaining gap explicitly in-repo.
+- Do not mask stub/mock limitations behind polished UX.
+- Prefer scenario-first and role-based UX over adding more disconnected pages.
+- Record every decision and remaining gap in-repo.
