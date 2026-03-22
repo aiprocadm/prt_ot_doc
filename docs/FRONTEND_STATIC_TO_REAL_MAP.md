@@ -19,3 +19,6 @@ _Date:_ 2026-03-21
 ## Still remaining
 - Full PWA/offline UX remains not-realized.
 - Some pages still aggregate from adjacent registries instead of having first-class backend projection endpoints.
+
+## 2026-03-22 note
+- No additional placeholder page was converted in this specific wave. The focus moved to backend document/pipeline hardening after the repo audit.

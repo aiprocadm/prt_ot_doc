@@ -68,3 +68,7 @@
 - Маршруты клиентского портала находятся в отдельном сегменте `/client-portal/*`.
 - Доступ в сегмент возможен только при `client_portal.view`.
 - На уровне роли `client` используется ограниченный набор разрешений без админских и операционных write-прав.
+
+## 2026-03-22 note
+- No route contract or permission requirement was changed in this wave.
+- Further work is still needed on action-level hiding/guarding consistency and tenant bootstrap/switch stability.

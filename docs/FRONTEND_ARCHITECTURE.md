@@ -77,3 +77,7 @@
 ## 9. Incremental static-to-real migration note
 - `CRM / Финансы` migrated from a hardcoded page to a real API-backed screen using a page-specific `api/crmFinance.ts` adapter that aggregates existing finance endpoints without changing backend contracts.
 - This keeps migration risk low while establishing the expected pattern for future placeholder-page replacement: reuse existing backend projections first, then add missing backend projections only where necessary.
+
+## Current wave note
+- Frontend architecture was audited but not materially changed in this wave.
+- The biggest confirmed frontend platform gap remains PWA/offline infrastructure in the Vite build and runtime shell.

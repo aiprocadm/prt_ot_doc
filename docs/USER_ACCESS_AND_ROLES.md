@@ -76,3 +76,7 @@ PATCH /api/v1/admin/users/{user_id}/attributes
 - invitation/self-service onboarding is not yet the canonical closed loop in repo;
 - enable/disable and password lifecycle depend on the current user model and deployment policy;
 - scope is attribute-based, so future waves can refine with richer org/branch abstractions without breaking current flows.
+
+## Current wave note
+- No role definitions were changed in this wave.
+- The hardening slice preserved existing tenant-aware execution semantics and avoided widening access in document/pipeline flows.
