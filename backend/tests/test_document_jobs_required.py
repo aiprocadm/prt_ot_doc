@@ -51,14 +51,46 @@ def test_document_job_wrappers_delegate_to_runtime_bridge(monkeypatch) -> None:
         assert response["step_status"] == "success"
 
 
-def test_document_job_wrappers_continue_to_compat_exports() -> None:
+def test_document_job_wrappers_keep_backward_compatible_envelope_when_no_bridge_registered() -> None:
+    module._COMPATIBILITY_BRIDGES.clear()
+
     report = export_report_job(tenant_slug="tenant-a", report_id="report-1")
     sync = sync_integration_job(tenant_slug="tenant-a", integration_key="1c")
 
     assert report["status"] == "accepted"
     assert report["bridge_mode"] == "compatibility-wrapper"
+    assert report["deferred"] is True
     assert sync["status"] == "accepted"
     assert sync["bridge_mode"] == "compatibility-wrapper"
+    assert sync["deferred"] is True
+
+
+def test_document_job_named_bridges_execute_runtime_handler(monkeypatch) -> None:
+    captured: list[tuple[str, str]] = []
+
+    async def fake_export(*, tenant_slug: str, report_id: str):
+        captured.append((tenant_slug, report_id))
+        return {"status": "exported", "artifact_id": f"artifact:{report_id}"}
+
+    monkeypatch.setitem(module._COMPATIBILITY_BRIDGES, "export_report", fake_export)
+
+    monkeypatch.setattr(module, "tenant_context", lambda tenant_slug: __import__('contextlib').nullcontext())
+    monkeypatch.setattr(module, "ensure_tenant_schema", lambda tenant_slug: None)
+
+    def fake_run(coro):
+        import asyncio
+        return asyncio.run(coro)
+
+    import types
+    monkeypatch.setitem(__import__('sys').modules, 'app.tasks', types.SimpleNamespace(_run_coroutine=fake_run))
+
+    response = export_report_job(tenant_slug="tenant-a", report_id="report-42")
+
+    assert captured == [("tenant-a", "report-42")]
+    assert response["status"] == "exported"
+    assert response["bridge_mode"] == "compatibility-execution-bridge"
+    assert response["deferred"] is False
+    assert response["artifact_id"] == "artifact:report-42"
 
 
 def test_route_group_description_matches_declared_group_order() -> None:

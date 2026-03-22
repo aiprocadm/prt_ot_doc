@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import inspect
+from collections.abc import Awaitable, Callable
+
 from app.core.tenant import tenant_context
 from app.db.session import ensure_tenant_schema, session_scope
 from app.services.celery_app import celery_app
@@ -7,6 +10,7 @@ from app.services.pipelines_orchestrator import PipelineOrchestrator
 
 _INTERNAL_ORCHESTRATOR = "document_pipeline_orchestrator"
 _RUNTIME_BRIDGE = "compatibility-execution-bridge"
+_COMPATIBILITY_BRIDGES: dict[str, Callable[..., Awaitable[dict[str, str | bool]] | dict[str, str | bool]]] = {}
 
 
 def _job_step_response(
@@ -62,73 +66,73 @@ def _run_coroutine_step(*, tenant_slug: str, job_id: str, step_id: str, step_key
     return _run_coroutine(_run())
 
 
+def _run_named_bridge(*, tenant_slug: str, bridge_name: str, payload: dict[str, str]) -> dict[str, str | bool]:
+    from app.tasks import _run_coroutine
+
+    async def _run() -> dict[str, str | bool]:
+        handler = _COMPATIBILITY_BRIDGES.get(bridge_name)
+        if handler is None:
+            response: dict[str, str | bool] = {
+                "tenant": tenant_slug,
+                **payload,
+                "status": "accepted",
+                "deferred": True,
+                "handler": f"{bridge_name}_bridge",
+                "bridge_mode": "compatibility-wrapper",
+                "orchestrator": _INTERNAL_ORCHESTRATOR,
+                "detail": "No internal bridge configured; compatibility envelope preserved for backward compatibility.",
+            }
+            return response
+
+        with tenant_context(tenant_slug):
+            ensure_tenant_schema(tenant_slug)
+            result = handler(tenant_slug=tenant_slug, **payload)
+            if inspect.isawaitable(result):
+                result = await result
+            return {
+                "tenant": tenant_slug,
+                **payload,
+                "status": "completed",
+                "deferred": False,
+                "handler": f"{bridge_name}_bridge",
+                "bridge_mode": _RUNTIME_BRIDGE,
+                "orchestrator": _INTERNAL_ORCHESTRATOR,
+                **result,
+            }
+
+    return _run_coroutine(_run())
+
+
 @celery_app.task(name="app.tasks.render_docx_job")
 def render_docx_job(*, tenant_slug: str, job_id: str, step_id: str) -> dict[str, str | bool]:
-    return _run_coroutine_step(
-        tenant_slug=tenant_slug,
-        job_id=job_id,
-        step_id=step_id,
-        step_key="render_docx",
-    )
+    return _run_coroutine_step(tenant_slug=tenant_slug, job_id=job_id, step_id=step_id, step_key="render_docx")
 
 
 @celery_app.task(name="app.tasks.build_zip_job")
 def build_zip_job(*, tenant_slug: str, job_id: str, step_id: str) -> dict[str, str | bool]:
-    return _run_coroutine_step(
-        tenant_slug=tenant_slug,
-        job_id=job_id,
-        step_id=step_id,
-        step_key="build_zip",
-    )
+    return _run_coroutine_step(tenant_slug=tenant_slug, job_id=job_id, step_id=step_id, step_key="build_zip")
 
 
 @celery_app.task(name="app.tasks.send_edo_job")
 def send_edo_job(*, tenant_slug: str, job_id: str, step_id: str) -> dict[str, str | bool]:
-    return _run_coroutine_step(
-        tenant_slug=tenant_slug,
-        job_id=job_id,
-        step_id=step_id,
-        step_key="send_edo",
-    )
+    return _run_coroutine_step(tenant_slug=tenant_slug, job_id=job_id, step_id=step_id, step_key="send_edo")
 
 
 @celery_app.task(name="app.tasks.verify_signature_job")
 def verify_signature_job(*, tenant_slug: str, job_id: str, step_id: str) -> dict[str, str | bool]:
-    return _run_coroutine_step(
-        tenant_slug=tenant_slug,
-        job_id=job_id,
-        step_id=step_id,
-        step_key="verify_signature",
-    )
+    return _run_coroutine_step(tenant_slug=tenant_slug, job_id=job_id, step_id=step_id, step_key="verify_signature")
 
 
 @celery_app.task(name="app.tasks.export_report_job")
-def export_report_job(*, tenant_slug: str, report_id: str) -> dict[str, str]:
-    return {
-        "tenant": tenant_slug,
-        "report_id": report_id,
-        "status": "accepted",
-        "bridge_mode": "compatibility-wrapper",
-        "orchestrator": _INTERNAL_ORCHESTRATOR,
-    }
+def export_report_job(*, tenant_slug: str, report_id: str) -> dict[str, str | bool]:
+    return _run_named_bridge(tenant_slug=tenant_slug, bridge_name="export_report", payload={"report_id": report_id})
 
 
 @celery_app.task(name="app.tasks.sync_integration_job")
-def sync_integration_job(*, tenant_slug: str, integration_key: str) -> dict[str, str]:
-    return {
-        "tenant": tenant_slug,
-        "integration_key": integration_key,
-        "status": "accepted",
-        "bridge_mode": "compatibility-wrapper",
-        "orchestrator": _INTERNAL_ORCHESTRATOR,
-    }
+def sync_integration_job(*, tenant_slug: str, integration_key: str) -> dict[str, str | bool]:
+    return _run_named_bridge(tenant_slug=tenant_slug, bridge_name="sync_integration", payload={"integration_key": integration_key})
 
 
 @celery_app.task(name="app.tasks.index_file_content_job")
 def index_file_content_job(*, tenant_slug: str, job_id: str, step_id: str) -> dict[str, str | bool]:
-    return _run_coroutine_step(
-        tenant_slug=tenant_slug,
-        job_id=job_id,
-        step_id=step_id,
-        step_key="index_file_content",
-    )
+    return _run_coroutine_step(tenant_slug=tenant_slug, job_id=job_id, step_id=step_id, step_key="index_file_content")

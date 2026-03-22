@@ -4,52 +4,52 @@ _Date:_ 2026-03-22
 
 ## Scope of this audit wave
 - Performed a factual repository audit before changing code.
-- Kept changes incremental and backward-compatible.
-- Focused this wave on safe decomposition of approval/EDO/sign models plus replacing legacy document-job step stubs with real orchestrator execution bridges.
+- Kept the wave incremental and backward-compatible.
+- Focused implementation on two verified hardening seams: background job compatibility wrappers and frontend PWA bootstrap.
 
 ## Canonical backend/frontend roots
-- Backend app bootstrap: `backend/app/main.py`, `backend/app/api/app.py`.
-- Backend API composition: `backend/app/api/v1/router.py`, `backend/app/api/v1/route_groups.py`.
-- Backend business roots: `backend/app/api/routes`, `backend/app/modules`, `backend/app/services`, `backend/app/models`, `backend/app/celery/tasks`.
-- Frontend app bootstrap: `frontend/src/main.tsx`, `frontend/src/App.tsx`.
-- Frontend route/page roots: `frontend/src/router/AppRouter.tsx`, `frontend/src/router/routeGroups.tsx`, `frontend/src/pages`, `frontend/src/api`, `frontend/src/stores`.
+- Backend bootstraps: `backend/app/main.py`, `backend/app/api/app.py`.
+- Backend composition roots: `backend/app/api/v1/router.py`, `backend/app/api/v1/route_groups.py`.
+- Backend domain roots: `backend/app/api/routes`, `backend/app/modules`, `backend/app/services`, `backend/app/models`, `backend/app/celery/tasks`.
+- Frontend bootstraps: `frontend/src/main.tsx`, `frontend/src/App.tsx`.
+- Frontend routing/data roots: `frontend/src/router`, `frontend/src/pages`, `frontend/src/api`, `frontend/src/hooks`, `frontend/src/permissions`.
 
 ## Active entrypoints
 - ASGI app: `backend/app/api/app.py`.
-- API v1 compatibility composition root: `backend/app/api/v1/router.py`.
-- API v1 grouped registry: `backend/app/api/v1/route_groups.py`.
+- API router composition: `backend/app/api/v1/router.py` backed by `backend/app/api/v1/route_groups.py`.
 - Worker/task entrypoints: `backend/app/worker.py`, `backend/app/tasks.py`, `backend/app/celery/tasks/*`.
-- Frontend SPA: `frontend/src/main.tsx` -> `frontend/src/App.tsx` -> router.
+- Frontend SPA: `frontend/src/main.tsx` -> `frontend/src/App.tsx` -> `frontend/src/router/AppRouter.tsx`.
+- Frontend build/runtime shell: `frontend/vite.config.ts` plus Vite PWA runtime registration in `frontend/src/pwa/register.ts`.
 
 ## Backend route map
-- Public: auth + client portal public endpoints.
-- Compliance/admin: audit, admin users/authz, attestations, notifications, departments, contracts, dashboard, orders, invoices, NPA, PPE, medical, journals, risk, sites, companies, persons, training, briefings, calendar, compliance, billing.
-- Operations: files, packs, incidents, inspections, prescriptions, safety ops, obligations, jobs, tasks, tenancy, outbox admin, webhooks, integrations, tenants, PWA sync, external registry, reports.
-- Document core: documents, EDO workflow, approval/signing v1, approval orchestration, replace, headers, branding, pipelines, workflow, PDF, packs v2, search, analytics, export center.
-- Platform extensions: client portal v1/internal, public APIs, API tokens.
+- `public`: auth + public client portal.
+- `compliance_and_admin`: audit, admin users/authz, attestations, notifications, departments, contracts, dashboard, orders, invoices, NPA, PPE, medical, journals, risk, sites, companies, persons, training, briefings, calendar, compliance, billing.
+- `operations`: files, packs, incidents, inspections, prescriptions, safety ops, obligations, jobs, tasks, tenancy, outbox admin, webhooks, integration readiness, tenants, PWA sync, external registry, reports.
+- `document_core`: documents, EDO workflow, approval/signing v1, approval orchestration, replace, headers, branding, pipelines, workflow, PDF, packs v2, search, analytics, export center.
+- `platform_extension`: client portal v1/internal, public API, API tokens, portal requests.
 
 ## Frontend route/page map
-- Enterprise screens exist for dashboards, documents, templates, packs/jobs, approvals/EDO, incidents, inspections, training, PPE, warehouse, admin, client portal, CRM/finance, files, search, audit, branding, integrations, calendar.
-- Router-level permission awareness is implemented through route grouping plus ability checks, but not every page has equally mature action-level hiding and empty/loading/error consistency.
+- Router registry is centered in `frontend/src/router/pageRegistry.tsx`, grouped by `routeGroups.tsx`, enforced by `ProtectedRoute.tsx`.
+- Operational pages exist for dashboards, documents/templates/packs, approvals/EDO, incidents/inspections/CAPA, training/PPE/warehouse, admin, files/search/audit, client portal, CRM/finance, reference/settings, contractors, activities, and calendar.
+- Connectivity/offline messaging exists via `frontend/src/components/common/ConnectivityBanner.tsx`, but true offline queue/conflict UX is still incomplete.
 
 ## Active module map
-- API route grouping is now explicitly described by `ROUTER_GROUP_ORDER`, `ROUTER_GROUPS`, and `describe_router_groups()` in `backend/app/api/v1/route_groups.py`.
-- ORM decomposition is partial: focused modules already exist (`document.py`, `document_core.py`, `tenanting.py`, `safety_core.py`, `risk.py`), and this wave extracted approval/EDO/sign primitives into `backend/app/models/approval_workflow.py` while keeping `backend/app/models/models.py` as the compatibility mega-module.
-- Document pipeline orchestration spans `backend/app/services/pipelines_orchestrator.py`, `backend/app/tasks.py`, `backend/app/celery/tasks/job_steps.py`, and `backend/app/celery/tasks/document_jobs_required.py`.
-- Frontend operational projections are largely aggregated through `frontend/src/api/operations.ts` and page-level hooks.
+- Router decomposition is already partially in place via `route_groups.py`; `router.py` remains the compatibility-heavy composition file.
+- ORM decomposition is partial: focused modules exist, but `backend/app/models/models.py` remains a large compatibility aggregator.
+- Pipeline/document orchestration centers on `backend/app/services/pipelines_orchestrator.py`, `backend/app/tasks.py`, `backend/app/celery/tasks/document_jobs_required.py`, and extracted `backend/app/services/pipeline_step_handlers.py`.
+- Frontend operational data flows aggregate through `frontend/src/api/*.ts` and page-level hooks such as `useAsyncResource` / `useLocalRegistry`.
 
 ## Migration heads
-- No migration changes in this wave.
-- Existing Alembic history remains authoritative under `backend/app/migrations/versions` if present in the deployment context.
-- This wave intentionally avoided schema changes.
+- No migration changes were made in this wave.
+- Migration state still needs explicit audit against `backend/app/migrations/versions` in a dedicated schema wave.
 
 ## Tests map
-- Backend tests cover tenanting, authz, billing, audit, pipeline orchestration, search, client portal, incidents/inspections/CAPA, workflow notifications, files, templates, and release/webhook stubs.
-- This wave adds focused regression coverage for document-job compatibility wrappers and route-group description metadata.
-- Frontend code has real-data pages for multiple formerly static screens, but this wave did not change runtime UI behavior.
+- Backend tests: `backend/tests`, `integration_tests`, plus focused regression coverage for compatibility bridges.
+- Frontend tests: `frontend/src/__tests__` covering routing, permissions, API clients, tasks, dashboards, operations pages, and client portal slices.
+- This wave added verification for named compatibility bridges and PWA-capable frontend build output.
 
 ## Static / placeholder frontend pages map
-Factually confirmed as already moved from static foundations to real data flows:
+Confirmed as already backed by real data/projection flows rather than pure static cards:
 - `frontend/src/pages/contractors/ContractorsPage.tsx`
 - `frontend/src/pages/reference/ReferencePage.tsx`
 - `frontend/src/pages/settings/SettingsPage.tsx`
@@ -63,20 +63,21 @@ Factually confirmed as already moved from static foundations to real data flows:
 - `frontend/src/pages/inspection-prep/InspectionPrepPackagesPage.tsx`
 - `frontend/src/pages/admin/AdminPage.tsx`
 
-Still remaining as broader gaps vs super-TZ:
-- full PWA plugin + service worker + offline queue/conflict UI,
-- stronger attention center and data quality center UX,
-- deeper role-based dashboard projections,
-- richer client/external operational history/request flows.
+Still not complete relative to the super-TZ:
+- full attention center UX,
+- full data quality center UX,
+- full offline queue/conflict-resolution UX,
+- richer role-based dashboard projections and external portal operational slices.
 
 ## Stub / mock / deferred backend map
-Confirmed problems and current state:
-- `backend/app/api/routes/ws_stub.py` -> WebSocket 501 stub remains deferred.
-- `backend/app/celery/tasks/document_jobs_required.py` -> legacy task wrappers now execute real internal orchestrator steps for render/build/sign/EDO/index flows through a tenant-aware compatibility bridge; report/integration sync wrappers remain compatibility-only envelopes.
-- `backend/app/services/pipelines_orchestrator.py` -> still a fat orchestration file, but this wave extracted artifact/sign/EDO/index step handlers into `backend/app/services/pipeline_step_handlers.py` to reduce bloat without changing contracts.
-- `backend/app/services/integrations/stubs.py` -> 1C/ЭДО/ФРДО/ЕИСОТ stubs remain non-production by design.
-- `backend/app/api/routes/approval_signing_v1.py`, `approval_orchestration.py`, `edo_workflow.py` -> still expose mock/stub provider flows and need future production-adapter hardening.
-- `frontend/vite.config.ts` -> no production-grade PWA plugin setup.
+Factually confirmed problems:
+- `backend/app/api/routes/ws_stub.py` -> WebSocket 501 stub still remains.
+- `backend/app/celery/tasks/document_jobs_required.py` -> document step wrappers are real tenant-aware bridges for render/build/sign/EDO/index; `export_report_job` and `sync_integration_job` now support real internal bridge handlers when wired, but still preserve deferred compatibility envelopes by default.
+- `backend/app/services/pipelines_orchestrator.py` -> still a fat orchestrator with partial internal decomposition.
+- `backend/app/services/integrations/stubs.py` -> 1C/ЭДО/ФРДО/ЕИСОТ stubs remain clearly non-production.
+- `backend/app/api/routes/approval_signing_v1.py`, `approval_orchestration.py`, `edo_workflow.py` -> still rely on stub/mock provider defaults and need production adapter hardening later.
+- `frontend/vite.config.ts` had no real PWA plugin setup before this wave; this wave adds a real plugin/manifest/service-worker baseline, but not the full offline queue/conflict stack requested in the super-TZ.
+- Several pages are still foundational/aggregated rather than domain-complete operational consoles.
 
 ## Fat files requiring decomposition
 - `backend/app/api/v1/router.py`
@@ -88,28 +89,28 @@ Confirmed problems and current state:
 
 ## Legacy / compatibility pairs and risky paths
 - `backend/app/api/v1/router.py` vs `backend/app/api/v1/route_groups.py`.
-- `backend/app/models/models.py` vs focused model modules under `backend/app/models/*`.
+- `backend/app/models/models.py` vs focused model modules.
 - `backend/app/tasks.py` vs `backend/app/celery/tasks/document_jobs_required.py`.
-- Approval/EDO/sign flows are split between `approval_signing_v1.py`, `approval_orchestration.py`, and `edo_workflow.py`.
-- Files/PDF/pipeline/pack routes have both legacy and canonical registration layers.
+- Approval/sign/EDO spread across `approval_signing_v1.py`, `approval_orchestration.py`, `edo_workflow.py`.
+- Vite SPA shell vs new generated PWA shell/service worker.
 
 ## Gaps relative to the super-TZ
-### P0 still open or only partially addressed
-- Full decomposition of `router.py` and `models.py` is not completed.
-- Tenant/authz/audit/correlation-id consistency still needs broader endpoint-by-endpoint verification.
-- Document chain centralization/readiness scoring is still incomplete.
-- Tasks/timeline/attention center is not yet a universal operational layer.
-- Workflow/sign/EDO provider abstraction is cleaner than before but not production-adapter complete.
-- PWA hardening remains largely open.
+### P0 partially addressed
+- Repo audit documented.
+- `router.py` decomposition is only partially established via route groups, not finished.
+- `models.py` decomposition is still partial.
+- Compatibility background jobs are hardened, but not all document/report/integration chains are fully centralized.
+- PWA setup moved from absent to real baseline, but offline queue/sync/conflict UX remains open.
 
-### P1/P2 not attempted in this wave
-- Data quality issue model and dashboard APIs.
-- Full offline queue/conflict UX.
-- End-to-end incident/inspection/prescription/CAPA closure loops beyond current v1 foundations.
-- Real certified provider adapters.
+### P0/P1 still open
+- Full tenant/authz/audit/correlation-id sweep across all business endpoints.
+- Centralized document readiness score and blocker explanations.
+- Universal tasks/timeline/attention layer.
+- Data quality issue model and dashboards.
+- Production-grade workflow/sign/EDO adapters.
 
 ## What changed in this wave
-- Extracted approval/EDO/sign ORM primitives into `backend/app/models/approval_workflow.py` with compatibility imports preserved through `backend/app/models/models.py`.
-- Extracted pipeline step handlers into `backend/app/services/pipeline_step_handlers.py` and wired `PipelineOrchestrator` to the focused module.
-- Replaced stub-like document-job Celery wrappers with tenant-aware runtime compatibility bridges that execute real orchestrator steps for render/build/sign/EDO/index flows.
-- Added regression tests covering both the step-handler dispatch path and the document-job compatibility bridge behavior.
+- Added a real Vite PWA baseline with manifest, service worker generation, runtime registration, and asset/runtime caching strategy.
+- Hardened `document_jobs_required.py` so compatibility task names can execute named internal bridges for report export and integration sync instead of being permanently hardcoded stubs.
+- Added regression tests for the bridge behavior.
+- Refreshed wave docs to clearly separate implemented hardening from remaining gaps.

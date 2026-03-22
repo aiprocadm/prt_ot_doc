@@ -1,8 +1,8 @@
 # Frontend Static -> Real Map
 
-_Date:_ 2026-03-21
+_Date:_ 2026-03-22
 
-## Converted in this wave
+## Already moved from static/foundation to real data
 - `ContractorsPage` -> `/companies`, `/sites`, `/contracts`.
 - `ReferencePage` -> `/npa`, `/ppe/items`, `/training/programs`, `/templates`, `/briefings/templates`.
 - `SettingsPage` -> `/tenancy/context`, `/notifications/settings/me`, `/api-tokens`.
@@ -16,9 +16,9 @@ _Date:_ 2026-03-21
 - `InspectionPrepPackagesPage` -> projection over `/inspections`, `/prescriptions`, `/tasks`, `/templates`.
 - `AdminPage` -> `/tenancy/context`, `/admin/outbox`, `/webhooks/endpoints`, `/api-tokens`, `/audit`.
 
-## Still remaining
-- Full PWA/offline UX remains not-realized.
-- Some pages still aggregate from adjacent registries instead of having first-class backend projection endpoints.
+## Strengthened in this wave
+- Frontend shell now has a real PWA baseline: generated manifest, service worker, runtime registration, and cache strategy in the Vite build. This improves platform readiness but does not mean offline operations are fully complete yet.
 
-## 2026-03-22 note
-- No additional placeholder page was converted in this specific wave. The focus moved to backend document/pipeline hardening after the repo audit.
+## Remaining gaps
+- Offline queue UI, sync status center, conflict resolution UI, and draft resume/retry flows are still incomplete.
+- Some pages still compose operational snapshots from adjacent registries instead of dedicated backend projection endpoints.
