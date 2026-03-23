@@ -31,6 +31,13 @@ _Date:_ 2026-03-23
 	- `GET /api/v1/workspace/attention`
 	- `GET /api/v1/workspace/task-inbox`
 	These endpoints return tenant-scoped, permission-aware operational queues (overdue/due-soon tasks, compliance deadline pressure, user sync failure pressure, and actionable recommendations) instead of frontend hardcoded aggregation.
+- Extended `GET /api/v1/workspace/attention` with first persisted readiness-blocker projection layer for:
+	- employees profile completeness,
+	- templates readiness availability,
+	- overdue training enrollments,
+	- expired issued PPE,
+	- expired active contracts.
+	This turns attention payloads into scenario-aware readiness diagnostics, not only task counters.
 
 ## Validation evidence for this wave
 - Updated route modules compile successfully.

@@ -94,7 +94,10 @@ async def test_workspace_attention_returns_overdue_deadlines_and_sync_counts(db_
     assert payload.summary.overdue_tasks == 1
     assert payload.summary.overdue_deadlines == 1
     assert payload.summary.failed_sync_batches == 1
+    assert payload.summary.readiness_blockers >= 1
     assert payload.items
+    assert any(blocker.code == "templates_not_ready" for blocker in payload.blockers)
+    assert any("Resolve readiness blockers" in rec for rec in payload.recommendations)
     assert any("Resolve overdue tasks" in rec for rec in payload.recommendations)
 
 

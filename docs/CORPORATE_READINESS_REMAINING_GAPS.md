@@ -33,8 +33,8 @@ _Date:_ 2026-03-23
 - Idempotent rerun and progress/reporting contracts still need hardening.
 
 ## Data-quality and blocker gaps
-- No full persisted issue layer yet for employees, companies/sites, templates/documents, training, PPE, and contractors.
-- No blocker severity + scenario-impact model is integrated end-to-end into dashboards, attention center, and entity readiness.
+- Workspace attention now includes an initial blocker projection slice (employees/templates/training/PPE/contracts), but no full persisted issue registry exists yet for employees, companies/sites, templates/documents, training, PPE, and contractors.
+- Blocker severity and action hints are now present in workspace attention, but scenario-impact integration is not yet end-to-end across dashboards and entity cards.
 
 ## Mobile/PWA gaps
 - PWA installability and runtime caching are in place, and `/api/pwa/bootstrap` already returns authenticated projections (user, permissions, dictionaries, sync/conflict diagnostics).
