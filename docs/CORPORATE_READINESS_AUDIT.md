@@ -1,6 +1,6 @@
 # Corporate Readiness Audit
 
-_Date:_ 2026-03-22
+_Date:_ 2026-03-23
 
 ## Scope and audit method
 - Re-validated runtime code before treating any capability as enterprise-ready.
@@ -24,7 +24,7 @@ The following areas are already strong enough to be treated as production-capabl
 - The document core already supports template upload, versioning, preview, replacement, branding, PDF generation, pack generation, and related lifecycle slices. This contour should be strengthened, not rewritten.
 - Business modules are broad and real: documents, packs, approvals, EDO, incidents, inspections, training, PPE, files, billing, CRM/portal slices, and admin/diagnostics routes are all present in runtime code.
 - `frontend/vite.config.ts` already contains a real `VitePWA` plugin setup with runtime caching. This is a meaningful field-readiness base, not just a placeholder manifest.
-- `/api/pwa/bootstrap` is no longer anonymous/simplified in the current code path; `backend/app/api/routes/pwa_sync.py` now exposes authenticated current-user projection, route-permission projections, dictionaries, sync counters, and diagnostics that can support the next offline/mobile wave.
+- `/api/pwa/bootstrap` is no longer anonymous/simplified in the current code path; `backend/app/api/routes/pwa_sync.py` now exposes authenticated current-user projection, route-permission projections, dictionaries, sync counters, offline capability flags, recent conflict projections, and diagnostics that can support the next offline/mobile wave.
 
 ## Confirmed foundation-level / partial operational areas
 These areas are valuable and usable, but are not yet at the standard required for a broad corporate rollout:
@@ -44,7 +44,7 @@ The following facts were re-verified directly from runtime code and remain mater
 - `backend/app/api/routes/approval_orchestration.py` — mock provider behavior still exists and must be isolated from production orchestration.
 - `backend/app/api/routes/edo_workflow.py` — mock/stub semantics remain visible, including `provider_code="mock"` defaults and simulation-oriented behavior.
 - `frontend/vite.config.ts` — PWA runtime caching is already in place and should be preserved.
-- `/api/pwa/bootstrap` — the previous simplified bootstrap limitation is now partially addressed in code, but the wider mobile/offline contour still requires queue/conflict/draft UX and selected field workflows.
+- `/api/pwa/bootstrap` — the previous simplified bootstrap limitation is now partially addressed in code, including queue/conflict capability projections, but the wider mobile/offline contour still requires frontend queue/conflict/draft UX and selected field workflows.
 
 ## Frontend operational assessment
 ### Production-usable or close to production-usable
@@ -127,4 +127,4 @@ The repo still contains debt that matters operationally, even if it should be ad
 ## What this wave actually accomplished
 - Reframed the audit around factual corporate readiness, not generic backlog coverage.
 - Preserved the documented evidence of the key deferred/mock/stub seams that still block a real enterprise rollout.
-- Confirmed that the PWA base already has installability/runtime caching and that the `/api/pwa/bootstrap` seam has been strengthened enough to serve as a real projection API for the next mobile/offline wave.
+- Confirmed that the PWA base already has installability/runtime caching and that the `/api/pwa/bootstrap` seam now includes offline capability and conflict projections, making it a stronger projection API for the next mobile/offline wave.

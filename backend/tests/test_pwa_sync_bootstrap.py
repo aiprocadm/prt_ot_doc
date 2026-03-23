@@ -83,6 +83,15 @@ async def test_pwa_bootstrap_returns_authenticated_projection_payload(db_session
         status="pending",
         payload={"id": "entry-1"},
     )
+    failed_batch = OfflineSyncBatch(
+        tenant_id=tenant.id,
+        user_id=user.id,
+        device_id="device-1",
+        entity_type="briefing_entry",
+        status="failed",
+        payload={"id": "entry-2"},
+        error_payload={"error": "conflict_final_record"},
+    )
     failed_media = OfflineMediaQueue(
         tenant_id=tenant.id,
         user_id=user.id,
@@ -91,7 +100,7 @@ async def test_pwa_bootstrap_returns_authenticated_projection_payload(db_session
         upload_status="failed",
         metadata_json={"kind": "photo"},
     )
-    db_session.add_all([template, journal, enrollment, deadline, pending_batch, failed_media])
+    db_session.add_all([template, journal, enrollment, deadline, pending_batch, failed_batch, failed_media])
     await db_session.commit()
 
     access = AccessContext(
@@ -124,5 +133,12 @@ async def test_pwa_bootstrap_returns_authenticated_projection_payload(db_session
     assert payload.sync_state["pending_batches"] == 1
     assert payload.sync_state["failed_media"] == 1
     assert payload.sync_state["has_blocking_failures"] is True
+    assert payload.offline_queue["conflict_count"] == 1
+    assert payload.offline_queue["failed_conflicts"][0]["conflict_code"] == "conflict_final_record"
+    assert payload.offline_queue["capabilities"]["briefing_mark"] is True
+    assert payload.offline_queue["capabilities"]["media_photo_sync"] is True
     assert payload.diagnostics["auth_required"] is True
+    assert payload.diagnostics["bootstrap_version"] == 3
+    assert payload.diagnostics["conflict_resolution_required"] is True
     assert "offline_media_statuses" in payload.dictionaries
+    assert "offline_capabilities" in payload.dictionaries

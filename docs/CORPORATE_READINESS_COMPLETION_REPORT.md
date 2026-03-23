@@ -1,12 +1,12 @@
 # Corporate Readiness Completion Report
 
-_Date:_ 2026-03-22
+_Date:_ 2026-03-23
 
 ## What was strengthened without rewrite
 - Re-ran the repository assessment specifically through a corporate-readiness lens instead of a generic backlog lens.
 - Updated the corporate-readiness document set so the next wave can start from repo-truth about foundations, blockers, and phased priorities.
 - Preserved the existing document core, tenancy, and broad module surface instead of destabilizing them with architectural rewrites.
-- Confirmed and documented that `backend/app/api/routes/pwa_sync.py` now exposes a materially stronger `/api/pwa/bootstrap` projection than the earlier simplified payload.
+- Confirmed and documented that `backend/app/api/routes/pwa_sync.py` now exposes a materially stronger `/api/pwa/bootstrap` projection than the earlier simplified payload, including offline capability flags, recent failed-conflict projections, and generated-at diagnostics.
 
 ## Stub/mock/deferred areas explicitly confirmed or narrowed
 - Confirmed `backend/app/api/routes/ws_stub.py` remains deferred.
@@ -18,7 +18,7 @@ _Date:_ 2026-03-22
 
 ## Operational screens or platform surfaces improved to a more usable corporate state
 - No broad visual rewrite was performed in this wave.
-- The practical improvement is at the platform contract level: the mobile/PWA frontend now has a stronger bootstrap API foundation for role-aware offline work, dictionaries, and sync diagnostics.
+- The practical improvement is at the platform contract level: the mobile/PWA frontend now has a stronger bootstrap API foundation for role-aware offline work, queue/conflict awareness, dictionaries, and sync diagnostics.
 - The documentation now clearly distinguishes screens and modules that are operational foundations from areas that are still thin wrappers, partial pages, or workflow-incomplete.
 
 ## Remaining gaps
