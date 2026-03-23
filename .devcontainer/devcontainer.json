@@ -16,6 +16,7 @@
         "ms-python.python",
         "ms-python.vscode-pylance",
         "ms-python.black-formatter",
+        "ms-python.debugpy",
         "charliermarsh.ruff",
         "vitest.explorer"
       ],
@@ -23,9 +24,10 @@
         "python.defaultInterpreterPath": "/workspaces/prt_ot_doc/.venv/bin/python",
         "python.testing.pytestEnabled": true,
         "python.testing.unittestEnabled": false,
+        "python.testing.nosetestsEnabled": false,
+        "python.testing.autoTestDiscoverOnSaveEnabled": true,
         "python.testing.pytestArgs": [
-          "tests",
-          "integration_tests"
+          "tests"
         ],
         "python.envFile": "${workspaceFolder}/.env",
         "python.analysis.extraPaths": [

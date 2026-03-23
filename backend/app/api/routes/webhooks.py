@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import secrets
+from datetime import datetime, timezone
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -11,10 +11,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, rbac
 from app.models.job_engine import InboundWebhookDedup
-from app.tasks import compute_inbound_dedup_key, process_inbound_webhook
 from app.models.models import Outbox, OutboxStatus, Tenant, WebhookDelivery, WebhookEndpoint
+from app.tasks import compute_inbound_dedup_key, process_inbound_webhook
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
@@ -97,6 +98,7 @@ async def list_webhooks(tenant: TenantDep, _: AdminAccess, session: SessionDep) 
 
 
 @router.post("/endpoints", response_model=WebhookEndpointCreateOut, status_code=status.HTTP_201_CREATED)
+@audit_operation("create", "webhook_endpoint")
 async def create_webhook(payload: WebhookEndpointIn, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> WebhookEndpointOut:
     generated_secret = payload.secret or secrets.token_urlsafe(32)
     row = WebhookEndpoint(
@@ -116,6 +118,7 @@ async def create_webhook(payload: WebhookEndpointIn, tenant: TenantDep, _: Admin
 
 
 @router.patch("/endpoints/{webhook_id}", response_model=WebhookEndpointOut)
+@audit_operation("update", "webhook_endpoint")
 async def update_webhook(webhook_id: str, payload: WebhookEndpointIn, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> WebhookEndpointOut:
     row = await session.get(WebhookEndpoint, webhook_id)
     if row is None or row.tenant_id != tenant.id:
@@ -133,6 +136,7 @@ async def update_webhook(webhook_id: str, payload: WebhookEndpointIn, tenant: Te
 
 
 @router.delete("/endpoints/{webhook_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+@audit_operation("delete", "webhook_endpoint")
 async def delete_webhook(webhook_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> None:
     row = await session.get(WebhookEndpoint, webhook_id)
     if row is None or row.tenant_id != tenant.id:
@@ -142,6 +146,7 @@ async def delete_webhook(webhook_id: str, tenant: TenantDep, _: AdminAccess, ses
 
 
 @router.post("/endpoints/{webhook_id}:rotate-secret", response_model=WebhookEndpointCreateOut)
+@audit_operation("rotate_secret", "webhook_endpoint")
 async def rotate_webhook_secret(webhook_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> WebhookEndpointCreateOut:
     row = await session.get(WebhookEndpoint, webhook_id)
     if row is None or row.tenant_id != tenant.id:
@@ -155,6 +160,7 @@ async def rotate_webhook_secret(webhook_id: str, tenant: TenantDep, _: AdminAcce
 
 
 @router.post("/endpoints/{webhook_id}:disable", response_model=WebhookEndpointOut)
+@audit_operation("disable", "webhook_endpoint")
 async def disable_webhook(webhook_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> WebhookEndpointOut:
     row = await session.get(WebhookEndpoint, webhook_id)
     if row is None or row.tenant_id != tenant.id:
@@ -166,6 +172,7 @@ async def disable_webhook(webhook_id: str, tenant: TenantDep, _: AdminAccess, se
 
 
 @router.post("/endpoints/{webhook_id}:enable", response_model=WebhookEndpointOut)
+@audit_operation("enable", "webhook_endpoint")
 async def enable_webhook(webhook_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> WebhookEndpointOut:
     row = await session.get(WebhookEndpoint, webhook_id)
     if row is None or row.tenant_id != tenant.id:
@@ -245,6 +252,7 @@ async def list_endpoint_deliveries(webhook_id: str, tenant: TenantDep, _: AdminA
 
 
 @router.post("/endpoints/{webhook_id}:test")
+@audit_operation("test", "webhook_endpoint")
 async def test_endpoint(webhook_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> dict[str, str]:
     row = await session.get(WebhookEndpoint, webhook_id)
     if row is None or row.tenant_id != tenant.id:
@@ -265,6 +273,7 @@ async def test_endpoint(webhook_id: str, tenant: TenantDep, _: AdminAccess, sess
 
 
 @router.post("/deliveries/{delivery_id}:retry")
+@audit_operation("retry", "webhook_delivery")
 async def retry_delivery(delivery_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> dict[str, str]:
     delivery = await session.get(WebhookDelivery, delivery_id)
     if delivery is None or delivery.tenant_id != tenant.id:
@@ -276,6 +285,7 @@ async def retry_delivery(delivery_id: str, tenant: TenantDep, _: AdminAccess, se
 
 
 @router.post("/events/{event_id}:replay")
+@audit_operation("replay", "outbox_event")
 async def replay_event(event_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> dict[str, str]:
     event = await session.get(Outbox, event_id)
     if event is None or event.tenant_id != tenant.id:
@@ -287,6 +297,7 @@ async def replay_event(event_id: str, tenant: TenantDep, _: AdminAccess, session
 
 
 @router.post("/inbound/{source}", status_code=status.HTTP_202_ACCEPTED)
+@audit_operation("inbound", "webhook_event")
 async def inbound_webhook(
     source: str,
     request: Request,

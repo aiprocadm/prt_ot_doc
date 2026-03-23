@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.models.finance import Contract, Invoice, InvoiceStatus, Order
 from app.models.models import Tenant
@@ -93,6 +94,7 @@ async def list_invoices(
 
 
 @router.post("/invoices", response_model=InvoiceRead, status_code=status.HTTP_201_CREATED)
+@audit_operation("create", "invoice")
 async def create_invoice(
     payload: InvoiceCreate,
     tenant: TenantDep,
@@ -142,6 +144,7 @@ async def get_invoice(
 
 
 @router.patch("/invoices/{invoice_id}", response_model=InvoiceRead)
+@audit_operation("update", "invoice")
 async def update_invoice(
     invoice_id: str,
     payload: InvoiceUpdate,
@@ -177,6 +180,7 @@ async def update_invoice(
     response_class=Response,
     response_model=None,
 )
+@audit_operation("delete", "invoice")
 async def delete_invoice(
     invoice_id: str,
     tenant: TenantDep,

@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.domains.ppe import build_journal_export
 from app.models.models import Journal, JournalEntry, Person, Tenant
@@ -107,6 +108,7 @@ async def list_journals(
 
 
 @router.post("", response_model=JournalRead, status_code=status.HTTP_201_CREATED)
+@audit_operation("create", "journal")
 async def create_journal(
     payload: JournalUpdate,
     tenant: TenantDep,
@@ -135,6 +137,7 @@ async def get_journal(journal_id: str, tenant: TenantDep, session: SessionDep, a
 
 
 @router.patch("/{journal_id}", response_model=JournalRead)
+@audit_operation("update", "journal")
 async def update_journal(
     journal_id: str,
     payload: JournalUpdate,
@@ -151,6 +154,7 @@ async def update_journal(
 
 
 @router.delete("/{journal_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+@audit_operation("delete", "journal")
 async def delete_journal(
     journal_id: str, tenant: TenantDep, session: SessionDep, access: ManagerAccess
 ) -> None:
@@ -193,6 +197,7 @@ async def list_entries(
 
 
 @router.post("/{journal_id}/entries", response_model=JournalEntryRead, status_code=status.HTTP_201_CREATED)
+@audit_operation("create", "journal_entry")
 async def create_entry(
     journal_id: str,
     payload: JournalEntryUpdate,
@@ -226,6 +231,7 @@ async def get_entry(entry_id: str, tenant: TenantDep, session: SessionDep, acces
 
 
 @router.patch("/entries/{entry_id}", response_model=JournalEntryRead)
+@audit_operation("update", "journal_entry")
 async def update_entry(
     entry_id: str,
     payload: JournalEntryUpdate,
@@ -249,6 +255,7 @@ async def update_entry(
 
 
 @router.delete("/entries/{entry_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+@audit_operation("delete", "journal_entry")
 async def delete_entry(entry_id: str, tenant: TenantDep, session: SessionDep, access: ManagerAccess) -> None:
     entry = await _get_entry(session, tenant, entry_id)
     if entry.deleted_at is None:

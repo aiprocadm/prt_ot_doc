@@ -10,6 +10,32 @@ from fastapi import Request
 from app.core.config import get_settings
 
 TRACE_HEADER: Final[str] = get_settings().trace_header_name
+TRACE_HEADER_ALIASES: Final[tuple[str, ...]] = (
+    "X-Trace-Id",
+    "X-Correlation-Id",
+    "X-Request-Id",
+)
+
+
+def _normalize_trace_id(value: str | None) -> str | None:
+    if not value:
+        return None
+    candidate = value.strip()
+    if not candidate:
+        return None
+    return candidate[:128]
+
+
+def _read_trace_from_headers(request: Request, header_name: str | None) -> str | None:
+    names: list[str] = []
+    if header_name:
+        names.append(header_name)
+    names.extend(alias for alias in TRACE_HEADER_ALIASES if alias not in names)
+    for name in names:
+        resolved = _normalize_trace_id(request.headers.get(name))
+        if resolved:
+            return resolved
+    return None
 
 
 def get_trace_id(request: Request, header_name: str | None = None) -> str:
@@ -20,19 +46,10 @@ def get_trace_id(request: Request, header_name: str | None = None) -> str:
     supplied.
     """
 
-    trace_id = getattr(request.state, "trace_id", None)
-    if trace_id:
-        return trace_id
-
-    header_key = header_name or TRACE_HEADER
-    header_value: str | None = None
-    if header_key:
-        header_value = request.headers.get(header_key)
-
-    if header_value:
-        candidate = header_value.strip()
-        if candidate:
-            trace_id = candidate[:128]
+    trace_id = _normalize_trace_id(getattr(request.state, "trace_id", None))
+    if not trace_id:
+        header_key = header_name or TRACE_HEADER
+        trace_id = _read_trace_from_headers(request, header_key)
 
     if not trace_id:
         trace_id = uuid.uuid4().hex

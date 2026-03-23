@@ -14,6 +14,9 @@ fi
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt -r requirements-dev.txt
+python -m pip install pytest pytest-asyncio pytest-cov pytest-mock moto
+# Warm up pytest collection so Testing panel has discovery metadata immediately.
+python -m pytest --collect-only -q tests >/dev/null || true
 
 cd frontend
 npm ci

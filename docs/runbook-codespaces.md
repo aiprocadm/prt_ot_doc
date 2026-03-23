@@ -1,5 +1,14 @@
 # Runbook: GitHub Codespaces (dockerless-first)
 
+## 0) Что настраивается автоматически при первом старте Codespace
+- Создается виртуальное окружение `.venv` (если отсутствует).
+- Устанавливаются зависимости из `requirements.txt` и `requirements-dev.txt`.
+- Дополнительно устанавливаются dev-пакеты для тестирования: `pytest`, `pytest-asyncio`, `pytest-cov`, `pytest-mock`, `moto`.
+- VS Code использует интерпретатор `${workspaceFolder}/.venv/bin/python`.
+- В Test Explorer включен `pytest`, отключены `unittest` и `nose`, discovery путь: `tests`.
+
+После завершения post-create шага тесты автоматически обнаруживаются Python-расширением и отображаются в панели Testing без ручной настройки.
+
 ## 1) Open → install → run
 ```bash
 cp .env.example .env

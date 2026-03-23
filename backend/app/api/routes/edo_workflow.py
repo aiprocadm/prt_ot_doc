@@ -12,7 +12,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps.tracing import get_trace_id
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.models.document import DocumentVersion
 from app.models.job_engine import InboundWebhookDedup
@@ -147,8 +149,10 @@ def _request_hash(*, request: Request, tenant: Tenant, user_id: str | None, body
 
 
 def _correlation_id(request: Request, response: Response) -> str:
-    value = request.headers.get("X-Correlation-Id") or str(uuid4())
+    value = get_trace_id(request)
+    response.headers["X-Trace-Id"] = value
     response.headers["X-Correlation-Id"] = value
+    response.headers["X-Request-Id"] = value
     return value
 
 
@@ -182,6 +186,7 @@ async def _idempotent_or_replay(
 
 
 @router.post("/approvals/routes")
+@audit_operation("create", "approval_route")
 async def create_approval_route(
     payload: ApprovalRouteCreate,
     request: Request,
@@ -215,6 +220,7 @@ async def list_approval_routes(session: AsyncSession = SessionDep, tenant: Tenan
 
 
 @router.patch("/approvals/routes/{route_id}")
+@audit_operation("update", "approval_route")
 async def update_approval_route(
     route_id: str,
     payload: ApprovalRouteCreate,
@@ -236,6 +242,7 @@ async def update_approval_route(
 
 
 @router.post("/approvals/requests")
+@audit_operation("start", "approval_request")
 async def start_approval_request(
     payload: ApprovalRequestCreate,
     request: Request,
@@ -295,6 +302,7 @@ async def start_approval_request(
 
 
 @router.post("/approvals/start")
+@audit_operation("start", "approval_request")
 async def start_approval_request_v1(
     payload: ApprovalRequestCreate,
     request: Request,
@@ -338,6 +346,7 @@ async def list_approval_tasks(
 
 
 @router.post("/approvals/requests/{request_id}/decide")
+@audit_operation("decide", "approval_request")
 async def decide_approval_request(
     request_id: str,
     payload: ApprovalDecisionCreate,
@@ -395,6 +404,7 @@ async def decide_approval_request(
 
 
 @router.post("/signatures")
+@audit_operation("create", "signature")
 async def create_signature(
     payload: SignatureCreate,
     session: AsyncSession = SessionDep,
@@ -439,6 +449,7 @@ async def create_signature(
 
 
 @router.post("/sign/request")
+@audit_operation("request", "signature")
 async def sign_request(
     payload: SignatureRequestIn,
     session: AsyncSession = SessionDep,
@@ -449,6 +460,7 @@ async def sign_request(
 
 
 @router.post("/sign/submit")
+@audit_operation("submit", "signature")
 async def sign_submit(
     payload: SignatureSubmitIn,
     session: AsyncSession = SessionDep,
@@ -500,6 +512,7 @@ async def list_signatures(document_version_id: str | None = None, session: Async
 
 
 @router.post("/edo/send")
+@audit_operation("send", "edo_message")
 async def send_to_edo(
     payload: EdoSendRequest,
     request: Request,
@@ -583,6 +596,7 @@ async def edo_messages(
 
 
 @router.post("/edo/webhook/status")
+@audit_operation("ingest_webhook", "edo_webhook")
 async def edo_status_webhook_v1(
     payload: EdoWebhookPayload,
     request: Request,
@@ -593,6 +607,7 @@ async def edo_status_webhook_v1(
 
 
 @router.post("/edo/webhooks/{provider_code}")
+@audit_operation("ingest_webhook", "edo_webhook")
 async def edo_webhook(
     provider_code: str,
     payload: EdoWebhookPayload,

@@ -38,7 +38,12 @@ async def _ping_redis(app: FastAPI, settings: Settings) -> None:
         await client.ping()
         return
 
-    redis = redis_async.from_url(settings.redis.broker_url)
+    broker_url = settings.redis.broker_url
+    if broker_url.startswith("memory://"):
+        # Dockerless / in-memory mode; no real Redis to reach.
+        return
+
+    redis = redis_async.from_url(broker_url)
     try:
         await redis.ping()
     finally:

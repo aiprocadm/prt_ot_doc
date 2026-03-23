@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.domains.incidents import append_log_entry, register_incident, update_incident
 from app.models.models import (
@@ -175,6 +176,7 @@ async def get_incident(
 
 
 @router.patch("/incidents/{incident_id}", response_model=IncidentRead)
+@audit_operation("update", "incident")
 async def patch_incident(
     incident_id: str,
     payload: IncidentUpdate,
@@ -199,6 +201,7 @@ async def patch_incident(
 
 
 @router.post("/incidents/{incident_id}/logs", response_model=IncidentLogRead, status_code=status.HTTP_201_CREATED)
+@audit_operation("create_log", "incident_log")
 async def add_incident_log(
     incident_id: str,
     payload: IncidentLogCreate,

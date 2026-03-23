@@ -11,6 +11,7 @@ from starlette import status
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from app.api.deps.tracing import TRACE_HEADER_ALIASES
 from app.core.config import Settings
 from app.core.metrics import get_metrics
 from app.core.request_context import reset_current_user_id, set_current_user_id
@@ -38,8 +39,7 @@ class ObservabilityMiddleware:
             return
 
         headers = Headers(scope=scope)
-        trace_header_value = headers.get(self._trace_header)
-        trace_id = self._select_trace_id(trace_header_value)
+        trace_id = self._select_trace_id(headers)
         trace_token = set_trace_id(trace_id)
         user_token = set_current_user_id(None)
         self._store_trace_in_scope(scope, trace_id)
@@ -146,11 +146,19 @@ class ObservabilityMiddleware:
 
         return limited_receive
 
-    def _select_trace_id(self, header_value: str | None) -> str:
-        if header_value:
-            normalized = header_value.strip()
-            if normalized:
-                return normalized[:128]
+    def _select_trace_id(self, headers: Headers) -> str:
+        candidates = [self._trace_header, *TRACE_HEADER_ALIASES]
+        seen: set[str] = set()
+        for header_name in candidates:
+            key = header_name.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            header_value = headers.get(header_name)
+            if header_value:
+                normalized = header_value.strip()
+                if normalized:
+                    return normalized[:128]
         return uuid.uuid4().hex
 
     async def _send_error_response(

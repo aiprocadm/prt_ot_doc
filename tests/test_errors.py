@@ -42,6 +42,8 @@ async def test_validation_error_uses_unified_payload(app_with_handlers: FastAPI)
     assert body["correlation_id"] == body["trace_id"]
     assert body["timestamp"]
     assert response.headers[TRACE_HEADER] == body["trace_id"]
+    assert response.headers["X-Correlation-Id"] == body["trace_id"]
+    assert response.headers["X-Request-Id"] == body["trace_id"]
     assert body["request_id"] == body["trace_id"]
 
 
@@ -63,6 +65,8 @@ async def test_forbidden_error_uses_unified_payload(app_with_handlers: FastAPI) 
     assert body["timestamp"]
     assert body["trace_id"]
     assert response.headers[TRACE_HEADER] == body["trace_id"]
+    assert response.headers["X-Correlation-Id"] == body["trace_id"]
+    assert response.headers["X-Request-Id"] == body["trace_id"]
     assert body["request_id"] == body["trace_id"]
 
 
@@ -84,6 +88,8 @@ async def test_internal_error_uses_unified_payload(app_with_handlers: FastAPI) -
     assert body["timestamp"]
     assert body["trace_id"]
     assert response.headers[TRACE_HEADER] == body["trace_id"]
+    assert response.headers["X-Correlation-Id"] == body["trace_id"]
+    assert response.headers["X-Request-Id"] == body["trace_id"]
     assert body["request_id"] == body["trace_id"]
 
 
@@ -105,4 +111,26 @@ async def test_not_found_error_uses_unified_payload(app_with_handlers: FastAPI) 
     assert body["timestamp"]
     assert body["trace_id"]
     assert response.headers[TRACE_HEADER] == body["trace_id"]
+    assert response.headers["X-Correlation-Id"] == body["trace_id"]
+    assert response.headers["X-Request-Id"] == body["trace_id"]
     assert body["request_id"] == body["trace_id"]
+
+
+@pytest.mark.anyio
+async def test_error_contract_uses_incoming_correlation_header(app_with_handlers: FastAPI) -> None:
+    transport = ASGITransport(app=app_with_handlers, raise_app_exceptions=False)
+    correlation_id = "corr-inbound-123"
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get(
+            "/forbidden",
+            headers={"X-Correlation-Id": correlation_id},
+        )
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    body = response.json()
+    assert body["trace_id"] == correlation_id
+    assert body["correlation_id"] == correlation_id
+    assert body["request_id"] == correlation_id
+    assert response.headers[TRACE_HEADER] == correlation_id
+    assert response.headers["X-Correlation-Id"] == correlation_id
+    assert response.headers["X-Request-Id"] == correlation_id

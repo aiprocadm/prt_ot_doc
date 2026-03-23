@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, abac
+from app.core.audit_decorator import audit_operation
 from app.models.finance import Contract, ContractStatus, Department
 from app.models.models import Company, Site, Tenant
 from app.schemas.contract import ContractCreate, ContractPage, ContractRead, ContractUpdate
@@ -104,6 +105,7 @@ async def list_contracts(
 
 
 @router.post("/contracts", response_model=ContractRead, status_code=status.HTTP_201_CREATED)
+@audit_operation("create", "contract")
 async def create_contract(
     payload: ContractCreate,
     tenant: TenantDep,
@@ -163,6 +165,7 @@ async def get_contract(
 
 
 @router.patch("/contracts/{contract_id}", response_model=ContractRead)
+@audit_operation("update", "contract")
 async def update_contract(
     contract_id: str,
     payload: ContractUpdate,
@@ -201,6 +204,7 @@ async def update_contract(
     response_model=None,
     response_class=Response,
 )
+@audit_operation("delete", "contract")
 async def delete_contract(
     contract_id: str,
     tenant: TenantDep,

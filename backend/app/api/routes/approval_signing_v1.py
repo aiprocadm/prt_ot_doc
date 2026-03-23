@@ -12,6 +12,7 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.audit_decorator import audit_operation
 from app.models.approval_signing import (
     ApprovalDecisionLog,
     ApprovalProcess,
@@ -125,6 +126,7 @@ async def _create_tasks(session: AsyncSession, process: ApprovalProcess, route: 
 
 
 @router.post("/approvals:start")
+@audit_operation("start", "approval_process", id_attr="process_id")
 async def approvals_start(payload: ApprovalStartIn, request: Request, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), x_user_id: str = Header(default="system", alias="X-User-Id")):
     key = request.headers.get("Idempotency-Key")
     idem = None
@@ -180,6 +182,7 @@ async def approval_tasks(mine: bool = True, status: str = "open", session: Async
 
 
 @router.post("/approvals/tasks/{task_id}:decide")
+@audit_operation("decide", "approval_task")
 async def approval_decide(task_id: str, payload: DecideIn, request: Request, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), x_user_id: str = Header(default="system", alias="X-User-Id")):
     task = await session.get(ApprovalTask, task_id)
     if not task or task.tenant_id != str(tenant.id):
@@ -212,6 +215,7 @@ async def approval_decide(task_id: str, payload: DecideIn, request: Request, ses
 
 
 @router.post("/approvals/tasks/{task_id}:delegate")
+@audit_operation("delegate", "approval_task", id_attr="new_task_id")
 async def approval_delegate(task_id: str, payload: DelegateIn, request: Request, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), x_user_id: str = Header(default="system", alias="X-User-Id")):
     task = await session.get(ApprovalTask, task_id)
     if not task or task.tenant_id != str(tenant.id):
@@ -226,6 +230,7 @@ async def approval_delegate(task_id: str, payload: DelegateIn, request: Request,
 
 
 @router.post("/approvals/processes/{process_id}:cancel")
+@audit_operation("cancel", "approval_process")
 async def approval_cancel(process_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
     p = await session.get(ApprovalProcess, process_id)
     if not p or p.tenant_id != str(tenant.id):
@@ -237,6 +242,7 @@ async def approval_cancel(process_id: str, session: AsyncSession = Depends(get_s
 
 
 @router.post("/sign:request")
+@audit_operation("request", "signature_request", id_attr="signature_request_id")
 async def sign_request(payload: SignRequestIn, request: Request, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), x_user_id: str = Header(default="system", alias="X-User-Id")):
     object_id = payload.object_id or payload.document_version_id
     if not object_id:
@@ -286,6 +292,7 @@ async def sign_request_get(request_id: str, session: AsyncSession = Depends(get_
 
 
 @router.post("/edo:send")
+@audit_operation("send", "edo_envelope")
 async def edo_send(
     payload: EdoSendIn,
     request: Request,
@@ -356,6 +363,7 @@ async def edo_get(envelope_id: str, session: AsyncSession = Depends(get_session)
 
 
 @router.post("/edo/webhooks/{provider}")
+@audit_operation("ingest_webhook", "edo_webhook")
 async def edo_webhook(provider: str, payload: dict[str, Any], request: Request, x_signature: str | None = Header(default=None, alias="X-Signature"), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
     secret = str((tenant.settings or {}).get("edo_webhook_secret", "dev-secret"))
     expected = build_webhook_signature(secret=secret, body=await request.body())
@@ -406,6 +414,7 @@ async def sign_request_v1(payload: SignRequestIn, request: Request, session: Asy
 
 
 @router.post("/sign/submit")
+@audit_operation("submit", "signature_request")
 async def sign_submit_v1(payload: SignSubmitIn, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), x_user_id: str = Header(default="system", alias="X-User-Id")):
     cert_info = payload.cert_info or {}
     valid_from = cert_info.get("valid_from")
@@ -440,6 +449,7 @@ async def edo_messages_v1(document_version_id: str | None = None, session: Async
 
 
 @router.post("/edo/webhook/status")
+@audit_operation("ingest_webhook", "edo_status")
 async def edo_webhook_status(payload: dict[str, Any], session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
     provider = str(payload.get("provider") or "stub")
     external_id = payload.get("external_id")
@@ -477,6 +487,7 @@ async def approval_routes_v1(session: AsyncSession = Depends(get_session), tenan
 
 
 @router.post("/approvals/routes")
+@audit_operation("create", "approval_route")
 async def approval_routes_create_v1(payload: ApprovalRouteIn, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
     row = ApprovalRoute(tenant_id=str(tenant.id), code=payload.code, name=payload.name, conditions=payload.conditions, steps=payload.steps, is_active=payload.is_active, priority=payload.priority, version=1)
     session.add(row)
@@ -485,6 +496,7 @@ async def approval_routes_create_v1(payload: ApprovalRouteIn, session: AsyncSess
 
 
 @router.patch("/approvals/routes/{route_id}")
+@audit_operation("update", "approval_route")
 async def approval_routes_patch_v1(route_id: str, payload: ApprovalRouteIn, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
     row = await session.get(ApprovalRoute, route_id)
     if not row or row.tenant_id != str(tenant.id):
@@ -505,6 +517,7 @@ async def webhooks_v1(session: AsyncSession = Depends(get_session), tenant: Tena
 
 
 @router.post("/webhooks")
+@audit_operation("create", "webhook_endpoint")
 async def webhooks_create_v1(payload: WebhookSubscriptionIn, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
     row = WebhookEndpoint(tenant_id=str(tenant.id), name=f"{payload.event_type} subscription", url=payload.url, secret=payload.secret, is_enabled=True, subscribed_events=[payload.event_type])
     session.add(row)
@@ -513,6 +526,7 @@ async def webhooks_create_v1(payload: WebhookSubscriptionIn, session: AsyncSessi
 
 
 @router.patch("/webhooks/{webhook_id}/disable")
+@audit_operation("disable", "webhook_endpoint")
 async def webhooks_disable_v1(webhook_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
     row = await session.get(WebhookEndpoint, webhook_id)
     if not row or row.tenant_id != str(tenant.id):

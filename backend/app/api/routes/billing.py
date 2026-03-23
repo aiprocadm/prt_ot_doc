@@ -5,6 +5,7 @@ from typing import Annotated, Any
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, abac
+from app.core.audit_decorator import audit_operation
 from app.models.models import BillingSubscription, BillingSubscriptionStatus, Tenant
 from app.schemas.billing import (
     BillingChangePlanRequest,
@@ -143,6 +144,7 @@ async def billing_plans(session: SessionDep, access: OwnerAdminAccess, tenant: T
 
 
 @router.post("/plan/change")
+@audit_operation("change_plan", "billing_subscription")
 async def change_plan(
     payload: BillingChangePlanRequest,
     session: SessionDep,
@@ -163,6 +165,7 @@ async def change_plan(
 
 
 @router.post("/subscription/mark_past_due")
+@audit_operation("mark_past_due", "billing_subscription")
 async def mark_past_due(
     payload: BillingStatusMutationRequest,
     session: SessionDep,
@@ -180,6 +183,7 @@ async def mark_past_due(
 
 
 @router.post("/subscription/mark_paid")
+@audit_operation("mark_paid", "billing_subscription")
 async def mark_paid(session: SessionDep, access: OwnerAdminAccess, tenant: Tenant = Depends(get_tenant_record)) -> dict[str, str]:
     _ = access
     sub = (await session.execute(select(BillingSubscription).where(BillingSubscription.tenant_id == tenant.id).order_by(BillingSubscription.created_at.desc()))).scalars().first()
@@ -192,6 +196,7 @@ async def mark_paid(session: SessionDep, access: OwnerAdminAccess, tenant: Tenan
 
 
 @router.post("/subscription/suspend")
+@audit_operation("suspend", "billing_subscription")
 async def suspend(session: SessionDep, access: OwnerAdminAccess, tenant: Tenant = Depends(get_tenant_record)) -> dict[str, str]:
     _ = access
     sub = (await session.execute(select(BillingSubscription).where(BillingSubscription.tenant_id == tenant.id).order_by(BillingSubscription.created_at.desc()))).scalars().first()
@@ -203,6 +208,7 @@ async def suspend(session: SessionDep, access: OwnerAdminAccess, tenant: Tenant 
 
 
 @router.post("/subscription/activate")
+@audit_operation("activate", "billing_subscription")
 async def activate(session: SessionDep, access: OwnerAdminAccess, tenant: Tenant = Depends(get_tenant_record)) -> dict[str, str]:
     _ = access
     sub = (await session.execute(select(BillingSubscription).where(BillingSubscription.tenant_id == tenant.id).order_by(BillingSubscription.created_at.desc()))).scalars().first()

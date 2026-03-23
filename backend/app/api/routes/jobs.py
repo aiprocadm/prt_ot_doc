@@ -5,22 +5,31 @@ import json
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps.tracing import get_trace_id
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.audit_decorator import audit_operation
+from app.core.security import rbac
 from app.core.idempotency import compute_request_hash
 from app.models.job_engine import DocumentArtifact, DocumentJob, DocumentJobLog, DocumentJobStep
+from app.modules.rbac_abac import require_permission
 from app.models.models import Tenant
 from app.modules.pipelines.models import PipelineProfile
 from app.modules.files.models import FileRecord
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 from app.services.pipelines_orchestrator import DocumentPipelineOrchestrator
 
-router = APIRouter(prefix="/jobs", tags=["jobs"])
+router = APIRouter(prefix="/jobs", tags=["jobs"], dependencies=[Depends(rbac())])
+
+_JobsReadDep = Depends(require_permission("document_jobs.read"))
+_JobsRunDep = Depends(require_permission("document_jobs.run_pipeline"))
+_JobsRetryDep = Depends(require_permission("document_jobs.retry_job"))
+_JobsCancelDep = Depends(require_permission("document_jobs.cancel_job"))
 
 class JobStepRead(BaseModel):
     code: str
@@ -79,12 +88,16 @@ def _status_value(raw: Any) -> str:
     return raw.value if hasattr(raw, "value") else str(raw)
 
 @router.post("", response_model=JobCreateResponse, status_code=status.HTTP_202_ACCEPTED)
+@audit_operation("run_pipeline", "document_job")
 async def create_job(
     payload: JobCreateRequest,
+    request: Request,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    __: Any = _JobsRunDep,
 ) -> JobCreateResponse:
+    correlation_id = get_trace_id(request)
     profile = None
     if payload.profile_id:
         profile = await session.get(PipelineProfile, payload.profile_id)
@@ -128,6 +141,7 @@ async def create_job(
         },
         idempotency_key=idem_key or f"jobs:{tenant.id}:{request_hash[:16]}",
         request_hash=request_hash,
+        correlation_id=correlation_id,
     )
     steps = (
         (
@@ -143,7 +157,7 @@ async def create_job(
     response_body = {
         "job_id": job.id,
         "status": _status_value(job.status),
-        "correlation_id": job.correlation_id,
+        "correlation_id": job.correlation_id or correlation_id,
         "steps": [
             {
                 "code": s.step_key or s.step_code,
@@ -178,6 +192,7 @@ async def get_job(
     job_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    __: Any = _JobsReadDep,
 ) -> JobRead:
     job = await session.get(DocumentJob, job_id)
     if job is None or str(job.tenant_id) != str(tenant.id):
@@ -305,6 +320,7 @@ async def list_jobs(
     project_id: str | None = Query(default=None),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    __: Any = _JobsReadDep,
 ) -> JobListRead:
     stmt = select(DocumentJob).where(DocumentJob.tenant_id == str(tenant.id))
     if status_filter:
@@ -351,10 +367,12 @@ async def list_jobs(
 
 @router.post("/{job_id}:cancel", response_model=JobRead)
 @router.post("/{job_id}/cancel", response_model=JobRead)
+@audit_operation("cancel", "document_job")
 async def cancel_job(
     job_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    __: Any = _JobsCancelDep,
 ) -> JobRead:
     job = await session.get(DocumentJob, job_id)
     if job is None or str(job.tenant_id) != str(tenant.id):
@@ -370,12 +388,14 @@ class RetryJobRequest(BaseModel):
 
 @router.post("/{job_id}:retry", response_model=JobRead)
 @router.post("/{job_id}/retry", response_model=JobRead)
+@audit_operation("retry", "document_job")
 async def retry_job(
     job_id: str,
     payload: RetryJobRequest | None = None,
     step_code: str | None = Query(default=None),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    __: Any = _JobsRetryDep,
 ) -> JobRead:
     job = await session.get(DocumentJob, job_id)
     if job is None or str(job.tenant_id) != str(tenant.id):
@@ -395,11 +415,13 @@ async def retry_job(
     return await get_job(job_id=job_id, session=session, tenant=tenant)
 
 @router.post("/{job_id}/steps/{step}:rerun", response_model=JobRead)
+@audit_operation("rerun_step", "document_job")
 async def rerun_step(
     job_id: str,
     step: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    __: Any = _JobsRetryDep,
 ) -> JobRead:
     job = await session.get(DocumentJob, job_id)
     if job is None or str(job.tenant_id) != str(tenant.id):
@@ -414,11 +436,13 @@ async def rerun_step(
     return await get_job(job_id=job_id, session=session, tenant=tenant)
 
 @router.post("/{job_id}/steps/{step_id}:retry", response_model=JobRead)
+@audit_operation("retry_step", "document_job")
 async def retry_step_by_id(
     job_id: str,
     step_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    __: Any = _JobsRetryDep,
 ) -> JobRead:
     job = await session.get(DocumentJob, job_id)
     if job is None or str(job.tenant_id) != str(tenant.id):
@@ -435,6 +459,7 @@ async def get_step_logs(
     tail: int = Query(default=200, ge=1, le=2000),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    __: Any = _JobsReadDep,
 ) -> dict[str, Any]:
     job = await session.get(DocumentJob, job_id)
     if job is None or str(job.tenant_id) != str(tenant.id):
@@ -469,6 +494,7 @@ async def get_job_steps(
     job_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    __: Any = _JobsReadDep,
 ) -> list[JobStepRead]:
     job = await session.get(DocumentJob, job_id)
     if job is None or str(job.tenant_id) != str(tenant.id):
@@ -506,11 +532,13 @@ class RetryStepRequest(BaseModel):
     step_key: str
 
 @router.post("/{job_id}:retry-step", response_model=JobRead)
+@audit_operation("retry_step", "document_job")
 async def retry_step_compat(
     job_id: str,
     payload: RetryStepRequest,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    __: Any = _JobsRetryDep,
 ) -> JobRead:
     return await rerun_step(job_id=job_id, step=payload.step_key, session=session, tenant=tenant)
 
@@ -519,6 +547,7 @@ async def stream_jobs(
     job_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    __: Any = _JobsReadDep,
 ) -> StreamingResponse:
     job = await session.get(DocumentJob, job_id)
     if job is None or str(job.tenant_id) != str(tenant.id):

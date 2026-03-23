@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
+from typing import Any
 from uuid import uuid4
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.audit_decorator import audit_operation
+from app.core.security import AccessContext, rbac
+from app.modules.rbac_abac import require_permission
 from app.models.models import Tenant
 from app.models.safety_core import (
     RiskMapItem,
@@ -20,6 +24,11 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/risk/advanced", tags=["risk-advanced"])
+
+_MethodologiesReadDep = Depends(require_permission("risk_methodologies.read"))
+_MethodologiesWriteDep = Depends(require_permission("risk_methodologies.update"))
+_MapsReadDep = Depends(require_permission("risk_maps.read"))
+_MapsWriteDep = Depends(require_permission("risk_maps.update"))
 
 
 class MethodologyCreate(BaseModel):
@@ -53,13 +62,14 @@ class MethodologyClone(BaseModel):
 
 
 @router.get("/methodologies")
-async def list_methodologies(tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+async def list_methodologies(tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _MethodologiesReadDep):
     rows = (await session.execute(select(SafetyRiskMethodology).where(SafetyRiskMethodology.tenant_id == tenant.id, SafetyRiskMethodology.deleted_at.is_(None)).order_by(SafetyRiskMethodology.code, SafetyRiskMethodology.version_no.desc()))).scalars().all()
     return {"items": rows, "total": len(rows)}
 
 
 @router.post("/methodologies", status_code=status.HTTP_201_CREATED)
-async def create_methodology(payload: MethodologyCreate, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+@audit_operation("create", "risk_methodology")
+async def create_methodology(payload: MethodologyCreate, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _MethodologiesWriteDep):
     item = SafetyRiskMethodology(tenant_id=tenant.id, **payload.model_dump())
     session.add(item)
     await session.commit()
@@ -68,7 +78,8 @@ async def create_methodology(payload: MethodologyCreate, tenant: Tenant = Depend
 
 
 @router.post("/methodologies/{item_id}/clone", status_code=status.HTTP_201_CREATED)
-async def clone_methodology(item_id: str, payload: MethodologyClone, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+@audit_operation("clone", "risk_methodology")
+async def clone_methodology(item_id: str, payload: MethodologyClone, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _MethodologiesWriteDep):
     source = await session.get(SafetyRiskMethodology, item_id)
     if not source or source.tenant_id != tenant.id or source.deleted_at is not None:
         raise HTTPException(404, "Methodology not found")
@@ -89,7 +100,8 @@ async def clone_methodology(item_id: str, payload: MethodologyClone, tenant: Ten
 
 
 @router.post("/methodologies/{item_id}/activate")
-async def activate_methodology(item_id: str, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+@audit_operation("activate", "risk_methodology")
+async def activate_methodology(item_id: str, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _MethodologiesWriteDep):
     item = await session.get(SafetyRiskMethodology, item_id)
     if not item or item.tenant_id != tenant.id or item.deleted_at is not None:
         raise HTTPException(404, "Methodology not found")
@@ -110,13 +122,14 @@ async def activate_methodology(item_id: str, tenant: Tenant = Depends(get_tenant
 
 
 @router.get("/maps")
-async def list_maps(tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+async def list_maps(tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _MapsReadDep):
     rows = (await session.execute(select(SafetyRiskMap).where(SafetyRiskMap.tenant_id == tenant.id, SafetyRiskMap.deleted_at.is_(None)).order_by(SafetyRiskMap.updated_at.desc()))).scalars().all()
     return {"items": rows, "total": len(rows)}
 
 
 @router.post("/maps", status_code=status.HTTP_201_CREATED)
-async def create_map(payload: RiskMapCreate, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+@audit_operation("create", "risk_map")
+async def create_map(payload: RiskMapCreate, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _MapsWriteDep):
     item = SafetyRiskMap(tenant_id=tenant.id, status="draft", **payload.model_dump())
     session.add(item)
     await session.commit()
@@ -125,7 +138,8 @@ async def create_map(payload: RiskMapCreate, tenant: Tenant = Depends(get_tenant
 
 
 @router.post("/maps/{map_id}/items", status_code=status.HTTP_201_CREATED)
-async def upsert_map_item(map_id: str, payload: MapItemUpsert, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+@audit_operation("upsert_item", "risk_map")
+async def upsert_map_item(map_id: str, payload: MapItemUpsert, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _MapsWriteDep):
     risk_map = await session.get(SafetyRiskMap, map_id)
     if not risk_map or risk_map.tenant_id != tenant.id:
         raise HTTPException(404, "Risk map not found")
@@ -168,7 +182,8 @@ async def upsert_map_item(map_id: str, payload: MapItemUpsert, tenant: Tenant = 
 
 
 @router.post("/maps/{map_id}/recalculate")
-async def recalculate_map(map_id: str, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+@audit_operation("recalculate", "risk_map")
+async def recalculate_map(map_id: str, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _MapsWriteDep):
     risk_map = await session.get(SafetyRiskMap, map_id)
     if not risk_map or risk_map.tenant_id != tenant.id:
         raise HTTPException(404, "Risk map not found")
@@ -195,7 +210,7 @@ async def recalculate_map(map_id: str, tenant: Tenant = Depends(get_tenant_recor
 
 
 @router.get("/maps/{map_id}/summary")
-async def risk_summary(map_id: str, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+async def risk_summary(map_id: str, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _MapsReadDep):
     risk_map = await session.get(SafetyRiskMap, map_id)
     if not risk_map or risk_map.tenant_id != tenant.id:
         raise HTTPException(404, "Risk map not found")

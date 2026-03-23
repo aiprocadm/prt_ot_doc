@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, rbac
 from app.models.models import RoleEnum, Tenant, User, UserAttribute, UserRole
 from app.schemas.admin_user import (
@@ -65,6 +66,7 @@ async def get_user_roles(
 
 @router.patch("/admin/users/{user_id}/roles", response_model=UserRolesResponse)
 @router.post("/admin/users/{user_id}/roles", response_model=UserRolesResponse)
+@audit_operation("assign", "user_role")
 async def assign_user_roles(
     user_id: str,
     payload: UserRolesRequest,
@@ -96,6 +98,7 @@ async def assign_user_roles(
 
 
 @router.patch("/admin/users/{user_id}/attributes", response_model=UserAttributesResponse)
+@audit_operation("assign", "user_attribute")
 async def assign_user_attributes(
     user_id: str,
     payload: UserAttributesRequest,

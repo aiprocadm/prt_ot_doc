@@ -10,6 +10,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 from starlette.types import ASGIApp
 
+from app.api.deps.tracing import get_trace_id
 from app.core.security import verify_token
 from app.core.config import get_settings
 from app.core.tenant import TENANT_HEADER, TENANT_HEADER_ALIASES, tenant_required
@@ -81,7 +82,7 @@ class TenantMiddleware(BaseHTTPMiddleware):
                 await self._preload_webhook_tenant(request)
             return await call_next(request)
 
-        correlation_id = request.headers.get("x-correlation-id") or getattr(request.state, "trace_id", None) or str(uuid4())
+        correlation_id = get_trace_id(request, get_settings().trace_header_name)
         request.state.correlation_id = correlation_id
 
         header_slug = request.headers.get(TENANT_HEADER)

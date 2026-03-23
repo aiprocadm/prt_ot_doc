@@ -1,18 +1,24 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Annotated, Any
+from typing import Any
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.audit_decorator import audit_operation
+from app.core.security import rbac
 from app.models.models import BriefingEntry, BriefingJournal, BriefingSignature, BriefingTemplate, Tenant
 from app.modules.briefings.services import BriefingEntryService
+from app.modules.rbac_abac import require_permission
 from app.services.audit import AuditService
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-router = APIRouter(prefix="/briefings", tags=["briefings"])
+router = APIRouter(prefix="/briefings", tags=["briefings"], dependencies=[Depends(rbac())])
+_PermReadDep = Depends(require_permission("briefings.read"))
+_PermWriteDep = Depends(require_permission("briefings.update"))
+_PermCreateDep = Depends(require_permission("briefings.create"))
 
 
 class BriefingTemplatePayload(BaseModel):
@@ -113,51 +119,51 @@ def _entry_read(entry: BriefingEntry, signatures: list[BriefingSignature] | None
 
 
 @router.get("/templates", response_model=BriefingCollection)
-async def list_templates(tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+async def list_templates(tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _PermReadDep):
     items = (await session.execute(select(BriefingTemplate).where(BriefingTemplate.tenant_id == tenant.id, BriefingTemplate.deleted_at.is_(None)))).scalars().all()
     return BriefingCollection(items=[BriefingTemplateRead.model_validate(item) for item in items], total=len(items))
 
 
 @router.post("/templates", response_model=BriefingTemplateRead, status_code=status.HTTP_201_CREATED)
-async def create_template(payload: BriefingTemplatePayload, request: Request, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+@audit_operation("create", "briefing_template")
+async def create_template(payload: BriefingTemplatePayload, request: Request, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _PermCreateDep):
     item = BriefingTemplate(tenant_id=tenant.id, **payload.model_dump())
     session.add(item)
     await session.flush()
-    await _audit(session, request, tenant_id=str(tenant.id), action="create", object_type="briefing_template", object_id=item.id, details={"briefing_type": item.briefing_type})
     await session.commit()
     return BriefingTemplateRead.model_validate(item)
 
 
 @router.patch("/templates/{item_id}", response_model=BriefingTemplateRead)
-async def patch_template(item_id: str, payload: BriefingTemplatePayload, request: Request, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+@audit_operation("update", "briefing_template")
+async def patch_template(item_id: str, payload: BriefingTemplatePayload, request: Request, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _PermWriteDep):
     item = await session.get(BriefingTemplate, item_id)
     if not item or item.tenant_id != tenant.id or item.deleted_at is not None:
         raise HTTPException(404, "Template not found")
     for k, v in payload.model_dump().items():
         setattr(item, k, v)
-    await _audit(session, request, tenant_id=str(tenant.id), action="update", object_type="briefing_template", object_id=item.id)
     await session.commit()
     return BriefingTemplateRead.model_validate(item)
 
 
 @router.get("/journals", response_model=BriefingCollection)
-async def list_journals(tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+async def list_journals(tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _PermReadDep):
     items = (await session.execute(select(BriefingJournal).where(BriefingJournal.tenant_id == tenant.id, BriefingJournal.deleted_at.is_(None)))).scalars().all()
     return BriefingCollection(items=[BriefingJournalRead.model_validate(item) for item in items], total=len(items))
 
 
 @router.post("/journals", response_model=BriefingJournalRead, status_code=status.HTTP_201_CREATED)
-async def create_journal(payload: BriefingJournalPayload, request: Request, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+@audit_operation("create", "briefing_journal")
+async def create_journal(payload: BriefingJournalPayload, request: Request, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _PermCreateDep):
     item = BriefingJournal(tenant_id=tenant.id, **payload.model_dump())
     session.add(item)
     await session.flush()
-    await _audit(session, request, tenant_id=str(tenant.id), action="create", object_type="briefing_journal", object_id=item.id, details={"journal_type": item.journal_type})
     await session.commit()
     return BriefingJournalRead.model_validate(item)
 
 
 @router.get("/entries", response_model=BriefingCollection)
-async def list_entries(tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+async def list_entries(tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _PermReadDep):
     items = (await session.execute(select(BriefingEntry).where(BriefingEntry.tenant_id == tenant.id, BriefingEntry.deleted_at.is_(None)).order_by(BriefingEntry.briefing_date.desc()))).scalars().all()
     signatures = (await session.execute(select(BriefingSignature).where(BriefingSignature.tenant_id == tenant.id))).scalars().all()
     grouped: dict[str, list[BriefingSignature]] = {}
@@ -167,24 +173,24 @@ async def list_entries(tenant: Tenant = Depends(get_tenant_record), session: Asy
 
 
 @router.get("/entries/overdue", response_model=BriefingCollection)
-async def list_overdue_entries(tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+async def list_overdue_entries(tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _PermReadDep):
     service = BriefingEntryService()
     items = await service.list_overdue(session, tenant_id=str(tenant.id))
     return BriefingCollection(items=[_entry_read(item) for item in items], total=len(items))
 
 
 @router.post("/entries", response_model=BriefingEntryRead, status_code=status.HTTP_201_CREATED)
-async def create_entry(payload: BriefingEntryPayload, request: Request, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+@audit_operation("create", "briefing_entry")
+async def create_entry(payload: BriefingEntryPayload, request: Request, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _PermCreateDep):
     item = BriefingEntry(tenant_id=tenant.id, **payload.model_dump())
     session.add(item)
     await session.flush()
-    await _audit(session, request, tenant_id=str(tenant.id), action="create", object_type="briefing_entry", object_id=item.id, details={"briefing_type": item.briefing_type, "person_id": item.person_id})
     await session.commit()
     return _entry_read(item)
 
 
 @router.post("/entries/bulk-create", response_model=BriefingCollection)
-async def bulk_create_entries(payload: BriefingBulkCreatePayload, request: Request, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+async def bulk_create_entries(payload: BriefingBulkCreatePayload, request: Request, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _PermCreateDep):
     created = []
     base = payload.model_dump(exclude={"person_ids"})
     for person_id in payload.person_ids:
@@ -199,29 +205,30 @@ async def bulk_create_entries(payload: BriefingBulkCreatePayload, request: Reque
 
 
 @router.post("/entries/{item_id}/sign-employee")
-async def sign_employee(item_id: str, payload: BriefingSignPayload, request: Request, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+@audit_operation("sign_employee", "briefing_entry", id_attr="entry")
+async def sign_employee(item_id: str, payload: BriefingSignPayload, request: Request, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _PermWriteDep):
     item = await session.get(BriefingEntry, item_id)
     if not item or item.tenant_id != tenant.id:
         raise HTTPException(404, "Entry not found")
     sig = await BriefingEntryService().sign(session, item, "employee", payload.signer_user_id, signature_payload=payload.signature_payload)
-    await _audit(session, request, tenant_id=str(tenant.id), action="sign_employee", object_type="briefing_entry", object_id=item.id)
     await session.commit()
     return {"entry": _entry_read(item, [sig]), "signature": BriefingSignatureRead.model_validate(sig)}
 
 
 @router.post("/entries/{item_id}/sign-instructor")
-async def sign_instructor(item_id: str, payload: BriefingSignPayload, request: Request, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+@audit_operation("sign_instructor", "briefing_entry", id_attr="entry")
+async def sign_instructor(item_id: str, payload: BriefingSignPayload, request: Request, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _PermWriteDep):
     item = await session.get(BriefingEntry, item_id)
     if not item or item.tenant_id != tenant.id:
         raise HTTPException(404, "Entry not found")
     sig = await BriefingEntryService().sign(session, item, "instructor", payload.signer_user_id, signature_payload=payload.signature_payload)
-    await _audit(session, request, tenant_id=str(tenant.id), action="sign_instructor", object_type="briefing_entry", object_id=item.id)
     await session.commit()
     return {"entry": _entry_read(item, [sig]), "signature": BriefingSignatureRead.model_validate(sig)}
 
 
 @router.post("/entries/{item_id}/complete", response_model=BriefingEntryRead)
-async def complete_entry(item_id: str, request: Request, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+@audit_operation("complete", "briefing_entry")
+async def complete_entry(item_id: str, request: Request, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _PermWriteDep):
     item = await session.get(BriefingEntry, item_id)
     if not item or item.tenant_id != tenant.id:
         raise HTTPException(404, "Entry not found")
@@ -230,13 +237,12 @@ async def complete_entry(item_id: str, request: Request, tenant: Tenant = Depend
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     signatures = (await session.execute(select(BriefingSignature).where(BriefingSignature.briefing_entry_id == item.id))).scalars().all()
-    await _audit(session, request, tenant_id=str(tenant.id), action="complete", object_type="briefing_entry", object_id=item.id, details={"valid_until": result.valid_until.isoformat() if result.valid_until else None})
     await session.commit()
     return _entry_read(result, list(signatures))
 
 
 @router.post("/entries/remind-overdue")
-async def remind_overdue_entries(request: Request, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
+async def remind_overdue_entries(request: Request, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _PermWriteDep):
     service = BriefingEntryService()
     overdue = await service.notify_overdue(session, tenant_id=str(tenant.id))
     await _audit(session, request, tenant_id=str(tenant.id), action="notify_overdue", object_type="briefing_entry", object_id="bulk", details={"count": len(overdue)})

@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.domains.training import (
     assign_training_plan,
@@ -148,6 +149,7 @@ async def list_courses(
 
 
 @router.post("/courses", response_model=TrainingCourseRead, status_code=status.HTTP_201_CREATED)
+@audit_operation("create", "training_course")
 async def create_course(
     payload: TrainingCourseCreate,
     tenant: TenantDep,
@@ -181,6 +183,7 @@ async def get_course(
 
 
 @router.patch("/courses/{course_id}", response_model=TrainingCourseRead)
+@audit_operation("update", "training_course")
 async def update_course(
     course_id: str,
     payload: TrainingCourseUpdate,
@@ -205,6 +208,7 @@ async def update_course(
     response_class=Response,
     response_model=None,
 )
+@audit_operation("delete", "training_course")
 async def delete_course(
     course_id: str,
     tenant: TenantDep,
@@ -218,6 +222,7 @@ async def delete_course(
 
 
 @router.post("/plans", response_model=TrainingPlanRead, status_code=status.HTTP_201_CREATED)
+@audit_operation("assign", "training_plan")
 async def assign_plan(
     payload: TrainingPlanCreate,
     tenant: TenantDep,
@@ -254,6 +259,7 @@ async def get_plan(
 
 
 @router.post("/sessions", response_model=TrainingSessionRead, status_code=status.HTTP_201_CREATED)
+@audit_operation("create", "training_session")
 async def create_session(
     payload: TrainingSessionCreate,
     tenant: TenantDep,
@@ -298,6 +304,7 @@ async def create_session(
 
 
 @router.post("/certificates", response_model=TrainingCertificateRead, status_code=status.HTTP_201_CREATED)
+@audit_operation("create", "training_certificate")
 async def create_certificate(
     payload: TrainingCertificateCreate,
     tenant: TenantDep,

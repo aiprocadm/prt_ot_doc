@@ -104,9 +104,15 @@ export const useAuthStore = createWithEqualityFn<AuthState>()(
       try {
         const { data } = await apiClient.post<LoginResponseDto>("/auth/login", payload);
         persistTokens(data);
-        const enrichedUser = await hydratePermissions(data.user);
+        let profile: UserDto | null = null;
+        try {
+          const { data: profileData } = await apiClient.get<UserDto>("/auth/me");
+          profile = await hydratePermissions(profileData);
+        } catch {
+          profile = await hydratePermissions(data.user ?? null);
+        }
         set((state) => {
-          state.user = enrichedUser;
+          state.user = profile;
           state.isAuthenticated = true;
           state.initialized = true;
         });

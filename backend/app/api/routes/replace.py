@@ -3,7 +3,6 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
-from datetime import datetime, timezone
 from io import BytesIO, StringIO
 from uuid import uuid4
 
@@ -13,6 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.audit_decorator import audit_operation
 from app.models.models import Tenant
 from app.modules.replace.engine import ReplaceOptions, replace_docx_bytes
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
@@ -161,6 +161,7 @@ def _build_report(run_id: str, hits: list[dict], mapping: dict[str, str], max_sa
 
 @router.post(":dry-run", response_model=ReplaceDryRunResponse, status_code=status.HTTP_202_ACCEPTED)
 @router.post("/dry-run", response_model=ReplaceDryRunResponse, status_code=status.HTTP_202_ACCEPTED)
+@audit_operation("dry_run", "document_replace")
 async def replace_dry_run(
     request: Request,
     docx_file: UploadFile | None = File(default=None),
@@ -200,6 +201,7 @@ async def replace_dry_run(
 
 @router.post(":apply", response_model=ReplaceApplyResponse, status_code=status.HTTP_202_ACCEPTED)
 @router.post("/apply", response_model=ReplaceApplyResponse, status_code=status.HTTP_202_ACCEPTED)
+@audit_operation("apply", "document_replace")
 async def replace_apply(
     request: Request,
     docx_file: UploadFile | None = File(default=None),
@@ -246,6 +248,7 @@ async def replace_apply(
 
 @router.post(":rollback", response_model=ReplaceRollbackResponse, status_code=status.HTTP_202_ACCEPTED)
 @router.post("/{replace_run_id}/rollback", response_model=ReplaceRollbackResponse, status_code=status.HTTP_202_ACCEPTED)
+@audit_operation("rollback", "document_replace")
 async def replace_rollback(
     request: Request,
     replace_run_id: str | None = None,

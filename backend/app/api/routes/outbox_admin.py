@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, rbac
 from app.models.job_engine import OutboxEvent, OutboxEventStatus
 from app.models.models import Outbox, OutboxStatus, Tenant
@@ -138,6 +139,7 @@ async def get_outbox_entry(
 
 
 @router.post("/{outbox_id}/retry", response_model=RetryResponse)
+@audit_operation("retry", "outbox_entry")
 async def retry_outbox_entry(
     outbox_id: str,
     *,
@@ -205,6 +207,7 @@ async def list_outbox_events(
 
 
 @router.post("/events/{event_id}/requeue", response_model=OutboxEventEntry)
+@audit_operation("requeue", "outbox_event")
 async def requeue_outbox_event(
     event_id: str,
     *,

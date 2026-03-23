@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.models.models import Company, Person, Position, Tenant, Workplace
 from app.repository import list_persons
@@ -128,6 +129,7 @@ async def list_persons_endpoint(
 
 
 @router.post("", response_model=PersonRead, status_code=status.HTTP_201_CREATED)
+@audit_operation("create", "person")
 async def create_person_endpoint(
     payload: PersonCreate,
     tenant: TenantDep,
@@ -192,6 +194,7 @@ async def get_person_endpoint(
 
 
 @router.patch("/{person_id}", response_model=PersonRead)
+@audit_operation("update", "person")
 async def update_person_endpoint(
     person_id: str,
     payload: PersonUpdate,
@@ -283,6 +286,7 @@ async def update_person_endpoint(
     response_class=Response,
     response_model=None,
 )
+@audit_operation("delete", "person")
 async def delete_person_endpoint(
     person_id: str,
     tenant: TenantDep,

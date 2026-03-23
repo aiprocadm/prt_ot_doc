@@ -5,6 +5,7 @@ from typing import Annotated
 from uuid import UUID
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.models.models import ApiToken, Tenant
 from app.schemas.api_tokens import ApiTokenCreateRequest, ApiTokenCreateResponse, ApiTokenRead
@@ -60,6 +61,7 @@ async def list_api_tokens(
 
 
 @router.post("", response_model=ApiTokenCreateResponse, status_code=status.HTTP_201_CREATED)
+@audit_operation("create", "api_token")
 async def create_api_token(
     payload: ApiTokenCreateRequest,
     session: SessionDep,
@@ -87,6 +89,7 @@ async def create_api_token(
 
 
 @router.delete("/{token_id}", status_code=status.HTTP_200_OK)
+@audit_operation("revoke", "api_token")
 async def revoke_api_token(
     token_id: str,
     session: SessionDep,

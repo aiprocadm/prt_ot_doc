@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.audit_decorator import audit_operation
 from app.core.security import abac, verify_token
 from app.db.session import _create_tenant_schema, resolve_tenant_schema
 from app.models.models import RoleEnum, Tenant, TenantQuota, TenantSettings
@@ -75,6 +76,7 @@ async def list_tenants_admin_endpoint(
 
 
 @router.post("", response_model=TenantRead, status_code=status.HTTP_201_CREATED)
+@audit_operation("create", "tenant")
 async def create_tenant_endpoint(
     payload: TenantCreate,
     session: SessionDep,
@@ -148,6 +150,7 @@ async def get_my_tenant_endpoint(
 
 
 @router.patch("/{tenant_id}/quotas", response_model=TenantQuotaRead)
+@audit_operation("update_quota", "tenant")
 async def patch_tenant_quotas_endpoint(
     tenant_id: str,
     payload: TenantQuotaPatch,

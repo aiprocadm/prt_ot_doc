@@ -7,6 +7,7 @@ from decimal import Decimal
 from typing import Any
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.audit_decorator import audit_operation
 from app.core.rbac_abac import ROLE_PERMISSIONS
 from app.core.security import AccessContext, rbac
 from app.models.models import (
@@ -314,6 +315,7 @@ def _serialize_date(value: date | datetime | None) -> str | None:
 
 
 @router.post("/sync/batch")
+@audit_operation("sync_batch", "offline_sync_batch")
 async def create_batch(
     payload: dict,
     tenant: Tenant = Depends(get_tenant_record),
@@ -338,6 +340,7 @@ async def sync_status(
 
 
 @router.post("/media/commit")
+@audit_operation("commit_media", "offline_media")
 async def commit_media(
     payload: dict,
     tenant: Tenant = Depends(get_tenant_record),

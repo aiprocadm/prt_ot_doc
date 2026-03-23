@@ -27,6 +27,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.payload_constraints import PayloadConstraintError, enforce_mapping_constraints
+from app.core.audit_decorator import audit_operation
 from app.core.idempotency import compute_request_hash
 from app.core.rate_limit import generate_per_tenant, ip_tenant_key, limiter
 from app.core.config import get_settings
@@ -387,6 +388,7 @@ async def _resolve_run(
     status_code=status.HTTP_202_ACCEPTED,
 )
 @limiter.limit(lambda: generate_per_tenant(), key_func=ip_tenant_key)
+@audit_operation("generate", "document_task", id_attr="task_id")
 async def generate_document(
     payload: DocGenerateRequest | DocGeneratePipelineRequest,
     request: Request,
@@ -397,6 +399,7 @@ async def generate_document(
     access: AccessContext = AccessDep,
 ) -> TaskAcceptedResponse:
     settings = get_settings()
+    correlation_id = get_trace_id()
     await BillingService(session).assert_allowed(tenant, "documents.generate")
     engine_payload: dict[str, Any] | None = None
     if isinstance(payload, DocGeneratePipelineRequest):
@@ -475,13 +478,13 @@ async def generate_document(
                     payload=engine_payload,
                     idempotency_key=normalized_key,
                     request_hash=request_hash,
-                    correlation_id=request.headers.get("x-correlation-id"),
+                    correlation_id=correlation_id,
                 )
                 await orchestrator.run_job(job_id=job.id)
                 body = {
                     "task_id": job.id,
                     "job_id": job.id,
-                    "correlation_id": job.correlation_id,
+                    "correlation_id": job.correlation_id or correlation_id,
                     "status_url": f"/api/v1/jobs/{job.id}",
                     "document_version_id": None,
                 }
@@ -524,7 +527,7 @@ async def generate_document(
             payload_hash=payload_hash,
             current_user=current_user,
             context=payload.data,
-            correlation_id=request.headers.get("x-correlation-id") or get_trace_id(),
+            correlation_id=correlation_id,
             npa_binding_id=payload.npa_binding_id,
             visible_passport=payload.visible_passport,
         )
@@ -569,6 +572,7 @@ async def generate_document(
         metadata = run.result_metadata or {}
         result = TaskAcceptedResponse(
             task_id=run.id,
+            correlation_id=correlation_id,
             status_url=status_url,
             document_version_id=metadata.get("document_version_id"),
         )
@@ -628,6 +632,7 @@ async def generate_document(
     status_code=status.HTTP_202_ACCEPTED,
 )
 @limiter.limit(lambda: generate_per_tenant(), key_func=ip_tenant_key)
+@audit_operation("batch_generate", "document_batch")
 async def generate_document_batch(
     file: UploadFile,
     request: Request,
@@ -856,6 +861,7 @@ async def get_generation_task_status(
 
 
 @router.patch("/{document_id}/status", response_model=DocumentRead)
+@audit_operation("change_status", "document")
 async def update_document_status(
     document_id: str,
     payload: DocumentStatusUpdate,

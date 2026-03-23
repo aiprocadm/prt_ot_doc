@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, rbac
 from app.modules.rbac_abac.engine import evaluate
 from app.modules.rbac_abac.types import PolicyContext, Resource, Subject
@@ -53,6 +54,7 @@ async def list_roles(*, tenant: TenantDep, _: AdminAccess, session: SessionDep):
 
 
 @router.post("/roles", status_code=status.HTTP_201_CREATED)
+@audit_operation("create", "authz_role")
 async def create_role(payload: RolePayload, *, tenant: TenantDep, _: AdminAccess, session: SessionDep):
     row = AuthzRole(tenant_id=str(tenant.id), code=payload.code, name=payload.name, is_system=payload.is_system)
     session.add(row)
@@ -62,6 +64,7 @@ async def create_role(payload: RolePayload, *, tenant: TenantDep, _: AdminAccess
 
 
 @router.post("/roles/assign")
+@audit_operation("assign", "authz_user_role")
 async def assign_role(payload: AssignRolePayload, *, tenant: TenantDep, _: AdminAccess, session: SessionDep):
     row = AuthzUserRole(
         tenant_id=str(tenant.id),
@@ -85,6 +88,7 @@ async def list_policies(*, tenant: TenantDep, _: AdminAccess, session: SessionDe
 
 
 @router.post("/policies", status_code=status.HTTP_201_CREATED)
+@audit_operation("create", "authz_policy")
 async def create_policy(payload: PolicyPayload, *, tenant: TenantDep, _: AdminAccess, session: SessionDep):
     row = AuthzPolicy(tenant_id=str(tenant.id), **payload.model_dump())
     session.add(row)

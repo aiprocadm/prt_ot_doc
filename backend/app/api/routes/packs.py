@@ -600,7 +600,12 @@ async def generate_pack_documents(
 
         task_id = str(uuid.uuid4())
         status_url = f"/api/v1/tasks/{task_id}"
-        result = TaskAcceptedResponse(task_id=task_id, status_url=status_url)
+        correlation_id = get_trace_id()
+        result = TaskAcceptedResponse(
+            task_id=task_id,
+            correlation_id=correlation_id,
+            status_url=status_url,
+        )
 
         await idempotency.store_success(
             record,
@@ -626,7 +631,6 @@ async def generate_pack_documents(
         raise
 
     try:
-        trace_id = get_trace_id()
         task_payload = payload.model_dump(mode="json")
         generate_pack_task.apply_async(
             kwargs={
@@ -635,7 +639,7 @@ async def generate_pack_documents(
                 "payload": task_payload,
             },
             task_id=task_id,
-            headers={"trace_id": trace_id, "tenant": tenant.slug},
+            headers={"trace_id": correlation_id, "tenant": tenant.slug},
         )
     except Exception as exc:  # pragma: no cover - defensive logging
         stored = await idempotency.get(key=normalized_key)

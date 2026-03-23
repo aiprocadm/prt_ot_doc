@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, abac
+from app.core.audit_decorator import audit_operation
 from app.models.finance import Department
 from app.models.models import Company, Tenant
 from app.schemas.department import DepartmentCreate, DepartmentPage, DepartmentRead, DepartmentUpdate
@@ -78,6 +79,7 @@ async def list_departments(
 
 
 @router.post("/departments", response_model=DepartmentRead, status_code=status.HTTP_201_CREATED)
+@audit_operation("create", "department")
 async def create_department(
     payload: DepartmentCreate,
     tenant: TenantDep,
@@ -104,6 +106,7 @@ async def get_department(
 
 
 @router.patch("/departments/{department_id}", response_model=DepartmentRead)
+@audit_operation("update", "department")
 async def update_department(
     department_id: str,
     payload: DepartmentUpdate,
@@ -128,6 +131,7 @@ async def update_department(
     response_class=Response,
     response_model=None,
 )
+@audit_operation("delete", "department")
 async def delete_department(
     department_id: str,
     tenant: TenantDep,

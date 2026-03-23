@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.models.finance import Contract, Order, OrderStatus
 from app.models.models import Tenant
@@ -78,6 +79,7 @@ async def list_orders(
 
 
 @router.post("/orders", response_model=OrderRead, status_code=status.HTTP_201_CREATED)
+@audit_operation("create", "order")
 async def create_order(
     payload: OrderCreate,
     tenant: TenantDep,
@@ -119,6 +121,7 @@ async def get_order(
 
 
 @router.patch("/orders/{order_id}", response_model=OrderRead)
+@audit_operation("update", "order")
 async def update_order(
     order_id: str,
     payload: OrderUpdate,
@@ -149,6 +152,7 @@ async def update_order(
     response_class=Response,
     response_model=None,
 )
+@audit_operation("delete", "order")
 async def delete_order(
     order_id: str,
     tenant: TenantDep,

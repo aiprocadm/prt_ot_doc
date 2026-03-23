@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Any, Literal
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.audit_decorator import audit_operation
 from app.core.rate_limit import ip_subject_key, limiter, login_per_identity
 from app.core.rbac_abac import ROLE_PERMISSIONS
 from app.core.security import (
@@ -96,6 +97,7 @@ async def _inject_login_subject(
 
 @router.post("/login", response_model=TokenPair, status_code=status.HTTP_200_OK)
 @limiter.limit(lambda: login_per_identity(), key_func=ip_subject_key)
+@audit_operation("login", "auth_session")
 async def login(
     request: Request,
     response: Response,
@@ -207,6 +209,7 @@ async def me_permissions(access: AccessContext = Depends(rbac())) -> Permissions
 
 
 @router.post("/refresh", response_model=TokenPair, status_code=status.HTTP_200_OK)
+@audit_operation("refresh", "auth_session")
 async def refresh_tokens(
     payload: RefreshRequest,
     session: AsyncSession = Depends(get_session),

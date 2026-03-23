@@ -306,7 +306,7 @@ class Settings(BaseSettings):
     portal_token_salt: str = Field("portal-salt", alias="PORTAL_TOKEN_SALT")
 
     admin_bootstrap: bool = Field(False, alias="ADMIN_BOOTSTRAP")
-    admin_email: str = Field("admin@example.local", alias="ADMIN_EMAIL")
+    admin_email: str = Field("admin@example.com", alias="ADMIN_EMAIL")
     admin_password: str = Field("", alias="ADMIN_PASSWORD")
     admin_tenant: str = Field("public", alias="ADMIN_TENANT")
     demo_bootstrap: bool = Field(False, alias="DEMO_BOOTSTRAP")

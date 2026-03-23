@@ -10,6 +10,7 @@ from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.models.obligations import Task, TaskStatus
 from app.models.models import Tenant
@@ -97,6 +98,7 @@ async def list_obligations(
 
 
 @router.patch("/obligations/{obligation_id}", response_model=TaskRead)
+@audit_operation("close", "obligation")
 async def close_obligation(
     obligation_id: str,
     tenant: Tenant = TenantDep,

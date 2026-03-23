@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.audit_decorator import audit_operation
 from app.models.models import ExternalRegistryJob, Tenant
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
@@ -16,10 +17,12 @@ async def list_jobs(tenant: Tenant = Depends(get_tenant_record), session: AsyncS
 
 
 @router.post("/webhooks/frdo")
+@audit_operation("webhook", "external_registry_frdo")
 async def frdo_webhook(payload: dict, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
     return {"ok": True, "provider": "frdo", "payload": payload}
 
 
 @router.post("/webhooks/eisot")
+@audit_operation("webhook", "external_registry_eisot")
 async def eisot_webhook(payload: dict, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session)):
     return {"ok": True, "provider": "eisot", "payload": payload}

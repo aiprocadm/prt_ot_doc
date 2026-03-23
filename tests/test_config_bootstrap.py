@@ -56,13 +56,13 @@ def test_admin_bootstrap_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Admin bootstrap env vars should be parsed without secrets in repo."""
 
     monkeypatch.setenv("ADMIN_BOOTSTRAP", "1")
-    monkeypatch.setenv("ADMIN_EMAIL", "admin@example.local")
+    monkeypatch.setenv("ADMIN_EMAIL", "admin@example.com")
     monkeypatch.setenv("ADMIN_PASSWORD", "temporary-password")
     monkeypatch.setenv("ADMIN_TENANT", "demo")
 
     settings = config.bootstrap("api")
 
     assert settings.admin_bootstrap is True
-    assert settings.admin_email == "admin@example.local"
+    assert settings.admin_email == "admin@example.com"
     assert settings.admin_password == "temporary-password"
     assert settings.admin_tenant == "demo"

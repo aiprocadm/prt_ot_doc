@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from typing import Annotated
-
 from datetime import datetime, timezone
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.models.models import (
     Company,
@@ -121,6 +121,7 @@ async def list_sites(
 
 
 @router.post("/sites", response_model=SiteRead, status_code=status.HTTP_201_CREATED)
+@audit_operation("create", "site")
 async def create_site(
     payload: SiteCreate, tenant: TenantDep, session: SessionDep, _: EditorAccess
 ) -> SiteRead:
@@ -139,6 +140,7 @@ async def get_site(site_id: str, tenant: TenantDep, session: SessionDep, _: Mana
 
 
 @router.patch("/sites/{site_id}", response_model=SiteRead)
+@audit_operation("update", "site")
 async def update_site(
     site_id: str,
     payload: SiteUpdate,
@@ -162,6 +164,7 @@ async def update_site(
 @router.delete(
     "/sites/{site_id}", response_model=None, status_code=status.HTTP_204_NO_CONTENT
 )
+@audit_operation("delete", "site")
 async def delete_site(
     site_id: str, tenant: TenantDep, session: SessionDep, _: EditorAccess
 ) -> None:
@@ -222,6 +225,7 @@ async def _replace_workplace_hazards(
 
 
 @router.post("/workplaces", response_model=WorkplaceRead, status_code=status.HTTP_201_CREATED)
+@audit_operation("create", "workplace")
 async def create_workplace(
     payload: WorkplaceCreate, tenant: TenantDep, session: SessionDep, _: EditorAccess
 ) -> WorkplaceRead:
@@ -257,6 +261,7 @@ async def get_workplace(
 
 
 @router.patch("/workplaces/{workplace_id}", response_model=WorkplaceRead)
+@audit_operation("update", "workplace")
 async def update_workplace(
     workplace_id: str,
     payload: WorkplaceUpdate,
@@ -294,6 +299,7 @@ async def update_workplace(
     response_model=None,
     status_code=status.HTTP_204_NO_CONTENT,
 )
+@audit_operation("delete", "workplace")
 async def delete_workplace(
     workplace_id: str, tenant: TenantDep, session: SessionDep, _: EditorAccess
 ) -> None:

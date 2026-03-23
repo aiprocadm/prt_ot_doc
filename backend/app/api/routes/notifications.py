@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, rbac
 from app.models.models import Tenant
 from app.modules.notifications import (
@@ -52,6 +53,7 @@ async def list_notifications(
 
 
 @router.post("/mark-read")
+@audit_operation("mark_read", "notification")
 async def mark_read(
     payload: MarkReadRequest,
     session: SessionDep,
@@ -96,6 +98,7 @@ async def list_templates(
 
 
 @router.post("/templates", response_model=NotificationTemplateOut)
+@audit_operation("upsert", "notification_template")
 async def upsert_template(
     payload: NotificationTemplateIn,
     session: SessionDep,
@@ -129,6 +132,7 @@ async def get_settings(
 
 
 @router.put("/settings/me", response_model=ChannelSettingsOut)
+@audit_operation("update", "notification_settings")
 async def put_settings(
     payload: ChannelSettingsIn,
     session: SessionDep,

@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.domains.ppe import issue_ppe_item, list_expiring_issues
 from app.models.ppe_registry import PPEIssue, PPEIssueStatus, PPEItem
@@ -99,6 +100,7 @@ async def list_items(
 
 
 @router.post("/items", response_model=PPEItemRead, status_code=status.HTTP_201_CREATED)
+@audit_operation("create", "ppe_item")
 async def create_item(
     payload: PPEItemCreate,
     tenant: TenantDep,
@@ -127,6 +129,7 @@ async def get_item(item_id: str, tenant: TenantDep, session: SessionDep, access:
 
 
 @router.patch("/items/{item_id}", response_model=PPEItemRead)
+@audit_operation("update", "ppe_item")
 async def update_item(
     item_id: str,
     payload: PPEItemUpdate,
@@ -143,6 +146,7 @@ async def update_item(
 
 
 @router.delete("/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+@audit_operation("delete", "ppe_item")
 async def delete_item(
     item_id: str, tenant: TenantDep, session: SessionDep, access: ManagerAccess
 ) -> None:
@@ -194,6 +198,7 @@ async def expiring_issues(
 
 
 @router.post("/issues", response_model=PPEIssueRead, status_code=status.HTTP_201_CREATED)
+@audit_operation("create", "ppe_issue")
 async def create_issue(
     payload: PPEIssueCreate,
     tenant: TenantDep,
@@ -237,6 +242,7 @@ async def get_issue(issue_id: str, tenant: TenantDep, session: SessionDep, acces
 
 
 @router.patch("/issues/{issue_id}", response_model=PPEIssueRead)
+@audit_operation("update", "ppe_issue")
 async def update_issue(
     issue_id: str,
     payload: PPEIssueUpdate,
