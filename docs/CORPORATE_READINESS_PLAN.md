@@ -110,6 +110,7 @@ _Date:_ 2026-03-23
 - Kept the roadmap explicitly centered on depth hardening rather than breadth expansion.
 - Established the hardened PWA bootstrap seam as an enabling dependency for the mobile/offline wave.
 - Added another consistency slice for sensitive write operations by expanding decorator-based auditing in public API, client portal, medical, NPA impact task creation, and audit export initiation routes.
+- Started Phase C operational workspace layer at backend API level with tenant-scoped and permission-aware projections for attention center and task inbox.
 
 ## Success criteria for the next implementation wave
 - A logged-in user immediately sees what requires attention, what is overdue, what is blocked, and what to do next.

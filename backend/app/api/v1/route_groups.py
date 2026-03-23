@@ -55,6 +55,7 @@ from app.api.routes import (
     tenants,
     training,
     training_next,
+    workspace,
     webhooks,
 )
 from app.modules.analytics.api import router as analytics_router
@@ -127,6 +128,7 @@ OPERATIONS_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
     (obligations.router, {"tags": ["obligations"]}),
     (jobs.router, {}),
     (tasks.router, {"prefix": "/tasks", "tags": ["tasks"]}),
+    (workspace.router, {}),
     (tenancy.router, {}),
     (outbox_admin.router, {"prefix": "/admin/outbox", "tags": ["outbox"]}),
     (webhooks.router, {}),

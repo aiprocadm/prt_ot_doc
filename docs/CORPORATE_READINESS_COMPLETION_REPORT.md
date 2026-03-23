@@ -27,10 +27,15 @@ _Date:_ 2026-03-23
 - No broad visual rewrite was performed in this wave.
 - The practical improvement is at the platform contract level: the mobile/PWA frontend now has a stronger bootstrap API foundation for role-aware offline work, queue/conflict awareness, dictionaries, and sync diagnostics.
 - The documentation now clearly distinguishes screens and modules that are operational foundations from areas that are still thin wrappers, partial pages, or workflow-incomplete.
+- Started Phase C backend projections by adding:
+	- `GET /api/v1/workspace/attention`
+	- `GET /api/v1/workspace/task-inbox`
+	These endpoints return tenant-scoped, permission-aware operational queues (overdue/due-soon tasks, compliance deadline pressure, user sync failure pressure, and actionable recommendations) instead of frontend hardcoded aggregation.
 
 ## Validation evidence for this wave
 - Updated route modules compile successfully.
-- Regression suite remains green: `114 passed`.
+- New workspace projection tests pass.
+- Regression suite remains green: `116 passed`.
 - No new static problems detected in changed route files.
 
 ## Remaining gaps
