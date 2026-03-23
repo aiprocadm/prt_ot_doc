@@ -1,6 +1,7 @@
 import { type ColumnDef } from "@tanstack/react-table";
 import { CheckCheck } from "lucide-react";
 import { useEffect, useMemo } from "react";
+import { Link } from "react-router-dom";
 
 import { RegistryTable } from "@/components/common/RegistryTable";
 import { StatusBadge } from "@/components/common/StatusBadge";
@@ -10,6 +11,7 @@ import { PERMISSIONS } from "@/permissions/permissions";
 import { useTasksStore } from "@/stores/tasks";
 import type { TaskDto } from "@/types/dto/tasks";
 import { formatDate } from "@/utils/datetime";
+import { entityContextPath } from "@/utils/workspaceNavigation";
 
 const TYPE_LABELS: Record<string, string> = {
   training_plan: "Обучение",
@@ -42,7 +44,19 @@ export const TaskTable = () => {
       {
         accessorKey: "entity_type",
         header: "Тип",
-        cell: ({ row }) => TYPE_LABELS[row.original.entity_type ?? ""] ?? row.original.entity_type ?? "—"
+        cell: ({ row }) => {
+          const rawType = row.original.entity_type ?? "";
+          const label = (TYPE_LABELS[rawType] ?? rawType) || "—";
+          const contextHref = entityContextPath(rawType);
+          if (!contextHref) {
+            return label;
+          }
+          return (
+            <Link to={contextHref} className="text-blue-600 hover:underline">
+              {label}
+            </Link>
+          );
+        }
       },
       {
         accessorKey: "priority",

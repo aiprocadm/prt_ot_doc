@@ -18,46 +18,26 @@ Date: 2026-03-23
 3. Add regression tests for tenant isolation and authz in each touched family.
 
 Current delta completed in Wave 1:
-- normalized audit context forwarding (`request_id`, `user_agent`) for write operations in safety-ops, tasks, inspections, attestations, companies routes;
-- added test coverage for audit-context forwarding helper behavior.
-- extended the same consistency rule to additional write-heavy modules: files, packs, prescriptions;
-- validated with focused backend tests.
-- applied structured error envelope normalization in prescriptions helper not-found flows and pack archive download validation flows.
-- applied permission parity hardening in pack routes via explicit read/write access dependencies and role split.
-- applied incidents-route consistency hardening: structured 400 error envelopes for validation failures and audit trace/user-agent propagation for incident create logging.
-- applied training-route consistency hardening: explicit read/write access dependencies for mutation endpoints and structured 400 error envelopes for validation failures.
-- applied ppe-route consistency hardening: explicit read/write access dependencies for mutation endpoints and structured 400 error envelopes for issue validation failures.
-- applied orders-route consistency hardening: explicit read/write access dependencies for mutation endpoints and structured 422 error envelopes for order-status validation failures.
-- applied persons-route consistency hardening: explicit read/write access dependencies and structured 400/422 error envelopes for validation/domain failures.
-- applied invoices-route consistency hardening: explicit read/write access dependencies and structured 400/422 error envelopes for validation/domain failures.
-- applied contracts-route consistency hardening: explicit read/write access dependencies and structured 400/422 error envelopes for validation/domain failures.
-- applied inspections-route consistency hardening: explicit read/write access dependencies and structured 400 error envelopes for domain validation failures.
-- applied tasks-route consistency hardening: parity test coverage for read/write role split and structured 422 error envelopes for validation failures.
-- applied companies-route consistency hardening: explicit read/write access dependencies and structured 422 error envelopes for validation failures.
-- applied sites-route consistency hardening: explicit read/write access dependencies with parity regression coverage.
-- applied attestations-route consistency hardening: explicit read/write access dependencies with parity regression coverage.
-- applied departments-route consistency hardening: explicit read/write access dependencies with parity regression coverage.
-- applied safety-ops consistency hardening: added read/write access parity regression coverage for existing role split.
-- applied briefings-route consistency hardening: explicit permission constants and structured 400 error envelopes for completion validation failures.
-- applied files consistency hardening: added read/write access parity regression coverage for existing upload/read role split.
-- applied prescriptions-route consistency hardening: explicit read/write access dependencies with parity regression coverage.
-- applied incidents-route consistency hardening: explicit read/write access dependencies with parity regression coverage alongside structured 400 error contract coverage.
-- applied audit-route consistency hardening: structured 400 error envelopes for backward-list validation failures.
-- applied risk-route consistency hardening: structured 422 error envelopes for risk-level filter validation failures.
-- applied admin-users-route consistency hardening: structured 422 error envelopes for role-assignment validation failures.
-- applied replace-route consistency hardening: structured 400/422 error envelopes for input validation failures and fixed unreachable empty-`from` map validation.
-- applied edo-workflow-route consistency hardening: structured 422 error envelopes for approval-route rules validation and aligned create/update validation behavior.
-- applied approval-orchestration-route consistency hardening: structured 422 error envelopes for webhook request validation failures.
-- applied documents-route consistency hardening: structured 400 error envelopes for document-generation and batch-input validation failures.
-- applied approval-signing-v1-route consistency hardening: structured 422 error envelopes for sign and EDO validation failures.
-- applied packs-route consistency hardening: structured 400 error envelopes for remaining pack validation failures.
-- applied risk-route additional consistency hardening: structured 400 error envelope for fallback assessment-input validation.
-- applied billing-route consistency hardening: shared structured 400 error helper for plan-change validation.
-- applied medical-route consistency hardening: explicit read/write role constants with parity regression coverage.
-- applied approval-orchestration-route parity hardening: explicit read/write role constants with parity regression coverage.
+- re-baselined factual enterprise-readiness audit and synchronized all 5 governance deliverables;
+- fixed execution order and Definition of Done for phases B-K;
+- preserved no-rewrite guardrails and explicit stub/mock/deferred transparency requirements;
+- prepared targeted route-family and screen-family priorities for immediate execution;
+- delivered first runtime consistency hardening slice for PWA sync owner scoping and anti-spoofing.
+
+Current delta started in Wave 2:
+- integrated attention center panel into dashboard with real workspace projections;
+- added frontend test coverage for attention panel rendering and dashboard integration.
+- connected dashboard task tab to workspace task-inbox projection with triage filters for overdue and priority views.
+- started deep-linking from task inbox rows into action screen filters on TasksPage.
+- added scenario-aware deep-linking from readiness blockers into concrete action modules.
+- added recent items/drafts block to dashboard for faster return-to-work context.
+- added entity-context navigation links in task inbox and recent task items.
+- unified workspace navigation mapping to reduce route drift between dashboard, attention center and task registry.
+- implemented first entity-card entry step: task links now transfer task/entity focus context and TasksPage shows focused context card with quick scenario actions.
+- extended entity-card summary/timeline entry points for document, contractor and inspection contexts via query-driven focus cards.
 
 Immediate next substep:
-- continue endpoint-by-endpoint permission parity sweep on read/write/bulk/export/search edges for remaining route families and add focused regression tests per family.
+- execute endpoint-by-endpoint consistency sweep on approvals/sign/EDO and documents/packs route families (tenant/authz/error/audit/correlation) with focused regression tests.
 
 Exit criteria:
 - no route family exits wave without consistency checklist pass,
@@ -68,6 +48,9 @@ Exit criteria:
 2. Add readiness blockers with severity, reasons, and recommended actions.
 3. Add recent drafts/recent items and recommendation blocks.
 4. Add deep links from dashboards to action screens.
+
+Immediate next substep for Wave 2:
+- deepen entity-card runtime behavior: add direct entity details loading, richer timeline events and cross-module action shortcuts from summary/timeline cards.
 
 Exit criteria:
 - user sees overdue/blocked/next actions immediately after login.
@@ -99,7 +82,7 @@ Priority seams:
 2. Integrate blockers into readiness, attention center, dashboards, and entity cards.
 
 ## Wave 6: Mobile/PWA practical hardening
-1. Harden /api/pwa/bootstrap projections for field workflows.
+1. Keep /api/pwa/bootstrap projection baseline and harden scenario depth for field workflows.
 2. Implement frontend offline queue, sync-state UI, conflict UI.
 3. Add retry/resume and robust drafts persistence.
 4. Cover selected field scenarios.

@@ -14,7 +14,19 @@ vi.mock("@/stores/tasks", () => ({
     loading: false,
     filters: {},
     setFilters: setFiltersMock,
-    items: [],
+    items: [
+      {
+        id: "task-focus-1",
+        title: "Фокусная задача",
+        status: "open",
+        priority: "high",
+        overdue: false,
+        entity_type: "document",
+        entity_id: "entity-1",
+      }
+    ],
+    item: null,
+    getById: vi.fn(),
     pagination: { page: 1, page_size: 10, total: 0 },
     setPage: vi.fn(),
     setPageSize: vi.fn(),
@@ -41,5 +53,25 @@ describe("TasksPage", () => {
     await user.selectOptions(screen.getByLabelText("Срок"), "overdue");
     expect(setFiltersMock).toHaveBeenCalledWith({ overdue: true });
     expect(listMock).toHaveBeenCalledWith({ overdue: true });
+  });
+
+  it("shows focus card for task context from workspace link", () => {
+    render(
+      <MemoryRouter initialEntries={["/tasks?task_id=task-focus-1&entity_type=document&entity_id=entity-1"]}>
+        <TasksPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByTestId("task-focus-card")).toBeInTheDocument();
+    expect(screen.getByText("Фокусная задача · open · high")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Открыть summary сущности" })).toHaveAttribute(
+      "href",
+      "/documents?entity_type=document&entity_id=entity-1&view=summary"
+    );
+    expect(screen.getByRole("link", { name: "Открыть timeline сущности" })).toHaveAttribute(
+      "href",
+      "/documents?entity_type=document&entity_id=entity-1&view=timeline"
+    );
+    expect(screen.getByRole("link", { name: "Открыть контекст сущности" })).toHaveAttribute("href", "/documents");
   });
 });

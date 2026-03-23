@@ -1,5 +1,6 @@
 import { addDays, endOfDay, isWithinInterval, startOfDay } from "date-fns";
 import { useEffect, useMemo } from "react";
+import { Link } from "react-router-dom";
 import { useSearchParams } from "react-router-dom";
 
 import { Breadcrumb } from "@/components/ui/breadcrumb";
@@ -10,6 +11,7 @@ import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { TaskTable } from "@/features/tasks/TaskTable";
 import { useTasksStore } from "@/stores/tasks";
 import type { TaskPriority } from "@/types/dto/tasks";
+import { entityCardLink, entityContextPath } from "@/utils/workspaceNavigation";
 
 const TASK_TYPE_OPTIONS = [
   { value: "", label: "Все типы" },
@@ -38,8 +40,11 @@ const TASK_PRIORITIES: TaskPriority[] = ["low", "medium", "high", "critical"];
 const isTaskPriority = (value: string): value is TaskPriority => TASK_PRIORITIES.includes(value as TaskPriority);
 
 const TasksPage = () => {
-  const { list, loading, filters, setFilters, items, pagination } = useTasksStore();
+  const { list, loading, filters, setFilters, items, item, getById, pagination } = useTasksStore();
   const [searchParams] = useSearchParams();
+  const focusedTaskId = searchParams.get("task_id") ?? undefined;
+  const focusedEntityType = searchParams.get("entity_type") ?? undefined;
+  const focusedEntityId = searchParams.get("entity_id") ?? undefined;
 
   useEffect(() => {
     const type = searchParams.get("type") ?? undefined;
@@ -51,6 +56,26 @@ const TasksPage = () => {
     setFilters({ type, overdue, priority });
     list({ type, overdue, priority });
   }, [list, searchParams, setFilters]);
+
+  useEffect(() => {
+    if (!focusedTaskId) return;
+    void getById(focusedTaskId);
+  }, [focusedTaskId, getById]);
+
+  const focusedTask = useMemo(() => {
+    if (!focusedTaskId) return null;
+    return items.find((task) => task.id === focusedTaskId) ?? (item?.id === focusedTaskId ? item : null);
+  }, [focusedTaskId, item, items]);
+
+  const focusedEntitySummaryLink = useMemo(
+    () => entityCardLink(focusedTask?.entity_type ?? focusedEntityType, focusedTask?.entity_id ?? focusedEntityId, "summary"),
+    [focusedEntityId, focusedEntityType, focusedTask?.entity_id, focusedTask?.entity_type]
+  );
+
+  const focusedEntityTimelineLink = useMemo(
+    () => entityCardLink(focusedTask?.entity_type ?? focusedEntityType, focusedTask?.entity_id ?? focusedEntityId, "timeline"),
+    [focusedEntityId, focusedEntityType, focusedTask?.entity_id, focusedTask?.entity_type]
+  );
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -122,6 +147,51 @@ const TasksPage = () => {
       />
       <Card>
         <CardContent className="py-6">
+          {focusedTaskId ? (
+            <div className="mb-4 rounded-md border bg-muted/20 p-4" data-testid="task-focus-card">
+              <div className="text-sm font-semibold">Фокус задачи из рабочего пространства</div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {focusedTask
+                  ? `${focusedTask.title} · ${focusedTask.status} · ${focusedTask.priority}`
+                  : `Задача ${focusedTaskId.slice(0, 8)} загружается...`}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                {focusedTask?.entity_type || focusedEntityType ? (
+                  <span className="rounded border px-2 py-1">
+                    entity_type: {focusedTask?.entity_type ?? focusedEntityType}
+                  </span>
+                ) : null}
+                {focusedTask?.entity_id || focusedEntityId ? (
+                  <span className="rounded border px-2 py-1">
+                    entity_id: {(focusedTask?.entity_id ?? focusedEntityId)?.slice(0, 12)}
+                  </span>
+                ) : null}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {focusedEntitySummaryLink ? (
+                  <Button size="sm" variant="outline" asChild>
+                    <Link to={focusedEntitySummaryLink}>Открыть summary сущности</Link>
+                  </Button>
+                ) : null}
+                {focusedEntityTimelineLink ? (
+                  <Button size="sm" variant="outline" asChild>
+                    <Link to={focusedEntityTimelineLink}>Открыть timeline сущности</Link>
+                  </Button>
+                ) : null}
+                {entityContextPath(focusedTask?.entity_type ?? focusedEntityType) ? (
+                  <Button size="sm" variant="outline" asChild>
+                    <Link to={entityContextPath(focusedTask?.entity_type ?? focusedEntityType) ?? "/tasks"}>
+                      Открыть контекст сущности
+                    </Link>
+                  </Button>
+                ) : null}
+                <Button size="sm" variant="ghost" asChild>
+                  <Link to="/tasks">Сбросить фокус</Link>
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
           <div className="mb-4 flex flex-wrap gap-4">
             <FilterField label="Тип" htmlFor="task-type">
               <select

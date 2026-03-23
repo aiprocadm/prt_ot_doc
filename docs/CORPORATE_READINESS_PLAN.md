@@ -49,6 +49,10 @@ Definition of done:
 - Consistency checklist applied to all prioritized route families.
 - Regression tests added for tenant/authz/error shape.
 
+Current progress (this iteration):
+- Started route-family consistency execution in PWA sync endpoints by enforcing user ownership and server-controlled mutable fields.
+- Added focused regression tests for anti-spoofing and owner access in offline endpoints.
+
 ### Phase C: Operational workspace layer
 Deliver:
 - Role-based workspace surfaces.
@@ -92,7 +96,8 @@ Priority paths:
 
 ### Phase F: Mobile/PWA practical field readiness v1
 Deliver:
-- Harden /api/pwa/bootstrap projections for field usage.
+- Keep existing /api/pwa/bootstrap foundation and harden it for field usage.
+- Enrich permissions and dictionaries where scenario coverage is still shallow.
 - Offline queue model on frontend.
 - Sync-state UI.
 - Conflict-resolution UI.
@@ -182,3 +187,9 @@ Priority test domains:
 - docs/CORPORATE_READINESS_COMPLETION_REPORT.md
 - docs/CORPORATE_READINESS_REMAINING_GAPS.md
 - docs/CORPORATE_READINESS_NEXT_STEPS.md
+
+## Governance and change control
+1. No massive rewrite or removal of working features.
+2. Every new business path must remain tenant-aware, permission-aware and audited.
+3. Any remaining stub/mock/deferred behavior must be explicit in API and diagnostics.
+4. Every wave ends with docs update plus focused test evidence.

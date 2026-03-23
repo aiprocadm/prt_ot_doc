@@ -24,8 +24,9 @@ Date: 2026-03-23
 - Cross-scenario blocker impact is still partial.
 
 ### 5) Mobile/offline remains partial
-- PWA shell exists, but queue/conflict/retry-resume/drafts UX is not enterprise-complete.
-- Selected field scenarios need completion and hardening.
+- PWA shell and runtime caching exist, and /api/pwa/bootstrap already returns authenticated projection data.
+- Baseline endpoint hardening is in place for offline batch/media ownership and anti-spoofing.
+- Remaining gap is enterprise field usability: queue transparency, conflict resolution UX, resilient drafts lifecycle and fuller scenario execution.
 
 ### 6) Admin diagnostics not yet operationally complete
 - Governance console still lacks full tenant readiness + provider mode + queue/job + data quality + usage/billing + environment consolidation.

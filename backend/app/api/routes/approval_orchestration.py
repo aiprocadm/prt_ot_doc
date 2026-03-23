@@ -61,6 +61,16 @@ def _approval_orchestration_unprocessable(message: str) -> HTTPException:
     )
 
 
+def _approval_orchestration_not_found(resource: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail={
+            "code": "approval_orchestration_not_found",
+            "message": f"{resource} not found",
+        },
+    )
+
+
 class ApprovalRouteCreate(BaseModel):
     code: str
     name: str
@@ -139,10 +149,10 @@ async def _assert_entity_belongs_to_tenant(
 ) -> None:
     if entity_type == "document":
         if await _get_document_for_tenant(session, tenant_id, entity_id) is None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Document version not found")
+            raise _approval_orchestration_not_found("document_version")
     elif entity_type == "pack":
         if await _get_pack_for_tenant(session, tenant_id, entity_id) is None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Pack run not found")
+            raise _approval_orchestration_not_found("pack_run")
 
 
 @router.post("/approval-routes")
@@ -164,7 +174,7 @@ async def list_approval_routes(session: SessionDep, tenant: TenantDep, _: Reader
 async def get_approval_route(route_id: str, session: SessionDep, tenant: TenantDep, _: ReaderAccess):
     row = await session.get(ApprovalRoute, route_id)
     if not row or row.tenant_id != _tenant_id_value(tenant):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+        raise _approval_orchestration_not_found("approval_route")
     return row
 
 
@@ -173,7 +183,7 @@ async def get_approval_route(route_id: str, session: SessionDep, tenant: TenantD
 async def patch_approval_route(route_id: str, payload: ApprovalRouteCreate, session: SessionDep, tenant: TenantDep, _: EditorAccess):
     row = await session.get(ApprovalRoute, route_id)
     if not row or row.tenant_id != _tenant_id_value(tenant):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+        raise _approval_orchestration_not_found("approval_route")
     for k, v in payload.model_dump().items():
         setattr(row, k, v)
     await session.flush()
@@ -185,7 +195,7 @@ async def patch_approval_route(route_id: str, payload: ApprovalRouteCreate, sess
 async def delete_approval_route(route_id: str, session: SessionDep, tenant: TenantDep, _: EditorAccess):
     row = await session.get(ApprovalRoute, route_id)
     if not row or row.tenant_id != _tenant_id_value(tenant):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+        raise _approval_orchestration_not_found("approval_route")
     await session.delete(row)
     return {"ok": True}
 
@@ -195,7 +205,7 @@ async def delete_approval_route(route_id: str, session: SessionDep, tenant: Tena
 async def create_approval_route_step(route_id: str, payload: ApprovalRouteStepCreate, session: SessionDep, tenant: TenantDep, _: EditorAccess):
     route = await session.get(ApprovalRoute, route_id)
     if route is None or route.tenant_id != _tenant_id_value(tenant):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+        raise _approval_orchestration_not_found("approval_route")
     row = ApprovalRouteStep(tenant_id=_tenant_id_value(tenant), approval_route_id=route_id, **payload.model_dump())
     session.add(row)
     await session.flush()
@@ -207,7 +217,7 @@ async def create_approval_route_step(route_id: str, payload: ApprovalRouteStepCr
 async def patch_approval_route_step(route_id: str, step_id: str, payload: ApprovalRouteStepCreate, session: SessionDep, tenant: TenantDep, _: EditorAccess):
     row = await session.get(ApprovalRouteStep, step_id)
     if not row or row.tenant_id != _tenant_id_value(tenant) or row.approval_route_id != route_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+        raise _approval_orchestration_not_found("approval_route_step")
     for k, v in payload.model_dump().items():
         setattr(row, k, v)
     await session.flush()
@@ -219,7 +229,7 @@ async def patch_approval_route_step(route_id: str, step_id: str, payload: Approv
 async def delete_approval_route_step(route_id: str, step_id: str, session: SessionDep, tenant: TenantDep, _: EditorAccess):
     row = await session.get(ApprovalRouteStep, step_id)
     if not row or row.tenant_id != _tenant_id_value(tenant) or row.approval_route_id != route_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+        raise _approval_orchestration_not_found("approval_route_step")
     await session.delete(row)
     return {"ok": True}
 
@@ -252,7 +262,7 @@ async def list_approvals(session: SessionDep, tenant: TenantDep, _: ReaderAccess
 async def get_approval(approval_id: str, session: SessionDep, tenant: TenantDep, _: ReaderAccess):
     row = await session.get(ApprovalInstance, approval_id)
     if not row or row.tenant_id != _tenant_id_value(tenant):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+        raise _approval_orchestration_not_found("approval_instance")
     return row
 
 
@@ -267,7 +277,7 @@ async def approval_timeline(approval_id: str, session: SessionDep, tenant: Tenan
 async def _act(approval_id: str, action: str, payload: ApprovalActionIn, session: AsyncSession, tenant_id: str, actor: str):
     current = await session.get(ApprovalInstance, approval_id)
     if current is None or current.tenant_id != tenant_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+        raise _approval_orchestration_not_found("approval_instance")
     service = ApprovalDecisionService(session, tenant_id)
     instance = await service.decide(instance_id=approval_id, actor_user_id=actor, decision=action, comment=payload.comment, target_user_id=payload.target_user_id)
     if instance.entity_type == "document":
@@ -310,7 +320,7 @@ async def approval_comment(approval_id: str, payload: ApprovalActionIn, session:
 async def approval_cancel(approval_id: str, session: SessionDep, tenant: TenantDep, _: EditorAccess):
     row = await session.get(ApprovalInstance, approval_id)
     if not row or row.tenant_id != _tenant_id_value(tenant):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+        raise _approval_orchestration_not_found("approval_instance")
     row.status = "canceled"
     return {"id": row.id, "status": row.status}
 
@@ -323,7 +333,7 @@ async def create_sign_request(payload: SignatureRequestIn, session: SessionDep, 
     if payload.approval_instance_id:
         approval_instance = await session.get(ApprovalInstance, payload.approval_instance_id)
         if approval_instance is None or approval_instance.tenant_id != tenant_id:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+            raise _approval_orchestration_not_found("approval_instance")
     req = SignatureRequest(
         tenant_id=tenant_id,
         object_type=payload.entity_type,
@@ -349,7 +359,7 @@ async def list_sign_requests(session: SessionDep, tenant: TenantDep, _: ReaderAc
 async def get_sign_request(request_id: str, session: SessionDep, tenant: TenantDep, _: ReaderAccess):
     row = await session.get(SignatureRequest, request_id)
     if not row or row.tenant_id != _tenant_id_value(tenant):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+        raise _approval_orchestration_not_found("signature_request")
     return {"id": row.id, "status": row.status, "provider": row.provider, **provider_response_meta(getattr(row, "provider_code", row.provider))}
 
 
@@ -358,7 +368,7 @@ async def get_sign_request(request_id: str, session: SessionDep, tenant: TenantD
 async def cancel_sign_request(request_id: str, session: SessionDep, tenant: TenantDep, _: EditorAccess):
     row = await session.get(SignatureRequest, request_id)
     if not row or row.tenant_id != _tenant_id_value(tenant):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+        raise _approval_orchestration_not_found("signature_request")
     row.status = "canceled"
     return {"id": row.id, "status": row.status}
 
@@ -368,7 +378,7 @@ async def cancel_sign_request(request_id: str, session: SessionDep, tenant: Tena
 async def refresh_sign_status(request_id: str, session: SessionDep, tenant: TenantDep, _: EditorAccess):
     row = await session.get(SignatureRequest, request_id)
     if not row or row.tenant_id != _tenant_id_value(tenant):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+        raise _approval_orchestration_not_found("signature_request")
     await SignatureVerificationService(session, _tenant_id_value(tenant)).refresh(row)
     return {"id": row.id, "status": row.status}
 
@@ -378,7 +388,7 @@ async def refresh_sign_status(request_id: str, session: SessionDep, tenant: Tena
 async def verify_sign_request(request_id: str, session: SessionDep, tenant: TenantDep, _: EditorAccess):
     row = await session.get(SignatureRequest, request_id)
     if not row or row.tenant_id != _tenant_id_value(tenant):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+        raise _approval_orchestration_not_found("signature_request")
     await SignatureVerificationService(session, _tenant_id_value(tenant)).verify(row)
     return {"id": row.id, "status": row.status, "verification_result": row.verification_result_json}
 
@@ -414,7 +424,7 @@ async def list_edo_messages(session: SessionDep, tenant: TenantDep, _: ReaderAcc
 async def get_edo_message(message_id: str, session: SessionDep, tenant: TenantDep, _: ReaderAccess):
     row = await session.get(EdoMessage, message_id)
     if not row or row.tenant_id != _tenant_id_value(tenant):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+        raise _approval_orchestration_not_found("edo_message")
     return {"id": row.id, "status": row.status, "operator_code": row.operator_code, **provider_response_meta(getattr(row, "provider_code", row.operator_code))}
 
 
@@ -429,7 +439,7 @@ async def list_edo_events(message_id: str, session: SessionDep, tenant: TenantDe
 async def refresh_edo_status(message_id: str, session: SessionDep, tenant: TenantDep, _: EditorAccess):
     row = await session.get(EdoMessage, message_id)
     if not row or row.tenant_id != _tenant_id_value(tenant):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+        raise _approval_orchestration_not_found("edo_message")
     next_status = "sent" if row.status == "queued" else "delivered"
     await EdoStatusProjectionService(session, _tenant_id_value(tenant)).apply_event(row, next_status, {"source": "refresh"}, None)
     return {"id": row.id, "status": row.status}
@@ -440,7 +450,7 @@ async def refresh_edo_status(message_id: str, session: SessionDep, tenant: Tenan
 async def cancel_edo(message_id: str, session: SessionDep, tenant: TenantDep, _: EditorAccess):
     row = await session.get(EdoMessage, message_id)
     if not row or row.tenant_id != _tenant_id_value(tenant):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+        raise _approval_orchestration_not_found("edo_message")
     row.status = "failed"
     return {"id": row.id, "status": row.status}
 
@@ -449,7 +459,7 @@ async def cancel_edo(message_id: str, session: SessionDep, tenant: TenantDep, _:
 async def get_edo_protocol(message_id: str, session: SessionDep, tenant: TenantDep, _: ReaderAccess):
     row = await session.get(EdoMessage, message_id)
     if not row or row.tenant_id != _tenant_id_value(tenant):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+        raise _approval_orchestration_not_found("edo_message")
     return {"message_id": row.id, "protocol": {"status": row.status}}
 
 
@@ -478,6 +488,6 @@ async def sign_webhook(provider_code: str, payload: dict[str, Any], session: Ses
         raise _approval_orchestration_unprocessable("request_id required")
     row = await session.get(SignatureRequest, request_id)
     if not row or row.tenant_id != _tenant_id_value(tenant):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+        raise _approval_orchestration_not_found("signature_request")
     row.status = payload.get("status", row.status)
     return {"id": row.id, "status": row.status, "provider": provider_code, **provider_response_meta(provider_code)}

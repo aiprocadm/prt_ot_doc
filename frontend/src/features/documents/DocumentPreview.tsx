@@ -14,7 +14,12 @@ import type { DocumentDto } from "@/types/dto/documents";
 import { formatDate } from "@/utils/datetime";
 import { downloadBlob } from "@/utils/download";
 
-export const DocumentPreview = ({ document }: { document: DocumentDto }) => {
+interface DocumentPreviewProps {
+  document: DocumentDto;
+  initialTab?: "preview" | "history" | "timeline";
+}
+
+export const DocumentPreview = ({ document, initialTab = "preview" }: DocumentPreviewProps) => {
   const { refreshStatus, download } = useDocumentsStore();
   const [current, setCurrent] = useState(document);
   const [release, setRelease] = useState<ReleaseStatus>({ approval: "draft", signature: "pending", edo: "queued" });
@@ -113,7 +118,7 @@ export const DocumentPreview = ({ document }: { document: DocumentDto }) => {
             Режим только для чтения
           </div>
         )}
-        <Tabs defaultValue="preview" className="space-y-4">
+        <Tabs defaultValue={initialTab} className="space-y-4">
           <TabsList>
             <TabsTrigger value="preview">Предпросмотр</TabsTrigger>
             <TabsTrigger value="history">История</TabsTrigger>

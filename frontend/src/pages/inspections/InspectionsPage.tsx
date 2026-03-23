@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 
-import { inspectionsApi, type Inspection } from "@/api/inspections";
+import { inspectionsApi, type Inspection, type InspectionResult } from "@/api/inspections";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -16,15 +17,21 @@ import type { ApiError } from "@/types/dto/common";
 import { formatDate } from "@/utils/datetime";
 import { toast } from "sonner";
 import { useCompaniesStore } from "@/stores/companies";
+import { entityCardLink } from "@/utils/workspaceNavigation";
 
 const INSPECTION_TYPES = ["planned", "unplanned", "documentary", "on_site", "counter"];
 
 const InspectionsPage = () => {
+  const [searchParams] = useSearchParams();
   const [items, setItems] = useState<Inspection[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("");
   const { items: companies, list: listCompanies } = useCompaniesStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  const [focusResults, setFocusResults] = useState<InspectionResult[]>([]);
+  const focusedEntityType = searchParams.get("entity_type") ?? undefined;
+  const focusedEntityId = searchParams.get("entity_id") ?? undefined;
+  const focusedView = searchParams.get("view") === "timeline" ? "timeline" : "summary";
 
   // create dialog state
   const [createOpen, setCreateOpen] = useState(false);
@@ -58,6 +65,20 @@ const InspectionsPage = () => {
     void load("");
     listCompanies({ page_size: 100 }).catch(() => undefined);
   }, [listCompanies]);
+
+  useEffect(() => {
+    if (focusedEntityType !== "inspection" || !focusedEntityId) {
+      setFocusResults([]);
+      return;
+    }
+    inspectionsApi.listResults(focusedEntityId).then(setFocusResults).catch(() => setFocusResults([]));
+  }, [focusedEntityId, focusedEntityType]);
+
+  const focusedInspection = focusedEntityType === "inspection" && focusedEntityId
+    ? items.find((inspection) => inspection.id === focusedEntityId) ?? null
+    : null;
+  const focusSummaryLink = entityCardLink(focusedEntityType, focusedEntityId, "summary");
+  const focusTimelineLink = entityCardLink(focusedEntityType, focusedEntityId, "timeline");
 
   const handleCreate = async () => {
     if (!form.company_id || !form.authority) {
@@ -203,6 +224,49 @@ const InspectionsPage = () => {
       </div>
 
       <ErrorState error={error ?? undefined} onRetry={() => void load()} />
+      {focusedEntityId && focusedEntityType === "inspection" ? (
+        <Card>
+          <CardContent className="py-4" data-testid="inspection-focus-card">
+            <div className="text-sm font-semibold">Фокус проверки из рабочего пространства</div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {focusedInspection
+                ? `${focusedInspection.inspection_type} · ${focusedInspection.status} · ${focusedInspection.authority}`
+                : `Проверка ${focusedEntityId.slice(0, 8)} загружается...`}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {focusSummaryLink ? (
+                <Button size="sm" variant={focusedView === "summary" ? "default" : "outline"} asChild>
+                  <Link to={focusSummaryLink}>Summary</Link>
+                </Button>
+              ) : null}
+              {focusTimelineLink ? (
+                <Button size="sm" variant={focusedView === "timeline" ? "default" : "outline"} asChild>
+                  <Link to={focusTimelineLink}>Timeline</Link>
+                </Button>
+              ) : null}
+              <Button size="sm" variant="ghost" asChild>
+                <Link to="/inspections">Сбросить фокус</Link>
+              </Button>
+            </div>
+            {focusedView === "timeline" ? (
+              <div className="mt-3 space-y-2">
+                {focusResults.length ? (
+                  focusResults.slice(0, 6).map((result) => (
+                    <div key={result.id} className="rounded-md border p-2 text-xs">
+                      <div className="font-medium">{result.title}</div>
+                      <div className="text-muted-foreground">
+                        {result.outcome ?? "без outcome"} · {result.issued_at ? formatDate(result.issued_at) : "дата не задана"}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-muted-foreground">События timeline пока отсутствуют.</p>
+                )}
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
       {loading ? <LoadingScreen label="Загрузка проверок" /> : null}
 
       <Card>

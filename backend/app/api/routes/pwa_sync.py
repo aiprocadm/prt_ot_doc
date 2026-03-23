@@ -20,7 +20,7 @@ from app.models.models import (
     TrainingEnrollment,
 )
 from app.modules.pwa_sync.services import OfflineSyncService
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -314,14 +314,52 @@ def _serialize_date(value: date | datetime | None) -> str | None:
     return value.isoformat()
 
 
+def _validate_payload_required_fields(payload: dict[str, Any], required_fields: tuple[str, ...]) -> None:
+    missing = [field for field in required_fields if payload.get(field) in (None, "")]
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "pwa_sync_validation_error",
+                "message": f"missing required fields: {', '.join(missing)}",
+            },
+        )
+
+
+def _sanitize_client_payload(payload: dict[str, Any], blocked_fields: tuple[str, ...]) -> dict[str, Any]:
+    sanitized = dict(payload)
+    for field in blocked_fields:
+        sanitized.pop(field, None)
+    return sanitized
+
+
+def _ensure_owner_or_admin(*, access: AccessContext, owner_user_id: str) -> None:
+    roles = set(access.to_auth_context().roles)
+    current_user_id = str(access.user.id)
+    if owner_user_id != current_user_id and "admin" not in roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "pwa_sync_forbidden", "message": "batch is not available for current user"},
+        )
+
+
 @router.post("/sync/batch")
 @audit_operation("sync_batch", "offline_sync_batch")
 async def create_batch(
     payload: dict,
     tenant: Tenant = Depends(get_tenant_record),
     session: AsyncSession = Depends(get_session),
+    access: AccessContext = Depends(rbac()),
 ):
-    batch = OfflineSyncBatch(tenant_id=tenant.id, **payload)
+    incoming = dict(payload or {})
+    _validate_payload_required_fields(incoming, ("device_id", "entity_type", "payload"))
+    sanitized = _sanitize_client_payload(incoming, ("tenant_id", "user_id", "status", "error_payload"))
+    batch = OfflineSyncBatch(
+        tenant_id=tenant.id,
+        user_id=str(access.user.id),
+        status="pending",
+        **sanitized,
+    )
     session.add(batch)
     await session.flush()
     return await OfflineSyncService().apply_batch(session, batch)
@@ -332,10 +370,12 @@ async def sync_status(
     batch_id: str,
     tenant: Tenant = Depends(get_tenant_record),
     session: AsyncSession = Depends(get_session),
+    access: AccessContext = Depends(rbac()),
 ):
     batch = await OfflineSyncService().get_status(session, batch_id)
     if not batch or batch.tenant_id != tenant.id:
         raise HTTPException(404, "Batch not found")
+    _ensure_owner_or_admin(access=access, owner_user_id=str(batch.user_id))
     return batch
 
 
@@ -345,8 +385,17 @@ async def commit_media(
     payload: dict,
     tenant: Tenant = Depends(get_tenant_record),
     session: AsyncSession = Depends(get_session),
+    access: AccessContext = Depends(rbac()),
 ):
-    media = OfflineMediaQueue(tenant_id=tenant.id, **payload)
+    incoming = dict(payload or {})
+    _validate_payload_required_fields(incoming, ("device_id", "local_ref"))
+    sanitized = _sanitize_client_payload(incoming, ("tenant_id", "user_id", "upload_status", "file_id"))
+    media = OfflineMediaQueue(
+        tenant_id=tenant.id,
+        user_id=str(access.user.id),
+        upload_status="pending",
+        **sanitized,
+    )
     session.add(media)
     await session.flush()
     return await OfflineSyncService().commit_media(session, media)
