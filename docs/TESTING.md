@@ -125,7 +125,13 @@ make final-acceptance
 - Machine-readable repository audit: `docs/audit/REPOSITORY_AUDIT.json`
 - Release decision record: `RELEASE_READINESS.md`
 
-## 10. 2026-03-21 focused hardening slice
+## 10. 2026-03-23 corporate-readiness hardening slice
+```bash
+pytest -q backend/tests/test_pwa_sync_bootstrap.py backend/tests/test_document_jobs_required.py backend/tests/test_corporate_readiness_hardening.py
+python -m compileall backend/app/api/routes/pwa_sync.py backend/app/api/routes/integration_readiness.py
+```
+
+## 11. 2026-03-21 focused hardening slice
 ```bash
 pytest -q backend/tests/test_notifications_service.py
 pytest -q backend/tests/test_next66_workflow_notifications_npa.py

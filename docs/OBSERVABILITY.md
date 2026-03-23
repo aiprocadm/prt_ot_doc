@@ -32,6 +32,8 @@ PYTHONPATH=backend python scripts/branded_document_smoke.py
 ```
 
 ## Current limitations
+- Integration readiness diagnostics now expose provider-mode metadata so enterprise operators can see whether an adapter is a production candidate, disabled, or explicitly non-production.
+- The PWA bootstrap contract now exposes user-scoped permission and conflict diagnostics, but frontend sync/conflict telemetry is still not a completed operational UI layer.
 - Full distributed tracing/export is still a foundation rather than a completed enterprise telemetry rollout.
 - Metrics depend on environment configuration and optional infrastructure (for example Redis-backed counters and scrape wiring).
 - Frontend RUM/browser telemetry is not yet a first-class subsystem in the repository.

@@ -16,6 +16,7 @@ from app.services.integrations.factory import (
     get_frdo_integration,
 )
 from app.services.integrations.interfaces import IntegrationDisabledError
+from app.services.provider_registry import provider_response_meta
 
 router = APIRouter(prefix="/integrations/readiness", tags=["integration-readiness"])
 
@@ -29,24 +30,30 @@ async def _provider_health(provider_name: str) -> dict[str, Any]:
     }
     factory = providers.get(provider_name)
     if factory is None:
-        return {"provider": provider_name, "health_status": "contract_only", "reachable": None}
+        payload = {"provider": provider_name, "health_status": "contract_only", "reachable": None}
+        payload.update(provider_response_meta(provider_name))
+        return payload
     integration = factory()
     try:
         reachable = await integration.health_check()
-        return {
+        payload = {
             "provider": provider_name,
             "adapter": integration.name,
             "health_status": "ready" if reachable else "degraded",
             "reachable": bool(reachable),
         }
+        payload.update(provider_response_meta(integration.name))
+        return payload
     except IntegrationDisabledError as exc:
-        return {
+        payload = {
             "provider": provider_name,
             "adapter": integration.name,
             "health_status": "disabled",
             "reachable": False,
             "message": str(exc),
         }
+        payload.update(provider_response_meta(integration.name))
+        return payload
 
 
 @router.get("")
@@ -85,6 +92,7 @@ async def get_integration_readiness(
         meta = configured_by_provider.get(provider_name)
         info = await _provider_health(provider_name)
         info["configured"] = meta is not None
+        info.setdefault("provider_code", info.get("adapter", provider_name))
         info["config_meta"] = meta.meta_json if meta is not None else {}
         if provider_name in {"epgu", "oidc", "ldap"}:
             info.setdefault("health_status", "contract_only")
@@ -96,9 +104,18 @@ async def get_integration_readiness(
             }
         providers.append(info)
 
+    non_production_total = sum(1 for item in providers if item.get("provider_mode") == "non_production")
+    disabled_total = sum(1 for item in providers if item.get("health_status") == "disabled")
+
     return {
         "tenant_id": str(tenant.id),
         "providers": providers,
+        "summary": {
+            "configured_total": sum(1 for item in providers if item.get("configured")),
+            "production_ready_total": sum(1 for item in providers if item.get("provider_production_ready") is True),
+            "non_production_total": non_production_total,
+            "disabled_total": disabled_total,
+        },
         "webhooks": {
             "configured_total": int(webhook_summary[0] or 0),
             "enabled_total": int(webhook_summary[1] or 0),

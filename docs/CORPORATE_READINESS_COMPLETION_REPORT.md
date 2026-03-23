@@ -6,7 +6,8 @@ _Date:_ 2026-03-23
 - Re-ran the repository assessment specifically through a corporate-readiness lens instead of a generic backlog lens.
 - Updated the corporate-readiness document set so the next wave can start from repo-truth about foundations, blockers, and phased priorities.
 - Preserved the existing document core, tenancy, and broad module surface instead of destabilizing them with architectural rewrites.
-- Confirmed and documented that `backend/app/api/routes/pwa_sync.py` now exposes a materially stronger `/api/pwa/bootstrap` projection than the earlier simplified payload, including offline capability flags, recent failed-conflict projections, and generated-at diagnostics.
+- Confirmed and documented that `backend/app/api/routes/pwa_sync.py` now exposes a materially stronger `/api/pwa/bootstrap` projection than the earlier simplified payload, including offline capability flags, recent failed-conflict projections, draft/conflict policy hints, permission etag diagnostics, and generated-at diagnostics.
+- Hardened `backend/app/api/routes/integration_readiness.py` so each provider now reports explicit provider mode / production-readiness metadata, making stub and disabled adapters visible to enterprise operators.
 
 ## Stub/mock/deferred areas explicitly confirmed or narrowed
 - Confirmed `backend/app/api/routes/ws_stub.py` remains deferred.

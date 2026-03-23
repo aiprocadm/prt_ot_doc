@@ -137,8 +137,15 @@ async def test_pwa_bootstrap_returns_authenticated_projection_payload(db_session
     assert payload.offline_queue["failed_conflicts"][0]["conflict_code"] == "conflict_final_record"
     assert payload.offline_queue["capabilities"]["briefing_mark"] is True
     assert payload.offline_queue["capabilities"]["media_photo_sync"] is True
+    assert payload.offline_queue["draft_policy"]["local_persistence"] is True
+    assert payload.offline_queue["draft_policy"]["requires_review_before_retry"] is True
+    assert payload.offline_queue["conflict_resolution"]["required"] is True
+    assert payload.offline_queue["conflict_resolution"]["recommended_action"] == "manual_review"
     assert payload.diagnostics["auth_required"] is True
-    assert payload.diagnostics["bootstrap_version"] == 3
+    assert payload.diagnostics["bootstrap_version"] == 4
     assert payload.diagnostics["conflict_resolution_required"] is True
+    assert payload.diagnostics["route_permission_count"] >= 1
+    assert payload.diagnostics["user_scoped"] is True
+    assert len(payload.diagnostics["permissions_etag"]) == 64
     assert "offline_media_statuses" in payload.dictionaries
     assert "offline_capabilities" in payload.dictionaries
