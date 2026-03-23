@@ -25,7 +25,12 @@ router = APIRouter(tags=["prescriptions"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 
-_manager_roles = ["admin", "owner", "hr", "line_manager"]
+_PRESCRIPTION_READ_ROLES = ["admin", "owner", "hr", "line_manager"]
+_PRESCRIPTION_WRITE_ROLES = ["admin", "owner", "hr", "line_manager"]
+
+
+def _error_detail(code: str, message: str) -> dict[str, str]:
+    return {"code": code, "message": message}
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
@@ -34,11 +39,11 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | No
 
 ManagerAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_manager_roles, action="read prescriptions")),
+    Depends(abac(_tenant_resource_id, required_roles=_PRESCRIPTION_READ_ROLES, action="read prescriptions")),
 ]
 EditorAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_manager_roles, action="manage prescriptions")),
+    Depends(abac(_tenant_resource_id, required_roles=_PRESCRIPTION_WRITE_ROLES, action="manage prescriptions")),
 ]
 
 
@@ -50,7 +55,10 @@ async def _get_inspection(session: AsyncSession, tenant_id: str, inspection_id: 
     )
     inspection = (await session.execute(stmt)).scalar_one_or_none()
     if inspection is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Inspection not found")
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail=_error_detail("inspection_not_found", "Inspection not found"),
+        )
     return inspection
 
 
@@ -62,7 +70,10 @@ async def _get_incident(session: AsyncSession, tenant_id: str, incident_id: str)
     )
     incident = (await session.execute(stmt)).scalar_one_or_none()
     if incident is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Incident not found")
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail=_error_detail("incident_not_found", "Incident not found"),
+        )
     return incident
 
 
@@ -70,7 +81,10 @@ async def _get_user(session: AsyncSession, tenant_id: str, user_id: str) -> User
     stmt = select(User).where(User.id == user_id, User.tenant_id == tenant_id, User.deleted_at.is_(None))
     user = (await session.execute(stmt)).scalar_one_or_none()
     if user is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail=_error_detail("user_not_found", "User not found"),
+        )
     return user
 
 
@@ -84,7 +98,10 @@ async def _get_prescription(
     )
     record = (await session.execute(stmt)).scalar_one_or_none()
     if record is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Prescription not found")
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail=_error_detail("prescription_not_found", "Prescription not found"),
+        )
     return record
 
 
@@ -157,6 +174,8 @@ async def create_prescription(
         object_id=record.id,
         user_id=getattr(access.user, "id", None),
         ip=ip,
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
         details={"inspection_id": record.inspection_id},
     )
     await session.commit()
@@ -205,6 +224,8 @@ async def update_prescription(
         object_id=record.id,
         user_id=getattr(access.user, "id", None),
         ip=ip,
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
         details={"status": record.status.value},
     )
     await session.commit()

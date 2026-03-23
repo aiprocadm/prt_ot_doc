@@ -22,9 +22,7 @@ from app.models.file import File
 from app.models.models import (
     Company,
     Person,
-    Position,
     Tenant,
-    TrainingCertificate,
     TrainingCourse,
     TrainingPlan,
     TrainingSessionStatus,
@@ -50,7 +48,8 @@ router = APIRouter(prefix="/training", tags=["training"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 
-_ALLOWED_ROLES = ["admin"]
+_TRAINING_READ_ROLES = ["admin"]
+_TRAINING_WRITE_ROLES = ["admin"]
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
@@ -59,8 +58,19 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | No
 
 ManagerAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_ALLOWED_ROLES)),
+    Depends(abac(_tenant_resource_id, required_roles=_TRAINING_READ_ROLES)),
 ]
+EditorAccess = Annotated[
+    AccessContext,
+    Depends(abac(_tenant_resource_id, required_roles=_TRAINING_WRITE_ROLES)),
+]
+
+
+def _training_bad_request(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail={"code": "training_validation_error", "message": message},
+    )
 
 
 def _course_to_schema(course: TrainingCourse) -> TrainingCourseRead:
@@ -154,7 +164,7 @@ async def create_course(
     payload: TrainingCourseCreate,
     tenant: TenantDep,
     session: SessionDep,
-    access: ManagerAccess,
+    access: EditorAccess,
 ) -> TrainingCourseRead:
     course = TrainingCourse(
         tenant_id=tenant.id,
@@ -189,7 +199,7 @@ async def update_course(
     payload: TrainingCourseUpdate,
     tenant: TenantDep,
     session: SessionDep,
-    access: ManagerAccess,
+    access: EditorAccess,
 ) -> TrainingCourseRead:
     course = await _get_course(session, tenant, course_id)
     updates = payload.model_dump(exclude_unset=True, by_alias=True)
@@ -213,7 +223,7 @@ async def delete_course(
     course_id: str,
     tenant: TenantDep,
     session: SessionDep,
-    access: ManagerAccess,
+    access: EditorAccess,
 ) -> None:
     course = await _get_course(session, tenant, course_id)
     course.deleted_at = datetime.now(tz=timezone.utc)
@@ -227,7 +237,7 @@ async def assign_plan(
     payload: TrainingPlanCreate,
     tenant: TenantDep,
     session: SessionDep,
-    access: ManagerAccess,
+    access: EditorAccess,
 ) -> TrainingPlanRead:
     await _get_company(session, tenant, payload.company_id)
     try:
@@ -243,7 +253,7 @@ async def assign_plan(
             actor_id=access.user.id if access else None,
         )
     except ValueError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        raise _training_bad_request(str(exc)) from exc
     return TrainingPlanRead.model_validate(plan)
 
 
@@ -264,7 +274,7 @@ async def create_session(
     payload: TrainingSessionCreate,
     tenant: TenantDep,
     session: SessionDep,
-    access: ManagerAccess,
+    access: EditorAccess,
 ) -> TrainingSessionRead:
     try:
         record = await register_training_session(
@@ -280,7 +290,7 @@ async def create_session(
             notes=payload.notes,
         )
     except ValueError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        raise _training_bad_request(str(exc)) from exc
     if record.status == TrainingSessionStatus.COMPLETED:
         outbox = OutboxService(session)
         await outbox.enqueue(
@@ -309,7 +319,7 @@ async def create_certificate(
     payload: TrainingCertificateCreate,
     tenant: TenantDep,
     session: SessionDep,
-    access: ManagerAccess,
+    access: EditorAccess,
 ) -> TrainingCertificateRead:
     if payload.file_id:
         file_stmt = select(File).where(File.id == payload.file_id, File.tenant_id == tenant.id)
@@ -333,7 +343,7 @@ async def create_certificate(
             position_id=payload.position_id,
         )
     except ValueError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        raise _training_bad_request(str(exc)) from exc
 
     return TrainingCertificateRead.model_validate(result.certificate)
 

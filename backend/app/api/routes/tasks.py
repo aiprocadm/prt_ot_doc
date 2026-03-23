@@ -50,6 +50,13 @@ TaskWriteAccess = Depends(
 )
 
 
+def _task_unprocessable(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail={"code": "task_validation_error", "message": message},
+    )
+
+
 def _normalize_meta_value(value):
     if isinstance(value, (dict, list, str, int, float, bool)) or value is None:
         return value
@@ -135,7 +142,7 @@ def _normalize_task_status(value: str | None) -> TaskStatus | None:
     try:
         return TaskStatus(str(value).lower())
     except ValueError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Unsupported task status") from exc
+        raise _task_unprocessable("Unsupported task status") from exc
 
 
 def _normalize_task_priority(value: str | None) -> TaskPriority | None:
@@ -144,7 +151,7 @@ def _normalize_task_priority(value: str | None) -> TaskPriority | None:
     try:
         return TaskPriority(str(value).lower())
     except ValueError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Unsupported task priority") from exc
+        raise _task_unprocessable("Unsupported task priority") from exc
 
 
 def _normalize_datetime(value: datetime | None) -> datetime | None:
@@ -254,6 +261,8 @@ async def create_task(
         object_id=task.id,
         user_id=getattr(access.user, "id", None),
         ip=ip,
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
         details={"entity_type": task.entity_type, "entity_id": task.entity_id},
     )
     await session.commit()
@@ -300,6 +309,8 @@ async def update_task(
         object_id=task.id,
         user_id=getattr(access.user, "id", None),
         ip=ip,
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
         details={"status": task.status.value, "priority": task.priority.value},
     )
     await session.commit()

@@ -64,6 +64,13 @@ class AuditExportRead(BaseModel):
     error: str | None = None
 
 
+def _audit_bad_request(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail={"code": "audit_validation_error", "message": message},
+    )
+
+
 def _to_entry(record: AuditLog) -> AuditLogEntry:
     return AuditLogEntry(
         id=record.id,
@@ -190,11 +197,11 @@ async def backward_list(
     session: SessionDep,
 ) -> AuditLogHistory:
     if object_id is not None and not object_id.strip():
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "object_id must not be blank")
+        raise _audit_bad_request("object_id must not be blank")
     if object_type is not None and not object_type.strip():
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "object_type must not be blank")
+        raise _audit_bad_request("object_type must not be blank")
     if action is not None and not action.strip():
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "action must not be blank")
+        raise _audit_bad_request("action must not be blank")
 
     return await get_audit_history(
         from_=None,

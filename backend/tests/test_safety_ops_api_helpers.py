@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
-from app.api.routes.safety_ops import _serialize_action, _serialize_finding
+import pytest
+
+from app.api.routes.safety_ops import _audit_event, _serialize_action, _serialize_finding
+from app.services.audit import AuditService
 from app.models.safety_ops import CorrectiveAction, Finding
 
 
@@ -52,3 +57,34 @@ def test_serialize_action_marks_overdue_and_keeps_effectiveness() -> None:
     assert payload["effectiveness_status"] == "partial"
     assert payload["responsible_user_id"] == "user-1"
     assert payload["completed_at"].startswith("2026-03-21T")
+
+
+@pytest.mark.asyncio
+async def test_audit_event_forwards_trace_and_user_agent(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def _fake_log_event(self, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(AuditService, "log_event", _fake_log_event)
+
+    request = SimpleNamespace(
+        client=SimpleNamespace(host="127.0.0.1"),
+        state=SimpleNamespace(trace_id="trace-123"),
+        headers={"user-agent": "pytest-agent"},
+    )
+
+    await _audit_event(
+        request=request,
+        session=AsyncMock(),
+        tenant_id="tenant-1",
+        action="create",
+        object_type="finding",
+        object_id="finding-1",
+        user_id="user-1",
+        details={"severity": "high"},
+    )
+
+    assert captured["request_id"] == "trace-123"
+    assert captured["user_agent"] == "pytest-agent"
+    assert captured["ip"] == "127.0.0.1"

@@ -461,6 +461,8 @@ async def _persist_and_audit(
         object_id=record.id,
         user_id=getattr(access.user, "id", None),
         ip=ip,
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
         details={
             "storage_key": record.storage_key,
             "sha256": record.sha256,
@@ -809,6 +811,8 @@ async def download_file(
         object_id=record.id,
         user_id=getattr(access.user, "id", None),
         ip=ip,
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
         details={
             "storage_key": record.storage_key,
             "sha256": record.sha256,

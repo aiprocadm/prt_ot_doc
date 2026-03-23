@@ -32,13 +32,29 @@ router = APIRouter(prefix="/ppe", tags=["ppe"])
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
+
+
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
     return getattr(tenant, "id", None)
 
 
+_PPE_READ_ROLES = ["admin"]
+_PPE_WRITE_ROLES = ["admin"]
+
+
 ManagerAccess = Annotated[
-    AccessContext, Depends(abac(_tenant_resource_id, required_roles=["admin"]))
+    AccessContext, Depends(abac(_tenant_resource_id, required_roles=_PPE_READ_ROLES))
 ]
+EditorAccess = Annotated[
+    AccessContext, Depends(abac(_tenant_resource_id, required_roles=_PPE_WRITE_ROLES))
+]
+
+
+def _ppe_bad_request(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail={"code": "ppe_validation_error", "message": message},
+    )
 
 
 async def _get_item(session: AsyncSession, tenant: Tenant, item_id: str) -> PPEItem:
@@ -105,7 +121,7 @@ async def create_item(
     payload: PPEItemCreate,
     tenant: TenantDep,
     session: SessionDep,
-    access: ManagerAccess,
+    access: EditorAccess,
 ) -> PPEItemRead:
     item = PPEItem(
         tenant_id=tenant.id,
@@ -135,7 +151,7 @@ async def update_item(
     payload: PPEItemUpdate,
     tenant: TenantDep,
     session: SessionDep,
-    access: ManagerAccess,
+    access: EditorAccess,
 ) -> PPEItemRead:
     item = await _get_item(session, tenant, item_id)
     for field, value in payload.model_dump(exclude_unset=True).items():
@@ -148,7 +164,7 @@ async def update_item(
 @router.delete("/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 @audit_operation("delete", "ppe_item")
 async def delete_item(
-    item_id: str, tenant: TenantDep, session: SessionDep, access: ManagerAccess
+    item_id: str, tenant: TenantDep, session: SessionDep, access: EditorAccess
 ) -> None:
     item = await _get_item(session, tenant, item_id)
     if item.deleted_at is None:
@@ -203,18 +219,21 @@ async def create_issue(
     payload: PPEIssueCreate,
     tenant: TenantDep,
     session: SessionDep,
-    access: ManagerAccess,
+    access: EditorAccess,
 ) -> PPEIssueRead:
-    issue = await issue_ppe_item(
-        session,
-        tenant_id=tenant.id,
-        person_id=payload.person_id,
-        item_id=payload.item_id,
-        quantity=payload.quantity,
-        issued_at=payload.issued_at,
-        wear_days=payload.wear_days,
-        expires_at=payload.expires_at,
-    )
+    try:
+        issue = await issue_ppe_item(
+            session,
+            tenant_id=tenant.id,
+            person_id=payload.person_id,
+            item_id=payload.item_id,
+            quantity=payload.quantity,
+            issued_at=payload.issued_at,
+            wear_days=payload.wear_days,
+            expires_at=payload.expires_at,
+        )
+    except ValueError as exc:
+        raise _ppe_bad_request(str(exc)) from exc
     outbox = OutboxService(session)
     await outbox.enqueue(
         tenant_id=str(tenant.id),
@@ -248,7 +267,7 @@ async def update_issue(
     payload: PPEIssueUpdate,
     tenant: TenantDep,
     session: SessionDep,
-    access: ManagerAccess,
+    access: EditorAccess,
 ) -> PPEIssueRead:
     issue = await _get_issue(session, tenant, issue_id)
     previous_status = issue.status

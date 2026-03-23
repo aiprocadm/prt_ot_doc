@@ -19,16 +19,22 @@ router = APIRouter(tags=["departments"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 
-_department_roles = ["admin", "owner", "hr", "line_manager"]
+_DEPARTMENT_READ_ROLES = ["admin", "owner", "hr", "line_manager"]
+_DEPARTMENT_WRITE_ROLES = ["admin", "owner", "hr", "line_manager"]
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
     return getattr(tenant, "id", None)
 
 
-DepartmentAccess = Annotated[
+DepartmentReadAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_department_roles, action="manage departments")),
+    Depends(abac(_tenant_resource_id, required_roles=_DEPARTMENT_READ_ROLES, action="read departments")),
+]
+
+DepartmentWriteAccess = Annotated[
+    AccessContext,
+    Depends(abac(_tenant_resource_id, required_roles=_DEPARTMENT_WRITE_ROLES, action="manage departments")),
 ]
 
 
@@ -60,7 +66,7 @@ async def _get_department(session: AsyncSession, tenant: Tenant, department_id: 
 async def list_departments(
     tenant: TenantDep,
     session: SessionDep,
-    _: DepartmentAccess,
+    _: DepartmentReadAccess,
     company_id: str | None = Query(default=None, min_length=1, max_length=36),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
@@ -84,7 +90,7 @@ async def create_department(
     payload: DepartmentCreate,
     tenant: TenantDep,
     session: SessionDep,
-    _: DepartmentAccess,
+    _: DepartmentWriteAccess,
 ) -> DepartmentRead:
     await _get_company(session, tenant, payload.company_id)
     department = Department(tenant_id=str(tenant.id), **payload.model_dump())
@@ -99,7 +105,7 @@ async def get_department(
     department_id: str,
     tenant: TenantDep,
     session: SessionDep,
-    _: DepartmentAccess,
+    _: DepartmentReadAccess,
 ) -> DepartmentRead:
     department = await _get_department(session, tenant, department_id)
     return DepartmentRead.model_validate(department)
@@ -112,7 +118,7 @@ async def update_department(
     payload: DepartmentUpdate,
     tenant: TenantDep,
     session: SessionDep,
-    _: DepartmentAccess,
+    _: DepartmentWriteAccess,
 ) -> DepartmentRead:
     department = await _get_department(session, tenant, department_id)
     updates = payload.model_dump(exclude_unset=True)
@@ -136,7 +142,7 @@ async def delete_department(
     department_id: str,
     tenant: TenantDep,
     session: SessionDep,
-    _: DepartmentAccess,
+    _: DepartmentWriteAccess,
 ) -> None:
     department = await _get_department(session, tenant, department_id)
     if department.deleted_at is None:

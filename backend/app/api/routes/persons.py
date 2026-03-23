@@ -23,7 +23,8 @@ router = APIRouter(prefix="/persons", tags=["persons"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 
-_ALLOWED_ROLES = ["admin"]
+_PERSON_READ_ROLES = ["admin"]
+_PERSON_WRITE_ROLES = ["admin"]
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
@@ -32,12 +33,26 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | No
 
 ManagerAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_ALLOWED_ROLES, action="read persons")),
+    Depends(abac(_tenant_resource_id, required_roles=_PERSON_READ_ROLES, action="read persons")),
 ]
 EditorAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_ALLOWED_ROLES, action="manage persons")),
+    Depends(abac(_tenant_resource_id, required_roles=_PERSON_WRITE_ROLES, action="manage persons")),
 ]
+
+
+def _person_bad_request(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail={"code": "person_validation_error", "message": message},
+    )
+
+
+def _person_unprocessable(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail={"code": "person_validation_error", "message": message},
+    )
 
 
 async def _get_company(session: AsyncSession, tenant: Tenant, company_id: str) -> Company:
@@ -143,12 +158,12 @@ async def create_person_endpoint(
     if payload.position_id is not None:
         position = await _get_position(session, tenant, payload.position_id)
         if position.company_id != company.id:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Position does not belong to company")
+            raise _person_bad_request("Position does not belong to company")
         position_id = position.id
     if payload.workplace_id is not None:
         workplace = await _get_workplace(session, tenant, payload.workplace_id)
         if workplace.company_id != company.id:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Workplace does not belong to company")
+            raise _person_bad_request("Workplace does not belong to company")
         workplace_id = workplace.id
 
     person = Person(
@@ -208,13 +223,13 @@ async def update_person_endpoint(
     target_company = None
     if "company_id" in data:
         if data["company_id"] is None:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "company_id cannot be null")
+            raise _person_unprocessable("company_id cannot be null")
         target_company = await _get_company(session, tenant, data["company_id"])
         person.company_id = target_company.id
 
     company_for_position_id = target_company.id if target_company else person.company_id
     if company_for_position_id is None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Person is not linked to a company")
+        raise _person_bad_request("Person is not linked to a company")
 
     if "position_id" in data:
         position_value = data["position_id"]
@@ -223,7 +238,7 @@ async def update_person_endpoint(
         else:
             position = await _get_position(session, tenant, position_value)
             if position.company_id != company_for_position_id:
-                raise HTTPException(status.HTTP_400_BAD_REQUEST, "Position does not belong to company")
+                raise _person_bad_request("Position does not belong to company")
             person.position_id = position.id
 
     if "workplace_id" in data:
@@ -233,9 +248,7 @@ async def update_person_endpoint(
         else:
             workplace = await _get_workplace(session, tenant, workplace_value)
             if workplace.company_id != company_for_position_id:
-                raise HTTPException(
-                    status.HTTP_400_BAD_REQUEST, "Workplace does not belong to company"
-                )
+                raise _person_bad_request("Workplace does not belong to company")
             person.workplace_id = workplace.id
 
     text_fields = {
@@ -253,9 +266,7 @@ async def update_person_endpoint(
         if field in data:
             cleaned = _clean_string(data[field])
             if required and cleaned is None:
-                raise HTTPException(
-                    status.HTTP_422_UNPROCESSABLE_ENTITY, f"{field} cannot be empty"
-                )
+                raise _person_unprocessable(f"{field} cannot be empty")
             setattr(person, field, cleaned)
 
     if "birth_date" in data:

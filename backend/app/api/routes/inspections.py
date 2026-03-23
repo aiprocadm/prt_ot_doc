@@ -28,7 +28,8 @@ router = APIRouter(tags=["inspections"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 
-_manager_roles = ["admin"]
+_INSPECTION_READ_ROLES = ["admin"]
+_INSPECTION_WRITE_ROLES = ["admin"]
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
@@ -37,12 +38,19 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | No
 
 ManagerAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_manager_roles, action="read inspections")),
+    Depends(abac(_tenant_resource_id, required_roles=_INSPECTION_READ_ROLES, action="read inspections")),
 ]
 EditorAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_manager_roles, action="manage inspections")),
+    Depends(abac(_tenant_resource_id, required_roles=_INSPECTION_WRITE_ROLES, action="manage inspections")),
 ]
+
+
+def _inspection_bad_request(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail={"code": "inspection_validation_error", "message": message},
+    )
 
 
 def _serialize_inspection(inspection: Inspection) -> InspectionRead:
@@ -150,7 +158,7 @@ async def create_inspection(
             started_at=payload.started_at,
         )
     except ValueError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        raise _inspection_bad_request(str(exc)) from exc
 
     await upsert_inspection_task(
         session,
@@ -167,6 +175,8 @@ async def create_inspection(
         object_id=inspection.id,
         user_id=getattr(access.user, "id", None),
         ip=ip,
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
         details={"scheduled_at": inspection.scheduled_at, "status": inspection.status.value},
     )
     await OutboxService(session).enqueue(
@@ -228,7 +238,7 @@ async def patch_inspection(
             updates=updates,
         )
     except ValueError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        raise _inspection_bad_request(str(exc)) from exc
     await upsert_inspection_task(
         session,
         tenant_id=str(tenant.id),
@@ -244,6 +254,8 @@ async def patch_inspection(
         object_id=updated.id,
         user_id=getattr(access.user, "id", None),
         ip=ip,
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
         details={"status": updated.status.value},
     )
     await session.commit()
@@ -277,7 +289,7 @@ async def add_inspection_result_entry(
             file_id=payload.file_id,
         )
     except ValueError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        raise _inspection_bad_request(str(exc)) from exc
     audit = AuditService(session)
     ip = request.client.host if request.client else "unknown"
     await audit.log_event(
@@ -287,6 +299,8 @@ async def add_inspection_result_entry(
         object_id=result.id,
         user_id=getattr(access.user, "id", None),
         ip=ip,
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
         details={"inspection_id": inspection.id},
     )
     await session.commit()

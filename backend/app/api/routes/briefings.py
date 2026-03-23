@@ -3,22 +3,33 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from app.api.dependencies import get_session, get_tenant_record
-from app.core.audit_decorator import audit_operation
-from app.core.security import rbac
-from app.models.models import BriefingEntry, BriefingJournal, BriefingSignature, BriefingTemplate, Tenant
-from app.modules.briefings.services import BriefingEntryService
-from app.modules.rbac_abac import require_permission
-from app.services.audit import AuditService
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.dependencies import get_session, get_tenant_record
+from app.core.audit_decorator import audit_operation
+from app.core.security import rbac
+from app.models.models import (
+    BriefingEntry,
+    BriefingJournal,
+    BriefingSignature,
+    BriefingTemplate,
+    Tenant,
+)
+from app.modules.briefings.services import BriefingEntryService
+from app.modules.rbac_abac import require_permission
+from app.services.audit import AuditService
+
+_BRIEFINGS_READ_PERMISSION = "briefings.read"
+_BRIEFINGS_WRITE_PERMISSION = "briefings.update"
+_BRIEFINGS_CREATE_PERMISSION = "briefings.create"
+
 router = APIRouter(prefix="/briefings", tags=["briefings"], dependencies=[Depends(rbac())])
-_PermReadDep = Depends(require_permission("briefings.read"))
-_PermWriteDep = Depends(require_permission("briefings.update"))
-_PermCreateDep = Depends(require_permission("briefings.create"))
+_PermReadDep = Depends(require_permission(_BRIEFINGS_READ_PERMISSION))
+_PermWriteDep = Depends(require_permission(_BRIEFINGS_WRITE_PERMISSION))
+_PermCreateDep = Depends(require_permission(_BRIEFINGS_CREATE_PERMISSION))
 
 
 class BriefingTemplatePayload(BaseModel):
@@ -104,6 +115,13 @@ async def _audit(session: AsyncSession, request: Request, *, tenant_id: str, act
         object_id=object_id,
         ip=request.client.host if request.client else "unknown",
         details=details or {},
+    )
+
+
+def _briefing_bad_request(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail={"code": "briefing_validation_error", "message": message},
     )
 
 
@@ -235,7 +253,7 @@ async def complete_entry(item_id: str, request: Request, tenant: Tenant = Depend
     try:
         result = await BriefingEntryService().complete(session, item)
     except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
+        raise _briefing_bad_request(str(exc)) from exc
     signatures = (await session.execute(select(BriefingSignature).where(BriefingSignature.briefing_entry_id == item.id))).scalars().all()
     await session.commit()
     return _entry_read(result, list(signatures))

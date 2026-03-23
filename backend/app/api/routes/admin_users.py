@@ -25,16 +25,20 @@ TenantDep = Depends(get_tenant_record)
 AdminAccess = Depends(rbac(["admin", "owner"]))
 
 
+def _admin_user_unprocessable(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail={"code": "admin_user_validation_error", "message": message},
+    )
+
+
 def _normalize_roles(roles: list[str]) -> list[RoleEnum]:
     normalized: list[RoleEnum] = []
     for role in roles:
         try:
             normalized.append(RoleEnum(str(role).lower()))
         except ValueError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Unsupported role: {role}",
-            ) from exc
+            raise _admin_user_unprocessable(f"Unsupported role: {role}") from exc
     deduped = list(dict.fromkeys(normalized))
     return deduped
 
@@ -85,7 +89,7 @@ async def assign_user_roles(
 
     roles = _normalize_roles(payload.roles)
     if not roles:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "At least one role is required")
+        raise _admin_user_unprocessable("At least one role is required")
 
     user.role = roles[0]
     user.roles.clear()

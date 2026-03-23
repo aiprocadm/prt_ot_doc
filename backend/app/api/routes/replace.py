@@ -6,7 +6,17 @@ import json
 from io import BytesIO, StringIO
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, Request, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +32,20 @@ router = APIRouter(prefix="/replace", tags=["replace"])
 _RUNS: dict[str, dict] = {}
 _REPORTS: dict[str, dict] = {}
 _FILES: dict[str, bytes] = {}
+
+
+def _replace_bad_request(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail={"code": "replace_bad_request", "message": message},
+    )
+
+
+def _replace_unprocessable(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail={"code": "replace_validation_error", "message": message},
+    )
 
 
 class ReplaceOptionsPayload(BaseModel):
@@ -80,10 +104,8 @@ def _parse_map(content: bytes) -> dict[str, str]:
         source = str(row.get("from") or "").strip()
         target = str(row.get("to") or "").strip()
         if not source:
-            continue
+            raise _replace_unprocessable("from cannot be empty")
         data[source] = target
-    if any(k == "" for k in data):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "from cannot be empty")
     return data
 
 
@@ -111,7 +133,7 @@ def _request_hash(docx_bytes: bytes, replace_map: dict[str, str], options: Repla
 
 def _require_tenant(request: Request) -> None:
     if not request.headers.get("X-Tenant"):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "X-Tenant header is required")
+        raise _replace_bad_request("X-Tenant header is required")
 
 
 async def _load_idempotency_response(
@@ -173,7 +195,7 @@ async def replace_dry_run(
 ) -> ReplaceDryRunResponse:
     _require_tenant(request)
     if not docx_file or not replace_map:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "docx_file and replace_map are required")
+        raise _replace_bad_request("docx_file and replace_map are required")
     options_payload = ReplaceOptionsPayload.model_validate_json(options_json) if options_json else ReplaceOptionsPayload()
     docx_bytes = await docx_file.read()
     mapping = _parse_map(await replace_map.read())
@@ -214,7 +236,7 @@ async def replace_apply(
 ) -> ReplaceApplyResponse:
     _require_tenant(request)
     if not docx_file or not replace_map:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "docx_file and replace_map are required")
+        raise _replace_bad_request("docx_file and replace_map are required")
     options_payload = ReplaceOptionsPayload.model_validate_json(options_json) if options_json else ReplaceOptionsPayload(dry_run=False)
     docx_bytes = await docx_file.read()
     mapping = _parse_map(await replace_map.read())

@@ -39,6 +39,27 @@ from app.modules.approval.webhook_utils import build_edo_status_dedup_key, build
 router = APIRouter()
 
 
+def _approval_signing_unprocessable(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail={"code": "approval_signing_validation_error", "message": message},
+    )
+
+
+def _require_document_object_id(document_version_id: str | None, object_id: str | None) -> str:
+    resolved = object_id or document_version_id
+    if not resolved:
+        raise _approval_signing_unprocessable("document_version_id is required")
+    return resolved
+
+
+def _validate_certificate_period(cert_info: dict[str, Any]) -> None:
+    valid_from = cert_info.get("valid_from")
+    valid_to = cert_info.get("valid_to")
+    if valid_from and valid_to and valid_from > valid_to:
+        raise _approval_signing_unprocessable("invalid certificate period")
+
+
 class ApprovalStartIn(BaseModel):
     object_type: str = "document_version"
     object_id: str
@@ -244,9 +265,7 @@ async def approval_cancel(process_id: str, session: AsyncSession = Depends(get_s
 @router.post("/sign:request")
 @audit_operation("request", "signature_request", id_attr="signature_request_id")
 async def sign_request(payload: SignRequestIn, request: Request, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), x_user_id: str = Header(default="system", alias="X-User-Id")):
-    object_id = payload.object_id or payload.document_version_id
-    if not object_id:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "document_version_id is required")
+    object_id = _require_document_object_id(payload.document_version_id, payload.object_id)
     key = request.headers.get("Idempotency-Key")
     idem = None
     if key:
@@ -307,9 +326,7 @@ async def edo_send(
     if not created:
         return await idem.respond_from_store(rec, model=EdoSendOut, response=response)
 
-    object_id = payload.object_id or payload.document_version_id
-    if not object_id:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "document_version_id is required")
+    object_id = _require_document_object_id(payload.document_version_id, payload.object_id)
     env = EdoEnvelope(
         tenant_id=str(tenant.id),
         object_type=payload.object_type,
@@ -417,10 +434,7 @@ async def sign_request_v1(payload: SignRequestIn, request: Request, session: Asy
 @audit_operation("submit", "signature_request")
 async def sign_submit_v1(payload: SignSubmitIn, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), x_user_id: str = Header(default="system", alias="X-User-Id")):
     cert_info = payload.cert_info or {}
-    valid_from = cert_info.get("valid_from")
-    valid_to = cert_info.get("valid_to")
-    if valid_from and valid_to and valid_from > valid_to:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "invalid certificate period")
+    _validate_certificate_period(cert_info)
     sig = SignatureRequest(tenant_id=str(tenant.id), object_type="document_version", object_id=payload.document_version_id, provider="stub", status=SignatureRequestStatus.SIGNED, payload_json={"kind": payload.kind, "signed_blob": payload.signed_blob[:64]}, result_json={"cert_info": cert_info, "ocsp_status": cert_info.get("ocsp_status", "unknown")})
     session.add(sig)
     await session.flush()
@@ -454,7 +468,7 @@ async def edo_webhook_status(payload: dict[str, Any], session: AsyncSession = De
     provider = str(payload.get("provider") or "stub")
     external_id = payload.get("external_id")
     if not external_id:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "external_id is required")
+        raise _approval_signing_unprocessable("external_id is required")
     status_value = str(payload.get("status", "failed"))
     dedup_key = build_edo_status_dedup_key(external_id=external_id, status=status_value)
     dedup = InboundWebhookDedup(

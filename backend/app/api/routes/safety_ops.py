@@ -174,6 +174,8 @@ async def _audit_event(
         object_id=object_id,
         user_id=user_id,
         ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
         details=details,
     )
 

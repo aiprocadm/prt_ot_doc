@@ -28,13 +28,17 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | N
     return getattr(tenant, "id", None)
 
 
+_MEDICAL_WRITE_ROLES = ["admin", "owner", "hr"]
+_MEDICAL_READ_ROLES = ["admin", "owner", "hr", "line_manager"]
+
+
 MedicalAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=["admin", "owner", "hr"], action="manage medical")),
+    Depends(abac(_tenant_resource_id, required_roles=_MEDICAL_WRITE_ROLES, action="manage medical")),
 ]
 MedicalReadAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=["admin", "owner", "hr", "line_manager"], action="read medical")),
+    Depends(abac(_tenant_resource_id, required_roles=_MEDICAL_READ_ROLES, action="read medical")),
 ]
 
 

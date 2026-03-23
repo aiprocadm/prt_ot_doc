@@ -36,7 +36,8 @@ router = APIRouter(tags=["incidents"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 
-_manager_roles = ["admin"]
+_INCIDENT_READ_ROLES = ["admin"]
+_INCIDENT_WRITE_ROLES = ["admin"]
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
@@ -45,12 +46,19 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | No
 
 ManagerAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_manager_roles, action="read incidents")),
+    Depends(abac(_tenant_resource_id, required_roles=_INCIDENT_READ_ROLES, action="read incidents")),
 ]
 EditorAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_manager_roles, action="manage incidents")),
+    Depends(abac(_tenant_resource_id, required_roles=_INCIDENT_WRITE_ROLES, action="manage incidents")),
 ]
+
+
+def _incident_bad_request(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail={"code": "incident_validation_error", "message": message},
+    )
 
 
 async def _get_incident(session: AsyncSession, tenant: Tenant, incident_id: str) -> Incident:
@@ -134,7 +142,7 @@ async def create_incident(
             victim_ids=payload.victim_ids,
         )
     except ValueError as exc:  # pragma: no cover - defensive conversion to HTTP error
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        raise _incident_bad_request(str(exc)) from exc
 
     await AuditService(session).log_event(
         tenant_id=str(tenant.id),
@@ -143,6 +151,8 @@ async def create_incident(
         object_id=incident.id,
         user_id=getattr(access.user, "id", None),
         ip=request.client.host if request.client else "unknown",
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
         details={"status": incident.status.value, "severity": incident.severity.value},
     )
     await OutboxService(session).enqueue(
@@ -196,7 +206,7 @@ async def patch_incident(
             victim_ids=victim_ids,
         )
     except ValueError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        raise _incident_bad_request(str(exc)) from exc
     return _serialize_incident(updated, victim_ids=victim_ids)
 
 
@@ -221,7 +231,7 @@ async def add_incident_log(
             metadata=payload.metadata_json,
         )
     except ValueError as exc:  # pragma: no cover - defensive guard
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        raise _incident_bad_request(str(exc)) from exc
     return IncidentLogRead.model_validate(log_entry)
 
 

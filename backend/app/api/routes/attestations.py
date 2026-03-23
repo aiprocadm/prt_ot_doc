@@ -25,7 +25,8 @@ router = APIRouter(tags=["attestations"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 
-_manager_roles = ["admin", "owner", "hr", "line_manager"]
+_ATTESTATION_READ_ROLES = ["admin", "owner", "hr", "line_manager"]
+_ATTESTATION_WRITE_ROLES = ["admin", "owner", "hr", "line_manager"]
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
@@ -34,11 +35,11 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | No
 
 ManagerAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_manager_roles, action="read attestations")),
+    Depends(abac(_tenant_resource_id, required_roles=_ATTESTATION_READ_ROLES, action="read attestations")),
 ]
 EditorAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_manager_roles, action="manage attestations")),
+    Depends(abac(_tenant_resource_id, required_roles=_ATTESTATION_WRITE_ROLES, action="manage attestations")),
 ]
 
 
@@ -152,6 +153,8 @@ async def create_attestation(
         object_id=record.id,
         user_id=getattr(access.user, "id", None),
         ip=ip,
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
         details={"person_id": record.person_id, "expires_at": record.expires_at},
     )
     await session.commit()
@@ -206,6 +209,8 @@ async def update_attestation(
         object_id=record.id,
         user_id=getattr(access.user, "id", None),
         ip=ip,
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
         details={"status": record.status.value},
     )
     await session.commit()

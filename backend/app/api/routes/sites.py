@@ -35,6 +35,8 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 
 _manager_roles = ["admin"]
+_SITE_READ_ROLES = ["admin"]
+_SITE_WRITE_ROLES = ["admin"]
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
@@ -43,11 +45,11 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | No
 
 ManagerAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_manager_roles, action="read sites")),
+    Depends(abac(_tenant_resource_id, required_roles=_SITE_READ_ROLES, action="read sites")),
 ]
 EditorAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_manager_roles, action="manage sites")),
+    Depends(abac(_tenant_resource_id, required_roles=_SITE_WRITE_ROLES, action="manage sites")),
 ]
 
 

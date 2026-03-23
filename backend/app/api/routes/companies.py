@@ -25,6 +25,8 @@ TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 
 
 _defense_roles = ["admin", "owner"]
+_COMPANY_READ_ROLES = ["admin", "owner"]
+_COMPANY_WRITE_ROLES = ["admin", "owner"]
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
@@ -33,12 +35,19 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | No
 
 ManagerAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_defense_roles, action="read companies")),
+    Depends(abac(_tenant_resource_id, required_roles=_COMPANY_READ_ROLES, action="read companies")),
 ]
 EditorAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_defense_roles, action="manage companies")),
+    Depends(abac(_tenant_resource_id, required_roles=_COMPANY_WRITE_ROLES, action="manage companies")),
 ]
+
+
+def _company_unprocessable(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail={"code": "company_validation_error", "message": message},
+    )
 
 
 async def _get_company_or_404(
@@ -102,7 +111,7 @@ def _apply_company_updates(company: Company, payload: CompanyUpdate) -> None:
         if field in data:
             cleaned = _clean_string(data[field])
             if field == "name" and cleaned is None:
-                raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "name cannot be empty")
+                raise _company_unprocessable("name cannot be empty")
             setattr(company, field, cleaned)
 
     for field in list_fields:
@@ -163,6 +172,7 @@ async def create_company_endpoint(
             object_id=company.id,
             user_id=access.user.id,
             ip=request.client.host if request.client else "unknown",
+            request_id=getattr(request.state, "trace_id", None),
             user_agent=request.headers.get("user-agent"),
             changed_fields={"fields": {"id": {"before": None, "after": company.id}}},
             details={"entity": "Company"},
@@ -227,6 +237,7 @@ async def update_company_endpoint(
             object_id=company.id,
             user_id=access.user.id,
             ip=request.client.host if request.client else "unknown",
+            request_id=getattr(request.state, "trace_id", None),
             user_agent=request.headers.get("user-agent"),
             changed_fields=field_level_diff(before, after),
             details={"entity": "Company"},
@@ -263,6 +274,7 @@ async def archive_company_endpoint(
             object_id=company.id,
             user_id=access.user.id,
             ip=request.client.host if request.client else "unknown",
+            request_id=getattr(request.state, "trace_id", None),
             user_agent=request.headers.get("user-agent"),
             changed_fields=field_level_diff(before, {"deleted_at": company.deleted_at}),
             details={"entity": "Company", "soft": True},

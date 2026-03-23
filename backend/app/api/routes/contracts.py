@@ -19,17 +19,37 @@ router = APIRouter(tags=["contracts"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 
-_finance_roles = ["admin", "owner", "accountant"]
+_CONTRACT_READ_ROLES = ["admin", "owner", "accountant"]
+_CONTRACT_WRITE_ROLES = ["admin", "owner", "accountant"]
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
     return getattr(tenant, "id", None)
 
 
-FinanceAccess = Annotated[
+ReadAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_finance_roles, action="manage contracts")),
+    Depends(abac(_tenant_resource_id, required_roles=_CONTRACT_READ_ROLES, action="read contracts")),
 ]
+
+WriteAccess = Annotated[
+    AccessContext,
+    Depends(abac(_tenant_resource_id, required_roles=_CONTRACT_WRITE_ROLES, action="manage contracts")),
+]
+
+
+def _contract_bad_request(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail={"code": "contract_validation_error", "message": message},
+    )
+
+
+def _contract_unprocessable(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail={"code": "contract_validation_error", "message": message},
+    )
 
 
 async def _get_company(session: AsyncSession, tenant: Tenant, company_id: str) -> Company:
@@ -86,7 +106,7 @@ async def _get_contract(session: AsyncSession, tenant: Tenant, contract_id: str)
 async def list_contracts(
     tenant: TenantDep,
     session: SessionDep,
-    _: FinanceAccess,
+    _: ReadAccess,
     company_id: str | None = Query(default=None, min_length=1, max_length=36),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
@@ -110,14 +130,14 @@ async def create_contract(
     payload: ContractCreate,
     tenant: TenantDep,
     session: SessionDep,
-    access: FinanceAccess,
+    access: WriteAccess,
 ) -> ContractRead:
     company = await _get_company(session, tenant, payload.company_id)
     department_id = payload.department_id
     if department_id:
         department = await _get_department(session, tenant, department_id)
         if department.company_id != company.id:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Department does not belong to company")
+            raise _contract_bad_request("Department does not belong to company")
     site_id = payload.site_id
     site_company_id = None
     if site_id:
@@ -129,7 +149,7 @@ async def create_contract(
         try:
             status_value = ContractStatus(str(payload.status).lower())
         except ValueError as exc:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Unsupported contract status") from exc
+            raise _contract_unprocessable("Unsupported contract status") from exc
     else:
         status_value = ContractStatus.DRAFT
     contract = Contract(
@@ -158,7 +178,7 @@ async def get_contract(
     contract_id: str,
     tenant: TenantDep,
     session: SessionDep,
-    _: FinanceAccess,
+    _: ReadAccess,
 ) -> ContractRead:
     contract = await _get_contract(session, tenant, contract_id)
     return ContractRead.model_validate(contract)
@@ -171,7 +191,7 @@ async def update_contract(
     payload: ContractUpdate,
     tenant: TenantDep,
     session: SessionDep,
-    access: FinanceAccess,
+    access: WriteAccess,
 ) -> ContractRead:
     contract = await _get_contract(session, tenant, contract_id)
     updates = payload.model_dump(exclude_unset=True)
@@ -181,7 +201,7 @@ async def update_contract(
     if "department_id" in updates and updates["department_id"]:
         department = await _get_department(session, tenant, str(updates["department_id"]))
         if department.company_id != contract.company_id:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Department does not belong to company")
+            raise _contract_bad_request("Department does not belong to company")
     if "site_id" in updates and updates["site_id"]:
         site = await _get_site(session, tenant, str(updates["site_id"]))
         access.ensure_site_access(site.id, site.company_id, action="update contract site")
@@ -189,7 +209,7 @@ async def update_contract(
         try:
             updates["status"] = ContractStatus(str(updates["status"]).lower())
         except ValueError as exc:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Unsupported contract status") from exc
+            raise _contract_unprocessable("Unsupported contract status") from exc
 
     for key, value in updates.items():
         setattr(contract, key, value)
@@ -209,7 +229,7 @@ async def delete_contract(
     contract_id: str,
     tenant: TenantDep,
     session: SessionDep,
-    _: FinanceAccess,
+    _: WriteAccess,
 ) -> None:
     contract = await _get_contract(session, tenant, contract_id)
     if contract.deleted_at is None:

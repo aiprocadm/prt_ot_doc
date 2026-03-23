@@ -24,6 +24,13 @@ router = APIRouter(prefix="/billing", tags=["billing"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
+def _billing_bad_request(code: str, message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail={"code": code, "message": message},
+    )
+
+
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
     return getattr(tenant, "id", None)
 
@@ -153,7 +160,7 @@ async def change_plan(
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, Any]:
     if not idempotency_key:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail={"code": "IDEMPOTENCY_REQUIRED", "message": "Idempotency-Key required"})
+        raise _billing_bad_request("IDEMPOTENCY_REQUIRED", "Idempotency-Key required")
     sub = await BillingService(session).switch_plan(
         tenant,
         payload.plan_code,

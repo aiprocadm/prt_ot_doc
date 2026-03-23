@@ -70,6 +70,20 @@ RiskReadAccess = Annotated[
 ]
 
 
+def _risk_unprocessable(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail={"code": "risk_validation_error", "message": message},
+    )
+
+
+def _risk_bad_request(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail={"code": "risk_bad_request", "message": message},
+    )
+
+
 async def _get_tenant_entity(
     session: AsyncSession, model: type, tenant_id: str, entity_id: str
 ):
@@ -836,9 +850,7 @@ async def assess(
         items_payload = payload.items
     else:
         if payload.hazard_code is None or payload.before is None:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST, "hazard_code and before are required"
-            )
+            raise _risk_bad_request("hazard_code and before are required")
         severity_before, likelihood_before = payload.before
         items_payload = [
             AssessItemIn(
@@ -1391,7 +1403,7 @@ async def list_risks(
         try:
             minimum, maximum = _risk_level_filter(risk_level)
         except ValueError as exc:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+            raise _risk_unprocessable(str(exc)) from exc
         filtered: list[Risk] = []
         for risk in risks:
             if minimum is not None and risk.level < minimum:

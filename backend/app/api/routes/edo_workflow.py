@@ -55,6 +55,13 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | N
 AccessDep = Depends(abac(_tenant_resource_id, required_roles=["admin", "employee"], action="manage edo"))
 
 
+def _edo_unprocessable(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail={"code": "edo_validation_error", "message": message},
+    )
+
+
 class ApiError(BaseModel):
     code: str
     type: str
@@ -81,6 +88,13 @@ class ApprovalRules(BaseModel):
         if sorted(orders) != list(range(1, len(parsed.steps) + 1)):
             raise ValueError("step order must be sequential and unique")
         return parsed
+
+
+def _validate_approval_rules(raw: dict[str, Any]) -> ApprovalRules:
+    try:
+        return ApprovalRules.validate_rules(raw)
+    except ValueError as exc:
+        raise _edo_unprocessable(str(exc)) from exc
 
 
 class ApprovalRouteCreate(BaseModel):
@@ -196,10 +210,7 @@ async def create_approval_route(
     _: AccessContext = AccessDep,
 ):
     cid = _correlation_id(request, response)
-    try:
-        ApprovalRules.validate_rules(payload.rules_json)
-    except Exception as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+    _validate_approval_rules(payload.rules_json)
     route = ApprovalRoute(
         tenant_id=str(tenant.id),
         code=payload.code,
@@ -231,7 +242,7 @@ async def update_approval_route(
     route = await session.get(ApprovalRoute, route_id)
     if route is None or route.tenant_id != str(tenant.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Approval route not found")
-    ApprovalRules.validate_rules(payload.rules_json)
+    _validate_approval_rules(payload.rules_json)
     route.code = payload.code
     route.name = payload.name
     route.rules_json = payload.rules_json

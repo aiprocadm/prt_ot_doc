@@ -40,14 +40,25 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | No
     return str(value) if value is not None else None
 
 
+_APPROVAL_ORCH_READ_ROLES = ["admin", "employee"]
+_APPROVAL_ORCH_WRITE_ROLES = ["admin", "employee"]
+
+
 ReaderAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=["admin", "employee"], action="read approval orchestration")),
+    Depends(abac(_tenant_resource_id, required_roles=_APPROVAL_ORCH_READ_ROLES, action="read approval orchestration")),
 ]
 EditorAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=["admin", "employee"], action="manage approval orchestration")),
+    Depends(abac(_tenant_resource_id, required_roles=_APPROVAL_ORCH_WRITE_ROLES, action="manage approval orchestration")),
 ]
+
+
+def _approval_orchestration_unprocessable(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail={"code": "approval_orchestration_validation_error", "message": message},
+    )
 
 
 class ApprovalRouteCreate(BaseModel):
@@ -464,7 +475,7 @@ async def edo_webhook(operator_code: str, payload: dict[str, Any], request: Requ
 async def sign_webhook(provider_code: str, payload: dict[str, Any], session: SessionDep, tenant: TenantDep):
     request_id = payload.get("request_id")
     if not request_id:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "request_id required")
+        raise _approval_orchestration_unprocessable("request_id required")
     row = await session.get(SignatureRequest, request_id)
     if not row or row.tenant_id != _tenant_id_value(tenant):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")

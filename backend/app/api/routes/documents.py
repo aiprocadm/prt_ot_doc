@@ -67,6 +67,13 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def _documents_bad_request(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail={"code": "documents_bad_request", "message": message},
+    )
+
+
 def _dispatch_celery_task(task, *, args: list[str], kwargs: dict[str, str], task_id: str | None = None, headers: dict[str, str] | None = None) -> None:
     if celery_app.conf.task_always_eager:
         task.apply(args=args, kwargs=kwargs, task_id=task_id, headers=headers)
@@ -159,7 +166,7 @@ def _serialize_payload(payload: dict[str, Any]) -> str:
     try:
         return json.dumps(payload, sort_keys=True, separators=(",", ":"))
     except (TypeError, ValueError) as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "data must be JSON serializable") from exc
+        raise _documents_bad_request("data must be JSON serializable") from exc
 
 
 def _hash_payload(payload: dict[str, Any]) -> str:
@@ -252,15 +259,9 @@ async def _fetch_template(
 ) -> tuple[Template, TemplateVersion]:
     tenant_slug = tenant.slug
     if not template_code:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            "template_code is required for template selection",
-        )
+        raise _documents_bad_request("template_code is required for template selection")
     if template_version is None:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            "template_version is required for template selection",
-        )
+        raise _documents_bad_request("template_version is required for template selection")
     filters: list[Any] = [
         Template.tenant_id == tenant_slug,
         TemplateVersion.tenant_id == tenant_slug,
@@ -305,10 +306,7 @@ async def _ensure_person(
     if person is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Person not found")
     if person.company_id != company.id:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            "person_id does not belong to the provided company",
-        )
+        raise _documents_bad_request("person_id does not belong to the provided company")
     return person
 
 
@@ -497,7 +495,7 @@ async def generate_document(
             return await idempotency.respond_from_store(record, model=TaskAcceptedResponse, response=response)
 
         if not isinstance(payload, DocGenerateRequest):
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "legacy mode requires old payload shape")
+            raise _documents_bad_request("legacy mode requires old payload shape")
 
         payload_hash = _hash_payload(payload.data)
 
@@ -649,10 +647,7 @@ async def generate_document_batch(
     settings = get_settings()
     await BillingService(session).assert_allowed(tenant, "documents.generate")
     if template_version is None or not company_id or not template_code:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            "template_code, template_version and company_id required",
-        )
+        raise _documents_bad_request("template_code, template_version and company_id required")
 
     filename = (file.filename or "").lower()
     if filename.endswith(".csv"):
@@ -660,10 +655,10 @@ async def generate_document_batch(
     elif filename.endswith(".xlsx"):
         rows = _parse_xlsx_payload(file)
     else:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Unsupported batch file type")
+        raise _documents_bad_request("Unsupported batch file type")
 
     if not rows:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Batch file is empty")
+        raise _documents_bad_request("Batch file is empty")
     if len(rows) > settings.document_batch_max_rows:
         raise HTTPException(
             status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,

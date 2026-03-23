@@ -81,25 +81,50 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 
 
+def _pack_bad_request(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail={"code": "pack_validation_error", "message": message},
+    )
+
+
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | None:
     return getattr(tenant, "id", None)
 
 
-_PACK_ALLOWED_ROLES = ["admin", "employee", "client_admin"]
+_PACK_READ_ROLES = ["admin", "employee", "client_admin", "client_user"]
+_PACK_WRITE_ROLES = ["admin", "employee", "client_admin"]
 
-PackAccess = Annotated[
+PackReadAccess = Annotated[
     AccessContext,
     Depends(
         abac(
             _tenant_resource_id,
-            required_roles=_PACK_ALLOWED_ROLES,
-            action="run pack",
+            required_roles=_PACK_READ_ROLES,
+            action="read pack",
+        )
+    ),
+]
+
+
+PackWriteAccess = Annotated[
+    AccessContext,
+    Depends(
+        abac(
+            _tenant_resource_id,
+            required_roles=_PACK_WRITE_ROLES,
+            action="manage pack",
         )
     ),
 ]
 
 
 _SINGLE_TASK_PLANS: frozenset[str] = frozenset({"start"})
+
+
+def _validate_pack_output_selection(include_docx: bool, include_pdf: bool) -> None:
+    if not (include_docx or include_pdf):
+        raise _pack_bad_request("At least one of include_docx or include_pdf must be enabled")
 
 
 def _resolve_tenant_plan(tenant: Tenant) -> str | None:
@@ -199,7 +224,7 @@ async def _get_site(
     if site is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Site not found")
     if site.company_id != company.id:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Site does not belong to company")
+        raise _pack_bad_request("Site does not belong to company")
     return site
 
 
@@ -233,10 +258,7 @@ async def _get_persons(
     for pid in unique_ids:
         person = indexed[pid]
         if person.company_id != company.id:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                "Person does not belong to the specified company",
-            )
+            raise _pack_bad_request("Person does not belong to the specified company")
         ordered.append(person)
     return ordered
 
@@ -438,7 +460,7 @@ def _resolve_naming(
 
 
 @router.get("/scenarios", response_model=PackScenarioListResponse)
-async def list_pack_scenarios(access: PackAccess) -> PackScenarioListResponse:
+async def list_pack_scenarios(access: PackReadAccess) -> PackScenarioListResponse:
     _ = access
     items = [_serialize_definition(definition) for definition in DEFAULT_PACKS]
     payload = [item.model_dump(mode="json") for item in items]
@@ -455,7 +477,7 @@ async def create_pack_from_scenario(
     payload: PackFromScenarioRequest,
     tenant: TenantDep,
     session: SessionDep,
-    access: PackAccess,
+    access: PackWriteAccess,
 ) -> PackListItem:
     _ = access
     definition = PACK_DEFINITIONS_BY_CODE.get(scenario_code)
@@ -483,7 +505,7 @@ async def create_pack_from_scenario(
 async def list_packs(
     tenant: TenantDep,
     session: SessionDep,
-    access: PackAccess,
+    access: PackReadAccess,
     page: int = Query(1, ge=1),
     per_page: int = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE),
     sort: str | None = Query(None),
@@ -559,14 +581,10 @@ async def generate_pack_documents(
     response: Response,
     tenant: TenantDep,
     session: SessionDep,
-    access: PackAccess,
+    access: PackWriteAccess,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> TaskAcceptedResponse:
-    if not (payload.include_docx or payload.include_pdf):
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            "At least one of include_docx or include_pdf must be enabled",
-        )
+    _validate_pack_output_selection(payload.include_docx, payload.include_pdf)
 
     normalized_key = normalize_idempotency_key(idempotency_key)
     idem_state = getattr(request.state, "idempotency", {})
@@ -662,7 +680,7 @@ async def run_pack(
     response: Response,
     tenant: TenantDep,
     session: SessionDep,
-    access: PackAccess,
+    access: PackWriteAccess,
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> PackRunResponse:
     normalized_key = normalize_idempotency_key(idempotency_key)
@@ -856,7 +874,7 @@ async def run_pack(
 @router.get("/download", summary="Download generated package archive")
 async def download_pack_archive(
     tenant: TenantDep,
-    access: PackAccess,
+    access: PackReadAccess,
     request: Request,
     session: AsyncSession = Depends(get_session),
     storage_key: str = Query(
@@ -867,10 +885,19 @@ async def download_pack_archive(
 ) -> Response:
     normalized_key = storage_key.strip()
     if not normalized_key:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "storage_key must not be empty")
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail={"code": "invalid_storage_key", "message": "storage_key must not be empty"},
+        )
     tenant_prefix = f"{tenant_prefix_path(tenant.slug)}/"
     if not normalized_key.startswith(tenant_prefix):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "storage_key does not belong to tenant")
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "forbidden_storage_key",
+                "message": "storage_key does not belong to tenant",
+            },
+        )
     settings = get_settings()
     if settings.s3_backend == "minio":
         url = s3.generate_presigned_get_url(normalized_key)
@@ -887,10 +914,16 @@ async def download_pack_archive(
         if storage.has(normalized_key):
             payload = storage.get(normalized_key)
     except ValueError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "storage_key is malformed") from exc
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail={"code": "malformed_storage_key", "message": "storage_key is malformed"},
+        ) from exc
 
     if payload is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Archive not found")
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail={"code": "pack_archive_not_found", "message": "Archive not found"},
+        )
     filename = normalized_key.rsplit("/", 1)[-1] or "package.zip"
     logger.info(
         "packs.download.stream",
@@ -905,6 +938,8 @@ async def download_pack_archive(
         object_id=normalized_key,
         user_id=getattr(access.user, "id", None),
         ip=ip,
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
         details={"bytes": len(payload)},
     )
     await session.commit()
@@ -921,7 +956,7 @@ async def download_pack_files_archive(
     pack_id: str,
     request: Request,
     tenant: TenantDep,
-    access: PackAccess,
+    access: PackReadAccess,
     session: SessionDep,
 ) -> StreamingResponse:
     files_stmt = select(StoredFile).where(
@@ -965,6 +1000,8 @@ async def download_pack_files_archive(
         object_id=pack_id,
         user_id=getattr(access.user, "id", None),
         ip=ip,
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
         details={"file_count": len(files)},
     )
     await session.commit()
@@ -977,7 +1014,7 @@ async def pack_safety_summary(
     pack_run_id: str,
     session: SessionDep,
     tenant: TenantDep,
-    access: PackAccess,
+    access: PackReadAccess,
 ) -> dict[str, list[dict[str, object]]]:
     """Return safety summary for pack run consumers (risk+PPE completeness)."""
 

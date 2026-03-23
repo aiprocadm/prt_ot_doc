@@ -19,17 +19,37 @@ router = APIRouter(tags=["invoices"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 
-_finance_roles = ["admin", "owner", "accountant"]
+_INVOICE_READ_ROLES = ["admin", "owner", "accountant"]
+_INVOICE_WRITE_ROLES = ["admin", "owner", "accountant"]
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
     return getattr(tenant, "id", None)
 
 
-FinanceAccess = Annotated[
+ReadAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_finance_roles, action="manage invoices")),
+    Depends(abac(_tenant_resource_id, required_roles=_INVOICE_READ_ROLES, action="read invoices")),
 ]
+
+WriteAccess = Annotated[
+    AccessContext,
+    Depends(abac(_tenant_resource_id, required_roles=_INVOICE_WRITE_ROLES, action="manage invoices")),
+]
+
+
+def _invoice_bad_request(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail={"code": "invoice_validation_error", "message": message},
+    )
+
+
+def _invoice_unprocessable(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail={"code": "invoice_validation_error", "message": message},
+    )
 
 
 async def _get_contract(session: AsyncSession, tenant: Tenant, contract_id: str) -> Contract:
@@ -72,7 +92,7 @@ async def _get_invoice(session: AsyncSession, tenant: Tenant, invoice_id: str) -
 async def list_invoices(
     tenant: TenantDep,
     session: SessionDep,
-    _: FinanceAccess,
+    _: ReadAccess,
     contract_id: str | None = Query(default=None, min_length=1, max_length=36),
     order_id: str | None = Query(default=None, min_length=1, max_length=36),
     limit: int = Query(50, ge=1, le=200),
@@ -99,19 +119,19 @@ async def create_invoice(
     payload: InvoiceCreate,
     tenant: TenantDep,
     session: SessionDep,
-    _: FinanceAccess,
+    _: WriteAccess,
 ) -> InvoiceRead:
     contract = await _get_contract(session, tenant, payload.contract_id)
     order_id = payload.order_id
     if order_id:
         order = await _get_order(session, tenant, order_id)
         if order.contract_id != contract.id:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Order does not belong to contract")
+            raise _invoice_bad_request("Order does not belong to contract")
     if payload.status:
         try:
             status_value = InvoiceStatus(str(payload.status).lower())
         except ValueError as exc:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Unsupported invoice status") from exc
+            raise _invoice_unprocessable("Unsupported invoice status") from exc
     else:
         status_value = InvoiceStatus.ISSUED
     invoice = Invoice(
@@ -137,7 +157,7 @@ async def get_invoice(
     invoice_id: str,
     tenant: TenantDep,
     session: SessionDep,
-    _: FinanceAccess,
+    _: ReadAccess,
 ) -> InvoiceRead:
     invoice = await _get_invoice(session, tenant, invoice_id)
     return InvoiceRead.model_validate(invoice)
@@ -150,7 +170,7 @@ async def update_invoice(
     payload: InvoiceUpdate,
     tenant: TenantDep,
     session: SessionDep,
-    _: FinanceAccess,
+    _: WriteAccess,
 ) -> InvoiceRead:
     invoice = await _get_invoice(session, tenant, invoice_id)
     updates = payload.model_dump(exclude_unset=True)
@@ -160,13 +180,13 @@ async def update_invoice(
     if "order_id" in updates and updates["order_id"]:
         order = await _get_order(session, tenant, str(updates["order_id"]))
         if order.contract_id != invoice.contract_id:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Order does not belong to contract")
+            raise _invoice_bad_request("Order does not belong to contract")
         invoice.order_id = order.id
     if "status" in updates and updates["status"]:
         try:
             updates["status"] = InvoiceStatus(str(updates["status"]).lower())
         except ValueError as exc:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Unsupported invoice status") from exc
+            raise _invoice_unprocessable("Unsupported invoice status") from exc
     for key, value in updates.items():
         setattr(invoice, key, value)
     await session.commit()
@@ -185,7 +205,7 @@ async def delete_invoice(
     invoice_id: str,
     tenant: TenantDep,
     session: SessionDep,
-    _: FinanceAccess,
+    _: WriteAccess,
 ) -> None:
     invoice = await _get_invoice(session, tenant, invoice_id)
     if invoice.deleted_at is None:

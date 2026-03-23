@@ -19,17 +19,30 @@ router = APIRouter(tags=["orders"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 
-_finance_roles = ["admin", "owner", "accountant"]
+_ORDER_READ_ROLES = ["admin", "owner", "accountant"]
+_ORDER_WRITE_ROLES = ["admin", "owner", "accountant"]
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
     return getattr(tenant, "id", None)
 
 
-FinanceAccess = Annotated[
+ReadAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_finance_roles, action="manage orders")),
+    Depends(abac(_tenant_resource_id, required_roles=_ORDER_READ_ROLES, action="read orders")),
 ]
+
+WriteAccess = Annotated[
+    AccessContext,
+    Depends(abac(_tenant_resource_id, required_roles=_ORDER_WRITE_ROLES, action="manage orders")),
+]
+
+
+def _order_unprocessable(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail={"code": "order_validation_error", "message": message},
+    )
 
 
 async def _get_contract(session: AsyncSession, tenant: Tenant, contract_id: str) -> Contract:
@@ -60,7 +73,7 @@ async def _get_order(session: AsyncSession, tenant: Tenant, order_id: str) -> Or
 async def list_orders(
     tenant: TenantDep,
     session: SessionDep,
-    _: FinanceAccess,
+    _: ReadAccess,
     contract_id: str | None = Query(default=None, min_length=1, max_length=36),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
@@ -84,14 +97,14 @@ async def create_order(
     payload: OrderCreate,
     tenant: TenantDep,
     session: SessionDep,
-    _: FinanceAccess,
+    _: WriteAccess,
 ) -> OrderRead:
     contract = await _get_contract(session, tenant, payload.contract_id)
     if payload.status:
         try:
             status_value = OrderStatus(str(payload.status).lower())
         except ValueError as exc:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Unsupported order status") from exc
+            raise _order_unprocessable("Unsupported order status") from exc
     else:
         status_value = OrderStatus.DRAFT
     order = Order(
@@ -114,7 +127,7 @@ async def get_order(
     order_id: str,
     tenant: TenantDep,
     session: SessionDep,
-    _: FinanceAccess,
+    _: ReadAccess,
 ) -> OrderRead:
     order = await _get_order(session, tenant, order_id)
     return OrderRead.model_validate(order)
@@ -127,7 +140,7 @@ async def update_order(
     payload: OrderUpdate,
     tenant: TenantDep,
     session: SessionDep,
-    _: FinanceAccess,
+    _: WriteAccess,
 ) -> OrderRead:
     order = await _get_order(session, tenant, order_id)
     updates = payload.model_dump(exclude_unset=True)
@@ -138,7 +151,7 @@ async def update_order(
         try:
             updates["status"] = OrderStatus(str(updates["status"]).lower())
         except ValueError as exc:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Unsupported order status") from exc
+            raise _order_unprocessable("Unsupported order status") from exc
     for key, value in updates.items():
         setattr(order, key, value)
     await session.commit()
@@ -157,7 +170,7 @@ async def delete_order(
     order_id: str,
     tenant: TenantDep,
     session: SessionDep,
-    _: FinanceAccess,
+    _: WriteAccess,
 ) -> None:
     order = await _get_order(session, tenant, order_id)
     if order.deleted_at is None:

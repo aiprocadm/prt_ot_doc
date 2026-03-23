@@ -1,125 +1,184 @@
 # Corporate Readiness Plan
 
-_Date:_ 2026-03-23
+Date: 2026-03-23
 
 ## Guardrails
-1. Do not delete or destabilize working features for architecture purity.
-2. Do not do a massive rewrite.
-3. Every new or hardened flow must remain tenant-aware, permission-aware, audited, and testable.
-4. Non-production stub/mock behavior must stay explicit in API behavior, diagnostics, and docs.
-5. Document every decision in-repo so the next wave does not rely on external memory.
+1. Do not remove working features for architecture purity.
+2. No massive rewrite.
+3. Every change must be tenant-aware, permission-aware, auditable, and tested.
+4. Stub/mock/deferred behavior must be explicit in API/docs/admin diagnostics.
+5. All decisions and gaps must be captured in repo docs.
 
-## Recommended execution order
+## Priority order (approved)
 1. Consistency hardening.
 2. Operational workspace layer.
-3. Document core centralization/strengthening.
+3. Document core centralization.
 4. Remove corporate-blocking stubs.
-5. Data quality + readiness blockers.
+5. Data quality and readiness blockers.
 6. Mobile/PWA practical hardening.
 7. Admin/governance/diagnostics.
 8. Reliability/observability/runbooks.
 9. Final UX cleanup and tests.
 
-## Phase-by-phase plan
-### Phase A — factual corporate-readiness audit
-- Keep `docs/CORPORATE_READINESS_AUDIT.md` and `docs/CORPORATE_READINESS_PLAN.md` aligned to actual runtime facts.
-- Re-verify deferred/mock/stub seams directly from code before claiming readiness.
-- Maintain an explicit split between production-usable foundations, foundation-level areas, and remaining blockers.
+## Phase plan and DoD
+### Phase A: Factual corporate-readiness audit
+Scope:
+- Keep audit and plan documents synchronized with runtime code.
+- Reconfirm mandatory stub/mock/deferred facts.
+- Classify modules as production-usable vs foundation-only.
 
-### Phase B — enterprise consistency hardening
-#### Backend
-- Verify tenant context on every business route family.
-- Normalize permission checks for read/write/bulk/export/search.
-- Normalize structured error contracts.
-- Normalize correlation-id propagation.
+Definition of done:
+- docs/CORPORATE_READINESS_AUDIT.md is fact-checked.
+- docs/CORPORATE_READINESS_PLAN.md includes ordered execution and measurable outcomes.
+
+### Phase B: Enterprise consistency hardening
+Backend:
+- Verify tenant checks on business endpoints.
+- Normalize permission checks on read/write/bulk/export/search.
+- Normalize structured errors and correlation-id.
 - Normalize audit for sensitive actions.
-- Verify background jobs preserve tenant context and diagnostics.
+- Ensure background jobs preserve tenant context.
 
-#### Frontend
-- Enforce route-level permission awareness.
-- Enforce action-level permission awareness and hide unavailable controls.
-- Standardize loading/error/empty states.
-- Add consistent unsaved-changes protection for critical forms and wizards.
+Frontend:
+- Route-level and action-level permission awareness.
+- Hide unavailable actions.
+- Standard loading/error/empty patterns.
+- Unsaved-changes protection in critical forms and wizards.
 
-### Phase C — operational workspace layer
-- Add role-based workspaces.
-- Add attention center.
-- Add task inbox.
-- Add readiness blockers.
-- Add recent drafts / recent items.
-- Add recommendation blocks.
-- Add deep-linking from dashboards to action screens.
-- Standardize entity cards with summary, tabs, timeline, tasks, files, and audit.
+Definition of done:
+- Consistency checklist applied to all prioritized route families.
+- Regression tests added for tenant/authz/error shape.
 
-### Phase D — document core to central engine
-- Strengthen the full lifecycle from template through archive without rewriting the existing core.
-- Add scope-aware template resolution across system / tenant / company / site.
-- Finalize readiness scores with reasons and recommended actions.
-- Add dependency-map foundations linking NPA, templates, packages, routes, and rules.
-- Persist render snapshots and deterministic metadata.
-- Harden rerun idempotency and progress semantics.
-- Ensure document passport completeness and reproducibility.
+### Phase C: Operational workspace layer
+Deliver:
+- Role-based workspace surfaces.
+- Attention center.
+- Task inbox.
+- Readiness blockers with reasons and recommended actions.
+- Recent drafts/recent items/recommendation blocks.
+- Dashboard deep links to action screens.
+- Consistent entity cards (summary, timeline, tasks, files, audit).
 
-### Phase E — remove corporate-blocking stubs
-- Isolate stub/mock providers cleanly from production-grade orchestration.
-- Make provider mode explicit in API responses, docs, and diagnostics.
-- Replace avoidable deferred/stub behavior with real internal logic where possible.
-- Keep provider contracts stable for future certified adapters.
-- Prioritize approval/sign orchestration, EDO workflow orchestration, pipeline execution, document jobs reporting, and integration readiness diagnostics.
+Definition of done:
+- User can answer immediately: what is overdue, blocked, urgent, and next action.
 
-### Phase F — mobile / PWA / offline hardening
-- Keep the existing PWA plugin and runtime caching.
-- Build on the hardened `/api/pwa/bootstrap` contract.
-- Add frontend offline queue model.
-- Add sync state UI.
-- Add conflict-resolution UX.
-- Add durable drafts persistence.
-- Add retry/resume semantics.
-- Cover selected field scenarios: briefings, incident drafts, checklist drafts, task/comment capture, media sync, and training acknowledgement.
+### Phase D: Document core central engine (no rewrite)
+Deliver:
+- Unified lifecycle: template -> readiness -> branding -> replace -> PDF -> approval -> sign -> EDO -> archive.
+- Scope resolution hardening: system/tenant/company/site.
+- Readiness score with explainable reasons and actions.
+- Dependency map foundations: NPA -> template -> package -> approval route -> rule.
+- Deterministic render snapshots and metadata.
+- Idempotent rerun and progress contracts.
+- Complete reproducible document passport.
 
-### Phase G — data quality + readiness blockers
-- Detect incomplete entities, missing relations, expired critical data, and feasible duplicates/conflicts.
-- Persist issues and expose severity plus scenario impact.
-- Integrate blockers into document readiness, contractor readiness, employee readiness, dashboards, and the attention center.
-- Start with employees, companies/sites, templates/documents, training, PPE, and contractors.
+Definition of done:
+- Existing document capabilities are not broken.
+- Lifecycle status is reproducible and explainable.
 
-### Phase H — UI/UX hardening
-- Convert partial/static/thin pages into real operational screens.
-- Unify registries, entity cards, and forms.
-- Add smart empty states and contextual hints.
-- Reduce clutter and move rare controls to secondary actions.
-- Enforce progressive disclosure.
-- Prioritize contractors, reference, settings, medical, fire safety/training/inspections, inspection plans/prep/checklists, admin, dashboards, and client portal views.
+### Phase E: Remove corporate-blocking stubs
+Deliver:
+- Separate internal production orchestration from non-production adapters.
+- Explicit mode visibility: production/mock/stub.
+- Replace avoidable deferred responses with real internal logic where feasible.
+- Keep provider contracts stable.
 
-### Phase I — enterprise admin / governance / diagnostics
-- Turn admin into a true operational console.
-- Add tenant settings, feature/module visibility, integration readiness, jobs diagnostics, data-quality overview, billing/usage diagnostics, environment diagnostics, provider-mode diagnostics, and tenant startup readiness.
+Priority paths:
+- approval/sign orchestration,
+- EDO workflow,
+- pipeline step execution,
+- document jobs reporting,
+- integration readiness diagnostics.
 
-### Phase J — reliability / observability / runbooks
-- Normalize retries, poison handling, job heartbeat/watchdog, failed-job diagnostics, cleanup tasks, integrity checks, and health/readiness coverage.
-- Update `docs/SETUP.md`, `docs/TESTING.md`, `docs/OBSERVABILITY.md`, `docs/RUNBOOK.md`, and `docs/RELEASE_READINESS.md` as each reliability wave lands.
-- Keep local bootstrap and CI verification reproducible.
+### Phase F: Mobile/PWA practical field readiness v1
+Deliver:
+- Harden /api/pwa/bootstrap projections for field usage.
+- Offline queue model on frontend.
+- Sync-state UI.
+- Conflict-resolution UI.
+- Draft persistence, retry/resume.
+- Field scenarios: briefing mark, incident draft, checklist draft, task/comment capture, media sync, selected training acknowledgement.
 
-### Phase K — tests and acceptance
-- Add/update backend unit and integration tests after each major wave.
-- Add/update frontend tests for operational pages and offline/mobile behavior.
-- Prioritize tenant isolation, authz, document lifecycle, readiness score, data-quality blockers, task/attention projections, workflow/sign/EDO orchestration, offline edge cases, and converted operational screens.
+### Phase G: Data quality and readiness blockers
+Deliver:
+- Detect missing fields/relations, expirations, duplicates/conflicts (where feasible).
+- Persist issues with severity and scenario impact.
+- Integrate blockers into readiness surfaces and attention center.
 
-## This wave outcome
-- Completed the corporate-readiness audit refresh.
-- Kept the roadmap explicitly centered on depth hardening rather than breadth expansion.
-- Established the hardened PWA bootstrap seam as an enabling dependency for the mobile/offline wave.
-- Added another consistency slice for sensitive write operations by expanding decorator-based auditing in public API, client portal, medical, NPA impact task creation, and audit export initiation routes.
-- Started Phase C operational workspace layer at backend API level with tenant-scoped and permission-aware projections for attention center and task inbox.
-- Added first data-quality/readiness blocker projection into workspace attention responses (employees/templates/training/PPE/contracts), including severity and action hints.
+Coverage minimum:
+- employees,
+- companies/sites,
+- templates/documents,
+- training,
+- PPE,
+- contractors.
 
-## Success criteria for the next implementation wave
-- A logged-in user immediately sees what requires attention, what is overdue, what is blocked, and what to do next.
-- Routes and actions behave consistently across modules for tenancy, permissions, errors, and audit.
-- Provider mode is explicit and impossible to mistake for production readiness.
-- Mobile/offline work uses real bootstrap projections instead of placeholder state.
+### Phase H: UI/UX hardening
+Deliver:
+- Convert thin/partial pages to operational screens.
+- Unify registries/entity cards/forms.
+- Smart empty states and contextual hints.
+- Reduce clutter and enforce progressive disclosure.
 
-## Immediate next implementation focus (delta)
-1. Complete the remaining route-family consistency sweep for tenant/authz/error/correlation across `public_api`, `client_portal`, and legacy wrappers.
-2. Start Phase C projections for attention center and task inbox as dedicated backend APIs (instead of frontend aggregation).
-3. Extend provider-mode diagnostics to be visible in operational admin views, not only API payloads.
+Priority pages:
+- contractors,
+- reference,
+- settings,
+- medical,
+- fire safety/training/inspections,
+- inspection checklists/plans/prep,
+- admin,
+- dashboards,
+- client portal operational views.
+
+### Phase I: Admin/governance/diagnostics
+Deliver:
+- Operational admin console.
+- Tenant settings.
+- Feature/module visibility.
+- Integration readiness and provider mode diagnostics.
+- Queue/job diagnostics.
+- Data quality overview.
+- Usage/billing diagnostics.
+- Environment diagnostics.
+- Tenant startup checklist.
+
+### Phase J: Reliability/observability/runbooks
+Deliver:
+- Retry and DLQ/poison consistency.
+- Watchdog/heartbeat.
+- Failed-job diagnostics.
+- Cleanup and integrity checks.
+- Better readiness/health coverage.
+- Reproducible local bootstrap and CI path.
+
+Docs to update in this phase:
+- docs/SETUP.md
+- docs/TESTING.md
+- docs/OBSERVABILITY.md
+- docs/RUNBOOK.md
+- docs/RELEASE_READINESS.md
+
+### Phase K: Tests and acceptance
+After each major wave:
+- backend unit/integration tests,
+- frontend tests,
+- meaningful scenario coverage.
+
+Priority test domains:
+- tenant isolation,
+- authz,
+- document lifecycle,
+- readiness score,
+- data quality blockers,
+- task/attention projections,
+- workflow/sign/EDO orchestration,
+- offline sync edge cases,
+- converted operational pages.
+
+## Deliverables for this planning wave
+- docs/CORPORATE_READINESS_AUDIT.md
+- docs/CORPORATE_READINESS_PLAN.md
+- docs/CORPORATE_READINESS_COMPLETION_REPORT.md
+- docs/CORPORATE_READINESS_REMAINING_GAPS.md
+- docs/CORPORATE_READINESS_NEXT_STEPS.md
