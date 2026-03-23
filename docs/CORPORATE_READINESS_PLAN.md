@@ -109,9 +109,15 @@ _Date:_ 2026-03-23
 - Completed the corporate-readiness audit refresh.
 - Kept the roadmap explicitly centered on depth hardening rather than breadth expansion.
 - Established the hardened PWA bootstrap seam as an enabling dependency for the mobile/offline wave.
+- Added another consistency slice for sensitive write operations by expanding decorator-based auditing in public API, client portal, medical, NPA impact task creation, and audit export initiation routes.
 
 ## Success criteria for the next implementation wave
 - A logged-in user immediately sees what requires attention, what is overdue, what is blocked, and what to do next.
 - Routes and actions behave consistently across modules for tenancy, permissions, errors, and audit.
 - Provider mode is explicit and impossible to mistake for production readiness.
 - Mobile/offline work uses real bootstrap projections instead of placeholder state.
+
+## Immediate next implementation focus (delta)
+1. Complete the remaining route-family consistency sweep for tenant/authz/error/correlation across `public_api`, `client_portal`, and legacy wrappers.
+2. Start Phase C projections for attention center and task inbox as dedicated backend APIs (instead of frontend aggregation).
+3. Extend provider-mode diagnostics to be visible in operational admin views, not only API payloads.

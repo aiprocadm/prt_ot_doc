@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, rbac
 from app.models.models import AuditExportJob, AuditLog, Tenant
 from app.celery.tasks.audit_export_job import export_audit_job
@@ -141,6 +142,7 @@ async def get_audit_log(audit_id: str, *, tenant: TenantDep, _: AdminAccess, ses
 
 
 @router.post("/exports", response_model=AuditExportCreateResponse, status_code=status.HTTP_202_ACCEPTED)
+@audit_operation("create", "audit_export")
 async def create_export(payload: AuditExportCreate, *, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> AuditExportCreateResponse:
     job = AuditExportJob(tenant_id=str(tenant.id), filters=payload.filters, format=payload.format, status="queued")
     session.add(job)

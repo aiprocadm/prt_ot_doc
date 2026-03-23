@@ -13,6 +13,7 @@ _Date:_ 2026-03-23
 
 ## Platform consistency gaps
 - No endpoint-by-endpoint verification is complete yet for every business route family covering tenant context, authz, structured errors, correlation-id propagation, and sensitive-action audit.
+- Recent waves expanded audit coverage significantly, but full normalization across all legacy/alias routes and bulk/export/search edges still remains.
 - Background job behavior has not yet been normalized platform-wide for retries, DLQ/poison handling, watchdogs, and failed-job diagnostics.
 - Permission behavior is still uneven across some read/write/bulk/export/search surfaces.
 
@@ -36,7 +37,8 @@ _Date:_ 2026-03-23
 - No blocker severity + scenario-impact model is integrated end-to-end into dashboards, attention center, and entity readiness.
 
 ## Mobile/PWA gaps
-- Frontend offline queue model remains incomplete.
+- PWA installability and runtime caching are in place, and `/api/pwa/bootstrap` already returns authenticated projections (user, permissions, dictionaries, sync/conflict diagnostics).
+- Frontend offline queue UX remains incomplete.
 - Sync-state UX is still incomplete.
 - Conflict-resolution UX is still missing.
 - Draft persistence and retry/resume semantics are still partial.

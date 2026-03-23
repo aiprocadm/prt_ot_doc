@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.audit_decorator import audit_operation
 from app.core.config import get_settings
 from app.domains.packs.service import resolve_pipeline_profile
 from app.models.models import (
@@ -250,6 +251,7 @@ async def list_presets(session: Annotated[AsyncSession, Depends(get_session)], t
 
 
 @presets_router.post("", status_code=status.HTTP_201_CREATED)
+@audit_operation("create", "package_preset")
 async def create_preset(payload: PackagePresetCreate, session: Annotated[AsyncSession, Depends(get_session)], tenant: Annotated[Tenant, Depends(get_tenant_record)]):
     record = ClientPackagePreset(tenant_id=tenant.id, **payload.model_dump())
     session.add(record)
@@ -259,6 +261,7 @@ async def create_preset(payload: PackagePresetCreate, session: Annotated[AsyncSe
 
 
 @presets_router.patch("/{preset_id}")
+@audit_operation("update", "package_preset")
 async def patch_preset(preset_id: str, payload: PackagePresetPatch, session: Annotated[AsyncSession, Depends(get_session)], tenant: Annotated[Tenant, Depends(get_tenant_record)]):
     record = await session.get(ClientPackagePreset, preset_id)
     if record is None or record.tenant_id != tenant.id or record.deleted_at is not None:
@@ -271,6 +274,7 @@ async def patch_preset(preset_id: str, payload: PackagePresetPatch, session: Ann
 
 
 @internal_router.post("/runs", status_code=status.HTTP_201_CREATED)
+@audit_operation("create", "package_run")
 async def create_run(payload: PackageRunCreate, session: Annotated[AsyncSession, Depends(get_session)], tenant: Annotated[Tenant, Depends(get_tenant_record)]):
     preset = (
         await session.execute(
@@ -372,6 +376,7 @@ async def get_run(run_id: str, session: Annotated[AsyncSession, Depends(get_sess
 
 
 @internal_router.post("/runs/{run_id}/portal-link", response_model=PortalLinkResponse)
+@audit_operation("issue_link", "portal_token")
 async def create_portal_link(run_id: str, session: Annotated[AsyncSession, Depends(get_session)], tenant: Annotated[Tenant, Depends(get_tenant_record)]):
     run = await _get_run_for_tenant(session, run_id=run_id, tenant_id=str(tenant.id))
     plain = secrets.token_urlsafe(24)
@@ -445,6 +450,7 @@ async def portal_package_files(run_id: str, auth: Annotated[PortalAuth, Depends(
 
 
 @router.post("/packages/{run_id}/tickets", status_code=status.HTTP_201_CREATED)
+@audit_operation("create", "client_ticket")
 async def portal_create_ticket(run_id: str, payload: PackageTicketCreate, auth: Annotated[PortalAuth, Depends(_portal_auth)], session: Annotated[AsyncSession, Depends(get_session)]):
     if run_id not in auth.package_run_ids or not auth.can_tickets:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Forbidden")

@@ -15,6 +15,7 @@ from app.models.models import Tenant
 from app.models.npa import NpaRevision
 
 from app.api.dependencies import get_session
+from app.core.audit_decorator import audit_operation
 from app.core.security import rbac
 from app.models.npa import NpaAct
 from app.schemas.npa import NpaActListResponse, NpaActRead
@@ -50,6 +51,7 @@ async def get_npa_detail(
 
 
 @router.post("/npa/{act_id}/impact/tasks")
+@audit_operation("create_tasks", "npa_impact")
 async def create_npa_update_tasks(
     act_id: str,
     session: SessionDep,

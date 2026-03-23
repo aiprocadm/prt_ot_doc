@@ -7,6 +7,21 @@ _Date:_ 2026-03-23
 - Kept the assessment focused on whether the platform can be operated as a real corporate solution: tenant-safe, permission-safe, auditable, operationally usable, and explicit about non-production gaps.
 - Did not assume the final super-spec was already implemented; compared the requested target shape against the current backend routes, services, tasks, and frontend runtime shell.
 
+## Factual repository snapshot (current main)
+- Backend route files: 55 (`backend/app/api/routes`).
+- Frontend page files: 74 (`frontend/src/pages`, `.tsx`).
+- Migration scripts: 71 (`backend/app/migrations/versions`).
+- Test artifacts discovered by runtime patterns: 603 files (python + frontend unit patterns).
+- Largest backend hotspots by size include:
+	- `backend/app/models/models.py` (~122 KB)
+	- `backend/app/tasks.py` (~76 KB)
+	- `backend/app/api/v1/router.py` (~55 KB)
+	- `backend/app/api/routes/risk.py` (~48 KB)
+	- `backend/app/services/pipeline.py` (~43 KB)
+	- `backend/app/api/routes/packs.py` (~37 KB)
+	- `backend/app/api/routes/documents.py` (~33 KB)
+	- `backend/app/services/pipelines_orchestrator.py` (~31 KB)
+
 ## Executive summary
 The repository is already a strong enterprise platform foundation. It has real tenancy, broad module coverage, document-core depth, installable PWA infrastructure, and many operational screens. However, it is not yet uniformly production-grade at the platform level.
 
@@ -129,3 +144,9 @@ The repo still contains debt that matters operationally, even if it should be ad
 - Reframed the audit around factual corporate readiness, not generic backlog coverage.
 - Preserved the documented evidence of the key deferred/mock/stub seams that still block a real enterprise rollout.
 - Confirmed that the PWA base already has installability/runtime caching and that the `/api/pwa/bootstrap` seam now includes offline capability and conflict projections, making it a stronger projection API for the next mobile/offline wave.
+- Performed an additional consistency hardening pass by extending `@audit_operation` coverage in residual write endpoints:
+	- `backend/app/api/routes/public_api.py`
+	- `backend/app/api/routes/client_portal.py`
+	- `backend/app/api/routes/medical.py`
+	- `backend/app/api/routes/npa.py`
+	- `backend/app/api/routes/audit.py`

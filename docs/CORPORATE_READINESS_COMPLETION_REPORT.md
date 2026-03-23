@@ -8,6 +8,12 @@ _Date:_ 2026-03-23
 - Preserved the existing document core, tenancy, and broad module surface instead of destabilizing them with architectural rewrites.
 - Confirmed and documented that `backend/app/api/routes/pwa_sync.py` now exposes a materially stronger `/api/pwa/bootstrap` projection than the earlier simplified payload, including offline capability flags, recent failed-conflict projections, draft/conflict policy hints, permission etag diagnostics, and generated-at diagnostics.
 - Hardened `backend/app/api/routes/integration_readiness.py` so each provider now reports explicit provider mode / production-readiness metadata, making stub and disabled adapters visible to enterprise operators.
+- Extended consistency hardening by adding decorator-based auditing to additional sensitive write endpoints in:
+	- `backend/app/api/routes/public_api.py`
+	- `backend/app/api/routes/client_portal.py`
+	- `backend/app/api/routes/medical.py`
+	- `backend/app/api/routes/npa.py`
+	- `backend/app/api/routes/audit.py`
 
 ## Stub/mock/deferred areas explicitly confirmed or narrowed
 - Confirmed `backend/app/api/routes/ws_stub.py` remains deferred.
@@ -21,6 +27,11 @@ _Date:_ 2026-03-23
 - No broad visual rewrite was performed in this wave.
 - The practical improvement is at the platform contract level: the mobile/PWA frontend now has a stronger bootstrap API foundation for role-aware offline work, queue/conflict awareness, dictionaries, and sync diagnostics.
 - The documentation now clearly distinguishes screens and modules that are operational foundations from areas that are still thin wrappers, partial pages, or workflow-incomplete.
+
+## Validation evidence for this wave
+- Updated route modules compile successfully.
+- Regression suite remains green: `114 passed`.
+- No new static problems detected in changed route files.
 
 ## Remaining gaps
 - No full consistency sweep has yet been completed across all route families for tenancy, authz, errors, correlation, and audit.

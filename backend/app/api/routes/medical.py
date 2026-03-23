@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.models.models import MedicalExam, Person, Tenant
 from app.schemas.medical import MedicalExamPage, MedicalExamRead, MedicalRequirementCreate
@@ -67,6 +68,7 @@ async def list_medical_exams(
 
 
 @router.post("/medical/requirements", response_model=TaskRead, status_code=status.HTTP_201_CREATED)
+@audit_operation("create", "medical_requirement")
 async def create_medical_requirement(
     payload: MedicalRequirementCreate,
     tenant: TenantDep,

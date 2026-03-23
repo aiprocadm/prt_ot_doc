@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.audit_decorator import audit_operation
 from app.core.security import api_key_auth
 from app.models.document import Document
 from app.models.models import (
@@ -104,6 +105,7 @@ async def list_machine_keys(session: AsyncSession = Depends(get_session), tenant
 
 
 @admin_router.post("", status_code=status.HTTP_201_CREATED)
+@audit_operation("issue", "machine_key")
 async def issue_machine_key(payload: MachineKeyCreate, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
     secret = await create_api_key(session, tenant_id=str(tenant.id), name=payload.name, scopes=payload.scopes or ["api:read"])
     secret.record.rate_limit_per_minute = payload.rate_limit_per_minute
@@ -113,6 +115,7 @@ async def issue_machine_key(payload: MachineKeyCreate, session: AsyncSession = D
 
 
 @admin_router.post("/{item_id}/revoke")
+@audit_operation("revoke", "machine_key")
 async def revoke_machine_key(item_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
     record = await session.get(ApiKey, item_id)
     if not record or record.tenant_id != tenant.id:
@@ -124,6 +127,7 @@ async def revoke_machine_key(item_id: str, session: AsyncSession = Depends(get_s
 
 
 @admin_router.post("/{item_id}/rotate")
+@audit_operation("rotate", "machine_key")
 async def rotate_machine_key(item_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
     record = await session.get(ApiKey, item_id)
     if not record or record.tenant_id != tenant.id:
@@ -278,6 +282,7 @@ async def public_webhooks(record: ApiKey = Depends(api_key_auth), session: Async
 
 
 @router.post("/integrations/webhooks/subscriptions", status_code=status.HTTP_201_CREATED)
+@audit_operation("create", "webhook_subscription")
 async def create_public_webhook_subscription(
     payload: PublicWebhookSubscriptionCreate,
     record: ApiKey = Depends(api_key_auth),
@@ -319,6 +324,7 @@ async def list_marketplace(session: AsyncSession = Depends(get_session), tenant:
 
 
 @marketplace_router.post("", status_code=status.HTTP_201_CREATED)
+@audit_operation("publish", "marketplace_item")
 async def publish_marketplace_item(payload: MarketplaceItemCreate, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
     item = MarketplaceCatalogItem(tenant_id=tenant.id, status="published", **payload.model_dump())
     session.add(item)
@@ -328,6 +334,7 @@ async def publish_marketplace_item(payload: MarketplaceItemCreate, session: Asyn
 
 
 @marketplace_router.post("/{item_id}/install")
+@audit_operation("install", "marketplace_item")
 async def install_marketplace_item(item_id: str, payload: MarketplaceInstallRequest, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
     item = await session.get(MarketplaceCatalogItem, item_id)
     if not item or item.tenant_id != tenant.id or item.deleted_at is not None:
