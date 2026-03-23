@@ -34,6 +34,7 @@ celery -A backend.app.worker worker --loglevel=info
 - Document/PDF pipeline settings to review on workstation installs: `LIBREOFFICE_BIN`, `PDF_LIBREOFFICE_TIMEOUT_SECONDS`, `FONTS_PATH`
 
 ## Verification
+- Corporate-readiness slice: `pytest -q backend/tests/test_pwa_sync_bootstrap.py backend/tests/test_document_jobs_required.py backend/tests/test_corporate_readiness_hardening.py`
 ```bash
 pytest -q tests/test_entrypoints.py
 pytest -q tests/api/test_branding_api.py

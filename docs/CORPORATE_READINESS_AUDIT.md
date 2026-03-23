@@ -44,7 +44,8 @@ The following facts were re-verified directly from runtime code and remain mater
 - `backend/app/api/routes/approval_orchestration.py` — mock provider behavior still exists and must be isolated from production orchestration.
 - `backend/app/api/routes/edo_workflow.py` — mock/stub semantics remain visible, including `provider_code="mock"` defaults and simulation-oriented behavior.
 - `frontend/vite.config.ts` — PWA runtime caching is already in place and should be preserved.
-- `/api/pwa/bootstrap` — the previous simplified bootstrap limitation is now partially addressed in code, including queue/conflict capability projections, but the wider mobile/offline contour still requires frontend queue/conflict/draft UX and selected field workflows.
+- `/api/pwa/bootstrap` — the bootstrap is now authenticated and user-scoped, exposes route permissions, sync counters, draft/conflict policy hints, and diagnostics (`bootstrap_version=4`), but the wider mobile/offline contour still requires frontend queue/conflict/draft UX and selected field workflows.
+- `backend/app/api/routes/integration_readiness.py` now surfaces provider mode and production-readiness metadata per adapter so stub/disabled integrations are explicit in diagnostics rather than looking production-ready.
 
 ## Frontend operational assessment
 ### Production-usable or close to production-usable

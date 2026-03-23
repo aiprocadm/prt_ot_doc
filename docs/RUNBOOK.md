@@ -33,6 +33,8 @@
 - Ручная проверка: `/client-portal`, `/admin` + role guards.
 
 ## Логи, задания, очереди
+- Проверка диагностики интеграций и provider mode: `pytest -q backend/tests/test_corporate_readiness_hardening.py`
+- Проверка PWA bootstrap/offline contract: `pytest -q backend/tests/test_pwa_sync_bootstrap.py`
 - `make logs`
 - `pytest -q tests/test_jobs_api.py tests/test_projection_jobs.py`
 - Worker entrypoint: `backend/app/worker.py`.

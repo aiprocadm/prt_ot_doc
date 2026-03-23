@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from datetime import date, datetime, timezone
+import hashlib
 from decimal import Decimal
 from typing import Any
 
@@ -165,6 +166,29 @@ def _route_permissions(permission_codes: Iterable[str]) -> list[PwaRoutePermissi
             )
         )
     return projections
+
+
+def _permissions_etag(permission_codes: Iterable[str]) -> str:
+    serialized = "|".join(sorted(set(permission_codes)))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _build_conflict_resolution_contract(conflict_count: int) -> dict[str, Any]:
+    return {
+        "required": conflict_count > 0,
+        "strategies": ["server_wins", "client_retry", "manual_review"],
+        "recommended_action": "manual_review" if conflict_count > 0 else "continue_sync",
+    }
+
+
+def _build_draft_policy(*, pending_batches: int, failed_batches: int) -> dict[str, Any]:
+    return {
+        "local_persistence": True,
+        "resume_supported": True,
+        "retry_supported": True,
+        "requires_review_before_retry": failed_batches > 0,
+        "pending_draft_count": pending_batches,
+    }
 
 
 def _serialize_template(item: BriefingTemplate) -> PwaBriefingTemplateProjection:
@@ -482,6 +506,8 @@ async def bootstrap(
             "failed_conflicts": [_serialize_conflict(item).model_dump(mode="json") for item in failed_conflicts[:10]],
             "conflict_count": len(failed_conflicts),
             "draft_entity_types": ["briefing_entry", "incident", "inspection_checklist", "task_comment", "training_ack"],
+            "draft_policy": _build_draft_policy(pending_batches=pending_batches, failed_batches=failed_batches),
+            "conflict_resolution": _build_conflict_resolution_contract(len(failed_conflicts)),
         },
         dictionaries=_build_dictionaries(),
         sync_state=_build_sync_state(
@@ -492,10 +518,13 @@ async def bootstrap(
         ),
         diagnostics={
             "provider_mode": "projection_api",
-            "bootstrap_version": 3,
+            "bootstrap_version": 4,
             "auth_required": True,
             "offline_scope": ["briefings", "training", "tasks", "incidents", "checklists", "media"],
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "conflict_resolution_required": len(failed_conflicts) > 0,
+            "permissions_etag": _permissions_etag(permissions),
+            "route_permission_count": len(PWA_ROUTE_PERMISSION_MAP),
+            "user_scoped": True,
         },
     )
