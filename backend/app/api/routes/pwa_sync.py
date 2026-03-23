@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -109,6 +109,15 @@ class PwaDeadlineProjection(BaseModel):
     due_at: datetime
 
 
+class PwaConflictProjection(BaseModel):
+    id: str
+    entity_type: str
+    device_id: str | None = None
+    conflict_code: str
+    status: str
+    failed_at: datetime | None = None
+
+
 class PwaBootstrapResponse(BaseModel):
     current_user: PwaCurrentUser
     tenant_branding: PwaTenantBranding
@@ -117,6 +126,7 @@ class PwaBootstrapResponse(BaseModel):
     active_journals: list[PwaBriefingJournalProjection] = Field(default_factory=list)
     assigned_training: list[PwaTrainingEnrollmentProjection] = Field(default_factory=list)
     compliance_deadlines_summary: dict[str, Any] = Field(default_factory=dict)
+    offline_queue: dict[str, Any] = Field(default_factory=dict)
     dictionaries: dict[str, Any] = Field(default_factory=dict)
     sync_state: dict[str, Any] = Field(default_factory=dict)
     diagnostics: dict[str, Any] = Field(default_factory=dict)
@@ -224,6 +234,14 @@ def _build_dictionaries() -> dict[str, Any]:
         "offline_batch_statuses": ["pending", "applied", "failed"],
         "offline_media_statuses": ["pending", "uploaded", "failed"],
         "sync_conflict_codes": ["conflict_final_record"],
+        "offline_capabilities": [
+            "briefing_mark",
+            "incident_draft",
+            "checklist_draft",
+            "task_comment_capture",
+            "media_photo_sync",
+            "training_acknowledgement",
+        ],
     }
 
 
@@ -237,6 +255,30 @@ def _build_sync_state(
         "failed_media": failed_media,
         "has_blocking_failures": failed_batches > 0 or failed_media > 0,
     }
+
+
+def _build_offline_capabilities(permission_codes: Iterable[str]) -> dict[str, bool]:
+    granted = set(permission_codes)
+    return {
+        "briefing_mark": bool({"briefings.read", "briefings.write"} & granted),
+        "incident_draft": bool({"incidents.read", "incidents.write"} & granted),
+        "checklist_draft": bool({"inspections.read", "inspections.write"} & granted),
+        "task_comment_capture": bool({"tasks.read", "tasks.write"} & granted),
+        "media_photo_sync": bool({"files.read", "files.write"} & granted),
+        "training_acknowledgement": bool({"training.read", "training.write"} & granted),
+    }
+
+
+def _serialize_conflict(item: OfflineSyncBatch) -> PwaConflictProjection:
+    payload = item.error_payload or {}
+    return PwaConflictProjection(
+        id=str(item.id),
+        entity_type=item.entity_type,
+        device_id=item.device_id,
+        conflict_code=str(payload.get("error") or "unknown_conflict"),
+        status=item.status,
+        failed_at=item.updated_at,
+    )
 
 
 def _serialize_date(value: date | datetime | None) -> str | None:
@@ -389,6 +431,21 @@ async def bootstrap(
         ).scalar_one()
         or 0
     )
+    failed_conflicts = (
+        (
+            await session.execute(
+                select(OfflineSyncBatch)
+                .where(
+                    OfflineSyncBatch.tenant_id == tenant.id,
+                    OfflineSyncBatch.user_id == access.user.id,
+                    OfflineSyncBatch.status == "failed",
+                )
+                .order_by(OfflineSyncBatch.updated_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     deadlines_by_status: dict[str, int] = {"upcoming": 0, "due": 0, "overdue": 0}
     for item in deadlines:
@@ -420,6 +477,12 @@ async def bootstrap(
                 min((item.due_at for item in deadlines), default=None)
             ),
         },
+        offline_queue={
+            "capabilities": _build_offline_capabilities(permissions),
+            "failed_conflicts": [_serialize_conflict(item).model_dump(mode="json") for item in failed_conflicts[:10]],
+            "conflict_count": len(failed_conflicts),
+            "draft_entity_types": ["briefing_entry", "incident", "inspection_checklist", "task_comment", "training_ack"],
+        },
         dictionaries=_build_dictionaries(),
         sync_state=_build_sync_state(
             pending_batches=pending_batches,
@@ -429,8 +492,10 @@ async def bootstrap(
         ),
         diagnostics={
             "provider_mode": "projection_api",
-            "bootstrap_version": 2,
+            "bootstrap_version": 3,
             "auth_required": True,
             "offline_scope": ["briefings", "training", "tasks", "incidents", "checklists", "media"],
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "conflict_resolution_required": len(failed_conflicts) > 0,
         },
     )
