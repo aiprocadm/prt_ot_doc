@@ -26,3 +26,10 @@ def test_provider_response_meta_is_additive_and_stable() -> None:
     assert payload["provider_mode"] == "non_production"
     assert payload["provider_production_ready"] is False
     assert "provider_warning" in payload
+
+
+def test_internal_fallback_provider_marked_as_non_production() -> None:
+    descriptor = describe_provider("internal-fallback")
+
+    assert descriptor.mode == "non_production"
+    assert descriptor.production_ready is False

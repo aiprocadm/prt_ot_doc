@@ -3,11 +3,12 @@ from __future__ import annotations
 from typing import Annotated
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps.tracing import get_trace_id
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
@@ -71,6 +72,14 @@ def _approval_orchestration_not_found(resource: str) -> HTTPException:
     )
 
 
+def _correlation_id(request: Request, response: Response) -> str:
+    value = get_trace_id(request)
+    response.headers["X-Trace-Id"] = value
+    response.headers["X-Correlation-Id"] = value
+    response.headers["X-Request-Id"] = value
+    return value
+
+
 class ApprovalRouteCreate(BaseModel):
     code: str
     name: str
@@ -108,7 +117,7 @@ class SignatureRequestIn(BaseModel):
     entity_type: str
     entity_id: str
     signature_type: str
-    provider_code: str = "mock"
+    provider_code: str = "internal-fallback"
     options: dict[str, Any] = Field(default_factory=dict)
     approval_instance_id: str | None = None
 
@@ -116,7 +125,7 @@ class SignatureRequestIn(BaseModel):
 class EdoMessageIn(BaseModel):
     entity_type: str
     entity_id: str
-    operator_code: str = "mock_edo"
+    operator_code: str = "internal-fallback"
     message_type: str = "document_package"
 
 
@@ -157,11 +166,12 @@ async def _assert_entity_belongs_to_tenant(
 
 @router.post("/approval-routes")
 @audit_operation("create", "approval_route")
-async def create_approval_route(payload: ApprovalRouteCreate, session: SessionDep, tenant: TenantDep, _: EditorAccess):
+async def create_approval_route(payload: ApprovalRouteCreate, request: Request, response: Response, session: SessionDep, tenant: TenantDep, _: EditorAccess):
+    cid = _correlation_id(request, response)
     row = ApprovalRoute(tenant_id=_tenant_id_value(tenant), **payload.model_dump())
     session.add(row)
     await session.flush()
-    return {"id": row.id}
+    return {"id": row.id, "correlation_id": cid}
 
 
 @router.get("/approval-routes")
@@ -180,63 +190,69 @@ async def get_approval_route(route_id: str, session: SessionDep, tenant: TenantD
 
 @router.patch("/approval-routes/{route_id}")
 @audit_operation("update", "approval_route")
-async def patch_approval_route(route_id: str, payload: ApprovalRouteCreate, session: SessionDep, tenant: TenantDep, _: EditorAccess):
+async def patch_approval_route(route_id: str, payload: ApprovalRouteCreate, request: Request, response: Response, session: SessionDep, tenant: TenantDep, _: EditorAccess):
+    cid = _correlation_id(request, response)
     row = await session.get(ApprovalRoute, route_id)
     if not row or row.tenant_id != _tenant_id_value(tenant):
         raise _approval_orchestration_not_found("approval_route")
     for k, v in payload.model_dump().items():
         setattr(row, k, v)
     await session.flush()
-    return {"id": row.id}
+    return {"id": row.id, "correlation_id": cid}
 
 
 @router.delete("/approval-routes/{route_id}")
 @audit_operation("delete", "approval_route")
-async def delete_approval_route(route_id: str, session: SessionDep, tenant: TenantDep, _: EditorAccess):
+async def delete_approval_route(route_id: str, request: Request, response: Response, session: SessionDep, tenant: TenantDep, _: EditorAccess):
+    cid = _correlation_id(request, response)
     row = await session.get(ApprovalRoute, route_id)
     if not row or row.tenant_id != _tenant_id_value(tenant):
         raise _approval_orchestration_not_found("approval_route")
     await session.delete(row)
-    return {"ok": True}
+    return {"ok": True, "correlation_id": cid}
 
 
 @router.post("/approval-routes/{route_id}/steps")
 @audit_operation("create", "approval_route_step")
-async def create_approval_route_step(route_id: str, payload: ApprovalRouteStepCreate, session: SessionDep, tenant: TenantDep, _: EditorAccess):
+async def create_approval_route_step(route_id: str, payload: ApprovalRouteStepCreate, request: Request, response: Response, session: SessionDep, tenant: TenantDep, _: EditorAccess):
+    cid = _correlation_id(request, response)
     route = await session.get(ApprovalRoute, route_id)
     if route is None or route.tenant_id != _tenant_id_value(tenant):
         raise _approval_orchestration_not_found("approval_route")
     row = ApprovalRouteStep(tenant_id=_tenant_id_value(tenant), approval_route_id=route_id, **payload.model_dump())
     session.add(row)
     await session.flush()
-    return {"id": row.id}
+    return {"id": row.id, "correlation_id": cid}
 
 
 @router.patch("/approval-routes/{route_id}/steps/{step_id}")
 @audit_operation("update", "approval_route_step")
-async def patch_approval_route_step(route_id: str, step_id: str, payload: ApprovalRouteStepCreate, session: SessionDep, tenant: TenantDep, _: EditorAccess):
+async def patch_approval_route_step(route_id: str, step_id: str, payload: ApprovalRouteStepCreate, request: Request, response: Response, session: SessionDep, tenant: TenantDep, _: EditorAccess):
+    cid = _correlation_id(request, response)
     row = await session.get(ApprovalRouteStep, step_id)
     if not row or row.tenant_id != _tenant_id_value(tenant) or row.approval_route_id != route_id:
         raise _approval_orchestration_not_found("approval_route_step")
     for k, v in payload.model_dump().items():
         setattr(row, k, v)
     await session.flush()
-    return {"id": row.id}
+    return {"id": row.id, "correlation_id": cid}
 
 
 @router.delete("/approval-routes/{route_id}/steps/{step_id}")
 @audit_operation("delete", "approval_route_step")
-async def delete_approval_route_step(route_id: str, step_id: str, session: SessionDep, tenant: TenantDep, _: EditorAccess):
+async def delete_approval_route_step(route_id: str, step_id: str, request: Request, response: Response, session: SessionDep, tenant: TenantDep, _: EditorAccess):
+    cid = _correlation_id(request, response)
     row = await session.get(ApprovalRouteStep, step_id)
     if not row or row.tenant_id != _tenant_id_value(tenant) or row.approval_route_id != route_id:
         raise _approval_orchestration_not_found("approval_route_step")
     await session.delete(row)
-    return {"ok": True}
+    return {"ok": True, "correlation_id": cid}
 
 
 @router.post("/approvals/start")
 @audit_operation("start", "approval_instance")
-async def start_approval(payload: ApprovalStartIn, session: SessionDep, tenant: TenantDep, _: EditorAccess, x_user_id: str = Header(default="system", alias="X-User-Id")):
+async def start_approval(payload: ApprovalStartIn, request: Request, response: Response, session: SessionDep, tenant: TenantDep, _: EditorAccess, x_user_id: str = Header(default="system", alias="X-User-Id")):
+    cid = _correlation_id(request, response)
     tenant_id = _tenant_id_value(tenant)
     await _assert_entity_belongs_to_tenant(session=session, tenant_id=tenant_id, entity_type=payload.entity_type, entity_id=payload.entity_id)
     service = ApprovalInstanceService(session, tenant_id)
@@ -249,7 +265,7 @@ async def start_approval(payload: ApprovalStartIn, session: SessionDep, tenant: 
         run = await _get_pack_for_tenant(session, tenant_id, payload.entity_id)
         if run is not None:
             run.approval_status = "running"
-    return {"id": instance.id, "status": instance.status}
+    return {"id": instance.id, "status": instance.status, "correlation_id": cid}
 
 
 @router.get("/approvals")
@@ -274,7 +290,7 @@ async def approval_timeline(approval_id: str, session: SessionDep, tenant: Tenan
     return {"items": decisions}
 
 
-async def _act(approval_id: str, action: str, payload: ApprovalActionIn, session: AsyncSession, tenant_id: str, actor: str):
+async def _act(approval_id: str, action: str, payload: ApprovalActionIn, session: AsyncSession, tenant_id: str, actor: str, correlation_id: str):
     current = await session.get(ApprovalInstance, approval_id)
     if current is None or current.tenant_id != tenant_id:
         raise _approval_orchestration_not_found("approval_instance")
@@ -288,46 +304,52 @@ async def _act(approval_id: str, action: str, payload: ApprovalActionIn, session
         run = await _get_pack_for_tenant(session, tenant_id, instance.entity_id)
         if run is not None:
             run.approval_status = instance.status.value
-    return {"id": instance.id, "status": instance.status}
+    return {"id": instance.id, "status": instance.status, "correlation_id": correlation_id}
 
 
 @router.post("/approvals/{approval_id}/approve")
 @audit_operation("approve", "approval_instance")
-async def approval_approve(approval_id: str, payload: ApprovalActionIn, session: SessionDep, tenant: TenantDep, _: EditorAccess, x_user_id: str = Header(default="system", alias="X-User-Id")):
-    return await _act(approval_id, "approve", payload, session, _tenant_id_value(tenant), x_user_id)
+async def approval_approve(approval_id: str, payload: ApprovalActionIn, request: Request, response: Response, session: SessionDep, tenant: TenantDep, _: EditorAccess, x_user_id: str = Header(default="system", alias="X-User-Id")):
+    cid = _correlation_id(request, response)
+    return await _act(approval_id, "approve", payload, session, _tenant_id_value(tenant), x_user_id, cid)
 
 
 @router.post("/approvals/{approval_id}/reject")
 @audit_operation("reject", "approval_instance")
-async def approval_reject(approval_id: str, payload: ApprovalActionIn, session: SessionDep, tenant: TenantDep, _: EditorAccess, x_user_id: str = Header(default="system", alias="X-User-Id")):
-    return await _act(approval_id, "reject", payload, session, _tenant_id_value(tenant), x_user_id)
+async def approval_reject(approval_id: str, payload: ApprovalActionIn, request: Request, response: Response, session: SessionDep, tenant: TenantDep, _: EditorAccess, x_user_id: str = Header(default="system", alias="X-User-Id")):
+    cid = _correlation_id(request, response)
+    return await _act(approval_id, "reject", payload, session, _tenant_id_value(tenant), x_user_id, cid)
 
 
 @router.post("/approvals/{approval_id}/delegate")
 @audit_operation("delegate", "approval_instance")
-async def approval_delegate(approval_id: str, payload: ApprovalActionIn, session: SessionDep, tenant: TenantDep, _: EditorAccess, x_user_id: str = Header(default="system", alias="X-User-Id")):
-    return await _act(approval_id, "delegate", payload, session, _tenant_id_value(tenant), x_user_id)
+async def approval_delegate(approval_id: str, payload: ApprovalActionIn, request: Request, response: Response, session: SessionDep, tenant: TenantDep, _: EditorAccess, x_user_id: str = Header(default="system", alias="X-User-Id")):
+    cid = _correlation_id(request, response)
+    return await _act(approval_id, "delegate", payload, session, _tenant_id_value(tenant), x_user_id, cid)
 
 
 @router.post("/approvals/{approval_id}/comment")
 @audit_operation("comment", "approval_instance")
-async def approval_comment(approval_id: str, payload: ApprovalActionIn, session: SessionDep, tenant: TenantDep, _: EditorAccess, x_user_id: str = Header(default="system", alias="X-User-Id")):
-    return await _act(approval_id, "comment", payload, session, _tenant_id_value(tenant), x_user_id)
+async def approval_comment(approval_id: str, payload: ApprovalActionIn, request: Request, response: Response, session: SessionDep, tenant: TenantDep, _: EditorAccess, x_user_id: str = Header(default="system", alias="X-User-Id")):
+    cid = _correlation_id(request, response)
+    return await _act(approval_id, "comment", payload, session, _tenant_id_value(tenant), x_user_id, cid)
 
 
 @router.post("/approvals/{approval_id}/cancel")
 @audit_operation("cancel", "approval_instance")
-async def approval_cancel(approval_id: str, session: SessionDep, tenant: TenantDep, _: EditorAccess):
+async def approval_cancel(approval_id: str, request: Request, response: Response, session: SessionDep, tenant: TenantDep, _: EditorAccess):
+    cid = _correlation_id(request, response)
     row = await session.get(ApprovalInstance, approval_id)
     if not row or row.tenant_id != _tenant_id_value(tenant):
         raise _approval_orchestration_not_found("approval_instance")
     row.status = "canceled"
-    return {"id": row.id, "status": row.status}
+    return {"id": row.id, "status": row.status, "correlation_id": cid}
 
 
 @router.post("/sign/requests")
 @audit_operation("create", "signature_request")
-async def create_sign_request(payload: SignatureRequestIn, session: SessionDep, tenant: TenantDep, _: EditorAccess, x_user_id: str = Header(default="system", alias="X-User-Id")):
+async def create_sign_request(payload: SignatureRequestIn, request: Request, response: Response, session: SessionDep, tenant: TenantDep, _: EditorAccess, x_user_id: str = Header(default="system", alias="X-User-Id")):
+    cid = _correlation_id(request, response)
     tenant_id = _tenant_id_value(tenant)
     await _assert_entity_belongs_to_tenant(session=session, tenant_id=tenant_id, entity_type=payload.entity_type, entity_id=payload.entity_id)
     if payload.approval_instance_id:
@@ -346,7 +368,7 @@ async def create_sign_request(payload: SignatureRequestIn, session: SessionDep, 
         approval_instance_id=payload.approval_instance_id,
     )
     req = await SignatureRequestService(session, tenant_id).create(req)
-    return {"id": req.id, "status": req.status, **provider_response_meta(payload.provider_code)}
+    return {"id": req.id, "status": req.status, "correlation_id": cid, **provider_response_meta(payload.provider_code)}
 
 
 @router.get("/sign/requests")
@@ -365,37 +387,41 @@ async def get_sign_request(request_id: str, session: SessionDep, tenant: TenantD
 
 @router.post("/sign/requests/{request_id}/cancel")
 @audit_operation("cancel", "signature_request")
-async def cancel_sign_request(request_id: str, session: SessionDep, tenant: TenantDep, _: EditorAccess):
+async def cancel_sign_request(request_id: str, request: Request, response: Response, session: SessionDep, tenant: TenantDep, _: EditorAccess):
+    cid = _correlation_id(request, response)
     row = await session.get(SignatureRequest, request_id)
     if not row or row.tenant_id != _tenant_id_value(tenant):
         raise _approval_orchestration_not_found("signature_request")
     row.status = "canceled"
-    return {"id": row.id, "status": row.status}
+    return {"id": row.id, "status": row.status, "correlation_id": cid}
 
 
 @router.post("/sign/requests/{request_id}/refresh-status")
 @audit_operation("refresh_status", "signature_request")
-async def refresh_sign_status(request_id: str, session: SessionDep, tenant: TenantDep, _: EditorAccess):
+async def refresh_sign_status(request_id: str, request: Request, response: Response, session: SessionDep, tenant: TenantDep, _: EditorAccess):
+    cid = _correlation_id(request, response)
     row = await session.get(SignatureRequest, request_id)
     if not row or row.tenant_id != _tenant_id_value(tenant):
         raise _approval_orchestration_not_found("signature_request")
     await SignatureVerificationService(session, _tenant_id_value(tenant)).refresh(row)
-    return {"id": row.id, "status": row.status}
+    return {"id": row.id, "status": row.status, "correlation_id": cid}
 
 
 @router.post("/sign/requests/{request_id}/verify")
 @audit_operation("verify", "signature_request")
-async def verify_sign_request(request_id: str, session: SessionDep, tenant: TenantDep, _: EditorAccess):
+async def verify_sign_request(request_id: str, request: Request, response: Response, session: SessionDep, tenant: TenantDep, _: EditorAccess):
+    cid = _correlation_id(request, response)
     row = await session.get(SignatureRequest, request_id)
     if not row or row.tenant_id != _tenant_id_value(tenant):
         raise _approval_orchestration_not_found("signature_request")
     await SignatureVerificationService(session, _tenant_id_value(tenant)).verify(row)
-    return {"id": row.id, "status": row.status, "verification_result": row.verification_result_json}
+    return {"id": row.id, "status": row.status, "verification_result": row.verification_result_json, "correlation_id": cid}
 
 
 @router.post("/edo/messages")
 @audit_operation("create", "edo_message")
-async def create_edo_message(payload: EdoMessageIn, session: SessionDep, tenant: TenantDep, _: EditorAccess, x_user_id: str = Header(default="system", alias="X-User-Id")):
+async def create_edo_message(payload: EdoMessageIn, request: Request, response: Response, session: SessionDep, tenant: TenantDep, _: EditorAccess, x_user_id: str = Header(default="system", alias="X-User-Id")):
+    cid = _correlation_id(request, response)
     tenant_id = _tenant_id_value(tenant)
     await _assert_entity_belongs_to_tenant(session=session, tenant_id=tenant_id, entity_type=payload.entity_type, entity_id=payload.entity_id)
     row = EdoMessage(
@@ -411,7 +437,7 @@ async def create_edo_message(payload: EdoMessageIn, session: SessionDep, tenant:
     )
     session.add(row)
     await session.flush()
-    return {"id": row.id, "status": row.status, **provider_response_meta(payload.operator_code)}
+    return {"id": row.id, "status": row.status, "correlation_id": cid, **provider_response_meta(payload.operator_code)}
 
 
 @router.get("/edo/messages")
@@ -436,23 +462,25 @@ async def list_edo_events(message_id: str, session: SessionDep, tenant: TenantDe
 
 @router.post("/edo/messages/{message_id}/refresh-status")
 @audit_operation("refresh_status", "edo_message")
-async def refresh_edo_status(message_id: str, session: SessionDep, tenant: TenantDep, _: EditorAccess):
+async def refresh_edo_status(message_id: str, request: Request, response: Response, session: SessionDep, tenant: TenantDep, _: EditorAccess):
+    cid = _correlation_id(request, response)
     row = await session.get(EdoMessage, message_id)
     if not row or row.tenant_id != _tenant_id_value(tenant):
         raise _approval_orchestration_not_found("edo_message")
     next_status = "sent" if row.status == "queued" else "delivered"
     await EdoStatusProjectionService(session, _tenant_id_value(tenant)).apply_event(row, next_status, {"source": "refresh"}, None)
-    return {"id": row.id, "status": row.status}
+    return {"id": row.id, "status": row.status, "correlation_id": cid}
 
 
 @router.post("/edo/messages/{message_id}/cancel")
 @audit_operation("cancel", "edo_message")
-async def cancel_edo(message_id: str, session: SessionDep, tenant: TenantDep, _: EditorAccess):
+async def cancel_edo(message_id: str, request: Request, response: Response, session: SessionDep, tenant: TenantDep, _: EditorAccess):
+    cid = _correlation_id(request, response)
     row = await session.get(EdoMessage, message_id)
     if not row or row.tenant_id != _tenant_id_value(tenant):
         raise _approval_orchestration_not_found("edo_message")
     row.status = "failed"
-    return {"id": row.id, "status": row.status}
+    return {"id": row.id, "status": row.status, "correlation_id": cid}
 
 
 @router.get("/edo/messages/{message_id}/protocol")
@@ -465,11 +493,12 @@ async def get_edo_protocol(message_id: str, session: SessionDep, tenant: TenantD
 
 @router.post("/webhooks/edo/{operator_code}")
 @audit_operation("ingest_webhook", "edo_webhook")
-async def edo_webhook(operator_code: str, payload: dict[str, Any], request: Request, session: SessionDep, tenant: TenantDep):
+async def edo_webhook(operator_code: str, payload: dict[str, Any], request: Request, response: Response, session: SessionDep, tenant: TenantDep):
+    cid = _correlation_id(request, response)
     dedupe_key = request.headers.get("X-Dedupe-Key") or payload.get("external_event_id") or f"{operator_code}:{hash(str(payload))}"
     exists = (await session.execute(select(EdoWebhookInbox).where(EdoWebhookInbox.dedupe_key == dedupe_key))).scalar_one_or_none()
     if exists:
-        return {"status": "ignored", "dedupe_key": dedupe_key, **provider_response_meta(operator_code)}
+        return {"status": "ignored", "dedupe_key": dedupe_key, "correlation_id": cid, **provider_response_meta(operator_code)}
     inbox = await EdoWebhookService(session, _tenant_id_value(tenant)).ingest(operator_code=operator_code, dedupe_key=dedupe_key, headers_json=dict(request.headers), payload_json=payload)
     message_id = payload.get("message_id")
     if message_id:
@@ -477,12 +506,13 @@ async def edo_webhook(operator_code: str, payload: dict[str, Any], request: Requ
         if row and row.tenant_id == _tenant_id_value(tenant):
             await EdoStatusProjectionService(session, _tenant_id_value(tenant)).apply_event(row, payload.get("status", row.status), payload, dedupe_key)
     inbox.status = "processed"
-    return {"status": "processed", "dedupe_key": dedupe_key, **provider_response_meta(operator_code)}
+    return {"status": "processed", "dedupe_key": dedupe_key, "correlation_id": cid, **provider_response_meta(operator_code)}
 
 
 @router.post("/webhooks/sign/{provider_code}")
 @audit_operation("ingest_webhook", "sign_webhook")
-async def sign_webhook(provider_code: str, payload: dict[str, Any], session: SessionDep, tenant: TenantDep):
+async def sign_webhook(provider_code: str, payload: dict[str, Any], request: Request, response: Response, session: SessionDep, tenant: TenantDep):
+    cid = _correlation_id(request, response)
     request_id = payload.get("request_id")
     if not request_id:
         raise _approval_orchestration_unprocessable("request_id required")
@@ -490,4 +520,4 @@ async def sign_webhook(provider_code: str, payload: dict[str, Any], session: Ses
     if not row or row.tenant_id != _tenant_id_value(tenant):
         raise _approval_orchestration_not_found("signature_request")
     row.status = payload.get("status", row.status)
-    return {"id": row.id, "status": row.status, "provider": provider_code, **provider_response_meta(provider_code)}
+    return {"id": row.id, "status": row.status, "provider": provider_code, "correlation_id": cid, **provider_response_meta(provider_code)}

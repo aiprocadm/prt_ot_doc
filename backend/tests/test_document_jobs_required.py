@@ -54,18 +54,20 @@ def test_document_job_wrappers_delegate_to_runtime_bridge(monkeypatch) -> None:
         assert response["step_status"] == "success"
 
 
-def test_document_job_wrappers_keep_backward_compatible_envelope_when_no_bridge_registered() -> None:
+def test_document_job_wrappers_use_internal_fallback_when_no_bridge_registered() -> None:
     module._COMPATIBILITY_BRIDGES.clear()
 
     report = export_report_job(tenant_slug="tenant-a", report_id="report-1")
     sync = sync_integration_job(tenant_slug="tenant-a", integration_key="1c")
 
-    assert report["status"] == "accepted"
-    assert report["bridge_mode"] == "compatibility-wrapper"
-    assert report["deferred"] is True
-    assert sync["status"] == "accepted"
-    assert sync["bridge_mode"] == "compatibility-wrapper"
-    assert sync["deferred"] is True
+    assert report["status"] == "completed"
+    assert report["bridge_mode"] == "internal-fallback"
+    assert report["deferred"] is False
+    assert report["provider_mode"] == "non_production"
+    assert sync["status"] == "completed"
+    assert sync["bridge_mode"] == "internal-fallback"
+    assert sync["deferred"] is False
+    assert sync["provider_mode"] == "non_production"
 
 
 def test_document_job_named_bridges_execute_runtime_handler(monkeypatch) -> None:

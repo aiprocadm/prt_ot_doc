@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps.tracing import get_trace_id
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.models.approval_signing import (
@@ -39,11 +40,62 @@ from app.modules.approval.webhook_utils import build_edo_status_dedup_key, build
 router = APIRouter()
 
 
-def _approval_signing_unprocessable(message: str) -> HTTPException:
+def _approval_signing_error(*, code: str, message: str, status_code: int) -> HTTPException:
     return HTTPException(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        detail={"code": "approval_signing_validation_error", "message": message},
+        status_code=status_code,
+        detail={
+            "code": code,
+            "message": message,
+        },
     )
+
+
+def _approval_signing_unprocessable(message: str) -> HTTPException:
+    return _approval_signing_error(
+        code="approval_signing_validation_error",
+        message=message,
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+    )
+
+
+def _approval_signing_not_found(resource: str) -> HTTPException:
+    return _approval_signing_error(
+        code="approval_signing_not_found",
+        message=f"{resource} not found",
+        status_code=status.HTTP_404_NOT_FOUND,
+    )
+
+
+def _approval_signing_forbidden(message: str) -> HTTPException:
+    return _approval_signing_error(
+        code="approval_signing_forbidden",
+        message=message,
+        status_code=status.HTTP_403_FORBIDDEN,
+    )
+
+
+def _approval_signing_unauthorized(message: str) -> HTTPException:
+    return _approval_signing_error(
+        code="approval_signing_unauthorized",
+        message=message,
+        status_code=status.HTTP_401_UNAUTHORIZED,
+    )
+
+
+def _approval_signing_conflict(message: str) -> HTTPException:
+    return _approval_signing_error(
+        code="approval_signing_conflict",
+        message=message,
+        status_code=status.HTTP_409_CONFLICT,
+    )
+
+
+def _correlation_id(request: Request, response: Response) -> str:
+    value = get_trace_id(request)
+    response.headers["X-Trace-Id"] = value
+    response.headers["X-Correlation-Id"] = value
+    response.headers["X-Request-Id"] = value
+    return value
 
 
 def _require_document_object_id(document_version_id: str | None, object_id: str | None) -> str:
@@ -81,7 +133,7 @@ class SignRequestIn(BaseModel):
     document_version_id: str | None = None
     object_type: str = "document_version"
     object_id: str | None = None
-    provider: str = "stub"
+    provider: str = "internal-fallback"
     kind: str | None = None
     payload: dict[str, Any] | None = None
 
@@ -97,7 +149,7 @@ class EdoSendIn(BaseModel):
     document_version_id: str | None = None
     object_type: str = "document_version"
     object_id: str | None = None
-    provider: str = "stub"
+    provider: str = "internal-fallback"
     operator_code: str | None = None
     recipient: str | None = None
     meta: dict[str, Any] | None = None
@@ -148,7 +200,8 @@ async def _create_tasks(session: AsyncSession, process: ApprovalProcess, route: 
 
 @router.post("/approvals:start")
 @audit_operation("start", "approval_process", id_attr="process_id")
-async def approvals_start(payload: ApprovalStartIn, request: Request, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), x_user_id: str = Header(default="system", alias="X-User-Id")):
+async def approvals_start(payload: ApprovalStartIn, request: Request, response: Response, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), x_user_id: str = Header(default="system", alias="X-User-Id")):
+    cid = _correlation_id(request, response)
     key = request.headers.get("Idempotency-Key")
     idem = None
     if key:
@@ -161,13 +214,13 @@ async def approvals_start(payload: ApprovalStartIn, request: Request, session: A
     ranked = sorted(((r.priority, cond_matches(r.conditions or {}, payload.context), r) for r in routes), key=lambda i: (i[0], i[1]), reverse=True)
     route = next((r for _, m, r in ranked if m >= 0), None)
     if route is None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "No matching route")
+        raise _approval_signing_conflict("No matching route")
     process = ApprovalProcess(tenant_id=str(tenant.id), object_type=payload.object_type, object_id=payload.object_id, route_id=route.id, status=ApprovalProcessStatus.IN_PROGRESS, started_at=datetime.now(timezone.utc), created_by=x_user_id)
     session.add(process)
     await session.flush()
     await _create_tasks(session, process, route, 0)
     await OutboxService(session).enqueue(tenant_id=str(tenant.id), event_type="approval.started", payload={"event_id": str(uuid4()), "tenant_id": str(tenant.id), "metadata": {"process_id": process.id}})
-    body = {"process_id": process.id, "route_id": route.id, "status": process.status.value}
+    body = {"process_id": process.id, "route_id": route.id, "status": process.status.value, "correlation_id": cid}
     if idem:
         await idem.store_success(rec, status_code=200, body=body)
     return body
@@ -188,7 +241,7 @@ async def approval_processes(status: str | None = None, object_id: str | None = 
 async def approval_process_detail(process_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
     p = await session.get(ApprovalProcess, process_id)
     if not p or p.tenant_id != str(tenant.id):
-        raise HTTPException(404, "Process not found")
+        raise _approval_signing_not_found("process")
     logs = (await session.execute(select(ApprovalDecisionLog).where(ApprovalDecisionLog.tenant_id == str(tenant.id), ApprovalDecisionLog.process_id == process_id).order_by(ApprovalDecisionLog.created_at.asc()))).scalars().all()
     return {"id": p.id, "status": p.status.value, "route_id": p.route_id, "current_step": p.current_step, "logs": [{"decision": l.decision, "comment": l.comment, "step_no": l.step_no} for l in logs]}
 
@@ -204,12 +257,13 @@ async def approval_tasks(mine: bool = True, status: str = "open", session: Async
 
 @router.post("/approvals/tasks/{task_id}:decide")
 @audit_operation("decide", "approval_task")
-async def approval_decide(task_id: str, payload: DecideIn, request: Request, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), x_user_id: str = Header(default="system", alias="X-User-Id")):
+async def approval_decide(task_id: str, payload: DecideIn, request: Request, response: Response, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), x_user_id: str = Header(default="system", alias="X-User-Id")):
+    cid = _correlation_id(request, response)
     task = await session.get(ApprovalTask, task_id)
     if not task or task.tenant_id != str(tenant.id):
-        raise HTTPException(404, "Task not found")
+        raise _approval_signing_not_found("task")
     if task.assignee_id != x_user_id:
-        raise HTTPException(403, "Task assignee mismatch")
+        raise _approval_signing_forbidden("Task assignee mismatch")
     process = await session.get(ApprovalProcess, task.process_id)
     route = await session.get(ApprovalRoute, process.route_id)
     task.status = ApprovalTaskStatus.DONE
@@ -224,7 +278,7 @@ async def approval_decide(task_id: str, payload: DecideIn, request: Request, ses
             ApprovalTask.__table__.update().where(and_(ApprovalTask.process_id == process.id, ApprovalTask.status == ApprovalTaskStatus.OPEN)).values(status=ApprovalTaskStatus.CANCELED)
         )
         await OutboxService(session).enqueue(tenant_id=str(tenant.id), event_type="approval.completed", payload={"event_id": str(uuid4()), "tenant_id": str(tenant.id), "metadata": {"process_id": process.id, "status": "rejected"}})
-        return {"status": process.status.value}
+        return {"status": process.status.value, "correlation_id": cid}
     step = (route.steps or [])[task.step_no] if route.steps else {}
     quorum = int(step.get("quorum", 1))
     approved_count = await session.scalar(select(func.count()).select_from(ApprovalTask).where(ApprovalTask.process_id == process.id, ApprovalTask.step_no == task.step_no, ApprovalTask.decision == "approve"))
@@ -232,22 +286,23 @@ async def approval_decide(task_id: str, payload: DecideIn, request: Request, ses
         await session.execute(ApprovalTask.__table__.update().where(and_(ApprovalTask.process_id == process.id, ApprovalTask.step_no == task.step_no, ApprovalTask.status == ApprovalTaskStatus.OPEN)).values(status=ApprovalTaskStatus.CANCELED))
         process.current_step = task.step_no + 1
         await _create_tasks(session, process, route, process.current_step)
-    return {"status": process.status.value, "current_step": process.current_step}
+    return {"status": process.status.value, "current_step": process.current_step, "correlation_id": cid}
 
 
 @router.post("/approvals/tasks/{task_id}:delegate")
 @audit_operation("delegate", "approval_task", id_attr="new_task_id")
-async def approval_delegate(task_id: str, payload: DelegateIn, request: Request, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), x_user_id: str = Header(default="system", alias="X-User-Id")):
+async def approval_delegate(task_id: str, payload: DelegateIn, request: Request, response: Response, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), x_user_id: str = Header(default="system", alias="X-User-Id")):
+    cid = _correlation_id(request, response)
     task = await session.get(ApprovalTask, task_id)
     if not task or task.tenant_id != str(tenant.id):
-        raise HTTPException(404, "Task not found")
+        raise _approval_signing_not_found("task")
     if task.assignee_id != x_user_id:
-        raise HTTPException(403, "Task assignee mismatch")
+        raise _approval_signing_forbidden("Task assignee mismatch")
     task.status = ApprovalTaskStatus.CANCELED
     new_task = ApprovalTask(tenant_id=str(tenant.id), process_id=task.process_id, step_no=task.step_no, assignee_type="user", assignee_id=payload.to_user_id, due_at=task.due_at, delegated_from=task.id)
     session.add(new_task)
     session.add(ApprovalDecisionLog(tenant_id=str(tenant.id), process_id=task.process_id, task_id=task.id, step_no=task.step_no, actor_user_id=x_user_id, decision="delegate", comment=payload.reason, ip=request.client.host if request.client else None, user_agent=request.headers.get("user-agent")))
-    return {"status": "delegated", "new_task_id": new_task.id}
+    return {"status": "delegated", "new_task_id": new_task.id, "correlation_id": cid}
 
 
 @router.post("/approvals/processes/{process_id}:cancel")
@@ -255,7 +310,7 @@ async def approval_delegate(task_id: str, payload: DelegateIn, request: Request,
 async def approval_cancel(process_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
     p = await session.get(ApprovalProcess, process_id)
     if not p or p.tenant_id != str(tenant.id):
-        raise HTTPException(404, "Process not found")
+        raise _approval_signing_not_found("process")
     p.status = ApprovalProcessStatus.CANCELED
     p.finished_at = datetime.now(timezone.utc)
     await session.execute(ApprovalTask.__table__.update().where(and_(ApprovalTask.process_id == process_id, ApprovalTask.status == ApprovalTaskStatus.OPEN)).values(status=ApprovalTaskStatus.CANCELED))
@@ -264,7 +319,8 @@ async def approval_cancel(process_id: str, session: AsyncSession = Depends(get_s
 
 @router.post("/sign:request")
 @audit_operation("request", "signature_request", id_attr="signature_request_id")
-async def sign_request(payload: SignRequestIn, request: Request, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), x_user_id: str = Header(default="system", alias="X-User-Id")):
+async def sign_request(payload: SignRequestIn, request: Request, response: Response, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), x_user_id: str = Header(default="system", alias="X-User-Id")):
+    cid = _correlation_id(request, response)
     object_id = _require_document_object_id(payload.document_version_id, payload.object_id)
     key = request.headers.get("Idempotency-Key")
     idem = None
@@ -276,11 +332,11 @@ async def sign_request(payload: SignRequestIn, request: Request, session: AsyncS
     sig = SignatureRequest(tenant_id=str(tenant.id), object_type=payload.object_type, object_id=object_id, provider=payload.provider, status=SignatureRequestStatus.REQUESTED, payload_json={"kind": payload.kind or "un_ep", **(payload.payload or {})})
     session.add(sig)
     await session.flush()
-    if payload.provider == "stub":
+    if payload.provider in {"stub", "internal-fallback"}:
         sig.status = SignatureRequestStatus.SIGNED
         sig.result_json = {"signed_by": x_user_id, "verified": True}
         await OutboxService(session).enqueue(tenant_id=str(tenant.id), event_type="Signed", payload={"event_id": str(uuid4()), "tenant_id": str(tenant.id), "document_id": object_id, "document_version_id": object_id, "status": "signed", "signed_at": datetime.now(timezone.utc).isoformat()})
-    body = {"signature_request_id": sig.id, "status": sig.status.value, **provider_response_meta(payload.provider)}
+    body = {"signature_request_id": sig.id, "status": sig.status.value, "correlation_id": cid, **provider_response_meta(payload.provider)}
     if idem:
         await idem.store_success(rec, status_code=200, body=body)
     return body
@@ -306,7 +362,7 @@ async def sign_requests(status: str | None = None, object_id: str | None = None,
 async def sign_request_get(request_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
     row = await session.get(SignatureRequest, request_id)
     if not row or row.tenant_id != str(tenant.id):
-        raise HTTPException(404, "Signature request not found")
+        raise _approval_signing_not_found("signature_request")
     return {"id": row.id, "status": row.status.value, "result_json": row.result_json}
 
 
@@ -319,6 +375,7 @@ async def edo_send(
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
 ):
+    cid = _correlation_id(request, response)
     key = normalize_idempotency_key(request.headers.get("Idempotency-Key"))
     request_hash = make_request_hash(request.url.path, str(tenant.id), None, payload.model_dump(mode="json"))
     idem = IdempotencyService(session=session, tenant_id=str(tenant.id), endpoint="approval.edo_send")
@@ -349,12 +406,12 @@ async def edo_send(
         event_type="EdoStatusChanged",
         payload={"event_id": str(uuid4()), "tenant_id": str(tenant.id), "metadata": {"envelope_id": env.id, "status": EdoEnvelopeStatus.DELIVERED.value}},
     )
-    body = {"id": env.id, "status": env.status.value, "external_id": env.external_id}
+    body = {"id": env.id, "status": env.status.value, "external_id": env.external_id, "correlation_id": cid}
     await idem.store_success(
         rec,
         status_code=200,
         body=body,
-        headers={"correlation-id": request.headers.get("x-correlation-id", "")},
+        headers={"X-Correlation-Id": cid, "X-Request-Id": cid, "X-Trace-Id": cid},
     )
     await session.commit()
     return body
@@ -375,31 +432,32 @@ async def edo_list(status: str | None = None, object_id: str | None = None, sess
 async def edo_get(envelope_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
     e = await session.get(EdoEnvelope, envelope_id)
     if not e or e.tenant_id != str(tenant.id):
-        raise HTTPException(404, "Envelope not found")
+        raise _approval_signing_not_found("envelope")
     return {"id": e.id, "status": e.status.value, "external_id": e.external_id, "last_event_at": e.last_event_at}
 
 
 @router.post("/edo/webhooks/{provider}")
 @audit_operation("ingest_webhook", "edo_webhook")
-async def edo_webhook(provider: str, payload: dict[str, Any], request: Request, x_signature: str | None = Header(default=None, alias="X-Signature"), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+async def edo_webhook(provider: str, payload: dict[str, Any], request: Request, response: Response, x_signature: str | None = Header(default=None, alias="X-Signature"), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
+    cid = _correlation_id(request, response)
     secret = str((tenant.settings or {}).get("edo_webhook_secret", "dev-secret"))
     expected = build_webhook_signature(secret=secret, body=await request.body())
     if x_signature and not hmac.compare_digest(x_signature, expected):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid signature")
+        raise _approval_signing_unauthorized("Invalid signature")
     external_id = payload.get("external_id")
     env = (await session.execute(select(EdoEnvelope).where(EdoEnvelope.tenant_id == str(tenant.id), EdoEnvelope.provider == provider, EdoEnvelope.external_id == external_id))).scalar_one_or_none()
     if not env:
-        raise HTTPException(404, "Envelope not found")
+        raise _approval_signing_not_found("envelope")
     new_status = payload.get("status", "failed")
     env.status = EdoEnvelopeStatus(new_status)
     env.last_event_at = datetime.now(timezone.utc)
     await OutboxService(session).enqueue(tenant_id=str(tenant.id), event_type="edo.status_changed", payload={"event_id": str(uuid4()), "tenant_id": str(tenant.id), "metadata": {"envelope_id": env.id, "status": env.status.value}})
-    return {"status": "ok"}
+    return {"status": "ok", "correlation_id": cid}
 
 
 @router.post("/approvals/start")
-async def approvals_start_v1(payload: ApprovalStartIn, request: Request, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), x_user_id: str = Header(default="system", alias="X-User-Id")):
-    return await approvals_start(payload, request, session, tenant, x_user_id)
+async def approvals_start_v1(payload: ApprovalStartIn, request: Request, response: Response, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), x_user_id: str = Header(default="system", alias="X-User-Id")):
+    return await approvals_start(payload, request, response, session, tenant, x_user_id)
 
 
 @router.get("/approvals/instances")
@@ -419,15 +477,15 @@ async def approval_tasks_v1(mine: int = 1, status: str = "pending", session: Asy
 
 
 @router.post("/approvals/tasks/{task_id}/decision")
-async def approval_decision_v1(task_id: str, payload: DecideIn, request: Request, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), x_user_id: str = Header(default="system", alias="X-User-Id")):
+async def approval_decision_v1(task_id: str, payload: DecideIn, request: Request, response: Response, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), x_user_id: str = Header(default="system", alias="X-User-Id")):
     if payload.delegate_to_user_id:
-        return await approval_delegate(task_id, DelegateIn(to_user_id=payload.delegate_to_user_id, reason=payload.comment), request, session, tenant, x_user_id)
-    return await approval_decide(task_id, DecideIn(decision=payload.decision, comment=payload.comment), request, session, tenant, x_user_id)
+        return await approval_delegate(task_id, DelegateIn(to_user_id=payload.delegate_to_user_id, reason=payload.comment), request, response, session, tenant, x_user_id)
+    return await approval_decide(task_id, DecideIn(decision=payload.decision, comment=payload.comment), request, response, session, tenant, x_user_id)
 
 
 @router.post("/sign/request")
-async def sign_request_v1(payload: SignRequestIn, request: Request, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), x_user_id: str = Header(default="system", alias="X-User-Id")):
-    return await sign_request(payload, request, session, tenant, x_user_id)
+async def sign_request_v1(payload: SignRequestIn, request: Request, response: Response, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), x_user_id: str = Header(default="system", alias="X-User-Id")):
+    return await sign_request(payload, request, response, session, tenant, x_user_id)
 
 
 @router.post("/sign/submit")
@@ -435,7 +493,7 @@ async def sign_request_v1(payload: SignRequestIn, request: Request, session: Asy
 async def sign_submit_v1(payload: SignSubmitIn, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), x_user_id: str = Header(default="system", alias="X-User-Id")):
     cert_info = payload.cert_info or {}
     _validate_certificate_period(cert_info)
-    sig = SignatureRequest(tenant_id=str(tenant.id), object_type="document_version", object_id=payload.document_version_id, provider="stub", status=SignatureRequestStatus.SIGNED, payload_json={"kind": payload.kind, "signed_blob": payload.signed_blob[:64]}, result_json={"cert_info": cert_info, "ocsp_status": cert_info.get("ocsp_status", "unknown")})
+    sig = SignatureRequest(tenant_id=str(tenant.id), object_type="document_version", object_id=payload.document_version_id, provider="internal-fallback", status=SignatureRequestStatus.SIGNED, payload_json={"kind": payload.kind, "signed_blob": payload.signed_blob[:64]}, result_json={"cert_info": cert_info, "ocsp_status": cert_info.get("ocsp_status", "unknown")})
     session.add(sig)
     await session.flush()
     await OutboxService(session).enqueue(tenant_id=str(tenant.id), event_type="Signed", payload={"event_id": str(uuid4()), "tenant_id": str(tenant.id), "document_version_id": payload.document_version_id, "signature_id": sig.id})
@@ -465,7 +523,7 @@ async def edo_messages_v1(document_version_id: str | None = None, session: Async
 @router.post("/edo/webhook/status")
 @audit_operation("ingest_webhook", "edo_status")
 async def edo_webhook_status(payload: dict[str, Any], session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
-    provider = str(payload.get("provider") or "stub")
+    provider = str(payload.get("provider") or "internal-fallback")
     external_id = payload.get("external_id")
     if not external_id:
         raise _approval_signing_unprocessable("external_id is required")
@@ -487,7 +545,7 @@ async def edo_webhook_status(payload: dict[str, Any], session: AsyncSession = De
 
     env = (await session.execute(select(EdoEnvelope).where(EdoEnvelope.tenant_id == str(tenant.id), EdoEnvelope.provider == provider, EdoEnvelope.external_id == external_id))).scalar_one_or_none()
     if not env:
-        raise HTTPException(404, "Envelope not found")
+        raise _approval_signing_not_found("envelope")
     env.status = EdoEnvelopeStatus(status_value)
     env.last_event_at = datetime.now(timezone.utc)
     await OutboxService(session).enqueue(tenant_id=str(tenant.id), event_type="EdoStatusChanged", payload={"event_id": str(uuid4()), "tenant_id": str(tenant.id), "metadata": {"envelope_id": env.id, "status": env.status.value}})
@@ -514,7 +572,7 @@ async def approval_routes_create_v1(payload: ApprovalRouteIn, session: AsyncSess
 async def approval_routes_patch_v1(route_id: str, payload: ApprovalRouteIn, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
     row = await session.get(ApprovalRoute, route_id)
     if not row or row.tenant_id != str(tenant.id):
-        raise HTTPException(404, "Route not found")
+        raise _approval_signing_not_found("route")
     row.name = payload.name
     row.conditions = payload.conditions
     row.steps = payload.steps
@@ -544,6 +602,6 @@ async def webhooks_create_v1(payload: WebhookSubscriptionIn, session: AsyncSessi
 async def webhooks_disable_v1(webhook_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
     row = await session.get(WebhookEndpoint, webhook_id)
     if not row or row.tenant_id != str(tenant.id):
-        raise HTTPException(404, "Webhook not found")
+        raise _approval_signing_not_found("webhook")
     row.is_enabled = False
     return {"id": row.id, "is_active": row.is_enabled}

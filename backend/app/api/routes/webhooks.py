@@ -11,10 +11,19 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.api.models.webhook_admin import (
+    WebhookDeliveryWithDiagnostics,
+    WebhookFailureDiagnostics,
+    WebhookRetryEligibility,
+)
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, rbac
 from app.models.job_engine import InboundWebhookDedup
 from app.models.models import Outbox, OutboxStatus, Tenant, WebhookDelivery, WebhookEndpoint
+from app.services.webhook_retry_telemetry import (
+    classify_failure,
+    FailureCategory,
+)
 from app.tasks import compute_inbound_dedup_key, process_inbound_webhook
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
@@ -272,12 +281,198 @@ async def test_endpoint(webhook_id: str, tenant: TenantDep, _: AdminAccess, sess
     return {"status": "queued"}
 
 
-@router.post("/deliveries/{delivery_id}:retry")
+def _extract_failure_diagnostics(
+    delivery: WebhookDelivery,
+    max_attempts: int = 5,
+    backoff_base: int = 5,
+    backoff_max: int = 300,
+) -> WebhookFailureDiagnostics | None:
+    """Extract failure diagnostics from WebhookDelivery last_error payload.
+
+    Args:
+        delivery: WebhookDelivery record with last_error diagnostics.
+        max_attempts: Maximum retry limit for context.
+        backoff_base: Exponential backoff base for context.
+        backoff_max: Maximum backoff cap for context.
+
+    Returns:
+        WebhookFailureDiagnostics if last_error contains structured diagnostics, else None.
+    """
+    if not delivery.last_error or not isinstance(delivery.last_error, dict):
+        return None
+
+    error = delivery.last_error
+    category = error.get("failure_category") or "unknown"
+
+    # Try to parse as enum, fall back to string
+    try:
+        failure_category = FailureCategory(category)
+    except (ValueError, KeyError):
+        failure_category = category  # type: ignore
+
+    return WebhookFailureDiagnostics(
+        failure_category=failure_category,
+        retry_eligible=error.get("retry_eligible", False),
+        http_status_code=error.get("http_status_code"),
+        error_class=error.get("error_class"),
+        error_message=error.get("error_message"),
+        current_attempt=error.get("current_attempt", delivery.attempts),
+        max_attempts=error.get("max_attempts", max_attempts),
+        attempts_remaining=error.get("attempts_remaining", max(0, max_attempts - delivery.attempts)),
+        next_attempt_in_seconds=error.get("next_attempt_in_seconds"),
+        timestamp=error.get("timestamp"),
+    )
+
+
+@router.get("/deliveries/{delivery_id}/diagnostics", response_model=WebhookFailureDiagnostics)
+async def get_delivery_diagnostics(
+    delivery_id: str,
+    tenant: TenantDep,
+    _: AdminAccess,
+    session: SessionDep,
+) -> WebhookFailureDiagnostics:
+    """Get failure diagnostics for a webhook delivery."""
+    delivery = await session.get(WebhookDelivery, delivery_id)
+    if delivery is None or delivery.tenant_id != tenant.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "delivery_not_found")
+
+    diag = _extract_failure_diagnostics(delivery)
+    if diag is None:
+        # Return minimal diagnostics if none available
+        category = classify_failure(status_code=delivery.last_status_code)
+        diag = WebhookFailureDiagnostics(
+            failure_category=category,
+            retry_eligible=isinstance(category, FailureCategory) and category.value.startswith("retryable_"),
+            http_status_code=delivery.last_status_code,
+            current_attempt=delivery.attempts,
+        )
+    return diag
+
+
+@router.get("/deliveries/{delivery_id}/retry-eligibility", response_model=WebhookRetryEligibility)
+async def get_delivery_retry_eligibility(
+    delivery_id: str,
+    tenant: TenantDep,
+    _: AdminAccess,
+    session: SessionDep,
+) -> WebhookRetryEligibility:
+    """Check if a webhook delivery is eligible for retry."""
+    delivery = await session.get(WebhookDelivery, delivery_id)
+    if delivery is None or delivery.tenant_id != tenant.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "delivery_not_found")
+
+    diag = _extract_failure_diagnostics(delivery)
+    if diag is None:
+        # Determine eligibility from status and last_status_code
+        if delivery.status == "success":
+            return WebhookRetryEligibility(
+                delivery_id=delivery_id,
+                eligible=False,
+                reason="Delivery succeeded, no retry needed",
+            )
+        elif delivery.status == "pending":
+            return WebhookRetryEligibility(
+                delivery_id=delivery_id,
+                eligible=True,
+                reason="Delivery pending, retry already scheduled",
+                next_attempt_in_seconds=(
+                    int((delivery.next_attempt_at - datetime.now(tz=timezone.utc)).total_seconds())
+                    if delivery.next_attempt_at
+                    else None
+                ),
+            )
+        else:
+            # Infer from status code
+            category = classify_failure(status_code=delivery.last_status_code)
+            eligible = isinstance(category, FailureCategory) and category.value.startswith("retryable_")
+            return WebhookRetryEligibility(
+                delivery_id=delivery_id,
+                eligible=eligible,
+                reason="Terminal failure, retries exhausted" if not eligible else "Transient failure, retryable",
+                failure_category=category,
+            )
+
+    # Use structured diagnostics
+    return WebhookRetryEligibility(
+        delivery_id=delivery_id,
+        eligible=diag.retry_eligible,
+        reason=(
+            f"{diag.failure_category}: {diag.error_message or 'See diagnostics for details'}"
+            if not diag.retry_eligible
+            else f"{diag.failure_category}: Retryable after {diag.next_attempt_in_seconds}s"
+        ),
+        failure_category=diag.failure_category,
+        next_attempt_in_seconds=diag.next_attempt_in_seconds,
+    )
+
+
+@router.get("/endpoints/{endpoint_id}/failed-deliveries", response_model=list[WebhookDeliveryWithDiagnostics])
+async def list_failed_deliveries_with_diagnostics(
+    endpoint_id: str,
+    tenant: TenantDep,
+    _: AdminAccess,
+    session: SessionDep,
+    limit: int = Query(default=50, le=500),
+) -> list[WebhookDeliveryWithDiagnostics]:
+    """List failed deliveries for an endpoint with retry diagnostics."""
+    endpoint = await session.get(WebhookEndpoint, endpoint_id)
+    if endpoint is None or endpoint.tenant_id != tenant.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "endpoint_not_found")
+
+    rows = (
+        await session.execute(
+            select(WebhookDelivery)
+            .where(
+                WebhookDelivery.tenant_id == tenant.id,
+                WebhookDelivery.endpoint_id == endpoint_id,
+                WebhookDelivery.status.in_(["failed", "pending"]),
+            )
+            .order_by(WebhookDelivery.updated_at.desc())
+            .limit(limit)
+        )
+    ).scalars().all()
+
+    result = []
+    for delivery in rows:
+        diag = _extract_failure_diagnostics(delivery)
+        result.append(
+            WebhookDeliveryWithDiagnostics(
+                id=delivery.id,
+                event_id=delivery.event_id,
+                endpoint_id=delivery.endpoint_id,
+                attempts=delivery.attempts,
+                status=delivery.status,
+                next_attempt_at=delivery.next_attempt_at,
+                response_status=delivery.last_status_code,
+                last_response_body=delivery.last_response_body,
+                latency_ms=delivery.latency_ms,
+                started_at=delivery.started_at,
+                ended_at=delivery.ended_at,
+                diagnostics=diag,
+            )
+        )
+    return result
+
+
+
+@router.post("/deliveries/{delivery_id}:retry", response_model=dict[str, str])
 @audit_operation("retry", "webhook_delivery")
 async def retry_delivery(delivery_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> dict[str, str]:
     delivery = await session.get(WebhookDelivery, delivery_id)
     if delivery is None or delivery.tenant_id != tenant.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "delivery_not_found")
+
+    if delivery.status == "success":
+        raise HTTPException(status.HTTP_409_CONFLICT, "Already delivered successfully")
+
+    # Check retry eligibility from diagnostics
+    diag = _extract_failure_diagnostics(delivery)
+    if diag and not diag.retry_eligible:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Not retryable: {diag.failure_category}",
+        )
+
     delivery.status = "pending"
     delivery.next_attempt_at = datetime.now(tz=timezone.utc)
     await session.commit()

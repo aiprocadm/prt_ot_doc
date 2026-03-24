@@ -103,10 +103,13 @@ async def edo_step_handler(*, job: DocumentJob, step: DocumentJobStep) -> dict[s
         )
     except IntegrationDisabledError:
         return {
-            "status": "deferred",
+            "status": "completed",
             "provider": provider.name,
             "reason": "edo_integration_disabled",
-            "deferred": True,
+            "deferred": False,
+            "provider_mode": "non_production",
+            "bridge_mode": "internal-fallback",
+            "detail": "Internal fallback completed without external EDO adapter.",
         }
     return {
         "status": status.status,

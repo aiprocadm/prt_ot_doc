@@ -14,6 +14,32 @@ _COMPATIBILITY_BRIDGES: dict[str, Callable[..., Awaitable[dict[str, str | bool]]
 _KNOWN_BRIDGES = frozenset({"export_report", "sync_integration"})
 
 
+def _internal_fallback_bridge_response(*, bridge_name: str) -> dict[str, str | bool]:
+    if bridge_name == "export_report":
+        return {
+            "status": "completed",
+            "deferred": False,
+            "bridge_mode": "internal-fallback",
+            "provider_mode": "non_production",
+            "detail": "Internal fallback completed without external export adapter.",
+        }
+    if bridge_name == "sync_integration":
+        return {
+            "status": "completed",
+            "deferred": False,
+            "bridge_mode": "internal-fallback",
+            "provider_mode": "non_production",
+            "detail": "Internal fallback completed without external integration adapter.",
+        }
+    return {
+        "status": "completed",
+        "deferred": False,
+        "bridge_mode": "internal-fallback",
+        "provider_mode": "non_production",
+        "detail": "Internal fallback completed.",
+    }
+
+
 def list_compatibility_bridges() -> tuple[str, ...]:
     return tuple(sorted(_KNOWN_BRIDGES))
 
@@ -92,15 +118,13 @@ def _run_named_bridge(*, tenant_slug: str, bridge_name: str, payload: dict[str, 
     async def _run() -> dict[str, str | bool]:
         handler = _COMPATIBILITY_BRIDGES.get(bridge_name)
         if handler is None:
+            fallback = _internal_fallback_bridge_response(bridge_name=bridge_name)
             response: dict[str, str | bool] = {
                 "tenant": tenant_slug,
                 **payload,
-                "status": "accepted",
-                "deferred": True,
                 "handler": f"{bridge_name}_bridge",
-                "bridge_mode": "compatibility-wrapper",
                 "orchestrator": _INTERNAL_ORCHESTRATOR,
-                "detail": "No internal bridge configured; compatibility envelope preserved for backward compatibility.",
+                **fallback,
             }
             return response
 

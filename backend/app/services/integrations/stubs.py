@@ -15,6 +15,19 @@ from .interfaces import (
 )
 
 
+def _stub_details(*, provider: str, operation: str, extra: dict[str, Any] | None = None) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "provider_mode": "non_production",
+        "adapter_type": "stub",
+        "provider": provider,
+        "operation": operation,
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+    }
+    if extra:
+        payload.update(extra)
+    return payload
+
+
 class DisabledAccountingIntegration(BaseAccountingIntegration):
     name = "disabled-1c"
 
@@ -38,14 +51,22 @@ class StubAccountingIntegration(BaseAccountingIntegration):
         return IntegrationStatus(
             external_id=f"1c-{int(datetime.now(tz=timezone.utc).timestamp())}",
             status="queued",
-            details={"received": True, "payload": payload},
+            details=_stub_details(
+                provider=self.name,
+                operation="export_document",
+                extra={"received": True, "payload": payload},
+            ),
         )
 
     async def fetch_document(self, external_id: str) -> dict[str, Any] | None:
         return {"external_id": external_id, "content": "stubbed"}
 
     async def sync_status(self, external_id: str) -> IntegrationStatus:
-        return IntegrationStatus(external_id=external_id, status="processed")
+        return IntegrationStatus(
+            external_id=external_id,
+            status="processed",
+            details=_stub_details(provider=self.name, operation="sync_status"),
+        )
 
     async def health_check(self) -> bool:
         return True
@@ -78,14 +99,22 @@ class StubEDOIntegration(BaseEDOIntegration):
         return IntegrationStatus(
             external_id=f"edo-{int(datetime.now(tz=timezone.utc).timestamp())}",
             status="sent",
-            details={"filename": filename, "size": len(content), "metadata": metadata or {}},
+            details=_stub_details(
+                provider=self.name,
+                operation="send_document",
+                extra={"filename": filename, "size": len(content), "metadata": metadata or {}},
+            ),
         )
 
     async def download_document(self, external_id: str) -> bytes:
         return f"stub-document:{external_id}".encode()
 
     async def get_document_status(self, external_id: str) -> IntegrationStatus:
-        return IntegrationStatus(external_id=external_id, status="delivered")
+        return IntegrationStatus(
+            external_id=external_id,
+            status="delivered",
+            details=_stub_details(provider=self.name, operation="get_document_status"),
+        )
 
     async def health_check(self) -> bool:
         return True
@@ -114,14 +143,18 @@ class StubFRDOIntegration(BaseFRDOIntegration):
         return IntegrationStatus(
             external_id=f"frdo-{int(datetime.now(tz=timezone.utc).timestamp())}",
             status="submitted",
-            details={"payload": payload},
+            details=_stub_details(provider=self.name, operation="submit_record", extra={"payload": payload}),
         )
 
     async def fetch_record(self, external_id: str) -> dict[str, Any] | None:
         return {"external_id": external_id, "state": "registered"}
 
     async def get_record_status(self, external_id: str) -> IntegrationStatus:
-        return IntegrationStatus(external_id=external_id, status="registered")
+        return IntegrationStatus(
+            external_id=external_id,
+            status="registered",
+            details=_stub_details(provider=self.name, operation="get_record_status"),
+        )
 
     async def health_check(self) -> bool:
         return True
@@ -150,16 +183,24 @@ class StubEISOTIntegration(BaseEISOTIntegration):
         return IntegrationStatus(
             external_id=f"eisot-{int(datetime.now(tz=timezone.utc).timestamp())}",
             status="queued",
-            details={"payload": payload},
+            details=_stub_details(provider=self.name, operation="publish_report", extra={"payload": payload}),
         )
 
     async def get_publication_status(self, external_id: str) -> IntegrationStatus:
-        return IntegrationStatus(external_id=external_id, status="accepted")
+        return IntegrationStatus(
+            external_id=external_id,
+            status="accepted",
+            details=_stub_details(provider=self.name, operation="get_publication_status"),
+        )
 
     async def pull_notifications(self) -> list[IntegrationStatus]:
         now = datetime.now(tz=timezone.utc).isoformat()
         return [
-            IntegrationStatus(external_id="notification-1", status="info", details={"timestamp": now}),
+            IntegrationStatus(
+                external_id="notification-1",
+                status="info",
+                details=_stub_details(provider=self.name, operation="pull_notifications", extra={"timestamp": now}),
+            ),
         ]
 
     async def health_check(self) -> bool:

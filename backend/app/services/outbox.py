@@ -20,6 +20,12 @@ from app.core.tracing import get_trace_id
 from app.models.job_engine import OutboxEvent, OutboxEventStatus
 from app.models.models import Outbox, OutboxStatus, WebhookDelivery
 from app.services.events import EventType, dedupe_key_for, normalize_payload, resolve_event_type
+from app.services.webhook_retry_telemetry import (
+    classify_failure,
+    calculate_retry_info,
+    create_failure_diagnostics,
+    FailureCategory,
+)
 from app.services.webhooks import (
     WebhookDestination,
     WebhookDispatchError,
@@ -486,8 +492,16 @@ class OutboxProcessor:
     async def _mark_failed(self, entry: Outbox, result: DispatchResult) -> None:
         entry.status = OutboxStatus.FAILED
         entry.next_attempt_at = self._compute_next_attempt(entry.attempts)
-        entry.last_error = self._error_payload(result)
-        await self._record_delivery(entry, success=False, status_code=result.status_code, error=self._error_payload(result))
+        entry.last_error = self._error_payload(
+            result,
+            attempt_number=entry.attempts,
+        )
+        await self._record_delivery(
+            entry,
+            success=False,
+            status_code=result.status_code,
+            error=entry.last_error,
+        )
 
     async def _mark_dead(
         self,
@@ -498,22 +512,65 @@ class OutboxProcessor:
     ) -> None:
         entry.status = OutboxStatus.DEAD
         entry.next_attempt_at = None
-        payload = self._error_payload(result) if result else None
-        if reason:
-            payload = {"message": reason, "error_class": reason}
+        if result:
+            payload = self._error_payload(
+                result,
+                attempt_number=entry.attempts,
+                is_terminal=True,
+            )
+        elif reason:
+            # Terminal reason (e.g., max_attempts_exceeded)
+            category = classify_failure(error_class=reason)
+            payload = create_failure_diagnostics(
+                failure_category=category,
+                retry_policy=calculate_retry_info(
+                    failure_category=category,
+                    current_attempt=entry.attempts,
+                    max_attempts=self.settings.outbox_max_attempts,
+                    backoff_seconds_base=self.settings.outbox_retry_backoff_seconds,
+                    backoff_seconds_max=self.settings.outbox_retry_backoff_max_seconds,
+                ),
+                error_class=reason,
+                error_message=reason,
+            )
+        else:
+            payload = None
         entry.last_error = payload
 
-    def _error_payload(self, result: DispatchResult | None) -> dict[str, Any] | None:
+    def _error_payload(
+        self,
+        result: DispatchResult | None,
+        *,
+        attempt_number: int = 0,
+        is_terminal: bool = False,
+    ) -> dict[str, Any] | None:
         if result is None:
             return None
-        payload: dict[str, Any] = {}
-        if result.error_class:
-            payload["error_class"] = result.error_class
-        if result.error_message:
-            payload["message"] = result.error_message
-        if result.status_code is not None:
-            payload["status_code"] = result.status_code
-        return payload or None
+
+        # Classify the failure
+        category = classify_failure(
+            status_code=result.status_code,
+            error_class=result.error_class,
+            error_message=result.error_message,
+        )
+
+        # Calculate retry policy
+        retry_policy = calculate_retry_info(
+            failure_category=category,
+            current_attempt=attempt_number,
+            max_attempts=self.settings.outbox_max_attempts,
+            backoff_seconds_base=self.settings.outbox_retry_backoff_seconds,
+            backoff_seconds_max=self.settings.outbox_retry_backoff_max_seconds,
+        )
+
+        # Create structured diagnostics
+        return create_failure_diagnostics(
+            failure_category=category,
+            retry_policy=retry_policy,
+            http_status_code=result.status_code,
+            error_class=result.error_class,
+            error_message=result.error_message,
+        )
 
     async def _already_delivered(self, entry: Outbox) -> bool:
         subscription_id = (entry.headers or {}).get("X-Webhook-Endpoint-Id") or (entry.headers or {}).get("X-Webhook-Subscription-Id")

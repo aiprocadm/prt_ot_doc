@@ -62,6 +62,20 @@ def _edo_unprocessable(message: str) -> HTTPException:
     )
 
 
+def _edo_not_found(resource: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail={"code": "edo_not_found", "message": f"{resource} not found"},
+    )
+
+
+def _edo_unauthorized(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail={"code": "edo_unauthorized", "message": message},
+    )
+
+
 class ApiError(BaseModel):
     code: str
     type: str
@@ -124,7 +138,7 @@ class SignatureCreate(BaseModel):
 
 class EdoSendRequest(BaseModel):
     document_version_id: str
-    provider_code: str = "mock"
+    provider_code: str = "internal-fallback"
     recipient: str | None = None
     operator_code: str | None = None
 
@@ -235,13 +249,16 @@ async def list_approval_routes(session: AsyncSession = SessionDep, tenant: Tenan
 async def update_approval_route(
     route_id: str,
     payload: ApprovalRouteCreate,
+    request: Request,
+    response: Response,
     session: AsyncSession = SessionDep,
     tenant: Tenant = TenantDep,
     _: AccessContext = AccessDep,
 ):
+    cid = _correlation_id(request, response)
     route = await session.get(ApprovalRoute, route_id)
     if route is None or route.tenant_id != str(tenant.id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Approval route not found")
+        raise _edo_not_found("approval_route")
     _validate_approval_rules(payload.rules_json)
     route.code = payload.code
     route.name = payload.name
@@ -249,7 +266,7 @@ async def update_approval_route(
     route.version = payload.version
     route.is_active = payload.is_active
     await session.flush()
-    return {"id": route.id, "version": route.version, "is_active": route.is_active}
+    return {"id": route.id, "version": route.version, "is_active": route.is_active, "correlation_id": cid}
 
 
 @router.post("/approvals/requests")
@@ -283,9 +300,9 @@ async def start_approval_request(
             )
         ).scalar_one_or_none()
     if route is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Approval route not found")
+        raise _edo_not_found("approval_route")
     if await session.get(DocumentVersion, payload.document_version_id) is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document version not found")
+        raise _edo_not_found("document_version")
 
     approval_request = ApprovalRequest(
         tenant_id=str(tenant.id),
@@ -304,7 +321,7 @@ async def start_approval_request(
         idempotency_key=f"approval.started:{approval_request.id}",
     )
     await session.flush()
-    body = {"id": approval_request.id, "status": approval_request.status.value}
+    body = {"id": approval_request.id, "status": approval_request.status.value, "correlation_id": get_trace_id(request)}
     if idem_service is not None:
         record = getattr(request.state, "idempotency_record", None)
         if record is not None:
@@ -361,13 +378,16 @@ async def list_approval_tasks(
 async def decide_approval_request(
     request_id: str,
     payload: ApprovalDecisionCreate,
+    request: Request,
+    response: Response,
     session: AsyncSession = SessionDep,
     tenant: Tenant = TenantDep,
     access: AccessContext = AccessDep,
 ):
+    cid = _correlation_id(request, response)
     approval_request = await session.get(ApprovalRequest, request_id)
     if approval_request is None or approval_request.tenant_id != str(tenant.id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Approval request not found")
+        raise _edo_not_found("approval_request")
 
     decision = ApprovalDecision(
         tenant_id=str(tenant.id),
@@ -382,7 +402,7 @@ async def decide_approval_request(
     if payload.decision is ApprovalDecisionType.APPROVE:
         route = await session.get(ApprovalRoute, approval_request.route_id)
         if route is None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Approval route not found")
+            raise _edo_not_found("approval_route")
         rules = ApprovalRules.validate_rules(route.rules_json)
         next_index = approval_request.current_step_index + 1
         if next_index >= len(rules.steps):
@@ -411,19 +431,22 @@ async def decide_approval_request(
             idempotency_key=f"approval.completed:{approval_request.id}",
         )
     await session.flush()
-    return {"status": approval_request.status.value, "current_step_index": approval_request.current_step_index}
+    return {"status": approval_request.status.value, "current_step_index": approval_request.current_step_index, "correlation_id": cid}
 
 
 @router.post("/signatures")
 @audit_operation("create", "signature")
 async def create_signature(
     payload: SignatureCreate,
+    request: Request,
+    response: Response,
     session: AsyncSession = SessionDep,
     tenant: Tenant = TenantDep,
     access: AccessContext = AccessDep,
 ):
+    cid = _correlation_id(request, response)
     if await session.get(DocumentVersion, payload.document_version_id) is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document version not found")
+        raise _edo_not_found("document_version")
     now = datetime.now(tz=timezone.utc)
     signature = Signature(
         tenant_id=str(tenant.id),
@@ -456,28 +479,33 @@ async def create_signature(
         },
         idempotency_key=f"signature:{signature.id}",
     )
-    return {"id": signature.id, "status": signature.status.value, "receipts_s3_key": signature.receipts_s3_key}
+    return {"id": signature.id, "status": signature.status.value, "receipts_s3_key": signature.receipts_s3_key, "correlation_id": cid}
 
 
 @router.post("/sign/request")
 @audit_operation("request", "signature")
 async def sign_request(
     payload: SignatureRequestIn,
+    request: Request,
+    response: Response,
     session: AsyncSession = SessionDep,
     tenant: Tenant = TenantDep,
     access: AccessContext = AccessDep,
 ):
-    return await create_signature(SignatureCreate(document_version_id=payload.document_version_id, type=payload.kind), session, tenant, access)
+    return await create_signature(SignatureCreate(document_version_id=payload.document_version_id, type=payload.kind), request, response, session, tenant, access)
 
 
 @router.post("/sign/submit")
 @audit_operation("submit", "signature")
 async def sign_submit(
     payload: SignatureSubmitIn,
+    request: Request,
+    response: Response,
     session: AsyncSession = SessionDep,
     tenant: Tenant = TenantDep,
     access: AccessContext = AccessDep,
 ):
+    cid = _correlation_id(request, response)
     signature = Signature(
         tenant_id=str(tenant.id),
         document_version_id=payload.document_version_id,
@@ -495,7 +523,7 @@ async def sign_submit(
         payload={"tenant_id": str(tenant.id), "event_id": str(uuid4()), "document_version_id": payload.document_version_id, "status": signature.status.value},
         idempotency_key=f"signature:submit:{signature.id}",
     )
-    return {"id": signature.id, "status": signature.status.value}
+    return {"id": signature.id, "status": signature.status.value, "correlation_id": cid}
 
 
 @router.get("/sign/status")
@@ -611,10 +639,11 @@ async def edo_messages(
 async def edo_status_webhook_v1(
     payload: EdoWebhookPayload,
     request: Request,
+    response: Response,
     session: AsyncSession = SessionDep,
     tenant: Tenant = TenantDep,
 ):
-    return await edo_webhook("stub", payload, request, session, tenant, None)
+    return await edo_webhook("internal-fallback", payload, request, response, session, tenant, None)
 
 
 @router.post("/edo/webhooks/{provider_code}")
@@ -623,15 +652,17 @@ async def edo_webhook(
     provider_code: str,
     payload: EdoWebhookPayload,
     request: Request,
+    response: Response,
     session: AsyncSession = SessionDep,
     tenant: Tenant = TenantDep,
     x_signature: str | None = Header(default=None, alias="X-Signature"),
 ):
+    cid = _correlation_id(request, response)
     secret = str((tenant.settings or {}).get("edo_webhook_secret", "dev-secret"))
     raw = await request.body()
     expected = hmac.new(secret.encode("utf-8"), raw, hashlib.sha256).hexdigest()
     if x_signature and not hmac.compare_digest(expected, x_signature):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid webhook signature")
+        raise _edo_unauthorized("Invalid webhook signature")
 
     payload_hash = hashlib.sha256(raw).hexdigest()
     dedup_key = str(payload.event_id or payload_hash)
@@ -647,7 +678,7 @@ async def edo_webhook(
         await session.flush()
     except Exception:
         await session.rollback()
-        return {"status": "duplicate", **provider_response_meta(provider_code)}
+        return {"status": "duplicate", "correlation_id": cid, **provider_response_meta(provider_code)}
 
     process_inbound_webhook.delay(
         source="edo",
@@ -661,4 +692,4 @@ async def edo_webhook(
             "raw_payload": payload.raw_payload,
         },
     )
-    return {"status": "accepted", **provider_response_meta(provider_code)}
+    return {"status": "accepted", "correlation_id": cid, **provider_response_meta(provider_code)}

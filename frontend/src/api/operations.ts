@@ -85,6 +85,72 @@ export type MedicalExamDto = {
 
 export type OutboxDto = { id: string; status: string; event_type: string; destination: string; attempts: number; created_at: string };
 export type WebhookEndpointDto = { id: string; code?: string | null; target_url: string; is_active: boolean };
+export type IntegrationReadinessDto = {
+  tenant_id: string;
+  providers: Array<{
+    provider: string;
+    adapter?: string;
+    configured?: boolean;
+    provider_mode?: string;
+    provider_production_ready?: boolean;
+    health_status?: string;
+    provider_warning?: string;
+  }>;
+  summary: {
+    configured_total: number;
+    production_ready_total: number;
+    non_production_total: number;
+    disabled_total: number;
+  };
+  webhooks: {
+    configured_total: number;
+    enabled_total: number;
+    delivery_total: number;
+    delivery_sent_total: number;
+    delivery_failed_total: number;
+  };
+  notes: string[];
+};
+
+export type WorkspaceAttentionDto = {
+  generated_at: string;
+  summary: {
+    overdue_tasks: number;
+    due_soon_tasks: number;
+    overdue_deadlines: number;
+    pending_sync_batches: number;
+    failed_sync_batches: number;
+    readiness_blockers: number;
+  };
+  items: Array<{
+    id: string;
+    title: string;
+    severity: string;
+    status: string;
+    reason: string;
+  }>;
+  blockers: Array<{
+    code: string;
+    title: string;
+    severity: string;
+    count: number;
+    reason: string;
+    action_hint: string;
+  }>;
+  recommendations: string[];
+};
+
+export type WorkspaceTaskInboxDto = {
+  total: number;
+  overdue: number;
+  items: Array<{
+    id: string;
+    title: string;
+    status: string;
+    priority: string;
+    overdue: boolean;
+  }>;
+};
 
 export const operationsApi = {
   getContractorSnapshot: async () => {
@@ -207,12 +273,31 @@ export const operationsApi = {
       apiClient.get<ApiTokenDto[]>("/api-tokens"),
       apiClient.get<{ items: Array<{ id: string; action: string; object_type: string; created_at: string }>; total: number }>("/audit")
     ]);
+
+    const [integrationReadinessResponse, workspaceAttentionResponse, taskInboxResponse] = await Promise.all([
+      apiClient
+        .get<IntegrationReadinessDto>("/integrations/readiness")
+        .then((response) => response.data)
+        .catch(() => null),
+      apiClient
+        .get<WorkspaceAttentionDto>("/workspace/attention", { params: { limit: 20 } })
+        .then((response) => response.data)
+        .catch(() => null),
+      apiClient
+        .get<WorkspaceTaskInboxDto>("/workspace/task-inbox", { params: { limit: 20, offset: 0 } })
+        .then((response) => response.data)
+        .catch(() => null)
+    ]);
+
     return {
       tenancy: tenancyResponse.data,
       outbox: outboxResponse.data.items ?? [],
       webhooks: webhookResponse.data ?? [],
       apiTokens: apiTokensResponse.data ?? [],
-      auditItems: auditResponse.data.items ?? []
+      auditItems: auditResponse.data.items ?? [],
+      integrationReadiness: integrationReadinessResponse,
+      attention: workspaceAttentionResponse,
+      taskInbox: taskInboxResponse
     };
   }
 };

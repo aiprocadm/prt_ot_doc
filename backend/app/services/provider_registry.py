@@ -11,7 +11,7 @@ class ProviderDescriptor:
     warning: str | None = None
 
 
-_NON_PRODUCTION_HINTS = ("stub", "mock", "fake", "demo", "sandbox", "test", "disabled")
+_NON_PRODUCTION_HINTS = ("stub", "mock", "fake", "demo", "sandbox", "test", "disabled", "fallback")
 
 
 def describe_provider(code: str | None) -> ProviderDescriptor:
