@@ -9,12 +9,14 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, rbac
 from app.models.models import AuditExportJob, AuditLog, Tenant
 from app.celery.tasks.audit_export_job import export_audit_job
 from app.services.file_storage import FileStorageService
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter()
 
@@ -141,7 +143,10 @@ async def get_audit_history(
 
 
 @router.get("/logs/{audit_id}", response_model=AuditLogEntry)
-async def get_audit_log(audit_id: str, *, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> AuditLogEntry:
+async def get_audit_log(audit_id: str, *, tenant: TenantDep, _: AdminAccess, session: SessionDep,
+    correlation_id: str = Depends(get_correlation_id)) -> AuditLogEntry:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     row = await session.get(AuditLog, audit_id)
     if row is None or str(row.tenant_id) != str(tenant.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Audit log not found")
@@ -150,7 +155,10 @@ async def get_audit_log(audit_id: str, *, tenant: TenantDep, _: AdminAccess, ses
 
 @router.post("/exports", response_model=AuditExportCreateResponse, status_code=status.HTTP_202_ACCEPTED)
 @audit_operation("create", "audit_export")
-async def create_export(payload: AuditExportCreate, *, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> AuditExportCreateResponse:
+async def create_export(payload: AuditExportCreate, *, tenant: TenantDep, _: AdminAccess, session: SessionDep,
+    correlation_id: str = Depends(get_correlation_id)) -> AuditExportCreateResponse:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     job = AuditExportJob(tenant_id=str(tenant.id), filters=payload.filters, format=payload.format, status="queued")
     session.add(job)
     await session.flush()
@@ -162,7 +170,10 @@ async def create_export(payload: AuditExportCreate, *, tenant: TenantDep, _: Adm
 
 
 @router.get("/exports/{export_id}", response_model=AuditExportRead)
-async def get_export(export_id: str, *, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> AuditExportRead:
+async def get_export(export_id: str, *, tenant: TenantDep, _: AdminAccess, session: SessionDep,
+    correlation_id: str = Depends(get_correlation_id)) -> AuditExportRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     row = await session.get(AuditExportJob, export_id)
     if row is None or str(row.tenant_id) != str(tenant.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Export job not found")
@@ -177,7 +188,10 @@ async def get_export(export_id: str, *, tenant: TenantDep, _: AdminAccess, sessi
 
 
 @router.get("/exports/{export_id}/download")
-async def download_export(export_id: str, *, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> StreamingResponse:
+async def download_export(export_id: str, *, tenant: TenantDep, _: AdminAccess, session: SessionDep,
+    correlation_id: str = Depends(get_correlation_id)) -> StreamingResponse:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     row = await session.get(AuditExportJob, export_id)
     if row is None or str(row.tenant_id) != str(tenant.id) or not row.storage_key:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Export file not found")
@@ -196,6 +210,8 @@ async def backward_list(
     _: AdminAccess,
     session: SessionDep,
 ) -> AuditLogHistory:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     if object_id is not None and not object_id.strip():
         raise _audit_bad_request("object_id must not be blank")
     if object_type is not None and not object_type.strip():
@@ -220,5 +236,8 @@ async def backward_list(
 
 
 @router.get("/export")
-async def backward_export(*, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> Response:
+async def backward_export(*, tenant: TenantDep, _: AdminAccess, session: SessionDep,
+    correlation_id: str = Depends(get_correlation_id)) -> Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     raise HTTPException(status.HTTP_410_GONE, "use POST /v1/audit/exports")

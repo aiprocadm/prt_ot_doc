@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.domains.training import (
@@ -42,6 +42,8 @@ from app.schemas.training import (
 )
 from app.services.events import EventType
 from app.services.outbox import OutboxService
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(prefix="/training", tags=["training"])
 
@@ -143,6 +145,8 @@ async def list_courses(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> TrainingCoursePage:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     stmt = (
         select(TrainingCourse)
         .where(TrainingCourse.tenant_id == tenant.id, TrainingCourse.deleted_at.is_(None))
@@ -166,6 +170,8 @@ async def create_course(
     session: SessionDep,
     access: EditorAccess,
 ) -> TrainingCourseRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     course = TrainingCourse(
         tenant_id=tenant.id,
         title=payload.title.strip(),
@@ -188,6 +194,8 @@ async def get_course(
     session: SessionDep,
     access: ManagerAccess,
 ) -> TrainingCourseRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     course = await _get_course(session, tenant, course_id)
     return _course_to_schema(course)
 
@@ -201,6 +209,8 @@ async def update_course(
     session: SessionDep,
     access: EditorAccess,
 ) -> TrainingCourseRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     course = await _get_course(session, tenant, course_id)
     updates = payload.model_dump(exclude_unset=True, by_alias=True)
     for field, value in updates.items():
@@ -225,6 +235,8 @@ async def delete_course(
     session: SessionDep,
     access: EditorAccess,
 ) -> None:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     course = await _get_course(session, tenant, course_id)
     course.deleted_at = datetime.now(tz=timezone.utc)
     await session.flush()
@@ -239,6 +251,8 @@ async def assign_plan(
     session: SessionDep,
     access: EditorAccess,
 ) -> TrainingPlanRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     await _get_company(session, tenant, payload.company_id)
     try:
         plan = await assign_training_plan(
@@ -264,6 +278,8 @@ async def get_plan(
     session: SessionDep,
     access: ManagerAccess,
 ) -> TrainingPlanRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     plan = await _get_plan(session, tenant, plan_id)
     return TrainingPlanRead.model_validate(plan)
 
@@ -276,6 +292,8 @@ async def create_session(
     session: SessionDep,
     access: EditorAccess,
 ) -> TrainingSessionRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     try:
         record = await register_training_session(
             session,
@@ -321,6 +339,8 @@ async def create_certificate(
     session: SessionDep,
     access: EditorAccess,
 ) -> TrainingCertificateRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     if payload.file_id:
         file_stmt = select(File).where(File.id == payload.file_id, File.tenant_id == tenant.id)
         file = (await session.execute(file_stmt)).scalar_one_or_none()
@@ -355,6 +375,8 @@ async def list_expiring_certificates(
     access: ManagerAccess,
     within_days: int = Query(30, ge=1, le=365),
 ) -> TrainingCertificatePage:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     cutoff = date.today() + timedelta(days=within_days)
     certificates = await upcoming_certificate_expirations(session, tenant_id=tenant.id, before=cutoff)
     items = [TrainingCertificateRead.model_validate(item) for item in certificates]

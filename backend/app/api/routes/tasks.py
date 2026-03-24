@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import UUID
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.security import AccessContext, abac
 from app.models.models import PipelineRun, Tenant
 from app.models.obligations import Task, TaskPriority, TaskStatus
@@ -23,6 +23,8 @@ from celery.result import AsyncResult
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter()
 
@@ -70,6 +72,8 @@ async def get_task_status(
     tenant: Tenant = TenantDep,
     access: AccessContext = TaskAccess,
 ) -> TaskStatusResponse:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     stmt = select(PipelineRun).where(
         PipelineRun.id == task_id,
         PipelineRun.tenant_id == tenant.id,
@@ -193,6 +197,8 @@ async def list_tasks(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
 ) -> TaskListResponse:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     stmt = select(Task).where(Task.tenant_id == tenant.id)
     status_filter = _normalize_task_status(status_value)
     if status_filter:
@@ -238,6 +244,8 @@ async def create_task(
     session: AsyncSession = SessionDep,
     access: AccessContext = TaskWriteAccess,
 ) -> TaskRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     priority = _normalize_task_priority(payload.priority) or TaskPriority.MEDIUM
     task = Task(
         tenant_id=str(tenant.id),
@@ -279,6 +287,8 @@ async def update_task(
     session: AsyncSession = SessionDep,
     access: AccessContext = TaskWriteAccess,
 ) -> TaskRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     stmt = select(Task).where(Task.id == task_id, Task.tenant_id == tenant.id)
     task = (await session.execute(stmt)).scalar_one_or_none()
     if task is None:

@@ -19,6 +19,8 @@ from app.core.audit_decorator import audit_operation
 from app.core.security import rbac
 from app.models.npa import NpaAct
 from app.schemas.npa import NpaActListResponse, NpaActRead
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(tags=["npa"])
 
@@ -43,6 +45,8 @@ async def get_npa_detail(
     tenant: Tenant = Depends(get_tenant_record),
     access=Depends(rbac()),
 ) -> dict:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     _ = access
     payload = await NpaImpactService(session, str(tenant.id)).detail(act_id, revision_id=revision_id)
     if payload is None:
@@ -59,6 +63,8 @@ async def create_npa_update_tasks(
     tenant: Tenant = Depends(get_tenant_record),
     access=Depends(rbac()),
 ) -> dict:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     tasks = await NpaImpactService(session, str(tenant.id)).create_update_tasks(act_id, getattr(access.user, "id", None), revision_id=revision_id)
     await session.commit()
     return {"created": len(tasks), "items": [{"id": item.id, "title": item.title} for item in tasks]}

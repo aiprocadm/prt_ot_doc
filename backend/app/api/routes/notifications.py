@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, rbac
 from app.models.models import Tenant
@@ -18,6 +18,8 @@ from app.modules.notifications import (
 )
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
@@ -42,6 +44,8 @@ async def list_notifications(
     limit: int = Query(default=20, ge=1, le=100),
     cursor: str | None = Query(default=None),
 ) -> NotificationPage:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     return await _service(session, tenant, access).list_notifications(
         status_value=status,
         priority_value=priority,
@@ -60,6 +64,8 @@ async def mark_read(
     tenant: TenantDep,
     access: AccessDep,
 ) -> dict[str, int]:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     updated = await _service(session, tenant, access).mark_read(payload.ids)
     return {"updated": updated}
 
@@ -70,6 +76,8 @@ async def get_settings_alias(
     tenant: TenantDep,
     access: AccessDep,
 ) -> ChannelSettingsOut:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     return await get_settings(session=session, tenant=tenant, access=access)
 
 
@@ -80,6 +88,8 @@ async def put_settings_alias(
     tenant: TenantDep,
     access: AccessDep,
 ) -> ChannelSettingsOut:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     return await put_settings(payload=payload, session=session, tenant=tenant, access=access)
 
 
@@ -91,6 +101,8 @@ async def list_templates(
     channel: str | None = Query(default=None),
     type: str | None = Query(default=None),
 ) -> list[NotificationTemplateOut]:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     return await _service(session, tenant, access).list_templates(
         channel_value=channel,
         type_value=type,
@@ -105,6 +117,8 @@ async def upsert_template(
     tenant: TenantDep,
     access: AccessDep,
 ) -> NotificationTemplateOut:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     return await _service(session, tenant, access).upsert_template(payload)
 
 
@@ -128,6 +142,8 @@ async def get_settings(
     tenant: TenantDep,
     access: AccessDep,
 ) -> ChannelSettingsOut:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     return await _service(session, tenant, access).get_settings()
 
 

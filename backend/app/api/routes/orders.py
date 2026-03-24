@@ -7,12 +7,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.models.finance import Contract, Order, OrderStatus
 from app.models.models import Tenant
 from app.schemas.order import OrderCreate, OrderPage, OrderRead, OrderUpdate
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(tags=["orders"])
 
@@ -74,10 +76,13 @@ async def list_orders(
     tenant: TenantDep,
     session: SessionDep,
     _: ReadAccess,
+    correlation_id: str = Depends(get_correlation_id),
     contract_id: str | None = Query(default=None, min_length=1, max_length=36),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> OrderPage:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     stmt = select(Order).where(
         Order.tenant_id == tenant.id,
         Order.deleted_at.is_(None),
@@ -98,7 +103,10 @@ async def create_order(
     tenant: TenantDep,
     session: SessionDep,
     _: WriteAccess,
+    correlation_id: str = Depends(get_correlation_id),
 ) -> OrderRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     contract = await _get_contract(session, tenant, payload.contract_id)
     if payload.status:
         try:
@@ -128,7 +136,10 @@ async def get_order(
     tenant: TenantDep,
     session: SessionDep,
     _: ReadAccess,
+    correlation_id: str = Depends(get_correlation_id),
 ) -> OrderRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     order = await _get_order(session, tenant, order_id)
     return OrderRead.model_validate(order)
 
@@ -141,7 +152,10 @@ async def update_order(
     tenant: TenantDep,
     session: SessionDep,
     _: WriteAccess,
+    correlation_id: str = Depends(get_correlation_id),
 ) -> OrderRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     order = await _get_order(session, tenant, order_id)
     updates = payload.model_dump(exclude_unset=True)
     if "contract_id" in updates and updates["contract_id"]:
@@ -171,7 +185,10 @@ async def delete_order(
     tenant: TenantDep,
     session: SessionDep,
     _: WriteAccess,
+    correlation_id: str = Depends(get_correlation_id),
 ) -> None:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     order = await _get_order(session, tenant, order_id)
     if order.deleted_at is None:
         order.deleted_at = datetime.now(timezone.utc)

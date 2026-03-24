@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.security import AccessContext, abac
 from app.models.models import Attestation, AttestationStatus, Person, Position, Tenant, User
 from app.schemas.attestations import (
@@ -19,6 +19,8 @@ from app.schemas.attestations import (
 )
 from app.services.audit import AuditService
 from app.services.obligations import upsert_attestation_task
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(tags=["attestations"])
 
@@ -95,6 +97,8 @@ async def list_attestations(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> AttestationPage:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     stmt = select(Attestation).where(
         Attestation.tenant_id == tenant.id, Attestation.deleted_at.is_(None)
     )
@@ -119,6 +123,8 @@ async def create_attestation(
     session: SessionDep,
     access: EditorAccess,
 ) -> AttestationRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     person = await _get_person(session, str(tenant.id), payload.person_id)
     if payload.position_id:
         await _get_position(session, str(tenant.id), payload.position_id)
@@ -169,6 +175,8 @@ async def get_attestation(
     session: SessionDep,
     _: ManagerAccess,
 ) -> AttestationRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     attestation = await _get_attestation(session, str(tenant.id), attestation_id)
     return AttestationRead.model_validate(attestation)
 
@@ -182,6 +190,8 @@ async def update_attestation(
     session: SessionDep,
     access: EditorAccess,
 ) -> AttestationRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     record = await _get_attestation(session, str(tenant.id), attestation_id)
     updates = payload.model_dump(exclude_unset=True)
     if "person_id" in updates and updates["person_id"]:

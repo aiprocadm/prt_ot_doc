@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.security import AccessContext, abac
 from app.domains.incidents import add_inspection_result, register_inspection, update_inspection
 from app.models.models import Inspection, InspectionResult, InspectionStatus, InspectionType, Tenant, User
@@ -22,6 +22,8 @@ from app.schemas.incidents import (
 from app.services.audit import AuditService
 from app.services.obligations import upsert_inspection_task
 from app.services.outbox import OutboxService
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(tags=["inspections"])
 
@@ -104,6 +106,8 @@ async def list_inspections(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> InspectionPage:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     stmt = select(Inspection).options(selectinload(Inspection.results)).where(
         Inspection.tenant_id == tenant.id, Inspection.deleted_at.is_(None)
     )
@@ -133,6 +137,8 @@ async def create_inspection(
     session: SessionDep,
     access: EditorAccess,
 ) -> InspectionRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     if payload.responsible_id:
         stmt = select(User).where(
             User.id == payload.responsible_id,
@@ -206,6 +212,8 @@ async def get_inspection(
     session: SessionDep,
     _: ManagerAccess,
 ) -> InspectionRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     inspection = await _get_inspection(session, tenant, inspection_id)
     return _serialize_inspection(inspection)
 
@@ -219,6 +227,8 @@ async def patch_inspection(
     session: SessionDep,
     access: EditorAccess,
 ) -> InspectionRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     inspection = await _get_inspection(session, tenant, inspection_id)
     updates = payload.model_dump(exclude_unset=True)
     if updates.get("responsible_id"):
@@ -276,6 +286,8 @@ async def add_inspection_result_entry(
     session: SessionDep,
     access: EditorAccess,
 ) -> InspectionResultRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     inspection = await _get_inspection(session, tenant, inspection_id)
     try:
         result = await add_inspection_result(
@@ -315,6 +327,8 @@ async def list_inspection_results(
     session: SessionDep,
     _: ManagerAccess,
 ) -> list[InspectionResultRead]:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     inspection = await _get_inspection(session, tenant, inspection_id)
     stmt = (
         select(InspectionResult)

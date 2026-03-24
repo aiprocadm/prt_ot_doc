@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.domains.ppe import issue_ppe_item, list_expiring_issues
@@ -27,6 +27,8 @@ from app.schemas.ppe import (
 )
 from app.services.events import EventType
 from app.services.outbox import OutboxService
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(prefix="/ppe", tags=["ppe"])
 
@@ -97,6 +99,8 @@ async def list_items(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> PPEItemPage:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     stmt = (
         select(PPEItem)
         .where(PPEItem.tenant_id == tenant.id, PPEItem.deleted_at.is_(None))
@@ -123,6 +127,8 @@ async def create_item(
     session: SessionDep,
     access: EditorAccess,
 ) -> PPEItemRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     item = PPEItem(
         tenant_id=tenant.id,
         name=payload.name,
@@ -139,7 +145,10 @@ async def create_item(
 
 
 @router.get("/items/{item_id}", response_model=PPEItemRead)
-async def get_item(item_id: str, tenant: TenantDep, session: SessionDep, access: ManagerAccess) -> PPEItemRead:
+async def get_item(item_id: str, tenant: TenantDep, session: SessionDep, access: ManagerAccess,
+    correlation_id: str = Depends(get_correlation_id)) -> PPEItemRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     item = await _get_item(session, tenant, item_id)
     return _item_schema(item)
 
@@ -153,6 +162,8 @@ async def update_item(
     session: SessionDep,
     access: EditorAccess,
 ) -> PPEItemRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     item = await _get_item(session, tenant, item_id)
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(item, field, value)
@@ -166,6 +177,8 @@ async def update_item(
 async def delete_item(
     item_id: str, tenant: TenantDep, session: SessionDep, access: EditorAccess
 ) -> None:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     item = await _get_item(session, tenant, item_id)
     if item.deleted_at is None:
         item.deleted_at = datetime.now(timezone.utc)
@@ -183,6 +196,8 @@ async def list_issues(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> PPEIssuePage:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     stmt = select(PPEIssue).where(PPEIssue.tenant_id == tenant.id, PPEIssue.deleted_at.is_(None))
     if person_id:
         stmt = stmt.where(PPEIssue.person_id == person_id)
@@ -209,6 +224,8 @@ async def expiring_issues(
     access: ManagerAccess,
     within_days: int = Query(30, ge=1, le=365),
 ) -> PPEIssuePage:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     issues = await list_expiring_issues(session, tenant_id=tenant.id, within_days=within_days)
     return PPEIssuePage(items=[_issue_schema(item) for item in issues], total=len(issues))
 
@@ -221,6 +238,8 @@ async def create_issue(
     session: SessionDep,
     access: EditorAccess,
 ) -> PPEIssueRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     try:
         issue = await issue_ppe_item(
             session,
@@ -255,7 +274,15 @@ async def create_issue(
 
 
 @router.get("/issues/{issue_id}", response_model=PPEIssueRead)
-async def get_issue(issue_id: str, tenant: TenantDep, session: SessionDep, access: ManagerAccess) -> PPEIssueRead:
+async def get_issue(
+    issue_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+    correlation_id: str = Depends(get_correlation_id),
+) -> PPEIssueRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     issue = await _get_issue(session, tenant, issue_id)
     return _issue_schema(issue)
 

@@ -23,6 +23,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter()
 
@@ -106,6 +107,8 @@ async def login(
     tenant: Tenant | None = Depends(_resolve_login_tenant),
 ) -> TokenPair:
     """Authenticate a user and issue a new token pair."""
+
+    TenantContextValidator.ensure_tenant_context(tenant)
 
     if tenant is None:
         raise _invalid_credentials()
@@ -216,6 +219,8 @@ async def refresh_tokens(
     tenant: Tenant = Depends(get_tenant_record),
 ) -> TokenPair:
     """Validate a refresh token and issue a new token pair."""
+
+    TenantContextValidator.ensure_tenant_context(tenant)
 
     try:
         claims = verify_token(payload.refresh_token, expected_type="refresh")

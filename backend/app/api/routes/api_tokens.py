@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.models.models import ApiToken, Tenant
@@ -13,6 +13,8 @@ from app.services.api_tokens import ApiTokenService
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(prefix="/api-tokens", tags=["api-tokens"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -34,6 +36,8 @@ async def list_api_tokens(
     access: OwnerAdminAccess,
     tenant: Tenant = Depends(get_tenant_record),
 ) -> list[ApiTokenRead]:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     _ = access
     rows = (
         (
@@ -68,6 +72,8 @@ async def create_api_token(
     access: OwnerAdminAccess,
     tenant: Tenant = Depends(get_tenant_record),
 ) -> ApiTokenCreateResponse:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     raw, token = ApiTokenService.issue_token(
         tenant_id=tenant.id,
         name=payload.name,
@@ -96,6 +102,8 @@ async def revoke_api_token(
     access: OwnerAdminAccess,
     tenant: Tenant = Depends(get_tenant_record),
 ) -> dict[str, str]:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     _ = access
     token = await session.get(ApiToken, token_id)
     if token is None or token.tenant_id != tenant.id or token.deleted_at is not None:

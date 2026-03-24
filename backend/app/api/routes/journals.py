@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.domains.ppe import build_journal_export
@@ -24,6 +24,8 @@ from app.schemas.journal import (
     JournalRead,
     JournalUpdate,
 )
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(prefix="/journals", tags=["journals"])
 
@@ -95,6 +97,8 @@ async def list_journals(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> JournalPage:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     stmt = select(Journal).where(Journal.tenant_id == tenant.id, Journal.deleted_at.is_(None))
     if company_id:
         stmt = stmt.where(Journal.company_id == company_id)
@@ -115,6 +119,8 @@ async def create_journal(
     session: SessionDep,
     access: ManagerAccess,
 ) -> JournalRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     journal = Journal(
         tenant_id=tenant.id,
         company_id=payload.company_id,
@@ -131,7 +137,10 @@ async def create_journal(
 
 
 @router.get("/{journal_id}", response_model=JournalRead)
-async def get_journal(journal_id: str, tenant: TenantDep, session: SessionDep, access: ManagerAccess) -> JournalRead:
+async def get_journal(journal_id: str, tenant: TenantDep, session: SessionDep, access: ManagerAccess,
+    correlation_id: str = Depends(get_correlation_id)) -> JournalRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     journal = await _get_journal(session, tenant, journal_id)
     return _journal_schema(journal)
 
@@ -145,6 +154,8 @@ async def update_journal(
     session: SessionDep,
     access: ManagerAccess,
 ) -> JournalRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     journal = await _get_journal(session, tenant, journal_id)
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(journal, field, value)
@@ -158,6 +169,8 @@ async def update_journal(
 async def delete_journal(
     journal_id: str, tenant: TenantDep, session: SessionDep, access: ManagerAccess
 ) -> None:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     journal = await _get_journal(session, tenant, journal_id)
     if journal.deleted_at is None:
         journal.deleted_at = datetime.now(timezone.utc)
@@ -175,6 +188,8 @@ async def list_entries(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ) -> JournalEntryPage:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     await _get_journal(session, tenant, journal_id)
     stmt = select(JournalEntry).where(
         JournalEntry.tenant_id == tenant.id,
@@ -205,6 +220,8 @@ async def create_entry(
     session: SessionDep,
     access: ManagerAccess,
 ) -> JournalEntryRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     journal = await _get_journal(session, tenant, journal_id)
     person = await _ensure_person(session, tenant, payload.person_id)
     entry_date = payload.entry_date or date.today()
@@ -225,7 +242,15 @@ async def create_entry(
 
 
 @router.get("/entries/{entry_id}", response_model=JournalEntryRead)
-async def get_entry(entry_id: str, tenant: TenantDep, session: SessionDep, access: ManagerAccess) -> JournalEntryRead:
+async def get_entry(
+    entry_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+    correlation_id: str = Depends(get_correlation_id),
+) -> JournalEntryRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     entry = await _get_entry(session, tenant, entry_id)
     return _entry_schema(entry)
 
@@ -256,7 +281,10 @@ async def update_entry(
 
 @router.delete("/entries/{entry_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 @audit_operation("delete", "journal_entry")
-async def delete_entry(entry_id: str, tenant: TenantDep, session: SessionDep, access: ManagerAccess) -> None:
+async def delete_entry(entry_id: str, tenant: TenantDep, session: SessionDep, access: ManagerAccess,
+    correlation_id: str = Depends(get_correlation_id)) -> None:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     entry = await _get_entry(session, tenant, entry_id)
     if entry.deleted_at is None:
         entry.deleted_at = datetime.now(timezone.utc)
@@ -271,6 +299,8 @@ async def export_journal(
     session: SessionDep,
     access: ManagerAccess,
 ) -> dict[str, object]:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     payload = await build_journal_export(session, tenant_id=tenant.id, journal_id=journal_id)
     journal = payload.get("journal")
     entries = payload.get("entries", [])

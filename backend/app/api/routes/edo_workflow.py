@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.tracing import get_trace_id
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.models.document import DocumentVersion
@@ -42,6 +42,8 @@ from app.services.billing import BillingService
 from app.services.outbox import OutboxService
 from app.services.provider_registry import provider_response_meta
 from app.tasks import edo_status_simulation_job, process_inbound_webhook, send_edo_job
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter()
 SessionDep = Depends(get_session)

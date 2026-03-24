@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.api.models.webhook_admin import (
     WebhookDeliveryWithDiagnostics,
     WebhookFailureDiagnostics,
@@ -25,6 +25,8 @@ from app.services.webhook_retry_telemetry import (
     FailureCategory,
 )
 from app.tasks import compute_inbound_dedup_key, process_inbound_webhook
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
@@ -99,7 +101,10 @@ def _to_endpoint_out(row: WebhookEndpoint) -> WebhookEndpointOut:
 
 
 @router.get("/endpoints", response_model=list[WebhookEndpointOut])
-async def list_webhooks(tenant: TenantDep, _: AdminAccess, session: SessionDep) -> list[WebhookEndpointOut]:
+async def list_webhooks(tenant: TenantDep, _: AdminAccess, session: SessionDep,
+    correlation_id: str = Depends(get_correlation_id)) -> list[WebhookEndpointOut]:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     rows = (
         await session.execute(select(WebhookEndpoint).where(WebhookEndpoint.tenant_id == tenant.id).order_by(WebhookEndpoint.created_at.desc()))
     ).scalars().all()
@@ -108,7 +113,10 @@ async def list_webhooks(tenant: TenantDep, _: AdminAccess, session: SessionDep) 
 
 @router.post("/endpoints", response_model=WebhookEndpointCreateOut, status_code=status.HTTP_201_CREATED)
 @audit_operation("create", "webhook_endpoint")
-async def create_webhook(payload: WebhookEndpointIn, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> WebhookEndpointOut:
+async def create_webhook(payload: WebhookEndpointIn, tenant: TenantDep, _: AdminAccess, session: SessionDep,
+    correlation_id: str = Depends(get_correlation_id)) -> WebhookEndpointOut:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     generated_secret = payload.secret or secrets.token_urlsafe(32)
     row = WebhookEndpoint(
         tenant_id=tenant.id,
@@ -128,7 +136,10 @@ async def create_webhook(payload: WebhookEndpointIn, tenant: TenantDep, _: Admin
 
 @router.patch("/endpoints/{webhook_id}", response_model=WebhookEndpointOut)
 @audit_operation("update", "webhook_endpoint")
-async def update_webhook(webhook_id: str, payload: WebhookEndpointIn, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> WebhookEndpointOut:
+async def update_webhook(webhook_id: str, payload: WebhookEndpointIn, tenant: TenantDep, _: AdminAccess, session: SessionDep,
+    correlation_id: str = Depends(get_correlation_id)) -> WebhookEndpointOut:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     row = await session.get(WebhookEndpoint, webhook_id)
     if row is None or row.tenant_id != tenant.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "webhook_not_found")
@@ -146,7 +157,10 @@ async def update_webhook(webhook_id: str, payload: WebhookEndpointIn, tenant: Te
 
 @router.delete("/endpoints/{webhook_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 @audit_operation("delete", "webhook_endpoint")
-async def delete_webhook(webhook_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> None:
+async def delete_webhook(webhook_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep,
+    correlation_id: str = Depends(get_correlation_id)) -> None:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     row = await session.get(WebhookEndpoint, webhook_id)
     if row is None or row.tenant_id != tenant.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "webhook_not_found")
@@ -156,7 +170,10 @@ async def delete_webhook(webhook_id: str, tenant: TenantDep, _: AdminAccess, ses
 
 @router.post("/endpoints/{webhook_id}:rotate-secret", response_model=WebhookEndpointCreateOut)
 @audit_operation("rotate_secret", "webhook_endpoint")
-async def rotate_webhook_secret(webhook_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> WebhookEndpointCreateOut:
+async def rotate_webhook_secret(webhook_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep,
+    correlation_id: str = Depends(get_correlation_id)) -> WebhookEndpointCreateOut:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     row = await session.get(WebhookEndpoint, webhook_id)
     if row is None or row.tenant_id != tenant.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "webhook_not_found")
@@ -170,7 +187,10 @@ async def rotate_webhook_secret(webhook_id: str, tenant: TenantDep, _: AdminAcce
 
 @router.post("/endpoints/{webhook_id}:disable", response_model=WebhookEndpointOut)
 @audit_operation("disable", "webhook_endpoint")
-async def disable_webhook(webhook_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> WebhookEndpointOut:
+async def disable_webhook(webhook_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep,
+    correlation_id: str = Depends(get_correlation_id)) -> WebhookEndpointOut:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     row = await session.get(WebhookEndpoint, webhook_id)
     if row is None or row.tenant_id != tenant.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "webhook_not_found")
@@ -182,7 +202,10 @@ async def disable_webhook(webhook_id: str, tenant: TenantDep, _: AdminAccess, se
 
 @router.post("/endpoints/{webhook_id}:enable", response_model=WebhookEndpointOut)
 @audit_operation("enable", "webhook_endpoint")
-async def enable_webhook(webhook_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> WebhookEndpointOut:
+async def enable_webhook(webhook_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep,
+    correlation_id: str = Depends(get_correlation_id)) -> WebhookEndpointOut:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     row = await session.get(WebhookEndpoint, webhook_id)
     if row is None or row.tenant_id != tenant.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "webhook_not_found")
@@ -201,6 +224,8 @@ async def list_deliveries(
     endpoint_id: str | None = Query(default=None),
     event_type: str | None = Query(default=None),
 ) -> list[WebhookDeliveryOut]:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     stmt = select(WebhookDelivery, Outbox.event_type).join(Outbox, Outbox.id == WebhookDelivery.event_id).where(WebhookDelivery.tenant_id == tenant.id)
     if status_filter:
         stmt = stmt.where(WebhookDelivery.status == status_filter)
@@ -229,7 +254,10 @@ async def list_deliveries(
 
 
 @router.get("/endpoints/{webhook_id}/deliveries", response_model=list[WebhookDeliveryOut])
-async def list_endpoint_deliveries(webhook_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> list[WebhookDeliveryOut]:
+async def list_endpoint_deliveries(webhook_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep,
+    correlation_id: str = Depends(get_correlation_id)) -> list[WebhookDeliveryOut]:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     row = await session.get(WebhookEndpoint, webhook_id)
     if row is None or row.tenant_id != tenant.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "webhook_not_found")
@@ -262,7 +290,10 @@ async def list_endpoint_deliveries(webhook_id: str, tenant: TenantDep, _: AdminA
 
 @router.post("/endpoints/{webhook_id}:test")
 @audit_operation("test", "webhook_endpoint")
-async def test_endpoint(webhook_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> dict[str, str]:
+async def test_endpoint(webhook_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep,
+    correlation_id: str = Depends(get_correlation_id)) -> dict[str, str]:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     row = await session.get(WebhookEndpoint, webhook_id)
     if row is None or row.tenant_id != tenant.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "webhook_not_found")
@@ -332,6 +363,8 @@ async def get_delivery_diagnostics(
     session: SessionDep,
 ) -> WebhookFailureDiagnostics:
     """Get failure diagnostics for a webhook delivery."""
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     delivery = await session.get(WebhookDelivery, delivery_id)
     if delivery is None or delivery.tenant_id != tenant.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "delivery_not_found")
@@ -357,6 +390,8 @@ async def get_delivery_retry_eligibility(
     session: SessionDep,
 ) -> WebhookRetryEligibility:
     """Check if a webhook delivery is eligible for retry."""
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     delivery = await session.get(WebhookDelivery, delivery_id)
     if delivery is None or delivery.tenant_id != tenant.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "delivery_not_found")
@@ -415,6 +450,8 @@ async def list_failed_deliveries_with_diagnostics(
     limit: int = Query(default=50, le=500),
 ) -> list[WebhookDeliveryWithDiagnostics]:
     """List failed deliveries for an endpoint with retry diagnostics."""
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     endpoint = await session.get(WebhookEndpoint, endpoint_id)
     if endpoint is None or endpoint.tenant_id != tenant.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "endpoint_not_found")
@@ -457,7 +494,10 @@ async def list_failed_deliveries_with_diagnostics(
 
 @router.post("/deliveries/{delivery_id}:retry", response_model=dict[str, str])
 @audit_operation("retry", "webhook_delivery")
-async def retry_delivery(delivery_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> dict[str, str]:
+async def retry_delivery(delivery_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep,
+    correlation_id: str = Depends(get_correlation_id)) -> dict[str, str]:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     delivery = await session.get(WebhookDelivery, delivery_id)
     if delivery is None or delivery.tenant_id != tenant.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "delivery_not_found")
@@ -481,7 +521,15 @@ async def retry_delivery(delivery_id: str, tenant: TenantDep, _: AdminAccess, se
 
 @router.post("/events/{event_id}:replay")
 @audit_operation("replay", "outbox_event")
-async def replay_event(event_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep) -> dict[str, str]:
+async def replay_event(
+    event_id: str,
+    tenant: TenantDep,
+    _: AdminAccess,
+    session: SessionDep,
+    correlation_id: str = Depends(get_correlation_id),
+) -> dict[str, str]:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     event = await session.get(Outbox, event_id)
     if event is None or event.tenant_id != tenant.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "event_not_found")

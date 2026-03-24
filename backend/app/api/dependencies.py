@@ -120,6 +120,11 @@ async def require_tenant_slug(request: Request) -> None:
     tenant_required(_resolve_tenant_slug(request))
 
 
+async def get_correlation_id(request: Request) -> str:
+    """Extract correlation ID from request context (set by GlobalErrorHandlerMiddleware)."""
+    return getattr(request.state, "correlation_id", "")
+
+
 async def get_session(tenant: Tenant = Depends(get_tenant_record)) -> AsyncIterator[AsyncSession]:
     """Provide an async database session scoped to the current tenant."""
 

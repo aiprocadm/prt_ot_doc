@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.security import AccessContext, abac
 from app.models.models import (
     Incident,
@@ -21,6 +21,8 @@ from app.models.models import (
     TrainingPlan,
 )
 from app.models.risk import RiskAssessmentItem
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -46,7 +48,10 @@ async def _scalar(session: AsyncSession, stmt) -> int:
 
 
 @router.get("/kpi")
-async def get_kpi(tenant: TenantDep, session: SessionDep, _: ReportAccess) -> dict[str, int]:
+async def get_kpi(tenant: TenantDep, session: SessionDep, _: ReportAccess,
+    correlation_id: str = Depends(get_correlation_id)) -> dict[str, int]:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     today = date.today()
 
     risks_high_stmt = select(func.count()).select_from(RiskAssessmentItem).where(

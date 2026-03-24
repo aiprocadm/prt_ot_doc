@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.models.models import (
@@ -28,6 +28,8 @@ from app.schemas.site import (
     WorkplaceRead,
     WorkplaceUpdate,
 )
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(tags=["sites"])
 
@@ -112,6 +114,8 @@ async def list_sites(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> SitePage:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     stmt = select(Site).where(Site.tenant_id == tenant.id, Site.deleted_at.is_(None))
     if company_id:
         stmt = stmt.where(Site.company_id == company_id)
@@ -127,6 +131,8 @@ async def list_sites(
 async def create_site(
     payload: SiteCreate, tenant: TenantDep, session: SessionDep, _: EditorAccess
 ) -> SiteRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     await _get_company(session, tenant, payload.company_id)
     site = Site(tenant_id=str(tenant.id), **payload.model_dump())
     session.add(site)
@@ -136,7 +142,10 @@ async def create_site(
 
 
 @router.get("/sites/{site_id}", response_model=SiteRead)
-async def get_site(site_id: str, tenant: TenantDep, session: SessionDep, _: ManagerAccess) -> SiteRead:
+async def get_site(site_id: str, tenant: TenantDep, session: SessionDep, _: ManagerAccess,
+    correlation_id: str = Depends(get_correlation_id)) -> SiteRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     site = await _get_site(session, tenant, site_id)
     return SiteRead.model_validate(site)
 
@@ -150,6 +159,8 @@ async def update_site(
     session: SessionDep,
     _: EditorAccess,
 ) -> SiteRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     site = await _get_site(session, tenant, site_id)
     updates = payload.model_dump(exclude_unset=True)
     if not updates:
@@ -170,6 +181,8 @@ async def update_site(
 async def delete_site(
     site_id: str, tenant: TenantDep, session: SessionDep, _: EditorAccess
 ) -> None:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     site = await _get_site(session, tenant, site_id)
     if site.deleted_at is None:
         site.deleted_at = datetime.now(timezone.utc)
@@ -186,6 +199,8 @@ async def list_workplaces(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> WorkplacePage:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     stmt = select(Workplace).where(
         Workplace.tenant_id == tenant.id,
         Workplace.deleted_at.is_(None),
@@ -231,6 +246,8 @@ async def _replace_workplace_hazards(
 async def create_workplace(
     payload: WorkplaceCreate, tenant: TenantDep, session: SessionDep, _: EditorAccess
 ) -> WorkplaceRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     await _get_company(session, tenant, payload.company_id)
     if payload.site_id:
         await _get_site(session, tenant, payload.site_id)
@@ -258,6 +275,8 @@ async def create_workplace(
 async def get_workplace(
     workplace_id: str, tenant: TenantDep, session: SessionDep, _: ManagerAccess
 ) -> WorkplaceRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     workplace = await _get_workplace(session, tenant, workplace_id)
     return WorkplaceRead.model_validate(workplace)
 
@@ -305,6 +324,8 @@ async def update_workplace(
 async def delete_workplace(
     workplace_id: str, tenant: TenantDep, session: SessionDep, _: EditorAccess
 ) -> None:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     workplace = await _get_workplace(session, tenant, workplace_id)
     if workplace.deleted_at is None:
         workplace.deleted_at = datetime.now(timezone.utc)

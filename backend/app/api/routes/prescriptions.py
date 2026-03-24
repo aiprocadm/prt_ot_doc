@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.security import AccessContext, abac
 from app.models.models import Incident, Inspection, Prescription, PrescriptionStatus, User
 from app.models.tenanting import Tenant
@@ -19,6 +19,8 @@ from app.schemas.prescriptions import (
     PrescriptionUpdate,
 )
 from app.services.audit import AuditService
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(tags=["prescriptions"])
 
@@ -117,6 +119,8 @@ async def list_prescriptions(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> PrescriptionPage:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     stmt = select(Prescription).where(
         Prescription.tenant_id == tenant.id, Prescription.deleted_at.is_(None)
     )
@@ -148,6 +152,8 @@ async def create_prescription(
     session: SessionDep,
     access: EditorAccess,
 ) -> PrescriptionRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     await _get_inspection(session, str(tenant.id), payload.inspection_id)
     if payload.incident_id:
         await _get_incident(session, str(tenant.id), payload.incident_id)
@@ -190,6 +196,8 @@ async def get_prescription(
     session: SessionDep,
     _: ManagerAccess,
 ) -> PrescriptionRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     record = await _get_prescription(session, str(tenant.id), prescription_id)
     return PrescriptionRead.model_validate(record)
 
@@ -203,6 +211,8 @@ async def update_prescription(
     session: SessionDep,
     access: EditorAccess,
 ) -> PrescriptionRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     record = await _get_prescription(session, str(tenant.id), prescription_id)
     updates = payload.model_dump(exclude_unset=True)
     if "inspection_id" in updates and updates["inspection_id"]:

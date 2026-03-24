@@ -10,13 +10,15 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.models.models import Company, Person, Position, Tenant, Workplace
 from app.repository import list_persons
 from app.services.billing import BillingService
 from app.schemas.person import PersonCreate, PersonPage, PersonRead, PersonUpdate
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(prefix="/persons", tags=["persons"])
 
@@ -136,9 +138,12 @@ async def list_persons_endpoint(
     tenant: TenantDep,
     session: SessionDep,
     access: ManagerAccess,
+    correlation_id: str = Depends(get_correlation_id),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> PersonPage:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     persons, total = await list_persons(session, tenant.id, limit=limit, offset=offset)
     return PersonPage(items=persons, total=total)
 
@@ -150,7 +155,10 @@ async def create_person_endpoint(
     tenant: TenantDep,
     session: SessionDep,
     access: EditorAccess,
+    correlation_id: str = Depends(get_correlation_id),
 ) -> PersonRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     await BillingService(session).assert_allowed(tenant, "users.create")
     company = await _get_company(session, tenant, payload.company_id)
     position_id = None
@@ -203,7 +211,10 @@ async def get_person_endpoint(
     tenant: TenantDep,
     session: SessionDep,
     access: ManagerAccess,
+    correlation_id: str = Depends(get_correlation_id),
 ) -> PersonRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     person = await _get_person(session, tenant, person_id)
     return PersonRead.model_validate(person)
 
@@ -216,7 +227,10 @@ async def update_person_endpoint(
     tenant: TenantDep,
     session: SessionDep,
     access: EditorAccess,
+    correlation_id: str = Depends(get_correlation_id),
 ) -> PersonRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     person = await _get_person(session, tenant, person_id)
     data = payload.model_dump(exclude_unset=True)
 
@@ -303,7 +317,10 @@ async def delete_person_endpoint(
     tenant: TenantDep,
     session: SessionDep,
     access: EditorAccess,
+    correlation_id: str = Depends(get_correlation_id),
 ) -> None:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     person = await _get_person(session, tenant, person_id)
     if person.deleted_at is None:
         person.deleted_at = datetime.now(timezone.utc)

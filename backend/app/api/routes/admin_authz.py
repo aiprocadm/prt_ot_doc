@@ -7,12 +7,14 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, rbac
 from app.modules.rbac_abac.engine import evaluate
 from app.modules.rbac_abac.types import PolicyContext, Resource, Subject
 from app.models.models import AuthzPolicy, AuthzRole, AuthzRolePermission, AuthzUserRole, Tenant
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(prefix="/admin", tags=["admin-rbac-abac"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]

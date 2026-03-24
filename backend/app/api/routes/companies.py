@@ -10,13 +10,15 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.rbac_abac import actor_from_claims, policy_forbidden
 from app.core.security import AccessContext, abac
 from app.models.models import Company, Tenant
 from app.repository import create_company, list_companies
 from app.schemas.company import CompanyCreate, CompanyPage, CompanyRead, CompanyUpdate
 from app.services.audit import AuditService, field_level_diff
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(prefix="/companies", tags=["companies"])
 
@@ -144,6 +146,8 @@ async def list_companies_endpoint(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> CompanyPage:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     companies, total = await list_companies(
         session,
         tenant.id,
@@ -163,6 +167,8 @@ async def create_company_endpoint(
     session: SessionDep,
     access: EditorAccess,
 ) -> CompanyRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     try:
         company = await create_company(session, tenant.id, payload)
         await AuditService(session).log_event(
@@ -194,6 +200,8 @@ async def get_company_endpoint(
     session: SessionDep,
     access: ManagerAccess,
 ) -> CompanyRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     company = await _get_company_or_404(session, tenant, company_id)
     actor = actor_from_claims(dict(access.claims), access.to_auth_context().roles)
     if actor.company_ids and company.id not in actor.company_ids:
@@ -225,6 +233,8 @@ async def update_company_endpoint(
     session: SessionDep,
     access: EditorAccess,
 ) -> CompanyRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     company = await _get_company_or_404(session, tenant, company_id)
     before = CompanyRead.model_validate(company).model_dump()
     _apply_company_updates(company, payload)
@@ -263,6 +273,8 @@ async def archive_company_endpoint(
     session: SessionDep,
     access: EditorAccess,
 ) -> None:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     company = await _get_company_or_404(session, tenant, company_id)
     if company.deleted_at is None:
         before = {"deleted_at": None}

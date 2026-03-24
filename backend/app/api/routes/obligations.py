@@ -9,13 +9,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.models.obligations import Task, TaskStatus
 from app.models.models import Tenant
 from app.schemas.obligations import ObligationSummary, ObligationSummaryItem
 from app.schemas.task import TaskRead
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(tags=["obligations"])
 
@@ -40,6 +42,8 @@ async def obligations_summary(
     session: AsyncSession = SessionDep,
     _: AccessContext = SummaryAccess,
 ) -> ObligationSummary:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     now = datetime.now(timezone.utc)
     open_statuses = [TaskStatus.OPEN, TaskStatus.IN_PROGRESS]
     overdue_case = case(
@@ -82,6 +86,8 @@ async def list_obligations(
     overdue: bool = Query(default=False),
     site_id: str | None = Query(default=None),
 ) -> list[TaskRead]:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     now = datetime.now(timezone.utc)
     stmt = select(Task).where(Task.tenant_id == tenant.id)
     if overdue:
@@ -105,6 +111,8 @@ async def close_obligation(
     session: AsyncSession = SessionDep,
     _: AccessContext = SummaryAccess,
 ) -> TaskRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     task = await session.get(Task, obligation_id)
     if task is None or task.tenant_id != tenant.id:
         raise HTTPException(status_code=404, detail="Obligation not found")

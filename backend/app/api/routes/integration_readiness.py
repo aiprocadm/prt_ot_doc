@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.security import AccessContext, rbac
 from app.models.models import Tenant, TenantIntegrationKey, WebhookDelivery, WebhookEndpoint
 from app.services.integrations.factory import (
@@ -17,6 +17,8 @@ from app.services.integrations.factory import (
 )
 from app.services.integrations.interfaces import IntegrationDisabledError
 from app.services.provider_registry import provider_response_meta
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(prefix="/integrations/readiness", tags=["integration-readiness"])
 

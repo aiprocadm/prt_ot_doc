@@ -4,9 +4,11 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.security import AccessContext, rbac
 from app.models.models import Tenant, TenantCounter, TenantQuota
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(prefix="/tenancy", tags=["tenancy"])
 _AuthDep = Depends(rbac())
@@ -19,6 +21,8 @@ async def get_tenancy_context(
     session: AsyncSession = Depends(get_session),
     _: AccessContext = _AuthDep,
 ) -> dict[str, object]:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     quota = (
         await session.execute(select(TenantQuota).where(TenantQuota.tenant_id == tenant.id))
     ).scalar_one_or_none()

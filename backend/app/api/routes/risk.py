@@ -14,7 +14,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.idempotency import compute_request_hash
 from app.core.security import AccessContext, AuthContext, abac, get_auth_ctx, rbac
 from app.core.metrics import get_metrics
@@ -46,6 +46,8 @@ from app.services.idempotency import IdempotencyService, normalize_idempotency_k
 from app.services.risk import RiskService
 from app.services.events import EventType
 from app.services.outbox import OutboxService
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(tags=["risks"])
 engine_router = APIRouter(prefix="/risk", tags=["risk"])

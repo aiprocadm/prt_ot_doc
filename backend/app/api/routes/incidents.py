@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.domains.incidents import append_log_entry, register_incident, update_incident
@@ -30,6 +30,8 @@ from app.schemas.incidents import (
 )
 from app.services.audit import AuditService
 from app.services.outbox import OutboxService
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(tags=["incidents"])
 
@@ -99,6 +101,8 @@ async def list_incidents(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> IncidentPage:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     stmt = select(Incident).options(selectinload(Incident.participants)).where(
         Incident.tenant_id == tenant.id, Incident.deleted_at.is_(None)
     )
@@ -126,6 +130,8 @@ async def create_incident(
     session: SessionDep,
     access: EditorAccess,
 ) -> IncidentRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     try:
         incident = await register_incident(
             session,
@@ -181,6 +187,8 @@ async def get_incident(
     session: SessionDep,
     _: ManagerAccess,
 ) -> IncidentRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     incident = await _get_incident(session, tenant, incident_id)
     return _serialize_incident(incident)
 
@@ -194,6 +202,8 @@ async def patch_incident(
     session: SessionDep,
     _: EditorAccess,
 ) -> IncidentRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     incident = await _get_incident(session, tenant, incident_id)
     updates = payload.model_dump(exclude_unset=True)
     victim_ids = updates.pop("victim_ids", None)
@@ -219,6 +229,8 @@ async def add_incident_log(
     session: SessionDep,
     _: EditorAccess,
 ) -> IncidentLogRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     incident = await _get_incident(session, tenant, incident_id)
     try:
         log_entry = await append_log_entry(
@@ -242,6 +254,8 @@ async def list_incident_logs(
     session: SessionDep,
     _: ManagerAccess,
 ) -> list[IncidentLogRead]:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     incident = await _get_incident(session, tenant, incident_id)
     stmt = (
         select(IncidentLog)

@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.config import get_settings
 from app.domains.packs.service import resolve_pipeline_profile
@@ -32,6 +32,8 @@ from app.models.models import (
     Tenant,
 )
 from app.services.file_storage import FileStorageService
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(prefix="/portal", tags=["client-portal"])
 internal_router = APIRouter(prefix="/packages", tags=["packages"])

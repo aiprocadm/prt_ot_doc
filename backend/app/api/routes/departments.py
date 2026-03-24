@@ -7,12 +7,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.security import AccessContext, abac
 from app.core.audit_decorator import audit_operation
 from app.models.finance import Department
 from app.models.models import Company, Tenant
 from app.schemas.department import DepartmentCreate, DepartmentPage, DepartmentRead, DepartmentUpdate
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(tags=["departments"])
 
@@ -71,6 +73,8 @@ async def list_departments(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> DepartmentPage:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     stmt = select(Department).where(
         Department.tenant_id == tenant.id,
         Department.deleted_at.is_(None),
@@ -92,6 +96,8 @@ async def create_department(
     session: SessionDep,
     _: DepartmentWriteAccess,
 ) -> DepartmentRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     await _get_company(session, tenant, payload.company_id)
     department = Department(tenant_id=str(tenant.id), **payload.model_dump())
     session.add(department)
@@ -107,6 +113,8 @@ async def get_department(
     session: SessionDep,
     _: DepartmentReadAccess,
 ) -> DepartmentRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     department = await _get_department(session, tenant, department_id)
     return DepartmentRead.model_validate(department)
 
@@ -120,6 +128,8 @@ async def update_department(
     session: SessionDep,
     _: DepartmentWriteAccess,
 ) -> DepartmentRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     department = await _get_department(session, tenant, department_id)
     updates = payload.model_dump(exclude_unset=True)
     if "company_id" in updates:
@@ -144,6 +154,8 @@ async def delete_department(
     session: SessionDep,
     _: DepartmentWriteAccess,
 ) -> None:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     department = await _get_department(session, tenant, department_id)
     if department.deleted_at is None:
         department.deleted_at = datetime.now(timezone.utc)

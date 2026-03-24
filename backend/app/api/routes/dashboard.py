@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.security import AccessContext, abac
 from app.models.document_core import PipelineRun, PipelineRunStatus, Template
 from app.models.models import Incident, IncidentStatus, TrainingPlan
@@ -25,6 +25,8 @@ from app.schemas.dashboard import (
     DashboardTaskInboxItem,
     DashboardTrainingSummary,
 )
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -54,6 +56,8 @@ async def dashboard_summary(
     session: AsyncSession = SessionDep,
     _: AccessContext = SummaryAccess,
 ) -> DashboardSummary:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     now = datetime.now(timezone.utc)
     today = date.today()
     due_soon_date = today + timedelta(days=14)
@@ -156,6 +160,8 @@ async def dashboard_operational_snapshot(
     session: AsyncSession = SessionDep,
     _: AccessContext = SummaryAccess,
 ) -> DashboardOperationalSnapshot:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     now = datetime.now(timezone.utc)
     open_task_statuses = [TaskStatus.OPEN, TaskStatus.IN_PROGRESS]
 

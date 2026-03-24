@@ -22,12 +22,14 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.models.models import Tenant
 from app.modules.replace.engine import ReplaceOptions, replace_docx_bytes
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(prefix="/replace", tags=["replace"])
 
@@ -217,6 +219,8 @@ async def replace_dry_run(
     options_json: str | None = Header(default=None, alias="X-Replace-Options"),
     _idempotency: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> ReplaceDryRunResponse:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     _require_tenant(request)
     if not docx_file or not replace_map:
         raise _replace_bad_request("docx_file and replace_map are required")
@@ -259,6 +263,8 @@ async def replace_apply(
     options_json: str | None = Header(default=None, alias="X-Replace-Options"),
     _idempotency: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> ReplaceApplyResponse:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     _require_tenant(request)
     if not docx_file or not replace_map:
         raise _replace_bad_request("docx_file and replace_map are required")
@@ -306,6 +312,8 @@ async def replace_rollback(
     backup_file_id: str | None = Query(default=None),
     _idempotency: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> ReplaceRollbackResponse:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     _require_tenant(request)
     target_job = apply_job_id or replace_run_id
     if backup_file_id is None:

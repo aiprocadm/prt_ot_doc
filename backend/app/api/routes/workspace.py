@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.security import AccessContext, rbac
 from app.models.finance import Contract, ContractStatus
 from app.models.models import (
@@ -23,6 +23,8 @@ from app.models.models import (
     TrainingEnrollment,
 )
 from app.models.obligations import Task, TaskStatus
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(prefix="/workspace", tags=["workspace"])
 
@@ -265,6 +267,8 @@ async def workspace_attention(
     access: AccessDep,
     limit: int = Query(30, ge=1, le=100),
 ) -> WorkspaceAttentionResponse:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     now = datetime.now(timezone.utc)
     soon_threshold = now + timedelta(days=3)
     open_statuses = [TaskStatus.OPEN, TaskStatus.IN_PROGRESS]
@@ -423,6 +427,8 @@ async def workspace_task_inbox(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> WorkspaceTaskInboxResponse:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     now = datetime.now(timezone.utc)
     open_statuses = [TaskStatus.OPEN, TaskStatus.IN_PROGRESS]
     stmt = select(Task).where(Task.tenant_id == tenant.id, Task.status.in_(open_statuses))

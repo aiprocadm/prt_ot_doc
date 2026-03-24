@@ -7,12 +7,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.security import AccessContext, abac
 from app.core.audit_decorator import audit_operation
 from app.models.finance import Contract, ContractStatus, Department
 from app.models.models import Company, Site, Tenant
 from app.schemas.contract import ContractCreate, ContractPage, ContractRead, ContractUpdate
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(tags=["contracts"])
 
@@ -111,6 +113,8 @@ async def list_contracts(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> ContractPage:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     stmt = select(Contract).where(
         Contract.tenant_id == tenant.id,
         Contract.deleted_at.is_(None),
@@ -132,6 +136,8 @@ async def create_contract(
     session: SessionDep,
     access: WriteAccess,
 ) -> ContractRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     company = await _get_company(session, tenant, payload.company_id)
     department_id = payload.department_id
     if department_id:
@@ -180,6 +186,8 @@ async def get_contract(
     session: SessionDep,
     _: ReadAccess,
 ) -> ContractRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     contract = await _get_contract(session, tenant, contract_id)
     return ContractRead.model_validate(contract)
 
@@ -193,6 +201,8 @@ async def update_contract(
     session: SessionDep,
     access: WriteAccess,
 ) -> ContractRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     contract = await _get_contract(session, tenant, contract_id)
     updates = payload.model_dump(exclude_unset=True)
     if "company_id" in updates:
@@ -231,6 +241,8 @@ async def delete_contract(
     session: SessionDep,
     _: WriteAccess,
 ) -> None:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     contract = await _get_contract(session, tenant, contract_id)
     if contract.deleted_at is None:
         contract.deleted_at = datetime.now(timezone.utc)

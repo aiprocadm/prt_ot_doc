@@ -8,7 +8,7 @@ from io import BytesIO
 from typing import Annotated, Any, Iterable
 from uuid import UUID
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.config import get_settings
 from app.core.idempotency import compute_request_hash
 from app.core.query import (
@@ -72,6 +72,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.modules.ppe.services import PackSafetySummaryService
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 logger = logging.getLogger(__name__)
 
@@ -479,6 +481,8 @@ async def create_pack_from_scenario(
     session: SessionDep,
     access: PackWriteAccess,
 ) -> PackListItem:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     _ = access
     definition = PACK_DEFINITIONS_BY_CODE.get(scenario_code)
     if definition is None:
@@ -511,6 +515,8 @@ async def list_packs(
     sort: str | None = Query(None),
     filter: str | None = Query(None),
 ) -> PackListResponse:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     pq = PageQuery(page=page, per_page=per_page)
     _ = access
     sq = SortQuery(raw=sort)
@@ -584,6 +590,8 @@ async def generate_pack_documents(
     access: PackWriteAccess,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> TaskAcceptedResponse:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     _validate_pack_output_selection(payload.include_docx, payload.include_pdf)
 
     normalized_key = normalize_idempotency_key(idempotency_key)
@@ -683,6 +691,8 @@ async def run_pack(
     access: PackWriteAccess,
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> PackRunResponse:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     normalized_key = normalize_idempotency_key(idempotency_key)
     idem_state = getattr(request.state, "idempotency", {})
     request_hash = idem_state.get("fingerprint")
@@ -883,6 +893,8 @@ async def download_pack_archive(
         description="Object storage key of the generated ZIP archive",
     ),
 ) -> Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     normalized_key = storage_key.strip()
     if not normalized_key:
         raise HTTPException(
@@ -959,6 +971,8 @@ async def download_pack_files_archive(
     access: PackReadAccess,
     session: SessionDep,
 ) -> StreamingResponse:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     files_stmt = select(StoredFile).where(
         StoredFile.tenant_id == tenant.id,
         StoredFile.pack_id == pack_id,
@@ -1017,6 +1031,8 @@ async def pack_safety_summary(
     access: PackReadAccess,
 ) -> dict[str, list[dict[str, object]]]:
     """Return safety summary for pack run consumers (risk+PPE completeness)."""
+
+    TenantContextValidator.ensure_tenant_context(tenant)
 
     del access
     tenant_scope = _tenant_scope_values(tenant)

@@ -9,13 +9,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.models.models import MedicalExam, Person, Tenant
 from app.schemas.medical import MedicalExamPage, MedicalExamRead, MedicalRequirementCreate
 from app.schemas.task import TaskRead
 from app.services.obligations import create_medical_task
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(tags=["medical"])
 
@@ -52,6 +54,8 @@ async def list_medical_exams(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> MedicalExamPage:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     _ = access
     stmt = select(MedicalExam).where(MedicalExam.tenant_id == tenant.id, MedicalExam.deleted_at.is_(None))
     if person_id:
@@ -79,6 +83,8 @@ async def create_medical_requirement(
     session: SessionDep,
     access: MedicalAccess,
 ) -> TaskRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     person = await session.scalar(
         select(Person).where(Person.id == payload.person_id, Person.tenant_id == tenant.id, Person.deleted_at.is_(None))
     )

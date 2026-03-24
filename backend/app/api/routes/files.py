@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 from app.core.metrics import get_metrics
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.config import get_settings
 from app.core.rate_limit import ip_tenant_key, limiter, upload_per_tenant
 from app.core.security import AccessContext, abac
@@ -39,6 +39,8 @@ from app.models.models import Tenant
 from app.services.audit import AuditService
 from app.services.clamav import ClamAVScanRequest, enqueue_scan_request
 from app.tenancy_quotas import assert_quota
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter()
 
@@ -495,6 +497,8 @@ async def upload_file(
     kind: Annotated[FileKind | None, Form()] = None,
     session: AsyncSession = Depends(get_session),
 ) -> FileUploadResponse:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     settings = get_settings()
     limit = settings.max_upload_size
     allowed_mimes = frozenset(settings.file_allowed_mime)
@@ -551,6 +555,8 @@ async def get_file_details(
     access: ReadAccessDep,
     session: AsyncSession = Depends(get_session),
 ) -> FileUploadResponse:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     record = await session.get(StoredFile, file_id)
     if record is None or record.tenant_id != tenant.id:
         raise HTTPException(
@@ -624,6 +630,8 @@ async def upload_template(
     extra: Annotated[str | None, Form()] = None,
     session: AsyncSession = Depends(get_session),
 ) -> FileUploadResponse:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     settings = get_settings()
     limit = settings.max_upload_size
     allowed_mimes = frozenset(settings.file_allowed_mime)
@@ -702,6 +710,8 @@ async def download_file(
     access: ReadAccessDep,
     session: AsyncSession = Depends(get_session),
 ) -> FileDownloadResponse:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     record = await session.get(StoredFile, file_id)
     if record is None or record.tenant_id != tenant.id:
         _record_download_denied("not_found")

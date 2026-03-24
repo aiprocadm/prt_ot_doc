@@ -28,6 +28,7 @@ from app.domains.files import s3
 from app.db.session import dispose_engine
 from app.services.dev_bootstrap import bootstrap_admin_user
 from app.services.demo_bootstrap import bootstrap_demo_tenant
+from app.middleware.global_error_handler import GlobalErrorHandlerMiddleware
 from app.middleware.observability import ObservabilityMiddleware
 from app.middleware.tenant import TenantMiddleware
 from app.middleware.billing_guard import BillingGuardMiddleware
@@ -41,6 +42,9 @@ def _normalize_patterns(values: Iterable[str]) -> list[str]:
 
 
 def _configure_middlewares(app: FastAPI, settings: Settings) -> None:
+    # Global error handler must be first to catch all exceptions
+    app.add_middleware(GlobalErrorHandlerMiddleware)
+    
     allowed_hosts = _normalize_patterns(settings.allowed_hosts)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
 

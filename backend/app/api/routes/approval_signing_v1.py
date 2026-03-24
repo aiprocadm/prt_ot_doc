@@ -12,7 +12,7 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.tracing import get_trace_id
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.models.approval_signing import (
     ApprovalDecisionLog,
@@ -36,6 +36,8 @@ from app.modules.approval.core import cond_matches, make_request_hash
 
 from app.models.job_engine import InboundWebhookDedup
 from app.modules.approval.webhook_utils import build_edo_status_dedup_key, build_webhook_signature
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter()
 

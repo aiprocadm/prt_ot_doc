@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, rbac
 from app.models.models import RoleEnum, Tenant, User, UserAttribute, UserRole
@@ -17,6 +17,8 @@ from app.schemas.admin_user import (
     UserRolesRequest,
     UserRolesResponse,
 )
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter()
 
@@ -55,7 +57,10 @@ async def get_user_roles(
     session: AsyncSession = SessionDep,
     tenant: Tenant = TenantDep,
     _: AccessContext = AdminAccess,
+    correlation_id: str = Depends(get_correlation_id),
 ) -> UserRolesResponse:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    
     result = await session.execute(
         select(User)
         .options(selectinload(User.roles))
@@ -77,7 +82,10 @@ async def assign_user_roles(
     session: AsyncSession = SessionDep,
     tenant: Tenant = TenantDep,
     _: AccessContext = AdminAccess,
+    correlation_id: str = Depends(get_correlation_id),
 ) -> UserRolesResponse:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    
     result = await session.execute(
         select(User)
         .options(selectinload(User.roles))
@@ -109,7 +117,10 @@ async def assign_user_attributes(
     session: AsyncSession = SessionDep,
     tenant: Tenant = TenantDep,
     _: AccessContext = AdminAccess,
+    correlation_id: str = Depends(get_correlation_id),
 ) -> UserAttributesResponse:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    
     user = (
         await session.execute(
             select(User).where(User.id == user_id, User.tenant_id == tenant.id, User.deleted_at.is_(None))

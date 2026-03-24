@@ -7,12 +7,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_session, get_tenant_record
+from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.models.finance import Contract, Invoice, InvoiceStatus, Order
 from app.models.models import Tenant
 from app.schemas.invoice import InvoiceCreate, InvoicePage, InvoiceRead, InvoiceUpdate
+from app.core.permission_checker import PermissionChecker
+from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(tags=["invoices"])
 
@@ -93,11 +95,14 @@ async def list_invoices(
     tenant: TenantDep,
     session: SessionDep,
     _: ReadAccess,
+    correlation_id: str = Depends(get_correlation_id),
     contract_id: str | None = Query(default=None, min_length=1, max_length=36),
     order_id: str | None = Query(default=None, min_length=1, max_length=36),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> InvoicePage:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     stmt = select(Invoice).where(
         Invoice.tenant_id == tenant.id,
         Invoice.deleted_at.is_(None),
@@ -120,7 +125,10 @@ async def create_invoice(
     tenant: TenantDep,
     session: SessionDep,
     _: WriteAccess,
+    correlation_id: str = Depends(get_correlation_id),
 ) -> InvoiceRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     contract = await _get_contract(session, tenant, payload.contract_id)
     order_id = payload.order_id
     if order_id:
@@ -158,7 +166,10 @@ async def get_invoice(
     tenant: TenantDep,
     session: SessionDep,
     _: ReadAccess,
+    correlation_id: str = Depends(get_correlation_id),
 ) -> InvoiceRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     invoice = await _get_invoice(session, tenant, invoice_id)
     return InvoiceRead.model_validate(invoice)
 
@@ -171,7 +182,10 @@ async def update_invoice(
     tenant: TenantDep,
     session: SessionDep,
     _: WriteAccess,
+    correlation_id: str = Depends(get_correlation_id),
 ) -> InvoiceRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     invoice = await _get_invoice(session, tenant, invoice_id)
     updates = payload.model_dump(exclude_unset=True)
     if "contract_id" in updates and updates["contract_id"]:
@@ -206,7 +220,10 @@ async def delete_invoice(
     tenant: TenantDep,
     session: SessionDep,
     _: WriteAccess,
+    correlation_id: str = Depends(get_correlation_id),
 ) -> None:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
     invoice = await _get_invoice(session, tenant, invoice_id)
     if invoice.deleted_at is None:
         invoice.deleted_at = datetime.now(timezone.utc)
