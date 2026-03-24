@@ -4,6 +4,7 @@ import csv
 import hashlib
 import json
 from io import BytesIO, StringIO
+from typing import Annotated
 from uuid import uuid4
 
 from fastapi import (
@@ -23,11 +24,33 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
+from app.core.security import AccessContext, abac
 from app.models.models import Tenant
 from app.modules.replace.engine import ReplaceOptions, replace_docx_bytes
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 
 router = APIRouter(prefix="/replace", tags=["replace"])
+
+SessionDep = Annotated[AsyncSession, Depends(get_session)]
+TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
+
+_REPLACE_READ_ROLES = ["admin", "employee"]
+_REPLACE_WRITE_ROLES = ["admin", "employee"]
+
+
+def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
+    value = getattr(tenant, "id", None)
+    return str(value) if value is not None else None
+
+
+ReaderAccess = Annotated[
+    AccessContext,
+    Depends(abac(_tenant_resource_id, required_roles=_REPLACE_READ_ROLES, action="read replace reports")),
+]
+EditorAccess = Annotated[
+    AccessContext,
+    Depends(abac(_tenant_resource_id, required_roles=_REPLACE_WRITE_ROLES, action="manage document replace")),
+]
 
 _RUNS: dict[str, dict] = {}
 _REPORTS: dict[str, dict] = {}
@@ -186,12 +209,13 @@ def _build_report(run_id: str, hits: list[dict], mapping: dict[str, str], max_sa
 @audit_operation("dry_run", "document_replace")
 async def replace_dry_run(
     request: Request,
+    session: SessionDep,
+    tenant: TenantDep,
+    _: EditorAccess,
     docx_file: UploadFile | None = File(default=None),
     replace_map: UploadFile | None = File(default=None),
     options_json: str | None = Header(default=None, alias="X-Replace-Options"),
     _idempotency: str | None = Header(default=None, alias="Idempotency-Key"),
-    session: AsyncSession = Depends(get_session),
-    tenant: Tenant = Depends(get_tenant_record),
 ) -> ReplaceDryRunResponse:
     _require_tenant(request)
     if not docx_file or not replace_map:
@@ -226,13 +250,14 @@ async def replace_dry_run(
 @audit_operation("apply", "document_replace")
 async def replace_apply(
     request: Request,
+    session: SessionDep,
+    tenant: TenantDep,
+    _: EditorAccess,
     docx_file: UploadFile | None = File(default=None),
     replace_map: UploadFile | None = File(default=None),
     backup: bool = Query(True),
     options_json: str | None = Header(default=None, alias="X-Replace-Options"),
     _idempotency: str | None = Header(default=None, alias="Idempotency-Key"),
-    session: AsyncSession = Depends(get_session),
-    tenant: Tenant = Depends(get_tenant_record),
 ) -> ReplaceApplyResponse:
     _require_tenant(request)
     if not docx_file or not replace_map:
@@ -273,12 +298,13 @@ async def replace_apply(
 @audit_operation("rollback", "document_replace")
 async def replace_rollback(
     request: Request,
+    session: SessionDep,
+    tenant: TenantDep,
+    _: EditorAccess,
     replace_run_id: str | None = None,
     apply_job_id: str | None = Query(default=None),
     backup_file_id: str | None = Query(default=None),
     _idempotency: str | None = Header(default=None, alias="Idempotency-Key"),
-    session: AsyncSession = Depends(get_session),
-    tenant: Tenant = Depends(get_tenant_record),
 ) -> ReplaceRollbackResponse:
     _require_tenant(request)
     target_job = apply_job_id or replace_run_id
@@ -310,7 +336,13 @@ async def replace_rollback(
 
 
 @router.get("/reports/{report_id}", response_model=ReplaceReportResponse)
-async def get_replace_report(report_id: str, request: Request, offset: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=1000)) -> ReplaceReportResponse:
+async def get_replace_report(
+    report_id: str,
+    request: Request,
+    _: ReaderAccess,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=1000),
+) -> ReplaceReportResponse:
     _require_tenant(request)
     report = _REPORTS.get(report_id)
     if not report:
@@ -320,7 +352,11 @@ async def get_replace_report(report_id: str, request: Request, offset: int = Que
 
 
 @router.get("/reports/{report_id}.csv")
-async def get_replace_report_csv(report_id: str, request: Request) -> StreamingResponse:
+async def get_replace_report_csv(
+    report_id: str,
+    request: Request,
+    _: ReaderAccess,
+) -> StreamingResponse:
     _require_tenant(request)
     report = _REPORTS.get(report_id)
     if not report:
@@ -333,7 +369,12 @@ async def get_replace_report_csv(report_id: str, request: Request) -> StreamingR
 
 
 @router.get("/{replace_run_id}/diff")
-async def get_replace_diff(replace_run_id: str, request: Request, limit: int = Query(50, ge=1, le=1000)) -> dict:
+async def get_replace_diff(
+    replace_run_id: str,
+    request: Request,
+    _: ReaderAccess,
+    limit: int = Query(50, ge=1, le=1000),
+) -> dict:
     _require_tenant(request)
     run = _RUNS.get(replace_run_id)
     if not run:

@@ -8,7 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { FilterField } from "@/components/common/FilterField";
 import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
+import { ActionButton } from "@/components/permissions/ActionButton";
 import { TaskTable } from "@/features/tasks/TaskTable";
+import { PERMISSIONS } from "@/permissions/permissions";
 import { useTasksStore } from "@/stores/tasks";
 import type { TaskPriority } from "@/types/dto/tasks";
 import { entityCardLink, entityContextPath } from "@/utils/workspaceNavigation";
@@ -40,7 +42,7 @@ const TASK_PRIORITIES: TaskPriority[] = ["low", "medium", "high", "critical"];
 const isTaskPriority = (value: string): value is TaskPriority => TASK_PRIORITIES.includes(value as TaskPriority);
 
 const TasksPage = () => {
-  const { list, loading, filters, setFilters, items, item, getById, pagination } = useTasksStore();
+  const { list, loading, filters, setFilters, items, item, getById, patchTask, pagination } = useTasksStore();
   const [searchParams] = useSearchParams();
   const focusedTaskId = searchParams.get("task_id") ?? undefined;
   const focusedEntityType = searchParams.get("entity_type") ?? undefined;
@@ -168,6 +170,20 @@ const TasksPage = () => {
                 ) : null}
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
+                <ActionButton
+                  size="sm"
+                  variant="outline"
+                  permission={PERMISSIONS.TASK_UPDATE}
+                  onClick={() => {
+                    if (!focusedTask || focusedTask.status === "done") return;
+                    void patchTask(focusedTask.id, { status: "done" });
+                  }}
+                  disabled={!focusedTask || focusedTask.status === "done"}
+                  title="Закрыть фокусную задачу"
+                  disabledReason="Недостаточно прав для изменения статуса задачи"
+                >
+                  Закрыть фокусную задачу
+                </ActionButton>
                 {focusedEntitySummaryLink ? (
                   <Button size="sm" variant="outline" asChild>
                     <Link to={focusedEntitySummaryLink}>Открыть summary сущности</Link>

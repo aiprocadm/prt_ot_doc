@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import { Link } from "react-router-dom";
 
 import { operationsApi } from "@/api/operations";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -7,6 +8,8 @@ import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { RegistryTable } from "@/components/common/RegistryTable";
 import { StatusBadge } from "@/components/common/StatusBadge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { useLocalRegistry } from "@/hooks/useLocalRegistry";
 import { formatDate } from "@/utils/datetime";
@@ -19,6 +22,10 @@ const FireInspectionsPage = () => {
   });
 
   const registry = useLocalRegistry({ items: data.inspections, match: (item, query) => [item.authority, item.purpose, item.status, item.inspection_type].filter(Boolean).join(" ").toLowerCase().includes(query) });
+  const overdueInspections = data.inspections.filter((item) => item.status !== "done" && item.status !== "closed" && Boolean(item.scheduled_at && new Date(item.scheduled_at).getTime() < Date.now())).length;
+  const openPrescriptions = data.prescriptions.filter((item) => item.status !== "closed").length;
+  const overdueTasks = data.tasks.filter((item) => item.overdue).length;
+  const hasBlockers = overdueInspections > 0 || openPrescriptions > 0 || overdueTasks > 0;
 
   return (
     <div className="space-y-4">
@@ -33,6 +40,21 @@ const FireInspectionsPage = () => {
       />
       <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
       {loading ? <LoadingScreen label="Загрузка проверок" /> : null}
+      {!loading && !error && hasBlockers ? (
+        <Card className="border-orange-200 bg-orange-50/40">
+          <CardHeader>
+            <CardTitle className="text-base">Blockers и next actions</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <p>Открытые узкие места: предписания {openPrescriptions}, просроченные задачи {overdueTasks}, просроченные проверки {overdueInspections}.</p>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild size="sm" variant="outline"><Link to="/inspections">Проверки</Link></Button>
+              <Button asChild size="sm" variant="outline"><Link to="/tasks?type=inspection">Задачи проверок</Link></Button>
+              <Button asChild size="sm" variant="outline"><Link to="/prescriptions">Предписания</Link></Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
       {!loading && !error && registry.total === 0 ? <EmptyState title="Проверки не найдены" description="Создайте inspections или загрузите данные." /> : null}
       {!loading && !error && registry.total > 0 ? (
         <RegistryTable

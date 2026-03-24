@@ -4,6 +4,7 @@ import { incidentsApi, type Incident } from "@/api/incidents";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
+import { Can } from "@/components/permissions/Can";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { PERMISSIONS } from "@/permissions/permissions";
 import type { ApiError } from "@/types/dto/common";
 import { formatDate } from "@/utils/datetime";
 import { toast } from "sonner";
@@ -119,105 +121,110 @@ const IncidentsPage = () => {
           </select>
           <Button variant="outline" onClick={() => void load()}>Обновить</Button>
 
-          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-            <DialogTrigger asChild>
-              <Button>Зарегистрировать инцидент</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Регистрация инцидента / НС</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="inc-title">Заголовок *</Label>
-                  <Input
-                    id="inc-title"
-                    value={form.title}
-                    onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
-                    placeholder="Краткое описание события"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
+          <Can
+            permission={PERMISSIONS.INCIDENT_CREATE}
+            fallback={<Button disabled title="Недостаточно прав для регистрации инцидента">Зарегистрировать инцидент</Button>}
+          >
+            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+              <DialogTrigger asChild>
+                <Button>Зарегистрировать инцидент</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Регистрация инцидента / НС</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
                   <div className="space-y-1.5">
-                    <Label htmlFor="inc-type">Тип события</Label>
-                    <select
-                      id="inc-type"
-                      className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                      value={form.incident_type}
-                      onChange={(e) => setForm((prev) => ({ ...prev, incident_type: e.target.value }))}
-                    >
-                      {INCIDENT_TYPES.map((t) => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="inc-severity">Тяжесть</Label>
-                    <select
-                      id="inc-severity"
-                      className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                      value={form.severity}
-                      onChange={(e) => setForm((prev) => ({ ...prev, severity: e.target.value }))}
-                    >
-                      {SEVERITY_LEVELS.map((s) => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="inc-date">Дата/время события *</Label>
-                  <Input
-                    id="inc-date"
-                    type="datetime-local"
-                    value={form.occurred_at}
-                    onChange={(e) => setForm((prev) => ({ ...prev, occurred_at: e.target.value }))}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="inc-company">Компания *</Label>
-                    <select
-                      id="inc-company"
-                      className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                      value={form.company_id}
-                      onChange={(e) => setForm((prev) => ({ ...prev, company_id: e.target.value }))}
-                    >
-                      <option value="">Выберите компанию</option>
-                      {companies.map((company) => (
-                        <option key={company.id} value={company.id}>{company.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="inc-site">ID площадки</Label>
+                    <Label htmlFor="inc-title">Заголовок *</Label>
                     <Input
-                      id="inc-site"
-                      value={form.site_id}
-                      onChange={(e) => setForm((prev) => ({ ...prev, site_id: e.target.value }))}
-                      placeholder="UUID площадки (опционально)"
+                      id="inc-title"
+                      value={form.title}
+                      onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
+                      placeholder="Краткое описание события"
                     />
                   </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="inc-type">Тип события</Label>
+                      <select
+                        id="inc-type"
+                        className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        value={form.incident_type}
+                        onChange={(e) => setForm((prev) => ({ ...prev, incident_type: e.target.value }))}
+                      >
+                        {INCIDENT_TYPES.map((t) => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="inc-severity">Тяжесть</Label>
+                      <select
+                        id="inc-severity"
+                        className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        value={form.severity}
+                        onChange={(e) => setForm((prev) => ({ ...prev, severity: e.target.value }))}
+                      >
+                        {SEVERITY_LEVELS.map((s) => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="inc-date">Дата/время события *</Label>
+                    <Input
+                      id="inc-date"
+                      type="datetime-local"
+                      value={form.occurred_at}
+                      onChange={(e) => setForm((prev) => ({ ...prev, occurred_at: e.target.value }))}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="inc-company">Компания *</Label>
+                      <select
+                        id="inc-company"
+                        className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        value={form.company_id}
+                        onChange={(e) => setForm((prev) => ({ ...prev, company_id: e.target.value }))}
+                      >
+                        <option value="">Выберите компанию</option>
+                        {companies.map((company) => (
+                          <option key={company.id} value={company.id}>{company.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="inc-site">ID площадки</Label>
+                      <Input
+                        id="inc-site"
+                        value={form.site_id}
+                        onChange={(e) => setForm((prev) => ({ ...prev, site_id: e.target.value }))}
+                        placeholder="UUID площадки (опционально)"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="inc-desc">Описание</Label>
+                    <Textarea
+                      id="inc-desc"
+                      value={form.description}
+                      onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
+                      placeholder="Подробное описание произошедшего"
+                      rows={3}
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" onClick={() => setCreateOpen(false)}>Отмена</Button>
+                    <Button disabled={creating} onClick={() => void handleCreate()}>
+                      {creating ? "Сохранение…" : "Зарегистрировать"}
+                    </Button>
+                  </div>
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="inc-desc">Описание</Label>
-                  <Textarea
-                    id="inc-desc"
-                    value={form.description}
-                    onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
-                    placeholder="Подробное описание произошедшего"
-                    rows={3}
-                  />
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setCreateOpen(false)}>Отмена</Button>
-                  <Button disabled={creating} onClick={() => void handleCreate()}>
-                    {creating ? "Сохранение…" : "Зарегистрировать"}
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
+              </DialogContent>
+            </Dialog>
+          </Can>
         </div>
       </div>
 

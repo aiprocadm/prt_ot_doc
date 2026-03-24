@@ -38,6 +38,6 @@ describe("buildProtectedRouteGroups", () => {
   it("keeps a single guarded route entry per permission cluster", () => {
     const groups = buildProtectedRouteGroups();
 
-    expect(groups).toHaveLength(30);
+    expect(groups).toHaveLength(31);
   });
 });

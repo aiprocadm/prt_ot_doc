@@ -32,6 +32,20 @@ const FireTrainingPage = () => {
       />
       <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
       {loading ? <LoadingScreen label="Загрузка журналов" /> : null}
+      {!loading && !error && data.overdueEntries.length > 0 ? (
+        <Card className="border-orange-200 bg-orange-50/40">
+          <CardHeader>
+            <CardTitle className="text-base">Blockers и next actions</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <p>Найдено просроченных записей инструктажей: {data.overdueEntries.length}. Требуется закрыть задолженность до следующей волны проверок.</p>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild size="sm" variant="outline"><Link to="/briefings">Открыть журналы инструктажей</Link></Button>
+              <Button asChild size="sm" variant="outline"><Link to="/tasks?type=briefing">Открыть связанные задачи</Link></Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
       {!loading && !error && data.templates.length + data.journals.length === 0 ? <EmptyState title="Нет данных по инструктажам" description="Создайте шаблоны или журналы инструктажей." /> : null}
       {!loading && !error ? (
         <div className="grid gap-4 lg:grid-cols-3">

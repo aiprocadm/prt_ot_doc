@@ -3,10 +3,24 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 
+import { PERMISSIONS } from "@/permissions/permissions";
 import TasksPage from "@/pages/tasks/TasksPage";
+import { useAuthStore } from "@/stores/auth";
 
 const listMock = vi.fn();
 const setFiltersMock = vi.fn();
+const patchTaskMock = vi.fn();
+
+const userWithTaskUpdate = {
+  id: "task-manager",
+  created_at: "2024-01-01",
+  updated_at: "2024-01-02",
+  email: "task.manager@example.com",
+  full_name: "Task Manager",
+  roles: ["line_manager"],
+  permissions: [PERMISSIONS.TASK_VIEW, PERMISSIONS.TASK_UPDATE],
+  attributes: { tenant_id: "tenant-1" }
+};
 
 vi.mock("@/stores/tasks", () => ({
   useTasksStore: () => ({
@@ -30,11 +44,60 @@ vi.mock("@/stores/tasks", () => ({
     pagination: { page: 1, page_size: 10, total: 0 },
     setPage: vi.fn(),
     setPageSize: vi.fn(),
-    patchTask: vi.fn()
+    patchTask: patchTaskMock
   })
 }));
 
 describe("TasksPage", () => {
+  it("shows enabled focused-task close action with update permission", async () => {
+    patchTaskMock.mockReset();
+    useAuthStore.setState({
+      user: userWithTaskUpdate,
+      loading: false,
+      error: null,
+      isAuthenticated: true,
+      initialized: true
+    });
+
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/tasks?task_id=task-focus-1&entity_type=document&entity_id=entity-1"]}>
+        <TasksPage />
+      </MemoryRouter>
+    );
+
+    const closeButton = await screen.findByRole("button", { name: "Закрыть фокусную задачу" });
+    expect(closeButton).toBeEnabled();
+
+    await user.click(closeButton);
+    expect(patchTaskMock).toHaveBeenCalledWith("task-focus-1", { status: "done" });
+  });
+
+  it("shows disabled focused-task close action without update permission", async () => {
+    patchTaskMock.mockReset();
+    useAuthStore.setState({
+      user: {
+        ...userWithTaskUpdate,
+        id: "task-viewer",
+        email: "task.viewer@example.com",
+        permissions: [PERMISSIONS.TASK_VIEW]
+      },
+      loading: false,
+      error: null,
+      isAuthenticated: true,
+      initialized: true
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/tasks?task_id=task-focus-1&entity_type=document&entity_id=entity-1"]}>
+        <TasksPage />
+      </MemoryRouter>
+    );
+
+    const closeButton = await screen.findByRole("button", { name: "Закрыть фокусную задачу" });
+    expect(closeButton).toBeDisabled();
+  });
+
   it("applies filters for type and due date", async () => {
     render(
       <MemoryRouter>

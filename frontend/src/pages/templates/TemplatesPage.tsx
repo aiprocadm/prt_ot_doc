@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,7 +16,7 @@ import { useTemplatesStore } from "@/stores/templates";
 import type { TemplateDto } from "@/types/dto/templates";
 
 const TemplatesPage = () => {
-  const { list, getById } = useTemplatesStore();
+  const { list, getById, items, loading, error } = useTemplatesStore();
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateDto | null>(null);
   const { can } = useAbility();
   const canView = can(PERMISSIONS.TEMPLATE_VIEW);
@@ -55,9 +58,19 @@ const TemplatesPage = () => {
       </div>
       <Card>
         <CardContent className="py-6">
-          <TemplateTable onSelect={(template) => {
-            getById(template.id).then((loaded) => setSelectedTemplate(loaded ?? template));
-          }} />
+          <ErrorState error={error ?? undefined} onRetry={() => void list()} />
+          {loading && items.length === 0 ? <LoadingScreen label="Загрузка шаблонов" /> : null}
+          {!loading && !error && items.length === 0 ? (
+            <EmptyState
+              title="Шаблоны не найдены"
+              description="Загрузите первый шаблон, чтобы запустить document lifecycle без ручных обходных сценариев."
+            />
+          ) : null}
+          {items.length > 0 ? (
+            <TemplateTable onSelect={(template) => {
+              getById(template.id).then((loaded) => setSelectedTemplate(loaded ?? template));
+            }} />
+          ) : null}
         </CardContent>
       </Card>
       {selectedTemplate && <TemplateDetails template={selectedTemplate} />}

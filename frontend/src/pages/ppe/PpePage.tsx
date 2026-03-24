@@ -4,9 +4,11 @@ import { opsApi, type PpeIssueDto, type PpeItemDto } from "@/api/ops";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
+import { Can } from "@/components/permissions/Can";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PERMISSIONS } from "@/permissions/permissions";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { PersonDto } from "@/types/dto/persons";
 import type { ApiError } from "@/types/dto/common";
@@ -69,7 +71,12 @@ const PpePage = () => {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "СИЗ и склады" }]} />
         <div className="flex gap-2">
-          <Button disabled>Быстрая выдача</Button>
+          <Can
+            permission={PERMISSIONS.PPE_ISSUE}
+            fallback={<Button disabled title="Недостаточно прав для выдачи СИЗ">Быстрая выдача</Button>}
+          >
+            <Button>Быстрая выдача</Button>
+          </Can>
           <Button variant="outline" onClick={() => void load()} disabled={loading}>Обновить</Button>
         </div>
       </div>

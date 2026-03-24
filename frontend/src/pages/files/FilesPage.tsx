@@ -1,5 +1,8 @@
 import { useEffect } from "react";
 
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Card, CardContent } from "@/components/ui/card";
 import { FileTable } from "@/features/files/FileTable";
@@ -7,10 +10,10 @@ import { FileUploader } from "@/features/files/FileUploader";
 import { useFilesStore } from "@/stores/files";
 
 const FilesPage = () => {
-  const { list } = useFilesStore();
+  const { list, items, loading, error } = useFilesStore();
 
   useEffect(() => {
-    list();
+    void list();
   }, [list]);
 
   return (
@@ -19,7 +22,12 @@ const FilesPage = () => {
       <FileUploader />
       <Card>
         <CardContent className="py-6">
-          <FileTable />
+          <ErrorState error={error ?? undefined} onRetry={() => void list()} />
+          {loading && items.length === 0 ? <LoadingScreen label="Загрузка файлов" /> : null}
+          {!loading && !error && items.length === 0 ? (
+            <EmptyState title="Файлы не найдены" description="Загрузите первый файл или проверьте активные фильтры." />
+          ) : null}
+          {!loading || items.length > 0 ? <FileTable /> : null}
         </CardContent>
       </Card>
     </div>

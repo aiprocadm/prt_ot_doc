@@ -22,6 +22,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { useCompaniesStore } from "@/stores/companies";
 
 const splitLines = (value: string) =>
@@ -50,6 +51,7 @@ const BrandingSettingsPage = () => {
   const [previewHistory, setPreviewHistory] = useState<BrandingPreviewDto[]>([]);
   const [generationHistory, setGenerationHistory] = useState<BrandingGenerationHistoryItemDto[]>([]);
   const [loading, setLoading] = useState(false);
+  const [savedFingerprint, setSavedFingerprint] = useState<string>("");
   const [form, setForm] = useState({
     legal_name: "",
     short_name: "",
@@ -114,10 +116,7 @@ const BrandingSettingsPage = () => {
       getBrandingHistory(companyId, siteId || undefined, 10).catch(() => [])
     ])
       .then(([data, history]) => {
-        setGenerationHistory(history);
-        setProfile(data);
-        setPreview(null);
-        setForm({
+        const nextForm = {
           legal_name: data.branding.legal_name ?? "",
           short_name: data.branding.short_name ?? "",
           inn: data.branding.inn ?? "",
@@ -145,7 +144,12 @@ const BrandingSettingsPage = () => {
           palette_accent: data.branding.palette?.accent ?? "",
           metadata_json: JSON.stringify(data.branding.metadata ?? {}, null, 2),
           signatories_json: JSON.stringify(data.branding.signatories ?? [], null, 2)
-        });
+        };
+        setGenerationHistory(history);
+        setProfile(data);
+        setPreview(null);
+        setForm(nextForm);
+        setSavedFingerprint(JSON.stringify({ companyId, siteId, form: nextForm }));
       })
       .catch(() => toast.error("Не удалось загрузить branding profile"))
       .finally(() => setLoading(false));
@@ -156,6 +160,13 @@ const BrandingSettingsPage = () => {
     [companies, companyId]
   );
   const currentSite = useMemo(() => sites.find((item) => item.id === siteId), [siteId, sites]);
+  const currentFingerprint = useMemo(
+    () => JSON.stringify({ companyId, siteId, form }),
+    [companyId, form, siteId],
+  );
+  const hasUnsavedChanges = Boolean(profile) && !loading && currentFingerprint !== savedFingerprint;
+
+  useUnsavedChanges(hasUnsavedChanges);
 
   const handleSave = async () => {
     if (!companyId) return;
@@ -199,6 +210,7 @@ const BrandingSettingsPage = () => {
       };
       const saved = await updateBrandingProfile(companyId, payload);
       setProfile(saved);
+      setSavedFingerprint(currentFingerprint);
       toast.success(siteId ? "Брендинг филиала сохранён" : "Фирменный профиль организации сохранён");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Не удалось сохранить профиль");

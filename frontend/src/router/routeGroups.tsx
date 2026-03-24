@@ -109,9 +109,7 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
       permission: PERMISSIONS.DOCUMENT_VIEW,
       routes: [
         <Route key="/documents" path="/documents" element={<DocumentsPage />} />,
-        <Route key="/documents/wizard" path="/documents/wizard" element={<DocumentsWizardPage />} />,
         <Route key="/documents/branding" path="/documents/branding" element={<BrandingSettingsPage />} />,
-        <Route key="/generation" path="/generation" element={<DocumentsWizardPage />} />,
         <Route key="/approvals/inbox" path="/approvals/inbox" element={<ApprovalsInboxPage />} />,
         <Route key="/approvals/outbox" path="/approvals/outbox" element={<ApprovalsOutboxPage />} />,
         <Route key="/approval-routes" path="/approval-routes" element={<ApprovalRoutesPage />} />,
@@ -126,6 +124,13 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
         <Route key="/package-presets" path="/package-presets" element={<PackagePresetsPage />} />,
         <Route key="/generate-pack/:presetId" path="/generate-pack/:presetId" element={<GeneratePackWizardPage />} />,
         <Route key="/pack-runs/:id" path="/pack-runs/:id" element={<PackRunDetailsPage />} />
+      ]
+    },
+    {
+      permission: PERMISSIONS.DOCUMENT_CREATE,
+      routes: [
+        <Route key="/documents/wizard" path="/documents/wizard" element={<DocumentsWizardPage />} />,
+        <Route key="/generation" path="/generation" element={<DocumentsWizardPage />} />
       ]
     },
     {

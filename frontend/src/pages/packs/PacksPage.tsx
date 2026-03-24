@@ -1,5 +1,8 @@
 import { useEffect } from "react";
 
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Card, CardContent } from "@/components/ui/card";
 import { PackTable } from "@/features/packs/PackTable";
@@ -7,10 +10,10 @@ import { PackWizard } from "@/features/packs/PackWizard";
 import { usePacksStore } from "@/stores/packs";
 
 const PacksPage = () => {
-  const { list } = usePacksStore();
+  const { list, items, loading, error } = usePacksStore();
 
   useEffect(() => {
-    list();
+    void list();
   }, [list]);
 
   return (
@@ -19,7 +22,12 @@ const PacksPage = () => {
       <PackWizard />
       <Card>
         <CardContent className="py-6">
-          <PackTable />
+          <ErrorState error={error ?? undefined} onRetry={() => void list()} />
+          {loading && items.length === 0 ? <LoadingScreen label="Загрузка пакетов" /> : null}
+          {!loading && !error && items.length === 0 ? (
+            <EmptyState title="Пакеты не найдены" description="Создайте первый пакет через мастер генерации." />
+          ) : null}
+          {!loading || items.length > 0 ? <PackTable /> : null}
         </CardContent>
       </Card>
     </div>

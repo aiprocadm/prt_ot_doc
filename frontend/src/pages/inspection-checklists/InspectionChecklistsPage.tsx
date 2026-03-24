@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from "react";
+import { Link } from "react-router-dom";
 
 import { operationsApi } from "@/api/operations";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -6,6 +7,8 @@ import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { RegistryTable } from "@/components/common/RegistryTable";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { useLocalRegistry } from "@/hooks/useLocalRegistry";
 
@@ -33,12 +36,29 @@ const InspectionChecklistsPage = () => {
   }, [data]);
 
   const registry = useLocalRegistry({ items, match: (item, query) => item.code.toLowerCase().includes(query) });
+  const openPrescriptions = data.prescriptions.filter((item) => item.status !== "closed").length;
+  const hasChecklistGap = data.templates.length === 0 || openPrescriptions > 0;
 
   return (
     <div className="space-y-4">
       <RegistryPageHeader title="Чек-листы проверок" description="Экран больше не пустой: он показывает фактическое использование inspection types как foundation для чек-листового реестра." />
       <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
       {loading ? <LoadingScreen label="Загрузка чек-листов" /> : null}
+      {!loading && !error && hasChecklistGap ? (
+        <Card className="border-orange-200 bg-orange-50/40">
+          <CardHeader>
+            <CardTitle className="text-base">Blockers и next actions</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <p>Открытых предписаний: {openPrescriptions}. Шаблонов документов для покрытия чек-листов: {data.templates.length}.</p>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild size="sm" variant="outline"><Link to="/templates">Шаблоны</Link></Button>
+              <Button asChild size="sm" variant="outline"><Link to="/inspections">Проверки</Link></Button>
+              <Button asChild size="sm" variant="outline"><Link to="/prescriptions">Предписания</Link></Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
       {!loading && !error && registry.total === 0 ? <EmptyState title="Чек-листы не найдены" description="В tenant еще не было проверок." /> : null}
       {!loading && !error && registry.total > 0 ? (
         <RegistryTable

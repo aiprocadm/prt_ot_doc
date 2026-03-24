@@ -78,7 +78,7 @@ export const TaskTable = () => {
         header: "Действия",
         cell: ({ row }) => (
           <ActionButton
-            permission={PERMISSIONS.TASK_VIEW}
+            permission={PERMISSIONS.TASK_UPDATE}
             variant="ghost"
             size="icon"
             title="Закрыть"

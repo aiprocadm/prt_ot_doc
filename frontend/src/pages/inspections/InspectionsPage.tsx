@@ -5,6 +5,7 @@ import { inspectionsApi, type Inspection, type InspectionResult } from "@/api/in
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
+import { Can } from "@/components/permissions/Can";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { PERMISSIONS } from "@/permissions/permissions";
 import type { ApiError } from "@/types/dto/common";
 import { formatDate } from "@/utils/datetime";
 import { toast } from "sonner";
@@ -135,91 +137,96 @@ const InspectionsPage = () => {
           </select>
           <Button variant="outline" onClick={() => void load()}>Обновить</Button>
 
-          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-            <DialogTrigger asChild>
-              <Button>Создать проверку</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Создание проверки / предписания</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="insp-company">Компания *</Label>
-                    <select
-                      id="insp-company"
-                      className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                      value={form.company_id}
-                      onChange={(e) => setForm((prev) => ({ ...prev, company_id: e.target.value }))}
-                    >
-                      <option value="">Выберите компанию</option>
-                      {companies.map((company) => (
-                        <option key={company.id} value={company.id}>{company.name}</option>
-                      ))}
-                    </select>
+          <Can
+            permission={PERMISSIONS.INSPECTION_CREATE}
+            fallback={<Button disabled title="Недостаточно прав для создания проверки">Создать проверку</Button>}
+          >
+            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+              <DialogTrigger asChild>
+                <Button>Создать проверку</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Создание проверки / предписания</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="insp-company">Компания *</Label>
+                      <select
+                        id="insp-company"
+                        className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        value={form.company_id}
+                        onChange={(e) => setForm((prev) => ({ ...prev, company_id: e.target.value }))}
+                      >
+                        <option value="">Выберите компанию</option>
+                        {companies.map((company) => (
+                          <option key={company.id} value={company.id}>{company.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="insp-site">ID площадки</Label>
+                      <Input
+                        id="insp-site"
+                        value={form.site_id}
+                        onChange={(e) => setForm((prev) => ({ ...prev, site_id: e.target.value }))}
+                        placeholder="Опционально"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="insp-type">Тип проверки</Label>
+                      <select
+                        id="insp-type"
+                        className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        value={form.inspection_type}
+                        onChange={(e) => setForm((prev) => ({ ...prev, inspection_type: e.target.value }))}
+                      >
+                        {INSPECTION_TYPES.map((t) => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="insp-date">Плановая дата</Label>
+                      <Input
+                        id="insp-date"
+                        type="date"
+                        value={form.scheduled_at}
+                        onChange={(e) => setForm((prev) => ({ ...prev, scheduled_at: e.target.value }))}
+                      />
+                    </div>
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="insp-site">ID площадки</Label>
+                    <Label htmlFor="insp-authority">Проверяющий орган *</Label>
                     <Input
-                      id="insp-site"
-                      value={form.site_id}
-                      onChange={(e) => setForm((prev) => ({ ...prev, site_id: e.target.value }))}
-                      placeholder="Опционально"
+                      id="insp-authority"
+                      value={form.authority}
+                      onChange={(e) => setForm((prev) => ({ ...prev, authority: e.target.value }))}
+                      placeholder="Ростехнадзор, Роструд, МЧС…"
                     />
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label htmlFor="insp-type">Тип проверки</Label>
-                    <select
-                      id="insp-type"
-                      className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                      value={form.inspection_type}
-                      onChange={(e) => setForm((prev) => ({ ...prev, inspection_type: e.target.value }))}
-                    >
-                      {INSPECTION_TYPES.map((t) => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="insp-date">Плановая дата</Label>
+                    <Label htmlFor="insp-purpose">Цель проверки</Label>
                     <Input
-                      id="insp-date"
-                      type="date"
-                      value={form.scheduled_at}
-                      onChange={(e) => setForm((prev) => ({ ...prev, scheduled_at: e.target.value }))}
+                      id="insp-purpose"
+                      value={form.purpose}
+                      onChange={(e) => setForm((prev) => ({ ...prev, purpose: e.target.value }))}
+                      placeholder="Контроль соблюдения требований ОТ"
                     />
                   </div>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" onClick={() => setCreateOpen(false)}>Отмена</Button>
+                    <Button disabled={creating} onClick={() => void handleCreate()}>
+                      {creating ? "Создание…" : "Создать проверку"}
+                    </Button>
+                  </div>
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="insp-authority">Проверяющий орган *</Label>
-                  <Input
-                    id="insp-authority"
-                    value={form.authority}
-                    onChange={(e) => setForm((prev) => ({ ...prev, authority: e.target.value }))}
-                    placeholder="Ростехнадзор, Роструд, МЧС…"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="insp-purpose">Цель проверки</Label>
-                  <Input
-                    id="insp-purpose"
-                    value={form.purpose}
-                    onChange={(e) => setForm((prev) => ({ ...prev, purpose: e.target.value }))}
-                    placeholder="Контроль соблюдения требований ОТ"
-                  />
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setCreateOpen(false)}>Отмена</Button>
-                  <Button disabled={creating} onClick={() => void handleCreate()}>
-                    {creating ? "Создание…" : "Создать проверку"}
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
+              </DialogContent>
+            </Dialog>
+          </Can>
         </div>
       </div>
 

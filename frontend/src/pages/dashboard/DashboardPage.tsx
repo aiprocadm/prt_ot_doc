@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Can } from "@/components/permissions/Can";
 import { ErrorState } from "@/components/common/ErrorState";
 import { EmptyState } from "@/components/common/EmptyState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -16,6 +17,7 @@ import { SlaIndicator } from "@/components/common/SlaIndicator";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { AttentionPanel } from "@/components/common/AttentionPanel";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
+import { PERMISSIONS } from "@/permissions/permissions";
 import { useDashboardStore } from "@/stores/dashboard";
 import { formatDate } from "@/utils/datetime";
 import { entityContextPath, taskInboxLink } from "@/utils/workspaceNavigation";
@@ -114,8 +116,18 @@ export const DashboardPage = () => {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button>Создать документ</Button>
-            <Button variant="outline">Запустить мастер</Button>
+            <Can
+              permission={PERMISSIONS.DOCUMENT_CREATE}
+              fallback={<Button disabled title="Недостаточно прав для создания документа">Создать документ</Button>}
+            >
+              <Button>Создать документ</Button>
+            </Can>
+            <Can
+              permission={PERMISSIONS.DOCUMENT_CREATE}
+              fallback={<Button variant="outline" disabled title="Недостаточно прав для запуска мастера">Запустить мастер</Button>}
+            >
+              <Button variant="outline">Запустить мастер</Button>
+            </Can>
           </div>
         </div>
       </div>

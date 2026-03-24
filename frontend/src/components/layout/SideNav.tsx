@@ -40,7 +40,7 @@ const navGroups = [
       { label: "Документы", to: "/documents", icon: FileText, permission: PERMISSIONS.DOCUMENT_VIEW },
       { label: "Шаблоны", to: "/templates", icon: FileArchive, permission: PERMISSIONS.TEMPLATE_VIEW },
       { label: "Пакеты", to: "/packs", icon: Package, permission: PERMISSIONS.PACK_VIEW },
-      { label: "Генерация", to: "/generation", icon: ClipboardCheck, permission: PERMISSIONS.GENERATION_VIEW },
+      { label: "Генерация", to: "/generation", icon: ClipboardCheck, permission: PERMISSIONS.DOCUMENT_CREATE },
       { label: "Пайплайны / Jobs", to: "/pipelines/runs", icon: Archive, permission: PERMISSIONS.DOCUMENT_VIEW },
       { label: "Архив", to: "/archive", icon: FileArchive, permission: PERMISSIONS.FILE_VIEW },
       { label: "Поиск", to: "/search", icon: Search, permission: PERMISSIONS.FILE_VIEW },

@@ -1,9 +1,11 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import DashboardPage from "@/pages/dashboard/DashboardPage";
+import { PERMISSIONS } from "@/permissions/permissions";
+import { useAuthStore } from "@/stores/auth";
 
 const fetchSummaryMock = vi.fn();
 const fetchOperationalMock = vi.fn();
@@ -85,6 +87,25 @@ vi.mock("@/hooks/useAsyncResource", () => ({
 }));
 
 describe("DashboardPage", () => {
+  beforeEach(() => {
+    useAuthStore.setState({
+      user: {
+        id: "dashboard-user",
+        created_at: "2024-01-01",
+        updated_at: "2024-01-02",
+        email: "dashboard@example.com",
+        full_name: "Dashboard User",
+        roles: ["super_admin"],
+        permissions: [PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.DOCUMENT_CREATE],
+        attributes: { tenant_id: "tenant-1" }
+      },
+      loading: false,
+      error: null,
+      isAuthenticated: true,
+      initialized: true
+    });
+  });
+
   it("renders KPI values from summary and workspace task inbox filters", async () => {
     const user = userEvent.setup();
 
@@ -129,5 +150,26 @@ describe("DashboardPage", () => {
     await user.selectOptions(screen.getByLabelText("Фильтр задач по приоритету"), "normal");
     expect(within(taskInbox).queryByText("Просроченная задача")).not.toBeInTheDocument();
     expect(within(taskInbox).getByText("Активная задача")).toBeInTheDocument();
+  });
+
+  it("shows disabled quick actions without document create permission", () => {
+    useAuthStore.setState((state) => ({
+      ...state,
+      user: state.user
+        ? {
+            ...state.user,
+            permissions: [PERMISSIONS.DASHBOARD_VIEW]
+          }
+        : null
+    }));
+
+    render(
+      <MemoryRouter>
+        <DashboardPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("button", { name: "Создать документ" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Запустить мастер" })).toBeDisabled();
   });
 });

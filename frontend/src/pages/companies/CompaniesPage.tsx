@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,7 +15,7 @@ import { useCompaniesStore } from "@/stores/companies";
 import type { CompanyDto } from "@/types/dto/companies";
 
 const CompaniesPage = () => {
-  const { list, getById } = useCompaniesStore();
+  const { list, getById, items, loading, error } = useCompaniesStore();
   const { setSidebar } = useSidebar();
   const [selectedCompany, setSelectedCompany] = useState<CompanyDto | null>(null);
 
@@ -22,7 +25,7 @@ const CompaniesPage = () => {
   }, [setSidebar]);
 
   useEffect(() => {
-    list();
+    void list().catch(() => undefined);
   }, [list]);
 
   const handleSelect = useCallback(
@@ -50,7 +53,12 @@ const CompaniesPage = () => {
       </div>
       <Card>
         <CardContent className="py-6">
-          <CompanyTable onSelect={handleSelect} />
+          <ErrorState error={error ?? undefined} onRetry={() => void list().catch(() => undefined)} />
+          {loading && items.length === 0 ? <LoadingScreen label="Загрузка компаний" /> : null}
+          {!loading && !error && items.length === 0 ? (
+            <EmptyState title="Компании не найдены" description="Создайте первую компанию или измените фильтры в боковой панели." />
+          ) : null}
+          {!loading || items.length > 0 ? <CompanyTable onSelect={handleSelect} /> : null}
         </CardContent>
       </Card>
       {selectedCompany && <CompanyDetails company={selectedCompany} />}

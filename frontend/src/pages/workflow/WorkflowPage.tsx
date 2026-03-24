@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { apiClient } from "@/api/client";
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import type { ApiError } from "@/types/dto/common";
 
 const defaultGraph = {
   nodes: [
@@ -94,16 +98,26 @@ const WorkflowPage = () => {
   const [validation, setValidation] = useState<string | null>(null);
   const [reassignRole, setReassignRole] = useState("admin");
   const [reassignUserId, setReassignUserId] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<ApiError | null>(null);
 
   const load = async () => {
-    const [definitionsResponse, tasksResponse, instancesResponse] = await Promise.all([
-      apiClient.get<WorkflowDefinition[]>("/workflow/definitions"),
-      apiClient.get<WorkflowTask[]>("/workflow/tasks"),
-      apiClient.get<WorkflowInstanceListItem[]>("/workflow/instances")
-    ]);
-    setDefinitions(definitionsResponse.data);
-    setTasks(tasksResponse.data);
-    setInstances(instancesResponse.data);
+    setLoading(true);
+    setError(null);
+    try {
+      const [definitionsResponse, tasksResponse, instancesResponse] = await Promise.all([
+        apiClient.get<WorkflowDefinition[]>("/workflow/definitions"),
+        apiClient.get<WorkflowTask[]>("/workflow/tasks"),
+        apiClient.get<WorkflowInstanceListItem[]>("/workflow/instances")
+      ]);
+      setDefinitions(definitionsResponse.data);
+      setTasks(tasksResponse.data);
+      setInstances(instancesResponse.data);
+    } catch (nextError) {
+      setError((nextError as ApiError) ?? { message: "Не удалось загрузить workflow данные" });
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -117,6 +131,8 @@ const WorkflowPage = () => {
       return null;
     }
   }, [graphText]);
+
+  const hasOperationalData = definitions.length > 0 || tasks.length > 0 || instances.length > 0 || selectedInstance !== null;
 
   const createProcess = async () => {
     if (!parsedGraph) return;
@@ -188,6 +204,11 @@ const WorkflowPage = () => {
   return (
     <div className="space-y-6">
       <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Workflow" }]} />
+      <ErrorState error={error ?? undefined} onRetry={() => void load()} />
+      {loading ? <LoadingScreen label="Загрузка workflow данных" /> : null}
+      {!loading && !error && !hasOperationalData ? (
+        <EmptyState title="Workflow данные отсутствуют" description="Определения, инстансы и задачи появятся после создания и запуска первого процесса." />
+      ) : null}
       <Card>
         <CardHeader><CardTitle>Workflow / BPM engine v1</CardTitle></CardHeader>
         <CardContent className="space-y-3">
@@ -208,6 +229,7 @@ const WorkflowPage = () => {
         <Card>
           <CardHeader><CardTitle>Процессы и версии</CardTitle></CardHeader>
           <CardContent className="space-y-4">
+            {!loading && !error && definitions.length === 0 ? <EmptyState title="Workflow definitions отсутствуют" description="Создайте draft process, чтобы опубликовать первую workflow схему." /> : null}
             {definitions.map((definition) => (
               <div key={definition.id} className="rounded-lg border p-4 space-y-3">
                 <div className="flex items-center justify-between gap-4">
@@ -252,6 +274,7 @@ const WorkflowPage = () => {
           <Card>
             <CardHeader><CardTitle>Workflow instances</CardTitle></CardHeader>
             <CardContent className="space-y-3">
+              {!loading && !error && instances.length === 0 ? <EmptyState title="Workflow instances отсутствуют" description="После запуска процесса здесь появятся активные и завершённые инстансы." /> : null}
               {instances.map((instance) => (
                 <div key={instance.id} className="rounded border p-3">
                   <div className="flex items-center justify-between gap-2">
@@ -274,6 +297,7 @@ const WorkflowPage = () => {
                 <Input placeholder="Reassign user id" value={reassignUserId} onChange={(event) => setReassignUserId(event.target.value)} />
                 <Input placeholder="Role code" value={reassignRole} onChange={(event) => setReassignRole(event.target.value)} />
               </div>
+              {!loading && !error && tasks.length === 0 ? <EmptyState title="Workflow tasks отсутствуют" description="Когда процесс дойдёт до task nodes, здесь появятся активные поручения." /> : null}
               {tasks.map((task) => (
                 <div key={task.id} className="rounded border p-3">
                   <div className="font-medium">{task.title}</div>

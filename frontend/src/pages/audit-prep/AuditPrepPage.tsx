@@ -38,7 +38,8 @@ const AuditPrepPage = () => {
       const key = inspection.authority || inspection.inspection_type || "Внутренний аудит";
       const existing = byAuthority.get(key) ?? { name: key, inspections: 0, openPrescriptions: 0, blockers: 0, next: null };
       existing.inspections += 1;
-      if (!existing.next || (inspection.scheduled_at && inspection.scheduled_at < existing.next)) existing.next = inspection.scheduled_at;
+      const nextScheduledAt = inspection.scheduled_at ?? null;
+      if (nextScheduledAt && (!existing.next || nextScheduledAt < existing.next)) existing.next = nextScheduledAt;
       byAuthority.set(key, existing);
     });
     snapshot.prescriptions.forEach((prescription) => {

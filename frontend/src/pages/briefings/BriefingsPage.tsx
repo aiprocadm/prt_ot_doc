@@ -8,6 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/common/StatusBadge";
+import { useAbility } from "@/permissions/useAbility";
+import { PERMISSIONS } from "@/permissions/permissions";
 import { useCompaniesStore } from "@/stores/companies";
 import { formatDate } from "@/utils/datetime";
 
@@ -21,6 +23,8 @@ const BriefingsPage = () => {
   const [templateForm, setTemplateForm] = useState({ code: "", title: "", briefing_type: "introductory", status: "active", description: "", validity_days: 365 });
   const [journalForm, setJournalForm] = useState({ code: "", title: "", journal_type: "ot", status: "active", site_id: null as string | null, department_id: null as string | null });
   const [entryForm, setEntryForm] = useState({ briefing_journal_id: "", briefing_template_id: "", person_id: "", instructor_user_id: "", briefing_type: "introductory", briefing_date: new Date().toISOString().slice(0, 16), valid_until: "", reason: "", status: "draft", notes: "" });
+  const ability = useAbility();
+  const canManageBriefings = ability.can(PERMISSIONS.TRAINING_ASSIGN);
 
   const load = async () => {
     setLoading(true);
@@ -55,7 +59,14 @@ const BriefingsPage = () => {
         <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Инструктажи" }]} />
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={() => void load()} disabled={loading}>Обновить</Button>
-          <Button variant="secondary" onClick={() => void briefingsApi.remindOverdue().then((result) => { toast.success(`Отправлено напоминаний: ${result.count}`); return load(); }).catch(() => toast.error("Не удалось отправить напоминания"))}>Напомнить о просрочке</Button>
+          <Button
+            variant="secondary"
+            disabled={!canManageBriefings}
+            title={canManageBriefings ? undefined : "Недостаточно прав для управления инструктажами"}
+            onClick={() => void briefingsApi.remindOverdue().then((result) => { toast.success(`Отправлено напоминаний: ${result.count}`); return load(); }).catch(() => toast.error("Не удалось отправить напоминания"))}
+          >
+            Напомнить о просрочке
+          </Button>
         </div>
       </div>
 
@@ -79,7 +90,14 @@ const BriefingsPage = () => {
             <Input placeholder="Название" value={templateForm.title} onChange={(e) => setTemplateForm((p) => ({ ...p, title: e.target.value }))} />
             <Input placeholder="Тип инструктажа" value={templateForm.briefing_type} onChange={(e) => setTemplateForm((p) => ({ ...p, briefing_type: e.target.value }))} />
             <Input type="number" placeholder="Срок действия, дни" value={templateForm.validity_days} onChange={(e) => setTemplateForm((p) => ({ ...p, validity_days: Number(e.target.value) }))} />
-            <Button className="w-full" onClick={() => void briefingsApi.createTemplate(templateForm).then(() => { toast.success("Шаблон создан"); setTemplateForm({ code: "", title: "", briefing_type: "introductory", status: "active", description: "", validity_days: 365 }); return load(); }).catch(() => toast.error("Не удалось создать шаблон"))}>Создать шаблон</Button>
+            <Button
+              className="w-full"
+              disabled={!canManageBriefings}
+              title={canManageBriefings ? undefined : "Недостаточно прав для управления инструктажами"}
+              onClick={() => void briefingsApi.createTemplate(templateForm).then(() => { toast.success("Шаблон создан"); setTemplateForm({ code: "", title: "", briefing_type: "introductory", status: "active", description: "", validity_days: 365 }); return load(); }).catch(() => toast.error("Не удалось создать шаблон"))}
+            >
+              Создать шаблон
+            </Button>
           </CardContent>
         </Card>
 
@@ -89,7 +107,14 @@ const BriefingsPage = () => {
             <Input placeholder="Код" value={journalForm.code} onChange={(e) => setJournalForm((p) => ({ ...p, code: e.target.value }))} />
             <Input placeholder="Название" value={journalForm.title} onChange={(e) => setJournalForm((p) => ({ ...p, title: e.target.value }))} />
             <Input placeholder="Тип журнала" value={journalForm.journal_type} onChange={(e) => setJournalForm((p) => ({ ...p, journal_type: e.target.value }))} />
-            <Button className="w-full" onClick={() => void briefingsApi.createJournal(journalForm).then(() => { toast.success("Журнал создан"); setJournalForm({ code: "", title: "", journal_type: "ot", status: "active", site_id: null, department_id: null }); return load(); }).catch(() => toast.error("Не удалось создать журнал"))}>Создать журнал</Button>
+            <Button
+              className="w-full"
+              disabled={!canManageBriefings}
+              title={canManageBriefings ? undefined : "Недостаточно прав для управления инструктажами"}
+              onClick={() => void briefingsApi.createJournal(journalForm).then(() => { toast.success("Журнал создан"); setJournalForm({ code: "", title: "", journal_type: "ot", status: "active", site_id: null, department_id: null }); return load(); }).catch(() => toast.error("Не удалось создать журнал"))}
+            >
+              Создать журнал
+            </Button>
           </CardContent>
         </Card>
 
@@ -118,7 +143,14 @@ const BriefingsPage = () => {
               </select>
             </div>
             <Input type="datetime-local" value={entryForm.briefing_date} onChange={(e) => setEntryForm((p) => ({ ...p, briefing_date: e.target.value }))} />
-            <Button className="w-full" onClick={() => void briefingsApi.createEntry({ ...entryForm, briefing_template_id: entryForm.briefing_template_id || null, person_id: entryForm.person_id || null, instructor_user_id: entryForm.instructor_user_id || null, valid_until: entryForm.valid_until || null }).then(() => { toast.success("Инструктаж назначен"); return load(); }).catch(() => toast.error("Не удалось назначить инструктаж"))}>Назначить</Button>
+            <Button
+              className="w-full"
+              disabled={!canManageBriefings}
+              title={canManageBriefings ? undefined : "Недостаточно прав для управления инструктажами"}
+              onClick={() => void briefingsApi.createEntry({ ...entryForm, briefing_template_id: entryForm.briefing_template_id || null, person_id: entryForm.person_id || null, instructor_user_id: entryForm.instructor_user_id || null, valid_until: entryForm.valid_until || null }).then(() => { toast.success("Инструктаж назначен"); return load(); }).catch(() => toast.error("Не удалось назначить инструктаж"))}
+            >
+              Назначить
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -139,9 +171,32 @@ const BriefingsPage = () => {
                 </div>
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
-                <Button size="sm" variant="outline" onClick={() => void briefingsApi.sign(entry.id, "employee").then(() => load()).catch(() => toast.error("Не удалось зафиксировать подпись сотрудника"))}>Подпись сотрудника</Button>
-                <Button size="sm" variant="outline" onClick={() => void briefingsApi.sign(entry.id, "instructor").then(() => load()).catch(() => toast.error("Не удалось зафиксировать подпись инструктора"))}>Подпись инструктора</Button>
-                <Button size="sm" onClick={() => void briefingsApi.complete(entry.id).then(() => { toast.success("Инструктаж завершен"); return load(); }).catch(() => toast.error("Сначала нужны обе подписи"))}>Завершить</Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!canManageBriefings}
+                  title={canManageBriefings ? undefined : "Недостаточно прав для управления инструктажами"}
+                  onClick={() => void briefingsApi.sign(entry.id, "employee").then(() => load()).catch(() => toast.error("Не удалось зафиксировать подпись сотрудника"))}
+                >
+                  Подпись сотрудника
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!canManageBriefings}
+                  title={canManageBriefings ? undefined : "Недостаточно прав для управления инструктажами"}
+                  onClick={() => void briefingsApi.sign(entry.id, "instructor").then(() => load()).catch(() => toast.error("Не удалось зафиксировать подпись инструктора"))}
+                >
+                  Подпись инструктора
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={!canManageBriefings}
+                  title={canManageBriefings ? undefined : "Недостаточно прав для управления инструктажами"}
+                  onClick={() => void briefingsApi.complete(entry.id).then(() => { toast.success("Инструктаж завершен"); return load(); }).catch(() => toast.error("Сначала нужны обе подписи"))}
+                >
+                  Завершить
+                </Button>
               </div>
               <div className="mt-3 text-sm text-muted-foreground">Подписей: {entry.signatures.length}</div>
             </div>

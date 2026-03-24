@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAbility } from "@/permissions/useAbility";
+import { PERMISSIONS } from "@/permissions/permissions";
 import type { ApiError } from "@/types/dto/common";
 import { toast } from "sonner";
 
@@ -27,6 +29,7 @@ const monthAgo = () => {
 };
 
 const ReportsPage = () => {
+  const ability = useAbility();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [kpi, setKpi] = useState<KpiPayload | null>(null);
@@ -34,6 +37,7 @@ const ReportsPage = () => {
   const [dateTo, setDateTo] = useState(today);
   const [exporting, setExporting] = useState(false);
   const [lastExportId, setLastExportId] = useState<string | null>(null);
+  const canExportReports = ability.can(PERMISSIONS.DOCUMENT_EXPORT) || ability.can(PERMISSIONS.REPORTS_VIEW);
 
   const loadKpi = async () => {
     setLoading(true);
@@ -86,10 +90,20 @@ const ReportsPage = () => {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Отчёты" }]} />
         <div className="flex gap-2">
-          <Button variant="outline" disabled={exporting} onClick={() => void exportReport("xlsx")}>
+          <Button
+            variant="outline"
+            disabled={exporting || !canExportReports}
+            title={canExportReports ? undefined : "Недостаточно прав для экспорта"}
+            onClick={() => void exportReport("xlsx")}
+          >
             {exporting ? "Экспорт…" : "XLSX"}
           </Button>
-          <Button variant="outline" disabled={exporting} onClick={() => void exportReport("pdf")}>
+          <Button
+            variant="outline"
+            disabled={exporting || !canExportReports}
+            title={canExportReports ? undefined : "Недостаточно прав для экспорта"}
+            onClick={() => void exportReport("pdf")}
+          >
             PDF
           </Button>
         </div>

@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 
 import { apiClient } from "@/api/client";
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,19 +21,28 @@ type NpaDetail = {
 };
 
 const NpaPage = () => {
-  const { list, setFilters, filters, items } = useNpaStore();
+  const { list, setFilters, filters, items, loading, error } = useNpaStore();
   const [search, setSearch] = useState(filters.search ?? "");
   const [status, setStatus] = useState<NpaStatus | "">(filters.status ?? "");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<NpaDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   useEffect(() => {
     void list();
   }, [list]);
 
   useEffect(() => {
-    if (!selectedId) return;
-    void apiClient.get<NpaDetail>(`/npa/${selectedId}`).then((response) => setDetail(response.data)).catch(() => setDetail(null));
+    if (!selectedId) {
+      setDetail(null);
+      return;
+    }
+    setDetailLoading(true);
+    void apiClient
+      .get<NpaDetail>(`/npa/${selectedId}`)
+      .then((response) => setDetail(response.data))
+      .catch(() => setDetail(null))
+      .finally(() => setDetailLoading(false));
   }, [selectedId]);
 
   const applyFilters = () => {
@@ -47,6 +59,7 @@ const NpaPage = () => {
   return (
     <div className="space-y-6">
       <Breadcrumb items={[{ label: "Главная", to: "/" }, { label: "НПА" }]} />
+      <ErrorState error={error ?? undefined} onRetry={() => void list()} />
       <Card>
         <CardContent className="flex flex-wrap items-end gap-4 py-6">
           <div className="flex flex-col gap-2">
@@ -65,9 +78,16 @@ const NpaPage = () => {
           <Button onClick={applyFilters}>Применить</Button>
         </CardContent>
       </Card>
+      {loading && items.length === 0 ? <LoadingScreen label="Загрузка реестра НПА" /> : null}
+      {!loading && !error && items.length === 0 ? (
+        <EmptyState
+          title="НПА не найдены"
+          description="Добавьте или импортируйте нормативные акты, чтобы impact analysis и update tasks работали на реальных данных."
+        />
+      ) : null}
       <div className="grid gap-6 xl:grid-cols-[1.2fr,0.8fr]">
         <div className="space-y-3">
-          <NpaTable />
+          {items.length > 0 ? <NpaTable /> : null}
           <Card>
             <CardHeader><CardTitle>Детализация НПА</CardTitle></CardHeader>
             <CardContent className="space-y-2">
@@ -85,7 +105,9 @@ const NpaPage = () => {
             <Button variant="outline" onClick={() => void createUpdateTasks()} disabled={!selectedId}>Create update tasks</Button>
           </CardHeader>
           <CardContent className="space-y-4">
-            {detail ? (
+            {detailLoading ? (
+              <LoadingScreen label="Загрузка impact analysis" />
+            ) : detail ? (
               <>
                 <div>
                   <div className="font-medium">{detail.act.code}</div>

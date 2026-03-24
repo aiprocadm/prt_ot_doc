@@ -31,6 +31,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ReplaceDiffViewer } from "@/components/wizard/ReplaceDiffViewer";
 import { WizardJobTimeline } from "@/components/wizard/WizardJobTimeline";
 import { WizardStepper } from "@/components/wizard/WizardStepper";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { useCompaniesStore } from "@/stores/companies";
 import { useTenantStore } from "@/stores/tenant";
 import { useDocumentsWizardStore } from "@/stores/documentsWizard";
@@ -216,6 +217,10 @@ const DocumentsWizardPage = () => {
     if (rowStatusFilter === "all") return batch.items;
     return batch.items.filter((item) => item.status === rowStatusFilter);
   }, [batch, rowStatusFilter]);
+  const hasUnsavedChanges = Boolean(sourceFile || replaceMapFile || docxFile);
+
+  useUnsavedChanges(hasUnsavedChanges);
+
   const archiveStatus = getArchiveStatusSummary({
     batchStatus: batch?.status,
     pipelineStatus: pipelineRun?.status

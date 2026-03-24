@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import type { ApiError } from "@/types/dto/common";
 
 interface Preset {
@@ -28,22 +29,32 @@ const WIZARD_STEPS = [
   { step: 5, label: "Результат", icon: CheckCircle }
 ];
 
+const DEFAULT_ROWS_JSON = '[{"doc":"Акт","employee":"Иванов И.И."}]';
+
 const GeneratePackWizardPage = () => {
   const { presetId: presetIdParam = "" } = useParams();
   const navigate = useNavigate();
 
+  const [initialIdempotencyKey, setInitialIdempotencyKey] = useState(() => `wizard-${Date.now()}`);
   const [step, setStep] = useState(presetIdParam ? 2 : 1);
   const [presets, setPresets] = useState<Preset[]>([]);
   const [presetsLoading, setPresetsLoading] = useState(false);
   const [presetsError, setPresetsError] = useState<ApiError | null>(null);
   const [selectedPresetId, setSelectedPresetId] = useState(presetIdParam);
-  const [rowsJson, setRowsJson] = useState('[{"doc":"Акт","employee":"Иванов И.И."}]');
+  const [rowsJson, setRowsJson] = useState(DEFAULT_ROWS_JSON);
   const [rowsError, setRowsError] = useState<string | null>(null);
-  const [idempotencyKey, setIdempotencyKey] = useState(`wizard-${Date.now()}`);
+  const [idempotencyKey, setIdempotencyKey] = useState(initialIdempotencyKey);
   const [dryRun, setDryRun] = useState(false);
   const [running, setRunning] = useState(false);
   const [packRunId, setPackRunId] = useState<string | null>(null);
   const [runError, setRunError] = useState<ApiError | null>(null);
+  const [draftOrigin, setDraftOrigin] = useState(() => ({
+    step: presetIdParam ? 2 : 1,
+    selectedPresetId: presetIdParam,
+    rowsJson: DEFAULT_ROWS_JSON,
+    idempotencyKey: initialIdempotencyKey,
+    dryRun: false,
+  }));
 
   const loadPresets = async () => {
     setPresetsLoading(true);
@@ -67,6 +78,21 @@ const GeneratePackWizardPage = () => {
       return null;
     }
   }, [rowsJson]);
+
+  const hasUnsavedChanges = useMemo(() => {
+    if (packRunId) {
+      return false;
+    }
+    return (
+      step !== draftOrigin.step ||
+      selectedPresetId !== draftOrigin.selectedPresetId ||
+      rowsJson !== draftOrigin.rowsJson ||
+      idempotencyKey !== draftOrigin.idempotencyKey ||
+      dryRun !== draftOrigin.dryRun
+    );
+  }, [draftOrigin, dryRun, idempotencyKey, packRunId, rowsJson, selectedPresetId, step]);
+
+  useUnsavedChanges(hasUnsavedChanges);
 
   useEffect(() => {
     if (presetIdParam) return;
@@ -337,10 +363,24 @@ const GeneratePackWizardPage = () => {
               <Button
                 variant="ghost"
                 onClick={() => {
+                  const nextIdempotencyKey = `wizard-${Date.now()}`;
+                  const nextStep = presetIdParam ? 2 : 1;
+                  setDraftOrigin({
+                    step: nextStep,
+                    selectedPresetId: presetIdParam,
+                    rowsJson: DEFAULT_ROWS_JSON,
+                    idempotencyKey: nextIdempotencyKey,
+                    dryRun: false,
+                  });
                   setStep(presetIdParam ? 2 : 1);
+                  setSelectedPresetId(presetIdParam);
+                  setRowsJson(DEFAULT_ROWS_JSON);
+                  setRowsError(null);
                   setPackRunId(null);
                   setRunError(null);
-                  setIdempotencyKey(`wizard-${Date.now()}`);
+                  setDryRun(false);
+                  setInitialIdempotencyKey(nextIdempotencyKey);
+                  setIdempotencyKey(nextIdempotencyKey);
                 }}
               >
                 Запустить ещё
