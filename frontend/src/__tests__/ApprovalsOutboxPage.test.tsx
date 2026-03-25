@@ -3,6 +3,8 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import ApprovalsOutboxPage from "@/pages/approvals/ApprovalsOutboxPage";
+import { PERMISSIONS } from "@/permissions/permissions";
+import { useAuthStore } from "@/stores/auth";
 
 const getMock = vi.fn();
 const postMock = vi.fn();
@@ -18,6 +20,21 @@ describe("ApprovalsOutboxPage", () => {
   beforeEach(() => {
     getMock.mockReset();
     postMock.mockReset();
+    useAuthStore.setState({
+      user: {
+        id: "user-1",
+        created_at: "2024-01-01",
+        updated_at: "2024-01-02",
+        email: "user@example.com",
+        full_name: "User",
+        roles: ["ot_specialist"],
+        permissions: [PERMISSIONS.DOCUMENT_VIEW, PERMISSIONS.ADMIN_OUTBOX_MANAGE],
+      },
+      loading: false,
+      error: null,
+      isAuthenticated: true,
+      initialized: true,
+    });
   });
 
   it("shows empty state when approval outbox has no items", async () => {

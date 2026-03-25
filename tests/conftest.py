@@ -9,9 +9,10 @@ from uuid import UUID
 
 # Set environment variables BEFORE any app imports
 os.environ.setdefault("APP_NAME", "TestService")
-os.environ.setdefault("APP_TRUSTED_HOSTS", "localhost,127.0.0.1,testserver")
+os.environ["APP_TRUSTED_HOSTS"] = "localhost,127.0.0.1,testserver"
 os.environ.setdefault("DEFAULT_LOCALE", "en-US")
 os.environ.setdefault("LIBREOFFICE_BIN", sys.executable)
+os.environ["ENABLE_METRICS"] = "true"
 _DEFAULT_SQLITE_TEST_DB_PATH = os.path.join(tempfile.gettempdir(), "prt_ot_doc_tests.db")
 _SQLITE_TEST_DB = f"sqlite+aiosqlite:///{_DEFAULT_SQLITE_TEST_DB_PATH}"
 os.environ.setdefault("DATABASE_URL", _SQLITE_TEST_DB)

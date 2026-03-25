@@ -23,6 +23,7 @@ from app.modules.files.models import FileEntityType, FileLinkRole
 from app.modules.files.service import FileService
 from app.modules.pipelines.graph import safe_eval_condition
 from app.modules.pipelines.models import PipelinePackageProfile, PipelineProfile
+from app.services.celery_app import celery_app
 from app.services.audit import AuditService, field_level_diff
 from app.services.file_storage import FileStorageService
 from app.services.pipeline_step_handlers import (
@@ -207,7 +208,7 @@ class PipelineOrchestrator:
             return job
         job.current_step_index = step.step_order or step.order
         if enqueue:
-            self.enqueue_next_step(job=job, step=step)
+            await self.enqueue_next_step(job=job, step=step)
         await self.session.flush()
         return job
 
@@ -367,8 +368,11 @@ class PipelineOrchestrator:
             await self.session.flush()
         return step
 
-    def enqueue_next_step(self, *, job: DocumentJob, step: DocumentJobStep) -> None:
+    async def enqueue_next_step(self, *, job: DocumentJob, step: DocumentJobStep) -> None:
         from app.celery.tasks.job_steps import run_job_step
+
+        if celery_app.conf.task_always_eager:
+            await self.session.commit()
 
         run_job_step.apply_async(
             kwargs={"tenant_slug": str(job.tenant_id), "job_id": job.id, "step_id": step.id},

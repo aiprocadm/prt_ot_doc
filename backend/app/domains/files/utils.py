@@ -42,6 +42,8 @@ __all__ = [
 
 DEFAULT_SNIFF_BYTES = 4096
 MIME_EXTENSION_OVERRIDES: Mapping[str, str] = {
+    "application/msword": "doc",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
     "image/jpeg": "jpg",
     "text/plain": "txt",
 }

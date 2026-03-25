@@ -218,9 +218,6 @@ async def run_pipeline(
         idempotency_key=idem_key,
         request_hash=request_hash,
     )
-    job.profile_id = profile.id
-    job.input = payload.inputs
-    await session.flush()
     steps = (await session.execute(select(DocumentJobStep).where(DocumentJobStep.job_id == job.id).order_by(DocumentJobStep.seq.asc().nullslast(), DocumentJobStep.order.asc()))).scalars().all()
     accepted = PipelineRunAccepted(
         run_id=job.id,
@@ -229,7 +226,7 @@ async def run_pipeline(
         correlation_id=job.correlation_id,
         step_runs=[_serialize_step(s) for s in steps],
     )
-    await idem_service.store_success(record, status_code=status.HTTP_202_ACCEPTED, body=accepted.model_dump())
+    await idem_service.store_success(record, status_code=status.HTTP_202_ACCEPTED, body=accepted.model_dump(mode="json"))
     await session.commit()
     return accepted
 

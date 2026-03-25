@@ -526,6 +526,7 @@ def rbac(required_roles: list[str] | None = None) -> Callable[..., Any]:
             str(user.company_id) if getattr(user, "company_id", None) else None
         )
 
+        request.state.claims = dict(payload)
         request.state.current_user = user
         request.state.current_user_id = user.id
         request.state.current_user_company_id = session.info["current_user_company_id"]

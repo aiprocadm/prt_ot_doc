@@ -75,9 +75,6 @@ def _documents_bad_request(message: str) -> HTTPException:
 
 
 def _dispatch_celery_task(task, *, args: list[str], kwargs: dict[str, str], task_id: str | None = None, headers: dict[str, str] | None = None) -> None:
-    if celery_app.conf.task_always_eager:
-        task.apply(args=args, kwargs=kwargs, task_id=task_id, headers=headers)
-        return
     task.apply_async(args=args, kwargs=kwargs, task_id=task_id, headers=headers)
 
 

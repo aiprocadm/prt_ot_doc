@@ -36,6 +36,14 @@ TenantDep = Depends(get_tenant_record)
 _SUMMARY_ROLES = ["admin", "owner", "line_manager", "hr", "ot_pb_lead"]
 
 
+def _as_utc_datetime(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | None:
     return getattr(tenant, "id", None)
 
@@ -237,10 +245,10 @@ async def dashboard_operational_snapshot(
                 id=str(task.id),
                 title=task.title,
                 owner_label=_task_owner_label(task),
-                due_at=task.due_at.isoformat() if task.due_at else None,
+                due_at=_as_utc_datetime(task.due_at).isoformat() if task.due_at else None,
                 priority=task.priority.value if hasattr(task.priority, "value") else str(task.priority),
                 status=task.status.value if hasattr(task.status, "value") else str(task.status),
-                overdue=bool(task.due_at and task.due_at < now),
+                overdue=bool((due_at := _as_utc_datetime(task.due_at)) and due_at < now),
                 entity_type=task.entity_type,
                 entity_id=task.entity_id,
             )

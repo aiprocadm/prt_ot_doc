@@ -51,21 +51,12 @@ class NotificationApplicationService:
             return enum_cls(raw_value)
         except ValueError as exc:
             allowed_values = [item.value for item in enum_cls]
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail={
-                    "message": f"Unsupported {field_name}: {raw_value}",
-                    "type": "validation",
-                    "allowed_values": allowed_values,
-                    "provided": raw_value,
-                    "field_errors": [
-                        {
-                            "field": field_name,
-                            "message": f"Expected one of: {', '.join(allowed_values)}",
-                            "type": "enum",
-                        }
-                    ],
-                },
+            raise NotificationApplicationService._validation_error(
+                field_name=field_name,
+                message=f"Unsupported {field_name}: {raw_value}",
+                allowed_values=allowed_values,
+                provided=raw_value,
+                field_error_type="enum",
             ) from exc
 
     @classmethod
@@ -96,6 +87,8 @@ class NotificationApplicationService:
             ],
         }
         payload.update(details)
+        if details:
+            payload["details"] = details
         return HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=payload,

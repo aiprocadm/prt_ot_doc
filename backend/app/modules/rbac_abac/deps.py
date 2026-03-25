@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from app.core.rbac_abac import ROLE_ALIASES, ROLE_PERMISSIONS
 from app.services.audit import AuditService
 from fastapi import HTTPException, Request, status
 
@@ -12,12 +13,30 @@ from .types import PolicyContext, Resource, Subject
 
 def _subject_from_request(request: Request) -> Subject:
     claims = getattr(request.state, "claims", {}) or {}
-    roles = tuple(str(role).lower() for role in claims.get("roles", []))
-    permissions = tuple(str(permission).lower() for permission in claims.get("permissions", []) if permission)
+
+    raw_roles = [str(role).lower() for role in claims.get("roles", []) if role]
+    single_role = claims.get("role")
+    if isinstance(single_role, str) and single_role:
+        raw_roles.append(single_role.lower())
+
+    normalized_roles = tuple(dict.fromkeys(ROLE_ALIASES.get(role, role) for role in raw_roles))
+
+    raw_permissions = [str(permission).lower() for permission in claims.get("permissions", []) if permission]
+    if raw_permissions:
+        permissions = tuple(dict.fromkeys(raw_permissions))
+    else:
+        permissions = tuple(
+            dict.fromkeys(
+                permission
+                for role in normalized_roles
+                for permission in ROLE_PERMISSIONS.get(role, set())
+            )
+        )
+
     return Subject(
         user_id=claims.get("sub"),
         tenant_id=claims.get("tenant_id") or claims.get("tenant"),
-        roles=roles,
+        roles=normalized_roles,
         permissions=permissions,
         company_ids=tuple(str(item) for item in claims.get("company_ids", []) if item),
         site_ids=tuple(str(item) for item in claims.get("site_ids", []) if item),

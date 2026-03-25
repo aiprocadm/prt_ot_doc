@@ -362,6 +362,8 @@
     "repo_level_directories": [
       ".devcontainer",
       ".github",
+      ".hypothesis",
+      ".local_storage",
       ".vscode",
       "app",
       "backend",

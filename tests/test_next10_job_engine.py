@@ -57,6 +57,7 @@ async def test_job_steps_transition_success_path(sessionmaker) -> None:
             payload={"template_code": "T", "template_version": 1, "options": {"zip": True}},
             idempotency_key="idem-1",
             request_hash="hash-1",
+            enqueue=False,
         )
         await orchestrator.run_job(job_id=job.id)
         await session.commit()
@@ -75,6 +76,7 @@ async def test_step_failure_marks_job_failed_and_sets_error(sessionmaker) -> Non
             payload={"template_code": "T", "template_version": 1, "options": {}},
             idempotency_key="idem-1",
             request_hash="hash-1",
+            enqueue=False,
         )
         await orchestrator.run_job(job_id=job.id, fail_step="convert_pdf")
         await session.commit()
@@ -94,6 +96,7 @@ async def test_step_retry_does_not_duplicate_artifacts(sessionmaker) -> None:
             payload={"template_code": "T", "template_version": 1, "options": {"zip": True}},
             idempotency_key="idem-1",
             request_hash="hash-1",
+            enqueue=False,
         )
         await orchestrator.run_job(job_id=job.id, fail_step="convert_pdf")
         await orchestrator.retry_job(job_id=job.id)
@@ -112,6 +115,7 @@ async def test_outbox_created_on_success(sessionmaker) -> None:
             payload={"template_code": "T", "template_version": 1, "options": {}},
             idempotency_key="idem-1",
             request_hash="hash-1",
+            enqueue=False,
         )
         await orchestrator.run_job(job_id=job.id)
         events = (await session.execute(select(OutboxEvent).where(OutboxEvent.tenant_id == "tenant-1"))).scalars().all()
@@ -215,6 +219,7 @@ async def test_cancel_sets_canceled_status(sessionmaker) -> None:
             payload={"template_code": "T", "template_version": 1, "options": {}},
             idempotency_key="idem-1",
             request_hash="hash-1",
+            enqueue=False,
         )
         await orchestrator.cancel_job(job_id=job.id)
         refreshed = await session.get(DocumentJob, job.id)

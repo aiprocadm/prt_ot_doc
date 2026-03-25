@@ -35,13 +35,18 @@ async def test_edo_send_and_webhook_expose_non_production_provider_metadata(asyn
 
 
 @pytest.mark.asyncio
-async def test_approval_sign_request_lists_provider_metadata(async_client, make_auth_headers):
+async def test_approval_sign_request_lists_provider_metadata(async_client, sessionmaker, make_auth_headers, data_factory):
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        _, version = await data_factory.create_document(tenant=tenant, session=session)
+        await session.commit()
+
     headers = await make_auth_headers()
     create = await async_client.post(
         "/api/v1/sign/requests",
         json={
             "entity_type": "document",
-            "entity_id": "doc-1",
+            "entity_id": version.id,
             "signature_type": "internal",
             "provider_code": "mock",
         },

@@ -80,6 +80,7 @@ def test_settings_default_database_url(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("DATABASE_URL", raising=False)
     settings = config.Settings.model_validate(
         {
+            "DATABASE_URL": "",
             "POSTGRES_HOST": "db",
             "POSTGRES_PORT": 5432,
             "POSTGRES_DB": "docs",

@@ -27,6 +27,7 @@ async def test_create_app_configures_middlewares_and_routes() -> None:
             "API_V1_PREFIX": "/api/v1",
             "APP_TRUSTED_HOSTS": ["example.com", " api.test "],
             "APP_CORS_ORIGINS": ["https://frontend.local"],
+            "ENABLE_METRICS": True,
             "LIBREOFFICE_BIN": sys.executable,
             "SECRET_KEY": "super-secret",
         }

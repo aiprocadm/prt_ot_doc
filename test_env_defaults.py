@@ -10,7 +10,7 @@ def apply_test_env_defaults() -> None:
     """Set lightweight defaults before importing app settings during tests."""
 
     os.environ.setdefault("APP_NAME", "TestService")
-    os.environ.setdefault("APP_TRUSTED_HOSTS", "localhost,127.0.0.1,testserver")
+    os.environ["APP_TRUSTED_HOSTS"] = "localhost,127.0.0.1,testserver"
     os.environ.setdefault("APP_RUN_MODE", "docker")
     os.environ.setdefault("CELERY_EAGER", "false")
     os.environ.setdefault("ENABLE_METRICS", "true")

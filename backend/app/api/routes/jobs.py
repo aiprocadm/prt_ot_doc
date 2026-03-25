@@ -184,12 +184,15 @@ async def create_job(
             for s in steps
         ],
     }
+    response_model = JobCreateResponse.model_validate(response_body)
     if idem_key and record is not None:
         await idem_service.store_success(
-            record, status_code=status.HTTP_202_ACCEPTED, body=response_body
+            record,
+            status_code=status.HTTP_202_ACCEPTED,
+            body=response_model.model_dump(mode="json"),
         )
     await session.commit()
-    return JobCreateResponse.model_validate(response_body)
+    return response_model
 
 class JobListRead(BaseModel):
     items: list[JobEnvelopeRead]
