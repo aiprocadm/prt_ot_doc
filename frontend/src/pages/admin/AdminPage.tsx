@@ -24,7 +24,10 @@ const AdminPage = () => {
       auditItems: [],
       integrationReadiness: null,
       attention: null,
-      taskInbox: null
+      taskInbox: null,
+      providerStatus: null,
+      tenantHealth: null,
+      roleSummary: null
     },
     errorMessage: "Не удалось загрузить операционную админ-консоль"
   });
@@ -60,6 +63,50 @@ const AdminPage = () => {
       {loading ? <LoadingScreen label="Загрузка админ-консоли" /> : null}
       {!loading && !error ? (
         <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+          <Card>
+            <CardHeader><CardTitle className="text-base">Tenant health score</CardTitle></CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              {data.tenantHealth ? (
+                <>
+                  <p>Score: {data.tenantHealth.score} / 100</p>
+                  <p>Grade: {data.tenantHealth.grade}</p>
+                  <p>Failed jobs (24h): {data.tenantHealth.failed_jobs_last24h}</p>
+                  <p>Poisoned events: {data.tenantHealth.outbox_events_poisoned}</p>
+                </>
+              ) : (
+                <p className="text-muted-foreground">Health score временно недоступен</p>
+              )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle className="text-base">Provider status</CardTitle></CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              {data.providerStatus ? (
+                <>
+                  <p>Production ready: {data.providerStatus.production_ready ? "yes" : "no"}</p>
+                  <p>Blocking providers: {data.providerStatus.blocking_for_golive.length}</p>
+                  {data.providerStatus.providers.slice(0, 3).map((provider) => <p key={provider.name}>{provider.name} · {provider.mode} · {provider.adapter}</p>)}
+                </>
+              ) : (
+                <p className="text-muted-foreground">Provider status временно недоступен</p>
+              )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle className="text-base">Role projection</CardTitle></CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              {data.roleSummary ? (
+                <>
+                  <p>Role: {data.roleSummary.role}</p>
+                  <p>Open tasks: {data.roleSummary.open_tasks}</p>
+                  <p>Overdue tasks: {data.roleSummary.overdue_tasks}</p>
+                  <p>Overdue deadlines: {data.roleSummary.overdue_deadlines}</p>
+                </>
+              ) : (
+                <p className="text-muted-foreground">Role summary временно недоступен</p>
+              )}
+            </CardContent>
+          </Card>
           <Card>
             <CardHeader><CardTitle className="text-base">Outbox</CardTitle></CardHeader>
             <CardContent className="space-y-2 text-sm">{data.outbox.slice(0, 5).map((item) => <p key={item.id}>{item.event_type} · {item.status} · attempts {item.attempts}</p>)}</CardContent>

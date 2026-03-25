@@ -152,6 +152,45 @@ export type WorkspaceTaskInboxDto = {
   }>;
 };
 
+export type ProviderStatusDto = {
+  generated_at: string;
+  production_ready: boolean;
+  providers: Array<{
+    name: string;
+    adapter: string;
+    mode: string;
+    production_ready: boolean;
+    warning?: string | null;
+  }>;
+  blocking_for_golive: string[];
+};
+
+export type TenantHealthDto = {
+  generated_at: string;
+  score: number;
+  grade: string;
+  failed_jobs_last24h: number;
+  outbox_pending: number;
+  outbox_failed: number;
+  outbox_events_poisoned: number;
+  non_production_providers: number;
+  blocking_providers: string[];
+  recommendations: string[];
+};
+
+export type RoleWorkspaceSummaryDto = {
+  generated_at: string;
+  role: string;
+  open_tasks: number;
+  overdue_tasks: number;
+  open_incidents: number;
+  open_inspections: number;
+  overdue_training: number;
+  expired_ppe: number;
+  overdue_deadlines: number;
+  recommendations: string[];
+};
+
 export const operationsApi = {
   getContractorSnapshot: async () => {
     const [companiesResponse, sitesResponse, contractsResponse] = await Promise.all([
@@ -267,14 +306,16 @@ export const operationsApi = {
 
   getAdminSnapshot: async () => {
     const [tenancyResponse, outboxResponse, webhookResponse, apiTokensResponse, auditResponse] = await Promise.all([
-      apiClient.get<TenancyContextDto>("/tenancy/context"),
-      apiClient.get<{ items: OutboxDto[]; total: number }>("/admin/outbox"),
-      apiClient.get<WebhookEndpointDto[]>("/webhooks/endpoints"),
-      apiClient.get<ApiTokenDto[]>("/api-tokens"),
-      apiClient.get<{ items: Array<{ id: string; action: string; object_type: string; created_at: string }>; total: number }>("/audit")
+      apiClient.get<TenancyContextDto>("/tenancy/context").catch(() => ({ data: { tenant: { id: "", slug: "" } } as TenancyContextDto })),
+      apiClient.get<{ items: OutboxDto[]; total: number }>("/admin/outbox").catch(() => ({ data: { items: [], total: 0 } })),
+      apiClient.get<WebhookEndpointDto[]>("/webhooks/endpoints").catch(() => ({ data: [] as WebhookEndpointDto[] })),
+      apiClient.get<ApiTokenDto[]>("/api-tokens").catch(() => ({ data: [] as ApiTokenDto[] })),
+      apiClient
+        .get<{ items: Array<{ id: string; action: string; object_type: string; created_at: string }>; total: number }>("/audit")
+        .catch(() => ({ data: { items: [], total: 0 } }))
     ]);
 
-    const [integrationReadinessResponse, workspaceAttentionResponse, taskInboxResponse] = await Promise.all([
+    const [integrationReadinessResponse, workspaceAttentionResponse, taskInboxResponse, providerStatusResponse, tenantHealthResponse, roleSummaryResponse] = await Promise.all([
       apiClient
         .get<IntegrationReadinessDto>("/integrations/readiness")
         .then((response) => response.data)
@@ -285,6 +326,18 @@ export const operationsApi = {
         .catch(() => null),
       apiClient
         .get<WorkspaceTaskInboxDto>("/workspace/task-inbox", { params: { limit: 20, offset: 0 } })
+        .then((response) => response.data)
+        .catch(() => null),
+      apiClient
+        .get<ProviderStatusDto>("/admin/provider-status")
+        .then((response) => response.data)
+        .catch(() => null),
+      apiClient
+        .get<TenantHealthDto>("/admin/tenant-health")
+        .then((response) => response.data)
+        .catch(() => null),
+      apiClient
+        .get<RoleWorkspaceSummaryDto>("/workspace/role-summary")
         .then((response) => response.data)
         .catch(() => null)
     ]);
@@ -297,7 +350,10 @@ export const operationsApi = {
       auditItems: auditResponse.data.items ?? [],
       integrationReadiness: integrationReadinessResponse,
       attention: workspaceAttentionResponse,
-      taskInbox: taskInboxResponse
+      taskInbox: taskInboxResponse,
+      providerStatus: providerStatusResponse,
+      tenantHealth: tenantHealthResponse,
+      roleSummary: roleSummaryResponse
     };
   }
 };

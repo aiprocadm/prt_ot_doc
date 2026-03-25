@@ -2,7 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { briefingsApi, type BriefingEntryDto, type BriefingJournalDto, type BriefingTemplateDto } from "@/api/briefings";
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
+import type { ApiError } from "@/types/dto/common";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -19,6 +23,7 @@ const BriefingsPage = () => {
   const [entries, setEntries] = useState<BriefingEntryDto[]>([]);
   const [overdue, setOverdue] = useState<BriefingEntryDto[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
   const { items: companies, list: listCompanies } = useCompaniesStore();
   const [templateForm, setTemplateForm] = useState({ code: "", title: "", briefing_type: "introductory", status: "active", description: "", validity_days: 365 });
   const [journalForm, setJournalForm] = useState({ code: "", title: "", journal_type: "ot", status: "active", site_id: null as string | null, department_id: null as string | null });
@@ -28,6 +33,7 @@ const BriefingsPage = () => {
 
   const load = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const [templateItems, journalItems, entryItems, overdueItems] = await Promise.all([
         briefingsApi.listTemplates(),
@@ -39,7 +45,8 @@ const BriefingsPage = () => {
       setJournals(journalItems);
       setEntries(entryItems);
       setOverdue(overdueItems);
-    } catch {
+    } catch (err) {
+      setLoadError((err as ApiError) ?? { status: 0, message: "Не удалось загрузить данные по инструктажам" });
       toast.error("Не удалось загрузить данные по инструктажам");
     } finally {
       setLoading(false);
@@ -55,6 +62,8 @@ const BriefingsPage = () => {
 
   return (
     <div className="space-y-6">
+      <ErrorState error={loadError ?? undefined} onRetry={() => void load()} />
+      {loading && templates.length === 0 && journals.length === 0 ? <LoadingScreen label="Загрузка инструктажей" /> : null}
       <div className="flex items-center justify-between gap-3">
         <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Инструктажи" }]} />
         <div className="flex items-center gap-2">

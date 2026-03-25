@@ -13,6 +13,10 @@ from app.core.security import AccessContext, rbac
 from app.models.finance import Contract, ContractStatus
 from app.models.models import (
     ComplianceDeadline,
+    Incident,
+    IncidentStatus,
+    Inspection,
+    InspectionStatus,
     OfflineSyncBatch,
     PPEIssue,
     PPEIssueStatus,
@@ -462,3 +466,162 @@ async def workspace_task_inbox(
         )
     overdue_count = sum(1 for item in items if item.overdue)
     return WorkspaceTaskInboxResponse(total=total, overdue=overdue_count, items=items)
+
+
+# ---------------------------------------------------------------------------
+# OPS-002: Role-specific Workspace Projections  GET /workspace/role-summary
+# ---------------------------------------------------------------------------
+
+_SAFETY_ROLES = {"safety_lead", "safety_manager", "admin", "owner"}
+_HR_ROLES = {"hr", "hr_manager", "admin", "owner"}
+_MANAGER_ROLES = {"line_manager", "manager", "admin", "owner"}
+
+
+class RoleWorkspaceSummary(BaseModel):
+    generated_at: datetime
+    role: str
+    open_tasks: int
+    overdue_tasks: int
+    open_incidents: int
+    open_inspections: int
+    overdue_training: int
+    expired_ppe: int
+    overdue_deadlines: int
+    recommendations: list[str] = Field(default_factory=list)
+
+
+@router.get("/role-summary", response_model=RoleWorkspaceSummary)
+async def role_workspace_summary(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: AccessDep,
+) -> RoleWorkspaceSummary:
+    """Role-specific aggregated workspace summary for safety leads, HR, managers and executives."""
+    TenantContextValidator.ensure_tenant_context(tenant)
+    now = datetime.now(timezone.utc)
+    role = access.user.role.value if hasattr(access.user.role, "value") else str(access.user.role)
+    open_statuses_task = [TaskStatus.OPEN, TaskStatus.IN_PROGRESS]
+
+    task_stmt = select(func.count()).select_from(Task).where(
+        Task.tenant_id == tenant.id,
+        Task.status.in_(open_statuses_task),
+    )
+    overdue_task_stmt = select(func.count()).select_from(Task).where(
+        Task.tenant_id == tenant.id,
+        Task.status.in_(open_statuses_task),
+        Task.due_at.is_not(None),
+        Task.due_at < now,
+    )
+    # Scope by role
+    if role in _MANAGER_ROLES and role not in _SAFETY_ROLES and role not in _HR_ROLES:
+        task_stmt = task_stmt.where(Task.assignee_id == access.user.id)
+        overdue_task_stmt = overdue_task_stmt.where(Task.assignee_id == access.user.id)
+
+    open_tasks = int((await session.execute(task_stmt)).scalar_one() or 0)
+    overdue_tasks = int((await session.execute(overdue_task_stmt)).scalar_one() or 0)
+
+    # Incidents (open/investigating) — relevant for safety roles
+    open_incidents = 0
+    if role in _SAFETY_ROLES:
+        open_incidents = int(
+            (
+                await session.execute(
+                    select(func.count()).select_from(Incident).where(
+                        Incident.tenant_id == tenant.id,
+                        Incident.deleted_at.is_(None),
+                        Incident.status.in_([IncidentStatus.REPORTED, IncidentStatus.INVESTIGATING]),
+                    )
+                )
+            ).scalar_one() or 0
+        )
+
+    # Inspections (open/scheduled) — safety roles
+    open_inspections = 0
+    if role in _SAFETY_ROLES:
+        open_inspections = int(
+            (
+                await session.execute(
+                    select(func.count()).select_from(Inspection).where(
+                        Inspection.tenant_id == tenant.id,
+                        Inspection.deleted_at.is_(None),
+                        Inspection.status.in_([InspectionStatus.PLANNED, InspectionStatus.IN_PROGRESS]),
+                    )
+                )
+            ).scalar_one() or 0
+        )
+
+    # Overdue training — HR roles
+    overdue_training = 0
+    if role in _HR_ROLES:
+        overdue_training = int(
+            (
+                await session.execute(
+                    select(func.count()).select_from(TrainingEnrollment).where(
+                        TrainingEnrollment.tenant_id == tenant.id,
+                        TrainingEnrollment.deleted_at.is_(None),
+                        TrainingEnrollment.status.in_(["assigned", "in_progress"]),
+                        TrainingEnrollment.due_at.is_not(None),
+                        TrainingEnrollment.due_at < now,
+                    )
+                )
+            ).scalar_one() or 0
+        )
+
+    # Expired issued PPE — safety / HR
+    expired_ppe = 0
+    if role in _SAFETY_ROLES | _HR_ROLES:
+        expired_ppe = int(
+            (
+                await session.execute(
+                    select(func.count()).select_from(PPEIssue).where(
+                        PPEIssue.tenant_id == tenant.id,
+                        PPEIssue.deleted_at.is_(None),
+                        PPEIssue.status == PPEIssueStatus.ISSUED,
+                        PPEIssue.expires_at.is_not(None),
+                        PPEIssue.expires_at < now,
+                    )
+                )
+            ).scalar_one() or 0
+        )
+
+    # Overdue compliance deadlines
+    overdue_deadlines = int(
+        (
+            await session.execute(
+                select(func.count()).select_from(ComplianceDeadline).where(
+                    ComplianceDeadline.tenant_id == tenant.id,
+                    or_(
+                        ComplianceDeadline.status == "overdue",
+                        and_(ComplianceDeadline.status == "due", ComplianceDeadline.due_at < now),
+                    ),
+                )
+            )
+        ).scalar_one() or 0
+    )
+
+    recs: list[str] = []
+    if overdue_tasks > 0:
+        recs.append(f"Close {overdue_tasks} overdue task(s)")
+    if open_incidents > 0:
+        recs.append(f"Investigate {open_incidents} open incident(s)")
+    if overdue_training > 0:
+        recs.append(f"Resolve {overdue_training} overdue training assignment(s)")
+    if expired_ppe > 0:
+        recs.append(f"Issue replacement for {expired_ppe} expired PPE item(s)")
+    if overdue_deadlines > 0:
+        recs.append(f"Address {overdue_deadlines} overdue compliance deadline(s)")
+    if not recs:
+        recs.append("All operational indicators are within normal range")
+
+    return RoleWorkspaceSummary(
+        generated_at=now,
+        role=role,
+        open_tasks=open_tasks,
+        overdue_tasks=overdue_tasks,
+        open_incidents=open_incidents,
+        open_inspections=open_inspections,
+        overdue_training=overdue_training,
+        expired_ppe=expired_ppe,
+        overdue_deadlines=overdue_deadlines,
+        recommendations=recs,
+    )

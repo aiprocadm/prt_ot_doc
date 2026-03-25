@@ -1,12 +1,18 @@
 import { RotateCcw } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { apiClient } from "@/api/client";
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { LoadingScreen } from "@/components/common/LoadingScreen";
+import { Can } from "@/components/permissions/Can";
 import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { PERMISSIONS } from "@/permissions/permissions";
+import { useAsyncResource } from "@/hooks/useAsyncResource";
 
 type OutboxEntry = {
   id: string;
@@ -39,52 +45,52 @@ type ReadinessResponse = {
 const formatDateTime = (value?: string | null) => (value ? new Date(value).toLocaleString() : "—");
 
 const IntegrationsPage = () => {
-  const [deliveries, setDeliveries] = useState<OutboxEntry[]>([]);
-  const [events, setEvents] = useState<OutboxEventEntry[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [retryingId, setRetryingId] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [readiness, setReadiness] = useState<ReadinessResponse | null>(null);
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const [outboxResponse, eventResponse] = await Promise.all([
+  const { data, setData, loading, error, reload } = useAsyncResource({
+    loader: async () => {
+      const [outboxResponse, eventResponse, readinessResponse] = await Promise.all([
         apiClient.get<{ items: OutboxEntry[] }>("/admin/outbox"),
         apiClient.get<{ items: OutboxEventEntry[] }>("/admin/outbox/events"),
+        apiClient.get<ReadinessResponse>("/integrations/readiness"),
       ]);
-      setDeliveries(outboxResponse.data.items);
-      setEvents(eventResponse.data.items);
-      const readinessResponse = await apiClient.get<ReadinessResponse>("/integrations/readiness");
-      setReadiness(readinessResponse.data);
-    } finally {
-      setLoading(false);
-    }
-  };
+      return {
+        deliveries: outboxResponse.data.items ?? [],
+        events: eventResponse.data.items ?? [],
+        readiness: readinessResponse.data ?? null,
+      };
+    },
+    initialData: {
+      deliveries: [] as OutboxEntry[],
+      events: [] as OutboxEventEntry[],
+      readiness: null as ReadinessResponse | null,
+    },
+    errorMessage: "Не удалось загрузить интеграции",
+  });
 
-  useEffect(() => {
-    void load();
-  }, []);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState("all");
 
-  const filteredDeliveries = useMemo(() => (statusFilter === "all" ? deliveries : deliveries.filter((item) => item.status === statusFilter)), [deliveries, statusFilter]);
+  const filteredDeliveries = useMemo(
+    () => (statusFilter === "all" ? data.deliveries : data.deliveries.filter((item) => item.status === statusFilter)),
+    [data.deliveries, statusFilter]
+  );
 
   const summary = useMemo(() => {
-    const failedDeliveries = deliveries.filter((item) => item.status === "failed" || item.status === "dead").length;
-    const failedEvents = events.filter((item) => item.status === "failed" || item.status === "poisoned").length;
-    const sent = deliveries.filter((item) => item.status === "sent").length;
+    const failedDeliveries = data.deliveries.filter((item) => item.status === "failed" || item.status === "dead").length;
+    const failedEvents = data.events.filter((item) => item.status === "failed" || item.status === "poisoned").length;
+    const sent = data.deliveries.filter((item) => item.status === "sent").length;
     return {
-      deliveries: deliveries.length,
+      deliveries: data.deliveries.length,
       failedDeliveries,
       failedEvents,
       sent
     };
-  }, [deliveries, events]);
+  }, [data.deliveries, data.events]);
 
   const retryDelivery = async (id: string) => {
     setRetryingId(id);
     try {
       await apiClient.post(`/admin/outbox/${id}/retry`);
-      await load();
+      await reload();
     } finally {
       setRetryingId(null);
     }
@@ -94,7 +100,7 @@ const IntegrationsPage = () => {
     setRetryingId(id);
     try {
       await apiClient.post(`/admin/outbox/events/${id}/requeue`);
-      await load();
+      await reload();
     } finally {
       setRetryingId(null);
     }
@@ -106,6 +112,11 @@ const IntegrationsPage = () => {
         title="Интеграции"
         description="Delivery history, retry-safe обработка и прозрачность статусов интеграций через outbox/event pipeline."
       />
+      <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
+      {loading ? <LoadingScreen label="Загрузка интеграций" /> : null}
+      {!loading && !error && data.deliveries.length + data.events.length === 0 ? (
+        <EmptyState title="Интеграционные события отсутствуют" description="После первых webhook/outbox операций здесь появится журнал доставок." />
+      ) : null}
 
       <div className="grid gap-4 md:grid-cols-4">
         <Card><CardContent className="py-6"><div className="text-sm text-muted-foreground">Всего доставок</div><div className="text-2xl font-semibold">{summary.deliveries}</div></CardContent></Card>
@@ -120,9 +131,9 @@ const IntegrationsPage = () => {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-3">
-            <Card><CardContent className="py-4"><div className="text-sm text-muted-foreground">Webhook endpoints</div><div className="text-xl font-semibold">{readiness?.webhooks.configured_total ?? 0}</div></CardContent></Card>
-            <Card><CardContent className="py-4"><div className="text-sm text-muted-foreground">Enabled endpoints</div><div className="text-xl font-semibold">{readiness?.webhooks.enabled_total ?? 0}</div></CardContent></Card>
-            <Card><CardContent className="py-4"><div className="text-sm text-muted-foreground">Failed deliveries</div><div className="text-xl font-semibold">{readiness?.webhooks.delivery_failed_total ?? 0}</div></CardContent></Card>
+            <Card><CardContent className="py-4"><div className="text-sm text-muted-foreground">Webhook endpoints</div><div className="text-xl font-semibold">{data.readiness?.webhooks.configured_total ?? 0}</div></CardContent></Card>
+            <Card><CardContent className="py-4"><div className="text-sm text-muted-foreground">Enabled endpoints</div><div className="text-xl font-semibold">{data.readiness?.webhooks.enabled_total ?? 0}</div></CardContent></Card>
+            <Card><CardContent className="py-4"><div className="text-sm text-muted-foreground">Failed deliveries</div><div className="text-xl font-semibold">{data.readiness?.webhooks.delivery_failed_total ?? 0}</div></CardContent></Card>
           </div>
           <Table>
             <TableHeader>
@@ -134,7 +145,7 @@ const IntegrationsPage = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {readiness?.providers.map((item) => (
+              {data.readiness?.providers.map((item) => (
                 <TableRow key={item.provider}>
                   <TableCell className="font-medium">{item.provider}</TableCell>
                   <TableCell>{item.adapter ?? "contract-only"}</TableCell>
@@ -159,7 +170,7 @@ const IntegrationsPage = () => {
               <option value="sent">sent</option>
             </select>
           </div>
-          <Button variant="outline" onClick={() => void load()} disabled={loading}>Обновить</Button>
+          <Button variant="outline" onClick={() => void reload()} disabled={loading}>Обновить</Button>
         </CardHeader>
         <CardContent>
           <Table>
@@ -190,14 +201,16 @@ const IntegrationsPage = () => {
                   </TableCell>
                   <TableCell className="text-right">
                     {(item.status === "failed" || item.status === "dead") ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => void retryDelivery(item.id)}
-                        disabled={retryingId === item.id}
-                      >
-                        <RotateCcw className="mr-2 h-4 w-4" /> Retry
-                      </Button>
+                      <Can permission={PERMISSIONS.ADMIN_OUTBOX_MANAGE}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void retryDelivery(item.id)}
+                          disabled={retryingId === item.id}
+                        >
+                          <RotateCcw className="mr-2 h-4 w-4" /> Retry
+                        </Button>
+                      </Can>
                     ) : (
                       <span className="text-xs text-muted-foreground">{item.last_error ? "есть ошибка" : "—"}</span>
                     )}
@@ -224,7 +237,7 @@ const IntegrationsPage = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {events.map((item) => (
+              {data.events.map((item) => (
                 <TableRow key={item.id}>
                   <TableCell>
                     <div className="font-medium">{item.event_type}</div>
@@ -236,14 +249,16 @@ const IntegrationsPage = () => {
                   <TableCell className="max-w-[280px] truncate text-xs text-muted-foreground">{item.last_error ?? "—"}</TableCell>
                   <TableCell className="text-right">
                     {(item.status === "failed" || item.status === "poisoned") ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => void retryEvent(item.id)}
-                        disabled={retryingId === item.id}
-                      >
-                        <RotateCcw className="mr-2 h-4 w-4" /> Requeue
-                      </Button>
+                      <Can permission={PERMISSIONS.ADMIN_OUTBOX_MANAGE}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void retryEvent(item.id)}
+                          disabled={retryingId === item.id}
+                        >
+                          <RotateCcw className="mr-2 h-4 w-4" /> Requeue
+                        </Button>
+                      </Can>
                     ) : (
                       <span className="text-xs text-muted-foreground">{formatDateTime(item.next_attempt_at)}</span>
                     )}

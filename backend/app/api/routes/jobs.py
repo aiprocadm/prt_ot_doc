@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.tracing import get_trace_id
@@ -16,7 +16,15 @@ from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.security import rbac
 from app.core.idempotency import compute_request_hash
-from app.models.job_engine import DocumentArtifact, DocumentJob, DocumentJobLog, DocumentJobStep
+from app.models.job_engine import (
+    DocumentArtifact,
+    DocumentJob,
+    DocumentJobLog,
+    DocumentJobStatus,
+    DocumentJobStep,
+    OutboxEvent,
+    OutboxEventStatus,
+)
 from app.modules.rbac_abac import require_permission
 from app.models.models import Tenant
 from app.modules.pipelines.models import PipelineProfile
@@ -597,3 +605,206 @@ async def stream_jobs(
 
     headers = {"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"}
     return StreamingResponse(_stream(), media_type="text/event-stream", headers=headers)
+
+
+# ---------------------------------------------------------------------------
+# OPS-008: Queue / Job Diagnostics
+# ---------------------------------------------------------------------------
+
+class QueueSummaryResponse(BaseModel):
+    generated_at: datetime
+    queued: int
+    running: int
+    failed_last24h: int
+    failed_total: int
+    canceled_total: int
+    success_last24h: int
+
+
+@router.get("/queue-summary", response_model=QueueSummaryResponse)
+async def get_queue_summary(
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    __: Any = _JobsReadDep,
+) -> QueueSummaryResponse:
+    """Return queue-level health summary for all document jobs of the current tenant."""
+    from datetime import timedelta
+    now = datetime.now(timezone.utc)
+    since = now - timedelta(hours=24)
+
+    counts = (
+        await session.execute(
+            select(
+                DocumentJob.status,
+                func.count(DocumentJob.id).label("cnt"),
+            )
+            .where(DocumentJob.tenant_id == str(tenant.id))
+            .group_by(DocumentJob.status)
+        )
+    ).all()
+    status_map: dict[str, int] = {row[0]: int(row[1]) for row in counts}
+
+    failed_last24h = int(
+        (
+            await session.execute(
+                select(func.count())
+                .select_from(DocumentJob)
+                .where(
+                    DocumentJob.tenant_id == str(tenant.id),
+                    DocumentJob.status == DocumentJobStatus.FAILED.value,
+                    DocumentJob.created_at >= since,
+                )
+            )
+        ).scalar_one() or 0
+    )
+    success_last24h = int(
+        (
+            await session.execute(
+                select(func.count())
+                .select_from(DocumentJob)
+                .where(
+                    DocumentJob.tenant_id == str(tenant.id),
+                    DocumentJob.status == DocumentJobStatus.SUCCESS.value,
+                    DocumentJob.created_at >= since,
+                )
+            )
+        ).scalar_one() or 0
+    )
+
+    return QueueSummaryResponse(
+        generated_at=now,
+        queued=status_map.get(DocumentJobStatus.QUEUED.value, 0),
+        running=status_map.get(DocumentJobStatus.RUNNING.value, 0),
+        failed_last24h=failed_last24h,
+        failed_total=status_map.get(DocumentJobStatus.FAILED.value, 0),
+        canceled_total=status_map.get(DocumentJobStatus.CANCELED.value, 0),
+        success_last24h=success_last24h,
+    )
+
+
+class FailedJobItem(BaseModel):
+    id: str
+    kind: str | None
+    error_code: str | None
+    error_payload: dict[str, Any] | None
+    started_at: datetime | None
+    ended_at: datetime | None
+    correlation_id: str | None
+
+
+class FailedJobsResponse(BaseModel):
+    total: int
+    items: list[FailedJobItem]
+
+
+@router.get("/failed", response_model=FailedJobsResponse)
+async def list_failed_jobs(
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    __: Any = _JobsReadDep,
+) -> FailedJobsResponse:
+    """List failed jobs sorted by most recent failure — useful for ops triage."""
+    total = int(
+        (
+            await session.execute(
+                select(func.count())
+                .select_from(DocumentJob)
+                .where(
+                    DocumentJob.tenant_id == str(tenant.id),
+                    DocumentJob.status == DocumentJobStatus.FAILED.value,
+                )
+            )
+        ).scalar_one() or 0
+    )
+    rows = (
+        await session.execute(
+            select(DocumentJob)
+            .where(
+                DocumentJob.tenant_id == str(tenant.id),
+                DocumentJob.status == DocumentJobStatus.FAILED.value,
+            )
+            .order_by(DocumentJob.ended_at.desc().nulls_last(), DocumentJob.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+    ).scalars().all()
+    return FailedJobsResponse(
+        total=total,
+        items=[
+            FailedJobItem(
+                id=j.id,
+                kind=j.kind,
+                error_code=j.error_code,
+                error_payload=j.error_payload,
+                started_at=j.started_at,
+                ended_at=j.ended_at,
+                correlation_id=j.correlation_id,
+            )
+            for j in rows
+        ],
+    )
+
+
+class PoisonedEventItem(BaseModel):
+    id: str
+    event_type: str
+    attempts: int
+    last_error: str | None
+    created_at: datetime
+    next_attempt_at: datetime | None
+
+
+class PoisonedEventsResponse(BaseModel):
+    total: int
+    items: list[PoisonedEventItem]
+
+
+@router.get("/poisoned", response_model=PoisonedEventsResponse)
+async def list_poisoned_events(
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    __: Any = _JobsReadDep,
+) -> PoisonedEventsResponse:
+    """List poisoned outbox events for triage and manual replay."""
+    total = int(
+        (
+            await session.execute(
+                select(func.count())
+                .select_from(OutboxEvent)
+                .where(
+                    OutboxEvent.tenant_id == tenant.id,
+                    OutboxEvent.status == OutboxEventStatus.POISONED.value,
+                )
+            )
+        ).scalar_one() or 0
+    )
+    rows = (
+        await session.execute(
+            select(OutboxEvent)
+            .where(
+                OutboxEvent.tenant_id == tenant.id,
+                OutboxEvent.status == OutboxEventStatus.POISONED.value,
+            )
+            .order_by(OutboxEvent.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+    ).scalars().all()
+    return PoisonedEventsResponse(
+        total=total,
+        items=[
+            PoisonedEventItem(
+                id=evt.id,
+                event_type=evt.event_type,
+                attempts=evt.attempts,
+                last_error=evt.last_error,
+                created_at=evt.created_at,
+                next_attempt_at=evt.next_attempt_at,
+            )
+            for evt in rows
+        ],
+    )

@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { Breadcrumb } from "@/components/ui/breadcrumb";
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { DocumentPreview } from "@/features/documents/DocumentPreview";
@@ -17,7 +20,7 @@ import type { DocumentDto } from "@/types/dto/documents";
 import { entityCardLink } from "@/utils/workspaceNavigation";
 
 const DocumentsPage = () => {
-  const { list, items, pagination, loading, getById } = useDocumentsStore();
+  const { list, items, pagination, loading, error, getById } = useDocumentsStore();
   const [selectedDocument, setSelectedDocument] = useState<DocumentDto | null>(null);
   const [searchParams] = useSearchParams();
   const { can } = useAbility();
@@ -115,6 +118,9 @@ const DocumentsPage = () => {
       ) : null}
       <Card>
         <CardContent className="py-6">
+          <ErrorState error={error ?? undefined} onRetry={() => void list()} />
+          {loading && items.length === 0 ? <LoadingScreen label="Загрузка документов" /> : null}
+          {!loading && !error && items.length === 0 ? <EmptyState title="Документы не найдены" description="Создайте первый документ или измените фильтры." /> : null}
           <DocumentTable onSelect={setSelectedDocument} />
         </CardContent>
       </Card>

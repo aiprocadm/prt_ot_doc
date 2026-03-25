@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { apiClient } from "@/api/client";
+import type { ApiError } from "@/types/dto/common";
 
 export type PortalRun = {
   id: string;
@@ -48,15 +49,24 @@ export const useClientPortalPackages = () => {
   const [items, setItems] = useState<PortalRun[]>([]);
   const [selected, setSelected] = useState<PortalDetail | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
 
   const selectRun = useCallback(async (runId: string) => {
-    const detail = await apiClient.get<PortalDetail>(`/client-portal/packages/${runId}`);
-    setSelected(detail.data);
-    return detail.data;
+    try {
+      const detail = await apiClient.get<PortalDetail>(`/client-portal/packages/${runId}`);
+      setSelected(detail.data);
+      setError(null);
+      return detail.data;
+    } catch (err) {
+      const nextError = (err as ApiError) ?? { status: 500, message: "Не удалось загрузить пакет" };
+      setError({ status: nextError.status ?? 500, message: nextError.message ?? "Не удалось загрузить пакет" });
+      return null;
+    }
   }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const { data } = await apiClient.get<PortalRun[]>("/client-portal/packages");
       setItems(data);
@@ -65,6 +75,11 @@ export const useClientPortalPackages = () => {
       } else {
         setSelected(null);
       }
+    } catch (err) {
+      const nextError = (err as ApiError) ?? { status: 500, message: "Не удалось загрузить список пакетов" };
+      setError({ status: nextError.status ?? 500, message: nextError.message ?? "Не удалось загрузить список пакетов" });
+      setItems([]);
+      setSelected(null);
     } finally {
       setLoading(false);
     }
@@ -86,5 +101,5 @@ export const useClientPortalPackages = () => {
     };
   }, [items, selected]);
 
-  return { items, selected, loading, load, selectRun, summary };
+  return { items, selected, loading, error, load, selectRun, summary };
 };

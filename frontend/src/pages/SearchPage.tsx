@@ -3,9 +3,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { createSavedSearch, deleteSavedSearch, fetchRecentSearches, fetchSavedSearches, fetchSearch, type SavedSearchItem, type SearchItem, type SearchType } from "@/api/search";
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import type { ApiError } from "@/types/dto/common";
 
 const tabs: Array<SearchType | "tasks" | "npa" | "contracts" | "orders"> = ["documents", "files", "people", "sites", "incidents", "inspections", "risk", "ppe", "training", "jobs", "templates", "tasks", "npa", "contracts", "orders"];
 
@@ -23,6 +27,10 @@ const SearchPage = () => {
   const [items, setItems] = useState<SearchItem[]>([]);
   const [facets, setFacets] = useState<Facets>({});
   const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [reloadNonce, setReloadNonce] = useState(0);
   const [recent, setRecent] = useState<Array<{ id: string; q: string; types: string[] }>>([]);
   const [saved, setSaved] = useState<SavedSearchItem[]>([]);
   const q = params.get("q") ?? "";
@@ -59,8 +67,12 @@ const SearchPage = () => {
     if (!q.trim()) {
       setItems([]);
       setFacets({});
+      setNextCursor(null);
+      setError(null);
       return;
     }
+    setLoading(true);
+    setError(null);
     fetchSearch({ q, types: activeTypes, status: status || undefined, company_id: companyId || undefined, site_id: siteId || undefined, project_id: projectId || undefined, risk_level: riskLevel || undefined })
       .then((data) => {
         setItems(data.items);
@@ -68,17 +80,32 @@ const SearchPage = () => {
         setNextCursor(data.next_cursor ?? null);
         void loadMemory();
       })
-      .catch(() => {
+      .catch((err) => {
+        const apiError = (err as ApiError) ?? { status: 500, message: "Не удалось загрузить результаты поиска" };
+        setError({ status: apiError.status ?? 500, message: apiError.message ?? "Не удалось загрузить результаты поиска" });
         setItems([]);
         setFacets({});
+        setNextCursor(null);
+      })
+      .finally(() => {
+        setLoading(false);
       });
-  }, [q, activeTypes, status, companyId, siteId, projectId, riskLevel]);
+  }, [q, activeTypes, status, companyId, siteId, projectId, riskLevel, reloadNonce]);
 
   const loadMore = async () => {
     if (!nextCursor) return;
-    const data = await fetchSearch({ q, types: activeTypes, cursor: nextCursor, status: status || undefined, company_id: companyId || undefined, site_id: siteId || undefined, project_id: projectId || undefined, risk_level: riskLevel || undefined });
-    setItems((prev) => [...prev, ...data.items]);
-    setNextCursor(data.next_cursor ?? null);
+    setLoadingMore(true);
+    try {
+      const data = await fetchSearch({ q, types: activeTypes, cursor: nextCursor, status: status || undefined, company_id: companyId || undefined, site_id: siteId || undefined, project_id: projectId || undefined, risk_level: riskLevel || undefined });
+      setItems((prev) => [...prev, ...data.items]);
+      setNextCursor(data.next_cursor ?? null);
+      setError(null);
+    } catch (err) {
+      const apiError = (err as ApiError) ?? { status: 500, message: "Не удалось загрузить дополнительные результаты" };
+      setError({ status: apiError.status ?? 500, message: apiError.message ?? "Не удалось загрузить дополнительные результаты" });
+    } finally {
+      setLoadingMore(false);
+    }
   };
 
   const saveCurrentSearch = async () => {
@@ -181,7 +208,12 @@ const SearchPage = () => {
           </Card>
 
           <div className="space-y-2">
-            {items.map((item) => (
+            {loading ? <LoadingScreen label="Загрузка результатов поиска" /> : null}
+            {!loading ? <ErrorState error={error ?? undefined} onRetry={() => setReloadNonce((prev) => prev + 1)} /> : null}
+            {!loading && !error && q.trim().length > 0 && items.length === 0 ? (
+              <EmptyState title="Ничего не найдено" description="Попробуйте изменить запрос или фильтры." />
+            ) : null}
+            {!loading && !error ? items.map((item) => (
               <div key={`${item.entity_type}-${item.entity_id}`} className="rounded border p-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
@@ -193,9 +225,9 @@ const SearchPage = () => {
                 {item.tags ? <div className="mt-1 text-xs text-muted-foreground">{Object.entries(item.tags).slice(0, 4).map(([key, value]) => `${key}: ${String(value)}`).join(" · ")}</div> : null}
                 {item.snippet ? <div className="mt-2 text-sm text-muted-foreground">{item.snippet}</div> : null}
               </div>
-            ))}
+            )) : null}
           </div>
-          {nextCursor ? <Button onClick={() => void loadMore()} variant="outline">Загрузить ещё</Button> : null}
+          {nextCursor ? <Button onClick={() => void loadMore()} variant="outline" disabled={loadingMore}>{loadingMore ? "Загрузка..." : "Загрузить ещё"}</Button> : null}
         </div>
         <div className="space-y-4">
           <Card>

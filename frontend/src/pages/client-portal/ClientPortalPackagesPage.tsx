@@ -2,12 +2,15 @@ import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/common/StatusBadge";
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { formatDate } from "@/utils/datetime";
 
 import { useClientPortalPackages } from "./useClientPortalPackages";
 
 const ClientPortalPackagesPage = () => {
-  const { items, selected, loading, load, selectRun } = useClientPortalPackages();
+  const { items, selected, loading, error, load, selectRun } = useClientPortalPackages();
 
   return (
     <div className="space-y-6">
@@ -15,23 +18,28 @@ const ClientPortalPackagesPage = () => {
         <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Кабинет клиента" }, { label: "Пакеты" }]} />
         <Button variant="outline" onClick={() => void load()} disabled={loading}>Обновить</Button>
       </div>
+      <ErrorState error={error ?? undefined} onRetry={() => void load()} />
+      {loading ? <LoadingScreen label="Загрузка пакетов" /> : null}
+      {!loading && !error && !items.length ? (
+        <EmptyState title="Пакеты не найдены" description="Создайте новый запуск, чтобы пакет появился в кабинете клиента." />
+      ) : null}
       <div className="grid gap-6 xl:grid-cols-[1.1fr_1.4fr]">
         <Card>
           <CardHeader><CardTitle>Список пакетов</CardTitle></CardHeader>
           <CardContent className="space-y-3">
-            {items.map((item) => (
+            {!loading && !error ? items.map((item) => (
               <button key={item.id} className="w-full rounded-lg border p-3 text-left hover:bg-muted" onClick={() => void selectRun(item.id)}>
                 <div className="flex items-center justify-between gap-2"><div className="font-medium">{item.id}</div><StatusBadge status={item.status} /></div>
                 <div className="mt-1 text-sm text-muted-foreground">Запуск: {item.started_at ? formatDate(item.started_at) : "—"}</div>
               </button>
-            ))}
-            {!items.length ? <div className="text-sm text-muted-foreground">Пакеты пока не найдены.</div> : null}
+            )) : null}
           </CardContent>
         </Card>
         <Card>
           <CardHeader><CardTitle>Детали пакета</CardTitle></CardHeader>
           <CardContent className="space-y-4">
-            {!selected ? <div className="text-sm text-muted-foreground">Выберите пакет слева.</div> : (
+            {!loading && !error && !selected && items.length > 0 ? <div className="text-sm text-muted-foreground">Выберите пакет слева.</div> : null}
+            {!loading && !error && selected ? (
               <>
                 <div className="flex items-center justify-between"><div className="font-medium">{selected.run.id}</div><StatusBadge status={selected.run.status} /></div>
                 <div className="grid gap-3 md:grid-cols-4">
@@ -50,7 +58,7 @@ const ClientPortalPackagesPage = () => {
                   <div className="mt-3 space-y-2">{selected.events.map((event) => <div key={event.id} className="rounded border p-3 text-sm">{event.type} · {formatDate(event.created_at)}</div>)}</div>
                 </div>
               </>
-            )}
+            ) : null}
           </CardContent>
         </Card>
       </div>

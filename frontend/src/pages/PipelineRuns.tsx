@@ -2,16 +2,24 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { bulkActionPipelineRuns, listPipelineRuns, type PipelineRun } from "@/api/pipelines";
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { LoadingScreen } from "@/components/common/LoadingScreen";
+import { useAsyncResource } from "@/hooks/useAsyncResource";
 
 const PipelineRuns = () => {
-  const [runs, setRuns] = useState<PipelineRun[]>([]);
+  const { data: runs, setData: setRuns, loading, error, reload } = useAsyncResource({
+    loader: listPipelineRuns,
+    initialData: [] as PipelineRun[],
+    errorMessage: "Не удалось загрузить историю пайплайнов",
+  });
   const [selected, setSelected] = useState<Record<string, boolean>>({});
 
-  const load = () => listPipelineRuns().then(setRuns).catch(() => setRuns([]));
-
   useEffect(() => {
-    load();
-  }, []);
+    if (runs.length === 0) {
+      setSelected({});
+    }
+  }, [runs]);
 
   const selectedIds = useMemo(() => Object.entries(selected).filter(([, on]) => on).map(([id]) => id), [selected]);
 
@@ -24,12 +32,17 @@ const PipelineRuns = () => {
   const doBulk = async (action: "retry" | "cancel") => {
     if (selectedIds.length === 0) return;
     await bulkActionPipelineRuns(selectedIds, action);
-    await load();
+    await reload();
   };
 
   return (
     <section className="space-y-4">
       <h1 className="text-xl font-semibold">Пайплайны / История задач</h1>
+      <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
+      {loading ? <LoadingScreen label="Загрузка истории пайплайнов" /> : null}
+      {!loading && !error && runs.length === 0 ? (
+        <EmptyState title="Пайплайны не найдены" description="После первых запусков pipeline здесь появится история задач." />
+      ) : null}
       <div className="flex items-center gap-2 text-sm">
         <button className="rounded border px-3 py-1" onClick={() => doBulk("retry").catch(() => undefined)} disabled={!selectedIds.length}>Retry selected</button>
         <button className="rounded border px-3 py-1" onClick={() => doBulk("cancel").catch(() => undefined)} disabled={!selectedIds.length}>Cancel selected</button>

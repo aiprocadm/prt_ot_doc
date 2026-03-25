@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
 
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { LoadingScreen } from "@/components/common/LoadingScreen";
+import { Can } from "@/components/permissions/Can";
 import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
@@ -7,11 +11,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PersonFormDialog } from "@/features/persons/PersonFormDialog";
 import { PersonTable } from "@/features/persons/PersonTable";
+import { PERMISSIONS } from "@/permissions/permissions";
 import { usePersonsStore } from "@/stores/persons";
 import type { PersonDto } from "@/types/dto/persons";
 
 const PersonsPage = () => {
-  const { list, pagination } = usePersonsStore();
+  const { list, pagination, loading, error, items } = usePersonsStore();
   const [selectedPerson, setSelectedPerson] = useState<PersonDto | null>(null);
 
   useEffect(() => {
@@ -27,7 +32,14 @@ const PersonsPage = () => {
         stats={[{ label: "Сотрудников", value: pagination.total }]}
         actions={
           <PersonFormDialog
-            trigger={<Button>Добавить</Button>}
+            trigger={
+              <Can
+                permission={PERMISSIONS.PERSON_CREATE}
+                fallback={<Button disabled title="Недостаточно прав для добавления сотрудника">Добавить</Button>}
+              >
+                <Button>Добавить</Button>
+              </Can>
+            }
             onSubmitted={(person) => {
               setSelectedPerson(person);
               list();
@@ -37,7 +49,12 @@ const PersonsPage = () => {
       />
       <Card>
         <CardContent className="py-6">
-          <PersonTable onSelect={setSelectedPerson} />
+          <ErrorState error={error ?? undefined} onRetry={() => void list()} />
+          {loading ? <LoadingScreen label="Загрузка сотрудников" /> : null}
+          {!loading && !error && items.length === 0 ? (
+            <EmptyState title="Сотрудники не найдены" description="Добавьте первого сотрудника или измените фильтры поиска." />
+          ) : null}
+          {!loading && !error && items.length > 0 ? <PersonTable onSelect={setSelectedPerson} /> : null}
         </CardContent>
       </Card>
       {selectedPerson && (

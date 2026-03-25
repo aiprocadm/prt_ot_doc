@@ -5,11 +5,13 @@ import { apiClient } from "@/api/client";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
+import { Can } from "@/components/permissions/Can";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { PERMISSIONS } from "@/permissions/permissions";
 import type { ApiError } from "@/types/dto/common";
 
 type OutboxEntry = {
@@ -150,14 +152,16 @@ const ApprovalsOutboxPage = () => {
                     </TableCell>
                     <TableCell className="text-right">
                       {RETRYABLE_OUTBOX_STATUSES.has(item.status) ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => void retryDelivery(item.id)}
-                          disabled={retryingId === item.id}
-                        >
-                          <RotateCcw className="mr-2 h-4 w-4" /> Retry
-                        </Button>
+                        <Can permission={PERMISSIONS.ADMIN_OUTBOX_MANAGE}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void retryDelivery(item.id)}
+                            disabled={retryingId === item.id}
+                          >
+                            <RotateCcw className="mr-2 h-4 w-4" /> Retry
+                          </Button>
+                        </Can>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
@@ -198,14 +202,16 @@ const ApprovalsOutboxPage = () => {
                     <TableCell>{formatDateTime(item.created_at)}</TableCell>
                     <TableCell className="text-right">
                       {RETRYABLE_EVENT_STATUSES.has(item.status) ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => void requeueEvent(item.id)}
-                          disabled={retryingId === item.id}
-                        >
-                          <RotateCcw className="mr-2 h-4 w-4" /> Requeue
-                        </Button>
+                        <Can permission={PERMISSIONS.ADMIN_OUTBOX_MANAGE}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void requeueEvent(item.id)}
+                            disabled={retryingId === item.id}
+                          >
+                            <RotateCcw className="mr-2 h-4 w-4" /> Requeue
+                          </Button>
+                        </Can>
                       ) : (
                         <span className="text-xs text-muted-foreground">{formatDateTime(item.next_attempt_at)}</span>
                       )}

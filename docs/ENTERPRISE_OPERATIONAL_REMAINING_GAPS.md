@@ -44,12 +44,12 @@
 - **Effort:** S-M (распространить hook на оставшиеся формы)
 - **Blocker for:** Волна A
 
-### GAP-UX-003 — ~8 страниц без loading/error/empty states
-- **Что:** Foundation pages отображают пустое состояние или сломанный UI при loading/error.
+### GAP-UX-003 — Loading/Error/Empty states (ЗАКРЫТО)
+- **Что:** Для приоритетных operational и client-portal страниц внедрен единый шаблон `ErrorState + LoadingScreen + EmptyState`, включая Search и Dashboard API surfaces.
 - **Где:** `RiskPage.tsx`, `EdoPage.tsx`, `SignaturesPage.tsx`, `TemplatesPage.tsx`, `NpaPage.tsx`, `PortalRequestsPage.tsx`, `SafetyDashboardPage.tsx`, `TrainingDashboardPage.tsx`, `ClientDeliveryDashboardPage.tsx` + другие
 - **Почему critical:** Корпоративные пользователи не понимают состояние системы — неуверенность, повторные нажатия, escalation.
-- **Effort:** M (шаблонный, повторяющийся)
-- **Blocker for:** Волна A
+- **Effort:** Closed
+- **Blocker for:** Снят
 
 ### GAP-UX-004 — Bulk operations отсутствуют
 - **Что:** Нет UI для bulk selection. В backend только `briefings/entries/bulk-create`. Нет bulk close tasks, bulk assign training, bulk issue PPE.
@@ -67,8 +67,8 @@
 - **Effort:** XL (новый модуль — модели, миграция, сервис, endpoints, celery job, frontend)
 - **Blocker for:** Волна C
 
-### GAP-OPS-002 — Role-specific workspace projections отсутствуют
-- **Что:** Единый `/workspace/attention` для всех ролей. Нет safety_lead / hr_lead / line_manager / contractor_manager проекций.
+### GAP-OPS-002 — Role-specific workspace projections (ЧАСТИЧНО ЗАКРЫТО)
+- **Что:** Добавлен `GET /workspace/role-summary` с role-aware агрегатами (tasks/incidents/inspections/training/ppe/deadlines). Полная role-specific персонализация dashboard UI по ролям еще не завершена.
 - **Где:** `backend/app/api/routes/workspace.py`, `frontend/src/pages/dashboard/`
 - **Почему critical:** Safety lead и HR видят одно и то же — нет role-specific task prioritization. Operational неэффективность.
 - **Effort:** M
@@ -80,14 +80,14 @@
 - **Effort:** M
 - **Blocker for:** Волна B
 
-### GAP-OPS-004 — Tenant health score endpoint отсутствует
-- **Что:** Нет `GET /admin/tenant-health` с комплексной оценкой здоровья tenant.
+### GAP-OPS-004 — Tenant health score endpoint (ЗАКРЫТО)
+- **Что:** Реализован `GET /admin/tenant-health` с composite score, grade, fail counters и actionable recommendations.
 - **Где:** Backend — нет endpoint; Frontend `AdminPage.tsx` — нет виджета
 - **Effort:** M
 - **Blocker for:** Волна B
 
-### GAP-OPS-005 — Provider status endpoint отсутствует
-- **Что:** Нет `/admin/provider-status` с явным перечислением production/non-production провайдеров.
+### GAP-OPS-005 — Provider status endpoint (ЗАКРЫТО)
+- **Что:** Реализован `/admin/provider-status` с явным перечислением provider mode, adapter и blocking_for_golive.
 - **Где:** Backend — нет endpoint
 - **Почему critical:** Admin не видит что в production mode, а что — stub. Невозможно оценить go-live readiness.
 - **Effort:** S
@@ -104,8 +104,8 @@
 - **Effort:** S
 - **Blocker for:** Волна D
 
-### GAP-OPS-008 — Queue/job diagnostics endpoint неполный
-- **Что:** `jobs.py` существует, но без `queue-summary`, `failed`, `poisoned` sub-endpoints.
+### GAP-OPS-008 — Queue/job diagnostics endpoint (ЗАКРЫТО)
+- **Что:** Добавлены `GET /jobs/queue-summary`, `GET /jobs/failed`, `GET /jobs/poisoned`.
 - **Effort:** M
 - **Blocker for:** Волна B
 
@@ -224,13 +224,13 @@
 |----|----------|----------|-------|--------|
 | SEC-001 | items.py пустой router без явного решения | LOW | B | XS |
 | UX-002 | Unsaved changes protection | HIGH | A | M |
-| UX-003 | 20 страниц без states | HIGH | A | M |
+| UX-003 | Loading/Error/Empty states (closed) | LOW | Done | S |
 | UX-001 | Action-level permissions | HIGH | B | L |
-| OPS-002 | Role workspace projections | HIGH | B | M |
+| OPS-002 | Role workspace projections (partial) | MEDIUM | B | M |
 | OPS-003 | Unified task projection | MEDIUM | B | M |
-| OPS-004 | Tenant health score | MEDIUM | B | M |
-| OPS-005 | Provider status endpoint | HIGH | B | S |
-| OPS-008 | Queue/job diagnostics | MEDIUM | B | M |
+| OPS-004 | Tenant health score (closed) | LOW | Done | S |
+| OPS-005 | Provider status endpoint (closed) | LOW | Done | S |
+| OPS-008 | Queue/job diagnostics (closed) | LOW | Done | M |
 | DOC-002 | Document readiness score | MEDIUM | B | M |
 | DOC-003 | NPA dependency map | LOW | B | M |
 | DOC-005 | Template scope verification | MEDIUM | B | S |

@@ -1,13 +1,18 @@
 import { FormEvent, useEffect, useState } from "react";
 
 import { approvalsApi, type ApprovalRoute } from "@/api/approvals";
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import type { ApiError } from "@/types/dto/common";
 
 const ApprovalRoutesPage = () => {
   const [items, setItems] = useState<ApprovalRoute[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({
     code: "",
@@ -18,8 +23,11 @@ const ApprovalRoutesPage = () => {
 
   const load = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       setItems(await approvalsApi.listRoutes());
+    } catch (err) {
+      setLoadError((err as ApiError) ?? { status: 0, message: "Не удалось загрузить маршруты согласования" });
     } finally {
       setLoading(false);
     }
@@ -76,9 +84,10 @@ const ApprovalRoutesPage = () => {
         </div>
       </form>
 
-      {loading && <div className="text-sm text-muted-foreground">Загрузка...</div>}
-
+      {loading && <LoadingScreen label="Загрузка маршрутов" />}
+      <ErrorState error={loadError ?? undefined} onRetry={() => void load()} />
       <div className="space-y-2">
+        {!loading && !loadError && items.length === 0 ? <EmptyState title="Маршрутов ещё нет" description="Создайте первый маршрут согласования через форму выше." /> : null}
         {items.map((route) => (
           <div key={route.id} className="rounded border p-3 text-sm">
             <div className="font-medium">{route.name}</div>
@@ -86,7 +95,6 @@ const ApprovalRoutesPage = () => {
             {route.description && <div className="mt-1 text-muted-foreground">{route.description}</div>}
           </div>
         ))}
-        {!loading && items.length === 0 && <div className="text-sm text-muted-foreground">Маршрутов пока нет</div>}
       </div>
     </div>
   );

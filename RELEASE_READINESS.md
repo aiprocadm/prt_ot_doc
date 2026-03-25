@@ -32,3 +32,8 @@
 - verify storage + LibreOffice + ClamAV + Celery workers;
 - run backend/frontend smoke for custom template upload and document generation;
 - provision real owner/demo credentials outside git.
+
+## Launch readiness verdict (2026-03-25)
+- Status: NOT READY (no-go for production cutover now).
+- Why: there are still high/medium enterprise gaps outside the completed Wave A/B slices (action-level permission coverage, unified task projection breadth, data quality module, offline field scenarios, reliability runbooks and worker-level operational checks).
+- Ready-to-launch trigger: switch to READY only after production cutover checklist passes on target infra and remaining high-severity operational gaps are either closed or explicitly risk-accepted by owners.

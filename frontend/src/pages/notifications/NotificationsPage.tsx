@@ -2,9 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { apiClient } from "@/api/client";
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import type { ApiError } from "@/types/dto/common";
 
 const channels = ["all", "inapp", "email", "telegram", "webhook"] as const;
 const priorities = ["all", "low", "medium", "high", "critical"] as const;
@@ -55,29 +59,48 @@ const NotificationsPage = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [templates, setTemplates] = useState<NotificationTemplate[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
 
   const load = async () => {
-    const response = await apiClient.get<{ items: NotificationItem[]; unread_count: number }>("/notifications", {
-      params: {
-        ...(statusFilter !== "all" ? { status: statusFilter } : {}),
-        ...(channel !== "all" ? { channel } : {}),
-        ...(priority !== "all" ? { priority } : {}),
-        ...(type ? { type } : {})
-      }
-    });
-    setItems(response.data.items);
-    setUnreadCount(response.data.unread_count);
-    setSelectedIds([]);
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await apiClient.get<{ items: NotificationItem[]; unread_count: number }>("/notifications", {
+        params: {
+          ...(statusFilter !== "all" ? { status: statusFilter } : {}),
+          ...(channel !== "all" ? { channel } : {}),
+          ...(priority !== "all" ? { priority } : {}),
+          ...(type ? { type } : {})
+        }
+      });
+      setItems(response.data.items);
+      setUnreadCount(response.data.unread_count);
+      setSelectedIds([]);
+    } catch (err) {
+      const apiError = (err as ApiError) ?? { status: 500, message: "Не удалось загрузить уведомления" };
+      setError({ status: apiError.status ?? 500, message: apiError.message ?? "Не удалось загрузить уведомления" });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const loadSettings = async () => {
-    const response = await apiClient.get<NotificationSettings>("/notifications/settings/me");
-    setSettings(response.data);
+    try {
+      const response = await apiClient.get<NotificationSettings>("/notifications/settings/me");
+      setSettings(response.data);
+    } catch {
+      setSettings(null);
+    }
   };
 
   const loadTemplates = async () => {
-    const response = await apiClient.get<NotificationTemplate[]>("/notifications/templates");
-    setTemplates(response.data);
+    try {
+      const response = await apiClient.get<NotificationTemplate[]>("/notifications/templates");
+      setTemplates(response.data);
+    } catch {
+      setTemplates([]);
+    }
   };
 
   useEffect(() => {
@@ -124,6 +147,11 @@ const NotificationsPage = () => {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          <ErrorState error={error ?? undefined} onRetry={() => void load()} />
+          {loading ? <LoadingScreen label="Загрузка уведомлений" /> : null}
+          {!loading && !error && items.length === 0 ? (
+            <EmptyState title="Уведомления отсутствуют" description="Новые события появятся здесь автоматически." />
+          ) : null}
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
             <select className="h-10 rounded-md border px-3" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as (typeof statuses)[number])}>
               {statuses.map((item) => <option key={item} value={item}>{item}</option>)}
@@ -137,7 +165,7 @@ const NotificationsPage = () => {
             <Input placeholder="Тип уведомления" value={type} onChange={(event) => setType(event.target.value)} />
             <div className="rounded-md border px-3 py-2 text-sm text-muted-foreground">Типы: {groupedByType.join(", ") || "—"}</div>
           </div>
-          {items.map((item) => (
+          {!loading && !error ? items.map((item) => (
             <div key={item.id} className={`rounded-md border p-3 ${item.is_read ? "bg-muted/30" : "border-primary/40"}`}>
               <div className="flex items-start gap-3">
                 <input type="checkbox" className="mt-1" checked={selectedIds.includes(item.id)} onChange={() => toggleSelected(item.id)} aria-label={`select-${item.id}`} />
@@ -166,7 +194,7 @@ const NotificationsPage = () => {
                 </div>
               </div>
             </div>
-          ))}
+          )) : null}
         </CardContent>
       </Card>
 

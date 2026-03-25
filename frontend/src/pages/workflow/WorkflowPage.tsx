@@ -4,11 +4,13 @@ import { apiClient } from "@/api/client";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
+import { Can } from "@/components/permissions/Can";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { PERMISSIONS } from "@/permissions/permissions";
 import type { ApiError } from "@/types/dto/common";
 
 const defaultGraph = {
@@ -215,8 +217,10 @@ const WorkflowPage = () => {
           <div className="grid gap-3 xl:grid-cols-[0.5fr,1fr]">
             <Input value={newCode} onChange={(event) => setNewCode(event.target.value)} placeholder="Код процесса" />
             <div className="flex flex-wrap gap-2">
-              <Button onClick={() => void validateGraph()}>Validate graph</Button>
-              <Button onClick={() => void createProcess()}>Create draft</Button>
+              <Button variant="outline" onClick={() => void validateGraph()}>Validate graph</Button>
+              <Can permission={PERMISSIONS.WORKFLOW_MANAGE}>
+                <Button onClick={() => void createProcess()}>Create draft</Button>
+              </Can>
               <Button variant="outline" onClick={() => void load()}>Refresh</Button>
             </div>
           </div>
@@ -237,7 +241,9 @@ const WorkflowPage = () => {
                     <div className="font-medium">{definition.name}</div>
                     <div className="text-sm text-muted-foreground">{definition.code} · entity: {definition.entity_type}</div>
                   </div>
-                  <Button size="sm" onClick={() => void start(definition.code)}>Запустить</Button>
+                  <Can permission={PERMISSIONS.WORKFLOW_MANAGE}>
+                    <Button size="sm" onClick={() => void start(definition.code)}>Запустить</Button>
+                  </Can>
                 </div>
                 {definition.versions.map((version) => (
                   <div key={version.id} className="rounded border bg-muted/30 p-3">
@@ -245,8 +251,16 @@ const WorkflowPage = () => {
                       <div className="text-sm font-medium">Версия {version.version_no}</div>
                       <div className="flex items-center gap-2">
                         <span className="text-xs uppercase text-muted-foreground">{version.status}</span>
-                        {version.status !== "published" ? <Button size="sm" variant="outline" onClick={() => void publish(version.id)}>Publish</Button> : null}
-                        {version.status !== "archived" ? <Button size="sm" variant="ghost" onClick={() => void archive(version.id)}>Archive</Button> : null}
+                        {version.status !== "published" ? (
+                          <Can permission={PERMISSIONS.WORKFLOW_MANAGE}>
+                            <Button size="sm" variant="outline" onClick={() => void publish(version.id)}>Publish</Button>
+                          </Can>
+                        ) : null}
+                        {version.status !== "archived" ? (
+                          <Can permission={PERMISSIONS.WORKFLOW_MANAGE}>
+                            <Button size="sm" variant="ghost" onClick={() => void archive(version.id)}>Archive</Button>
+                          </Can>
+                        ) : null}
                       </div>
                     </div>
                     <div className="mt-3 grid gap-2 md:grid-cols-2">
@@ -306,10 +320,12 @@ const WorkflowPage = () => {
                   <div className="mt-1 text-xs text-muted-foreground">SLA: {task.due_at ? new Date(task.due_at).toLocaleString() : "—"}</div>
                   {task.task_payload ? <div className="mt-1 text-xs text-muted-foreground">Payload: {JSON.stringify(task.task_payload)}</div> : null}
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <Button size="sm" onClick={() => void completeTask(task.id)}>Complete</Button>
-                    <Button size="sm" variant="outline" onClick={() => void moveTask(task.id, "reassign")}>Reassign</Button>
-                    <Button size="sm" variant="outline" onClick={() => void moveTask(task.id, "delegate")}>Delegate</Button>
-                    <Button size="sm" variant="outline" onClick={() => void moveTask(task.id, "escalate")}>Escalate</Button>
+                    <Can permission={PERMISSIONS.WORKFLOW_MANAGE}>
+                      <Button size="sm" onClick={() => void completeTask(task.id)}>Complete</Button>
+                      <Button size="sm" variant="outline" onClick={() => void moveTask(task.id, "reassign")}>Reassign</Button>
+                      <Button size="sm" variant="outline" onClick={() => void moveTask(task.id, "delegate")}>Delegate</Button>
+                      <Button size="sm" variant="outline" onClick={() => void moveTask(task.id, "escalate")}>Escalate</Button>
+                    </Can>
                     <Button size="sm" variant="outline" onClick={() => void openInstance(task.instance_id)}>Timeline</Button>
                   </div>
                 </div>

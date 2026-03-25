@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,7 +11,7 @@ import { useAuditStore } from "@/stores/audit";
 import { AuditTable } from "@/features/audit/AuditTable";
 
 const AuditPage = () => {
-  const { setFilters, list, filters } = useAuditStore();
+  const { setFilters, list, filters, items, loading, error } = useAuditStore();
   const [search, setSearch] = useState(filters.search ?? "");
 
   useEffect(() => {
@@ -34,7 +37,12 @@ const AuditPage = () => {
           <Button onClick={applyFilters}>Применить</Button>
         </CardContent>
       </Card>
-      <AuditTable />
+      <ErrorState error={error ?? undefined} onRetry={() => void list()} />
+      {loading ? <LoadingScreen label="Загрузка журнала аудита" /> : null}
+      {!loading && !error && items.length === 0 ? (
+        <EmptyState title="События аудита не найдены" description="Измените фильтры или выполните действия в системе, чтобы сформировать журнал." />
+      ) : null}
+      {!loading && !error && items.length > 0 ? <AuditTable /> : null}
     </div>
   );
 };

@@ -3,6 +3,9 @@ import { useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useSearchParams } from "react-router-dom";
 
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -42,7 +45,7 @@ const TASK_PRIORITIES: TaskPriority[] = ["low", "medium", "high", "critical"];
 const isTaskPriority = (value: string): value is TaskPriority => TASK_PRIORITIES.includes(value as TaskPriority);
 
 const TasksPage = () => {
-  const { list, loading, filters, setFilters, items, item, getById, patchTask, pagination } = useTasksStore();
+  const { list, loading, error, filters, setFilters, items, item, getById, patchTask, pagination } = useTasksStore();
   const [searchParams] = useSearchParams();
   const focusedTaskId = searchParams.get("task_id") ?? undefined;
   const focusedEntityType = searchParams.get("entity_type") ?? undefined;
@@ -253,6 +256,9 @@ const TasksPage = () => {
             </FilterField>
           </div>
           <TaskTable />
+          <ErrorState error={error ?? undefined} onRetry={() => void list()} />
+          {loading && items.length === 0 ? <LoadingScreen label="Загрузка задач" /> : null}
+          {!loading && !error && items.length === 0 ? <EmptyState title="Задач нет" description="Измените фильтры или дождитесь появления новых обязательств." /> : null}
         </CardContent>
       </Card>
     </div>
