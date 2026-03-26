@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from pydantic import Field, computed_field
+from pydantic import Field
 
 from app.models.models import (
     IncidentSeverity,

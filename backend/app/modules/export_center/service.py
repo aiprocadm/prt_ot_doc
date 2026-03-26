@@ -3,9 +3,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from app.modules.projections.models import ExportJob, ExportSchedule, KpiDefinition
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.modules.projections.models import ExportJob, ExportSchedule, KpiDefinition
 
 
 class ExportCenterService:

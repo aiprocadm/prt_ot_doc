@@ -1,10 +1,10 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
-from datetime import datetime, timezone
 import hashlib
 import json
+from copy import deepcopy
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.models import Company, PipelineRun, Site, Tenant
 from app.modules.headers.models import HeaderFooterPreset
 from app.modules.headers.placeholders import render_placeholders
+
 from .schemas import BrandingProfilePayload, BrandingProfileRead, BrandingResolutionMeta
 
 

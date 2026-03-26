@@ -11,6 +11,25 @@ const refreshStatusMock = vi.fn();
 const setPageMock = vi.fn();
 const setPageSizeMock = vi.fn();
 const setFiltersMock = vi.fn();
+const getByIdMock = vi.fn();
+
+const storeState = {
+  items: [] as unknown,
+  item: null,
+  filters: {},
+  pagination: { page: 1, page_size: 10, total: 1 } as { page: number; page_size: number; total: number } | undefined,
+  list: listMock,
+  setPage: setPageMock,
+  setPageSize: setPageSizeMock,
+  setFilters: setFiltersMock,
+  download: downloadMock,
+  refreshStatus: refreshStatusMock,
+  generateDocument: vi.fn(),
+  getGenerationStatus: vi.fn(),
+  getById: getByIdMock,
+  loading: false,
+  error: null,
+};
 
 const mockDocument = {
   id: "doc-1",
@@ -33,21 +52,7 @@ const mockDocument = {
 };
 
 vi.mock("@/stores/documents", () => ({
-  useDocumentsStore: () => ({
-    items: [mockDocument],
-    item: null,
-    filters: {},
-    pagination: { page: 1, page_size: 10, total: 1 },
-    list: listMock,
-    setPage: setPageMock,
-    setPageSize: setPageSizeMock,
-    setFilters: setFiltersMock,
-    download: downloadMock,
-    refreshStatus: refreshStatusMock,
-    generateDocument: vi.fn(),
-    getGenerationStatus: vi.fn(),
-    loading: false
-  })
+  useDocumentsStore: () => storeState
 }));
 
 vi.mock("@/stores/companies", () => ({
@@ -58,6 +63,10 @@ import DocumentsPage from "@/pages/documents/DocumentsPage";
 
 describe("DocumentsPage", () => {
   it("loads documents list and opens document card", async () => {
+    storeState.items = [mockDocument];
+    storeState.pagination = { page: 1, page_size: 10, total: 1 };
+    storeState.loading = false;
+    storeState.error = null;
     useAuthStore.setState({
       user: {
         id: "user-10",
@@ -86,5 +95,37 @@ describe("DocumentsPage", () => {
 
     expect(screen.getByText("Обновить статус")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /инструкция по от/i })).toBeInTheDocument();
+  });
+
+  it("does not crash when documents store contains malformed items or missing pagination", () => {
+    storeState.items = null;
+    storeState.pagination = undefined;
+    storeState.loading = false;
+    storeState.error = null;
+
+    useAuthStore.setState({
+      user: {
+        id: "user-10",
+        created_at: "2024-01-01",
+        updated_at: "2024-01-02",
+        email: "user@example.com",
+        full_name: "User",
+        roles: ["ot_specialist"],
+        permissions: [PERMISSIONS.DOCUMENT_VIEW, PERMISSIONS.DOCUMENT_CREATE]
+      },
+      loading: false,
+      error: null,
+      isAuthenticated: true,
+      initialized: true
+    });
+
+    render(
+      <MemoryRouter>
+        <DocumentsPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("heading", { name: "Документы" })).toBeInTheDocument();
+    expect(screen.getByText("Документы не найдены")).toBeInTheDocument();
   });
 });

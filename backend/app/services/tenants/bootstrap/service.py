@@ -9,7 +9,17 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import ensure_tenant_schema
-from app.models.models import Company, PackagePreset, PackageProfile, RoleEnum, Tenant, TenantQuota, TenantSettings, User, UserRole
+from app.models.models import (
+    Company,
+    PackagePreset,
+    PackageProfile,
+    RoleEnum,
+    Tenant,
+    TenantQuota,
+    TenantSettings,
+    User,
+    UserRole,
+)
 from app.services.audit import AuditService
 from app.services.auth import hash_password
 from app.services.authz_seed import seed_authz_catalog

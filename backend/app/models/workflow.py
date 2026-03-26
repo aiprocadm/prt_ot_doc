@@ -22,9 +22,9 @@ from app.models.models import (
     EdoStatusHistory,
     EdoWebhookInbox,
     Signature,
+    SignatureRequest,
     SignatureStatus,
     SignatureType,
-    SignatureRequest,
 )
 
 __all__ = [

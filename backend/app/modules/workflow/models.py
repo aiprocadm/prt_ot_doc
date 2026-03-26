@@ -11,7 +11,6 @@ from sqlalchemy.types import JSON
 
 from app.models.base import SoftDeleteMixin, TenantBaseModel
 
-
 JSONBType = JSONB().with_variant(JSON(), "sqlite")
 
 

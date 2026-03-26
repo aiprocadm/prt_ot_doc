@@ -1,5 +1,5 @@
-from fastapi import HTTPException, status
 import pytest
+from fastapi import HTTPException, status
 
 from app.api.routes.packs import _pack_bad_request, _validate_pack_output_selection
 

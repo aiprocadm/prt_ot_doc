@@ -7,11 +7,11 @@ import random
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from time import perf_counter
-from uuid import uuid4
 from typing import Any, Mapping
+from uuid import uuid4
 
 import httpx
-from sqlalchemy import Select, select
+from sqlalchemy import Select, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -21,15 +21,14 @@ from app.models.job_engine import OutboxEvent, OutboxEventStatus
 from app.models.models import Outbox, OutboxStatus, WebhookDelivery
 from app.services.events import EventType, dedupe_key_for, normalize_payload, resolve_event_type
 from app.services.webhook_retry_telemetry import (
-    classify_failure,
     calculate_retry_info,
+    classify_failure,
     create_failure_diagnostics,
-    FailureCategory,
 )
 from app.services.webhooks import (
     WebhookDestination,
-    WebhookDispatchError,
     WebhookDispatcher,
+    WebhookDispatchError,
 )
 
 logger = logging.getLogger(__name__)
@@ -279,15 +278,28 @@ class OutboxProcessor:
             await self.process_once()
             await asyncio.sleep(self.settings.outbox_poll_interval)
 
+    def _stale_in_progress_cutoff(self, now: datetime) -> datetime:
+        timeout = max(float(self.settings.outbox_in_progress_timeout_seconds), 1.0)
+        return now - timedelta(seconds=timeout)
+
     async def process_once(self, *, batch_size: int = 100) -> int:
         start_loop = perf_counter()
         now = datetime.now(tz=timezone.utc)
+        stale_cutoff = self._stale_in_progress_cutoff(now)
         stmt: Select[tuple[Outbox]] = (
             select(Outbox)
             .where(
-                Outbox.status.in_([OutboxStatus.PENDING, OutboxStatus.FAILED]),
-                Outbox.next_attempt_at.is_not(None),
-                Outbox.next_attempt_at <= now,
+                or_(
+                    (
+                        Outbox.status.in_([OutboxStatus.PENDING, OutboxStatus.FAILED])
+                        & Outbox.next_attempt_at.is_not(None)
+                        & (Outbox.next_attempt_at <= now)
+                    ),
+                    (
+                        (Outbox.status == OutboxStatus.IN_PROGRESS)
+                        & (Outbox.updated_at <= stale_cutoff)
+                    ),
+                )
             )
             .order_by(Outbox.next_attempt_at.asc(), Outbox.created_at.asc())
             .limit(batch_size)
@@ -301,6 +313,19 @@ class OutboxProcessor:
             return 0
 
         for entry in entries:
+            if entry.status == OutboxStatus.IN_PROGRESS:
+                logger.warning(
+                    "outbox.reclaim_stale_in_progress",
+                    extra={
+                        "outbox_id": entry.id,
+                        "tenant_id": entry.tenant_id,
+                        "event_type": entry.event_type,
+                        "destination": entry.destination,
+                        "attempt": entry.attempts,
+                        "updated_at": entry.updated_at.isoformat() if entry.updated_at else None,
+                        "stale_cutoff": stale_cutoff.isoformat(),
+                    },
+                )
             entry.status = OutboxStatus.IN_PROGRESS
             entry.attempts += 1
 

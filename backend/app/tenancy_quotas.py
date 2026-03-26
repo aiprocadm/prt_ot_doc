@@ -8,7 +8,14 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.file import File
-from app.models.models import PipelineRun, PipelineRunStatus, Tenant, TenantCounter, TenantQuota, TenantQuotaCounter
+from app.models.models import (
+    PipelineRun,
+    PipelineRunStatus,
+    Tenant,
+    TenantCounter,
+    TenantQuota,
+    TenantQuotaCounter,
+)
 
 
 def _raise_quota(kind: str, *, limit: int, used: int, billing_gate: bool, correlation_id: str | None = None) -> None:

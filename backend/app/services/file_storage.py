@@ -29,6 +29,23 @@ __all__ = [
 JSON_SAFE_SEPARATOR = ":"
 
 
+def _clone_blob_meta(meta: BlobMeta) -> BlobMeta:
+    return BlobMeta(
+        key=meta.key,
+        size=meta.size,
+        content_type=meta.content_type,
+        sha256=meta.sha256,
+        created_at=meta.created_at,
+        updated_at=meta.updated_at,
+        quarantined=meta.quarantined,
+        adapter=meta.adapter,
+        etag=meta.etag,
+        scan_status=meta.scan_status,
+        tags=dict(meta.tags),
+        last_validated_mime=meta.last_validated_mime,
+    )
+
+
 def _resolve_endpoint(endpoint: str, *, secure: bool) -> Tuple[str | None, bool]:
     """Normalize an S3 endpoint value to host[:port] and secure flag."""
 
@@ -107,18 +124,19 @@ class _MemoryAdapter:
 
     def put(self, key: str, data: bytes, *, content_type: str | None = None, quarantined: bool = False) -> BlobMeta:
         now = datetime.now(tz=timezone.utc)
+        existing = self._meta.get(key)
         meta = BlobMeta(
             key=key,
             size=len(data),
             content_type=content_type,
             sha256=hashlib.sha256(data).hexdigest(),
-            created_at=self._meta.get(key, BlobMeta(key, 0, None, "", now, now)).created_at if key in self._meta else now,
+            created_at=existing.created_at if existing is not None else now,
             updated_at=now,
             quarantined=quarantined,
             adapter=self.name,
             etag=hashlib.md5(data).hexdigest(),  # noqa: S324 - eTag compatibility only
             scan_status="quarantined" if quarantined else "clean",
-            tags=dict(self._meta.get(key).tags) if key in self._meta else {},
+            tags=dict(existing.tags) if existing is not None else {},
             last_validated_mime=content_type,
         )
         with self._lock:
@@ -135,7 +153,7 @@ class _MemoryAdapter:
             meta = self._meta.get(key)
             if meta is None:
                 return None
-            return BlobMeta(**meta.to_dict())
+            return _clone_blob_meta(meta)
 
     def has(self, key: str) -> bool:
         with self._lock:
@@ -164,7 +182,7 @@ class _MemoryAdapter:
             meta.scan_status = "quarantined" if quarantined else "clean"
             if reason:
                 meta.tags["quarantine_reason"] = reason
-            return BlobMeta(**meta.to_dict())
+            return _clone_blob_meta(meta)
 
 
 class _LocalAdapter:
@@ -202,7 +220,7 @@ class _LocalAdapter:
                 last_validated_mime=content_type,
             )
             self._meta[key] = meta
-            return BlobMeta(**meta.to_dict())
+            return _clone_blob_meta(meta)
 
     def get(self, key: str) -> bytes:
         return self._path(key).read_bytes()
@@ -225,7 +243,7 @@ class _LocalAdapter:
                     scan_status="clean",
                 )
                 self._meta[key] = meta
-            return BlobMeta(**meta.to_dict()) if meta else None
+            return _clone_blob_meta(meta) if meta else None
 
     def has(self, key: str) -> bool:
         return self._path(key).exists()
@@ -258,7 +276,7 @@ class _LocalAdapter:
             meta.updated_at = datetime.now(tz=timezone.utc)
             if reason:
                 meta.tags["quarantine_reason"] = reason
-            return BlobMeta(**meta.to_dict())
+            return _clone_blob_meta(meta)
 
 
 
@@ -295,7 +313,7 @@ class _S3Adapter:
                 last_validated_mime=mime,
             )
             self._meta[key] = meta
-            return BlobMeta(**meta.to_dict())
+            return _clone_blob_meta(meta)
 
     def get(self, key: str) -> bytes:
         self._s3.ensure_bucket()
@@ -324,7 +342,7 @@ class _S3Adapter:
                 last_validated_mime=cached.last_validated_mime if cached else remote.get("content_type"),
             )
             self._meta[key] = meta
-            return BlobMeta(**meta.to_dict())
+            return _clone_blob_meta(meta)
 
     def has(self, key: str) -> bool:
         return self.head(key) is not None
@@ -353,7 +371,7 @@ class _S3Adapter:
             meta.updated_at = datetime.now(tz=timezone.utc)
             if reason:
                 meta.tags["quarantine_reason"] = reason
-            return BlobMeta(**meta.to_dict())
+            return _clone_blob_meta(meta)
 
 
 class FileStorageService:

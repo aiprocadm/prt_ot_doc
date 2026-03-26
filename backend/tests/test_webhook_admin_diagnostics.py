@@ -8,18 +8,16 @@ Validates:
 """
 
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
-from fastapi import status
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.models.webhook_admin import (
     WebhookDeliveryWithDiagnostics,
     WebhookFailureDiagnostics,
     WebhookRetryEligibility,
 )
-from app.models.models import WebhookDelivery, WebhookEndpoint, Tenant
+from app.models.models import Tenant, WebhookDelivery, WebhookEndpoint
 from app.services.webhook_retry_telemetry import FailureCategory
 
 

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import pytest
+from fastapi import HTTPException
+
 from app.modules.files.models import FileDownloadLog, FileLink, FileRecord, FileStatus
 from app.modules.files.service import FileService, compute_sha256_stream
-from fastapi import HTTPException
 
 
 class DummySession:

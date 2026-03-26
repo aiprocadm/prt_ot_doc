@@ -136,17 +136,26 @@ const WorkflowPage = () => {
 
   const hasOperationalData = definitions.length > 0 || tasks.length > 0 || instances.length > 0 || selectedInstance !== null;
 
+  const setActionError = (nextError: unknown, fallbackMessage: string) => {
+    setError((nextError as ApiError) ?? { message: fallbackMessage });
+  };
+
   const createProcess = async () => {
     if (!parsedGraph) return;
-    await apiClient.post("/workflow/definitions", {
-      code: newCode,
-      name: "Document approval",
-      entity_type: "document",
-      description: "JSON-driven workflow definition",
-      graph: parsedGraph,
-      variables_schema: { approved: "boolean", initiator_id: "string", escalation_role: "string" }
-    });
-    await load();
+    setError(null);
+    try {
+      await apiClient.post("/workflow/definitions", {
+        code: newCode,
+        name: "Document approval",
+        entity_type: "document",
+        description: "JSON-driven workflow definition",
+        graph: parsedGraph,
+        variables_schema: { approved: "boolean", initiator_id: "string", escalation_role: "string" }
+      });
+      await load();
+    } catch (nextError) {
+      setActionError(nextError, "Не удалось создать workflow definition");
+    }
   };
 
   const validateGraph = async () => {
@@ -154,53 +163,87 @@ const WorkflowPage = () => {
       setValidation("JSON графа невалиден");
       return;
     }
-    const response = await apiClient.post("/workflow/definitions/validate", {
-      code: newCode,
-      name: "Validation",
-      entity_type: "document",
-      graph: parsedGraph,
-      variables_schema: {}
-    });
-    setValidation(`OK · узлы: ${(response.data.node_types ?? []).join(", ")}`);
+    try {
+      const response = await apiClient.post("/workflow/definitions/validate", {
+        code: newCode,
+        name: "Validation",
+        entity_type: "document",
+        graph: parsedGraph,
+        variables_schema: {}
+      });
+      setValidation(`OK · узлы: ${(response.data.node_types ?? []).join(", ")}`);
+    } catch (nextError) {
+      setValidation((nextError as ApiError)?.message ?? "Не удалось провалидировать workflow graph");
+    }
   };
 
   const publish = async (versionId: string) => {
-    await apiClient.post(`/workflow/versions/${versionId}/publish`);
-    await load();
+    setError(null);
+    try {
+      await apiClient.post(`/workflow/versions/${versionId}/publish`);
+      await load();
+    } catch (nextError) {
+      setActionError(nextError, "Не удалось опубликовать workflow version");
+    }
   };
 
   const archive = async (versionId: string) => {
-    await apiClient.post(`/workflow/versions/${versionId}/archive`);
-    await load();
+    setError(null);
+    try {
+      await apiClient.post(`/workflow/versions/${versionId}/archive`);
+      await load();
+    } catch (nextError) {
+      setActionError(nextError, "Не удалось архивировать workflow version");
+    }
   };
 
   const start = async (definitionCode: string) => {
-    const response = await apiClient.post<WorkflowInstance>("/workflow/instances", {
-      definition_code: definitionCode,
-      entity_type: "document",
-      entity_id: `doc-${Date.now()}`,
-      context: { approved: true, initiator_id: "current-user", escalation_role: "safety_admin" }
-    });
-    setSelectedInstance(response.data);
-    await load();
+    setError(null);
+    try {
+      const response = await apiClient.post<WorkflowInstance>("/workflow/instances", {
+        definition_code: definitionCode,
+        entity_type: "document",
+        entity_id: `doc-${Date.now()}`,
+        context: { approved: true, initiator_id: "current-user", escalation_role: "safety_admin" }
+      });
+      setSelectedInstance(response.data);
+      await load();
+    } catch (nextError) {
+      setActionError(nextError, "Не удалось запустить workflow instance");
+    }
   };
 
   const openInstance = async (instanceId: string) => {
-    const response = await apiClient.get<WorkflowInstance>(`/workflow/instances/${instanceId}`);
-    setSelectedInstance(response.data);
+    setError(null);
+    try {
+      const response = await apiClient.get<WorkflowInstance>(`/workflow/instances/${instanceId}`);
+      setSelectedInstance(response.data);
+    } catch (nextError) {
+      setActionError(nextError, "Не удалось загрузить workflow instance");
+    }
   };
 
   const completeTask = async (taskId: string) => {
-    await apiClient.post(`/workflow/tasks/${taskId}/complete`, { decision: "approve", payload: { approved: true } });
-    await load();
+    setError(null);
+    try {
+      await apiClient.post(`/workflow/tasks/${taskId}/complete`, { decision: "approve", payload: { approved: true } });
+      await load();
+    } catch (nextError) {
+      setActionError(nextError, "Не удалось завершить workflow task");
+    }
   };
 
   const moveTask = async (taskId: string, mode: "delegate" | "escalate" | "reassign") => {
-    await apiClient.post(`/workflow/tasks/${taskId}/${mode}`, {
-      ...(reassignUserId ? { assignee_user_id: reassignUserId } : {}),
-      assignee_role_code: reassignRole || undefined
-    });
-    await load();
+    setError(null);
+    try {
+      await apiClient.post(`/workflow/tasks/${taskId}/${mode}`, {
+        ...(reassignUserId ? { assignee_user_id: reassignUserId } : {}),
+        assignee_role_code: reassignRole || undefined
+      });
+      await load();
+    } catch (nextError) {
+      setActionError(nextError, `Не удалось выполнить действие ${mode} для workflow task`);
+    }
   };
 
   return (

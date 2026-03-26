@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import re
-from io import BytesIO
-from collections.abc import Iterable, Mapping, Sequence
-
 import base64
+import re
+from collections.abc import Iterable, Mapping, Sequence
+from io import BytesIO
 from typing import Any
 
 from docx import Document

@@ -43,6 +43,7 @@ describe("DocumentPreview", () => {
       <DocumentPreview
         document={{
           id: "doc-1",
+          current_version_id: "ver-1",
           name: "Приказ",
           type: "order",
           version: 3,
@@ -59,6 +60,6 @@ describe("DocumentPreview", () => {
     expect(screen.getByRole("button", { name: "Подписать" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Подписать" }));
-    await waitFor(() => expect(quickSignSpy).toHaveBeenCalledWith("doc-1"));
+    await waitFor(() => expect(quickSignSpy).toHaveBeenCalledWith("ver-1"));
   });
 });

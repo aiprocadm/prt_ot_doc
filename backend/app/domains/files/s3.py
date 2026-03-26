@@ -20,7 +20,8 @@ from botocore.exceptions import ClientError
 
 from app.core.config import get_settings
 from app.services.file_storage import FileStorageService as MemoryStorageService
-from app.services.storage import FileStorageError, FileStorageService as LocalStorageService
+from app.services.storage import FileStorageError
+from app.services.storage import FileStorageService as LocalStorageService
 
 logger = logging.getLogger(__name__)
 

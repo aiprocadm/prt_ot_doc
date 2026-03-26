@@ -4,8 +4,13 @@ import { apiClient } from "@/api/client";
 import { tokenStorage } from "@/api/tokenStorage";
 import { tenantStorage } from "@/api/tenantStorage";
 import { resetTenantStores } from "@/stores/reset";
+import { useTenantStore } from "@/stores/tenant";
 import type { ApiError } from "@/types/dto/common";
 import type { LoginRequestDto, LoginResponseDto, PermissionsResponseDto, RefreshResponseDto, UserDto } from "@/types/dto/auth";
+
+type LoginActionPayload = LoginRequestDto & {
+  tenant: string;
+};
 
 interface AuthState {
   user: UserDto | null;
@@ -13,7 +18,7 @@ interface AuthState {
   error: ApiError | null;
   isAuthenticated: boolean;
   initialized: boolean;
-  login: (payload: LoginRequestDto) => Promise<void>;
+  login: (payload: LoginActionPayload) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
   initialize: () => Promise<void>;
@@ -102,7 +107,12 @@ export const useAuthStore = createWithEqualityFn<AuthState>()(
         state.error = null;
       });
       try {
-        const { data } = await apiClient.post<LoginResponseDto>("/auth/login", payload);
+        const tenantSlug = payload.tenant.trim();
+        useTenantStore.getState().setTenant({ slug: tenantSlug, name: tenantSlug });
+        const { data } = await apiClient.post<LoginResponseDto>("/auth/login", {
+          email: payload.email,
+          password: payload.password
+        });
         persistTokens(data);
         let profile: UserDto | null = null;
         try {

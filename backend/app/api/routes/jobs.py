@@ -11,11 +11,11 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps.tracing import get_trace_id
 from app.api.dependencies import get_session, get_tenant_record
+from app.api.deps.tracing import get_trace_id
 from app.core.audit_decorator import audit_operation
-from app.core.security import rbac
 from app.core.idempotency import compute_request_hash
+from app.core.security import rbac
 from app.models.job_engine import (
     DocumentArtifact,
     DocumentJob,
@@ -25,10 +25,10 @@ from app.models.job_engine import (
     OutboxEvent,
     OutboxEventStatus,
 )
-from app.modules.rbac_abac import require_permission
 from app.models.models import Tenant
-from app.modules.pipelines.models import PipelineProfile
 from app.modules.files.models import FileRecord
+from app.modules.pipelines.models import PipelineProfile
+from app.modules.rbac_abac import require_permission
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 from app.services.pipelines_orchestrator import DocumentPipelineOrchestrator
 

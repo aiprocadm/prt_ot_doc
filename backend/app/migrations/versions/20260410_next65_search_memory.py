@@ -7,8 +7,8 @@ from __future__ import annotations
 
 from typing import Union
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "20260410_next65"
 down_revision: Union[str, None] = "20260409_next64"

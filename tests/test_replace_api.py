@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from io import BytesIO
 from uuid import uuid4
 
@@ -7,7 +8,6 @@ import pytest
 from docx import Document
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
-import json
 
 from app.models.document import DocumentVersion
 from app.services.file_storage import FileStorageService

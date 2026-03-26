@@ -14,10 +14,10 @@ from app.db import Base, SharedBase
 from app.models.models import (
     PipelineRun,
     PipelineRunStatus,
-    Tenant,
     Template,
     TemplateVersion,
     TemplateVersionStatus,
+    Tenant,
 )
 from app.services.file_storage import FileStorageService
 from app.services.pipeline import PipelineService

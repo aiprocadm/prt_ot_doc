@@ -8,7 +8,13 @@ from io import BytesIO
 from typing import Annotated, Any, Iterable
 from uuid import UUID
 
-from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
+from fastapi.responses import RedirectResponse, StreamingResponse
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.api.dependencies import get_session, get_tenant_record
 from app.core.config import get_settings
 from app.core.idempotency import compute_request_hash
 from app.core.query import (
@@ -22,6 +28,7 @@ from app.core.query import (
 from app.core.response import list_response
 from app.core.security import AccessContext, abac
 from app.core.tenant import tenant_prefix_path
+from app.core.tenant_validation import TenantContextValidator
 from app.core.tracing import get_trace_id
 from app.domains.files import s3
 from app.domains.packs.context import enrich_context
@@ -35,10 +42,10 @@ from app.models.models import (
     DocumentPackItem,
     MedicalExam,
     Person,
-    PPEIssue,
-    PPEIssueStatus,
     PipelineRun,
     PipelineRunStatus,
+    PPEIssue,
+    PPEIssueStatus,
     Site,
     TemplateVersion,
     Tenant,
@@ -46,6 +53,7 @@ from app.models.models import (
     TrainingStatus,
 )
 from app.models.safety_core import PPEPersonalCard, PPEPersonalCardItem, RiskMapItem, SafetyRiskMap
+from app.modules.ppe.services import PackSafetySummaryService
 from app.schemas.pack import (
     PackFromScenarioRequest,
     PackGenerateRequest,
@@ -65,15 +73,6 @@ from app.services.idempotency import IdempotencyService, normalize_idempotency_k
 from app.services.package_pipeline import build_idempotency_key
 from app.services.pipeline import PipelineService
 from app.services.tasks import generate_document_task, generate_pack_task
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
-from fastapi.responses import RedirectResponse, StreamingResponse
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
-
-from app.modules.ppe.services import PackSafetySummaryService
-from app.core.permission_checker import PermissionChecker
-from app.core.tenant_validation import TenantContextValidator
 
 logger = logging.getLogger(__name__)
 

@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
+from app.core.tenant_validation import TenantContextValidator
 from app.domains.ppe import issue_ppe_item, list_expiring_issues
 from app.models.ppe_registry import PPEIssue, PPEIssueStatus, PPEItem
 from app.models.tenanting import Tenant
@@ -27,8 +28,6 @@ from app.schemas.ppe import (
 )
 from app.services.events import EventType
 from app.services.outbox import OutboxService
-from app.core.permission_checker import PermissionChecker
-from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(prefix="/ppe", tags=["ppe"])
 

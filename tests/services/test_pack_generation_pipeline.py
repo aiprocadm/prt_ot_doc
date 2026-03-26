@@ -4,6 +4,11 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.domains.packs.definitions import (
+    PACK_CODE_INCIDENT,
+    PACK_CODE_INSPECTION_PREP,
+    PACK_CODE_SITE_ACCESS,
+)
 from app.models.models import (
     Company,
     DocumentPack,
@@ -13,11 +18,6 @@ from app.models.models import (
     Person,
     TemplateVersion,
     TemplateVersionStatus,
-)
-from app.domains.packs.definitions import (
-    PACK_CODE_INCIDENT,
-    PACK_CODE_INSPECTION_PREP,
-    PACK_CODE_SITE_ACCESS,
 )
 from app.services.package_pipeline import PackGenerationPipeline
 from tests.utils.factories import TestDataFactory

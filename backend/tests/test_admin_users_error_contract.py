@@ -1,5 +1,5 @@
-from fastapi import HTTPException, status
 import pytest
+from fastapi import HTTPException, status
 
 from app.api.routes.admin_users import _admin_user_unprocessable, _normalize_roles
 

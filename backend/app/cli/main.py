@@ -7,14 +7,15 @@ from pathlib import Path
 from typing import Any, Optional
 
 import typer
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.tracing import get_trace_id
 from app.db.session import AsyncSessionLocal
 from app.models.models import Template, TemplateVersion, TemplateVersionStatus
 from app.services.file_storage import FileStorageService
 from app.services.pipeline import PipelineService
 from app.services.tasks import run_pipeline_task
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
 
 EXIT_OK = 0
 EXIT_VALIDATION = 2

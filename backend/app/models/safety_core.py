@@ -5,8 +5,6 @@ import enum
 from datetime import date, datetime
 from typing import Any
 
-from app.db.session import TenantBase
-from app.models.base import SoftDeleteMixin, TenantBaseModel
 from sqlalchemy import (
     JSON,
     Boolean,
@@ -22,6 +20,9 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column
+
+from app.db.session import TenantBase
+from app.models.base import SoftDeleteMixin, TenantBaseModel
 
 
 class RiskMethodologyType(str, enum.Enum):

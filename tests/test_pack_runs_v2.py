@@ -5,11 +5,12 @@ import uuid
 from io import BytesIO
 
 import pytest
-from app.models.file import File, FileKind, FileScanStatus
-from app.models.models import Tenant
 from httpx import AsyncClient
 from openpyxl import Workbook
 from sqlalchemy import select
+
+from app.models.file import File, FileKind, FileScanStatus
+from app.models.models import Tenant
 
 
 @pytest.mark.anyio

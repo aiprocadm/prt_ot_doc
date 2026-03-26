@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.api.routes.safety_ops import _audit_event, _serialize_action, _serialize_finding
-from app.services.audit import AuditService
 from app.models.safety_ops import CorrectiveAction, Finding
+from app.services.audit import AuditService
 
 
 def test_serialize_finding_exposes_operational_projection_fields() -> None:

@@ -25,8 +25,6 @@ from app.db import AsyncSessionLocal, ensure_tenant_schema, session_scope
 from app.domains.files import s3
 from app.domains.files.utils import build_dated_prefix
 from app.domains.templating.renderer import render_docx
-from app.modules.templates.passport import inject_passport
-from app.modules.templates.service import build_passport
 from app.models.document import (
     Document,
     DocumentBatchItem,
@@ -48,39 +46,50 @@ from app.models.job_engine import (
 )
 from app.models.models import (
     Company,
+    EdoEnvelopeStatus,
     EdoMessage,
     EdoStatus,
-    EdoEnvelopeStatus,
     EdoStatusHistory,
+    Inspection,
     Person,
     PipelineRun,
     PipelineRunStatus,
+    PPEIssue,
+    RoleEnum,
     Template,
     TemplateVersion,
     Tenant,
     TrainingPlan,
     User,
-    RoleEnum,
-    PPEIssue,
-    Inspection,
     WebhookDelivery,
     WebhookEndpoint,
 )
-from app.repository import create_template
+from app.models.notifications import (
+    Notification,
+    NotificationChannel,
+    NotificationStatus,
+    NotificationType,
+    PlanTask,
+    PlanTaskStatus,
+    ReminderEntityType,
+    ReminderRule,
+)
 from app.modules.headers.engine import apply_headers_to_docx
 from app.modules.headers.repo import get_preset_by_code
+from app.modules.templates.passport import inject_passport
+from app.modules.templates.service import build_passport
+from app.modules.workflow.service import WorkflowService
+from app.repository import create_template
 from app.schemas.template import TemplateCreate, TemplateVersionMetadata
 from app.services.audit import AuditService
 from app.services.celery_app import celery_app
+from app.services.events import EventType
 from app.services.file_storage import FileStorageService
 from app.services.idempotency import IdempotencyService, cleanup_idempotency_keys
-from app.services.events import EventType
+from app.services.notifications import send_notification
 from app.services.obligations import process_task_reminders
 from app.services.outbox import OutboxProcessor, OutboxService
-from app.services.notifications import send_notification, build_dedup_key
 from app.services.reminders import evaluate_due_date
-from app.models.notifications import Notification, NotificationChannel, NotificationStatus, NotificationType, ReminderRule, ReminderEntityType, PlanTask, PlanTaskStatus
-from app.modules.workflow.service import WorkflowService
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -1229,7 +1238,7 @@ def process_inbound_webhook(*, source: str, tenant_slug: str, payload: dict[str,
 
 async def _process_inbound_webhook(*, source: str, tenant_slug: str, payload: dict[str, Any]) -> int:
     from app.models.document import DocumentVersion, DocumentVersionStatus
-    from app.models.models import EdoEnvelope, EdoEnvelopeStatus
+    from app.models.models import EdoEnvelope
 
     async with session_scope(tenant=tenant_slug) as session:
         if source != "edo":
@@ -1432,7 +1441,8 @@ def apply_headers_job(*, job_id: str, tenant_slug: str) -> dict[str, str]:
 @celery_app.task(name="app.tasks.convert_pdf_job")
 def convert_pdf_job(*, tenant_id: str, input_file_id: str, pdf_run_id: str, options: dict, correlation_id: str | None = None) -> dict[str, object]:
     async def _run() -> dict[str, object]:
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timezone
+
         from sqlalchemy import select
 
         from app.models.file import File
@@ -1530,7 +1540,7 @@ def convert_pdf_job(*, tenant_id: str, input_file_id: str, pdf_run_id: str, opti
 @celery_app.task(name="files.index_content", bind=True, max_retries=3, default_retry_delay=30)
 def index_file_content_job(self, tenant_slug: str, version_id: str | None = None, file_id: str | None = None):
     async def _run() -> dict[str, str]:
-        from app.modules.files.service import index_file_version, index_file_record
+        from app.modules.files.service import index_file_record, index_file_version
 
         with tenant_context(tenant_slug):
             ensure_tenant_schema(tenant_slug)
@@ -1630,7 +1640,6 @@ def send_edo_job(*, message_id: str, tenant_id: str, provider_code: str) -> dict
 @celery_app.task(name="edo_status_simulation_job")
 def edo_status_simulation_job(*, message_id: str, tenant_id: str, status: str) -> dict[str, str]:
     async def _run() -> dict[str, str]:
-        from sqlalchemy import select
 
         async with session_scope(tenant=tenant_id) as session:
             message = await session.get(EdoMessage, message_id)

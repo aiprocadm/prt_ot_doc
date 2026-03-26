@@ -1,5 +1,5 @@
-from fastapi import HTTPException, status
 import pytest
+from fastapi import HTTPException, status
 
 from app.api.routes.edo_workflow import _validate_approval_rules
 

@@ -12,12 +12,12 @@ from app.domains.packs.assets import (
     build_inline_image_descriptor,
 )
 from app.domains.packs.definitions import (
-    PACK_CODE_INCIDENT,
-    PACK_CODE_NEW_COMPANY,
-    PACK_CODE_SITE_ACCESS,
     PACK_CODE_CEO_SHIELD,
+    PACK_CODE_INCIDENT,
     PACK_CODE_INSPECTION_PREP,
+    PACK_CODE_NEW_COMPANY,
     PACK_CODE_OPO,
+    PACK_CODE_SITE_ACCESS,
     PACK_CODE_WASTE,
 )
 

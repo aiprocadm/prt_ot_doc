@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+
 from app.models.models import RoleEnum
 from app.models.safety_core import RiskMeasure
 

@@ -1,7 +1,7 @@
 """FastAPI middleware for tenant extraction and context propagation."""
 from __future__ import annotations
 
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from fastapi import HTTPException, status
 from sqlalchemy import or_, select
@@ -11,12 +11,12 @@ from starlette.responses import Response
 from starlette.types import ASGIApp
 
 from app.api.deps.tracing import get_trace_id
-from app.core.security import verify_token
 from app.core.config import get_settings
-from app.core.tenant import TENANT_HEADER, TENANT_HEADER_ALIASES, tenant_required
+from app.core.security import verify_token
+from app.core.tenant import TENANT_HEADER, tenant_required
 from app.db.session import AsyncSessionLocal
-from app.modules.tenancy.context import TenantContext, reset_tenant_context, set_tenant_context
 from app.models.models import Tenant, TenantQuota, TenantSettings
+from app.modules.tenancy.context import TenantContext, reset_tenant_context, set_tenant_context
 
 
 class TenantMiddleware(BaseHTTPMiddleware):
@@ -68,6 +68,8 @@ class TenantMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):  # type: ignore[override]
         path = request.url.path
+        correlation_id = get_trace_id(request, get_settings().trace_header_name)
+        request.state.correlation_id = correlation_id
 
         if path == "/metrics" and not self._metrics_enabled:
             return Response(status_code=status.HTTP_404_NOT_FOUND)
@@ -80,10 +82,9 @@ class TenantMiddleware(BaseHTTPMiddleware):
         ):
             if path.startswith("/api/v1/webhooks/inbound/") or path.startswith("/api/v1/edo/webhooks/") or path.startswith("/api/v1/edo/webhook/status"):
                 await self._preload_webhook_tenant(request)
-            return await call_next(request)
-
-        correlation_id = get_trace_id(request, get_settings().trace_header_name)
-        request.state.correlation_id = correlation_id
+            response = await call_next(request)
+            response.headers["X-Correlation-Id"] = correlation_id
+            return response
 
         header_slug = request.headers.get(TENANT_HEADER)
         if path.startswith("/api/v1/") and not header_slug:
@@ -218,13 +219,21 @@ class TenantMiddleware(BaseHTTPMiddleware):
         if getattr(request.state, "tenant_record", None) is not None:
             return
 
-        tenant_candidates = ["test", get_settings().default_tenant_slug]
+        tenant_candidates: list[str] = []
+        for raw_value in (
+            request.headers.get(TENANT_HEADER),
+            request.headers.get("x-tenant-slug"),
+            request.query_params.get("tenant"),
+            request.query_params.get("tenant_slug"),
+            request.query_params.get("slug"),
+            get_settings().default_tenant_slug,
+        ):
+            normalized = str(raw_value or "").strip().lower()
+            if normalized and normalized not in tenant_candidates:
+                tenant_candidates.append(normalized)
         async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as session:
             for candidate in tenant_candidates:
-                slug = str(candidate or "").strip().lower()
-                if not slug:
-                    continue
-                tenant = (await session.execute(select(Tenant).where(or_(Tenant.slug == slug, Tenant.code == slug)))).scalar_one_or_none()
+                tenant = (await session.execute(select(Tenant).where(or_(Tenant.slug == candidate, Tenant.code == candidate)))).scalar_one_or_none()
                 if tenant is None or not tenant.is_active:
                     continue
                 request.state.tenant_record = tenant

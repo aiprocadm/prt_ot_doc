@@ -6,7 +6,14 @@ underlying table declarations yet, which keeps Alembic/import compatibility
 stable while allowing new code to stop depending on the mega-module.
 """
 
-from app.models.models import Tenant, TenantCounter, TenantIntegrationKey, TenantQuota, TenantQuotaCounter, TenantSettings
+from app.models.models import (
+    Tenant,
+    TenantCounter,
+    TenantIntegrationKey,
+    TenantQuota,
+    TenantQuotaCounter,
+    TenantSettings,
+)
 
 __all__ = [
     "Tenant",

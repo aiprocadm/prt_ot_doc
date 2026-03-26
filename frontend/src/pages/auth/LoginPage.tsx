@@ -3,6 +3,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useLocation, useNavigate } from "react-router-dom";
 
+import { tenantStorage } from "@/api/tenantStorage";
+import { TENANT_OPTIONS } from "@/config/tenants";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,7 +13,14 @@ import { loginSchema, type LoginFormValues } from "@/types/forms/auth";
 import { consumeReturnTo } from "@/utils/returnTo";
 
 const LoginPage = () => {
-  const form = useForm<LoginFormValues>({ resolver: zodResolver(loginSchema), defaultValues: { email: "", password: "" } });
+  const form = useForm<LoginFormValues>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: {
+      tenant: tenantStorage.getTenant()?.slug ?? TENANT_OPTIONS[0]?.slug ?? "",
+      email: "",
+      password: ""
+    }
+  });
   const { login, loading, isAuthenticated } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
@@ -39,6 +48,18 @@ const LoginPage = () => {
         <p className="text-sm text-muted-foreground">Авторизуйтесь для управления документами</p>
       </div>
       <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
+        <div className="space-y-2">
+          <Label htmlFor="tenant">Tenant</Label>
+          <Input id="tenant" list="tenant-options" {...form.register("tenant")} autoComplete="organization" placeholder="demo" />
+          <datalist id="tenant-options">
+            {TENANT_OPTIONS.map((tenant) => (
+              <option key={tenant.slug} value={tenant.slug}>
+                {tenant.name}
+              </option>
+            ))}
+          </datalist>
+          {form.formState.errors.tenant && <p className="text-xs text-destructive">{form.formState.errors.tenant.message}</p>}
+        </div>
         <div className="space-y-2">
           <Label htmlFor="email">E-mail</Label>
           <Input id="email" type="email" {...form.register("email")} autoComplete="email" />

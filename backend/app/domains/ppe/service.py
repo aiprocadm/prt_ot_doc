@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,13 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.models import (
     Journal,
     JournalEntry,
-    JournalType,
-    PPENorm,
+    Person,
+    Position,
     PPEIssue,
     PPEIssueStatus,
     PPEItem,
-    Person,
-    Position,
+    PPENorm,
 )
 
 

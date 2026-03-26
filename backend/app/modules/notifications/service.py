@@ -3,6 +3,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Final
 
+from fastapi import HTTPException, status
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.models.models import Inspection, PPEIssue, Tenant, TrainingPlan
 from app.models.notifications import (
     Notification,
@@ -24,9 +28,6 @@ from app.modules.notifications.schemas import (
     NotificationTemplateIn,
     NotificationTemplateOut,
 )
-from fastapi import HTTPException, status
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 CALENDAR_SOURCES: Final[tuple[str, ...]] = ("task", "training", "ppe", "inspection")
 

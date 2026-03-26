@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 
 import { apiClient } from "@/api/client";
+import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
@@ -99,16 +100,23 @@ const OutboxPage = () => {
             <Input value={eventTypes} onChange={(e) => setEventTypes(e.target.value)} placeholder="event types" />
             <Button type="submit" disabled={loading}>Create</Button>
           </form>
-          <ul className="space-y-1 text-sm">
-            {endpoints.map((item) => (
-              <li key={item.id}>
-                {item.url} — <b>{item.enabled ? "enabled" : "disabled"}</b> ({item.subscribed_events.join(", ") || "all"})
-                <Button size="sm" className="ml-2" onClick={() => void runTest(item.id)} disabled={loading}>
-                  Test
-                </Button>
-              </li>
-            ))}
-          </ul>
+          {endpoints.length === 0 ? (
+            <EmptyState
+              title="Webhook endpoints отсутствуют"
+              description="Создайте первый endpoint, чтобы начать проверку delivery и интеграционных уведомлений."
+            />
+          ) : (
+            <ul className="space-y-1 text-sm">
+              {endpoints.map((item) => (
+                <li key={item.id}>
+                  {item.url} — <b>{item.enabled ? "enabled" : "disabled"}</b> ({item.subscribed_events.join(", ") || "all"})
+                  <Button size="sm" className="ml-2" onClick={() => void runTest(item.id)} disabled={loading}>
+                    Test
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
         </CardContent>
       </Card>
       <Card>
@@ -116,13 +124,20 @@ const OutboxPage = () => {
           <CardTitle>Deliveries</CardTitle>
         </CardHeader>
         <CardContent>
-          <ul className="space-y-1 text-sm">
-            {deliveries.slice(0, 20).map((item) => (
-              <li key={item.id}>
-                {item.event_id} → {item.endpoint_id} — <b>{item.status}</b> (attempts: {item.attempts})
-              </li>
-            ))}
-          </ul>
+          {deliveries.length === 0 ? (
+            <EmptyState
+              title="Delivery history пуста"
+              description="После первой отправки webhook здесь появится история доставок."
+            />
+          ) : (
+            <ul className="space-y-1 text-sm">
+              {deliveries.slice(0, 20).map((item) => (
+                <li key={item.id}>
+                  {item.event_id} → {item.endpoint_id} — <b>{item.status}</b> (attempts: {item.attempts})
+                </li>
+              ))}
+            </ul>
+          )}
         </CardContent>
       </Card>
       <Card>
@@ -130,13 +145,20 @@ const OutboxPage = () => {
           <CardTitle>Job outbox timeline / events emitted</CardTitle>
         </CardHeader>
         <CardContent>
-          <ul className="space-y-1 text-sm">
-            {items.map((item) => (
-              <li key={item.id}>
-                {item.event_type} — <b>{item.status}</b> (attempts: {item.attempts})
-              </li>
-            ))}
-          </ul>
+          {items.length === 0 ? (
+            <EmptyState
+              title="Outbox events отсутствуют"
+              description="После первых фоновых событий здесь появится timeline интеграционных сообщений."
+            />
+          ) : (
+            <ul className="space-y-1 text-sm">
+              {items.map((item) => (
+                <li key={item.id}>
+                  {item.event_type} — <b>{item.status}</b> (attempts: {item.attempts})
+                </li>
+              ))}
+            </ul>
+          )}
           <Button className="mt-3" onClick={() => void load()} disabled={loading}>
             Refresh
           </Button>

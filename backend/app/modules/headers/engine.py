@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from io import BytesIO
 import re
+from io import BytesIO
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from lxml import etree

@@ -5,10 +5,16 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.models.models import ClientPackagePreset, ClientPackageRun, ClientPortalToken, PackageEvent, PackageRequirement, PackageRunStatus
+from app.models.models import (
+    ClientPackagePreset,
+    ClientPackageRun,
+    ClientPortalToken,
+    PackageEvent,
+    PackageRequirement,
+    PackageRunStatus,
+)
 from app.services.file_storage import FileStorageService
 
 

@@ -190,6 +190,7 @@ async def test_tenant_middleware_allows_exact_public_prefix() -> None:
     response = await middleware.dispatch(request, call_next)
     assert response.status_code == 200
     assert response.body == b"ok"
+    assert response.headers["X-Correlation-Id"]
 
 
 @pytest.mark.asyncio

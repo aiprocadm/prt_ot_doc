@@ -5,6 +5,12 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Literal
 
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.rate_limit import ip_subject_key, limiter, login_per_identity
@@ -16,14 +22,9 @@ from app.core.security import (
     rbac,
     verify_token,
 )
+from app.core.tenant_validation import TenantContextValidator
 from app.models.models import Tenant, User
 from app.services.auth import verify_password
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
-from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter()
 

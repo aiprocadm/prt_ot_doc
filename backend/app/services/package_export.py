@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import logging
 import io
+import logging
 import re
 import unicodedata
 import zipfile
@@ -12,8 +12,8 @@ from typing import Callable, Iterable, Sequence
 
 from app.core.config import get_settings
 from app.core.metrics import PipelineStage, PipelineType, StageResult, get_metrics
-from app.domains.files.utils import build_dated_prefix
 from app.domains.files import s3
+from app.domains.files.utils import build_dated_prefix
 from app.services.file_storage import FileStorageService
 
 logger = logging.getLogger(__name__)

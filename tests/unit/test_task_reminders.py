@@ -5,7 +5,14 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sqlalchemy import select
 
-from app.models.models import Inspection, InspectionStatus, InspectionType, Outbox, Prescription, PrescriptionStatus
+from app.models.models import (
+    Inspection,
+    InspectionStatus,
+    InspectionType,
+    Outbox,
+    Prescription,
+    PrescriptionStatus,
+)
 from app.models.obligations import Task, TaskPriority, TaskReminderChannel, TaskStatus
 from app.services.obligations import process_task_reminders
 

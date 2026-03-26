@@ -12,11 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
+from app.core.tenant_validation import TenantContextValidator
 from app.domains.ppe import build_journal_export
 from app.models.models import Journal, JournalEntry, Person, Tenant
 from app.schemas.journal import (
-    JournalCreate,
-    JournalEntryCreate,
     JournalEntryPage,
     JournalEntryRead,
     JournalEntryUpdate,
@@ -24,8 +23,6 @@ from app.schemas.journal import (
     JournalRead,
     JournalUpdate,
 )
-from app.core.permission_checker import PermissionChecker
-from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(prefix="/journals", tags=["journals"])
 

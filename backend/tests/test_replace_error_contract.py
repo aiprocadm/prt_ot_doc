@@ -1,5 +1,5 @@
-from fastapi import HTTPException, status
 import pytest
+from fastapi import HTTPException, status
 from starlette.requests import Request
 
 from app.api.routes.replace import (

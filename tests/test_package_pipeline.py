@@ -1,14 +1,14 @@
 from types import SimpleNamespace
 
-from app.services.package_pipeline import (
-    PACK_TYPE_CODE_MAP,
-    DocumentPackageType,
-    build_idempotency_key,
-)
 from app.domains.packs.definitions import (
     PACK_CODE_INCIDENT,
     PACK_CODE_NEW_COMPANY,
     PACK_CODE_SITE_ACCESS,
+)
+from app.services.package_pipeline import (
+    PACK_TYPE_CODE_MAP,
+    DocumentPackageType,
+    build_idempotency_key,
 )
 
 

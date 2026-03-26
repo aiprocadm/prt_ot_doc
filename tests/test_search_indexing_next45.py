@@ -7,7 +7,12 @@ from sqlalchemy import select
 
 from app.models.models import Tenant
 from app.modules.files.extractors import extract_text_docx
-from app.modules.files.models import FileContentIndex, FileContentIndexStatus, FileRecord, FileStatus
+from app.modules.files.models import (
+    FileContentIndex,
+    FileContentIndexStatus,
+    FileRecord,
+    FileStatus,
+)
 from app.modules.files.service import index_file_record
 from app.modules.search.service import SearchService
 

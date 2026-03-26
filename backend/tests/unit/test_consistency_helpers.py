@@ -4,7 +4,7 @@ import pytest
 from fastapi import HTTPException, status
 
 from app.core.correlation_id import CorrelationIDManager, get_logger
-from app.core.errors import ErrorBuilder, ErrorDetail, ERROR_CODES
+from app.core.errors import ERROR_CODES, ErrorBuilder, ErrorDetail
 from app.core.permission_checker import PermissionAction, PermissionChecker
 from app.core.tenant_validation import TenantContextValidator
 from app.models.models import Tenant
@@ -47,6 +47,23 @@ class TestErrorBuilder:
         assert error.message == "Minimal error"
         assert error.field is None
         assert error.details is None
+        assert error.timestamp is not None
+
+    def test_build_uses_context_correlation_id_when_missing(self):
+        """Test builder falls back to active correlation context."""
+        token = CorrelationIDManager.set("ctx-corr-123")
+        try:
+            error = (
+                ErrorBuilder()
+                .with_code("CTX_ERROR")
+                .with_message("Context backed error")
+                .build()
+            )
+        finally:
+            CorrelationIDManager.reset(token)
+
+        assert error.correlation_id == "ctx-corr-123"
+        assert error.timestamp is not None
 
     def test_build_missing_code_raises(self):
         """Test that missing code raises ValueError."""
@@ -171,8 +188,9 @@ class TestTenantContextValidator:
 
     def test_ensure_session_tenant_match(self):
         """Test ensure_session_tenant passes if session tenant matches."""
-        from sqlalchemy.ext.asyncio import AsyncSession
         from unittest.mock import MagicMock
+
+        from sqlalchemy.ext.asyncio import AsyncSession
 
         session = MagicMock(spec=AsyncSession)
         session.info = {"tenant": "test-tenant"}
@@ -182,8 +200,9 @@ class TestTenantContextValidator:
 
     def test_ensure_session_tenant_mismatch_raises(self):
         """Test ensure_session_tenant raises on mismatch."""
-        from sqlalchemy.ext.asyncio import AsyncSession
         from unittest.mock import MagicMock
+
+        from sqlalchemy.ext.asyncio import AsyncSession
 
         session = MagicMock(spec=AsyncSession)
         session.info = {"tenant": "tenant-a"}
@@ -216,6 +235,18 @@ class TestCorrelationIDManager:
         """Test clearing correlation ID."""
         CorrelationIDManager.set("test-456")
         CorrelationIDManager.clear()
+        assert CorrelationIDManager.get() is None
+
+    def test_reset_restores_previous_value(self):
+        """Test reset restores prior correlation context."""
+        CorrelationIDManager.clear()
+        first_token = CorrelationIDManager.set("outer")
+        second_token = CorrelationIDManager.set("inner")
+
+        CorrelationIDManager.reset(second_token)
+        assert CorrelationIDManager.get() == "outer"
+
+        CorrelationIDManager.reset(first_token)
         assert CorrelationIDManager.get() is None
 
     def test_default_none(self):

@@ -2,7 +2,15 @@ from __future__ import annotations
 
 from sqlalchemy import select
 
-from app.models.models import Company, PipelineRun, PipelineRunStatus, RoleEnum, Site, TemplateVersion, TemplateVersionStatus
+from app.models.models import (
+    Company,
+    PipelineRun,
+    PipelineRunStatus,
+    RoleEnum,
+    Site,
+    TemplateVersion,
+    TemplateVersionStatus,
+)
 from app.modules.headers.models import HeaderFooterPreset
 
 

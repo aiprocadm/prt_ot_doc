@@ -6,8 +6,8 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.tenant import get_current_tenant
 from app.core.rbac_abac import actor_from_claims, apply_abac_filters
+from app.core.tenant import get_current_tenant
 from app.models.models import (
     Company,
     Person,

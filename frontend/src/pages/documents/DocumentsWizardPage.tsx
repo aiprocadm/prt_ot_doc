@@ -371,21 +371,25 @@ const DocumentsWizardPage = () => {
                   variant="outline"
                   disabled={!canCallApi || !companyId}
                   onClick={async () => {
-                    if (!companyId) return;
-                    const preview = await previewBranding({
-                      company_id: companyId,
-                      site_id: siteId || undefined,
-                      preset_code: headerPreset || undefined,
-                      document_title: templateCode || "Branded document",
-                      document_number: `preview-${templateVersion}`,
-                      watermark_override: { enabled: true, text: "PREVIEW" }
-                    });
-                    pushBrandingPreview(preview);
-                    setPartial({
-                      companyId: (preview.wizard_defaults.company_id as string | undefined) ?? companyId,
-                      siteId: (preview.wizard_defaults.site_id as string | undefined) ?? siteId,
-                      headerPreset: (preview.wizard_defaults.preset_code as string | undefined) ?? headerPreset,
-                    });
+                    try {
+                      if (!companyId) return;
+                      const preview = await previewBranding({
+                        company_id: companyId,
+                        site_id: siteId || undefined,
+                        preset_code: headerPreset || undefined,
+                        document_title: templateCode || "Branded document",
+                        document_number: `preview-${templateVersion}`,
+                        watermark_override: { enabled: true, text: "PREVIEW" }
+                      });
+                      pushBrandingPreview(preview);
+                      setPartial({
+                        companyId: (preview.wizard_defaults.company_id as string | undefined) ?? companyId,
+                        siteId: (preview.wizard_defaults.site_id as string | undefined) ?? siteId,
+                        headerPreset: (preview.wizard_defaults.preset_code as string | undefined) ?? headerPreset,
+                      });
+                    } catch (error) {
+                      toast.error(error instanceof Error ? error.message : "Не удалось собрать branded preview");
+                    }
                   }}
                 >
                   Собрать branded preview
@@ -484,15 +488,19 @@ const DocumentsWizardPage = () => {
               <Button
                 disabled={!canCallApi || !docxFile || !replaceMapFile}
                 onClick={async () => {
-                  if (!docxFile || !replaceMapFile) return;
-                  const result = await replaceDryRun({
-                    docxFile,
-                    replaceMapFile,
-                    idempotencyKey
-                  });
-                  setPartial({ replaceDryRun: result });
-                  const fullReport = await getReplaceReport(result.report_id, { limit: 100 });
-                  setPartial({ replaceDryRun: { ...result, preview_samples: fullReport.rows } });
+                  try {
+                    if (!docxFile || !replaceMapFile) return;
+                    const result = await replaceDryRun({
+                      docxFile,
+                      replaceMapFile,
+                      idempotencyKey
+                    });
+                    setPartial({ replaceDryRun: result });
+                    const fullReport = await getReplaceReport(result.report_id, { limit: 100 });
+                    setPartial({ replaceDryRun: { ...result, preview_samples: fullReport.rows } });
+                  } catch (error) {
+                    toast.error(error instanceof Error ? error.message : "Не удалось выполнить dry-run replace");
+                  }
                 }}
               >
                 Выполнить dry-run
@@ -517,15 +525,19 @@ const DocumentsWizardPage = () => {
                 <Button
                   disabled={!canCallApi || !sourceFile || !templateCode || !companyId}
                   onClick={async () => {
-                    if (!sourceFile) return;
-                    const response = await generateDocumentsBatch({
-                      file: sourceFile,
-                      templateCode,
-                      templateVersion,
-                      companyId
-                    });
-                    setPartial({ batch: response });
-                    toast.success("Batch запущен");
+                    try {
+                      if (!sourceFile) return;
+                      const response = await generateDocumentsBatch({
+                        file: sourceFile,
+                        templateCode,
+                        templateVersion,
+                        companyId
+                      });
+                      setPartial({ batch: response });
+                      toast.success("Batch запущен");
+                    } catch (error) {
+                      toast.error(error instanceof Error ? error.message : "Не удалось запустить batch");
+                    }
                   }}
                 >
                   Запустить batch по строкам
@@ -534,26 +546,30 @@ const DocumentsWizardPage = () => {
                   variant="outline"
                   disabled={!canCallApi || !templateCode || !companyId}
                   onClick={async () => {
-                    const payload = {
-                      template_code: templateCode,
-                      template_version: templateVersion,
-                      company_id: companyId,
-                      data: {
-                        preset,
-                        mapping,
-                        headerPreset,
-                        siteId: siteId || null,
-                        branding_preview: brandingPreview?.apply_headers_payload ?? null,
-                        reproducibility: brandingPreview?.profile.reproducibility ?? null
+                    try {
+                      const payload = {
+                        template_code: templateCode,
+                        template_version: templateVersion,
+                        company_id: companyId,
+                        data: {
+                          preset,
+                          mapping,
+                          headerPreset,
+                          siteId: siteId || null,
+                          branding_preview: brandingPreview?.apply_headers_payload ?? null,
+                          reproducibility: brandingPreview?.profile.reproducibility ?? null
+                        }
+                      };
+                      const task = await generateDocument(payload, idempotencyKey);
+                      const status = await getGenerationTaskStatus(task.task_id);
+                      setPartial({ taskId: task.task_id });
+                      const run = await getPipelineRun(task.task_id);
+                      setPartial({ pipelineRun: run });
+                      if (status.status === "failed" || status.status === "error") {
+                        toast.error(status.error ?? "Pipeline завершился с ошибкой");
                       }
-                    };
-                    const task = await generateDocument(payload, idempotencyKey);
-                    const status = await getGenerationTaskStatus(task.task_id);
-                    setPartial({ taskId: task.task_id });
-                    const run = await getPipelineRun(task.task_id);
-                    setPartial({ pipelineRun: run });
-                    if (status.status === "failed" || status.status === "error") {
-                      toast.error(status.error ?? "Pipeline завершился с ошибкой");
+                    } catch (error) {
+                      toast.error(error instanceof Error ? error.message : "Не удалось запустить single pipeline");
                     }
                   }}
                 >
@@ -614,13 +630,17 @@ const DocumentsWizardPage = () => {
                 variant="outline"
                 disabled={!pipelineRun?.artifacts}
                 onClick={async () => {
-                  const fileId = String((pipelineRun?.artifacts?.all as Array<{ file_id?: string }> | undefined)?.[0]?.file_id ?? "");
-                  if (!fileId) {
-                    toast.error("Файл артефакта не найден.");
-                    return;
+                  try {
+                    const fileId = String((pipelineRun?.artifacts?.all as Array<{ file_id?: string }> | undefined)?.[0]?.file_id ?? "");
+                    if (!fileId) {
+                      toast.error("Файл артефакта не найден.");
+                      return;
+                    }
+                    const link = await fetchFileDownloadLink(fileId);
+                    window.open(link.url, "_blank", "noopener,noreferrer");
+                  } catch (error) {
+                    toast.error(error instanceof Error ? error.message : "Не удалось скачать артефакт");
                   }
-                  const link = await fetchFileDownloadLink(fileId);
-                  window.open(link.url, "_blank", "noopener,noreferrer");
                 }}
               >
                 Скачать первый артефакт (ZIP/PDF)

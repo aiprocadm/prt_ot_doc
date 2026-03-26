@@ -5,8 +5,8 @@ Revises: 20260316_next45_notifications_autotasks_calendar
 Create Date: 2026-03-17 00:00:00.000000
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "20260317_next46_content_search_archive"

@@ -10,7 +10,6 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-
 # revision identifiers, used by Alembic.
 revision: str = "20250320_risk_assessment_action_plan"
 down_revision: str | tuple[str, ...] = "20250318_pack_item_template_version"

@@ -7,6 +7,7 @@ import logging
 from datetime import datetime, timezone
 from io import StringIO
 from typing import Annotated, Any
+from uuid import UUID
 
 from fastapi import (
     APIRouter,
@@ -14,31 +15,37 @@ from fastapi import (
     Form,
     Header,
     HTTPException,
+    Query,
     Request,
     Response,
     UploadFile,
     status,
 )
-from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.dependencies import get_session, get_tenant_record
-from app.core.payload_constraints import PayloadConstraintError, enforce_mapping_constraints
+from app.api.dependencies import get_file_storage_service, get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
-from app.core.idempotency import compute_request_hash
-from app.core.rate_limit import generate_per_tenant, ip_tenant_key, limiter
 from app.core.config import get_settings
-from app.core.tracing import get_trace_id
+from app.core.idempotency import compute_request_hash
+from app.core.payload_constraints import PayloadConstraintError, enforce_mapping_constraints
+from app.core.rate_limit import generate_per_tenant, ip_tenant_key, limiter
 from app.core.security import AccessContext, abac, rbac
+from app.core.tracing import get_trace_id
 from app.models.document import (
+    Document,
     DocumentBatchItem,
     DocumentBatchItemStatus,
     DocumentBatchRun,
     DocumentBatchStatus,
+    DocumentJobStatus,
+    DocumentStatus,
+    DocumentVersion,
+    DocumentVersionStatus,
 )
+from app.models.file import File
 from app.models.models import (
     Company,
     Person,
@@ -50,7 +57,17 @@ from app.models.models import (
     Tenant,
     User,
 )
-from app.schemas.document import DocumentBatchRunRead, DocumentRead, DocumentStatusUpdate
+from app.schemas.document import (
+    DocumentBatchRunRead,
+    DocumentCompanySummaryRead,
+    DocumentFileLinkRead,
+    DocumentHistoryEntryRead,
+    DocumentPaginationRead,
+    DocumentRead,
+    DocumentStatusUpdate,
+    DocumentUiListResponse,
+    DocumentUiRead,
+)
 from app.schemas.task import TaskAcceptedResponse, TaskStatusResponse
 from app.services.audit import AuditService
 from app.services.billing import BillingService
@@ -59,9 +76,10 @@ from app.services.documents import (
     DocumentWorkflowService,
     InvalidStatusTransitionError,
 )
+from app.services.file_storage import FileStorageService
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 from app.services.pipelines_orchestrator import DocumentPipelineOrchestrator
-from app.tasks import celery_app, generate_document_task, generate_document_batch_item_task
+from app.tasks import generate_document_batch_item_task, generate_document_task
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -87,6 +105,18 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | N
 
 
 _DOCUMENT_RUN_ROLES = ["admin", "employee", "client_admin"]
+_DOCUMENT_READ_ROLES = [
+    "owner",
+    "admin",
+    "employee",
+    "line_manager",
+    "hr",
+    "ot_specialist",
+    "ot_head",
+    "client_admin",
+    "client_user",
+    "clerk",
+]
 _DOCUMENT_STATUS_ROLES = ["admin"]
 
 AccessDep = Depends(
@@ -94,6 +124,13 @@ AccessDep = Depends(
         _tenant_resource_id,
         required_roles=_DOCUMENT_RUN_ROLES,
         action="manage documents",
+    )
+)
+ReadAccessDep = Depends(
+    abac(
+        _tenant_resource_id,
+        required_roles=_DOCUMENT_READ_ROLES,
+        action="read documents",
     )
 )
 StatusAccessDep = Depends(rbac(_DOCUMENT_STATUS_ROLES))
@@ -158,6 +195,302 @@ class DocGenerateRequest(BaseModel):
         if self.inline_data is None and self.input_source_id is None and self.company_id is None:
             raise ValueError("company_id required for legacy mode")
         return self
+
+
+def _map_document_status(document: Document) -> str:
+    if document.job and document.job.status in {DocumentJobStatus.QUEUED, DocumentJobStatus.PROCESSING}:
+        return "generating"
+    if document.job and document.job.status is DocumentJobStatus.FAILED:
+        return "error"
+    if document.status in {DocumentStatus.GENERATED, DocumentStatus.APPROVED, DocumentStatus.SIGNED, DocumentStatus.ARCHIVED}:
+        return "ready"
+    if document.status is DocumentStatus.REVOKED:
+        return "error"
+    return "draft"
+
+
+def _document_matches_frontend_status(document: Document, status_value: str | None) -> bool:
+    if not status_value:
+        return True
+    return _map_document_status(document) == status_value
+
+
+def _build_file_link(
+    *,
+    file_record: File | None,
+    document_id: str,
+    download_path: str,
+    storage_key: str | None = None,
+    created_at: datetime | None = None,
+) -> DocumentFileLinkRead | None:
+    if file_record is None and not storage_key:
+        return None
+    name = None
+    if file_record is not None:
+        name = file_record.original_name
+    elif storage_key:
+        name = storage_key.rsplit("/", 1)[-1]
+    return DocumentFileLinkRead(
+        id=file_record.id if file_record is not None else f"document:{document_id}",
+        url=download_path,
+        name=name or f"document-{document_id}",
+        mime_type=file_record.mime if file_record is not None else "application/octet-stream",
+        size=file_record.size if file_record is not None else 0,
+        created_at=file_record.created_at if file_record is not None else (created_at or datetime.now(timezone.utc)),
+    )
+
+
+def _resolve_latest_version(document: Document) -> DocumentVersion | None:
+    if not document.versions:
+        return None
+    return max(document.versions, key=lambda version: (version.version_number, version.created_at))
+
+
+def _build_document_history(document: Document) -> list[DocumentHistoryEntryRead]:
+    history: list[DocumentHistoryEntryRead] = []
+    for version in sorted(document.versions, key=lambda item: (item.version_number, item.created_at), reverse=True):
+        history.append(
+            DocumentHistoryEntryRead(
+                id=version.id,
+                created_at=version.created_at,
+                updated_at=version.updated_at,
+                document_id=version.document_id,
+                status=version.status.value if isinstance(version.status, DocumentVersionStatus) else str(version.status),
+                storage=_build_file_link(
+                    file_record=version.file,
+                    document_id=document.id,
+                    download_path=f"/api/v1/documents/{document.id}/download",
+                    storage_key=version.file_key,
+                    created_at=version.created_at,
+                ),
+            )
+        )
+    return history
+
+
+def _build_document_ui_read(document: Document) -> DocumentUiRead:
+    latest_version = _resolve_latest_version(document)
+    current_file = document.file or (latest_version.file if latest_version else None)
+    company = document.company
+    if company is None:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Document company is missing")
+    template_name = (document.template.name if document.template else None) or f"Document {document.id[:8]}"
+    template_type = (document.template.domain if document.template else None) or (document.template.code if document.template else None) or "document"
+    return DocumentUiRead(
+        id=document.id,
+        created_at=document.created_at,
+        updated_at=document.updated_at,
+        name=template_name,
+        type=template_type,
+        company=DocumentCompanySummaryRead(
+            id=company.id,
+            created_at=company.created_at,
+            updated_at=company.updated_at,
+            name=company.name,
+            inn=company.inn or "",
+            status="active",
+        ),
+        status=_map_document_status(document),
+        version=str(latest_version.version_number if latest_version else 1),
+        current_version_id=latest_version.id if latest_version else None,
+        template_id=document.template_id,
+        storage=_build_file_link(
+            file_record=current_file,
+            document_id=document.id,
+            download_path=f"/api/v1/documents/{document.id}/download",
+            storage_key=document.storage_key or (latest_version.file_key if latest_version else None),
+            created_at=document.updated_at,
+        ),
+        history=_build_document_history(document),
+    )
+
+
+def _document_read_query(tenant_id: str):
+    return (
+        select(Document)
+        .where(Document.tenant_id == tenant_id)
+        .options(
+            selectinload(Document.company),
+            selectinload(Document.template),
+            selectinload(Document.file),
+            selectinload(Document.job),
+            selectinload(Document.versions).selectinload(DocumentVersion.file),
+        )
+    )
+
+
+@router.get("", response_model=DocumentUiListResponse)
+async def list_documents(
+    tenant: Tenant = TenantDep,
+    session: AsyncSession = SessionDep,
+    access: AccessContext = ReadAccessDep,
+    search: str | None = Query(default=None),
+    status_value: str | None = Query(default=None, alias="status"),
+    company_id: str | None = Query(default=None),
+    type_value: str | None = Query(default=None, alias="type"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=10, ge=1, le=200),
+) -> DocumentUiListResponse:
+    access.ensure_tenant_access(tenant.id, action="read documents")
+
+    stmt = _document_read_query(str(tenant.id))
+    if company_id:
+        stmt = stmt.where(Document.company_id == company_id)
+
+    scoped_company_ids = access.claims.get("company_ids")
+    if isinstance(scoped_company_ids, list) and scoped_company_ids:
+        stmt = stmt.where(Document.company_id.in_([str(value) for value in scoped_company_ids]))
+    elif access.company_id:
+        stmt = stmt.where(Document.company_id == str(access.company_id))
+
+    if search:
+        pattern = f"%{search.strip()}%"
+        stmt = stmt.where(
+            or_(
+                Document.id.ilike(pattern),
+                Document.company.has(Company.name.ilike(pattern)),
+                Document.template.has(or_(Template.name.ilike(pattern), Template.code.ilike(pattern))),
+            )
+        )
+    if type_value:
+        stmt = stmt.where(
+            Document.template.has(
+                or_(Template.domain == type_value, Template.code == type_value)
+            )
+        )
+    if status_value == "generating":
+        stmt = stmt.where(
+            or_(
+                Document.job.has(status=DocumentJobStatus.QUEUED),
+                Document.job.has(status=DocumentJobStatus.PROCESSING),
+            )
+        )
+    elif status_value == "ready":
+        stmt = stmt.where(
+            Document.status.in_(
+                [
+                    DocumentStatus.GENERATED,
+                    DocumentStatus.APPROVED,
+                    DocumentStatus.SIGNED,
+                    DocumentStatus.ARCHIVED,
+                ]
+            )
+        )
+    elif status_value == "draft":
+        stmt = stmt.where(Document.status.in_([DocumentStatus.DRAFT, DocumentStatus.REVIEW]))
+    elif status_value == "error":
+        stmt = stmt.where(
+            or_(
+                Document.status == DocumentStatus.REVOKED,
+                Document.job.has(status=DocumentJobStatus.FAILED),
+            )
+        )
+
+    total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
+    rows = list(
+        (
+            await session.execute(
+                stmt.order_by(Document.updated_at.desc()).offset((page - 1) * page_size).limit(page_size)
+            )
+        ).scalars().all()
+    )
+
+    items: list[DocumentUiRead] = []
+    for document in rows:
+        access.ensure_abac(
+            action="read document",
+            company_id=document.company_id,
+            document_id=document.id,
+            document_status=document.status.value if hasattr(document.status, "value") else str(document.status),
+            document_owner_id=document.created_by,
+            site_id=document.site_id,
+            site_company_id=document.company_id,
+        )
+        items.append(_build_document_ui_read(document))
+
+    return DocumentUiListResponse(
+        items=items,
+        pagination=DocumentPaginationRead(page=page, page_size=page_size, total=total),
+    )
+
+
+@router.get("/{document_id}", response_model=DocumentUiRead)
+async def get_document(
+    document_id: str,
+    tenant: Tenant = TenantDep,
+    session: AsyncSession = SessionDep,
+    access: AccessContext = ReadAccessDep,
+) -> DocumentUiRead:
+    access.ensure_tenant_access(tenant.id, action="read document")
+    document = (
+        await session.execute(_document_read_query(str(tenant.id)).where(Document.id == document_id))
+    ).scalar_one_or_none()
+    if document is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
+    access.ensure_abac(
+        action="read document",
+        company_id=document.company_id,
+        document_id=document.id,
+        document_status=document.status.value if hasattr(document.status, "value") else str(document.status),
+        document_owner_id=document.created_by,
+        site_id=document.site_id,
+        site_company_id=document.company_id,
+    )
+    return _build_document_ui_read(document)
+
+
+@router.get("/{document_id}/status", response_model=DocumentUiRead)
+async def get_document_status(
+    document_id: str,
+    tenant: Tenant = TenantDep,
+    session: AsyncSession = SessionDep,
+    access: AccessContext = ReadAccessDep,
+) -> DocumentUiRead:
+    return await get_document(document_id=document_id, tenant=tenant, session=session, access=access)
+
+
+@router.get("/{document_id}/download")
+async def download_document(
+    document_id: str,
+    tenant: Tenant = TenantDep,
+    session: AsyncSession = SessionDep,
+    access: AccessContext = ReadAccessDep,
+    storage: FileStorageService = Depends(get_file_storage_service),
+) -> Response:
+    access.ensure_tenant_access(tenant.id, action="download document")
+    document = (
+        await session.execute(_document_read_query(str(tenant.id)).where(Document.id == document_id))
+    ).scalar_one_or_none()
+    if document is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
+    access.ensure_abac(
+        action="download document",
+        company_id=document.company_id,
+        document_id=document.id,
+        document_status=document.status.value if hasattr(document.status, "value") else str(document.status),
+        document_owner_id=document.created_by,
+        site_id=document.site_id,
+        site_company_id=document.company_id,
+    )
+
+    latest_version = _resolve_latest_version(document)
+    current_file = document.file or (latest_version.file if latest_version else None)
+    storage_key = document.storage_key or (current_file.storage_key if current_file else None) or (latest_version.file_key if latest_version else None)
+    if not storage_key:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document file not found")
+
+    try:
+        payload = storage.download(storage_key)
+    except KeyError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document file not found") from exc
+
+    filename = (current_file.original_name if current_file and current_file.original_name else f"document-{document.id}.bin").replace('"', "")
+    media_type = current_file.mime if current_file else "application/octet-stream"
+    return Response(
+        content=payload,
+        media_type=media_type,
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
 
 def _serialize_payload(payload: dict[str, Any]) -> str:
     try:

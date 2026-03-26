@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
 import app.modules.training.services as training_services
 from app.modules.training.services import TrainingEnrollmentService
 

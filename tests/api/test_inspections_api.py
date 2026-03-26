@@ -6,9 +6,7 @@ import pytest
 from fastapi import status
 from sqlalchemy import select
 
-from app.models.models import Outbox
-
-from app.models.models import InspectionStatus, RoleEnum
+from app.models.models import InspectionStatus, Outbox, RoleEnum
 from tests.utils.factories import TestDataFactory
 
 

@@ -6,6 +6,20 @@ import type { PaginatedState } from "@/stores/types";
 import type { ApiError, PaginatedResponse } from "@/types/dto/common";
 import type { DocumentDto, DocumentFiltersDto } from "@/types/dto/documents";
 
+type LegacyDocumentsResponse = {
+  items?: unknown;
+  pagination?: {
+    page?: number;
+    page_size?: number;
+    total?: number;
+  } | null;
+  total?: number;
+  limit?: number;
+  offset?: number;
+};
+
+type DocumentsResponse = PaginatedResponse<DocumentDto> | LegacyDocumentsResponse;
+
 interface GenerateDocumentPayload {
   template_code: string;
   template_version: number;
@@ -45,6 +59,47 @@ interface DocumentsState extends PaginatedState<DocumentDto, DocumentFiltersDto>
   getGenerationStatus: (taskId: string) => Promise<GenerationTaskStatus>;
   reset: () => void;
 }
+
+const isPositiveNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value > 0;
+
+const isNonNegativeNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0;
+
+const isPaginationRecord = (value: unknown): value is { page?: unknown; page_size?: unknown; total?: unknown } =>
+  typeof value === "object" && value !== null;
+
+const hasLegacyWindow = (value: DocumentsResponse): value is LegacyDocumentsResponse =>
+  "limit" in value || "offset" in value || "total" in value;
+
+const normalizeDocumentsResponse = (
+  payload: DocumentsResponse,
+  fallback: ReturnType<typeof defaultPagination>
+) => {
+  const items = Array.isArray(payload?.items) ? (payload.items as DocumentDto[]) : [];
+  const pagination = isPaginationRecord(payload.pagination) ? payload.pagination : null;
+  const pageSize = isPositiveNumber(pagination?.page_size)
+    ? pagination.page_size
+    : hasLegacyWindow(payload) && isPositiveNumber(payload.limit)
+      ? payload.limit
+      : fallback.page_size;
+  const offset = hasLegacyWindow(payload) && isNonNegativeNumber(payload.offset) ? payload.offset : (fallback.page - 1) * pageSize;
+  const page = isPositiveNumber(pagination?.page)
+    ? pagination.page
+    : Math.floor(offset / Math.max(pageSize, 1)) + 1;
+  const total = isNonNegativeNumber(pagination?.total)
+    ? pagination.total
+    : hasLegacyWindow(payload) && isNonNegativeNumber(payload.total)
+      ? payload.total
+      : items.length;
+
+  return {
+    items,
+    pagination: {
+      page,
+      page_size: pageSize,
+      total
+    }
+  };
+};
 
 export const useDocumentsStore = create<DocumentsState>()(
   immer((set, get) => ({
@@ -87,10 +142,11 @@ export const useDocumentsStore = create<DocumentsState>()(
       });
       const query = { ...get().filters, ...params, page: get().pagination.page, page_size: get().pagination.page_size };
       try {
-        const { data } = await apiClient.get<PaginatedResponse<DocumentDto>>("/documents", { params: query });
+        const { data } = await apiClient.get<DocumentsResponse>("/documents", { params: query });
+        const normalized = normalizeDocumentsResponse(data, get().pagination);
         set((state) => {
-          state.items = data.items;
-          state.pagination = data.pagination;
+          state.items = normalized.items;
+          state.pagination = normalized.pagination;
         });
       } catch (error) {
         set((state) => {

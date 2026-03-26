@@ -9,7 +9,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.core.tenant import TENANT_HEADER, get_current_tenant, tenant_required
+from app.core.tenant import TENANT_HEADER, tenant_required
 from app.db.session import AsyncSessionLocal, ensure_tenant_schema, get_tenant_session
 from app.models.models import Tenant
 from app.services.file_storage import FileStorageService

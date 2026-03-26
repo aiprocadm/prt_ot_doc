@@ -7,25 +7,31 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
-from app.models.models import PackRun, PackRunItem, PackRunLog, PackagePresetItem, TemplateVersion
-from app.models.models import Tenant
+from app.models.models import (
+    PackagePresetItem,
+    PackRun,
+    PackRunItem,
+    PackRunLog,
+    TemplateVersion,
+    Tenant,
+)
 from app.modules.packs.schemas import (
     DownloadRead,
     MappingPreviewRequest,
-    PackRunAccepted,
-    PackRunCreate,
-    PackRunItemRead,
-    PackRunLogRead,
-    PackRunRead,
     PackagePresetCreate,
     PackagePresetItemCreate,
-    PackagePresetItemRead,
     PackagePresetItemPatch,
+    PackagePresetItemRead,
     PackagePresetPatch,
     PackagePresetRead,
     PackageProfileCreate,
     PackageProfilePatch,
     PackageProfileRead,
+    PackRunAccepted,
+    PackRunCreate,
+    PackRunItemRead,
+    PackRunLogRead,
+    PackRunRead,
     SourcePreviewRead,
 )
 from app.modules.packs.service import (
@@ -33,7 +39,6 @@ from app.modules.packs.service import (
     NamingRuleEngine,
     PackageService,
     PackRunService,
-    ensure_template_version_deletable,
     load_source_rows,
 )
 

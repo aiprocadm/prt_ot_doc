@@ -1,9 +1,10 @@
 import hashlib
 
 import pytest
+from fastapi import HTTPException
+
 from app.modules.files.service import compute_sha256_stream
 from app.modules.files.storage import build_tenant_key
-from fastapi import HTTPException
 
 
 def test_build_tenant_key_is_tenant_scoped() -> None:

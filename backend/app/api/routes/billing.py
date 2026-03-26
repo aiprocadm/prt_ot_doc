@@ -3,9 +3,13 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any
 
+from fastapi import APIRouter, Depends, Header, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.api.dependencies import get_session, get_tenant_record
-from app.core.security import AccessContext, abac
 from app.core.audit_decorator import audit_operation
+from app.core.security import AccessContext, abac
 from app.models.models import BillingSubscription, BillingSubscriptionStatus, Tenant
 from app.schemas.billing import (
     BillingChangePlanRequest,
@@ -16,9 +20,6 @@ from app.schemas.billing import (
     BillingSummaryRead,
 )
 from app.services.billing import BillingService, current_period_yyyymm
-from fastapi import APIRouter, Depends, Header, HTTPException, status
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]

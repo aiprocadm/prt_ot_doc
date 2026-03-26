@@ -3,9 +3,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from fastapi import HTTPException, Request, status
+
 from app.core.rbac_abac import ROLE_ALIASES, ROLE_PERMISSIONS
 from app.services.audit import AuditService
-from fastapi import HTTPException, Request, status
 
 from .engine import evaluate
 from .types import PolicyContext, Resource, Subject

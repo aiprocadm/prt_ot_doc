@@ -5,8 +5,8 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi import status
 
-from app.models.obligations import Task, TaskStatus
 from app.models.models import RoleEnum
+from app.models.obligations import Task, TaskStatus
 from tests.utils.factories import TestDataFactory
 
 

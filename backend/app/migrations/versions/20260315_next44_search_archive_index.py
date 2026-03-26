@@ -5,10 +5,9 @@ Revises: 20260314_next43_outbox_webhooks_spine
 Create Date: 2026-03-15 00:00:00.000000
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
-
 
 revision = "20260315_next44_search_archive_index"
 down_revision = "20260314_next43_outbox_webhooks_spine"

@@ -1,7 +1,7 @@
 """next60 incidents inspections capa prep domains"""
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "20260405_next60_incidents_inspections_capa_prep"
 down_revision = "20260401_next58"

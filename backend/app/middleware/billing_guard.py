@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from fastapi import Request
+from starlette.middleware.base import BaseHTTPMiddleware
+
 from app.api.dependencies import _resolve_tenant_slug
 from app.db.session import AsyncSessionLocal
 from app.models.models import Tenant
 from app.services.billing import BillingService
-from fastapi import Request
-from starlette.middleware.base import BaseHTTPMiddleware
 
 
 def resolve_billing_action(request: Request) -> str:

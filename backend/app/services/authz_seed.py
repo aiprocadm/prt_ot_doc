@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from app.core.rbac_abac import RESOURCE_PERMISSIONS, ROLE_PERMISSIONS
-from app.models.models import AuthzPermission, AuthzRole, AuthzRolePermission
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.rbac_abac import RESOURCE_PERMISSIONS, ROLE_PERMISSIONS
+from app.models.models import AuthzPermission, AuthzRole, AuthzRolePermission
 
 ROLE_CODES = [
     "owner",

@@ -6,8 +6,8 @@ Revises: 20260405_next60_incidents_inspections_capa_prep
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "20260406_next61_analytics_read_models"

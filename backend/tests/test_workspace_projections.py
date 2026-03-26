@@ -7,7 +7,11 @@ import pytest
 from sqlalchemy import Column, String, Table
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.api.routes.workspace import role_workspace_summary, workspace_attention, workspace_task_inbox
+from app.api.routes.workspace import (
+    role_workspace_summary,
+    workspace_attention,
+    workspace_task_inbox,
+)
 from app.core.security import AccessContext
 from app.db.session import TenantBase
 from app.models.models import ComplianceDeadline, OfflineSyncBatch

@@ -3,9 +3,6 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-import logging
-from pathlib import Path
-
 import pytest
 import pytest_asyncio
 from sqlalchemy import select
@@ -17,15 +14,15 @@ from app.db import Base, SharedBase
 from app.models.models import (
     PipelineRun,
     PipelineRunStatus,
-    Tenant,
     Template,
     TemplateVersion,
     TemplateVersionStatus,
+    Tenant,
 )
 from app.services.docx import DocxService
 from app.services.file_storage import FileStorageService
-from app.services.pipeline import PipelineService
 from app.services.pdf import PdfConversionError, PdfConversionResult
+from app.services.pipeline import PipelineService
 
 
 def _prepare_sqlite_metadata() -> None:

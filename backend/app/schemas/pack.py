@@ -8,7 +8,6 @@ from pydantic import Field, field_validator
 from app.schemas.base import BaseSchema
 
 
-
 class PackListItem(BaseSchema):
     id: str
     code: str

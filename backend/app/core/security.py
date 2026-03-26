@@ -18,10 +18,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_session
-from app.core.request_context import set_current_user_id
-from app.core.tenant import set_current_tenant
 from app.core.config import Settings, get_settings
 from app.core.rbac_abac import actor_from_claims, policy_forbidden
+from app.core.request_context import set_current_user_id
+from app.core.tenant import set_current_tenant
 from app.models.models import ApiKey, User
 from app.services.api_keys import authenticate_api_key
 

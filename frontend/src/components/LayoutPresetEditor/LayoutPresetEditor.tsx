@@ -111,14 +111,18 @@ export const LayoutPresetEditor = () => {
       toast.error("Укажите code и name");
       return;
     }
-    if (selectedPreset) {
-      await apiClient.patch(`/layout-presets/${selectedPreset.id}`, payload);
-      toast.success("Пресет обновлён");
-    } else {
-      await apiClient.post("/layout-presets", payload);
-      toast.success("Пресет создан");
+    try {
+      if (selectedPreset) {
+        await apiClient.patch(`/layout-presets/${selectedPreset.id}`, payload);
+        toast.success("Пресет обновлён");
+      } else {
+        await apiClient.post("/layout-presets", payload);
+        toast.success("Пресет создан");
+      }
+      await loadPresets();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось сохранить пресет");
     }
-    await loadPresets();
   };
 
   const runPreview = async () => {

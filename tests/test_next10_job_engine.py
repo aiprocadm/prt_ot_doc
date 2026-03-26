@@ -6,8 +6,8 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy import select
 
-from app.models.job_engine import DocumentArtifact, DocumentJob, OutboxEvent
 from app.db import session_scope
+from app.models.job_engine import DocumentArtifact, DocumentJob, OutboxEvent
 from app.services.idempotency import IdempotencyService
 from app.services.pipelines_orchestrator import DocumentPipelineOrchestrator
 

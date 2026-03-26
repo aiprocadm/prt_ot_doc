@@ -3,19 +3,37 @@ import { useParams } from "react-router-dom";
 
 import { cancelPipelineRun, getPipelineRun, retryPipelineRun, retryPipelineStepRun, type PipelineRun } from "@/api/pipelines";
 import { getFile, listEntityFiles, reindexFile } from "@/api/files";
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { JobTimeline } from "@/components/JobTimeline";
 import { FileList } from "@/features/files/FileList";
+import type { ApiError } from "@/types/dto/common";
 
 const PipelineRunDetails = () => {
   const { id = "" } = useParams();
   const [run, setRun] = useState<PipelineRun | null>(null);
   const [indexStatus, setIndexStatus] = useState<string>("—");
   const [indexedFileId, setIndexedFileId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<ApiError | null>(null);
 
-  const load = () => getPipelineRun(id).then(setRun);
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const nextRun = await getPipelineRun(id);
+      setRun(nextRun);
+    } catch (loadError) {
+      setRun(null);
+      setError(loadError as ApiError);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    load().catch(() => setRun(null));
+    void load();
   }, [id]);
 
   const sseRef = useRef<EventSource | null>(null);
@@ -31,7 +49,12 @@ const PipelineRunDetails = () => {
     const startPolling = () => {
       if (pollTimer) return;
       pollTimer = window.setInterval(() => {
-        load().catch(() => undefined);
+        getPipelineRun(id)
+          .then((nextRun) => {
+            setRun(nextRun);
+            setError(null);
+          })
+          .catch(() => undefined);
       }, 3000);
     };
 
@@ -42,14 +65,21 @@ const PipelineRunDetails = () => {
         try {
           const payload = JSON.parse((event as MessageEvent<string>).data) as PipelineRun;
           setRun(payload);
+          setError(null);
         } catch {
-          load().catch(() => undefined);
+          getPipelineRun(id)
+            .then((nextRun) => {
+              setRun(nextRun);
+              setError(null);
+            })
+            .catch(() => undefined);
         }
       });
       source.addEventListener("run.done", (event) => {
         try {
           const payload = JSON.parse((event as MessageEvent<string>).data) as PipelineRun;
           setRun(payload);
+          setError(null);
         } finally {
           source.close();
           sseRef.current = null;
@@ -96,19 +126,70 @@ const PipelineRunDetails = () => {
         setIndexStatus("—");
       });
   }, [run?.run_id]);
+  if (loading) {
+    return <LoadingScreen label="Загрузка pipeline run" />;
+  }
 
+  if (error) {
+    return <ErrorState error={error} onRetry={() => void load()} />;
+  }
 
-  if (!run) return <section>Загрузка...</section>;
+  if (!run) {
+    return (
+      <section className="space-y-4">
+        <EmptyState
+          title="Pipeline run не найден"
+          description="Проверьте идентификатор запуска или обновите страницу после повторного запуска задачи."
+        />
+      </section>
+    );
+  }
 
   return (
     <section className="space-y-4">
       <h1 className="text-xl font-semibold">Job {run.run_id}</h1>
       <div className="flex gap-2">
-        <button className="rounded border px-3 py-1" onClick={() => retryPipelineRun(run.run_id).then(setRun)}>Retry failed</button>
+        <button
+          className="rounded border px-3 py-1"
+          onClick={() =>
+            retryPipelineRun(run.run_id)
+              .then((nextRun) => {
+                setRun(nextRun);
+                setError(null);
+              })
+              .catch((actionError) => setError(actionError as ApiError))
+          }
+        >
+          Retry failed
+        </button>
         {failedStep ? (
-          <button className="rounded border px-3 py-1" onClick={() => retryPipelineStepRun(run.run_id, failedStep.step_run_id).then(setRun)}>Retry step</button>
+          <button
+            className="rounded border px-3 py-1"
+            onClick={() =>
+              retryPipelineStepRun(run.run_id, failedStep.step_run_id)
+                .then((nextRun) => {
+                  setRun(nextRun);
+                  setError(null);
+                })
+                .catch((actionError) => setError(actionError as ApiError))
+            }
+          >
+            Retry step
+          </button>
         ) : null}
-        <button className="rounded border px-3 py-1" onClick={() => cancelPipelineRun(run.run_id).then(setRun)}>Cancel</button>
+        <button
+          className="rounded border px-3 py-1"
+          onClick={() =>
+            cancelPipelineRun(run.run_id)
+              .then((nextRun) => {
+                setRun(nextRun);
+                setError(null);
+              })
+              .catch((actionError) => setError(actionError as ApiError))
+          }
+        >
+          Cancel
+        </button>
       </div>
       <JobTimeline steps={run.step_runs} />
       <div className="rounded border p-3 text-sm">
@@ -130,11 +211,18 @@ const PipelineRunDetails = () => {
         <div className="rounded border p-3 text-sm">
           <h2 className="mb-2 font-medium">Step logs</h2>
           <div className="max-h-56 space-y-1 overflow-auto">
-            {stepLogs.slice(-50).map((log, idx) => (
-              <div key={`${log.timestamp}-${idx}`} className="text-xs">
-                <span className="text-muted-foreground">[{log.level}]</span> {log.step_name ? `${log.step_name}: ` : ""}{log.message}
-              </div>
-            ))}
+            {stepLogs.length === 0 ? (
+              <EmptyState
+                title="Логи пока отсутствуют"
+                description="События шагов появятся здесь после старта обработки или при поступлении обновлений."
+              />
+            ) : (
+              stepLogs.slice(-50).map((log, idx) => (
+                <div key={`${log.timestamp}-${idx}`} className="text-xs">
+                  <span className="text-muted-foreground">[{log.level}]</span> {log.step_name ? `${log.step_name}: ` : ""}{log.message}
+                </div>
+              ))
+            )}
           </div>
         </div>
         <div className="rounded border p-3 text-sm">

@@ -4,17 +4,17 @@ from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID
 
-from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
-from app.core.audit_decorator import audit_operation
-from app.core.security import AccessContext, abac
-from app.models.models import ApiToken, Tenant
-from app.schemas.api_tokens import ApiTokenCreateRequest, ApiTokenCreateResponse, ApiTokenRead
-from app.services.api_tokens import ApiTokenService
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.permission_checker import PermissionChecker
+
+from app.api.dependencies import get_session, get_tenant_record
+from app.core.audit_decorator import audit_operation
+from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
+from app.models.models import ApiToken, Tenant
+from app.schemas.api_tokens import ApiTokenCreateRequest, ApiTokenCreateResponse, ApiTokenRead
+from app.services.api_tokens import ApiTokenService
 
 router = APIRouter(prefix="/api-tokens", tags=["api-tokens"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]

@@ -4,8 +4,22 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
-from app.models.document_core import PipelineRun, PipelineRunStatus, Template, TemplateVersion, TemplateVersionStatus
-from app.models.models import Incident, IncidentStage, IncidentStatus, IncidentType, RoleEnum, TrainingCourse, TrainingPlan
+from app.models.document_core import (
+    PipelineRun,
+    PipelineRunStatus,
+    Template,
+    TemplateVersion,
+    TemplateVersionStatus,
+)
+from app.models.models import (
+    Incident,
+    IncidentStage,
+    IncidentStatus,
+    IncidentType,
+    RoleEnum,
+    TrainingCourse,
+    TrainingPlan,
+)
 from app.models.obligations import Task, TaskPriority, TaskStatus
 from app.models.risk import RiskAssessment, RiskHazard
 from app.models.safety_ops import InspectionPrepGap, InspectionPrepPackage

@@ -5,9 +5,8 @@ Revises: 20260311_next40_job_step_order_index
 Create Date: 2026-03-12 00:00:00.000000
 """
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision = "20260312_next41"
 down_revision = "20260311_next40"

@@ -4,9 +4,10 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
+from fastapi import HTTPException
+
 from app.models.models import BillingEventType, BillingSubscriptionStatus, Tenant
 from app.services.billing import BillingService, current_period_yyyymm
-from fastapi import HTTPException
 
 
 @dataclass(slots=True)

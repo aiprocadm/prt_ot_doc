@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from app.services.celery_app import celery_app
 from app.core.tenant import tenant_context
 from app.db.session import ensure_tenant_schema, session_scope
+from app.services.celery_app import celery_app
 from app.services.pipelines_orchestrator import DocumentPipelineOrchestrator
 
 

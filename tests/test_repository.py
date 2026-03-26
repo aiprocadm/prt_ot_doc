@@ -14,8 +14,8 @@ from app.repository import (
     get_template_by_name,
     list_companies,
     list_persons,
-    list_tenants,
     list_templates,
+    list_tenants,
 )
 from app.schemas.company import CompanyCreate
 from app.schemas.template import TemplateCreate, TemplateVersionMetadata

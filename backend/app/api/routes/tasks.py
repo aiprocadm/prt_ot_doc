@@ -4,8 +4,14 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import UUID
 
-from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
+from celery.result import AsyncResult
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, abac
+from app.core.tenant_validation import TenantContextValidator
 from app.models.models import PipelineRun, Tenant
 from app.models.obligations import Task, TaskPriority, TaskStatus
 from app.schemas.task import (
@@ -19,12 +25,6 @@ from app.schemas.task import (
 from app.services.audit import AuditService
 from app.services.celery_app import celery_app
 from app.services.obligations import next_task_reminder
-from celery.result import AsyncResult
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.permission_checker import PermissionChecker
-from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter()
 

@@ -12,7 +12,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from app.models.base import TenantBaseModel
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
-    from app.models.models import Site
+    pass
 
 __all__ = [
     "Checklist",

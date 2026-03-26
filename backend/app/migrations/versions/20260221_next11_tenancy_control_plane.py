@@ -9,9 +9,8 @@ from __future__ import annotations
 
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision: str = "20260221_next11_tenancy_control_plane"
 down_revision: Union[str, None] = "20260222_next10"

@@ -4,10 +4,10 @@ from datetime import datetime, timezone
 
 from app.modules.ppe.services import (
     NormItem,
+    PackSafetySummaryService,
     PPEIssueEvent,
     PPENormService,
     PPEPersonalCardService,
-    PackSafetySummaryService,
     RiskPPEProjectionService,
 )
 from app.modules.risk.services import (

@@ -5,7 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from app.core.rbac_abac import actor_from_claims, policy_engine as rbac_abac_engine
+from app.core.rbac_abac import actor_from_claims
+from app.core.rbac_abac import policy_engine as rbac_abac_engine
 from app.models.models import User
 
 

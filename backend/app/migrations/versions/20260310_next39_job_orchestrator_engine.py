@@ -5,9 +5,8 @@ Revises: 20260308_next38
 Create Date: 2026-03-10
 """
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision = "20260310_next39"
 down_revision = "20260308_next38_audit_chain_fields"

@@ -8,7 +8,13 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.models import Incident, Inspection, PPEIssue, Prescription, TrainingPlan
-from app.models.notifications import Notification, NotificationStatus, NotificationType, PlanTask, PlanTaskStatus
+from app.models.notifications import (
+    Notification,
+    NotificationStatus,
+    NotificationType,
+    PlanTask,
+    PlanTaskStatus,
+)
 from app.modules.projections.models import (
     ContractorReadinessReadModel,
     PackageReadModel,

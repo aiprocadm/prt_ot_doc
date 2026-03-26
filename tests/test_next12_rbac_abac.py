@@ -3,9 +3,10 @@ from __future__ import annotations
 from types import SimpleNamespace
 from uuid import uuid4
 
+from sqlalchemy import select
+
 from app.core.rbac_abac import actor_from_claims, policy_engine, scoped_query
 from app.models.models import Company, Incident
-from sqlalchemy import select
 
 
 def _actor(

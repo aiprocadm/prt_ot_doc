@@ -4,7 +4,11 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app.models.notifications import NotificationChannel, NotificationChannelSettings, NotificationType
+from app.models.notifications import (
+    NotificationChannel,
+    NotificationChannelSettings,
+    NotificationType,
+)
 from app.services.notifications import apply_quiet_hours, build_dedup_key, send_notification
 
 

@@ -4,6 +4,8 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import select
+
 from app.core.rbac_abac import (
     ROLE_PERMISSIONS,
     ActorContext,
@@ -13,7 +15,6 @@ from app.core.rbac_abac import (
     scoped_query,
 )
 from app.models.models import AuditLog, Incident, Template
-from sqlalchemy import select
 
 
 def _actor(

@@ -11,8 +11,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.dependencies import get_session, get_tenant_record
 from app.api.deps.tracing import get_trace_id
-from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.models.approval_signing import (
     ApprovalDecisionLog,
@@ -27,17 +27,14 @@ from app.models.approval_signing import (
     SignatureRequestStatus,
     WebhookEndpoint,
 )
-from app.models.models import IdempotencyStatus, User, UserRole
+from app.models.job_engine import InboundWebhookDedup
+from app.models.models import IdempotencyStatus, UserRole
 from app.models.tenanting import Tenant
+from app.modules.approval.core import cond_matches, make_request_hash
+from app.modules.approval.webhook_utils import build_edo_status_dedup_key, build_webhook_signature
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 from app.services.outbox import OutboxService
 from app.services.provider_registry import provider_response_meta
-from app.modules.approval.core import cond_matches, make_request_hash
-
-from app.models.job_engine import InboundWebhookDedup
-from app.modules.approval.webhook_utils import build_edo_status_dedup_key, build_webhook_signature
-from app.core.permission_checker import PermissionChecker
-from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter()
 

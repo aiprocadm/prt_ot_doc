@@ -3,21 +3,28 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, Field
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
+from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, rbac
+from app.core.tenant_validation import TenantContextValidator
+from app.models.job_engine import DocumentJob, DocumentJobStatus, OutboxEvent, OutboxEventStatus
+from app.models.models import (
+    AuthzPolicy,
+    AuthzRole,
+    AuthzRolePermission,
+    AuthzUserRole,
+    Outbox,
+    OutboxStatus,
+    Tenant,
+)
 from app.modules.rbac_abac.engine import evaluate
 from app.modules.rbac_abac.types import PolicyContext, Resource, Subject
-from app.models.models import AuthzPolicy, AuthzRole, AuthzRolePermission, AuthzUserRole, Outbox, OutboxStatus, Tenant
-from app.models.job_engine import DocumentJob, DocumentJobStatus, OutboxEvent, OutboxEventStatus
 from app.services.provider_registry import describe_provider
-from app.core.permission_checker import PermissionChecker
-from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(prefix="/admin", tags=["admin-rbac-abac"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]

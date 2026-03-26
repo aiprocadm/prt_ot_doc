@@ -9,12 +9,13 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from app.api.dependencies import get_session, get_tenant_record
-from app.models.models import Outbox, Tenant
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.dependencies import get_session, get_tenant_record
+from app.models.models import Outbox, Tenant
 
 router = APIRouter()
 

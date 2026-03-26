@@ -7,9 +7,8 @@ Create Date: 2026-03-06 00:00:00.000000
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision: str = "20260306_tenant_core_registry"
 down_revision: str | None = "20260221_next11_tenancy_control_plane"

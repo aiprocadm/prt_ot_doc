@@ -13,7 +13,11 @@ from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, abac
 from app.models.models import Tenant
 from app.modules.client_portal.services import ClientPortalService
-from app.modules.projections.models import ClientPortalReadModel, PortalRequest, PortalRequestMessage
+from app.modules.projections.models import (
+    ClientPortalReadModel,
+    PortalRequest,
+    PortalRequestMessage,
+)
 
 router = APIRouter(prefix="/client-portal", tags=["client-portal-v1"])
 internal_router = APIRouter(prefix="/portal-requests", tags=["portal-requests"])

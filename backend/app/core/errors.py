@@ -5,10 +5,13 @@ This module provides centralized error envelope format for all endpoints,
 ensuring consistency in error responses, correlation_id propagation, and error messaging.
 """
 
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import status
 from pydantic import BaseModel
+
+from app.core.correlation_id import CorrelationIDManager
 
 
 class ErrorDetail(BaseModel):
@@ -89,13 +92,15 @@ class ErrorBuilder:
         """Build error detail."""
         if not self.error_code or not self.message:
             raise ValueError("error_code and message are required")
+        correlation_id = self.correlation_id or CorrelationIDManager.get()
+        timestamp = self.timestamp or datetime.now(timezone.utc).isoformat()
         return ErrorDetail(
             error_code=self.error_code,
             message=self.message,
             field=self.field,
             details=self.details,
-            correlation_id=self.correlation_id,
-            timestamp=self.timestamp,
+            correlation_id=correlation_id,
+            timestamp=timestamp,
         )
 
 

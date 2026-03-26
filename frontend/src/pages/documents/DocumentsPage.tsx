@@ -28,9 +28,14 @@ const DocumentsPage = () => {
   const focusedEntityType = searchParams.get("entity_type") ?? undefined;
   const focusedEntityId = searchParams.get("entity_id") ?? undefined;
   const focusedView = searchParams.get("view") === "timeline" ? "timeline" : "summary";
+  const safeItems = Array.isArray(items) ? items : [];
+  const safePagination = pagination ?? { page: 1, page_size: 10, total: safeItems.length };
 
-  const statusCounts = items.reduce(
+  const statusCounts = safeItems.reduce(
     (acc, document) => {
+      if (!document?.status) {
+        return acc;
+      }
       acc[document.status] = (acc[document.status] ?? 0) + 1;
       return acc;
     },
@@ -47,7 +52,7 @@ const DocumentsPage = () => {
     if (!canView || !focusedEntityId) return;
     if (!["document", "document_version", "template_version"].includes(focusedEntityType ?? "")) return;
 
-    const existing = items.find((doc) => doc.id === focusedEntityId);
+    const existing = safeItems.find((doc) => doc.id === focusedEntityId);
     if (existing) {
       setSelectedDocument(existing);
       return;
@@ -55,7 +60,7 @@ const DocumentsPage = () => {
     void getById(focusedEntityId).then((doc) => {
       if (doc) setSelectedDocument(doc);
     });
-  }, [canView, focusedEntityId, focusedEntityType, getById, items]);
+  }, [canView, focusedEntityId, focusedEntityType, getById, safeItems]);
 
   const focusSummaryLink = useMemo(
     () => entityCardLink(focusedEntityType, focusedEntityId, "summary"),
@@ -82,7 +87,7 @@ const DocumentsPage = () => {
           </span>
         }
         stats={[
-          { label: "Всего документов", value: pagination.total },
+          { label: "Всего документов", value: safePagination.total },
           { label: "Готовые (на странице)", value: statusCounts.ready ?? 0 },
           { label: "Черновики (на странице)", value: statusCounts.draft ?? 0 },
           { label: "Ошибки (на странице)", value: statusCounts.error ?? 0 }
@@ -119,8 +124,8 @@ const DocumentsPage = () => {
       <Card>
         <CardContent className="py-6">
           <ErrorState error={error ?? undefined} onRetry={() => void list()} />
-          {loading && items.length === 0 ? <LoadingScreen label="Загрузка документов" /> : null}
-          {!loading && !error && items.length === 0 ? <EmptyState title="Документы не найдены" description="Создайте первый документ или измените фильтры." /> : null}
+          {loading && safeItems.length === 0 ? <LoadingScreen label="Загрузка документов" /> : null}
+          {!loading && !error && safeItems.length === 0 ? <EmptyState title="Документы не найдены" description="Создайте первый документ или измените фильтры." /> : null}
           <DocumentTable onSelect={setSelectedDocument} />
         </CardContent>
       </Card>

@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from fastapi import HTTPException
+
 from app.models.models import (
     BillingPlan,
     BillingSubscription,
@@ -11,7 +13,6 @@ from app.models.models import (
     Tenant,
 )
 from app.services.billing import BillingService
-from fastapi import HTTPException
 
 
 class _StubSession:

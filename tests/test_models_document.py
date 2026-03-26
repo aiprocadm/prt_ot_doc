@@ -5,8 +5,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.models.document import Document, DocumentStatus, DocumentVersion
-from app.services.documents import DocumentVersionUpdateError
 from app.models.models import Company, Person, RoleEnum, Template, Tenant, User
+from app.services.documents import DocumentVersionUpdateError
 
 
 @pytest.mark.asyncio()

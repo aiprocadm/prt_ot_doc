@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from app.models.models import ComplianceDeadline, TrainingCertificate
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.models import ComplianceDeadline, TrainingCertificate
 
 
 class ComplianceDeadlineService:

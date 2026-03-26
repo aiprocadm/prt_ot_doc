@@ -3,6 +3,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pytest
+from fastapi import HTTPException
+from sqlalchemy import Column, String, Table, text
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from app.db.session import SharedBase, TenantBase
 from app.models.models import Tenant
 from app.models.notifications import (
@@ -14,9 +18,6 @@ from app.models.notifications import (
 )
 from app.modules.notifications.schemas import NotificationTemplateIn
 from app.modules.notifications.service import NotificationApplicationService
-from fastapi import HTTPException
-from sqlalchemy import Column, String, Table, text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 @pytest.fixture()

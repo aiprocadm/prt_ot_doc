@@ -3,11 +3,12 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.models.models import BriefingEntry, BriefingSignature, BriefingTemplate
 from app.services.events import EventType
 from app.services.outbox import OutboxService
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class BriefingEntryService:

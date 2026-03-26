@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+
 from sqlalchemy import select
 
 from app.core.config import Settings

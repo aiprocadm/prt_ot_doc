@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.tenant import tenant_prefix_path
 from app.domains.packs.definitions import (
-    DOCX_MIME,
     DEFAULT_PACKS,
+    DOCX_MIME,
     PACK_DEFINITIONS_BY_CODE,
     PackDefinition,
     PackTemplateSpec,

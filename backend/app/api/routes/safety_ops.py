@@ -3,12 +3,12 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
+from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, abac
 from app.models.models import Tenant
 from app.models.safety_ops import (
@@ -22,8 +22,6 @@ from app.models.safety_ops import (
 from app.modules.capa.service import CorrectiveActionService
 from app.modules.inspection_prep.service import GapAnalysisService, InspectionPrepPackageService
 from app.services.audit import AuditService
-from app.core.permission_checker import PermissionChecker
-from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(tags=["safety-ops"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]

@@ -8,12 +8,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.security import AccessContext, rbac
 from app.models.models import Tenant
 from app.modules.projections.models import SearchIndexEntry
 from app.modules.projections.services import ProjectionOrchestrator
 from app.modules.search.service import SearchFilters, SearchService
-
-from app.core.security import AccessContext, rbac
 
 router = APIRouter()
 

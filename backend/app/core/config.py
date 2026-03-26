@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
@@ -349,6 +348,10 @@ class Settings(BaseSettings):
     celery_retry_backoff_max_seconds: int = Field(300, alias="CELERY_RETRY_BACKOFF_MAX_SECONDS")
     celery_eager: bool = Field(False, alias="CELERY_EAGER")
     outbox_poll_interval: float = Field(5.0, alias="OUTBOX_POLL_INTERVAL")
+    outbox_in_progress_timeout_seconds: float = Field(
+        900.0,
+        alias="OUTBOX_IN_PROGRESS_TIMEOUT_SECONDS",
+    )
     outbox_max_attempts: int = Field(10, alias="OUTBOX_MAX_ATTEMPTS")
     outbox_retry_backoff_seconds: float = Field(5.0, alias="OUTBOX_RETRY_BACKOFF_SECONDS")
     outbox_retry_backoff_max_seconds: float = Field(600.0, alias="OUTBOX_RETRY_BACKOFF_MAX_SECONDS")

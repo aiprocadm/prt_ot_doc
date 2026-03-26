@@ -3,6 +3,7 @@ from __future__ import annotations
 from types import MappingProxyType, SimpleNamespace
 
 import pytest
+
 from app.api.routes.integration_readiness import _provider_health, get_integration_readiness
 from app.core.security import AccessContext
 from app.services.integrations.interfaces import IntegrationDisabledError

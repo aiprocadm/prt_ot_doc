@@ -217,6 +217,47 @@ async def test_outbox_processor_avoids_double_send_with_in_progress(
 
 
 @pytest.mark.anyio
+async def test_outbox_processor_reclaims_stale_in_progress_entries(
+    sessionmaker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OUTBOX_IN_PROGRESS_TIMEOUT_SECONDS", "1")
+    get_settings.cache_clear()  # type: ignore[attr-defined]
+
+    async with sessionmaker() as session:
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
+        entry = Outbox(
+            tenant_id=tenant.id,
+            event_type="DocumentCreated",
+            destination="https://example.test/hooks",
+            payload={"document_id": "doc-stale"},
+            status=OutboxStatus.IN_PROGRESS,
+            attempts=1,
+            next_attempt_at=None,
+            updated_at=datetime.now(tz=timezone.utc) - timedelta(seconds=5),
+        )
+        session.add(entry)
+        await session.commit()
+        entry_id = entry.id
+
+    dispatcher = DummyDispatcher()
+    async with sessionmaker() as session:
+        processor = OutboxProcessor(session, dispatcher=dispatcher)
+        processed = await processor.process_once()
+
+    assert processed == 1
+    assert len(dispatcher.calls) == 1
+
+    async with sessionmaker() as session:
+        refreshed = await session.get(Outbox, entry_id)
+        assert refreshed is not None
+        assert refreshed.status == OutboxStatus.SENT
+        assert refreshed.attempts == 2
+        assert refreshed.sent_at is not None
+
+    get_settings.cache_clear()  # type: ignore[attr-defined]
+
+
+@pytest.mark.anyio
 async def test_outbox_dedup_prevents_second_delivery(sessionmaker) -> None:
     async with sessionmaker() as session:
         tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()

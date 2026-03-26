@@ -25,6 +25,7 @@ export const DocumentPreview = ({ document, initialTab = "preview" }: DocumentPr
   const [release, setRelease] = useState<ReleaseStatus>({ approval: "draft", signature: "pending", edo: "queued" });
   const [myTaskId, setMyTaskId] = useState<string | null>(null);
   const { can } = useAbility();
+  const releaseTargetId = current.current_version_id ?? current.id;
   const resource = {
     status: current.status,
     company_id: current.company?.id
@@ -32,7 +33,7 @@ export const DocumentPreview = ({ document, initialTab = "preview" }: DocumentPr
 
   useEffect(() => {
     setCurrent(document);
-    releaseApi.documentReleaseStatus(document.id).then(setRelease).catch(() => undefined);
+    releaseApi.documentReleaseStatus(document.current_version_id ?? document.id).then(setRelease).catch(() => undefined);
     approvalsApi.listMyTasks("pending").then((items) => {
       const mine = items.find((it) => (it.instance_id || it.process_id));
       setMyTaskId(mine?.id ?? null);
@@ -57,20 +58,20 @@ export const DocumentPreview = ({ document, initialTab = "preview" }: DocumentPr
     if (!myTaskId) return;
     await releaseApi.quickApprove(myTaskId, "mobile approve");
     toast.success("Согласовано");
-    releaseApi.documentReleaseStatus(document.id).then(setRelease).catch(() => undefined);
+    releaseApi.documentReleaseStatus(releaseTargetId).then(setRelease).catch(() => undefined);
   };
 
   const handleQuickReject = async () => {
     if (!myTaskId) return;
     await releaseApi.quickReject(myTaskId, "mobile reject");
     toast.success("Отклонено");
-    releaseApi.documentReleaseStatus(document.id).then(setRelease).catch(() => undefined);
+    releaseApi.documentReleaseStatus(releaseTargetId).then(setRelease).catch(() => undefined);
   };
 
   const handleQuickSign = async () => {
-    await releaseApi.quickSign(document.id);
+    await releaseApi.quickSign(releaseTargetId);
     toast.success("Подпись отправлена");
-    releaseApi.documentReleaseStatus(document.id).then(setRelease).catch(() => undefined);
+    releaseApi.documentReleaseStatus(releaseTargetId).then(setRelease).catch(() => undefined);
   };
 
   return (

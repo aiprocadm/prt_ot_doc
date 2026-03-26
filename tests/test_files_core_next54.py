@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import pytest
+from fastapi import HTTPException
+
 from app.modules.files.models import FileRecord, FileStatus
 from app.modules.files.service import FileService
 from app.modules.files.storage import assert_tenant_key, build_tenant_key
-from fastapi import HTTPException
 
 
 class _Scalar:

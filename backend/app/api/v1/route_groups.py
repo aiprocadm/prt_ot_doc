@@ -8,8 +8,8 @@ from app.api.dependencies import require_tenant_slug
 from app.api.routes import (
     admin_authz,
     admin_users,
-    approval_orchestration,
     api_tokens,
+    approval_orchestration,
     approval_signing_v1,
     attestations,
     audit,
@@ -55,8 +55,8 @@ from app.api.routes import (
     tenants,
     training,
     training_next,
-    workspace,
     webhooks,
+    workspace,
 )
 from app.modules.analytics.api import router as analytics_router
 from app.modules.branding.api import router as branding_router

@@ -11,8 +11,8 @@ from typing import Any, Mapping, Sequence
 
 from .config import get_settings
 from .i18n import get_runtime_timezone
-from .task_context import get_task_id
 from .request_context import get_current_user_id
+from .task_context import get_task_id
 from .tenant import get_current_tenant
 from .tracing import get_trace_id
 

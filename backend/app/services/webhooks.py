@@ -6,8 +6,8 @@ import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from time import time
 from hashlib import sha256
+from time import time
 from typing import Any
 from urllib.parse import urlparse
 

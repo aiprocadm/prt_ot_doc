@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy import String, select
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from app.core.db.scoping import scope_query
 from app.core.rbac_abac import ActorContext, policy_engine
+from app.db import session as db_session
 from app.middleware.tenant import TenantMiddleware
 from app.modules.tenancy.context import TenantContext, reset_tenant_context, set_tenant_context
-from app.db import session as db_session
-from sqlalchemy import String, select
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
 class Base(DeclarativeBase):

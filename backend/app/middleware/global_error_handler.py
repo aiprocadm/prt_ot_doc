@@ -5,7 +5,6 @@ Catches all exceptions and returns standardized error responses
 with correlation_id and structured format.
 """
 
-import logging
 from datetime import datetime, timezone
 
 from fastapi import Request, status
@@ -13,7 +12,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.correlation_id import CorrelationIDManager, get_logger
-from app.core.errors import ErrorBuilder, get_status_code
+from app.core.errors import ErrorBuilder
 
 logger = get_logger(__name__)
 
@@ -21,13 +20,29 @@ logger = get_logger(__name__)
 class GlobalErrorHandlerMiddleware(BaseHTTPMiddleware):
     """Global middleware for standardized error handling."""
 
+    @staticmethod
+    def _resolve_correlation_id(request: Request) -> str | None:
+        state_value = getattr(request.state, "correlation_id", None)
+        if isinstance(state_value, str) and state_value.strip():
+            return state_value.strip()
+        return CorrelationIDManager.get()
+
+    @staticmethod
+    def _classify_value_error(exc: ValueError) -> tuple[int, str]:
+        message = str(exc).strip().lower()
+        if any(token in message for token in ("tenant", "x-tenant", "missing_tenant")):
+            return status.HTTP_400_BAD_REQUEST, "TENANT_INVALID"
+        if "permission" in message:
+            return status.HTTP_403_FORBIDDEN, "PERMISSION_DENIED"
+        return status.HTTP_400_BAD_REQUEST, "VALIDATION_ERROR"
+
     async def dispatch(self, request: Request, call_next):
         """Catch exceptions and return standardized error responses."""
         try:
             # Extract correlation_id from headers and set in context
             correlation_id = request.headers.get(
                 "x-correlation-id"
-            ) or request.headers.get("x-request-id")
+            ) or request.headers.get("x-request-id") or getattr(request.state, "correlation_id", None)
             if correlation_id:
                 CorrelationIDManager.set(correlation_id)
 
@@ -46,19 +61,10 @@ class GlobalErrorHandlerMiddleware(BaseHTTPMiddleware):
 
     def _handle_value_error(self, exc: ValueError, request: Request) -> JSONResponse:
         """Handle ValueError (validation, tenant context, etc.)."""
-        correlation_id = CorrelationIDManager.get()
+        correlation_id = self._resolve_correlation_id(request)
 
         error_message = str(exc)
-        error_code = "VALIDATION_ERROR"
-
-        if "tenant" in error_message.lower():
-            error_code = "TENANT_INVALID"
-            status_code = status.HTTP_400_BAD_REQUEST
-        elif "permission" in error_message.lower():
-            error_code = "PERMISSION_DENIED"
-            status_code = status.HTTP_403_FORBIDDEN
-        else:
-            status_code = status.HTTP_400_BAD_REQUEST
+        status_code, error_code = self._classify_value_error(exc)
 
         logger.warning(
             f"Validation error: {error_message}",
@@ -86,7 +92,7 @@ class GlobalErrorHandlerMiddleware(BaseHTTPMiddleware):
 
     def _handle_permission_error(self, exc: PermissionError, request: Request) -> JSONResponse:
         """Handle PermissionError."""
-        correlation_id = CorrelationIDManager.get()
+        correlation_id = self._resolve_correlation_id(request)
 
         logger.warning(
             f"Permission denied: {str(exc)}",
@@ -113,7 +119,7 @@ class GlobalErrorHandlerMiddleware(BaseHTTPMiddleware):
 
     def _handle_unexpected_error(self, exc: Exception, request: Request) -> JSONResponse:
         """Handle unexpected exceptions."""
-        correlation_id = CorrelationIDManager.get()
+        correlation_id = self._resolve_correlation_id(request)
 
         logger.error(
             f"Unexpected error: {str(exc)}",

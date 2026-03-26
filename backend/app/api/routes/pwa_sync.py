@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Iterable
 from datetime import date, datetime, timezone
-import hashlib
 from decimal import Decimal
 from typing import Any
 
-from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.rbac_abac import ROLE_PERMISSIONS
 from app.core.security import AccessContext, rbac
@@ -20,12 +25,6 @@ from app.models.models import (
     TrainingEnrollment,
 )
 from app.modules.pwa_sync.services import OfflineSyncService
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.permission_checker import PermissionChecker
-from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(prefix="/pwa", tags=["pwa"])
 

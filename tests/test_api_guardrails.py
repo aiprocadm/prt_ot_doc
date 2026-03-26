@@ -4,9 +4,8 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from starlette import status
 
-from app.models.models import RoleEnum
-
 from app.middleware.tenant import TenantMiddleware
+from app.models.models import RoleEnum
 
 
 @pytest.fixture(autouse=True)

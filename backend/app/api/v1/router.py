@@ -14,6 +14,22 @@ from time import perf_counter
 from typing import Annotated, Any, Mapping
 from uuid import UUID
 
+from fastapi import (
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, ConfigDict, ValidationError
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.api.dependencies import get_session, get_tenant_record
 from app.api.v1.route_groups import create_public_router, create_tenant_router
 from app.core.metrics import PipelineStage, PipelineType, StageResult, get_metrics
@@ -37,19 +53,6 @@ from app.models.document_core import (
     TemplateVersionStatus,
 )
 from app.models.tenanting import Tenant, TenantCounter, TenantQuota
-from app.modules.files.api import router as files_v1_router
-from app.modules.headers import api as headers_api
-from app.modules.packs import api as packs_v2_api
-from app.modules.pipelines import api as pipelines_api
-from app.modules.pdf import api as pdf_api
-from app.modules.replace import api as replace_api
-from app.modules.search.api import router as search_router
-from app.modules.analytics.api import router as analytics_router
-from app.modules.branding.api import router as branding_router
-from app.modules.workflow.api import router as workflow_router
-from app.modules.export_center.api import router as export_center_router
-from app.modules.client_portal.api import router as client_portal_v1_router
-from app.modules.client_portal.api import internal_router as portal_requests_router
 from app.modules.templates import build_passport, lint_docx_template, render_preview_docx
 from app.modules.templates.repo import get_template_version_by_code
 from app.modules.templates.schemas import (
@@ -83,22 +86,6 @@ from app.services.idempotency import IdempotencyService, normalize_idempotency_k
 from app.services.pipeline import PipelineService
 from app.services.tasks import run_pipeline_task
 from app.tenancy_quotas import assert_quota
-from fastapi import (
-    APIRouter,
-    Depends,
-    File,
-    Form,
-    HTTPException,
-    Query,
-    Request,
-    Response,
-    UploadFile,
-    status,
-)
-from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, ConfigDict, ValidationError
-from sqlalchemy import func, or_, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 ATTACHMENT_HEADER = 'attachment; filename="{filename}"'

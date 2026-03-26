@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import HTTPException, Request, status
+from fastapi import HTTPException, status
 
 from app.core.rbac_abac import ActorContext, policy_engine
 

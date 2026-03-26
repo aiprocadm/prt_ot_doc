@@ -25,6 +25,12 @@ def test_parse_csv_supports_comments_bom() -> None:
     assert [r["from"] for r in rules] == ["foo", "hello"]
 
 
+def test_parse_csv_preserves_quoted_semicolons() -> None:
+    payload = '"foo;bar";baz\n'.encode("utf-8")
+    rules = parse_replace_csv(payload)
+    assert rules == [{"from": "foo;bar", "to": "baz", "flags": {}, "priority": 0}]
+
+
 def test_replace_docx_handles_broken_runs_and_whole_word() -> None:
     data = _docx_bytes()
     replaced, hits = replace_docx(

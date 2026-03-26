@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "20250410_p1_entities_tasks_roles"
 down_revision = "20250325_outbox_outbound_traffic"

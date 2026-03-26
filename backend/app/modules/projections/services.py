@@ -7,11 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.finance import Contract, Order
 from app.models.models import (
+    NPA,
     ClientPackageRun,
     Company,
     Incident,
     Inspection,
-    NPA,
     Person,
     Prescription,
     Site,

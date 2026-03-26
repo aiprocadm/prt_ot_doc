@@ -8,7 +8,7 @@ import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 
 const PipelineRuns = () => {
-  const { data: runs, setData: setRuns, loading, error, reload } = useAsyncResource({
+  const { data: runs, loading, error, reload } = useAsyncResource({
     loader: listPipelineRuns,
     initialData: [] as PipelineRun[],
     errorMessage: "Не удалось загрузить историю пайплайнов",

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from io import BytesIO
-from typing import Callable, Iterable, Sequence
+from typing import Callable, Sequence
 
 from docx import Document
 

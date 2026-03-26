@@ -1,6 +1,5 @@
 """Service layer package exports."""
 
-from .docx import DocxService
 from .documents import (
     DocumentNotFoundError,
     DocumentVersionDeletionError,
@@ -9,6 +8,7 @@ from .documents import (
     DocumentWorkflowService,
     InvalidStatusTransitionError,
 )
+from .docx import DocxService
 from .file_storage import FileStorageService
 from .package_export import (
     ExportDocument,

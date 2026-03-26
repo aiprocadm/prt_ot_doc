@@ -8,6 +8,10 @@ from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
+from sqlalchemy import select, update
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.models.job_engine import (
     DocumentArtifact,
     DocumentJob,
@@ -23,8 +27,8 @@ from app.modules.files.models import FileEntityType, FileLinkRole
 from app.modules.files.service import FileService
 from app.modules.pipelines.graph import safe_eval_condition
 from app.modules.pipelines.models import PipelinePackageProfile, PipelineProfile
-from app.services.celery_app import celery_app
 from app.services.audit import AuditService, field_level_diff
+from app.services.celery_app import celery_app
 from app.services.file_storage import FileStorageService
 from app.services.pipeline_step_handlers import (
     artifact_step_handler,
@@ -32,9 +36,6 @@ from app.services.pipeline_step_handlers import (
     index_projection_step_handler,
     signature_step_handler,
 )
-from sqlalchemy import select, update
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.ext.asyncio import AsyncSession
 
 DEFAULT_STEPS = [
     "render_docx",

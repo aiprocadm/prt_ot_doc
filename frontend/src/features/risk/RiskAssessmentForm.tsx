@@ -14,7 +14,7 @@ import { useCompaniesStore } from "@/stores/companies";
 import { riskAssessmentSchema, type RiskAssessmentFormValues } from "@/types/forms/risk";
 
 export const RiskAssessmentForm = () => {
-  const { hazards, listHazards, createAssessment } = useRiskStore();
+  const { hazards, createAssessment } = useRiskStore();
   const { items: companies, list: listCompanies } = useCompaniesStore();
   const { can } = useAbility();
   const canAssess = can(PERMISSIONS.RISK_ASSESS);
@@ -26,10 +26,9 @@ export const RiskAssessmentForm = () => {
 
   useEffect(() => {
     if (canAssess) {
-      listHazards();
-      listCompanies();
+      void listCompanies();
     }
-  }, [canAssess, listCompanies, listHazards]);
+  }, [canAssess, listCompanies]);
 
   const handleAddHazard = (hazardId: string) => {
     if (!hazardId) return;
@@ -37,9 +36,13 @@ export const RiskAssessmentForm = () => {
   };
 
   const onSubmit = async (values: RiskAssessmentFormValues) => {
-    await createAssessment(values);
-    toast.success("Расчёт сохранён");
-    form.reset({ company_id: "", hazards: [] });
+    try {
+      await createAssessment(values);
+      toast.success("Расчёт сохранён");
+      form.reset({ company_id: "", hazards: [] });
+    } catch (error) {
+      toast.error((error as Error)?.message ?? "Не удалось сохранить расчёт");
+    }
   };
 
   return (
@@ -69,9 +72,10 @@ export const RiskAssessmentForm = () => {
             </select>
           </div>
           <div className="space-y-2">
-            <Label>Добавить опасность</Label>
+            <Label htmlFor="risk-hazard">Добавить опасность</Label>
             <div className="flex gap-2">
               <select
+                id="risk-hazard"
                 className="h-10 flex-1 rounded-md border px-3"
                 disabled={!canAssess}
                 onChange={(event) => handleAddHazard(event.target.value)}

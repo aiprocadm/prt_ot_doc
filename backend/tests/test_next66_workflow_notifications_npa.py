@@ -3,15 +3,19 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from sqlalchemy import select
-from sqlalchemy import Column, String, Table
-from sqlalchemy import text
+from sqlalchemy import Column, String, Table, select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.db.session import SharedBase, TenantBase
 from app.domains.npa.impact import NpaImpactService
 from app.models.models import NPABinding
-from app.models.notifications import NotificationChannel, NotificationTemplate, NotificationType, PlanTask, PlanTaskStatus
+from app.models.notifications import (
+    NotificationChannel,
+    NotificationTemplate,
+    NotificationType,
+    PlanTask,
+    PlanTaskStatus,
+)
 from app.models.npa import NpaAct, NpaRevision
 from app.modules.workflow.service import WorkflowService
 

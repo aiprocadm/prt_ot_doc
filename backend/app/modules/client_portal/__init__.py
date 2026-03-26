@@ -1,1 +1,1 @@
-from .api import router, internal_router
+from .api import internal_router, router

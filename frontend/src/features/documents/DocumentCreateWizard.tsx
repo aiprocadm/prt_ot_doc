@@ -17,6 +17,7 @@ const createIdempotencyKey = () =>
 export const DocumentCreateWizard = () => {
   const { items: companies, list: listCompanies } = useCompaniesStore();
   const { generateDocument, getGenerationStatus, list: listDocuments } = useDocumentsStore();
+  const safeCompanies = Array.isArray(companies) ? companies : [];
 
   const [templateCode, setTemplateCode] = useState("");
   const [templateVersion, setTemplateVersion] = useState("1");
@@ -86,7 +87,7 @@ export const DocumentCreateWizard = () => {
             onChange={(event) => setCompanyId(event.target.value)}
           >
             <option value="">Выберите компанию</option>
-            {companies.map((company) => (
+            {safeCompanies.map((company) => (
               <option key={company.id} value={company.id}>
                 {company.name}
               </option>

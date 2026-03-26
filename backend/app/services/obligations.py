@@ -8,8 +8,15 @@ from typing import Iterable
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.models import (
+    Attestation,
+    Inspection,
+    Prescription,
+    Tenant,
+    TrainingCourse,
+    TrainingPlan,
+)
 from app.models.obligations import Task, TaskPriority, TaskReminderChannel, TaskStatus
-from app.models.models import Attestation, Inspection, Prescription, Tenant, TrainingCourse, TrainingPlan
 from app.services.events import EventType
 from app.services.outbox import OutboxService
 

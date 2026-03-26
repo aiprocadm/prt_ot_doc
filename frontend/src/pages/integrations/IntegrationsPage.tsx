@@ -1,5 +1,6 @@
 import { RotateCcw } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import { apiClient } from "@/api/client";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -13,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PERMISSIONS } from "@/permissions/permissions";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
+import type { ApiError } from "@/types/dto/common";
 
 type OutboxEntry = {
   id: string;
@@ -45,19 +47,21 @@ type ReadinessResponse = {
 const formatDateTime = (value?: string | null) => (value ? new Date(value).toLocaleString() : "—");
 
 const IntegrationsPage = () => {
-  const { data, setData, loading, error, reload } = useAsyncResource({
-    loader: async () => {
-      const [outboxResponse, eventResponse, readinessResponse] = await Promise.all([
-        apiClient.get<{ items: OutboxEntry[] }>("/admin/outbox"),
-        apiClient.get<{ items: OutboxEventEntry[] }>("/admin/outbox/events"),
-        apiClient.get<ReadinessResponse>("/integrations/readiness"),
-      ]);
-      return {
-        deliveries: outboxResponse.data.items ?? [],
-        events: eventResponse.data.items ?? [],
-        readiness: readinessResponse.data ?? null,
-      };
-    },
+  const loadIntegrations = useCallback(async () => {
+    const [outboxResponse, eventResponse, readinessResponse] = await Promise.all([
+      apiClient.get<{ items: OutboxEntry[] }>("/admin/outbox"),
+      apiClient.get<{ items: OutboxEventEntry[] }>("/admin/outbox/events"),
+      apiClient.get<ReadinessResponse>("/integrations/readiness"),
+    ]);
+    return {
+      deliveries: outboxResponse.data.items ?? [],
+      events: eventResponse.data.items ?? [],
+      readiness: readinessResponse.data ?? null,
+    };
+  }, []);
+
+  const { data, loading, error, reload } = useAsyncResource({
+    loader: loadIntegrations,
     initialData: {
       deliveries: [] as OutboxEntry[],
       events: [] as OutboxEventEntry[],
@@ -91,6 +95,8 @@ const IntegrationsPage = () => {
     try {
       await apiClient.post(`/admin/outbox/${id}/retry`);
       await reload();
+    } catch (error) {
+      toast.error((error as ApiError)?.message ?? "Не удалось повторить доставку");
     } finally {
       setRetryingId(null);
     }
@@ -101,6 +107,8 @@ const IntegrationsPage = () => {
     try {
       await apiClient.post(`/admin/outbox/events/${id}/requeue`);
       await reload();
+    } catch (error) {
+      toast.error((error as ApiError)?.message ?? "Не удалось вернуть событие в очередь");
     } finally {
       setRetryingId(null);
     }

@@ -5,9 +5,8 @@ Revises: 20260306_next35_search_fts
 Create Date: 2026-03-07 00:00:00.000000
 """
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision = "20260307_next37_audit_immutable_export"
 down_revision = "20260306_next35_search_fts"

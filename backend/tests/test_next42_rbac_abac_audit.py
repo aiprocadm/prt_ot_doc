@@ -4,9 +4,9 @@ from datetime import datetime, timezone
 
 import pytest
 
+from app.models.models import AuthzPolicy
 from app.modules.rbac_abac.engine import _match_condition, evaluate
 from app.modules.rbac_abac.types import PolicyContext, Resource, Subject
-from app.models.models import AuthzPolicy
 from app.services.audit import field_level_diff
 
 

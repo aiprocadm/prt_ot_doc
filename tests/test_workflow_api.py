@@ -1,7 +1,22 @@
 from datetime import date, datetime, timezone
-from app.models.models import Incident, IncidentSeverity, IncidentStatus, IncidentType, NPABinding, NPA, NPAStatus
+
+from app.models.models import (
+    NPA,
+    Incident,
+    IncidentSeverity,
+    IncidentStatus,
+    IncidentType,
+    NPABinding,
+    NPAStatus,
+)
+from app.models.notifications import (
+    Notification,
+    NotificationChannel,
+    NotificationPriority,
+    NotificationStatus,
+    NotificationType,
+)
 from app.models.npa import NpaAct, NpaRevision
-from app.models.notifications import Notification, NotificationChannel, NotificationPriority, NotificationStatus, NotificationType
 
 
 async def test_workflow_definition_publish_start_and_complete(async_client, sessionmaker, make_auth_headers, data_factory):
@@ -452,10 +467,12 @@ async def test_workflow_sla_sweep_marks_escalation(async_client, sessionmaker, m
     )
     task_id = start_response.json()["tasks"][0]["id"]
 
-    from app.modules.workflow.service import WorkflowService
     from datetime import datetime, timedelta, timezone
+
     from sqlalchemy import select
+
     from app.modules.workflow.models import WorkflowTask
+    from app.modules.workflow.service import WorkflowService
 
     async with sessionmaker() as session:
         task = (await session.execute(select(WorkflowTask).where(WorkflowTask.id == task_id))).scalar_one()

@@ -6,7 +6,12 @@ from pathlib import Path
 
 from docx import Document
 
-from app.domains.templating.renderer import TemplateRenderer, _coerce_mapping, render_docx, render_docx_with_metadata
+from app.domains.templating.renderer import (
+    TemplateRenderer,
+    _coerce_mapping,
+    render_docx,
+    render_docx_with_metadata,
+)
 
 
 def _build_template(text: str) -> bytes:

@@ -1,7 +1,10 @@
-from fastapi import HTTPException, status
 import pytest
+from fastapi import HTTPException, status
 
-from app.api.routes.approval_signing_v1 import _require_document_object_id, _validate_certificate_period
+from app.api.routes.approval_signing_v1 import (
+    _require_document_object_id,
+    _validate_certificate_period,
+)
 
 
 def test_require_document_object_id_raises_structured_unprocessable() -> None:

@@ -7,7 +7,6 @@ from pathlib import Path
 
 from scripts import repo_audit
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 

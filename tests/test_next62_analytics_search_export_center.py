@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.models import RoleEnum
 from app.modules.projections.models import ExportJob, PackageReadModel, SearchIndexEntry

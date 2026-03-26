@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import enum
-from typing import Any, TYPE_CHECKING
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
@@ -12,9 +12,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym, validat
 from sqlalchemy.types import JSON
 
 from app.models.base import TenantBaseModel
-from app.models.finance import Contract, Department, Invoice, Order
-from app.models.models import Company, DocumentPack, Person, Site, Template, TemplateVersion, User
 from app.models.file import File
+from app.models.finance import Contract, Department, Invoice, Order
+from app.models.models import Company, DocumentPack, Person, Template, TemplateVersion, User
 
 JSONBType = JSONB().with_variant(JSON(), "sqlite")
 

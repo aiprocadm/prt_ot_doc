@@ -6,7 +6,6 @@ import contextvars
 from dataclasses import dataclass
 from typing import Optional
 
-
 _TRACE_ID: contextvars.ContextVar[str] = contextvars.ContextVar(
     "trace_id", default="unknown"
 )

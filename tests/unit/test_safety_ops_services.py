@@ -2,8 +2,8 @@ from datetime import date, timedelta
 
 from app.modules.capa import CorrectiveActionService, PrescriptionService
 from app.modules.incidents import IncidentCaseService, RiskReviewTriggerService
-from app.modules.inspections import InspectionChecklistService, InspectionService
 from app.modules.inspection_prep import GapAnalysisService
+from app.modules.inspections import InspectionChecklistService, InspectionService
 
 
 def test_incident_status_transitions() -> None:

@@ -25,10 +25,10 @@ Extracted automatically from kwargs/request.state:
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from functools import wraps
 from inspect import Signature, signature
-import logging
 from typing import Any, get_type_hints
 
 from fastapi import Request

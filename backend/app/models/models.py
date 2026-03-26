@@ -4,16 +4,25 @@ import enum
 from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, Any
 
-from app.db.session import TenantBase
-from app.models.base import (
-    SharedModel,
-    SoftDeleteMixin,
-    TenantBaseModel,
-    TimestampMixin,
-    UUIDMixin,
-    VersionedMixin,
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Date,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    LargeBinary,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+    event,
 )
-from app.models.file import File
+from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
+
+from app.db.session import TenantBase
 from app.models.approval_workflow import (
     ApprovalDecision,
     ApprovalDecisionType,
@@ -36,24 +45,15 @@ from app.models.approval_workflow import (
     SignatureStatus,
     SignatureType,
 )
-
-from sqlalchemy import (
-    JSON,
-    Boolean,
-    Date,
-    DateTime,
-    Enum,
-    ForeignKey,
-    Index,
-    Integer,
-    LargeBinary,
-    Numeric,
-    String,
-    Text,
-    UniqueConstraint,
-    event,
+from app.models.base import (
+    SharedModel,
+    SoftDeleteMixin,
+    TenantBaseModel,
+    TimestampMixin,
+    UUIDMixin,
+    VersionedMixin,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
+from app.models.file import File
 
 if TYPE_CHECKING:  # pragma: no cover - used for type checkers only
     from app.models.file import File
@@ -155,6 +155,13 @@ __all__ = [
     "WebhookEndpoint",
     "WebhookDelivery",
     "ApprovalRoute",
+    "ApprovalRouteAppliesTo",
+    "ApprovalRouteStatus",
+    "ApprovalRouteStep",
+    "ApprovalInstance",
+    "ApprovalInstanceStep",
+    "ApprovalInstanceStatus",
+    "ApprovalInstanceStepStatus",
     "ApprovalRequest",
     "ApprovalDecision",
     "ApprovalRequestStatus",
@@ -167,6 +174,7 @@ __all__ = [
     "EdoStatusHistory",
     "EdoDirection",
     "EdoStatus",
+    "EdoMessageStatus",
 ]
 
 

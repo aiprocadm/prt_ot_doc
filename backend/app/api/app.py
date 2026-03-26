@@ -24,14 +24,14 @@ from app.core.rate_limit import (
     configure_rate_limiter,
     limiter,
 )
-from app.domains.files import s3
 from app.db.session import dispose_engine
-from app.services.dev_bootstrap import bootstrap_admin_user
-from app.services.demo_bootstrap import bootstrap_demo_tenant
+from app.domains.files import s3
+from app.middleware.billing_guard import BillingGuardMiddleware
 from app.middleware.global_error_handler import GlobalErrorHandlerMiddleware
 from app.middleware.observability import ObservabilityMiddleware
 from app.middleware.tenant import TenantMiddleware
-from app.middleware.billing_guard import BillingGuardMiddleware
+from app.services.demo_bootstrap import bootstrap_demo_tenant
+from app.services.dev_bootstrap import bootstrap_admin_user
 
 __all__ = ["create_app", "SettingsError"]
 

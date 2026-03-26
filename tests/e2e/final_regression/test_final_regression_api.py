@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import pytest
-from app.modules.pipelines.models import PipelineProfile
 from httpx import ASGITransport, AsyncClient
+
+from app.modules.pipelines.models import PipelineProfile
 
 
 @pytest.mark.anyio

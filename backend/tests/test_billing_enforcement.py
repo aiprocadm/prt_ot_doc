@@ -5,7 +5,13 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi import HTTPException
 
-from app.models.models import BillingPlan, BillingSubscription, BillingSubscriptionStatus, BillingUsageCounter, Tenant
+from app.models.models import (
+    BillingPlan,
+    BillingSubscription,
+    BillingSubscriptionStatus,
+    BillingUsageCounter,
+    Tenant,
+)
 from app.services.billing import BillingContext, BillingService
 
 

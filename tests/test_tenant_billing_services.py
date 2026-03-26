@@ -3,10 +3,21 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from app.models.models import BillingPlan, BillingSubscription, BillingSubscriptionStatus, BillingUsageCounter, Tenant
+
+from app.models.models import (
+    BillingPlan,
+    BillingSubscription,
+    BillingSubscriptionStatus,
+    BillingUsageCounter,
+    Tenant,
+)
 from app.services.billing import BillingService
-from app.services.tenant_billing import QuotaExceeded, QuotasService, SubscriptionService, UsageCountersService
-from fastapi import HTTPException
+from app.services.tenant_billing import (
+    QuotaExceeded,
+    QuotasService,
+    SubscriptionService,
+    UsageCountersService,
+)
 
 
 class _Session:

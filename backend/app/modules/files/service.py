@@ -10,6 +10,10 @@ from time import perf_counter
 from typing import Any
 from uuid import uuid4
 
+from fastapi import HTTPException, status
+from sqlalchemy import delete, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.config import get_settings
 from app.domains.files import s3
 from app.modules.files import av, extractors, storage
@@ -34,9 +38,6 @@ from app.modules.files.models import (
 from app.modules.search.models import SearchDocument
 from app.services.outbox import OutboxService
 from app.tasks import av_scan_file_job, index_file_content_job
-from fastapi import HTTPException, status
-from sqlalchemy import delete, func, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 MAX_INDEX_BYTES = 25 * 1024 * 1024
 MAX_INDEX_CHARS = 500_000

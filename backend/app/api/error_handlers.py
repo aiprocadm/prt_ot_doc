@@ -8,13 +8,14 @@ from datetime import UTC, datetime
 from http import HTTPStatus
 from typing import Any, Final, Mapping
 
-from app.api.deps.tracing import TRACE_HEADER as DEFAULT_TRACE_HEADER
-from app.api.deps.tracing import get_trace_id
-from app.core.config import Settings, get_settings
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from starlette.exceptions import HTTPException as StarletteHTTPException
+
+from app.api.deps.tracing import TRACE_HEADER as DEFAULT_TRACE_HEADER
+from app.api.deps.tracing import get_trace_id
+from app.core.config import Settings, get_settings
 
 try:  # pragma: no cover - optional dependency during docs builds
     from slowapi.errors import RateLimitExceeded

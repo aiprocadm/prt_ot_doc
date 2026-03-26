@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import pytest
-from app.models.document import Document, DocumentStatus
-from app.models.models import Template, TemplateVersion, TemplateVersionStatus, Tenant
 from httpx import AsyncClient
 from sqlalchemy import select
+
+from app.models.document import Document, DocumentStatus
+from app.models.models import Template, TemplateVersion, TemplateVersionStatus, Tenant
 
 
 @pytest.mark.anyio

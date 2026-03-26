@@ -12,10 +12,15 @@ from app.models.models import (
     ApprovalInstanceStep,
     ApprovalInstanceStepStatus,
     ApprovalRoute,
-    ApprovalRouteStep,
     ApprovalRouteStatus,
+    ApprovalRouteStep,
 )
-from app.modules.approvals.service import ApprovalDecisionService, ApprovalInstanceService, ApprovalRouteService, EscalationService
+from app.modules.approvals.service import (
+    ApprovalDecisionService,
+    ApprovalInstanceService,
+    ApprovalRouteService,
+    EscalationService,
+)
 
 
 @pytest.fixture()

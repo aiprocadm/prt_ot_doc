@@ -3,6 +3,9 @@ from __future__ import annotations
 import calendar
 from datetime import date, datetime, timezone
 
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.models.models import (
     TrainingAttempt,
     TrainingCertificate,
@@ -12,8 +15,6 @@ from app.models.models import (
     TrainingProgram,
     TrainingTest,
 )
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class TrainingEnrollmentService:

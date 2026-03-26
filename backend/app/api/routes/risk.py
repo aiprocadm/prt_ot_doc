@@ -5,8 +5,8 @@ import json
 import logging
 import re
 from datetime import date, datetime, timedelta, timezone
-from uuid import uuid4
 from typing import Annotated, cast
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -14,16 +14,16 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
+from app.api.dependencies import get_session, get_tenant_record
 from app.core.idempotency import compute_request_hash
-from app.core.security import AccessContext, AuthContext, abac, get_auth_ctx, rbac
 from app.core.metrics import get_metrics
-from app.domains.risk import recalc_risk_map, rebuild_matrix_from_methodology, score_band
+from app.core.security import AccessContext, AuthContext, abac, get_auth_ctx, rbac
+from app.domains.risk import rebuild_matrix_from_methodology, recalc_risk_map, score_band
 from app.models.models import (
     Company,
     DocumentPack,
-    Position,
     Person,
+    Position,
     RiskMap,
     RiskMethodology,
     Site,
@@ -42,12 +42,10 @@ from app.models.risk import (
     RiskMatrixCell,
 )
 from app.schemas.risk import RiskListResponse
-from app.services.idempotency import IdempotencyService, normalize_idempotency_key
-from app.services.risk import RiskService
 from app.services.events import EventType
+from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 from app.services.outbox import OutboxService
-from app.core.permission_checker import PermissionChecker
-from app.core.tenant_validation import TenantContextValidator
+from app.services.risk import RiskService
 
 router = APIRouter(tags=["risks"])
 engine_router = APIRouter(prefix="/risk", tags=["risk"])

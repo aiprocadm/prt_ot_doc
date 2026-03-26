@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.security import AccessContext, abac
+from app.core.tenant_validation import TenantContextValidator
 from app.models.models import (
     Incident,
     IncidentStatus,
@@ -21,8 +22,6 @@ from app.models.models import (
     TrainingPlan,
 )
 from app.models.risk import RiskAssessmentItem
-from app.core.permission_checker import PermissionChecker
-from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 

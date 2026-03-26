@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import BinaryIO
 from uuid import uuid4
 
-
 __all__ = ["FileStorageError", "FileStorageService", "StoredObject"]
 
 

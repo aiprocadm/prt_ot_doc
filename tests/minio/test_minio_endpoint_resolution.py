@@ -1,7 +1,7 @@
+import sys
 from importlib import util
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
-import sys
 
 ROOT = Path(__file__).resolve().parents[2] / "backend"
 

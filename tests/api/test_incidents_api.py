@@ -6,9 +6,14 @@ import pytest
 from fastapi import status
 from sqlalchemy import select
 
-from app.models.models import Outbox
-
-from app.models.models import IncidentStage, IncidentStatus, IncidentType, IncidentSeverity, RoleEnum
+from app.models.models import (
+    IncidentSeverity,
+    IncidentStage,
+    IncidentStatus,
+    IncidentType,
+    Outbox,
+    RoleEnum,
+)
 from tests.utils.factories import TestDataFactory
 
 

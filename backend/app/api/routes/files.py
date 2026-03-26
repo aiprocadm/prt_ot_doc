@@ -9,7 +9,6 @@ from uuid import UUID
 from fastapi import (
     APIRouter,
     Depends,
-    File as UploadFileParam,
     Form,
     HTTPException,
     Request,
@@ -17,16 +16,20 @@ from fastapi import (
     UploadFile,
     status,
 )
+from fastapi import (
+    File as UploadFileParam,
+)
 from pydantic import BaseModel, Field
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
-from app.core.metrics import get_metrics
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
+from app.api.dependencies import get_session, get_tenant_record
 from app.core.config import get_settings
+from app.core.metrics import get_metrics
 from app.core.rate_limit import ip_tenant_key, limiter, upload_per_tenant
 from app.core.security import AccessContext, abac
+from app.core.tenant_validation import TenantContextValidator
 from app.domains.files import s3
 from app.domains.files.utils import (
     DEFAULT_SNIFF_BYTES,
@@ -34,13 +37,12 @@ from app.domains.files.utils import (
     determine_extension,
     guess_mime_type,
 )
-from app.models.file import File as StoredFile, FileKind, FileScanStatus
+from app.models.file import File as StoredFile
+from app.models.file import FileKind, FileScanStatus
 from app.models.models import Tenant
 from app.services.audit import AuditService
 from app.services.clamav import ClamAVScanRequest, enqueue_scan_request
 from app.tenancy_quotas import assert_quota
-from app.core.permission_checker import PermissionChecker
-from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter()
 

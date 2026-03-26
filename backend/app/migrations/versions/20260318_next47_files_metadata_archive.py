@@ -5,9 +5,8 @@ Revises: 20260317_next46_content_search_archive
 Create Date: 2026-03-18 00:00:00.000000
 """
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision = "20260318_next47_files_metadata_archive"
 down_revision = "20260317_next46_content_search_archive"

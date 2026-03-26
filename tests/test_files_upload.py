@@ -15,16 +15,17 @@ from sqlalchemy import select
 from app.api.routes.files import MAX_UPLOAD_BYTES
 from app.core.config import get_settings
 from app.domains.files import s3
-from app.models.file import File as StoredFile, FileKind, FileScanStatus
+from app.models.file import File as StoredFile
+from app.models.file import FileKind, FileScanStatus
 from app.models.models import AuditLog, RoleEnum
 from app.services.clamav import (
-    ClamAVScanOutcome,
-    ClamAVVerdict,
-    MemoryQuarantinePublisher,
-    get_quarantine_publisher,
-    process_scan_request,
-    reset_clamav_client,
-    reset_quarantine_publisher,
+        ClamAVScanOutcome,
+        ClamAVVerdict,
+        MemoryQuarantinePublisher,
+        get_quarantine_publisher,
+        process_scan_request,
+        reset_clamav_client,
+        reset_quarantine_publisher,
 )
 
 

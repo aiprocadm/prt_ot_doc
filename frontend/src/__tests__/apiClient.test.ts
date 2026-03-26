@@ -26,7 +26,7 @@ describe("apiClient", () => {
     mock.onGet("/documents").reply((config) => {
       expect(config.headers?.Authorization).toBe("Bearer access-token");
       expect(config.headers?.["X-Tenant"]).toBe("severstroy");
-      expect(config.headers?.["X-Site"]).toBe("Северный кластер");
+      expect(config.headers?.["X-Site"]).toBeUndefined();
       return [200, {}];
     });
 
@@ -64,20 +64,27 @@ describe("apiClient", () => {
   it("allows whitelisted routes without tenant", async () => {
     const mock = new MockAdapter(apiClient);
 
-    mock.onGet("/auth/login").reply((config) => {
-      expect(config.headers?.["X-Tenant"]).toBeUndefined();
-      expect(config.headers?.["X-Site"]).toBeUndefined();
-      return [200, {}];
-    });
-
     mock.onGet("/health").reply((config) => {
       expect(config.headers?.["X-Tenant"]).toBeUndefined();
       expect(config.headers?.["X-Site"]).toBeUndefined();
       return [200, { status: "ok" }];
     });
 
-    await apiClient.get("/auth/login");
     await apiClient.get("/health");
+
+    mock.restore();
+  });
+
+  it("injects tenant header for auth profile routes", async () => {
+    tenantStorage.setTenant({ slug: "demo" });
+
+    const mock = new MockAdapter(apiClient);
+    mock.onGet("/auth/me").reply((config) => {
+      expect(config.headers?.["X-Tenant"]).toBe("demo");
+      return [200, {}];
+    });
+
+    await apiClient.get("/auth/me");
 
     mock.restore();
   });

@@ -9,19 +9,19 @@ from typing import Iterable
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.file import File
 from app.models.models import (
     Company,
     Permit,
     PermitStatus,
     Person,
     Position,
+    TrainingCertificate,
     TrainingCourse,
     TrainingPlan,
-    TrainingCertificate,
     TrainingSession,
     TrainingSessionStatus,
 )
-from app.models.file import File
 from app.services.events import EventType
 from app.services.obligations import create_training_task
 from app.services.outbox import OutboxService

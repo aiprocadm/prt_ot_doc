@@ -5,11 +5,12 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.services.audit import AuditService
 from fastapi import HTTPException, Request, status
 from sqlalchemy import and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
+
+from app.services.audit import AuditService
 
 
 class Action(str, enum.Enum):

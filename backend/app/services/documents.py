@@ -12,7 +12,6 @@ from app.services.audit import AuditService
 from app.services.events import EventType
 from app.services.outbox import OutboxService
 
-
 _ALLOWED_STATUS_TRANSITIONS: Mapping[
     DocumentStatus, frozenset[DocumentStatus]
 ] = {

@@ -16,6 +16,7 @@ export interface DocumentDto extends BaseEntityDto {
   company: CompanyDto;
   status: DocumentStatus;
   version: string;
+  current_version_id?: string | null;
   template_id?: string;
   storage?: FileLinkDto | null;
   history?: DocumentVersionDto[];

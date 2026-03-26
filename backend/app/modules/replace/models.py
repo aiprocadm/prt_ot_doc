@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import enum
-
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import DateTime, Index, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB

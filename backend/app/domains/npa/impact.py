@@ -4,12 +4,12 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.models import NPABinding
-from app.models.npa import NpaAct, NpaRevision
 from app.models.notifications import PlanTask, PlanTaskStatus
+from app.models.npa import NpaAct, NpaRevision
 
 
 @dataclass(slots=True)

@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.models.models import ExternalRegistryJob, TrainingCertificate, TrainingProtocol
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.models import ExternalRegistryJob, TrainingCertificate, TrainingProtocol
 
 
 @dataclass

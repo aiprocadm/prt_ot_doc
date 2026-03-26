@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from enum import Enum
 from datetime import datetime
+from enum import Enum
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY, TSVECTOR

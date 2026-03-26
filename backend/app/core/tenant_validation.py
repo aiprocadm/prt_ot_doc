@@ -8,7 +8,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import ErrorBuilder, ERROR_CODES
+from app.core.errors import ERROR_CODES, ErrorBuilder
 from app.models.models import Tenant
 
 

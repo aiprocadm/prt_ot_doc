@@ -18,20 +18,20 @@ from app.models.models import (
     DocumentPack,
     DocumentPackItem,
     MedicalExam,
-    PPEIssue,
-    PPEIssueStatus,
     Person,
     PipelineRun,
+    PPEIssue,
+    PPEIssueStatus,
     Site,
     Training,
     TrainingStatus,
 )
 from app.schemas.pack import PackGenerateRequest
 from app.services.audit import AuditService
-from app.services.events import EventType
-from app.services.outbox import OutboxService
 from app.services.celery_app import celery_app
 from app.services.celery_app import settings as celery_settings
+from app.services.events import EventType
+from app.services.outbox import OutboxService
 from app.services.package_pipeline import PackGenerationPipeline, person_label
 from app.services.pipeline import PipelineService
 

@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { apiClient } from "@/api/client";
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { LoadingScreen } from "@/components/common/LoadingScreen";
+import type { ApiError } from "@/types/dto/common";
 
 type GraphNode = { id: string; type: string; config?: Record<string, unknown> };
 type GraphEdge = { from: string; to: string; condition?: string };
@@ -39,6 +43,8 @@ const defaultGraph: { nodes: GraphNode[]; edges: GraphEdge[] } = {
 
 const PipelineBuilderPage = () => {
   const [profiles, setProfiles] = useState<PipelineProfile[]>([]);
+  const [profilesLoading, setProfilesLoading] = useState(true);
+  const [profilesError, setProfilesError] = useState<ApiError | null>(null);
   const [code, setCode] = useState("doc-default");
   const [name, setName] = useState("Default pipeline");
   const [graph, setGraph] = useState<{ nodes: GraphNode[]; edges: GraphEdge[] }>(defaultGraph);
@@ -47,12 +53,21 @@ const PipelineBuilderPage = () => {
   const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
-    const response = await apiClient.get<PipelineProfile[]>("/v1/pipelines/profiles");
-    setProfiles(response.data);
+    setProfilesLoading(true);
+    setProfilesError(null);
+    try {
+      const response = await apiClient.get<PipelineProfile[]>("/v1/pipelines/profiles");
+      setProfiles(response.data);
+    } catch (loadError) {
+      setProfiles([]);
+      setProfilesError(loadError as ApiError);
+    } finally {
+      setProfilesLoading(false);
+    }
   };
 
   useEffect(() => {
-    load().catch(() => setProfiles([]));
+    void load();
   }, []);
 
   const parsedGraph = graph;
@@ -154,9 +169,9 @@ const PipelineBuilderPage = () => {
               <div className="space-y-2">
                 <div className="text-xs font-medium text-muted-foreground">Canvas (nodes + links)</div>
                 <div className="max-h-52 space-y-2 overflow-auto rounded border p-2">
-                  {parsedGraph.nodes.map((node) => (
+                  {parsedGraph.nodes.map((node, nodeIdx) => (
                     <button
-                      key={node.id}
+                      key={`${node.id}-${nodeIdx}`}
                       type="button"
                       className={`w-full rounded border p-2 text-left text-xs ${selectedNodeId === node.id ? "border-blue-500 bg-blue-50" : ""}`}
                       onClick={() => setSelectedNodeId(node.id)}
@@ -172,10 +187,10 @@ const PipelineBuilderPage = () => {
                     <div key={`${edge.from}-${edge.to}-${idx}`} className="space-y-1 rounded border p-2">
                       <div className="grid grid-cols-2 gap-2">
                         <select className="rounded border px-1 py-0.5" value={edge.from} onChange={(e) => updateEdge(idx, { from: e.target.value })}>
-                          {parsedGraph.nodes.map((node) => <option key={`${idx}-from-${node.id}`}>{node.id}</option>)}
+                          {parsedGraph.nodes.map((node, nodeIdx) => <option key={`${idx}-from-${node.id}-${nodeIdx}`}>{node.id}</option>)}
                         </select>
                         <select className="rounded border px-1 py-0.5" value={edge.to} onChange={(e) => updateEdge(idx, { to: e.target.value })}>
-                          {parsedGraph.nodes.map((node) => <option key={`${idx}-to-${node.id}`}>{node.id}</option>)}
+                          {parsedGraph.nodes.map((node, nodeIdx) => <option key={`${idx}-to-${node.id}-${nodeIdx}`}>{node.id}</option>)}
                         </select>
                       </div>
                       <input className="w-full rounded border px-1 py-0.5" value={edge.condition ?? ""} onChange={(e) => updateEdge(idx, { condition: e.target.value || undefined })} placeholder="condition (optional)" />
@@ -221,15 +236,25 @@ const PipelineBuilderPage = () => {
         </div>
         <div className="rounded border p-3 text-sm">
           <h2 className="mb-2 font-medium">Профили</h2>
-          <div className="space-y-2">
-            {profiles.map((profile) => (
-              <div key={profile.id} className="rounded border p-2">
-                <div className="font-medium">{profile.code}</div>
-                <div className="text-xs text-muted-foreground">v{profile.profile_version} · {profile.name}</div>
-                <div className="text-xs">nodes: {profile.graph?.nodes?.length ?? 0}, edges: {profile.graph?.edges?.length ?? 0}</div>
-              </div>
-            ))}
-          </div>
+          <ErrorState error={profilesError ?? undefined} onRetry={() => void load()} />
+          {profilesLoading ? <LoadingScreen label="Загрузка pipeline profiles" /> : null}
+          {!profilesLoading && !profilesError && profiles.length === 0 ? (
+            <EmptyState
+              title="Профили пайплайна не найдены"
+              description="Создайте первый профиль через builder слева или повторите загрузку позже."
+            />
+          ) : null}
+          {!profilesLoading && !profilesError && profiles.length > 0 ? (
+            <div className="space-y-2">
+              {profiles.map((profile) => (
+                <div key={profile.id} className="rounded border p-2">
+                  <div className="font-medium">{profile.code}</div>
+                  <div className="text-xs text-muted-foreground">v{profile.profile_version} · {profile.name}</div>
+                  <div className="text-xs">nodes: {profile.graph?.nodes?.length ?? 0}, edges: {profile.graph?.edges?.length ?? 0}</div>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
       </div>
     </section>

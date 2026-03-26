@@ -7,9 +7,8 @@ Create Date: 2025-03-15 00:00:00.000000
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "20250315_platform_p0_document_snapshot_batch"

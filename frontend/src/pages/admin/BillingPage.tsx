@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import {
   activateSubscription,
@@ -20,6 +20,7 @@ import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type { ApiError } from "@/types/dto/common";
 
 const Meter = ({ label, used, limit }: { label: string; used: number; limit: number }) => {
   const pct = limit <= 0 ? 0 : Math.min(Math.round((used / Math.max(limit, 1)) * 100), 100);
@@ -33,15 +34,19 @@ const Meter = ({ label, used, limit }: { label: string; used: number; limit: num
 };
 
 const BillingPage = () => {
-  const { data, setData, loading, error, reload } = useAsyncResource({
-    loader: async () => {
-      const [summary, invoiceItems, planItems] = await Promise.all([getBillingSummary(), getBillingInvoices(), getBillingPlans()]);
-      return {
-        summary,
-        invoices: invoiceItems,
-        plans: planItems,
-      };
-    },
+  const [actionError, setActionError] = useState<ApiError | null>(null);
+
+  const loadBilling = useCallback(async () => {
+    const [summary, invoiceItems, planItems] = await Promise.all([getBillingSummary(), getBillingInvoices(), getBillingPlans()]);
+    return {
+      summary,
+      invoices: invoiceItems,
+      plans: planItems,
+    };
+  }, []);
+
+  const { data, loading, error, reload } = useAsyncResource({
+    loader: loadBilling,
     initialData: {
       summary: null as BillingSummary | null,
       invoices: [] as BillingInvoice[],
@@ -63,9 +68,18 @@ const BillingPage = () => {
 
   const run = async (key: string, fn: () => Promise<unknown>) => {
     setBusy(key);
+    setActionError(null);
     try {
       await fn();
       await reload();
+    } catch (nextError) {
+      const apiError = (nextError ?? {}) as Partial<ApiError>;
+      setActionError({
+        status: apiError.status ?? 500,
+        code: apiError.code,
+        type: apiError.type,
+        message: apiError.message ?? "Не удалось выполнить billing action"
+      });
     } finally {
       setBusy(null);
     }
@@ -74,7 +88,7 @@ const BillingPage = () => {
   return (
     <div className="space-y-6">
       <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Администрирование", to: "/admin" }, { label: "Биллинг" }]} />
-      <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
+      <ErrorState error={(actionError ?? error) ?? undefined} onRetry={() => void reload()} />
       {loading ? <LoadingScreen label="Загрузка биллинга" /> : null}
       {!loading && !error && !data.summary ? (
         <EmptyState title="Биллинг временно недоступен" description="Данные тарифа и счетов появятся после инициализации billing context." />

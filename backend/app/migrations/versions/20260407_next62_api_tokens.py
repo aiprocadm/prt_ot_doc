@@ -7,8 +7,8 @@ Create Date: 2026-04-07
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "20260407_next62_api_tokens"
 down_revision = "20260406_next61_analytics_read_models"

@@ -43,19 +43,24 @@ const PackageProfilesPage = () => {
 
   const createProfile = async () => {
     if (!code || !name) return;
-    await apiClient.post("/package-profiles", {
-      code,
-      name,
-      status: "active",
-      pipeline_steps_json: [
-        { step: "render_docx", enabled: true },
-        { step: "convert_pdf", enabled: true },
-        { step: "build_zip", enabled: true }
-      ]
-    });
-    setCode("");
-    setName("");
-    await load();
+    setError(null);
+    try {
+      await apiClient.post("/package-profiles", {
+        code,
+        name,
+        status: "active",
+        pipeline_steps_json: [
+          { step: "render_docx", enabled: true },
+          { step: "convert_pdf", enabled: true },
+          { step: "build_zip", enabled: true }
+        ]
+      });
+      setCode("");
+      setName("");
+      await load();
+    } catch (nextError) {
+      setError((nextError as ApiError) ?? { message: "Не удалось создать package profile" });
+    }
   };
 
   return (
@@ -78,7 +83,7 @@ const PackageProfilesPage = () => {
           {!loading && !error && items.length === 0 ? (
             <EmptyState title="Package profiles отсутствуют" description="Создайте первый profile для работы с package presets." />
           ) : null}
-          {!loading && !error && items.length > 0 ? (
+          {!loading && items.length > 0 ? (
             <ul className="space-y-1 text-sm">
               {items.map((item) => (
                 <li key={item.id}>{item.code} — {item.name} ({item.status})</li>

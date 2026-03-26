@@ -22,9 +22,9 @@ class CorrelationIDManager:
     """Manages correlation ID across request lifecycle and background jobs."""
 
     @staticmethod
-    def set(correlation_id: str) -> None:
+    def set(correlation_id: str) -> contextvars.Token[Optional[str]]:
         """Set correlation ID for current context."""
-        _correlation_id_context.set(correlation_id)
+        return _correlation_id_context.set(correlation_id)
 
     @staticmethod
     def get() -> Optional[str]:
@@ -35,6 +35,11 @@ class CorrelationIDManager:
     def clear() -> None:
         """Clear correlation ID from current context."""
         _correlation_id_context.set(None)
+
+    @staticmethod
+    def reset(token: contextvars.Token[Optional[str]]) -> None:
+        """Restore a previously active correlation ID."""
+        _correlation_id_context.reset(token)
 
     @staticmethod
     def copy_context():

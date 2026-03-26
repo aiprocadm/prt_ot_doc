@@ -27,6 +27,8 @@ export const TemplateDetails = ({ template }: { template: TemplateDto }) => {
     try {
       await activateVersion(template.id, versionId);
       toast.success("Версия активирована");
+    } catch (error) {
+      toast.error((error as Error)?.message ?? "Не удалось активировать версию");
     } finally {
       setIsActivating(false);
     }
@@ -34,30 +36,42 @@ export const TemplateDetails = ({ template }: { template: TemplateDto }) => {
 
   const handleUpload = async () => {
     if (!file) return;
-    const form = new FormData();
-    form.append("file", file);
-    form.append("document_type", template.template_type ?? "custom");
-    await apiClient.post(`/templates/${template.id}/versions:upload`, form, {
-      headers: { "Content-Type": "multipart/form-data", "Idempotency-Key": `${template.id}-${file.name}` }
-    });
-    toast.success("Версия загружена");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("document_type", template.template_type ?? "custom");
+      await apiClient.post(`/templates/${template.id}/versions:upload`, form, {
+        headers: { "Content-Type": "multipart/form-data", "Idempotency-Key": `${template.id}-${file.name}` }
+      });
+      toast.success("Версия загружена");
+    } catch (error) {
+      toast.error((error as Error)?.message ?? "Не удалось загрузить версию");
+    }
   };
 
   const handleLint = async () => {
-    const { data } = await apiClient.post(`/templates/${template.id}/versions/${versionId}:lint`, {
-      required_fields: []
-    });
-    setLintReport(JSON.stringify(data, null, 2));
-    toast.success("Lint завершён");
+    try {
+      const { data } = await apiClient.post(`/templates/${template.id}/versions/${versionId}:lint`, {
+        required_fields: []
+      });
+      setLintReport(JSON.stringify(data, null, 2));
+      toast.success("Lint завершён");
+    } catch (error) {
+      toast.error((error as Error)?.message ?? "Не удалось выполнить lint");
+    }
   };
 
   const handlePreview = async () => {
-    const parsed = JSON.parse(previewData);
-    const { data } = await apiClient.post(`/templates/${template.id}/versions/${versionId}:preview`, {
-      data: parsed,
-      render_pdf: false
-    });
-    toast.success(`Preview готов: ${data.docx_url}`);
+    try {
+      const parsed = JSON.parse(previewData);
+      const { data } = await apiClient.post(`/templates/${template.id}/versions/${versionId}:preview`, {
+        data: parsed,
+        render_pdf: false
+      });
+      toast.success(`Preview готов: ${data.docx_url}`);
+    } catch (error) {
+      toast.error((error as Error)?.message ?? "Не удалось построить preview");
+    }
   };
 
   return (

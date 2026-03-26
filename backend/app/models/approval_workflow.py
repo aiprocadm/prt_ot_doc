@@ -4,9 +4,21 @@ import enum
 from datetime import datetime
 from typing import Any
 
-from app.models.base import SoftDeleteMixin, TenantBaseModel, VersionedMixin
-from sqlalchemy import JSON, Boolean, DateTime, Enum, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.models.base import SoftDeleteMixin, TenantBaseModel
 
 
 class ApprovalRequestStatus(str, enum.Enum):

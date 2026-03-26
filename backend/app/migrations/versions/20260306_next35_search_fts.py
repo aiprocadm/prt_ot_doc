@@ -7,7 +7,6 @@ Create Date: 2026-03-06 00:00:00.000000
 
 from alembic import op
 
-
 revision = "20260306_next35_search_fts"
 down_revision = "20260305_next34_outbox_webhook_hardening"
 branch_labels = None

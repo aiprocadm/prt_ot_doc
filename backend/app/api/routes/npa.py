@@ -9,18 +9,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.dependencies import get_tenant_record
-from app.domains.npa.impact import NpaImpactService
-from app.models.models import Tenant
-from app.models.npa import NpaRevision
-
-from app.api.dependencies import get_session
+from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.security import rbac
+from app.core.tenant_validation import TenantContextValidator
+from app.domains.npa.impact import NpaImpactService
+from app.models.models import Tenant
 from app.models.npa import NpaAct
 from app.schemas.npa import NpaActListResponse, NpaActRead
-from app.core.permission_checker import PermissionChecker
-from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(tags=["npa"])
 

@@ -11,7 +11,7 @@ const API_BASE_URL = appConfig.apiBaseUrl;
 let isRefreshing = false;
 let refreshPromise: Promise<string | null> | null = null;
 const subscribers: Array<(token: string | null) => void> = [];
-const TENANT_WHITELIST = [/\/v1\/auth(\/|$)/, /\/v1\/health(\/|$)/];
+const TENANT_WHITELIST = [/\/v1\/health(\/|$)/];
 
 const combineUrl = (baseURL: string, url: string) => {
   if (!baseURL) return url;
@@ -151,9 +151,6 @@ apiClient.interceptors.request.use((config) => {
   }
   if (tenant && requiresTenant) {
     config.headers["X-Tenant"] = tenant.slug;
-    if (tenant.site) {
-      config.headers["X-Site"] = tenant.site;
-    }
   }
   config.timeout = config.timeout ?? 15_000;
   return config;

@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
+from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.security import rbac
 from app.models.models import (
@@ -21,8 +21,6 @@ from app.models.models import (
 from app.modules.briefings.services import BriefingEntryService
 from app.modules.rbac_abac import require_permission
 from app.services.audit import AuditService
-from app.core.permission_checker import PermissionChecker
-from app.core.tenant_validation import TenantContextValidator
 
 _BRIEFINGS_READ_PERMISSION = "briefings.read"
 _BRIEFINGS_WRITE_PERMISSION = "briefings.update"

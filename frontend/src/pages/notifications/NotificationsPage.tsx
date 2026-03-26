@@ -121,14 +121,26 @@ const NotificationsPage = () => {
 
   const markRead = async (ids: string[]) => {
     if (!ids.length) return;
-    await apiClient.post("/notifications/mark-read", { ids });
-    await load();
+    setError(null);
+    try {
+      await apiClient.post("/notifications/mark-read", { ids });
+      await load();
+    } catch (err) {
+      const apiError = (err as ApiError) ?? { status: 500, message: "Не удалось отметить уведомления как прочитанные" };
+      setError({ status: apiError.status ?? 500, message: apiError.message ?? "Не удалось отметить уведомления как прочитанные" });
+    }
   };
 
   const saveSettings = async () => {
     if (!settings) return;
-    await apiClient.put("/notifications/settings/me", settings);
-    await loadSettings();
+    setError(null);
+    try {
+      await apiClient.put("/notifications/settings/me", settings);
+      await loadSettings();
+    } catch (err) {
+      const apiError = (err as ApiError) ?? { status: 500, message: "Не удалось сохранить настройки уведомлений" };
+      setError({ status: apiError.status ?? 500, message: apiError.message ?? "Не удалось сохранить настройки уведомлений" });
+    }
   };
 
   return (
@@ -165,7 +177,7 @@ const NotificationsPage = () => {
             <Input placeholder="Тип уведомления" value={type} onChange={(event) => setType(event.target.value)} />
             <div className="rounded-md border px-3 py-2 text-sm text-muted-foreground">Типы: {groupedByType.join(", ") || "—"}</div>
           </div>
-          {!loading && !error ? items.map((item) => (
+          {!loading ? items.map((item) => (
             <div key={item.id} className={`rounded-md border p-3 ${item.is_read ? "bg-muted/30" : "border-primary/40"}`}>
               <div className="flex items-start gap-3">
                 <input type="checkbox" className="mt-1" checked={selectedIds.includes(item.id)} onChange={() => toggleSelected(item.id)} aria-label={`select-${item.id}`} />

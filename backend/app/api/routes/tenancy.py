@@ -4,11 +4,10 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
+from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, rbac
-from app.models.models import Tenant, TenantCounter, TenantQuota
-from app.core.permission_checker import PermissionChecker
 from app.core.tenant_validation import TenantContextValidator
+from app.models.models import Tenant, TenantCounter, TenantQuota
 
 router = APIRouter(prefix="/tenancy", tags=["tenancy"])
 _AuthDep = Depends(rbac())

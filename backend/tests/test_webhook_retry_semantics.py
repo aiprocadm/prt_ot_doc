@@ -11,8 +11,8 @@ from datetime import datetime
 
 from app.services.webhook_retry_telemetry import (
     FailureCategory,
-    classify_failure,
     calculate_retry_info,
+    classify_failure,
     create_failure_diagnostics,
 )
 

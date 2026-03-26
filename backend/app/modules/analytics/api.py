@@ -8,7 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.models.models import Tenant
-from app.modules.analytics.services import AnalyticsAggregationService, DashboardFilters, KpiDashboardService
+from app.modules.analytics.services import (
+    AnalyticsAggregationService,
+    DashboardFilters,
+    KpiDashboardService,
+)
 from app.modules.projections.models import DashboardKpiSnapshot
 from app.modules.projections.services import ProjectionOrchestrator
 

@@ -4,6 +4,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import LoginPage from "@/pages/auth/LoginPage";
 
+vi.mock("@/api/tenantStorage", () => ({
+  tenantStorage: {
+    getTenant: () => null
+  }
+}));
+
 const mockAuthState = {
   login: vi.fn(),
   loading: false,
@@ -26,6 +32,7 @@ describe("LoginPage smoke", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Вход в платформу" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Tenant")).toBeInTheDocument();
     expect(screen.getByLabelText("E-mail")).toBeInTheDocument();
     expect(screen.getByLabelText("Пароль")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Войти" })).toBeInTheDocument();

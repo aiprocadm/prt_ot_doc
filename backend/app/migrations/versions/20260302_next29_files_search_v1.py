@@ -5,10 +5,9 @@ Revises: 20260301_next26_pipeline_idempotency
 Create Date: 2026-03-02 00:00:00.000000
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
-
 
 revision = "20260302_next29"
 down_revision = "20260301_next26"

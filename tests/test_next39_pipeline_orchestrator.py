@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import pytest
+from sqlalchemy import select
+
 from app.models.job_engine import DocumentJobStatus, DocumentJobStep, JobStepStatus
 from app.modules.pipelines.models import PipelineProfile
 from app.services.pipelines_orchestrator import PipelineOrchestrator
-from sqlalchemy import select
 
 
 @pytest.mark.anyio

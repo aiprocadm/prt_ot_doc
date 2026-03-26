@@ -26,6 +26,8 @@ const STATUS_OPTIONS = [
 
 export const DocumentTable = ({ onSelect }: DocumentTableProps) => {
   const { items, pagination, setPage, setPageSize, list, download, loading, filters, setFilters } = useDocumentsStore();
+  const safeItems = Array.isArray(items) ? items : [];
+  const safePagination = pagination ?? { page: 1, page_size: 10, total: safeItems.length };
 
   const columns = useMemo<ColumnDef<DocumentDto>[]>(
     () => [
@@ -95,11 +97,11 @@ export const DocumentTable = ({ onSelect }: DocumentTableProps) => {
   return (
     <RegistryTable
       columns={columns}
-      data={items}
+      data={safeItems}
       isLoading={loading}
-      pageIndex={pagination.page}
-      pageSize={pagination.page_size}
-      total={pagination.total}
+      pageIndex={safePagination.page}
+      pageSize={safePagination.page_size}
+      total={safePagination.total}
       onPageChange={(page) => {
         setPage(page);
         list();

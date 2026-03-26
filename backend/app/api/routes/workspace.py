@@ -8,8 +8,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
+from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, rbac
+from app.core.tenant_validation import TenantContextValidator
 from app.models.finance import Contract, ContractStatus
 from app.models.models import (
     ComplianceDeadline,
@@ -18,17 +19,15 @@ from app.models.models import (
     Inspection,
     InspectionStatus,
     OfflineSyncBatch,
+    Person,
     PPEIssue,
     PPEIssueStatus,
-    Person,
-    Tenant,
     TemplateVersion,
     TemplateVersionStatus,
+    Tenant,
     TrainingEnrollment,
 )
 from app.models.obligations import Task, TaskStatus
-from app.core.permission_checker import PermissionChecker
-from app.core.tenant_validation import TenantContextValidator
 
 router = APIRouter(prefix="/workspace", tags=["workspace"])
 

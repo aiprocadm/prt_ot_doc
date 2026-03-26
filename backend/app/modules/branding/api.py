@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.models.models import Tenant
+
 from .schemas import (
     BrandingGenerationHistoryItem,
     BrandingGenerationHistoryResponse,

@@ -9,6 +9,7 @@ from celery.schedules import crontab
 from kombu import Queue
 
 from app.core.config import get_settings
+from app.core.correlation_id import CorrelationIDManager
 from app.core.task_context import reset_task_id, set_task_id
 from app.core.tracing import reset_trace_id, set_trace_id
 
@@ -88,7 +89,14 @@ celery_app.conf.task_routes = (route_task_by_tenant, {
 })
 
 
-_TASK_CONTEXT_TOKENS: dict[str, tuple[contextvars.Token[Optional[str]], contextvars.Token[str]]] = {}
+_TASK_CONTEXT_TOKENS: dict[
+    str,
+    tuple[
+        contextvars.Token[Optional[str]],
+        contextvars.Token[str],
+        contextvars.Token[Optional[str]],
+    ],
+] = {}
 
 
 @signals.task_prerun.connect
@@ -108,15 +116,26 @@ def _on_task_prerun(  # type: ignore[misc]
         task_token = set_task_id(None)
 
     trace_header_value: Optional[str] = None
+    correlation_header_value: Optional[str] = None
     request = getattr(task, "request", None)
     if request is not None:
         headers = getattr(request, "headers", None)
         if isinstance(headers, dict):
             trace_header_value = headers.get("trace_id") or headers.get("X-Trace-Id")
+            correlation_header_value = (
+                headers.get("correlation_id")
+                or headers.get("x-correlation-id")
+                or headers.get("X-Correlation-Id")
+                or headers.get("x-request-id")
+                or headers.get("X-Request-Id")
+            )
 
-    trace_identifier = (trace_header_value or task_id).strip() or task_id
+    trace_identifier = (trace_header_value or correlation_header_value or task_id).strip() or task_id
     trace_token = set_trace_id(trace_identifier)
-    _TASK_CONTEXT_TOKENS[task_id] = (task_token, trace_token)
+    correlation_token = CorrelationIDManager.set(
+        (correlation_header_value or trace_identifier).strip() or trace_identifier
+    )
+    _TASK_CONTEXT_TOKENS[task_id] = (task_token, trace_token, correlation_token)
 
 
 @signals.task_postrun.connect
@@ -132,7 +151,7 @@ def _on_task_postrun(  # type: ignore[misc]
     if not tokens:
         return
 
-    task_token, trace_token = tokens
+    task_token, trace_token, correlation_token = tokens
     try:
         reset_task_id(task_token)
     except LookupError:  # pragma: no cover - defensive cleanup
@@ -142,3 +161,8 @@ def _on_task_postrun(  # type: ignore[misc]
         reset_trace_id(trace_token)
     except LookupError:  # pragma: no cover - defensive cleanup
         logger.debug("celery.context.reset_trace_id_missing", extra={"task_id": task_id})
+
+    try:
+        CorrelationIDManager.reset(correlation_token)
+    except LookupError:  # pragma: no cover - defensive cleanup
+        logger.debug("celery.context.reset_correlation_id_missing", extra={"task_id": task_id})

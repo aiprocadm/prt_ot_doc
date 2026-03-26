@@ -10,13 +10,14 @@ import pytest
 
 from app.core.config import Settings
 from app.models.models import OutboxStatus
-from app.services.outbox import OutboxProcessor, DispatchResult
+from app.services.outbox import DispatchResult, OutboxProcessor
 
 
 @pytest.fixture
 def mock_settings():
     """Create mock settings for OutboxProcessor."""
     settings = MagicMock(spec=Settings)
+    settings.outbox_in_progress_timeout_seconds = 900
     settings.outbox_max_attempts = 5
     settings.outbox_retry_backoff_seconds = 5
     settings.outbox_retry_backoff_max_seconds = 300

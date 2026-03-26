@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from alembic import op
 
-
 # revision identifiers, used by Alembic.
 revision: str = "20250318_pack_item_template_version"
 down_revision: str | tuple[str, ...] = "20250315_platform_p0_document_snapshot_batch"

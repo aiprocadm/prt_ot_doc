@@ -1,7 +1,8 @@
 import pytest
-from app.api.error_handlers import TRACE_HEADER, register_exception_handlers
 from fastapi import FastAPI, HTTPException, status
 from httpx import ASGITransport, AsyncClient
+
+from app.api.error_handlers import TRACE_HEADER, register_exception_handlers
 
 
 @pytest.fixture()

@@ -17,8 +17,8 @@ from app.models import (
     risk,  # noqa: F401
     safety_ops,  # noqa: F401
 )
-from app.modules.replace import models as replace_models  # noqa: F401
 from app.modules.pipelines import models as pipeline_models  # noqa: F401
+from app.modules.replace import models as replace_models  # noqa: F401
 
 Base = TenantBase
 
@@ -38,12 +38,8 @@ TARGET_METADATA = (ALEMBIC_METADATA,)
 
 __all__ = ["Base", "TARGET_METADATA", "ALEMBIC_METADATA", "SharedBase", "TenantBase"]
 
-from app.modules.pdf import models as pdf_models  # noqa: F401
-
 from app.modules.files import models as files_models  # noqa: F401
-
-from app.modules.search import models as search_models  # noqa: F401
-
+from app.modules.pdf import models as pdf_models  # noqa: F401
 from app.modules.projections import models as projections_models  # noqa: F401
-
+from app.modules.search import models as search_models  # noqa: F401
 from app.modules.workflow import models as workflow_models  # noqa: F401

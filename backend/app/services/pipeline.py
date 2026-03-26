@@ -13,10 +13,20 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.metrics import (
+    Metrics,
+    PipelineStage,
+    PipelineType,
+    StageResult,
+    get_metrics,
+    sanitize_label,
+)
 from app.core.payload_constraints import (
     enforce_mapping_constraints,
     normalize_output_basename,
 )
+from app.core.tenant import get_current_tenant
+from app.domains.files.utils import build_dated_prefix
 from app.models.models import PipelineRun, PipelineRunStatus, Template, TemplateVersion
 from app.services.docx import DocxService
 from app.services.file_storage import FileStorageService
@@ -26,16 +36,6 @@ from app.services.pdf import (
     PdfConversionResult,
     PdfConverter,
 )
-from app.core.metrics import (
-    Metrics,
-    PipelineStage,
-    PipelineType,
-    StageResult,
-    get_metrics,
-    sanitize_label,
-)
-from app.core.tenant import get_current_tenant
-from app.domains.files.utils import build_dated_prefix
 
 __all__ = ["PipelineService"]
 

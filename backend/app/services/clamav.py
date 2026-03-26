@@ -16,8 +16,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.domains.files import s3
 from app.db import session_scope
+from app.domains.files import s3
 from app.models.file import File, FileScanStatus
 
 logger = logging.getLogger(__name__)

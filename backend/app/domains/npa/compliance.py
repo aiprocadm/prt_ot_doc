@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
-
 _REQUIRED_FIELDS = {"ru": ["inn", "ogrn"], "us": ["ein"]}
 
 

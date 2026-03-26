@@ -53,23 +53,33 @@ const PackagePresetsPage = () => {
 
   const createPreset = async () => {
     if (!profiles.length || !code || !name) return;
-    await apiClient.post("/package-presets", {
-      code,
-      name,
-      package_profile_id: profiles[0].id,
-      naming_rule: "<doc>_<date>",
-      source_type: "json",
-      mapping_json: { doc: { type: "literal", value: "pack" } },
-      status: "active"
-    });
-    setCode("");
-    setName("");
-    await load();
+    setError(null);
+    try {
+      await apiClient.post("/package-presets", {
+        code,
+        name,
+        package_profile_id: profiles[0].id,
+        naming_rule: "<doc>_<date>",
+        source_type: "json",
+        mapping_json: { doc: { type: "literal", value: "pack" } },
+        status: "active"
+      });
+      setCode("");
+      setName("");
+      await load();
+    } catch (nextError) {
+      setError((nextError as ApiError) ?? { message: "Не удалось создать package preset" });
+    }
   };
 
   const validatePreset = async (id: string) => {
-    await apiClient.post(`/package-presets/${id}:validate`);
-    await load();
+    setError(null);
+    try {
+      await apiClient.post(`/package-presets/${id}:validate`);
+      await load();
+    } catch (nextError) {
+      setError((nextError as ApiError) ?? { message: "Не удалось провалидировать package preset" });
+    }
   };
 
   return (
@@ -92,7 +102,7 @@ const PackagePresetsPage = () => {
           {!loading && !error && items.length === 0 ? (
             <EmptyState title="Package presets отсутствуют" description="Создайте первый preset после настройки package profile." />
           ) : null}
-          {!loading && !error && items.length > 0 ? (
+          {!loading && items.length > 0 ? (
             <ul className="space-y-1 text-sm">
               {items.map((item) => (
                 <li key={item.id} className="flex items-center justify-between gap-2">

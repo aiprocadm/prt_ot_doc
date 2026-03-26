@@ -9,7 +9,7 @@ from typing import Callable
 
 from fastapi import HTTPException, status
 
-from app.core.errors import ERROR_CODES, ErrorBuilder
+from app.core.errors import ErrorBuilder
 
 
 class PermissionAction(str, Enum):

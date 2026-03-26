@@ -10,22 +10,31 @@ from httpx import AsyncClient
 mock_aws = pytest.importorskip("moto").mock_aws
 from sqlalchemy import select
 
+import app.tasks as task_module
 from app.core.config import get_settings
 from app.core.security import issue_access_token
-from app.domains.files import s3
 from app.db.session import AsyncSessionLocal
+from app.domains.files import s3
 from app.models.document import (
     Document as DocumentModel,
+)
+from app.models.document import (
     DocumentBatchItem,
     DocumentBatchRun,
     DocumentBatchStatus,
     DocumentSnapshot,
     DocumentVersion,
 )
-from app.models.models import Company, Outbox, TemplateVersion, Tenant
-from app.models.models import PipelineRun, PipelineRunStatus, RoleEnum
+from app.models.models import (
+    Company,
+    Outbox,
+    PipelineRun,
+    PipelineRunStatus,
+    RoleEnum,
+    TemplateVersion,
+    Tenant,
+)
 from app.tasks import celery_app
-import app.tasks as task_module
 from tests.utils.factories import TestDataFactory
 
 DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"

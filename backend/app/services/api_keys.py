@@ -9,9 +9,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from app.models.models import ApiKey
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.models import ApiKey
 
 API_KEY_PREFIX = "ak"
 API_KEY_DELIMITER = "."

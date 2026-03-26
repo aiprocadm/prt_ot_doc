@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.security import issue_access_token
-from app.models.document import Document, DocumentStatus
+from app.models.document import Document, DocumentStatus, DocumentVersionStatus
 from app.models.models import AuditLog, RoleEnum
 from tests.utils.factories import TestDataFactory
 
@@ -300,3 +300,91 @@ async def test_document_status_sequential_flow(
             DocumentStatus.ARCHIVED.value,
         ]
         assert all(entry.details["outcome"] == "success" for entry in entries)
+
+
+@pytest.mark.anyio()
+async def test_documents_list_returns_frontend_compatible_payload(
+    async_client: AsyncClient,
+    sessionmaker: async_sessionmaker[AsyncSession],
+    data_factory: TestDataFactory,
+) -> None:
+    seeded = await _seed_document(
+        sessionmaker,
+        data_factory,
+        status=DocumentStatus.GENERATED,
+    )
+    access_token = issue_access_token(
+        subject=seeded["user_id"],
+        tenant=seeded["tenant_slug"],
+        role=seeded["role"],
+        additional_claims={"tenant_id": seeded["tenant_id"]},
+    )
+
+    response = await async_client.get(
+        "/api/v1/documents",
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "X-Tenant": seeded["tenant_slug"],
+        },
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    payload = response.json()
+    assert payload["pagination"]["page"] == 1
+    assert payload["pagination"]["page_size"] == 10
+    assert payload["pagination"]["total"] >= 1
+    assert payload["items"]
+
+    item = next(entry for entry in payload["items"] if entry["id"] == seeded["document_id"])
+    assert item["status"] == "ready"
+    assert item["current_version_id"]
+    assert item["company"]["id"]
+    assert item["company"]["name"]
+    assert item["history"]
+    assert item["history"][0]["status"] == DocumentVersionStatus.DRAFT.value
+
+
+@pytest.mark.anyio()
+async def test_document_detail_and_status_return_current_version(
+    async_client: AsyncClient,
+    sessionmaker: async_sessionmaker[AsyncSession],
+    data_factory: TestDataFactory,
+) -> None:
+    seeded = await _seed_document(
+        sessionmaker,
+        data_factory,
+        status=DocumentStatus.REVIEW,
+    )
+    access_token = issue_access_token(
+        subject=seeded["user_id"],
+        tenant=seeded["tenant_slug"],
+        role=seeded["role"],
+        additional_claims={"tenant_id": seeded["tenant_id"]},
+    )
+
+    detail_response = await async_client.get(
+        f"/api/v1/documents/{seeded['document_id']}",
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "X-Tenant": seeded["tenant_slug"],
+        },
+    )
+    status_response = await async_client.get(
+        f"/api/v1/documents/{seeded['document_id']}/status",
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "X-Tenant": seeded["tenant_slug"],
+        },
+    )
+
+    assert detail_response.status_code == status.HTTP_200_OK
+    assert status_response.status_code == status.HTTP_200_OK
+
+    detail_payload = detail_response.json()
+    status_payload = status_response.json()
+    assert detail_payload["id"] == seeded["document_id"]
+    assert detail_payload["current_version_id"]
+    assert detail_payload["status"] == "draft"
+    assert detail_payload["storage"]["url"].endswith(f"/api/v1/documents/{seeded['document_id']}/download")
+    assert status_payload["id"] == detail_payload["id"]
+    assert status_payload["current_version_id"] == detail_payload["current_version_id"]

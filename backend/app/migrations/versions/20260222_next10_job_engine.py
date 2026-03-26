@@ -5,9 +5,8 @@ Revises: 20260221_next9_authz_tables
 Create Date: 2026-02-22 00:00:00
 """
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision = "20260222_next10"
 down_revision = "20260221_next9_authz_tables"

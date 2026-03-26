@@ -9,9 +9,8 @@ from __future__ import annotations
 
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision: str = "20260304_next32_reliability_core"
 down_revision: Union[str, None] = "20260303_next30_approval_signing_core"

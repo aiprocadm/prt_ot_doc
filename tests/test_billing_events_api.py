@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from app.models.models import BillingEvent, BillingEventType, Tenant
 from sqlalchemy import select
+
+from app.models.models import BillingEvent, BillingEventType, Tenant
 
 
 async def test_billing_events_list(async_client, sessionmaker, make_auth_headers) -> None:
