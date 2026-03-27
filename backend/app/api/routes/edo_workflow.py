@@ -327,7 +327,7 @@ async def start_approval_request(
     return body
 
 
-@router.post("/approvals/start")
+@router.post("/edo-workflow/approvals/start")
 @audit_operation("start", "approval_request")
 async def start_approval_request_v1(
     payload: ApprovalRequestCreate,
@@ -608,8 +608,8 @@ async def send_to_edo(
     return body
 
 
-@router.get("/edo/messages")
-async def edo_messages(
+@router.get("/edo-workflow/messages")
+async def edo_messages_v1(
     document_version_id: str | None = None,
     session: AsyncSession = SessionDep,
     tenant: Tenant = TenantDep,

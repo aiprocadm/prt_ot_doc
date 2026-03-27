@@ -97,7 +97,12 @@ async def _inject_login_subject(
     return payload
 
 
-@router.post("/login", response_model=TokenPair, status_code=status.HTTP_200_OK)
+@router.post(
+    "/login",
+    response_model=TokenPair,
+    status_code=status.HTTP_200_OK,
+    responses={status.HTTP_401_UNAUTHORIZED: {"description": "Unauthorized"}},
+)
 @limiter.limit(lambda: login_per_identity(), key_func=ip_subject_key)
 @audit_operation("login", "auth_session")
 async def login(
@@ -156,7 +161,12 @@ async def login(
     return TokenPair(access_token=access_token, refresh_token=refresh_token)
 
 
-@router.get("/me", response_model=MeResponse, status_code=status.HTTP_200_OK)
+@router.get(
+    "/me",
+    response_model=MeResponse,
+    status_code=status.HTTP_200_OK,
+    responses={status.HTTP_401_UNAUTHORIZED: {"description": "Unauthorized"}},
+)
 async def me(access: AccessContext = Depends(rbac())) -> MeResponse:
     """Return basic profile information for the authenticated subject."""
 
@@ -193,7 +203,12 @@ async def me(access: AccessContext = Depends(rbac())) -> MeResponse:
 
 
 
-@router.get("/me/permissions", response_model=PermissionsResponse, status_code=status.HTTP_200_OK)
+@router.get(
+    "/me/permissions",
+    response_model=PermissionsResponse,
+    status_code=status.HTTP_200_OK,
+    responses={status.HTTP_401_UNAUTHORIZED: {"description": "Unauthorized"}},
+)
 async def me_permissions(access: AccessContext = Depends(rbac())) -> PermissionsResponse:
     """Return effective permission codes and ABAC scopes for the authenticated subject."""
 
@@ -212,7 +227,12 @@ async def me_permissions(access: AccessContext = Depends(rbac())) -> Permissions
     )
 
 
-@router.post("/refresh", response_model=TokenPair, status_code=status.HTTP_200_OK)
+@router.post(
+    "/refresh",
+    response_model=TokenPair,
+    status_code=status.HTTP_200_OK,
+    responses={status.HTTP_401_UNAUTHORIZED: {"description": "Unauthorized"}},
+)
 @audit_operation("refresh", "auth_session")
 async def refresh_tokens(
     payload: RefreshRequest,
@@ -264,6 +284,18 @@ async def refresh_tokens(
         additional_claims=additional_claims,
     )
     return TokenPair(access_token=access_token, refresh_token=refresh_token)
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
+@audit_operation("logout", "auth_session")
+async def logout() -> Response:
+    """Stateless logout endpoint.
+
+    The backend currently does not persist refresh-token revocation state, so the
+    contract is limited to acknowledging logout while clients clear local tokens.
+    """
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/admin/ping", response_model=AdminPingResponse)

@@ -86,6 +86,31 @@ const addSubscriber = (callback: (token: string | null) => void) => {
   subscribers.push(callback);
 };
 
+export const requestTokenRefresh = async (refreshTokenValue: string): Promise<RefreshResponseDto> => {
+  const tenant = tenantStorage.getTenant();
+  if (!tenant?.slug) {
+    throw {
+      status: 0,
+      code: "TENANT_REQUIRED",
+      type: "tenancy",
+      message: "Выберите контур перед выполнением запроса.",
+      details: { url: "/auth/refresh", path: "/auth/refresh" },
+      field_errors: []
+    } satisfies ApiError;
+  }
+
+  const response = await axios.post<RefreshResponseDto>(
+    `${API_BASE_URL}/auth/refresh`,
+    { refresh_token: refreshTokenValue },
+    {
+      headers: { "X-Tenant": tenant.slug },
+      withCredentials: true,
+      timeout: 15_000
+    }
+  );
+  return response.data;
+};
+
 const refreshToken = async (): Promise<string | null> => {
   if (isRefreshing && refreshPromise) return refreshPromise;
 
@@ -94,15 +119,12 @@ const refreshToken = async (): Promise<string | null> => {
     try {
       const refreshTokenValue = tokenStorage.getRefreshToken();
       if (!refreshTokenValue) return null;
-      const response = await axios.post<RefreshResponseDto>(`${API_BASE_URL}/auth/refresh`, {
-        refresh_token: refreshTokenValue
-      });
+      const response = await requestTokenRefresh(refreshTokenValue);
       tokenStorage.setTokens({
-        accessToken: response.data.access_token,
-        refreshToken: response.data.refresh_token,
-        expiresIn: response.data.expires_in
+        accessToken: response.access_token,
+        refreshToken: response.refresh_token
       });
-      return response.data.access_token;
+      return response.access_token;
     } catch {
       tokenStorage.clear();
       return null;

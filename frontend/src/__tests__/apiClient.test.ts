@@ -1,7 +1,9 @@
+import axios from "axios";
 import MockAdapter from "axios-mock-adapter";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "@/api/client";
+import { appConfig } from "@/config/env";
 import { tenantStorage } from "@/api/tenantStorage";
 import { tokenStorage } from "@/api/tokenStorage";
 
@@ -102,6 +104,36 @@ describe("apiClient", () => {
     });
 
     mock.restore();
+  });
+
+  it("sends tenant header during silent refresh", async () => {
+    const refreshUrl = `${appConfig.apiBaseUrl}/auth/refresh`;
+    const nextAccessToken = [
+      "header",
+      btoa(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 60 })).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, ""),
+      "signature"
+    ].join(".");
+
+    tokenStorage.setTokens({ accessToken: "expired-access", refreshToken: "refresh-token", expiresIn: 10 });
+    tenantStorage.setTenant({ slug: "demo" });
+
+    const apiMock = new MockAdapter(apiClient);
+    const axiosMock = new MockAdapter(axios);
+
+    apiMock.onGet("/documents").replyOnce(401).onGet("/documents").replyOnce(200, { ok: true });
+    axiosMock.onPost(refreshUrl).reply((config) => {
+      expect(config.headers?.["X-Tenant"]).toBe("demo");
+      return [200, { access_token: nextAccessToken, refresh_token: "rotated-refresh" }];
+    });
+
+    const response = await apiClient.get<{ ok: boolean }>("/documents");
+
+    expect(response.data).toEqual({ ok: true });
+    expect(tokenStorage.getAccessToken()).toBe(nextAccessToken);
+    expect(tokenStorage.getRefreshToken()).toBe("rotated-refresh");
+
+    apiMock.restore();
+    axiosMock.restore();
   });
 
 

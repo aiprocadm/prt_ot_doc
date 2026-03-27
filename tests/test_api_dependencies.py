@@ -51,12 +51,12 @@ async def test_get_session_uses_tenant_session_factory(monkeypatch: pytest.Monke
 
     class Recorder:
         def __init__(self) -> None:
-            self.calls: list[tuple[str, str | None]] = []
+            self.calls: list[tuple[str, str, str | None]] = []
             self.contexts: list[DummyContextManager] = []
 
-        def __call__(self, *, tenant: str, schema_name: str | None = None):
+        def __call__(self, *, tenant: str, tenant_id: str | None = None, schema_name: str | None = None):
             ctx = DummyContextManager()
-            self.calls.append((tenant, schema_name))
+            self.calls.append((tenant, tenant_id or "", schema_name))
             self.contexts.append(ctx)
             return ctx
 
@@ -68,7 +68,7 @@ async def test_get_session_uses_tenant_session_factory(monkeypatch: pytest.Monke
 
     session = await generator.__anext__()
     assert session is recorder.contexts[0].session
-    assert recorder.calls == [("acme", "tenant_acme")]
+    assert recorder.calls == [("acme", "tenant-id", "tenant_acme")]
 
     await generator.aclose()
     assert recorder.contexts[0].exited is True

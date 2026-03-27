@@ -1,6 +1,6 @@
 import { createWithEqualityFn } from "zustand/traditional";
 import { immer } from "zustand/middleware/immer";
-import { apiClient } from "@/api/client";
+import { apiClient, requestTokenRefresh } from "@/api/client";
 import { tokenStorage } from "@/api/tokenStorage";
 import { tenantStorage } from "@/api/tenantStorage";
 import { resetTenantStores } from "@/stores/reset";
@@ -24,11 +24,10 @@ interface AuthState {
   initialize: () => Promise<void>;
 }
 
-const persistTokens = (payload: { access_token: string; refresh_token: string; expires_in: number }) => {
+const persistTokens = (payload: { access_token: string; refresh_token: string }) => {
   tokenStorage.setTokens({
     accessToken: payload.access_token,
-    refreshToken: payload.refresh_token,
-    expiresIn: payload.expires_in
+    refreshToken: payload.refresh_token
   });
 };
 
@@ -64,6 +63,7 @@ export const useAuthStore = createWithEqualityFn<AuthState>()(
     initialized: false,
     initialize: async () => {
       tokenStorage.hydrate();
+      tenantStorage.hydrate();
       const refreshToken = tokenStorage.getRefreshToken();
       if (!refreshToken) {
         set((state) => {
@@ -75,7 +75,7 @@ export const useAuthStore = createWithEqualityFn<AuthState>()(
         return;
       }
       try {
-        const { data } = await apiClient.post<RefreshResponseDto>("/auth/refresh", { refresh_token: refreshToken });
+        const data = await requestTokenRefresh(refreshToken);
         persistTokens(data);
         let profile: UserDto | null = null;
         let profileError: ApiError | null = null;
@@ -115,15 +115,17 @@ export const useAuthStore = createWithEqualityFn<AuthState>()(
         });
         persistTokens(data);
         let profile: UserDto | null = null;
+        let profileError: ApiError | null = null;
         try {
           const { data: profileData } = await apiClient.get<UserDto>("/auth/me");
           profile = await hydratePermissions(profileData);
-        } catch {
-          profile = await hydratePermissions(data.user ?? null);
+        } catch (error) {
+          profileError = (error as ApiError) ?? null;
         }
         set((state) => {
           state.user = profile;
           state.isAuthenticated = true;
+          state.error = profileError;
           state.initialized = true;
         });
       } catch (error) {
@@ -142,7 +144,7 @@ export const useAuthStore = createWithEqualityFn<AuthState>()(
     refresh: async () => {
       const refreshToken = tokenStorage.getRefreshToken();
       if (!refreshToken) return;
-      const { data } = await apiClient.post<RefreshResponseDto>("/auth/refresh", { refresh_token: refreshToken });
+      const data = await requestTokenRefresh(refreshToken);
       persistTokens(data);
       set((state) => {
         state.isAuthenticated = true;

@@ -32,7 +32,7 @@ async def test_login_success(
     )
     assert response.status_code == 200
     payload = response.json()
-    assert "access_token" in payload and "refresh_token" in payload
+    assert payload.keys() == {"access_token", "refresh_token"}
 
     access_claims = verify_token(payload["access_token"], expected_type="access")
     refresh_claims = verify_token(payload["refresh_token"], expected_type="refresh")
@@ -125,6 +125,7 @@ async def test_refresh_issues_new_token_pair(
     )
     assert refresh_response.status_code == 200
     new_tokens = refresh_response.json()
+    assert new_tokens.keys() == {"access_token", "refresh_token"}
     assert new_tokens["access_token"] != tokens["access_token"]
     assert new_tokens["refresh_token"] != tokens["refresh_token"]
 
@@ -132,6 +133,14 @@ async def test_refresh_issues_new_token_pair(
     refresh_claims = verify_token(new_tokens["refresh_token"], expected_type="refresh")
     assert access_claims["tenant"] == "test"
     assert refresh_claims["tenant"] == "test"
+
+
+@pytest.mark.anyio
+async def test_logout_endpoint_is_available(async_client: AsyncClient) -> None:
+    response = await async_client.post("/api/v1/auth/logout")
+
+    assert response.status_code == 204
+    assert response.text == ""
 
 
 @pytest.mark.anyio

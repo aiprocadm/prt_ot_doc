@@ -176,7 +176,7 @@ async def finalize_upload_v2(
     return FinalizeUploadResponse(file_id=file_record.id, status=file_record.status)
 
 
-@router.get("/{file_id}", response_model=FileDto)
+@router.get("/records/{file_id}", response_model=FileDto)
 async def get_file_v2(
     file_id: str,
     session: AsyncSession = Depends(get_session),
@@ -339,7 +339,7 @@ async def abort_upload_v2(
     await session.commit()
     return {"status": "aborted"}
 
-@router.post("/upload", response_model=FinalizeUploadResponse)
+@router.post("/upload-multipart", response_model=FinalizeUploadResponse)
 async def upload_multipart_v1(
     file: UploadFile = File(...),
     session: AsyncSession = Depends(get_session),

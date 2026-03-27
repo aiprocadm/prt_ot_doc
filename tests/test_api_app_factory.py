@@ -48,6 +48,7 @@ async def test_create_app_configures_middlewares_and_routes() -> None:
 
     cors_middleware = next(m for m in app.user_middleware if m.cls is CORSMiddleware)
     assert cors_middleware.kwargs["allow_origins"] == ["https://frontend.local"]
+    assert cors_middleware.kwargs["allow_credentials"] is True
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://example.com") as client:

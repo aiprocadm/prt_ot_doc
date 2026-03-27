@@ -273,6 +273,7 @@ class Settings(BaseSettings):
         alias="APP_CORS_ORIGINS",
         validation_alias=AliasChoices("APP_CORS_ORIGINS", "ALLOWED_ORIGINS"),
     )
+    cors_allow_credentials: bool = Field(True, alias="APP_CORS_ALLOW_CREDENTIALS")
 
     database_url_env: str | None = Field(default=None, alias="DATABASE_URL")
     postgres_host: str = Field("postgres", alias="POSTGRES_HOST")
@@ -283,6 +284,7 @@ class Settings(BaseSettings):
     database_echo: bool = Field(False, alias="DATABASE_ECHO")
     default_tenant_slug: str = Field("public", alias="DEFAULT_TENANT_SLUG")
     shared_schema: str = Field("public", alias="SHARED_SCHEMA")
+    runtime_schema_bootstrap: bool = Field(False, alias="RUNTIME_SCHEMA_BOOTSTRAP")
 
     storage_backend: Literal["local", "s3", "memory"] = Field(
         "memory", alias="STORAGE_BACKEND"
@@ -460,8 +462,8 @@ class Settings(BaseSettings):
         info: ValidationInfo,
     ) -> list[str]:
         defaults = {
-            "allowed_hosts": ["*"],
-            "allowed_origins": ["*"],
+            "allowed_hosts": list(DEFAULT_ALLOWED_HOSTS),
+            "allowed_origins": list(DEFAULT_ALLOWED_ORIGINS),
             "worker_queues": ["default"],
         }
 
@@ -562,6 +564,21 @@ class Settings(BaseSettings):
         if self.pdf_worker_queue not in queues:
             queues.append(self.pdf_worker_queue)
         self.worker_queues = queues
+        return self
+
+    @model_validator(mode="after")
+    def _validate_cors_settings(self) -> "Settings":
+        origins: list[str] = []
+        for origin in self.allowed_origins:
+            normalized = origin.strip()
+            if normalized and normalized not in origins:
+                origins.append(normalized)
+        self.allowed_origins = origins or list(DEFAULT_ALLOWED_ORIGINS)
+
+        if self.cors_allow_credentials and "*" in self.allowed_origins:
+            raise ValueError(
+                "APP_CORS_ORIGINS cannot contain '*' when APP_CORS_ALLOW_CREDENTIALS is enabled"
+            )
         return self
 
     @model_validator(mode="after")

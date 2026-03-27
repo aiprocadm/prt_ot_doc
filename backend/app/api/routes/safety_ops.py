@@ -322,7 +322,7 @@ async def verify_finding(
     return _serialize_finding(row)
 
 
-@router.get("/prescriptions")
+@router.get("/safety-ops/prescriptions")
 async def list_prescriptions(tenant: TenantDep, session: SessionDep, _: ManagerAccess) -> list[dict[str, str]]:
     rows = (
         await session.execute(
@@ -332,7 +332,7 @@ async def list_prescriptions(tenant: TenantDep, session: SessionDep, _: ManagerA
     return [{"id": r.id, "code": r.code, "status": r.status} for r in rows]
 
 
-@router.post("/prescriptions", status_code=status.HTTP_201_CREATED)
+@router.post("/safety-ops/prescriptions", status_code=status.HTTP_201_CREATED)
 async def create_prescription(
     payload: PrescriptionIn,
     request: Request,

@@ -52,11 +52,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AuthResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
+                $ref: '#/components/schemas/TokenPair'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /api/v1/auth/refresh:
     post:
       tags: [Auth]
@@ -74,9 +74,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AuthResponse'
+                $ref: '#/components/schemas/TokenPair'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /api/v1/auth/logout:
     post:
       tags: [Auth]
@@ -85,8 +87,6 @@ paths:
       responses:
         '204':
           description: Сессия завершена
-        '401':
-          $ref: '#/components/responses/Unauthorized'
   /api/v1/auth/me:
     get:
       tags: [Auth]
@@ -98,7 +98,21 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UserProfile'
+                $ref: '#/components/schemas/MeResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/auth/me/permissions:
+    get:
+      tags: [Auth]
+      summary: Получить effective permissions текущего пользователя
+      operationId: getCurrentUserPermissions
+      responses:
+        '200':
+          description: Эффективные роли, права и ABAC-scopes пользователя
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionsResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
   /api/v1/tenants:
@@ -1690,7 +1704,7 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ValidationError'
+            $ref: '#/components/schemas/HTTPValidationError'
   schemas:
     Pagination:
       type: object
@@ -1714,53 +1728,123 @@ components:
           additionalProperties: true
         trace_id:
           type: string
+    HTTPValidationError:
+      type: object
+      properties:
+        detail:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationError'
     ValidationError:
-      allOf:
-        - $ref: '#/components/schemas/ErrorResponse'
-        - type: object
-          properties:
-            errors:
-              type: array
-              items:
-                type: object
-                properties:
-                  field:
-                    type: string
-                  message:
-                    type: string
+      type: object
+      required: [loc, msg, type]
+      properties:
+        loc:
+          type: array
+          items:
+            anyOf:
+              - type: string
+              - type: integer
+        msg:
+          type: string
+        type:
+          type: string
     LoginRequest:
       type: object
-      required: [email, password, tenant]
+      additionalProperties: false
+      required: [email, password]
       properties:
         email:
           type: string
           format: email
         password:
           type: string
-          format: password
-        tenant:
-          type: string
     RefreshRequest:
       type: object
+      additionalProperties: false
       required: [refresh_token]
       properties:
         refresh_token:
           type: string
-    AuthResponse:
+          minLength: 1
+    TokenPair:
       type: object
-      required: [access_token, refresh_token, expires_in]
+      required: [access_token, refresh_token]
       properties:
         access_token:
           type: string
         refresh_token:
           type: string
-        token_type:
+    MeResponse:
+      type: object
+      required: [sub, email, role]
+      properties:
+        sub:
           type: string
-          default: Bearer
-        expires_in:
-          type: integer
-        user:
-          $ref: '#/components/schemas/UserProfile'
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+        tenant_id:
+          anyOf:
+            - type: string
+            - type: 'null'
+        tenant_slug:
+          anyOf:
+            - type: string
+            - type: 'null'
+        roles:
+          type: array
+          items:
+            type: string
+        permissions:
+          type: array
+          items:
+            type: string
+        company_id:
+          anyOf:
+            - type: string
+            - type: 'null'
+        attributes:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+        abac_scopes:
+          type: object
+          additionalProperties:
+            anyOf:
+              - type: array
+                items:
+                  type: string
+              - type: integer
+              - type: 'null'
+        abilities:
+          type: array
+          items:
+            type: string
+    PermissionsResponse:
+      type: object
+      properties:
+        roles:
+          type: array
+          items:
+            type: string
+        permissions:
+          type: array
+          items:
+            type: string
+        abac_scopes:
+          type: object
+          additionalProperties:
+            anyOf:
+              - type: array
+                items:
+                  type: string
+              - type: integer
+              - type: 'null'
     Tenant:
       type: object
       required: [id, slug, name, contact_email, settings]

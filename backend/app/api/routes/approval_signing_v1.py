@@ -245,7 +245,7 @@ async def approval_process_detail(process_id: str, session: AsyncSession = Depen
     return {"id": p.id, "status": p.status.value, "route_id": p.route_id, "current_step": p.current_step, "logs": [{"decision": l.decision, "comment": l.comment, "step_no": l.step_no} for l in logs]}
 
 
-@router.get("/approvals/tasks")
+@router.get("/approvals/process-tasks")
 async def approval_tasks(mine: bool = True, status: str = "open", session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), x_user_id: str = Header(default="system", alias="X-User-Id")):
     stmt = select(ApprovalTask).where(ApprovalTask.tenant_id == str(tenant.id), ApprovalTask.status == status)
     if mine:

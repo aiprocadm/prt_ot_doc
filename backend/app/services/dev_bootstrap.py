@@ -29,6 +29,7 @@ async def bootstrap_admin_user(settings: Settings) -> None:
     tenant_slug = settings.admin_tenant.strip() or settings.default_tenant_slug
 
     tenant_id: str
+    tenant_schema_name: str
     async with session_scope(tenant="public") as session:
         tenant = (await session.execute(select(Tenant).where(Tenant.slug == tenant_slug))).scalar_one_or_none()
         if tenant is None:
@@ -36,13 +37,15 @@ async def bootstrap_admin_user(settings: Settings) -> None:
                 slug=tenant_slug,
                 name=f"{tenant_slug.title()} tenant",
                 contact_email=settings.admin_email,
+                schema_name=f"tenant_{tenant_slug}",
                 is_active=True,
             )
             session.add(tenant)
             await session.flush()
         tenant_id = tenant.id
+        tenant_schema_name = str(tenant.schema_name or f"tenant_{tenant_slug}")
 
-    ensure_tenant_schema(tenant_slug)
+    ensure_tenant_schema(tenant_slug, schema_name=tenant_schema_name)
 
     async with session_scope(tenant=tenant_slug) as session:
         existing = (

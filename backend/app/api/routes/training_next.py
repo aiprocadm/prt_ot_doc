@@ -386,7 +386,7 @@ async def list_certificates(tenant: Tenant = Depends(get_tenant_record), session
     return {"items": rows, "total": len(rows)}
 
 
-@router.post("/certificates", status_code=201)
+@router.post("/certificates:create", status_code=201)
 @audit_operation("create", "training_certificate")
 async def create_certificate(payload: dict, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _PermCreateDep):
     if not payload.get("code"):

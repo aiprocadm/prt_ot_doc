@@ -35,23 +35,26 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
                 slug=tenant_slug,
                 name=f"{company_name} ({tenant_slug})",
                 contact_email="demo@example.local",
+                schema_name=f"tenant_{tenant_slug}",
                 is_active=True,
             )
             session.add(tenant)
             await session.flush()
+        tenant_db_id = str(tenant.id)
+        tenant_schema_name = str(tenant.schema_name or f"tenant_{tenant_slug}")
 
-    ensure_tenant_schema(tenant_slug)
+    ensure_tenant_schema(tenant_slug, schema_name=tenant_schema_name)
 
     async with session_scope(tenant=tenant_slug) as session:
         company = (await session.execute(select(Company).where(Company.name == company_name))).scalar_one_or_none()
         if company is None:
-            company = Company(tenant_id=tenant_slug, name=company_name, legal_address="г. Москва")
+            company = Company(tenant_id=tenant_db_id, name=company_name, legal_address="г. Москва")
             session.add(company)
             await session.flush()
 
         site = (await session.execute(select(Site).where(Site.company_id == company.id, Site.name == site_name))).scalar_one_or_none()
         if site is None:
-            site = Site(tenant_id=tenant_slug, company_id=company.id, name=site_name, address="Москва, Тестовая 1")
+            site = Site(tenant_id=tenant_db_id, company_id=company.id, name=site_name, address="Москва, Тестовая 1")
             session.add(site)
             await session.flush()
 
@@ -59,13 +62,13 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
             await session.execute(select(Department).where(Department.company_id == company.id, Department.name == "Производство"))
         ).scalar_one_or_none()
         if department is None:
-            session.add(Department(tenant_id=tenant_slug, company_id=company.id, name="Производство", code="DEMO-PROD"))
+            session.add(Department(tenant_id=tenant_db_id, company_id=company.id, name="Производство", code="DEMO-PROD"))
 
         position = (
             await session.execute(select(Position).where(Position.company_id == company.id, Position.name == "Мастер участка"))
         ).scalar_one_or_none()
         if position is None:
-            position = Position(tenant_id=tenant_slug, company_id=company.id, name="Мастер участка")
+            position = Position(tenant_id=tenant_db_id, company_id=company.id, name="Мастер участка")
             session.add(position)
             await session.flush()
 
@@ -81,7 +84,7 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
         if person is None:
             session.add(
                 Person(
-                    tenant_id=tenant_slug,
+                    tenant_id=tenant_db_id,
                     company_id=company.id,
                     position_id=position.id if position else None,
                     first_name="Иван",
@@ -97,7 +100,7 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
         if course is None:
             session.add(
                 TrainingCourse(
-                    tenant_id=tenant_slug,
+                    tenant_id=tenant_db_id,
                     title="Вводный инструктаж (демо)",
                     code="demo-intro",
                     duration_hours=2,

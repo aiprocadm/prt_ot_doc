@@ -70,10 +70,47 @@ def test_settings_normalization_and_validators(tmp_path: Path) -> None:
     assert settings.libreoffice_bin == str(executable)
     assert settings.default_tenant_slug == "acme-co"
     assert settings.shared_schema == "shared_schema"
+    assert settings.cors_allow_credentials is True
+    assert settings.runtime_schema_bootstrap is False
     assert settings.celery.worker_queues == settings.worker_queues
     assert settings.celery.pdf_queue == settings.pdf_worker_queue
     assert settings.runtime.environment == "development"
     assert settings.runtime.is_development is True
+
+
+def test_settings_reject_wildcard_origin_with_credentials() -> None:
+    with pytest.raises(ValueError, match=r"APP_CORS_ORIGINS cannot contain '\*'"):
+        config.Settings.model_validate(
+            {
+                "LIBREOFFICE_BIN": "python",
+                "APP_CORS_ORIGINS": "*",
+                "APP_CORS_ALLOW_CREDENTIALS": True,
+            }
+        )
+
+
+def test_settings_allow_wildcard_origin_without_credentials() -> None:
+    settings = config.Settings.model_validate(
+        {
+            "LIBREOFFICE_BIN": "python",
+            "APP_CORS_ORIGINS": "*",
+            "APP_CORS_ALLOW_CREDENTIALS": False,
+        }
+    )
+
+    assert settings.allowed_origins == ["*"]
+    assert settings.cors_allow_credentials is False
+
+
+def test_settings_allow_explicit_runtime_schema_bootstrap() -> None:
+    settings = config.Settings.model_validate(
+        {
+            "LIBREOFFICE_BIN": "python",
+            "RUNTIME_SCHEMA_BOOTSTRAP": True,
+        }
+    )
+
+    assert settings.runtime_schema_bootstrap is True
 
 
 def test_settings_default_database_url(monkeypatch: pytest.MonkeyPatch) -> None:

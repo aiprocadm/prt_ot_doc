@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 2026-03-26
+- Stabilized tenancy session propagation for FK-backed tenant models by separating `tenant_id`, `tenant_slug`, and `tenant_schema` in session context and preventing slug autofill into UUID-backed `tenant_id` fields.
+- Fixed demo bootstrap so FK-backed entities use the real tenant UUID instead of tenant slug values.
+- Formalized stateless logout with `POST /auth/logout -> 204 No Content` and documented that clients must clear local tokens because backend-side refresh-token revocation is not yet implemented.
+- Removed unreachable quota code from `backend/app/api/v1/router.py` and kept `assert_quota(...)` as the single active generation quota path.
+- Hardened CORS configuration so credentialed requests cannot start with wildcard origins; added settings and app-factory regression coverage for this.
+- Realigned `docs/openapi.yaml` with the runtime auth contract and added contract tests for `/api/v1/auth/login`, `/api/v1/auth/refresh`, `/api/v1/auth/logout`, `/api/v1/auth/me`, and `/api/v1/auth/me/permissions`.
+- Removed critical runtime route collisions on canonical URLs for prescriptions, files, training certificates, approvals, and EDO list endpoints by moving overlapping legacy aliases to explicit namespaced/versioned paths; added a regression test for duplicate path+method registration on these critical routes.
+- Fixed runtime schema bootstrap for tenants with explicit `schema_name`: session bootstrap, dependency resolution, dev bootstrap, demo bootstrap, and tenant bootstrap service now create/use the recorded schema instead of recomputing `tenant_<slug>`.
+- Disabled implicit schema auto-create in ordinary runtime session paths by default behind `RUNTIME_SCHEMA_BOOTSTRAP`; explicit bootstrap routines remain responsible for intentional schema creation in dev/test setup flows.
+
 ## 2026-03-21
 - Added canonical docs: `docs/TEMPLATE_UPLOAD_AND_RENDERING.md`, `docs/DEMO_ACCESS.md`, `docs/OWNER_ADMIN_ACCESS.md`, `docs/USER_ACCESS_AND_ROLES.md`.
 - Hardened template catalog contract with category/status/scope fields.

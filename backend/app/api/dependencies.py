@@ -71,7 +71,7 @@ async def _fetch_tenant_by_identifier(identifier: str) -> Tenant:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found")
     if not tenant.is_active:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Tenant inactive")
-    ensure_tenant_schema(tenant.slug)
+    ensure_tenant_schema(tenant.slug, schema_name=tenant.schema_name, implicit=True)
     return tenant
 
 
@@ -128,7 +128,11 @@ async def get_correlation_id(request: Request) -> str:
 async def get_session(tenant: Tenant = Depends(get_tenant_record)) -> AsyncIterator[AsyncSession]:
     """Provide an async database session scoped to the current tenant."""
 
-    async with get_tenant_session(tenant=tenant.slug, schema_name=tenant.schema_name) as session:
+    async with get_tenant_session(
+        tenant=tenant.slug,
+        tenant_id=str(tenant.id),
+        schema_name=tenant.schema_name,
+    ) as session:
         info = getattr(session, "info", None)
         if info is None or not isinstance(info, dict):
             info = {}
@@ -137,6 +141,8 @@ async def get_session(tenant: Tenant = Depends(get_tenant_record)) -> AsyncItera
             except AttributeError:
                 pass
         info["tenant"] = tenant.slug
+        info["tenant_slug"] = tenant.slug
+        info["tenant_schema"] = tenant.schema_name
         if getattr(tenant, "id", None) is not None:
             info["tenant_id"] = str(tenant.id)
         info.setdefault("token_tenant_id", None)

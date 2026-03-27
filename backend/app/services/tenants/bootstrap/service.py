@@ -61,8 +61,15 @@ class BootstrapTenantService:
 
         tenant = await self._ensure_tenant(tenant_slug=tenant_slug, tenant_name=tenant_name, owner_email=owner_email, dry_run=dry_run, summary=summary)
         tenant_id = tenant.id if tenant else f"dry-run:{tenant_slug}"
+        tenant_schema = tenant.schema_name if tenant else f"tenant_{tenant_slug}"
 
-        await self._ensure_tenant_settings(tenant_id=tenant_id, tenant_slug=tenant_slug, dry_run=dry_run, summary=summary)
+        await self._ensure_tenant_settings(
+            tenant_id=tenant_id,
+            tenant_slug=tenant_slug,
+            tenant_schema=tenant_schema,
+            dry_run=dry_run,
+            summary=summary,
+        )
         await self._ensure_quota(tenant_id=tenant_id, dry_run=dry_run, summary=summary)
         await self._ensure_owner(tenant_id=tenant_id, owner_email=owner_email, owner_password=owner_password, dry_run=dry_run, summary=summary)
         await seed_authz_catalog(self.session)
@@ -79,6 +86,7 @@ class BootstrapTenantService:
     async def _ensure_tenant(self, *, tenant_slug: str, tenant_name: str, owner_email: str, dry_run: bool, summary: BootstrapTenantSummary) -> Tenant | None:
         existing = (await self.session.execute(select(Tenant).where(Tenant.slug == tenant_slug))).scalar_one_or_none()
         if existing:
+            ensure_tenant_schema(existing.slug, schema_name=existing.schema_name or f"tenant_{existing.slug}")
             summary.mark(entity="tenant", created=False)
             return existing
 
@@ -89,11 +97,19 @@ class BootstrapTenantService:
         tenant = Tenant(slug=tenant_slug, code=tenant_slug, name=tenant_name, contact_email=owner_email, schema_name=f"tenant_{tenant_slug}", s3_prefix=f"tenants/{tenant_slug}")
         self.session.add(tenant)
         await self.session.flush()
-        ensure_tenant_schema(tenant_slug)
+        ensure_tenant_schema(tenant_slug, schema_name=tenant.schema_name)
         summary.mark(entity="tenant", created=True)
         return tenant
 
-    async def _ensure_tenant_settings(self, *, tenant_id: str, tenant_slug: str, dry_run: bool, summary: BootstrapTenantSummary) -> None:
+    async def _ensure_tenant_settings(
+        self,
+        *,
+        tenant_id: str,
+        tenant_slug: str,
+        tenant_schema: str,
+        dry_run: bool,
+        summary: BootstrapTenantSummary,
+    ) -> None:
         existing = (await self.session.execute(select(TenantSettings).where(TenantSettings.tenant_id == tenant_id))).scalar_one_or_none()
         if existing:
             summary.mark(entity="tenant_settings", created=False)
@@ -101,7 +117,7 @@ class BootstrapTenantService:
         if dry_run:
             summary.mark(entity="tenant_settings", created=True)
             return
-        self.session.add(TenantSettings(tenant_id=tenant_id, schema_name=f"tenant_{tenant_slug}", s3_prefix=f"tenants/{tenant_slug}", retention_policy={"audit_days": 3650}))
+        self.session.add(TenantSettings(tenant_id=tenant_id, schema_name=tenant_schema, s3_prefix=f"tenants/{tenant_slug}", retention_policy={"audit_days": 3650}))
         summary.mark(entity="tenant_settings", created=True)
 
     async def _ensure_quota(self, *, tenant_id: str, dry_run: bool, summary: BootstrapTenantSummary) -> None:
