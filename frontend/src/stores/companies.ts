@@ -6,6 +6,18 @@ import type { PaginatedState, PaginationParams } from "@/stores/types";
 import type { ApiError, PaginatedResponse } from "@/types/dto/common";
 import type { CompanyDto, CompanyFiltersDto, UpdateCompanyDto } from "@/types/dto/companies";
 
+type LegacyCompaniesResponse = {
+  items?: unknown;
+  total?: number;
+  limit?: number;
+  offset?: number;
+  pagination?: {
+    page?: number;
+    page_size?: number;
+    total?: number;
+  } | null;
+};
+
 interface CompaniesState extends PaginatedState<CompanyDto, CompanyFiltersDto> {
   list: (params?: Partial<CompanyFiltersDto> & PaginationParams) => Promise<void>;
   getById: (id: string) => Promise<CompanyDto | null>;
@@ -26,6 +38,50 @@ const createInitialState = () => ({
   loading: false,
   error: null as ApiError | null
 });
+
+const isPositiveNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value > 0;
+
+const isNonNegativeNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0;
+
+const normalizeCompaniesResponse = (
+  payload: PaginatedResponse<CompanyDto> | LegacyCompaniesResponse,
+  fallback: ReturnType<typeof defaultPagination>
+) => {
+  const items = Array.isArray(payload?.items)
+    ? payload.items.filter((item): item is CompanyDto => Boolean(item && typeof item === "object" && "id" in item))
+    : [];
+  const pagination = payload.pagination ?? null;
+  const legacyLimit = (payload as LegacyCompaniesResponse).limit;
+  const legacyOffset = (payload as LegacyCompaniesResponse).offset;
+  const legacyTotal = (payload as LegacyCompaniesResponse).total;
+  const pageSizeFromPayload = pagination?.page_size;
+  const pageFromPayload = pagination?.page;
+  const totalFromPayload = pagination?.total;
+
+  const pageSize: number = isPositiveNumber(pageSizeFromPayload)
+    ? pageSizeFromPayload
+    : isPositiveNumber(legacyLimit)
+      ? legacyLimit
+      : fallback.page_size;
+  const offset: number = isNonNegativeNumber(legacyOffset)
+    ? legacyOffset
+    : (fallback.page - 1) * pageSize;
+  const page: number = isPositiveNumber(pageFromPayload) ? pageFromPayload : Math.floor(offset / Math.max(pageSize, 1)) + 1;
+  const total: number = isNonNegativeNumber(totalFromPayload)
+    ? totalFromPayload
+    : isNonNegativeNumber(legacyTotal)
+      ? legacyTotal
+      : items.length;
+
+  return {
+    items,
+    pagination: {
+      page,
+      page_size: pageSize,
+      total
+    }
+  };
+};
 
 export const useCompaniesStore = create<CompaniesState>()(
   immer((set, get) => ({
@@ -56,10 +112,11 @@ export const useCompaniesStore = create<CompaniesState>()(
       });
       const query = { ...get().filters, ...params, page: get().pagination.page, page_size: get().pagination.page_size };
       try {
-        const { data } = await apiClient.get<PaginatedResponse<CompanyDto>>("/companies", { params: query });
+        const { data } = await apiClient.get<PaginatedResponse<CompanyDto> | LegacyCompaniesResponse>("/companies", { params: query });
+        const normalized = normalizeCompaniesResponse(data, get().pagination);
         set((state) => {
-          state.items = data.items;
-          state.pagination = data.pagination;
+          state.items = normalized.items;
+          state.pagination = normalized.pagination;
         });
       } catch (error) {
         set((state) => {

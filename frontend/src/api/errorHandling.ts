@@ -3,14 +3,14 @@ import { toast } from "sonner";
 import type { ApiError } from "@/types/dto/common";
 import { tokenStorage } from "@/api/tokenStorage";
 import { setReturnTo } from "@/utils/returnTo";
+import { sessionStorageSetItem } from "@/utils/browserStorage";
 
 const AUTH_PATHS = ["/auth/login", "/auth/refresh", "/auth/logout"];
 
 const BILLING_ALERT_STORAGE_KEY = "billing:alert";
 
 const rememberBillingAlert = (code: string) => {
-  if (typeof window === "undefined") return;
-  window.sessionStorage.setItem(BILLING_ALERT_STORAGE_KEY, JSON.stringify({ code, ts: Date.now() }));
+  sessionStorageSetItem(BILLING_ALERT_STORAGE_KEY, JSON.stringify({ code, ts: Date.now() }));
 };
 
 export { BILLING_ALERT_STORAGE_KEY };

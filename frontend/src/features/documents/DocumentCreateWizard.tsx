@@ -17,7 +17,9 @@ const createIdempotencyKey = () =>
 export const DocumentCreateWizard = () => {
   const { items: companies, list: listCompanies } = useCompaniesStore();
   const { generateDocument, getGenerationStatus, list: listDocuments } = useDocumentsStore();
-  const safeCompanies = Array.isArray(companies) ? companies : [];
+  const safeCompanies = Array.isArray(companies)
+    ? companies.filter((company): company is NonNullable<(typeof companies)[number]> => Boolean(company?.id && company?.name))
+    : [];
 
   const [templateCode, setTemplateCode] = useState("");
   const [templateVersion, setTemplateVersion] = useState("1");

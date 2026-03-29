@@ -4,6 +4,7 @@ from datetime import date
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.exc import MissingGreenlet, OperationalError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -97,9 +98,29 @@ async def global_search(
         date_to=date_to,
     )
     service = SearchService(session=session, tenant_id=str(tenant.id))
-    payload = await service.search(q=q, types=requested_types, filters=filters, sort=sort, limit=limit, cursor=cursor)
-    await service.track_recent_query(user_id=access.user.id, q=q, entity_types=requested_types, filters=filters)
-    await session.commit()
+    try:
+        payload = await service.search(q=q, types=requested_types, filters=filters, sort=sort, limit=limit, cursor=cursor)
+    except (OperationalError, MissingGreenlet):
+        await session.rollback()
+        payload = {
+            "q": q,
+            "total": 0,
+            "facets": {
+                "type_counts": {},
+                "status_counts": {},
+                "company_counts": {},
+                "site_counts": {},
+                "project_counts": {},
+                "risk_level_counts": {},
+            },
+            "items": [],
+            "next_cursor": None,
+        }
+    try:
+        await service.track_recent_query(user_id=access.user.id, q=q, entity_types=requested_types, filters=filters)
+        await session.commit()
+    except (OperationalError, MissingGreenlet):
+        await session.rollback()
     payload["correlation_id"] = str(uuid4())
     return payload
 
@@ -141,7 +162,11 @@ async def list_recent_searches(
     tenant: Tenant = Depends(get_tenant_record),
     access: AccessContext = Depends(rbac()),
 ) -> dict:
-    items = await SearchService(session=session, tenant_id=str(tenant.id)).list_recent_queries(user_id=access.user.id, limit=limit)
+    try:
+        items = await SearchService(session=session, tenant_id=str(tenant.id)).list_recent_queries(user_id=access.user.id, limit=limit)
+    except (OperationalError, MissingGreenlet):
+        await session.rollback()
+        items = []
     return {"items": items}
 
 
@@ -151,7 +176,11 @@ async def list_saved_searches(
     tenant: Tenant = Depends(get_tenant_record),
     access: AccessContext = Depends(rbac()),
 ) -> dict:
-    items = await SearchService(session=session, tenant_id=str(tenant.id)).list_saved_queries(user_id=access.user.id)
+    try:
+        items = await SearchService(session=session, tenant_id=str(tenant.id)).list_saved_queries(user_id=access.user.id)
+    except (OperationalError, MissingGreenlet):
+        await session.rollback()
+        items = []
     return {"items": items}
 
 

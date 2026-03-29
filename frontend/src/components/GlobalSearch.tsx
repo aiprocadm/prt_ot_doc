@@ -28,7 +28,9 @@ export const GlobalSearch = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    void fetchRecentSearches().then(setRecent).catch(() => setRecent([]));
+    void fetchRecentSearches()
+      .then((result) => setRecent(Array.isArray(result) ? result : []))
+      .catch(() => setRecent([]));
   }, []);
 
   useEffect(() => {
@@ -49,7 +51,7 @@ export const GlobalSearch = () => {
       return;
     }
     searchGlobal(debounced)
-      .then((result) => setItems(result.items.slice(0, 10)))
+      .then((result) => setItems(Array.isArray(result.items) ? result.items.slice(0, 10) : []))
       .catch(() => setItems([]));
   }, [debounced]);
 

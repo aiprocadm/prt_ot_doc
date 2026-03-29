@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
+import { SectionErrorBoundary } from "@/components/common/SectionErrorBoundary";
 import { Card, CardContent } from "@/components/ui/card";
 import { DocumentPreview } from "@/features/documents/DocumentPreview";
 import { DocumentCreateWizard } from "@/features/documents/DocumentCreateWizard";
@@ -93,9 +94,11 @@ const DocumentsPage = () => {
           { label: "Ошибки (на странице)", value: statusCounts.error ?? 0 }
         ]}
       />
-      <PermissionGate permission={PERMISSIONS.DOCUMENT_CREATE}>
-        <DocumentCreateWizard />
-      </PermissionGate>
+      <SectionErrorBoundary>
+        <PermissionGate permission={PERMISSIONS.DOCUMENT_CREATE}>
+          <DocumentCreateWizard />
+        </PermissionGate>
+      </SectionErrorBoundary>
       {focusedEntityId && ["document", "document_version", "template_version"].includes(focusedEntityType ?? "") ? (
         <Card>
           <CardContent className="py-4" data-testid="document-focus-card">
@@ -121,15 +124,21 @@ const DocumentsPage = () => {
           </CardContent>
         </Card>
       ) : null}
-      <Card>
-        <CardContent className="py-6">
-          <ErrorState error={error ?? undefined} onRetry={() => void list()} />
-          {loading && safeItems.length === 0 ? <LoadingScreen label="Загрузка документов" /> : null}
-          {!loading && !error && safeItems.length === 0 ? <EmptyState title="Документы не найдены" description="Создайте первый документ или измените фильтры." /> : null}
-          <DocumentTable onSelect={setSelectedDocument} />
-        </CardContent>
-      </Card>
-      {selectedDocument && <DocumentPreview document={selectedDocument} initialTab={focusedView === "timeline" ? "timeline" : "preview"} />}
+      <SectionErrorBoundary>
+        <Card>
+          <CardContent className="py-6">
+            <ErrorState error={error ?? undefined} onRetry={() => void list()} />
+            {loading && safeItems.length === 0 ? <LoadingScreen label="Загрузка документов" /> : null}
+            {!loading && !error && safeItems.length === 0 ? <EmptyState title="Документы не найдены" description="Создайте первый документ или измените фильтры." /> : null}
+            <DocumentTable onSelect={setSelectedDocument} />
+          </CardContent>
+        </Card>
+      </SectionErrorBoundary>
+      {selectedDocument ? (
+        <SectionErrorBoundary>
+          <DocumentPreview document={selectedDocument} initialTab={focusedView === "timeline" ? "timeline" : "preview"} />
+        </SectionErrorBoundary>
+      ) : null}
     </div>
   );
 };

@@ -1,3 +1,5 @@
+import { localStorageGetItem, localStorageRemoveItem, localStorageSetItem } from "@/utils/browserStorage";
+
 const TENANT_KEY = "prt-tenant";
 
 export type StoredTenant = {
@@ -27,16 +29,14 @@ const parseTenant = (raw: string | null): StoredTenant | null => {
 };
 
 const readTenant = () => {
-  if (typeof window === "undefined") return null;
-  return parseTenant(window.localStorage.getItem(TENANT_KEY));
+  return parseTenant(localStorageGetItem(TENANT_KEY));
 };
 
 const persistTenant = (tenant: StoredTenant | null) => {
-  if (typeof window === "undefined") return;
   if (tenant) {
-    window.localStorage.setItem(TENANT_KEY, JSON.stringify(tenant));
+    localStorageSetItem(TENANT_KEY, JSON.stringify(tenant));
   } else {
-    window.localStorage.removeItem(TENANT_KEY);
+    localStorageRemoveItem(TENANT_KEY);
   }
 };
 

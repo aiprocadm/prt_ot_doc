@@ -75,12 +75,12 @@ export const searchGlobal = async (q: string) => fetchSearch({ q, limit: 8 });
 
 export const fetchRecentSearches = async () => {
   const { data } = await apiClient.get<{ items: SearchMemoryItem[] }>("/search/recent");
-  return data.items;
+  return Array.isArray(data?.items) ? data.items : [];
 };
 
 export const fetchSavedSearches = async () => {
   const { data } = await apiClient.get<{ items: SavedSearchItem[] }>("/search/saved");
-  return data.items;
+  return Array.isArray(data?.items) ? data.items : [];
 };
 
 export const createSavedSearch = async (payload: { name: string; q: string; types: string[]; filters?: Record<string, unknown>; is_shared?: boolean }) => {

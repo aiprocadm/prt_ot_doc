@@ -4,6 +4,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, Query, Response, status
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
@@ -144,10 +145,18 @@ async def validate_definition(payload: WorkflowDefinitionIn, session: SessionDep
 async def list_definitions(session: SessionDep, tenant: TenantDep, access: AccessDep) -> list[WorkflowDefinitionRead]:
     _ = access
     service = _service(session, tenant)
-    definitions = await service.list_definitions()
+    try:
+        definitions = await service.list_definitions()
+    except OperationalError:
+        await session.rollback()
+        return []
     result: list[WorkflowDefinitionRead] = []
     for item in definitions:
-        versions = await service.get_versions(item.id)
+        try:
+            versions = await service.get_versions(item.id)
+        except OperationalError:
+            await session.rollback()
+            versions = []
         result.append(WorkflowDefinitionRead(id=item.id, code=item.code, name=item.name, description=item.description, entity_type=item.entity_type, current_version_id=item.current_version_id, versions=[_serialize_version(v) for v in versions]))
     return result
 
@@ -184,7 +193,11 @@ async def list_instances(
     entity_type: str | None = Query(default=None),
 ) -> list[WorkflowInstanceListItem]:
     _ = access
-    items = await _service(session, tenant).list_instances(status_filter=status_filter, entity_type=entity_type)
+    try:
+        items = await _service(session, tenant).list_instances(status_filter=status_filter, entity_type=entity_type)
+    except OperationalError:
+        await session.rollback()
+        return []
     return [
         WorkflowInstanceListItem(
             id=item[0].id,
@@ -212,7 +225,11 @@ async def get_instance(instance_id: str, session: SessionDep, tenant: TenantDep,
 @router.get("/tasks", response_model=list[WorkflowTaskRead])
 async def list_tasks(session: SessionDep, tenant: TenantDep, access: AccessDep, assignee: str | None = Query(default="me")) -> list[WorkflowTaskRead]:
     role_codes = [role.code for role in getattr(access.user, 'roles', [])] if getattr(access.user, 'roles', None) else []
-    tasks = await _service(session, tenant).list_tasks(user_id=access.user.id if assignee == 'me' else None, role_codes=role_codes)
+    try:
+        tasks = await _service(session, tenant).list_tasks(user_id=access.user.id if assignee == 'me' else None, role_codes=role_codes)
+    except OperationalError:
+        await session.rollback()
+        return []
     return [_serialize_task(item) for item in tasks]
 
 

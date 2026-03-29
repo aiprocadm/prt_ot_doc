@@ -22,16 +22,27 @@ This wave re-audited the repository and confirmed the following canonical paths:
 
 ## Quick start
 
-### Backend
+### Local dockerless / Codespaces
+```bash
+make dev-lite
+```
+
+This is the recommended local start path in this workspace. It prepares dockerless env defaults, initializes the SQLite schema, starts backend on `http://localhost:8000`, and starts frontend on `http://localhost:5173`.
+
+Default local login:
+- tenant: `demo`
+- email: `admin@example.com`
+- password: `admin123`
+
+### Manual backend start
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt -r requirements-dev.txt
-alembic -c backend/app/migrations/alembic.ini upgrade head
-uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
+python scripts/run_backend_lite.py
 ```
 
-### Frontend
+### Manual frontend start
 ```bash
 npm --prefix frontend ci
 npm --prefix frontend run dev

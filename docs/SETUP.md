@@ -1,16 +1,27 @@
 # SETUP
 
-## Backend
+## Local dockerless / Codespaces
+```bash
+make dev-lite
+```
+
+This is the recommended local start path for this workspace. It configures dockerless env defaults, creates the SQLite schema from metadata, starts backend on `http://localhost:8000`, and starts frontend on `http://localhost:5173`.
+
+Default local login:
+- tenant: `demo`
+- email: `admin@example.com`
+- password: `admin123`
+
+## Manual backend
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt -r requirements-dev.txt
 cp .env.example .env
-alembic -c backend/app/migrations/alembic.ini upgrade head
-uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
+python scripts/run_backend_lite.py
 ```
 
-## Frontend
+## Manual frontend
 ```bash
 npm --prefix frontend ci
 npm --prefix frontend run dev

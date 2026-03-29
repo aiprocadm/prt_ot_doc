@@ -31,6 +31,24 @@ fi
 
 source ./scripts/dockerless_env.sh
 
+ensure_port_free() {
+  local port="$1"
+  local label="$2"
+  local pid=""
+
+  if command -v lsof >/dev/null 2>&1; then
+    pid="$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)"
+  fi
+
+  if [[ -n "$pid" ]]; then
+    echo "$label port $port is already in use by PID $pid. Stop the existing process and rerun ./scripts/dev_lite.sh."
+    exit 1
+  fi
+}
+
+ensure_port_free 8000 "Backend"
+ensure_port_free 5173 "Frontend"
+
 if [[ "${DATABASE_URL}" == sqlite+aiosqlite:///./* ]]; then
   SQLITE_PATH="${DATABASE_URL#sqlite+aiosqlite:///./}"
   if [[ "${KEEP_DB:-0}" == "1" ]]; then
@@ -51,7 +69,7 @@ echo "Backend:  http://localhost:8000"
 echo "Frontend: http://localhost:5173"
 echo ""
 
-PYTHONPATH=backend uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+python ./scripts/run_backend_lite.py &
 BACK_PID=$!
 
 BACKEND_READY=0

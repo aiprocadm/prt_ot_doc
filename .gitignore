@@ -39,3 +39,6 @@ pytest.ini
 htmlcov/
 .storage/
 !.vscode/settings.json
+backend/.local_storage/
+backend/dev.db
+runtime-dev.db

@@ -27,6 +27,8 @@ updates = {
     "REDIS_RESULT_URL": "memory://",
     "RATE_LIMIT_STORAGE_URI": "memory://",
     "ENABLE_METRICS": "false",
+    "LIBREOFFICE_BIN": "python",
+    "DEMO_BOOTSTRAP": "0",
 }
 
 updated = set()

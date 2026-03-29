@@ -1,3 +1,5 @@
+import { sessionStorageGetItem, sessionStorageRemoveItem, sessionStorageSetItem } from "@/utils/browserStorage";
+
 const REFRESH_KEY = "prt-refresh-token";
 let accessToken: string | null = null;
 let refreshToken: string | null = null;
@@ -6,16 +8,14 @@ let expiresAt: number | null = null;
 const EXPIRY_SKEW_MS = 10_000;
 
 const readRefreshToken = () => {
-  if (typeof window === "undefined") return null;
-  return window.sessionStorage.getItem(REFRESH_KEY);
+  return sessionStorageGetItem(REFRESH_KEY);
 };
 
 const persistRefreshToken = (token: string | null) => {
-  if (typeof window === "undefined") return;
   if (token) {
-    window.sessionStorage.setItem(REFRESH_KEY, token);
+    sessionStorageSetItem(REFRESH_KEY, token);
   } else {
-    window.sessionStorage.removeItem(REFRESH_KEY);
+    sessionStorageRemoveItem(REFRESH_KEY);
   }
 };
 

@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
+from sqlalchemy.exc import OperationalError
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -55,6 +56,20 @@ SummaryAccess = Depends(
 async def _scalar(session: AsyncSession, stmt) -> int:
     value = await session.scalar(stmt)
     return int(value or 0)
+
+
+async def _safe_scalar(session: AsyncSession, stmt, default: int = 0) -> int:
+    try:
+        return await _scalar(session, stmt)
+    except OperationalError:
+        return default
+
+
+async def _safe_max_datetime(session: AsyncSession, stmt):
+    try:
+        return await session.scalar(stmt)
+    except OperationalError:
+        return None
 
 
 @router.get("/summary", response_model=DashboardSummary)
@@ -198,21 +213,21 @@ async def dashboard_operational_snapshot(
         )
     ).all()
 
-    packages_total = await _scalar(
+    packages_total = await _safe_scalar(
         session,
         select(func.count()).select_from(InspectionPrepPackage).where(
             InspectionPrepPackage.tenant_id == str(tenant.id),
             InspectionPrepPackage.deleted_at.is_(None),
         ),
     )
-    open_gaps = await _scalar(
+    open_gaps = await _safe_scalar(
         session,
         select(func.count()).select_from(InspectionPrepGap).where(
             InspectionPrepGap.tenant_id == str(tenant.id),
             InspectionPrepGap.status == "open",
         ),
     )
-    critical_gaps = await _scalar(
+    critical_gaps = await _safe_scalar(
         session,
         select(func.count()).select_from(InspectionPrepGap).where(
             InspectionPrepGap.tenant_id == str(tenant.id),
@@ -220,7 +235,8 @@ async def dashboard_operational_snapshot(
             InspectionPrepGap.severity == "critical",
         ),
     )
-    latest_target_date = await session.scalar(
+    latest_target_date = await _safe_max_datetime(
+        session,
         select(func.max(InspectionPrepPackage.target_inspection_date)).where(
             InspectionPrepPackage.tenant_id == str(tenant.id),
             InspectionPrepPackage.deleted_at.is_(None),

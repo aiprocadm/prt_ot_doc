@@ -5,8 +5,9 @@ from __future__ import annotations
 from app.api.app import create_app
 from app.core.config import bootstrap
 from app.core.logging import configure_logging
+from app.core.runtime_bootstrap import prepare_runtime
 
-settings = bootstrap("api")
+settings = prepare_runtime(bootstrap("api"))
 configure_logging()
 app = create_app(settings=settings)
 
