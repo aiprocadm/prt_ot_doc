@@ -34,6 +34,8 @@
 ## Stabilization invariants
 - For FK-backed tenant-scoped models derived from `TenantBaseModel`, `tenant_id` stores `tenant.id` only. `tenant.slug` remains a routing/header identifier and must not be written into FK-backed `tenant_id` columns.
 - Session tenancy context is now split into `tenant_id`, `tenant_slug`, and `tenant_schema`. Legacy `session.info["tenant"]` is preserved only as a compatibility alias for slug-oriented flows.
+- Tenant dependencies now resolve slug and id separately: request routing uses `tenant_slug`, persistence uses `tenant_id`, and schema routing uses `tenant_schema`.
+- Pipeline, package generation, and background job entrypoints now validate tenant consistency against `session.info["tenant_id"]`; a slug in session context is no longer treated as a valid persistence identifier.
 - Runtime schema bootstrap now respects recorded `tenant.schema_name` when a tenant uses an explicit schema override; dev bootstrap, demo bootstrap, dependency resolution, and tenant bootstrap service no longer fall back to `tenant_<slug>` when a different schema name is already configured.
 - Implicit runtime schema creation through `AsyncSessionLocal(...)` is now disabled by default and guarded by `RUNTIME_SCHEMA_BOOTSTRAP=false`. Ordinary runtime paths no longer auto-create shared or tenant schemas unless this is explicitly enabled; explicit bootstrap flows still call schema creation directly.
 - Demo bootstrap now seeds FK-backed entities with the resolved tenant UUID instead of the tenant slug.
@@ -44,4 +46,4 @@
 - Canonical frontend-facing paths are now protected from overlapping legacy aliases on the most critical route collisions. Legacy compatibility handlers were moved to explicit namespaced or versioned paths instead of shadowing active URLs.
 
 ## Known remaining gap after wave 1
-- Several legacy template/pack/pipeline domains still use slug-scoped `tenant_id` semantics in their own tables and services. They were not mass-refactored in this patch because that requires a bounded migration plan and compatibility review across models, repositories, and workers.
+- Some legacy modules outside the hardened document/pipeline/jobs contour still read `session.info["tenant"]` as a compatibility alias or query mixed historical data using `(tenant.id, tenant.slug)` scope. Those paths still need a bounded cleanup and, where required, data migration for old slug-backed rows.

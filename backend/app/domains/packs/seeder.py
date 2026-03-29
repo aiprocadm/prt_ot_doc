@@ -18,6 +18,7 @@ from app.domains.packs.definitions import (
 from app.models.models import (
     DocumentPack,
     DocumentPackItem,
+    Tenant,
     Template,
     TemplateVersion,
     TemplateVersionStatus,
@@ -27,6 +28,24 @@ from app.schemas.template import TemplateCreate, TemplateVersionMetadata
 from app.services.file_storage import FileStorageService
 
 __all__ = ["ensure_default_packs", "ensure_pack_by_code"]
+
+
+async def _resolve_tenant_id(session: AsyncSession, tenant_slug: str) -> str:
+    info = getattr(session, "info", None)
+    if isinstance(info, dict):
+        session_tenant_slug = str(info.get("tenant_slug") or info.get("tenant") or "").strip().lower()
+        session_tenant_id = str(info.get("tenant_id") or "").strip()
+        if session_tenant_slug == tenant_slug and session_tenant_id:
+            return session_tenant_id
+
+    tenant = (
+        await session.execute(
+            select(Tenant.id).where(Tenant.slug == tenant_slug).limit(1)
+        )
+    ).scalar_one_or_none()
+    if tenant is None:
+        raise ValueError(f"Tenant not found for slug {tenant_slug}")
+    return str(tenant)
 
 
 async def _ensure_template(
@@ -85,15 +104,16 @@ async def _ensure_pack(
     definition: PackDefinition,
     templates: dict[str, Template],
 ) -> DocumentPack:
+    tenant_id = await _resolve_tenant_id(session, tenant_slug)
     stmt = select(DocumentPack).where(
-        DocumentPack.tenant_id == tenant_slug,
+        DocumentPack.tenant_id.in_((tenant_id, tenant_slug)),
         DocumentPack.code == definition.code,
         DocumentPack.deleted_at.is_(None),
     )
     pack = (await session.execute(stmt)).scalar_one_or_none()
     if pack is None:
         pack = DocumentPack(
-            tenant_id=tenant_slug,
+            tenant_id=tenant_id,
             code=definition.code,
             name=definition.name,
             description=definition.description,
@@ -140,7 +160,7 @@ async def _ensure_pack(
         if item is None:
             version_id = await _resolve_template_version_id(template)
             item = DocumentPackItem(
-                tenant_id=tenant_slug,
+                tenant_id=tenant_id,
                 pack_id=pack.id,
                 template_id=template.id,
                 template_version_id=version_id,
@@ -220,8 +240,9 @@ async def ensure_pack_by_code(
         storage=storage,
     )
 
+    tenant_id = await _resolve_tenant_id(session, tenant_slug)
     stmt = select(DocumentPack).where(
-        DocumentPack.tenant_id == tenant_slug,
+        DocumentPack.tenant_id.in_((tenant_id, tenant_slug)),
         DocumentPack.code == pack_code,
         DocumentPack.deleted_at.is_(None),
     )

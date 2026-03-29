@@ -68,7 +68,7 @@ def _pipeline_run_coroutine(
                 footer_text=request_meta.get("footer_text"),
                 idempotency_key=run.idempotency_key,
                 output_basename=request_meta.get("output_basename"),
-                tenant_id=tenant_slug,
+                tenant_id=run.tenant_id,
             )
             return updated.id
 

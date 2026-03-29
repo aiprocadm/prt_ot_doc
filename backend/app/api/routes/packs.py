@@ -800,7 +800,7 @@ async def run_pack(
                     footer_text=None,
                     idempotency_key=run_key,
                     output_basename=None,
-                    tenant_id=tenant.slug,
+                    tenant_id=template.tenant_id,
                 )
                 await session.flush()
                 status_value = (
@@ -835,7 +835,7 @@ async def run_pack(
                             footer_text=None,
                             idempotency_key=run_key,
                             output_basename=None,
-                            tenant_id=tenant.slug,
+                            tenant_id=template.tenant_id,
                         )
                         status_value = (
                             run.status.value

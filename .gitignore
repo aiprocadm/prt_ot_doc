@@ -11,6 +11,7 @@ frontend/node_modules/
 frontend/dist/
 frontend/coverage/
 frontend/.vite/
+.vite/
 .DS_Store
 .idea/
 .hypothesis/
@@ -38,7 +39,10 @@ pytest.ini
 .coverage
 htmlcov/
 .storage/
+.local_storage/
 !.vscode/settings.json
 backend/.local_storage/
 backend/dev.db
+dev.db
 runtime-dev.db
+frontend/dev-dist/

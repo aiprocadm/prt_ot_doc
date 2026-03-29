@@ -587,14 +587,14 @@ async def _fetch_template(
     template_id: str | None = None,
     template_version: int | None = None,
 ) -> tuple[Template, TemplateVersion]:
-    tenant_slug = tenant.slug
+    tenant_scope = (str(tenant.id), tenant.slug)
     if not template_code:
         raise _documents_bad_request("template_code is required for template selection")
     if template_version is None:
         raise _documents_bad_request("template_version is required for template selection")
     filters: list[Any] = [
-        Template.tenant_id == tenant_slug,
-        TemplateVersion.tenant_id == tenant_slug,
+        Template.tenant_id.in_(tenant_scope),
+        TemplateVersion.tenant_id.in_(tenant_scope),
         TemplateVersion.status == TemplateVersionStatus.ACTIVE,
         or_(Template.code == template_code, Template.name == template_code),
         TemplateVersion.version == template_version,

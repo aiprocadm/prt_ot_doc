@@ -149,6 +149,7 @@ async def test_pipeline_logs_start_and_success(
     assert success_record.job_id == run.id
     assert success_record.pdf_fallback is False
     assert success_record.duration_seconds >= 0
+    assert run.tenant_id == tenant.id
 
 
 @pytest.mark.asyncio()
@@ -450,3 +451,92 @@ async def test_pipeline_run_idempotency_key_unique_constraint(
         await session.flush()
 
     await session.rollback()
+
+
+@pytest.mark.asyncio()
+async def test_pipeline_rejects_slug_passed_as_tenant_id(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch_docx(monkeypatch)
+    tenant = (
+        await session.execute(select(Tenant).where(Tenant.slug == "acme"))
+    ).scalar_one()
+    template, version = await _prepare_template(session, tenant)
+    service = PipelineService(pdf_converter=_FakePdfConverter())
+
+    with tenant_context("acme"):
+        with pytest.raises(ValueError, match="Template version belongs to a different tenant"):
+            await service.run(
+                session,
+                tenant_id=tenant.slug,
+                template=template,
+                template_version=version,
+                context={"name": "Jane"},
+                replacements=None,
+                header_text=None,
+                footer_text=None,
+                idempotency_key="slug-is-not-id",
+                output_basename="report",
+            )
+
+
+@pytest.mark.asyncio()
+async def test_pipeline_rejects_partial_session_tenant_contract(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch_docx(monkeypatch)
+    tenant = (
+        await session.execute(select(Tenant).where(Tenant.slug == "beta"))
+    ).scalar_one()
+    template, version = await _prepare_template(session, tenant)
+    service = PipelineService(pdf_converter=_FakePdfConverter())
+    session.info["tenant_slug"] = tenant.slug
+    session.info["tenant"] = tenant.slug
+
+    with tenant_context("beta"):
+        with pytest.raises(ValueError, match="tenant session contract is incomplete"):
+            await service.run(
+                session,
+                tenant_id=tenant.id,
+                template=template,
+                template_version=version,
+                context={"name": "Ivan"},
+                replacements=None,
+                header_text=None,
+                footer_text=None,
+                idempotency_key="partial-session-contract",
+                output_basename="report",
+            )
+
+
+@pytest.mark.asyncio()
+async def test_pipeline_rejects_session_tenant_mismatch(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch_docx(monkeypatch)
+    tenant = (
+        await session.execute(select(Tenant).where(Tenant.slug == "gamma"))
+    ).scalar_one()
+    other_tenant = (
+        await session.execute(select(Tenant).where(Tenant.slug == "delta"))
+    ).scalar_one()
+    template, version = await _prepare_template(session, tenant)
+    service = PipelineService(pdf_converter=_FakePdfConverter())
+    session.info["tenant_id"] = other_tenant.id
+    session.info["tenant_slug"] = other_tenant.slug
+    session.info["tenant"] = other_tenant.slug
+
+    with tenant_context("gamma"):
+        with pytest.raises(ValueError, match="Session tenant does not match template tenant"):
+            await service.run(
+                session,
+                tenant_id=tenant.id,
+                template=template,
+                template_version=version,
+                context={"name": "Mismatch"},
+                replacements=None,
+                header_text=None,
+                footer_text=None,
+                idempotency_key="mismatch-session-contract",
+                output_basename="report",
+            )

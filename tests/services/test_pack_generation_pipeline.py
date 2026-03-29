@@ -25,10 +25,10 @@ from tests.utils.factories import TestDataFactory
 
 class _StubPipeline:
     def __init__(self) -> None:
-        self.calls: list[tuple[str, str]] = []
+        self.calls: list[tuple[str, str, str | None]] = []
 
     async def run(self, *, template, template_version, **_kwargs):
-        self.calls.append((template.id, template_version.id))
+        self.calls.append((template.id, template_version.id, _kwargs.get("tenant_id")))
         return SimpleNamespace(
             docx_storage_key=f"docx-{template.id}",
             pdf_storage_key=f"pdf-{template.id}",
@@ -109,6 +109,7 @@ async def test_pack_pipeline_plans_and_renders(
         assert len(documents) == 1
         assert documents[0].docx_storage_key.startswith("docx-")
         assert pipeline.pipeline.calls
+        assert pipeline.pipeline.calls[0][2] == tenant.id
 
 
 @pytest.mark.asyncio

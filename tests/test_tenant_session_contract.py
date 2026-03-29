@@ -101,6 +101,18 @@ async def test_async_session_local_ensures_explicit_schema_name(monkeypatch: pyt
 
 
 @pytest.mark.anyio
+async def test_get_tenant_session_hydrates_canonical_session_contract(sessionmaker) -> None:
+    async with sessionmaker() as seed:
+        tenant = (await seed.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
+
+    async with db_session.get_tenant_session(tenant="test") as session:
+        assert session.info["tenant_id"] == tenant.id
+        assert session.info["tenant_slug"] == tenant.slug
+        assert session.info["tenant_schema"]
+        assert session.info["tenant"] == tenant.slug
+
+
+@pytest.mark.anyio
 async def test_fetch_tenant_by_identifier_uses_recorded_schema_name(
     sessionmaker,
     monkeypatch: pytest.MonkeyPatch,

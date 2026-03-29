@@ -40,6 +40,8 @@ async def _prepare_pack_environment(
     ppe_valid: bool = True,
 ) -> SimpleNamespace:
     tenant = (await session.execute(select(Tenant).where(Tenant.slug == tenant_slug))).scalar_one()
+    session.info["tenant_id"] = tenant.id
+    session.info["tenant_slug"] = tenant.slug
     session.info["tenant"] = tenant.slug
 
     company = Company(
@@ -134,7 +136,7 @@ async def _prepare_pack_environment(
 
     templates: list[Template] = []
     pack = DocumentPack(
-        tenant_id=tenant.slug,
+        tenant_id=tenant.id,
         code=pack_code,
         name="Site Entry",
         description="",
@@ -144,7 +146,7 @@ async def _prepare_pack_environment(
 
     for index in range(items_count):
         template = Template(
-            tenant_id=tenant.slug,
+            tenant_id=tenant.id,
             name=f"Entry Template {index}",
             description="",
             metadata_json={},
@@ -154,7 +156,7 @@ async def _prepare_pack_environment(
         await session.flush()
 
         version = TemplateVersion(
-            tenant_id=tenant.slug,
+            tenant_id=tenant.id,
             template_id=template.id,
             version=1,
             checksum=b"checksum",
@@ -165,7 +167,7 @@ async def _prepare_pack_environment(
         await session.flush()
 
         item = DocumentPackItem(
-            tenant_id=tenant.slug,
+            tenant_id=tenant.id,
             pack_id=pack.id,
             template_id=template.id,
             template_version_id=version.id,

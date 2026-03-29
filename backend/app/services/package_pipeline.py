@@ -157,7 +157,7 @@ class PackGenerationPipeline:
                 footer_text=None,
                 idempotency_key=spec.run_key,
                 output_basename=None,
-                tenant_id=tenant_slug,
+                tenant_id=spec.template.tenant_id,
             )
             outputs = dict(getattr(run, "outputs", None) or {})
             metadata = dict(getattr(run, "result_metadata", None) or {})

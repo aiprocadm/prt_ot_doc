@@ -28,9 +28,10 @@ def _raise_quota(kind: str, *, limit: int, used: int, billing_gate: bool, correl
 
 
 async def check_concurrent_jobs(session: AsyncSession, *, tenant: Tenant, quota: TenantQuota) -> None:
+    tenant_scope = (str(tenant.id), tenant.slug)
     running_jobs = await session.scalar(
         select(func.count()).select_from(PipelineRun).where(
-            PipelineRun.tenant_id == tenant.slug,
+            PipelineRun.tenant_id.in_(tenant_scope),
             PipelineRun.status.in_([PipelineRunStatus.QUEUED, PipelineRunStatus.RUNNING]),
         )
     )

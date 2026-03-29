@@ -122,6 +122,22 @@ def _run_coroutine(coro: Coroutine[Any, Any, T]) -> T:
     return result_holder["value"]
 
 
+async def _resolve_task_tenant_scope(
+    session: AsyncSession,
+    tenant_slug: str,
+) -> tuple[str, tuple[str, ...]]:
+    tenant_id = str(session.info.get("tenant_id") or "").strip()
+    if not tenant_id:
+        tenant = (
+            await session.execute(select(Tenant.id).where(Tenant.slug == tenant_slug).limit(1))
+        ).scalar_one_or_none()
+        if tenant is None:
+            raise ValueError(f"Tenant not found for slug {tenant_slug}")
+        tenant_id = str(tenant)
+    tenant_scope = (tenant_id, tenant_slug) if tenant_id != tenant_slug else (tenant_id,)
+    return tenant_id, tenant_scope
+
+
 RETRYABLE_EXCEPTIONS: tuple[type[BaseException], ...] = (
     ClientError,
     SQLAlchemyError,
@@ -216,7 +232,7 @@ async def _generate_document_for_run(run_id: str, tenant_slug: str) -> tuple[str
                 passport = build_passport(
                     code=template.name,
                     version=template_version.version,
-                    tenant_id=tenant_slug,
+                    tenant_id=run.tenant_id,
                     generated_by=(user.email or user.id),
                     correlation_id=correlation_id,
                     data=context_payload,
@@ -901,6 +917,7 @@ async def _dispatch_outbox_events(*, max_attempts: int | None = None, tenant_slu
     now = datetime.now(tz=timezone.utc)
     limit = int(max_attempts or settings.outbox_max_attempts)
     async with session_scope(tenant=tenant_slug) as session:
+        tenant_id, tenant_scope = await _resolve_task_tenant_scope(session, tenant_slug)
         pending = (
             await session.execute(
                 select(OutboxEvent)
@@ -918,7 +935,12 @@ async def _dispatch_outbox_events(*, max_attempts: int | None = None, tenant_slu
         await session.flush()
 
         endpoints = (
-            await session.execute(select(WebhookEndpoint).where(WebhookEndpoint.tenant_id == tenant_slug, WebhookEndpoint.is_enabled.is_(True)))
+            await session.execute(
+                select(WebhookEndpoint).where(
+                    WebhookEndpoint.tenant_id.in_(tenant_scope),
+                    WebhookEndpoint.is_enabled.is_(True),
+                )
+            )
         ).scalars().all()
         async with httpx.AsyncClient(timeout=10.0) as client:
             for event in pending:
@@ -935,11 +957,9 @@ async def _dispatch_outbox_events(*, max_attempts: int | None = None, tenant_slu
                             "PPEIssued": NotificationType.PPE_ISSUE_CREATED,
                             "RiskAssessed": NotificationType.CA_DUE_SOON,
                         }[event.event_type]
-                        tenant_row = (await session.execute(select(Tenant).where(Tenant.slug == tenant_slug))).scalar_one_or_none()
-                        resolved_tenant_id = str(tenant_row.id) if tenant_row is not None else str(event.tenant_id)
                         await send_notification(
                             session,
-                            tenant_id=resolved_tenant_id,
+                            tenant_id=tenant_id,
                             user_id=actor_id,
                             channel=NotificationChannel.INAPP,
                             type=mapped,
@@ -1241,6 +1261,8 @@ async def _process_inbound_webhook(*, source: str, tenant_slug: str, payload: di
     from app.models.models import EdoEnvelope
 
     async with session_scope(tenant=tenant_slug) as session:
+        tenant_id = str(session.info.get("tenant_id") or "").strip() or tenant_slug
+        tenant_scope = (tenant_id, tenant_slug) if tenant_id != tenant_slug else (tenant_id,)
         if source != "edo":
             return 0
         external_id = str(payload.get("external_id") or "")
@@ -1263,12 +1285,12 @@ async def _process_inbound_webhook(*, source: str, tenant_slug: str, payload: di
 
         envelope = (
             await session.execute(
-                select(EdoEnvelope).where(EdoEnvelope.tenant_id == tenant_slug, EdoEnvelope.external_id == external_id)
+                select(EdoEnvelope).where(EdoEnvelope.tenant_id.in_(tenant_scope), EdoEnvelope.external_id == external_id)
             )
         ).scalar_one_or_none()
         message = (
             await session.execute(
-                select(EdoMessage).where(EdoMessage.tenant_id == tenant_slug, EdoMessage.external_id == external_id)
+                select(EdoMessage).where(EdoMessage.tenant_id.in_(tenant_scope), EdoMessage.external_id == external_id)
             )
         ).scalar_one_or_none()
         if envelope is None and message is None:
@@ -1308,7 +1330,7 @@ async def _process_inbound_webhook(*, source: str, tenant_slug: str, payload: di
                 changed += 1
                 session.add(
                     EdoStatusHistory(
-                        tenant_id=tenant_slug,
+                        tenant_id=tenant_id,
                         edo_message_id=message.id,
                         status=message_target,
                         raw_payload_json=payload,
@@ -1319,7 +1341,7 @@ async def _process_inbound_webhook(*, source: str, tenant_slug: str, payload: di
             return 0
 
         await AuditService(session).log_event(
-            tenant_id=tenant_slug,
+            tenant_id=tenant_id,
             action="edo_status_update",
             object_type="EdoEnvelope" if envelope is not None else "EdoMessage",
             object_id=(envelope.id if envelope is not None else message.id),
@@ -1331,12 +1353,12 @@ async def _process_inbound_webhook(*, source: str, tenant_slug: str, payload: di
         )
         if target_status == EdoEnvelopeStatus.SIGNED and envelope is not None:
             await OutboxService(session).add_event(
-                tenant_id=tenant_slug,
+                tenant_id=tenant_id,
                 event_type="Signed",
                 aggregate_type="edo_envelope",
                 aggregate_id=envelope.id,
                 payload={
-                    "tenant_id": tenant_slug,
+                    "tenant_id": tenant_id,
                     "event_id": str(uuid4()),
                     "document_id": envelope.object_id,
                     "document_version_id": envelope.object_id,
@@ -1710,8 +1732,8 @@ def workflow_sla_tick(tenant_slug: str) -> int:
         with tenant_context(tenant_slug):
             ensure_tenant_schema(tenant_slug)
             async with session_scope(tenant=tenant_slug) as session:
-                tenant = (await session.execute(select(Tenant).where(Tenant.slug == tenant_slug))).scalar_one()
-                processed = await WorkflowService(session, str(tenant.id)).sweep_task_sla()
+                tenant_id, _tenant_scope = await _resolve_task_tenant_scope(session, tenant_slug)
+                processed = await WorkflowService(session, tenant_id).sweep_task_sla()
                 await session.commit()
                 return processed
     return _run_coroutine(_run())
@@ -1722,8 +1744,8 @@ def workflow_timers_tick(tenant_slug: str) -> int:
         with tenant_context(tenant_slug):
             ensure_tenant_schema(tenant_slug)
             async with session_scope(tenant=tenant_slug) as session:
-                tenant = (await session.execute(select(Tenant).where(Tenant.slug == tenant_slug))).scalar_one()
-                processed = await WorkflowService(session, str(tenant.id)).run_due_timers()
+                tenant_id, _tenant_scope = await _resolve_task_tenant_scope(session, tenant_slug)
+                processed = await WorkflowService(session, tenant_id).run_due_timers()
                 await session.commit()
                 return processed
     return _run_coroutine(_run())

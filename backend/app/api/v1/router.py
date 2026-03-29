@@ -593,7 +593,7 @@ async def create_template_catalog(
     request: Request,
 ) -> TemplateDTO:
     template = Template(
-        tenant_id=tenant.slug,
+        tenant_id=str(tenant.id),
         code=payload.code,
         name=payload.name,
         description=payload.description,
@@ -608,7 +608,7 @@ async def create_template_catalog(
     session.add(template)
     await session.flush()
     await AuditService(session).log_event(
-        tenant_id=tenant.slug,
+        tenant_id=str(tenant.id),
         action="create",
         object_type="template",
         object_id=template.id,
@@ -666,7 +666,7 @@ async def patch_template(
         }
     await session.flush()
     await AuditService(session).log_event(
-        tenant_id=tenant.slug,
+        tenant_id=str(tenant.id),
         action="update",
         object_type="template",
         object_id=template.id,
@@ -705,7 +705,7 @@ async def upload_template_version(
     idem_record = None
     if idempotency_key:
         normalized = normalize_idempotency_key(idempotency_key)
-        idem_service = IdempotencyService(session=session, tenant_id=tenant.slug, endpoint=f"template_upload:{template_id}")
+        idem_service = IdempotencyService(session=session, tenant_id=str(tenant.id), endpoint=f"template_upload:{template_id}")
         idem_record, created = await idem_service.acquire(
             key=normalized,
             request_hash=hashlib.sha256(payload_bytes).hexdigest(),
@@ -721,7 +721,7 @@ async def upload_template_version(
     storage.put(key, payload_bytes, content_type=DOCX_CONTENT_TYPE)
     parsed = lint_docx_template(payload_bytes)
     version = TemplateVersion(
-        tenant_id=tenant.slug,
+        tenant_id=str(tenant.id),
         template_id=template.id,
         version=next_ver,
         checksum=hashlib.sha256(payload_bytes).digest(),
@@ -790,7 +790,7 @@ async def preview_template_version(
     idem_record = None
     if idempotency_key:
         normalized = normalize_idempotency_key(idempotency_key)
-        idem_service = IdempotencyService(session=session, tenant_id=tenant.slug, endpoint=f"template_preview:{template_id}:{version_id}")
+        idem_service = IdempotencyService(session=session, tenant_id=str(tenant.id), endpoint=f"template_preview:{template_id}:{version_id}")
         idem_record, created = await idem_service.acquire(
             key=normalized,
             request_hash=hashlib.sha256(json.dumps(payload.model_dump(mode="json"), sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest(),
@@ -803,7 +803,7 @@ async def preview_template_version(
     passport = build_passport(
         code=template.code or template.name,
         version=version.version,
-        tenant_id=tenant.slug,
+        tenant_id=str(tenant.id),
         generated_by="api_user",
         correlation_id=get_trace_id(request),
         data=payload.data,
@@ -956,7 +956,7 @@ async def create_template_version(
     FileStorageService.default().put(key, payload, content_type=DOCX_CONTENT_TYPE)
 
     version = TemplateVersion(
-        tenant_id=tenant.slug,
+        tenant_id=str(tenant.id),
         template_id=template.id,
         version=next_ver,
         checksum=bytes.fromhex(checksum_hex),
@@ -978,7 +978,7 @@ async def list_template_versions(template_id: str, session: SessionDep, tenant: 
         select(TemplateVersion)
         .where(
             TemplateVersion.template_id == template_id,
-            TemplateVersion.tenant_id == tenant.slug,
+            TemplateVersion.tenant_id.in_(_tenant_scope(tenant)),
             TemplateVersion.deleted_at.is_(None),
         )
         .order_by(TemplateVersion.version.desc())
@@ -999,7 +999,7 @@ async def get_template_version(
     if (
         version is None
         or version.template_id != template_id
-        or version.tenant_id != tenant.slug
+        or version.tenant_id not in _tenant_scope(tenant)
         or version.deleted_at is not None
     ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Template version not found")
@@ -1044,7 +1044,7 @@ async def patch_template_version(
     if "profile" in payload and isinstance(payload["profile"], dict):
         version.profile = payload["profile"]
     await AuditService(session).log_event(
-        tenant_id=tenant.slug,
+        tenant_id=str(tenant.id),
         action="template_version.update",
         object_type="template_version",
         object_id=version.id,
@@ -1068,7 +1068,7 @@ async def get_template_by_code_version(
     request: Request,
     version: int = Query(..., ge=1),
 ) -> dict[str, object]:
-    row = await get_template_version_by_code(session, tenant_id=tenant.slug, code=code, version=version)
+    row = await get_template_version_by_code(session, tenant_id=str(tenant.id), code=code, version=version)
     if row is None:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
@@ -1085,14 +1085,14 @@ async def get_template_by_code_version(
 
 @router.post("/templates/render-preview", response_model=RenderPreviewResponse)
 async def render_preview(payload: RenderPreviewRequest, session: SessionDep, tenant: TenantDep, access: EditorAccess, request: Request) -> RenderPreviewResponse:
-    row = await get_template_version_by_code(session, tenant_id=tenant.slug, code=payload.code, version=payload.version)
+    row = await get_template_version_by_code(session, tenant_id=str(tenant.id), code=payload.code, version=payload.version)
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Template not found")
     template, tv = row
     storage = FileStorageService.default()
     source = storage.get(tv.file_id or tv.payload_key)
     correlation_id = get_trace_id(request)
-    passport = build_passport(code=template.code, version=tv.version, tenant_id=tenant.slug, generated_by="api_user", correlation_id=correlation_id, data=payload.data, options={"visible_passport": payload.visible_passport}, npa_binding_id=payload.npa_binding_id)
+    passport = build_passport(code=template.code, version=tv.version, tenant_id=str(tenant.id), generated_by="api_user", correlation_id=correlation_id, data=payload.data, options={"visible_passport": payload.visible_passport}, npa_binding_id=payload.npa_binding_id)
     rendered = render_preview_docx(template_bytes=source, data=payload.data, passport=passport, visible_passport=payload.visible_passport)
     rendered_sha = hashlib.sha256(rendered).hexdigest()
     out_key = f"{tenant.slug}/documents/preview/{uuid.uuid4()}/rendered.docx"
@@ -1239,7 +1239,7 @@ async def run_pipeline(
     try:
         template_stmt = select(Template).where(
             Template.id == template_id,
-            Template.tenant_id == tenant_slug,
+            Template.tenant_id.in_(_tenant_scope(tenant)),
         )
         template = (await session.execute(template_stmt)).scalar_one_or_none()
         if not template:
@@ -1291,7 +1291,7 @@ async def run_pipeline(
                 footer_text=normalized.footer_text,
                 idempotency_key=effective_idempotency_key,
                 output_basename=normalized.output_basename,
-                tenant_id=tenant_slug,
+                tenant_id=str(tenant.id),
             )
             response.status_code = status.HTTP_200_OK
             return PipelineRunRead.model_validate(run)
@@ -1306,7 +1306,7 @@ async def run_pipeline(
             footer_text=normalized.footer_text,
             idempotency_key=effective_idempotency_key,
             output_basename=normalized.output_basename,
-            tenant_id=tenant_slug,
+            tenant_id=str(tenant.id),
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
@@ -1335,7 +1335,7 @@ async def run_pipeline(
                 footer_text=normalized.footer_text,
                 idempotency_key=effective_idempotency_key,
                 output_basename=normalized.output_basename,
-                tenant_id=tenant_slug,
+                tenant_id=str(tenant.id),
             )
             response.status_code = status.HTTP_200_OK
             return PipelineRunRead.model_validate(run)

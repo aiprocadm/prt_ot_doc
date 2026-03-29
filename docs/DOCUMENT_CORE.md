@@ -36,6 +36,10 @@
 - template selection for generation is tolerant to historical `code` vs `name` inconsistencies;
 - backend template handlers and schemas were de-duplicated to remove broken/ambiguous contracts;
 - frontend template forms/DTOs were re-aligned with backend scope/type/version contracts;
+- canonical tenant contract for document-core now uses `tenant.id` for `Template`, `TemplateVersion`, `DocumentPack`, `DocumentPackItem`, and `PipelineRun` persistence;
+- `PipelineService` now compares template tenancy against `session.info["tenant_id"]`, while `tenant_slug` remains routing-only and `tenant_schema` remains schema-only;
+- document/session/jobs flows keep backward-compatible `session.info["tenant"]` only as a slug alias and no longer use it as the primary source of truth for persistence checks;
+- dashboard quick actions now route to the real document wizard (`/documents/wizard`) and pack wizard page (`/packs`).
 - docs now explicitly describe demo/owner/bootstrap/user-access flows.
 
 ### Still partial

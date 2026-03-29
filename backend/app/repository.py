@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+from uuid import UUID
 
 from app.core.rbac_abac import actor_from_claims, apply_abac_filters
 from app.core.tenant import get_current_tenant
@@ -20,24 +22,78 @@ from app.schemas.company import CompanyCreate
 from app.schemas.template import TemplateCreate, TemplateVersionMetadata
 
 
-def _assert_tenant_scope(session: AsyncSession, tenant_id: str | None) -> str:
-    """Ensure repository operations stay within the current tenant scope."""
+def _normalize_tenant_id(value: object) -> str | None:
+    if value in (None, ""):
+        return None
+    candidate = str(value).strip()
+    if not candidate:
+        return None
+    try:
+        return str(UUID(candidate))
+    except (TypeError, ValueError):
+        return None
 
-    session_tenant = session.info.get("tenant_id") or session.info.get("tenant")
-    normalized_session_tenant = str(session_tenant) if session_tenant else None
-    normalized_expected = str(tenant_id) if tenant_id is not None else None
 
-    if normalized_expected is None:
-        normalized_expected = normalized_session_tenant or get_current_tenant().slug
+def _normalize_tenant_slug(value: object) -> str | None:
+    if value in (None, ""):
+        return None
+    candidate = str(value).strip().lower()
+    return candidate or None
 
-    if normalized_session_tenant and normalized_expected:
-        if str(normalized_session_tenant) != str(normalized_expected):
-            raise HTTPException(
-                status.HTTP_403_FORBIDDEN,
-                "Tenant mismatch for repository operation",
-            )
 
-    return normalized_expected
+def _tenant_scope_values(tenant_id: str, tenant_slug: str | None) -> tuple[str, ...]:
+    values = [tenant_id]
+    if tenant_slug and tenant_slug not in values:
+        values.append(tenant_slug)
+    return tuple(values)
+
+
+async def _resolve_tenant_scope(
+    session: AsyncSession,
+    tenant_identifier: str | None,
+) -> tuple[str, str | None]:
+    session_info = getattr(session, "info", None)
+    session_tenant_id = _normalize_tenant_id(session_info.get("tenant_id")) if isinstance(session_info, dict) else None
+    session_tenant_slug = _normalize_tenant_slug(
+        session_info.get("tenant_slug") or session_info.get("tenant")
+    ) if isinstance(session_info, dict) else None
+
+    requested_tenant_id = _normalize_tenant_id(tenant_identifier)
+    requested_tenant_slug = None if requested_tenant_id else _normalize_tenant_slug(tenant_identifier)
+
+    if requested_tenant_id and session_tenant_id and requested_tenant_id != session_tenant_id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Tenant mismatch for repository operation")
+    if requested_tenant_slug and session_tenant_slug and requested_tenant_slug != session_tenant_slug:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Tenant mismatch for repository operation")
+
+    if requested_tenant_id and session_tenant_id == requested_tenant_id:
+        return session_tenant_id, session_tenant_slug
+    if requested_tenant_slug and session_tenant_slug == requested_tenant_slug and session_tenant_id:
+        return session_tenant_id, session_tenant_slug
+    if tenant_identifier is None and session_tenant_id:
+        return session_tenant_id, session_tenant_slug
+
+    lookup = requested_tenant_id or requested_tenant_slug or session_tenant_id or session_tenant_slug or get_current_tenant().slug
+    filters = [Tenant.slug == lookup, Tenant.code == lookup]
+    if _normalize_tenant_id(lookup):
+        filters.append(Tenant.id == str(lookup))
+    row = (
+        await session.execute(
+            select(Tenant.id, Tenant.slug).where(or_(*filters)).limit(1)
+        )
+    ).first()
+    if row is None:
+        if session_tenant_id:
+            return session_tenant_id, session_tenant_slug
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Tenant mismatch for repository operation")
+
+    resolved_tenant_id = str(row.id)
+    resolved_tenant_slug = _normalize_tenant_slug(row.slug)
+    if session_tenant_id and resolved_tenant_id != session_tenant_id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Tenant mismatch for repository operation")
+    if session_tenant_slug and resolved_tenant_slug and resolved_tenant_slug != session_tenant_slug:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Tenant mismatch for repository operation")
+    return resolved_tenant_id, resolved_tenant_slug
 
 
 async def list_tenants(
@@ -45,7 +101,9 @@ async def list_tenants(
 ) -> tuple[list[Tenant], int]:
     """Return the active tenant ordered by creation time with total count."""
 
-    scope_slug = _assert_tenant_scope(session, tenant_slug)
+    _scope_tenant_id, scope_slug = await _resolve_tenant_scope(session, tenant_slug)
+    if scope_slug is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Tenant mismatch for repository operation")
     base = select(Tenant).where(Tenant.slug == scope_slug)
     total = await session.scalar(select(func.count()).select_from(base.subquery()))
     stmt = base.order_by(Tenant.created_at.asc()).offset(offset).limit(limit)
@@ -58,7 +116,7 @@ async def create_company(
 ) -> Company:
     """Insert a new company record for the provided tenant."""
 
-    normalized_tenant = _assert_tenant_scope(session, tenant_id)
+    normalized_tenant, _tenant_slug = await _resolve_tenant_scope(session, tenant_id)
 
     def _clean(value: str | None) -> str | None:
         if value is None:
@@ -117,10 +175,11 @@ async def list_companies(
 ) -> tuple[list[Company], int]:
     """Return companies for a tenant excluding soft-deleted rows."""
 
-    normalized_tenant = _assert_tenant_scope(session, tenant_id)
+    normalized_tenant, normalized_slug = await _resolve_tenant_scope(session, tenant_id)
+    tenant_scope = _tenant_scope_values(normalized_tenant, normalized_slug)
 
     base = select(Company).where(
-        Company.tenant_id == normalized_tenant,
+        Company.tenant_id.in_(tenant_scope),
         Company.deleted_at.is_(None),
     )
     if claims is not None:
@@ -138,10 +197,11 @@ async def list_persons(
 ) -> tuple[list[Person], int]:
     """Return people for a tenant with pagination."""
 
-    normalized_tenant = _assert_tenant_scope(session, tenant_id)
+    normalized_tenant, normalized_slug = await _resolve_tenant_scope(session, tenant_id)
+    tenant_scope = _tenant_scope_values(normalized_tenant, normalized_slug)
 
     base = select(Person).where(
-        Person.tenant_id == normalized_tenant,
+        Person.tenant_id.in_(tenant_scope),
         Person.deleted_at.is_(None),
     )
     stmt = base.order_by(Person.created_at.desc()).offset(offset).limit(limit)
@@ -149,12 +209,6 @@ async def list_persons(
     total_stmt = select(func.count()).select_from(base.subquery())
     total = await session.scalar(total_stmt)
     return list(rows), int(total or 0)
-
-
-def _resolve_tenant_slug(session: AsyncSession, tenant_slug: str | None) -> str:
-    slug = tenant_slug or session.info.get("tenant")
-    normalized = str(slug) if slug else None
-    return _assert_tenant_scope(session, normalized)
 
 
 async def list_templates(
@@ -171,9 +225,15 @@ async def list_templates(
     the total count is returned to support pagination responses.
     """
 
-    slug = _resolve_tenant_slug(session, tenant_slug)
-    base = select(Template).where(Template.tenant_id == slug)
-    stmt = base.order_by(Template.created_at.desc()).offset(offset).limit(limit)
+    tenant_id, resolved_slug = await _resolve_tenant_scope(session, tenant_slug)
+    tenant_scope = _tenant_scope_values(tenant_id, resolved_slug)
+    base = select(Template).where(Template.tenant_id.in_(tenant_scope))
+    stmt = (
+        base.options(selectinload(Template.versions))
+        .order_by(Template.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
     rows = list((await session.execute(stmt)).scalars().all())
     total_stmt = select(func.count()).select_from(base.subquery())
     total = int(await session.scalar(total_stmt) or 0)
@@ -187,9 +247,10 @@ async def get_template_by_name(
 ) -> Template | None:
     """Return the template with the given name if it exists."""
 
-    slug = _resolve_tenant_slug(session, tenant_slug)
+    tenant_id, resolved_slug = await _resolve_tenant_scope(session, tenant_slug)
+    tenant_scope = _tenant_scope_values(tenant_id, resolved_slug)
     stmt = select(Template).where(
-        Template.tenant_id == slug, Template.name == name
+        Template.tenant_id.in_(tenant_scope), Template.name == name
     )
     result = await session.execute(stmt)
     return result.scalars().first()
@@ -200,13 +261,15 @@ async def get_active_template_with_version(
 ) -> tuple[Template, TemplateVersion] | None:
     """Return the template and its active version by name if present."""
 
-    slug = _resolve_tenant_slug(session, tenant_slug)
+    tenant_id, resolved_slug = await _resolve_tenant_scope(session, tenant_slug)
+    tenant_scope = _tenant_scope_values(tenant_id, resolved_slug)
     stmt = (
         select(Template, TemplateVersion)
         .join(TemplateVersion, TemplateVersion.template_id == Template.id)
         .where(
-            Template.tenant_id == slug,
+            Template.tenant_id.in_(tenant_scope),
             Template.name == name,
+            TemplateVersion.tenant_id.in_(tenant_scope),
             TemplateVersion.status == TemplateVersionStatus.ACTIVE,
         )
         .order_by(TemplateVersion.version.desc())
@@ -261,10 +324,10 @@ async def create_template(
         if tenant_slug is None:
             tenant_slug = tenant_identifier
 
-    slug = _resolve_tenant_slug(session, tenant_slug)
-    tenant_identifier = tenant_identifier or slug
+    tenant_identifier = tenant_slug or tenant_identifier
+    canonical_tenant_id, canonical_tenant_slug = await _resolve_tenant_scope(session, tenant_identifier)
 
-    existing = await get_active_template_with_version(session, effective_payload.name, slug)
+    existing = await get_active_template_with_version(session, effective_payload.name, canonical_tenant_id)
     if existing:
         template, version = existing
         _ensure_idempotent_match(template, version, effective_payload, checksum=checksum)
@@ -276,7 +339,7 @@ async def create_template(
     async def _create() -> TemplateVersion:
         template = Template(
             id=template_id,
-            tenant_id=tenant_identifier,
+            tenant_id=canonical_tenant_id,
             code=effective_payload.name,
             name=effective_payload.name,
             description=effective_payload.description,
@@ -303,7 +366,7 @@ async def create_template(
         )
 
         version = TemplateVersion(
-            tenant_id=slug,
+            tenant_id=canonical_tenant_id,
             template_id=template.id,
             version=next_version,
             checksum=checksum,
@@ -324,9 +387,9 @@ async def create_template(
         return await _create()
     except IntegrityError:
         await session.rollback()
-        existing = await get_active_template_with_version(session, payload.name, slug)
+        existing = await get_active_template_with_version(session, effective_payload.name, canonical_tenant_id)
         if not existing:
             raise
         template, version = existing
-        _ensure_idempotent_match(template, version, payload, checksum=checksum)
+        _ensure_idempotent_match(template, version, effective_payload, checksum=checksum)
         return version

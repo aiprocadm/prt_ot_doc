@@ -527,8 +527,11 @@ async def audit_authz_decision(
     object_id: str | None = None,
 ) -> None:
     tenant = str(
-        session.info.get("tenant_id") or session.info.get("tenant") or actor.tenant_id or ""
-    )
+        session.info.get("tenant_id")
+        or session.info.get("token_tenant_id")
+        or actor.tenant_id
+        or ""
+    ).strip()
     audit = AuditService(session)
     await audit.log_event(
         tenant_id=tenant,

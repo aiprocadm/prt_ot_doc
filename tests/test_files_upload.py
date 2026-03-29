@@ -4,6 +4,7 @@ import hashlib
 import logging
 import re
 import zipfile
+from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timezone
 from io import BytesIO
 from typing import BinaryIO
@@ -19,6 +20,7 @@ from app.models.file import File as StoredFile
 from app.models.file import FileKind, FileScanStatus
 from app.models.models import AuditLog, RoleEnum
 from app.services.clamav import (
+    ClamAVScanRequest,
         ClamAVScanOutcome,
         ClamAVVerdict,
         MemoryQuarantinePublisher,
@@ -379,6 +381,58 @@ async def test_clamav_detects_infected_and_blocks_download(
         assert record.is_quarantined is True
         assert record.scan_status == FileScanStatus.INFECTED
         assert record.clamav_signature == "Eicar-Test-Signature"
+
+
+@pytest.mark.anyio
+async def test_process_scan_request_uses_canonical_tenant_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    message = ClamAVScanRequest(
+        bucket="bucket-a",
+        key="uploads/test.txt",
+        size=4,
+        mime="text/plain",
+        sha256="a" * 64,
+        tenant_id="00000000-0000-0000-0000-000000000123",
+        tenant_slug="test",
+    )
+    captured: dict[str, str] = {}
+
+    class _Result:
+        def scalar_one_or_none(self):
+            return None
+
+    class _Session:
+        async def execute(self, *_args, **_kwargs):
+            return _Result()
+
+        async def flush(self):
+            return None
+
+    @asynccontextmanager
+    async def fake_get_tenant_session(*, tenant: str | None = None, tenant_id: str | None = None, schema_name: str | None = None):
+        del schema_name
+        captured["tenant"] = tenant or ""
+        captured["tenant_id"] = tenant_id or ""
+        yield _Session()
+
+    @contextmanager
+    def fake_stream_object(*, key: str):
+        assert key == message.key
+        yield BytesIO(b"scan")
+
+    class _CleanScanner:
+        def scan_stream(self, stream: BinaryIO) -> ClamAVScanOutcome:
+            assert stream.read() == b"scan"
+            return ClamAVScanOutcome(status=ClamAVVerdict.CLEAN, raw="OK")
+
+    monkeypatch.setattr("app.services.clamav.get_tenant_session", fake_get_tenant_session)
+    monkeypatch.setattr("app.services.clamav.s3.stream_object", fake_stream_object)
+
+    outcome = await process_scan_request(message, scanner=_CleanScanner())
+
+    assert outcome.status == ClamAVVerdict.CLEAN
+    assert captured == {"tenant": "test", "tenant_id": "00000000-0000-0000-0000-000000000123"}
 
 
 @pytest.mark.anyio

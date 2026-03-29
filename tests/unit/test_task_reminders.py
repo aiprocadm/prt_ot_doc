@@ -46,6 +46,8 @@ async def test_task_reminder_overdue_and_schedule(sessionmaker, data_factory):
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         tenant.settings = {"obligations": {"reminder_days": [10, 5]}}
+        session.info["tenant_id"] = tenant.id
+        session.info["tenant_slug"] = tenant.slug
         session.info["tenant"] = tenant.slug
         task = Task(
             tenant_id=tenant.id,
@@ -77,6 +79,8 @@ async def test_task_reminder_uses_tenant_windows(sessionmaker, data_factory):
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         tenant.settings = {"obligations": {"reminder_days": [10, 5]}}
+        session.info["tenant_id"] = tenant.id
+        session.info["tenant_slug"] = tenant.slug
         session.info["tenant"] = tenant.slug
         task = Task(
             tenant_id=tenant.id,
@@ -94,6 +98,32 @@ async def test_task_reminder_uses_tenant_windows(sessionmaker, data_factory):
         assert processed == 1
         await session.refresh(task)
         assert task.next_remind_at == (due_at - timedelta(days=5)).replace(tzinfo=None)
+
+
+@pytest.mark.anyio
+async def test_task_reminder_uses_canonical_tenant_id_for_settings(sessionmaker, data_factory):
+    now = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    due_at = now + timedelta(days=6)
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        tenant.settings = {"obligations": {"reminder_days": [9, 4]}}
+        session.info["tenant_id"] = tenant.id
+        task = Task(
+            tenant_id=tenant.id,
+            title="Canonical task",
+            due_at=due_at,
+            status=TaskStatus.OPEN,
+            priority=TaskPriority.MEDIUM,
+            reminder_channel=TaskReminderChannel.IN_APP,
+            next_remind_at=now - timedelta(minutes=5),
+        )
+        session.add(task)
+        await session.commit()
+
+        processed = await process_task_reminders(session, now=now)
+        assert processed == 1
+        await session.refresh(task)
+        assert task.next_remind_at == (due_at - timedelta(days=4)).replace(tzinfo=None)
 
 
 @pytest.mark.anyio

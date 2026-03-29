@@ -68,8 +68,9 @@ async def test_orchestrator_retry_and_cancel_logic(sessionmaker, data_factory) -
             payload={"data": {}},
             idempotency_key="idem-2",
             request_hash="hash-2",
+            enqueue=False,
         )
-        await orchestrator.start_job(job_id=job.id)
+        await orchestrator.start_job(job_id=job.id, enqueue=False)
         step = await orchestrator._next_step(job.id)
         assert step is not None
         step.status = JobStepStatus.FAILED.value
@@ -111,6 +112,58 @@ async def test_retry_failed_only_keeps_successful_steps(sessionmaker, data_facto
         await orchestrator.retry_job(job_id=job.id, retry_failed_only=True)
         assert steps[0].status == JobStepStatus.SUCCESS.value
         assert steps[1].status == JobStepStatus.QUEUED.value
+
+
+@pytest.mark.anyio
+async def test_enqueue_next_step_passes_slug_and_tenant_id(
+    sessionmaker,
+    data_factory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        session.add(
+            PipelineProfile(
+                tenant_id=str(tenant.id),
+                code="doc_dispatch",
+                name="Dispatch",
+                steps=[{"code": "render_docx"}],
+                limits={},
+                is_active=True,
+            )
+        )
+        await session.commit()
+
+    captured: dict[str, dict[str, str]] = {}
+
+    class StubResult:
+        id = "stub-job-step"
+
+    def fake_apply_async(*, kwargs: dict[str, str], headers: dict[str, str]):
+        captured["kwargs"] = kwargs
+        captured["headers"] = headers
+        return StubResult()
+
+    monkeypatch.setattr("app.celery.tasks.job_steps.run_job_step.apply_async", fake_apply_async)
+
+    async with sessionmaker() as session:
+        orchestrator = PipelineOrchestrator(session)
+        job = await orchestrator.create_job(
+            tenant_id=str(tenant.id),
+            profile_code="doc_dispatch",
+            payload={"data": {}},
+            idempotency_key="idem-dispatch",
+            request_hash="hash-dispatch",
+            enqueue=False,
+        )
+        step = await orchestrator._next_step(job.id)
+
+        assert step is not None
+        await orchestrator.enqueue_next_step(job=job, step=step)
+
+    assert captured["kwargs"]["tenant_slug"] == tenant.slug
+    assert captured["kwargs"]["tenant_id"] == str(tenant.id)
+    assert captured["headers"]["tenant_id"] == str(tenant.id)
 
 
 @pytest.mark.anyio

@@ -521,7 +521,11 @@ class AuditService:
     ) -> AuditLog:
         """Backward-compatible wrapper for logging audit events."""
 
-        tenant_id = str(self.session.info.get("tenant_id") or self.session.info.get("tenant") or "")
+        tenant_id = str(
+            self.session.info.get("tenant_id")
+            or self.session.info.get("token_tenant_id")
+            or ""
+        ).strip()
         return await self.log_event(
             tenant_id=tenant_id,
             action=action,

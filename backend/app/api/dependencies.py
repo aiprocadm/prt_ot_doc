@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from typing import AsyncIterator
+from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy import or_, select
@@ -25,15 +26,49 @@ from app.services.integrations import (
 )
 
 
-def _resolve_tenant_slug(request: Request) -> str | None:
-    state_tenant = getattr(request.state, "tenant_id", None)
+def _normalize_tenant_id(value: object) -> str | None:
+    if value in (None, ""):
+        return None
+    candidate = str(value).strip()
+    if not candidate:
+        return None
+    try:
+        return str(UUID(candidate))
+    except (TypeError, ValueError):
+        return None
+
+
+def resolve_tenant_slug(request: Request) -> str | None:
+    state_tenant = getattr(request.state, "tenant_slug", None)
     if state_tenant:
-        return str(state_tenant)
+        return str(state_tenant).strip().lower()
+    state_record = getattr(request.state, "tenant_record", None)
+    if isinstance(state_record, Tenant):
+        return str(state_record.slug).strip().lower()
     for header_name in (TENANT_HEADER, "x-tenant-slug"):
         value = request.headers.get(header_name)
         if value:
-            return value
+            return str(value).strip().lower()
     return None
+
+
+def resolve_tenant_id(request: Request) -> str | None:
+    state_tenant = getattr(request.state, "tenant_id", None)
+    normalized = _normalize_tenant_id(state_tenant)
+    if normalized:
+        return normalized
+    state_record = getattr(request.state, "tenant_record", None)
+    if isinstance(state_record, Tenant):
+        return _normalize_tenant_id(state_record.id)
+    return None
+
+
+def resolve_tenant_identifier(request: Request) -> str | None:
+    return resolve_tenant_id(request) or resolve_tenant_slug(request)
+
+
+def _resolve_tenant_slug(request: Request) -> str | None:
+    return resolve_tenant_slug(request)
 
 
 def _resolve_fallback_tenants(request: Request) -> list[str]:
@@ -76,11 +111,14 @@ async def _fetch_tenant_by_identifier(identifier: str) -> Tenant:
 
 
 async def get_auth_tenant_record(request: Request) -> Tenant:
-    tenant_slug = _resolve_tenant_slug(request)
     candidates: list[str] = []
-    if tenant_slug:
+    tenant_id = resolve_tenant_id(request)
+    tenant_slug = resolve_tenant_slug(request)
+    if tenant_id:
+        candidates.append(tenant_id)
+    if tenant_slug and tenant_slug not in candidates:
         candidates.append(tenant_slug)
-    else:
+    if not candidates:
         candidates.extend(_resolve_fallback_tenants(request))
 
     last_error: HTTPException | None = None
@@ -103,21 +141,27 @@ async def get_tenant_record(request: Request) -> Tenant:
     preloaded = getattr(request.state, "tenant_record", None)
     if isinstance(preloaded, Tenant):
         return preloaded
-    tenant_slug = _resolve_tenant_slug(request)
-    if tenant_slug is None:
-        for candidate in _resolve_fallback_tenants(request):
-            try:
-                return await _fetch_tenant_by_identifier(candidate)
-            except HTTPException as exc:
-                if exc.status_code == status.HTTP_404_NOT_FOUND:
-                    continue
-                raise
-    info = tenant_required(tenant_slug)
-    return await _fetch_tenant_by_identifier(info.slug)
+    tenant_id = resolve_tenant_id(request)
+    if tenant_id is not None:
+        return await _fetch_tenant_by_identifier(tenant_id)
+
+    tenant_slug = resolve_tenant_slug(request)
+    if tenant_slug is not None:
+        info = tenant_required(tenant_slug)
+        return await _fetch_tenant_by_identifier(info.slug)
+
+    for candidate in _resolve_fallback_tenants(request):
+        try:
+            return await _fetch_tenant_by_identifier(candidate)
+        except HTTPException as exc:
+            if exc.status_code == status.HTTP_404_NOT_FOUND:
+                continue
+            raise
+    raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found")
 
 
 async def require_tenant_slug(request: Request) -> None:
-    tenant_required(_resolve_tenant_slug(request))
+    tenant_required(resolve_tenant_slug(request))
 
 
 async def get_correlation_id(request: Request) -> str:

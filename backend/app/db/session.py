@@ -31,6 +31,7 @@ class TenantAsyncSession(AsyncSession):
 
     async def __aenter__(self) -> TenantAsyncSession:  # type: ignore[override]
         await super().__aenter__()
+        await _hydrate_async_session_tenant_identity(self)
         await _apply_search_path(self)
         return self
 
@@ -140,6 +141,59 @@ def _resolve_session_tenant_identity(session) -> tuple[str | None, str | None, s
     if resolved_schema:
         info["tenant_schema"] = resolved_schema
     return tenant_id, resolved_slug, resolved_schema
+
+
+async def _hydrate_async_session_tenant_identity(
+    session: AsyncSession,
+) -> tuple[str | None, str | None, str | None]:
+    try:
+        from app.models.models import Tenant
+    except Exception:
+        return None, None, None
+
+    info = getattr(session, "info", None)
+    if not isinstance(info, dict):
+        return None, None, None
+
+    tenant_id = _normalize_tenant_id(info.get("tenant_id"))
+    tenant_slug = str(info.get("tenant_slug") or info.get("tenant") or "").strip().lower() or None
+    tenant_schema_name = str(info.get("tenant_schema") or "").strip() or None
+
+    if tenant_id and tenant_slug and tenant_schema_name:
+        info["tenant_id"] = tenant_id
+        info["tenant_slug"] = tenant_slug
+        info["tenant_schema"] = tenant_schema_name
+        info["tenant"] = tenant_slug
+        return tenant_id, tenant_slug, tenant_schema_name
+
+    filters = []
+    if tenant_id:
+        filters.append(Tenant.id == tenant_id)
+    if tenant_slug:
+        filters.extend((Tenant.slug == tenant_slug, Tenant.code == tenant_slug))
+    if not filters:
+        return tenant_id, tenant_slug, tenant_schema_name
+
+    try:
+        row = (
+            await session.execute(
+                select(Tenant.id, Tenant.slug, Tenant.schema_name).where(or_(*filters)).limit(1)
+            )
+        ).first()
+    except Exception:
+        return tenant_id, tenant_slug, tenant_schema_name
+
+    if row is None:
+        return tenant_id, tenant_slug, tenant_schema_name
+
+    resolved_tenant_id = str(row.id)
+    resolved_tenant_slug = str(row.slug).strip().lower()
+    resolved_tenant_schema = str(row.schema_name or tenant_schema_name or tenant_schema(resolved_tenant_slug)).strip()
+    info["tenant_id"] = resolved_tenant_id
+    info["tenant_slug"] = resolved_tenant_slug
+    info["tenant_schema"] = resolved_tenant_schema
+    info["tenant"] = resolved_tenant_slug
+    return resolved_tenant_id, resolved_tenant_slug, resolved_tenant_schema
 
 
 def _apply_default_tenant(session, flush_context, instances) -> None:

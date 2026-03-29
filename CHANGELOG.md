@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 2026-03-29
+- Hardened tenant identity handling across document-core so `tenant.id` is again the canonical persistence identifier for `Template`, `TemplateVersion`, `DocumentPack`, `DocumentPackItem`, and `PipelineRun`, while `tenant.slug` remains routing-only and `tenant_schema` remains schema-only.
+- Updated session/dependency contract to hydrate `session.info` with `tenant_id`, `tenant_slug`, and `tenant_schema`; legacy `session.info["tenant"]` now survives only as a backward-compatible slug alias.
+- Fixed document pipeline and package/job entrypoints that were passing `tenant_slug` into `tenant_id`, including `backend/app/services/pipeline.py`, `backend/app/services/tasks.py`, `backend/app/services/package_pipeline.py`, `backend/app/domains/packs/seeder.py`, `backend/app/repository.py`, `backend/app/tasks.py`, and `backend/app/api/v1/router.py`.
+- Added regression coverage for tenant session contract, pipeline tenant consistency, tenant-scoped package persistence, and dashboard quick-action routing.
+- Wired dashboard quick actions to the real document wizard and pack wizard flows.
+
 ## 2026-03-26
 - Stabilized tenancy session propagation for FK-backed tenant models by separating `tenant_id`, `tenant_slug`, and `tenant_schema` in session context and preventing slug autofill into UUID-backed `tenant_id` fields.
 - Fixed demo bootstrap so FK-backed entities use the real tenant UUID instead of tenant slug values.

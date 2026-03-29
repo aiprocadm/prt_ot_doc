@@ -22,7 +22,7 @@ from app.models.job_engine import (
     OutboxEventStatus,
     PipelineStepLock,
 )
-from app.models.models import TenantQuota
+from app.models.models import Tenant, TenantQuota
 from app.modules.files.models import FileEntityType, FileLinkRole
 from app.modules.files.service import FileService
 from app.modules.pipelines.graph import safe_eval_condition
@@ -375,10 +375,36 @@ class PipelineOrchestrator:
         if celery_app.conf.task_always_eager:
             await self.session.commit()
 
+        tenant_slug = await self._resolve_job_tenant_slug(str(job.tenant_id))
+
         run_job_step.apply_async(
-            kwargs={"tenant_slug": str(job.tenant_id), "job_id": job.id, "step_id": step.id},
+            kwargs={
+                "tenant_slug": tenant_slug,
+                "tenant_id": str(job.tenant_id),
+                "job_id": job.id,
+                "step_id": step.id,
+            },
             headers={"tenant_id": str(job.tenant_id)},
         )
+
+    async def _resolve_job_tenant_slug(self, tenant_id: str) -> str:
+        session_info = getattr(self.session, "info", None)
+        if isinstance(session_info, dict):
+            session_tenant_id = str(session_info.get("tenant_id") or "").strip() or None
+            session_tenant_slug = (
+                str(session_info.get("tenant_slug") or session_info.get("tenant") or "").strip().lower() or None
+            )
+            if session_tenant_id == tenant_id and session_tenant_slug:
+                return session_tenant_slug
+
+        tenant_slug = (
+            await self.session.execute(
+                select(Tenant.slug).where(Tenant.id == tenant_id).limit(1)
+            )
+        ).scalar_one_or_none()
+        if tenant_slug:
+            return str(tenant_slug).strip().lower()
+        raise ValueError(f"Tenant slug not found for tenant_id {tenant_id}")
 
     async def _next_step(
         self, job_id: str, from_step_order: int | None = None

@@ -120,13 +120,17 @@ export const DashboardPage = () => {
               permission={PERMISSIONS.DOCUMENT_CREATE}
               fallback={<Button disabled title="Недостаточно прав для создания документа">Создать документ</Button>}
             >
-              <Button>Создать документ</Button>
+              <Button asChild>
+                <Link to="/documents/wizard">Создать документ</Link>
+              </Button>
             </Can>
             <Can
-              permission={PERMISSIONS.DOCUMENT_CREATE}
+              permission={PERMISSIONS.PACK_VIEW}
               fallback={<Button variant="outline" disabled title="Недостаточно прав для запуска мастера">Запустить мастер</Button>}
             >
-              <Button variant="outline">Запустить мастер</Button>
+              <Button variant="outline" asChild>
+                <Link to="/packs">Запустить мастер</Link>
+              </Button>
             </Can>
           </div>
         </div>

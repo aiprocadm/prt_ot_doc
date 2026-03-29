@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Iterable
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.models import (
@@ -84,10 +84,14 @@ def _next_reminder_after_send(
 
 
 async def _get_reminder_days(session: AsyncSession) -> list[int]:
-    tenant_slug = session.info.get("tenant")
-    if not tenant_slug:
+    tenant_id = str(session.info.get("tenant_id") or "").strip() or None
+    tenant_slug = str(session.info.get("tenant_slug") or session.info.get("tenant") or "").strip() or None
+    if tenant_id:
+        stmt = select(Tenant).where(Tenant.id == tenant_id)
+    elif tenant_slug:
+        stmt = select(Tenant).where(or_(Tenant.slug == tenant_slug, Tenant.code == tenant_slug))
+    else:
         return list(DEFAULT_REMINDER_DAYS)
-    stmt = select(Tenant).where(Tenant.slug == tenant_slug)
     tenant = (await session.execute(stmt)).scalar_one_or_none()
     settings = tenant.settings if tenant and isinstance(tenant.settings, dict) else {}
     obligations = settings.get("obligations") if isinstance(settings, dict) else {}

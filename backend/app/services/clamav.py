@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.db import session_scope
+from app.db import get_tenant_session
 from app.domains.files import s3
 from app.models.file import File, FileScanStatus
 
@@ -348,7 +348,10 @@ async def process_scan_request(
     }
 
     if session_factory is None:
-        session_cm = session_scope(tenant=message.tenant_slug)
+        session_cm = get_tenant_session(
+            tenant=message.tenant_slug,
+            tenant_id=message.tenant_id,
+        )
     else:
         session_cm = _session_from_factory(session_factory)
 

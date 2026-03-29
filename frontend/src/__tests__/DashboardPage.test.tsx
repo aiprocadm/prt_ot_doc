@@ -96,7 +96,7 @@ describe("DashboardPage", () => {
         email: "dashboard@example.com",
         full_name: "Dashboard User",
         roles: ["super_admin"],
-        permissions: [PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.DOCUMENT_CREATE],
+        permissions: [PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.DOCUMENT_CREATE, PERMISSIONS.PACK_VIEW],
         attributes: { tenant_id: "tenant-1" }
       },
       loading: false,
@@ -139,6 +139,8 @@ describe("DashboardPage", () => {
     ).toBe(true);
     expect(screen.getByText("Недавние объекты и черновики")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Открыть запуски" })).toHaveAttribute("href", "/pipelines/runs");
+    expect(screen.getByRole("link", { name: "Создать документ" })).toHaveAttribute("href", "/documents/wizard");
+    expect(screen.getByRole("link", { name: "Запустить мастер" })).toHaveAttribute("href", "/packs");
     expect(within(taskInbox).getByRole("link", { name: "training_plan" })).toHaveAttribute("href", "/training");
     expect(screen.getByRole("link", { name: "Контекст: training_plan" })).toHaveAttribute("href", "/training");
 
@@ -170,6 +172,27 @@ describe("DashboardPage", () => {
     );
 
     expect(screen.getByRole("button", { name: "Создать документ" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Запустить мастер" })).toBeDisabled();
+  });
+
+  it("keeps wizard action permission-aware when pack access is missing", () => {
+    useAuthStore.setState((state) => ({
+      ...state,
+      user: state.user
+        ? {
+            ...state.user,
+            permissions: [PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.DOCUMENT_CREATE]
+          }
+        : null
+    }));
+
+    render(
+      <MemoryRouter>
+        <DashboardPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("link", { name: "Создать документ" })).toHaveAttribute("href", "/documents/wizard");
     expect(screen.getByRole("button", { name: "Запустить мастер" })).toBeDisabled();
   });
 });

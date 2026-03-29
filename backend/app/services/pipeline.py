@@ -83,13 +83,20 @@ class PipelineService:
 
         normalized_output_basename = normalize_output_basename(output_basename)
 
-        tenant_identifier = tenant_id or template.tenant_id
+        tenant_identifier = str(tenant_id or template.tenant_id or "").strip()
         if not tenant_identifier:
             raise ValueError("Template is not bound to a tenant")
         if template_version.tenant_id and template_version.tenant_id != tenant_identifier:
             raise ValueError("Template version belongs to a different tenant")
-        session_tenant = session.info.get("tenant")
-        if session_tenant and session_tenant != tenant_identifier:
+        session_info = getattr(session, "info", None)
+        session_tenant_id = None
+        session_tenant_slug = None
+        if isinstance(session_info, dict):
+            session_tenant_id = str(session_info.get("tenant_id") or "").strip() or None
+            session_tenant_slug = str(session_info.get("tenant_slug") or session_info.get("tenant") or "").strip() or None
+        if session_tenant_slug and session_tenant_id is None:
+            raise ValueError("Session tenant_id is missing; tenant session contract is incomplete")
+        if session_tenant_id and session_tenant_id != tenant_identifier:
             raise ValueError("Session tenant does not match template tenant")
 
         replacements_map = dict(replacements or {})
