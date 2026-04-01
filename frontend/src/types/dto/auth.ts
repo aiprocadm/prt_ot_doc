@@ -24,7 +24,6 @@ export interface LoginRequestDto {
 
 export interface AuthTokenPairDto {
   access_token: string;
-  refresh_token: string;
 }
 
 export type LoginResponseDto = AuthTokenPairDto;

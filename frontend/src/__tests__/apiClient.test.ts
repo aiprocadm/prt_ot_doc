@@ -21,7 +21,7 @@ describe("apiClient", () => {
   });
 
   it("injects auth and tenant headers", async () => {
-    tokenStorage.setTokens({ accessToken: "access-token", refreshToken: "refresh-token", expiresIn: 10 });
+    tokenStorage.setTokens({ accessToken: "access-token", expiresIn: 10 });
     tenantStorage.setTenant({ slug: "severstroy", site: "Северный кластер" });
 
     const mock = new MockAdapter(apiClient);
@@ -114,7 +114,7 @@ describe("apiClient", () => {
       "signature"
     ].join(".");
 
-    tokenStorage.setTokens({ accessToken: "expired-access", refreshToken: "refresh-token", expiresIn: 10 });
+    tokenStorage.setTokens({ accessToken: "expired-access", expiresIn: 10 });
     tenantStorage.setTenant({ slug: "demo" });
 
     const apiMock = new MockAdapter(apiClient);
@@ -123,14 +123,13 @@ describe("apiClient", () => {
     apiMock.onGet("/documents").replyOnce(401).onGet("/documents").replyOnce(200, { ok: true });
     axiosMock.onPost(refreshUrl).reply((config) => {
       expect(config.headers?.["X-Tenant"]).toBe("demo");
-      return [200, { access_token: nextAccessToken, refresh_token: "rotated-refresh" }];
+      return [200, { access_token: nextAccessToken }];
     });
 
     const response = await apiClient.get<{ ok: boolean }>("/documents");
 
     expect(response.data).toEqual({ ok: true });
     expect(tokenStorage.getAccessToken()).toBe(nextAccessToken);
-    expect(tokenStorage.getRefreshToken()).toBe("rotated-refresh");
 
     apiMock.restore();
     axiosMock.restore();

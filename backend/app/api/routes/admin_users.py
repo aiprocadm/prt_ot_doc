@@ -12,6 +12,7 @@ from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, rbac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.models import RoleEnum, Tenant, User, UserAttribute, UserRole
+from app.services.refresh_sessions import revoke_refresh_sessions_for_user
 from app.schemas.admin_user import (
     UserAttributesRequest,
     UserAttributesResponse,
@@ -102,6 +103,12 @@ async def assign_user_roles(
     user.roles.clear()
     for role in roles:
         user.roles.append(UserRole(tenant_id=str(tenant.id), user_id=user.id, role=role))
+    await revoke_refresh_sessions_for_user(
+        session=session,
+        tenant_id=str(tenant.id),
+        user_id=user.id,
+        reason="role-change",
+    )
 
     await session.commit()
     await session.refresh(user)

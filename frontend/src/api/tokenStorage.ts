@@ -1,23 +1,7 @@
-import { sessionStorageGetItem, sessionStorageRemoveItem, sessionStorageSetItem } from "@/utils/browserStorage";
-
-const REFRESH_KEY = "prt-refresh-token";
 let accessToken: string | null = null;
-let refreshToken: string | null = null;
 let expiresAt: number | null = null;
 
 const EXPIRY_SKEW_MS = 10_000;
-
-const readRefreshToken = () => {
-  return sessionStorageGetItem(REFRESH_KEY);
-};
-
-const persistRefreshToken = (token: string | null) => {
-  if (token) {
-    sessionStorageSetItem(REFRESH_KEY, token);
-  } else {
-    sessionStorageRemoveItem(REFRESH_KEY);
-  }
-};
 
 const decodeJwtPayload = (token: string) => {
   const [, rawPayload = ""] = token.split(".");
@@ -46,21 +30,14 @@ const resolveExpiresAt = (token: string, expiresIn?: number) => {
 
 export const tokenStorage = {
   getAccessToken: () => accessToken,
-  getRefreshToken: () => refreshToken ?? readRefreshToken(),
   getExpiresAt: () => expiresAt,
-  setTokens: (tokens: { accessToken: string; refreshToken: string; expiresIn?: number }) => {
+  setTokens: (tokens: { accessToken: string; expiresIn?: number }) => {
     accessToken = tokens.accessToken;
-    refreshToken = tokens.refreshToken;
     expiresAt = resolveExpiresAt(tokens.accessToken, tokens.expiresIn);
-    persistRefreshToken(refreshToken);
   },
-  hydrate: () => {
-    refreshToken = readRefreshToken();
-  },
+  hydrate: () => undefined,
   clear: () => {
     accessToken = null;
-    refreshToken = null;
     expiresAt = null;
-    persistRefreshToken(null);
   }
 };

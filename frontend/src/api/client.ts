@@ -86,7 +86,7 @@ const addSubscriber = (callback: (token: string | null) => void) => {
   subscribers.push(callback);
 };
 
-export const requestTokenRefresh = async (refreshTokenValue: string): Promise<RefreshResponseDto> => {
+export const requestTokenRefresh = async (): Promise<RefreshResponseDto> => {
   const tenant = tenantStorage.getTenant();
   if (!tenant?.slug) {
     throw {
@@ -101,7 +101,7 @@ export const requestTokenRefresh = async (refreshTokenValue: string): Promise<Re
 
   const response = await axios.post<RefreshResponseDto>(
     `${API_BASE_URL}/auth/refresh`,
-    { refresh_token: refreshTokenValue },
+    {},
     {
       headers: { "X-Tenant": tenant.slug },
       withCredentials: true,
@@ -117,12 +117,9 @@ const refreshToken = async (): Promise<string | null> => {
   isRefreshing = true;
   refreshPromise = (async () => {
     try {
-      const refreshTokenValue = tokenStorage.getRefreshToken();
-      if (!refreshTokenValue) return null;
-      const response = await requestTokenRefresh(refreshTokenValue);
+      const response = await requestTokenRefresh();
       tokenStorage.setTokens({
-        accessToken: response.access_token,
-        refreshToken: response.refresh_token
+        accessToken: response.access_token
       });
       return response.access_token;
     } catch {

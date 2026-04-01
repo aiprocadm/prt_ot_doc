@@ -24,10 +24,9 @@ interface AuthState {
   initialize: () => Promise<void>;
 }
 
-const persistTokens = (payload: { access_token: string; refresh_token: string }) => {
+const persistTokens = (payload: { access_token: string }) => {
   tokenStorage.setTokens({
-    accessToken: payload.access_token,
-    refreshToken: payload.refresh_token
+    accessToken: payload.access_token
   });
 };
 
@@ -64,18 +63,8 @@ export const useAuthStore = createWithEqualityFn<AuthState>()(
     initialize: async () => {
       tokenStorage.hydrate();
       tenantStorage.hydrate();
-      const refreshToken = tokenStorage.getRefreshToken();
-      if (!refreshToken) {
-        set((state) => {
-          state.isAuthenticated = false;
-          state.user = null;
-          state.error = null;
-          state.initialized = true;
-        });
-        return;
-      }
       try {
-        const data = await requestTokenRefresh(refreshToken);
+        const data = await requestTokenRefresh();
         persistTokens(data);
         let profile: UserDto | null = null;
         let profileError: ApiError | null = null;
@@ -142,9 +131,7 @@ export const useAuthStore = createWithEqualityFn<AuthState>()(
       }
     },
     refresh: async () => {
-      const refreshToken = tokenStorage.getRefreshToken();
-      if (!refreshToken) return;
-      const data = await requestTokenRefresh(refreshToken);
+      const data = await requestTokenRefresh();
       persistTokens(data);
       set((state) => {
         state.isAuthenticated = true;
