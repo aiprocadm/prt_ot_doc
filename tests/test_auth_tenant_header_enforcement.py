@@ -66,7 +66,7 @@ async def test_auth_refresh_accepts_token_tenant_without_header(
             json={"email": "refresh-tenant-header@example.com", "password": "refresh-secret"},
         )
         assert login.status_code == 200
-        refresh_token = login.json()["refresh_token"]
+        refresh_token = login.cookies["prt_refresh_token"]
 
         missing_header = await client.post(
             "/api/v1/auth/refresh",
@@ -76,11 +76,11 @@ async def test_auth_refresh_accepts_token_tenant_without_header(
     assert missing_header.status_code == 200
     payload = missing_header.json()
     assert "access_token" in payload
-    assert "refresh_token" in payload
+    assert "prt_refresh_token" in missing_header.cookies
 
 
 @pytest.mark.anyio
-async def test_auth_login_remains_public_without_tenant_header(
+async def test_auth_login_requires_tenant_header_or_domain_context(
     app_fixture,
     sessionmaker: async_sessionmaker[AsyncSession],
     data_factory: TestDataFactory,
@@ -101,7 +101,4 @@ async def test_auth_login_remains_public_without_tenant_header(
             json={"email": "public-login@example.com", "password": "public-secret"},
         )
 
-    assert login.status_code == 200
-    body = login.json()
-    assert "access_token" in body
-    assert "refresh_token" in body
+    assert login.status_code == 400

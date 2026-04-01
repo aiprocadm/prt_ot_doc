@@ -28,14 +28,16 @@ async def test_login_success(
 
     response = await async_client.post(
         "/api/v1/auth/login",
+        headers={"X-Tenant": "test"},
         json={"email": "admin@example.com", "password": "secret123"},
     )
     assert response.status_code == 200
     payload = response.json()
-    assert payload.keys() == {"access_token", "refresh_token"}
+    assert payload.keys() == {"access_token"}
+    assert "prt_refresh_token" in response.cookies
 
     access_claims = verify_token(payload["access_token"], expected_type="access")
-    refresh_claims = verify_token(payload["refresh_token"], expected_type="refresh")
+    refresh_claims = verify_token(response.cookies["prt_refresh_token"], expected_type="refresh")
 
     assert access_claims["sub"] == user_id
     assert refresh_claims["sub"] == user_id
@@ -64,6 +66,7 @@ async def test_login_rejects_invalid_password(
 
     response = await async_client.post(
         "/api/v1/auth/login",
+        headers={"X-Tenant": "test"},
         json={"email": "user@example.com", "password": "wrong-password"},
     )
     assert response.status_code == 401
@@ -77,6 +80,7 @@ async def test_login_rejects_invalid_password(
 async def test_login_rejects_unknown_email(async_client: AsyncClient) -> None:
     response = await async_client.post(
         "/api/v1/auth/login",
+        headers={"X-Tenant": "test"},
         json={"email": "missing@example.com", "password": "whatever"},
     )
     assert response.status_code == 401
@@ -90,6 +94,7 @@ async def test_login_rejects_unknown_email(async_client: AsyncClient) -> None:
 async def test_login_rejects_tenant_id_field(async_client: AsyncClient) -> None:
     response = await async_client.post(
         "/api/v1/auth/login",
+        headers={"X-Tenant": "test"},
         json={"email": "user@example.com", "password": "secret", "tenant_id": "evil"},
     )
     assert response.status_code == 422
@@ -114,6 +119,7 @@ async def test_refresh_issues_new_token_pair(
 
     login_response = await async_client.post(
         "/api/v1/auth/login",
+        headers={"X-Tenant": "test"},
         json={"email": "refresh@example.com", "password": "refresh-secret"},
     )
     assert login_response.status_code == 200
@@ -121,26 +127,95 @@ async def test_refresh_issues_new_token_pair(
 
     refresh_response = await async_client.post(
         "/api/v1/auth/refresh",
-        json={"refresh_token": tokens["refresh_token"]},
+        headers={"X-Tenant": "test"},
+        json={"refresh_token": login_response.cookies["prt_refresh_token"]},
     )
     assert refresh_response.status_code == 200
     new_tokens = refresh_response.json()
-    assert new_tokens.keys() == {"access_token", "refresh_token"}
+    assert new_tokens.keys() == {"access_token"}
     assert new_tokens["access_token"] != tokens["access_token"]
-    assert new_tokens["refresh_token"] != tokens["refresh_token"]
+    assert refresh_response.cookies["prt_refresh_token"] != login_response.cookies["prt_refresh_token"]
 
     access_claims = verify_token(new_tokens["access_token"], expected_type="access")
-    refresh_claims = verify_token(new_tokens["refresh_token"], expected_type="refresh")
+    refresh_claims = verify_token(refresh_response.cookies["prt_refresh_token"], expected_type="refresh")
     assert access_claims["tenant"] == "test"
     assert refresh_claims["tenant"] == "test"
 
 
 @pytest.mark.anyio
-async def test_logout_endpoint_is_available(async_client: AsyncClient) -> None:
-    response = await async_client.post("/api/v1/auth/logout")
+async def test_logout_endpoint_is_available(
+    async_client: AsyncClient,
+    sessionmaker: async_sessionmaker[AsyncSession],
+    data_factory: TestDataFactory,
+) -> None:
+    async with sessionmaker() as session:
+        await data_factory.create_user(
+            email="logout@example.com",
+            role=RoleEnum.ADMIN,
+            password="logout-secret",
+            session=session,
+        )
+        await session.commit()
+    login_response = await async_client.post(
+        "/api/v1/auth/login",
+        headers={"X-Tenant": "test"},
+        json={"email": "logout@example.com", "password": "logout-secret"},
+    )
+    access_token = login_response.json()["access_token"]
+    response = await async_client.post(
+        "/api/v1/auth/logout",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
 
     assert response.status_code == 204
     assert response.text == ""
+
+
+@pytest.mark.anyio
+async def test_refresh_reuse_after_rotation_is_rejected(
+    async_client: AsyncClient,
+    sessionmaker: async_sessionmaker[AsyncSession],
+    data_factory: TestDataFactory,
+) -> None:
+    async with sessionmaker() as session:
+        await data_factory.create_user(
+            email="reuse@example.com",
+            role=RoleEnum.ADMIN,
+            password="reuse-secret",
+            session=session,
+        )
+        await session.commit()
+
+    login_response = await async_client.post(
+        "/api/v1/auth/login",
+        headers={"X-Tenant": "test"},
+        json={"email": "reuse@example.com", "password": "reuse-secret"},
+    )
+    old_refresh = login_response.cookies["prt_refresh_token"]
+
+    first_refresh = await async_client.post(
+        "/api/v1/auth/refresh",
+        headers={"X-Tenant": "test"},
+        json={"refresh_token": old_refresh},
+    )
+    assert first_refresh.status_code == 200
+    next_refresh = first_refresh.cookies["prt_refresh_token"]
+
+    async_client.cookies.set("prt_refresh_token", old_refresh)
+    replay = await async_client.post(
+        "/api/v1/auth/refresh",
+        headers={"X-Tenant": "test"},
+        json={"refresh_token": old_refresh},
+    )
+    assert replay.status_code == 401
+
+    async_client.cookies.set("prt_refresh_token", next_refresh)
+    family_revoked = await async_client.post(
+        "/api/v1/auth/refresh",
+        headers={"X-Tenant": "test"},
+        json={"refresh_token": next_refresh},
+    )
+    assert family_revoked.status_code == 401
 
 
 @pytest.mark.anyio
@@ -166,6 +241,7 @@ async def test_company_creation_requires_admin_role(
 
     manager_login = await async_client.post(
         "/api/v1/auth/login",
+        headers={"X-Tenant": "test"},
         json={"email": "manager@example.com", "password": "manager-pass"},
     )
     assert manager_login.status_code == 200
@@ -183,6 +259,7 @@ async def test_company_creation_requires_admin_role(
 
     admin_login = await async_client.post(
         "/api/v1/auth/login",
+        headers={"X-Tenant": "test"},
         json={"email": "creator@example.com", "password": "creator-pass"},
     )
     assert admin_login.status_code == 200
@@ -215,6 +292,7 @@ async def test_me_permissions_returns_roles_permissions_and_scopes(
 
     login_response = await async_client.post(
         "/api/v1/auth/login",
+        headers={"X-Tenant": "test"},
         json={"email": "perm@example.com", "password": "perm-secret"},
     )
     assert login_response.status_code == 200
