@@ -11,6 +11,8 @@ from sqlalchemy.types import JSON
 from app.db.session import TenantBase
 from app.models.base import SoftDeleteMixin, TimestampMixin, UUIDMixin, VersionedMixin
 
+# Canonical file-domain models backing `app.modules.files.api`.
+
 
 class FileVersionStatus(str, Enum):
     uploaded = "uploaded"
