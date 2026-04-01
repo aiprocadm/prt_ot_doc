@@ -1,6 +1,7 @@
 """FastAPI middleware for tenant extraction and context propagation."""
 from __future__ import annotations
 
+import logging
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -17,6 +18,8 @@ from app.core.tenant import TENANT_HEADER, tenant_required
 from app.db.session import AsyncSessionLocal
 from app.models.models import Tenant, TenantQuota, TenantSettings
 from app.modules.tenancy.context import TenantContext, reset_tenant_context, set_tenant_context
+
+logger = logging.getLogger(__name__)
 
 
 class TenantMiddleware(BaseHTTPMiddleware):
@@ -219,27 +222,41 @@ class TenantMiddleware(BaseHTTPMiddleware):
         if getattr(request.state, "tenant_record", None) is not None:
             return
 
-        tenant_candidates: list[str] = []
-        for raw_value in (
-            request.headers.get(TENANT_HEADER),
-            request.headers.get("x-tenant-slug"),
-            request.query_params.get("tenant"),
-            request.query_params.get("tenant_slug"),
-            request.query_params.get("slug"),
-            get_settings().default_tenant_slug,
-        ):
+        candidate_sources = (
+            ("tenant_header", request.headers.get(TENANT_HEADER)),
+            ("tenant_slug_header", request.headers.get("x-tenant-slug")),
+            ("tenant_code_header", request.headers.get("x-tenant-code")),
+        )
+        tenant_candidates: list[tuple[str, str]] = []
+        for source, raw_value in candidate_sources:
             normalized = str(raw_value or "").strip().lower()
-            if normalized and normalized not in tenant_candidates:
-                tenant_candidates.append(normalized)
+            if normalized and normalized not in {value for value, _ in tenant_candidates}:
+                tenant_candidates.append((normalized, source))
+
+        if not tenant_candidates:
+            logger.warning(
+                "tenant.resolve.webhook.failed",
+                extra={"path": request.url.path, "reason": "missing_tenant_source"},
+            )
+            return
+
         async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as session:
-            for candidate in tenant_candidates:
+            for candidate, source in tenant_candidates:
                 tenant = (await session.execute(select(Tenant).where(or_(Tenant.slug == candidate, Tenant.code == candidate)))).scalar_one_or_none()
                 if tenant is None or not tenant.is_active:
                     continue
                 request.state.tenant_record = tenant
                 request.state.tenant_id = str(tenant.id)
                 request.state.tenant_slug = tenant.slug
+                logger.info(
+                    "tenant.resolve.webhook.success",
+                    extra={"path": request.url.path, "tenant": tenant.slug, "source": source},
+                )
                 return
+        logger.warning(
+            "tenant.resolve.webhook.failed",
+            extra={"path": request.url.path, "reason": "tenant_not_found_or_inactive"},
+        )
 
 
 __all__ = ["TENANT_HEADER", "TenantMiddleware"]
