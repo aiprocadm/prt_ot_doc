@@ -1,6 +1,7 @@
 """Dependency declarations shared across API routers."""
 from __future__ import annotations
 
+import logging
 from functools import lru_cache
 from typing import AsyncIterator
 from uuid import UUID
@@ -24,6 +25,8 @@ from app.services.integrations import (
     get_eisot_integration,
     get_frdo_integration,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _normalize_tenant_id(value: object) -> str | None:
@@ -72,9 +75,25 @@ def _resolve_tenant_slug(request: Request) -> str | None:
 
 
 def _resolve_fallback_tenants(request: Request) -> list[str]:
-    """Return fallback tenant slugs for routes that can operate without tenant headers."""
+    """Return fallback tenant slugs only for explicitly marked internal/test flows."""
 
     path = request.url.path
+    allow_internal_fallback = bool(getattr(request.state, "allow_internal_tenant_fallback", False))
+    if not allow_internal_fallback:
+        logger.info(
+            "tenant.resolve.fallback.disabled",
+            extra={"path": path, "reason": "flag_not_set"},
+        )
+        return []
+
+    settings = get_settings()
+    if settings.app_env != "test":
+        logger.warning(
+            "tenant.resolve.fallback.blocked",
+            extra={"path": path, "environment": settings.app_env},
+        )
+        return []
+
     allow_fallback = (
         path.startswith("/api/v1/auth")
         or path.startswith("/api/v1/portal")
@@ -85,7 +104,7 @@ def _resolve_fallback_tenants(request: Request) -> list[str]:
     if not allow_fallback:
         return []
 
-    default_slug = get_settings().default_tenant_slug
+    default_slug = settings.default_tenant_slug
     candidates: list[str] = ["test", default_slug]
     deduped: list[str] = []
     for candidate in candidates:
@@ -111,21 +130,41 @@ async def _fetch_tenant_by_identifier(identifier: str) -> Tenant:
 
 
 async def get_auth_tenant_record(request: Request) -> Tenant:
-    candidates: list[str] = []
+    candidates: list[tuple[str, str]] = []
     tenant_id = resolve_tenant_id(request)
     tenant_slug = resolve_tenant_slug(request)
     if tenant_id:
-        candidates.append(tenant_id)
-    if tenant_slug and tenant_slug not in candidates:
-        candidates.append(tenant_slug)
+        candidates.append((tenant_id, "request_state_or_header_id"))
+    if tenant_slug and tenant_slug not in {value for value, _ in candidates}:
+        candidates.append((tenant_slug, "request_state_or_header_slug"))
+
+    auth_header = request.headers.get("authorization") or ""
+    if auth_header.lower().startswith("bearer "):
+        from app.core.security import verify_token
+
+        token = auth_header.split(None, 1)[1].strip()
+        if token:
+            try:
+                claims = verify_token(token, expected_type="access")
+            except HTTPException:
+                claims = {}
+            tenant_claim = str(claims.get("tenant") or "").strip().lower()
+            if tenant_claim and tenant_claim not in {value for value, _ in candidates}:
+                candidates.append((tenant_claim, "verified_access_token_claim"))
+
     if not candidates:
-        candidates.extend(_resolve_fallback_tenants(request))
+        candidates.extend((candidate, "internal_test_fallback") for candidate in _resolve_fallback_tenants(request))
 
     last_error: HTTPException | None = None
-    for candidate in candidates:
+    for candidate, source in candidates:
         info = tenant_required(candidate)
         try:
-            return await _fetch_tenant_by_identifier(info.slug)
+            tenant = await _fetch_tenant_by_identifier(info.slug)
+            logger.info(
+                "tenant.resolve.success",
+                extra={"path": request.url.path, "tenant": tenant.slug, "source": source},
+            )
+            return tenant
         except HTTPException as exc:
             if exc.status_code == status.HTTP_404_NOT_FOUND:
                 last_error = exc
@@ -140,23 +179,43 @@ async def get_auth_tenant_record(request: Request) -> Tenant:
 async def get_tenant_record(request: Request) -> Tenant:
     preloaded = getattr(request.state, "tenant_record", None)
     if isinstance(preloaded, Tenant):
+        logger.info(
+            "tenant.resolve.success",
+            extra={"path": request.url.path, "tenant": preloaded.slug, "source": "middleware_preloaded"},
+        )
         return preloaded
     tenant_id = resolve_tenant_id(request)
     if tenant_id is not None:
-        return await _fetch_tenant_by_identifier(tenant_id)
+        tenant = await _fetch_tenant_by_identifier(tenant_id)
+        logger.info(
+            "tenant.resolve.success",
+            extra={"path": request.url.path, "tenant": tenant.slug, "source": "request_state_or_header_id"},
+        )
+        return tenant
 
     tenant_slug = resolve_tenant_slug(request)
     if tenant_slug is not None:
         info = tenant_required(tenant_slug)
-        return await _fetch_tenant_by_identifier(info.slug)
+        tenant = await _fetch_tenant_by_identifier(info.slug)
+        logger.info(
+            "tenant.resolve.success",
+            extra={"path": request.url.path, "tenant": tenant.slug, "source": "request_state_or_header_slug"},
+        )
+        return tenant
 
     for candidate in _resolve_fallback_tenants(request):
         try:
-            return await _fetch_tenant_by_identifier(candidate)
+            tenant = await _fetch_tenant_by_identifier(candidate)
+            logger.info(
+                "tenant.resolve.success",
+                extra={"path": request.url.path, "tenant": tenant.slug, "source": "internal_test_fallback"},
+            )
+            return tenant
         except HTTPException as exc:
             if exc.status_code == status.HTTP_404_NOT_FOUND:
                 continue
             raise
+    logger.warning("tenant.resolve.failed", extra={"path": request.url.path, "reason": "tenant_not_provided"})
     raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found")
 
 
