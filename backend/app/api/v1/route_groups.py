@@ -26,7 +26,6 @@ from app.api.routes import (
     documents,
     edo_workflow,
     external_registry,
-    files,
     incidents,
     inspections,
     integration_readiness,
@@ -116,8 +115,7 @@ COMPLIANCE_AND_ADMIN_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
 )
 
 OPERATIONS_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
-    (files.router, {"prefix": "/files", "tags": ["files"]}),
-    (files_v1_router, {"prefix": "/files", "tags": ["files-v1"]}),
+    (files_v1_router, {"prefix": "/files", "tags": ["files"]}),
     (packs.router, {"prefix": "/packs", "tags": ["packs"]}),
     (client_portal.presets_router, {}),
     (client_portal.internal_router, {}),

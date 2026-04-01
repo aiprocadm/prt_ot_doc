@@ -1,3 +1,10 @@
+"""Legacy files API.
+
+Deprecated: canonical file endpoints live in ``app.modules.files.api`` and are
+mounted under the same ``/files`` prefix from ``app.api.v1.route_groups``.
+Do not add new endpoints here.
+"""
+
 import hashlib
 import json
 import logging

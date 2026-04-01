@@ -1,4 +1,8 @@
 """File metadata model for tenant-scoped storage objects."""
+#
+# Deprecated for new file-domain endpoint work: canonical HTTP/API domain lives
+# in `app.modules.files.*`. This model is still used by legacy features and
+# should be migrated incrementally.
 
 from __future__ import annotations
 

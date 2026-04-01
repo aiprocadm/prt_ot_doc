@@ -53,6 +53,8 @@ from app.services.idempotency import IdempotencyService, normalize_idempotency_k
 
 router = APIRouter()
 
+# Canonical files API router for `/api/v1/files` endpoints.
+
 
 @router.post(":upload-init", response_model=UploadInitResponse)
 async def upload_init(
@@ -127,8 +129,8 @@ async def download_url(file_id: str, version_id: str, request: Request, session:
     return DownloadURLResponse(url=url, expires_in=600)
 
 
-@router.post("/presign-upload", response_model=UploadSessionResponse)
-@router.post("/init-upload", response_model=UploadSessionResponse)
+@router.post("/presign-upload", response_model=UploadSessionResponse, operation_id="files_presign_upload")
+@router.post("/init-upload", response_model=UploadSessionResponse, operation_id="files_init_upload")
 async def create_upload_session_v2(
     payload: UploadSessionRequest,
     session: AsyncSession = Depends(get_session),
@@ -146,8 +148,8 @@ async def create_upload_session_v2(
     return UploadSessionResponse(file_id=file_record.id, signed_put_url=upload_url, expires_at=datetime.now(timezone.utc) + timedelta(seconds=max(expires_in, 0)), existing=(upload_url == ""))
 
 
-@router.post("/complete-upload", response_model=FinalizeUploadResponse)
-@router.post("/complete-upload-v2", response_model=FinalizeUploadResponse)
+@router.post("/complete-upload", response_model=FinalizeUploadResponse, operation_id="files_complete_upload")
+@router.post("/complete-upload-v2", response_model=FinalizeUploadResponse, operation_id="files_complete_upload_v2")
 async def complete_upload_v2(
     payload: CompleteUploadRequest,
     session: AsyncSession = Depends(get_session),
@@ -160,8 +162,8 @@ async def complete_upload_v2(
     return FinalizeUploadResponse(file_id=file_record.id, status=file_record.status)
 
 
-@router.post("/{file_id}:finalize", response_model=FinalizeUploadResponse)
-@router.post("/{file_id}:complete", response_model=FinalizeUploadResponse)
+@router.post("/{file_id}:finalize", response_model=FinalizeUploadResponse, operation_id="files_finalize_upload")
+@router.post("/{file_id}:complete", response_model=FinalizeUploadResponse, operation_id="files_complete_file_upload")
 async def finalize_upload_v2(
     file_id: str,
     payload: UploadCompleteRequest,
@@ -220,8 +222,8 @@ async def reindex_file_content_v2(
     return ReindexFileResponse(file_id=file_id, status="queued")
 
 
-@router.get("/{file_id}/download-url", response_model=DownloadUrlResponse)
-@router.post("/{file_id}:download-url", response_model=DownloadUrlResponse)
+@router.get("/{file_id}/download-url", response_model=DownloadUrlResponse, operation_id="files_get_download_url")
+@router.post("/{file_id}:download-url", response_model=DownloadUrlResponse, operation_id="files_post_download_url")
 async def get_download_url_v2(
     file_id: str,
     request: Request,
@@ -245,8 +247,8 @@ async def get_download_url_v2(
     return DownloadUrlResponse(signed_get_url=url)
 
 
-@router.post("/{file_id}:link", response_model=LinkFileResponse)
-@router.post("/{file_id}/link", response_model=LinkFileResponse)
+@router.post("/{file_id}:link", response_model=LinkFileResponse, operation_id="files_link")
+@router.post("/{file_id}/link", response_model=LinkFileResponse, operation_id="files_link_compat")
 async def link_file_v2(
     file_id: str,
     payload: LinkFileRequest,
@@ -260,8 +262,16 @@ async def link_file_v2(
     return LinkFileResponse(link_id=link.id)
 
 
-@router.get("/entities/{entity_type}/{entity_id}/files", response_model=list[EntityFileListItem])
-@router.get("/entities/{entity_type}/{entity_id}/list", response_model=list[EntityFileListItem])
+@router.get(
+    "/entities/{entity_type}/{entity_id}/files",
+    response_model=list[EntityFileListItem],
+    operation_id="files_list_entity_files",
+)
+@router.get(
+    "/entities/{entity_type}/{entity_id}/list",
+    response_model=list[EntityFileListItem],
+    operation_id="files_list_entity_files_compat",
+)
 async def list_entity_files_v2(
     entity_type: str,
     entity_id: str,
@@ -292,8 +302,8 @@ async def list_entity_files_v2(
     ]
 
 
-@router.post("/{file_id}:signed-url", response_model=SignedUrlResponse)
-@router.post("/{file_id}/signed-url", response_model=SignedUrlResponse)
+@router.post("/{file_id}:signed-url", response_model=SignedUrlResponse, operation_id="files_signed_url")
+@router.post("/{file_id}/signed-url", response_model=SignedUrlResponse, operation_id="files_signed_url_compat")
 async def get_signed_url_v2(
     file_id: str,
     payload: SignedUrlRequest,
