@@ -1,0 +1,454 @@
+from __future__ import annotations
+
+import hashlib
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.dependencies import get_session, get_tenant_record
+from app.core.idempotency import compute_request_hash
+from app.models.models import Tenant
+from app.modules.files import service
+from app.modules.files.models import FileContentIndex, FileLink, FileRecord, FileVersion
+from app.modules.files.schemas import (
+    CompleteUploadRequest,
+    DownloadUrlRequest,
+    DownloadURLResponse,
+    DownloadUrlResponse,
+    EntityFileListItem,
+    FileDto,
+    FileIndexStatusDto,
+    FileVersionDto,
+    FinalizeUploadResponse,
+    LinkFileRequest,
+    LinkFileResponse,
+    NewFileVersionRequest,
+    NewFileVersionResponse,
+    ReindexFileResponse,
+    SignedUrlRequest,
+    SignedUrlResponse,
+    UploadCompleteRequest,
+    UploadCompleteResponse,
+    UploadInitRequest,
+    UploadInitResponse,
+    UploadSessionRequest,
+    UploadSessionResponse,
+)
+from app.services.billing import BillingService
+from app.services.idempotency import IdempotencyService, normalize_idempotency_key
+
+router = APIRouter()
+
+
+@router.post(":upload-init", response_model=UploadInitResponse)
+async def upload_init(
+    payload: UploadInitRequest,
+    response: Response,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> UploadInitResponse:
+    if not idempotency_key:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Idempotency-Key is required")
+    request_hash = compute_request_hash(payload.model_dump(mode="json"))
+    idem = IdempotencyService(session=session, tenant_id=str(tenant.id), endpoint="files.upload_init")
+    key = normalize_idempotency_key(idempotency_key)
+    record, created = await idem.acquire(
+        key=key,
+        request_hash=request_hash,
+        method="POST",
+        path="/v1/files:upload-init",
+    )
+    if not created:
+        return await idem.respond_from_store(record, model=UploadInitResponse, response=response)
+
+    obj, version, url = await service.create_upload_session(session=session, tenant_id=str(tenant.id), payload=payload, user_id=None)
+    body = UploadInitResponse(file_id=obj.id, version_id=version.id, upload_url=url, s3_key=version.s3_key)
+    await idem.store_success(record, status_code=status.HTTP_200_OK, body=body.model_dump())
+    await session.commit()
+    return body
+
+
+@router.post(":upload-complete", response_model=UploadCompleteResponse)
+async def upload_complete(
+    payload: UploadCompleteRequest,
+    response: Response,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> UploadCompleteResponse:
+    if not idempotency_key:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Idempotency-Key is required")
+    request_hash = compute_request_hash(payload.model_dump(mode="json"))
+    idem = IdempotencyService(session=session, tenant_id=str(tenant.id), endpoint="files.upload_complete")
+    key = normalize_idempotency_key(idempotency_key)
+    record, created = await idem.acquire(
+        key=key,
+        request_hash=request_hash,
+        method="POST",
+        path="/v1/files:upload-complete",
+    )
+    if not created:
+        return await idem.respond_from_store(record, model=UploadCompleteResponse, response=response)
+
+    version = await service.complete_upload(session=session, tenant_id=str(tenant.id), file_id=payload.file_id, version_id=payload.version_id)
+    body = {"version_id": version.id, "status": version.status, "av_status": version.av_status}
+    await idem.store_success(record, status_code=status.HTTP_200_OK, body=body)
+    await session.commit()
+    return UploadCompleteResponse(**body)
+
+
+@router.get("/{file_id}/versions/{version_id}:download-url", response_model=DownloadURLResponse)
+async def download_url(file_id: str, version_id: str, request: Request, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> DownloadURLResponse:
+    url = await service.issue_download_url(
+        session=session,
+        tenant_id=str(tenant.id),
+        file_id=file_id,
+        version_id=version_id,
+        user_id=None,
+        ip=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
+    await session.commit()
+    return DownloadURLResponse(url=url, expires_in=600)
+
+
+@router.post("/presign-upload", response_model=UploadSessionResponse)
+@router.post("/init-upload", response_model=UploadSessionResponse)
+async def create_upload_session_v2(
+    payload: UploadSessionRequest,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> UploadSessionResponse:
+    await BillingService(session).assert_allowed(tenant, "files.upload", meta={"delta_bytes": int(payload.size_bytes)})
+    svc = service.FileService(session=session, tenant_id=str(tenant.id))
+    file_record, upload_url, expires_in = await svc.create_upload_session(
+        filename=payload.filename,
+        content_type=payload.content_type,
+        size_bytes=payload.size_bytes,
+        metadata_json=payload.metadata or payload.metadata_json or ({"sha256": payload.sha256} if payload.sha256 else None),
+    )
+    await session.commit()
+    return UploadSessionResponse(file_id=file_record.id, signed_put_url=upload_url, expires_at=datetime.now(timezone.utc) + timedelta(seconds=max(expires_in, 0)), existing=(upload_url == ""))
+
+
+@router.post("/complete-upload", response_model=FinalizeUploadResponse)
+@router.post("/complete-upload-v2", response_model=FinalizeUploadResponse)
+async def complete_upload_v2(
+    payload: CompleteUploadRequest,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> FinalizeUploadResponse:
+    svc = service.FileService(session=session, tenant_id=str(tenant.id))
+    file_record = await svc.finalize_upload(file_id=payload.file_id)
+    await BillingService(session).add_usage(tenant_id=str(tenant.id), s3_bytes_delta=int(file_record.size_bytes or 0))
+    await session.commit()
+    return FinalizeUploadResponse(file_id=file_record.id, status=file_record.status)
+
+
+@router.post("/{file_id}:finalize", response_model=FinalizeUploadResponse)
+@router.post("/{file_id}:complete", response_model=FinalizeUploadResponse)
+async def finalize_upload_v2(
+    file_id: str,
+    payload: UploadCompleteRequest,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> FinalizeUploadResponse:
+    svc = service.FileService(session=session, tenant_id=str(tenant.id))
+    resolved_file_id = payload.file_id or file_id
+    file_record = await svc.finalize_upload(file_id=resolved_file_id)
+    await BillingService(session).add_usage(tenant_id=str(tenant.id), s3_bytes_delta=int(file_record.size_bytes or 0))
+    await session.commit()
+    return FinalizeUploadResponse(file_id=file_record.id, status=file_record.status)
+
+
+@router.get("/records/{file_id}", response_model=FileDto)
+async def get_file_v2(
+    file_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> FileDto:
+    file_record = await session.get(FileRecord, file_id)
+    if file_record is None or file_record.tenant_id != str(tenant.id):
+        raise HTTPException(status_code=404, detail="file_not_found")
+    link_rows = (await session.execute(select(FileLink).where(FileLink.tenant_id == str(tenant.id), FileLink.file_id == file_id))).scalars().all()
+    content_index = (await session.execute(select(FileContentIndex).where(FileContentIndex.file_id == file_id))).scalar_one_or_none()
+    return FileDto(
+        id=file_record.id,
+        bucket=file_record.bucket,
+        object_key=file_record.object_key,
+        content_type=file_record.content_type,
+        size_bytes=file_record.size_bytes,
+        sha256=file_record.sha256,
+        status=file_record.status,
+        av_vendor=file_record.av_vendor,
+        av_result_json=file_record.av_result_json or {},
+        metadata_json=file_record.metadata_json or {},
+        links=[EntityFileListItem(file_id=file_record.id, role=link_row.role, status=file_record.status, display_name=Path(file_record.object_key).name, size=file_record.size_bytes) for link_row in link_rows],
+        content_index=FileIndexStatusDto(status=content_index.status, attempts=int(content_index.attempts or 0), last_error=content_index.last_error) if content_index else None,
+    )
+
+
+
+
+@router.post("/{file_id}:reindex", response_model=ReindexFileResponse)
+async def reindex_file_content_v2(
+    file_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> ReindexFileResponse:
+    file_record = await session.get(FileRecord, file_id)
+    if file_record is None or file_record.tenant_id != str(tenant.id):
+        raise HTTPException(status_code=404, detail="file_not_found")
+    from app.tasks import index_file_content_job
+
+    index_file_content_job.apply_async(kwargs={"tenant_slug": session.info.get("tenant"), "file_id": file_id}, countdown=0)
+    return ReindexFileResponse(file_id=file_id, status="queued")
+
+
+@router.get("/{file_id}/download-url", response_model=DownloadUrlResponse)
+@router.post("/{file_id}:download-url", response_model=DownloadUrlResponse)
+async def get_download_url_v2(
+    file_id: str,
+    request: Request,
+    payload: DownloadUrlRequest | None = None,
+    purpose: str | None = None,
+    ttl: int = 600,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> DownloadUrlResponse:
+    resolved_purpose = (payload.purpose if payload else purpose) or "download"
+    resolved_ttl = payload.ttl_seconds if payload else ttl
+    svc = service.FileService(session=session, tenant_id=str(tenant.id))
+    url = await svc.get_signed_download_url(
+        file_id=file_id,
+        purpose=resolved_purpose,
+        ttl=resolved_ttl,
+        ip=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
+    await session.commit()
+    return DownloadUrlResponse(signed_get_url=url)
+
+
+@router.post("/{file_id}:link", response_model=LinkFileResponse)
+@router.post("/{file_id}/link", response_model=LinkFileResponse)
+async def link_file_v2(
+    file_id: str,
+    payload: LinkFileRequest,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> LinkFileResponse:
+    svc = service.FileService(session=session, tenant_id=str(tenant.id))
+    role = payload.role or payload.tag or "attachment"
+    link = await svc.link_file(file_id=file_id, entity_type=payload.entity_type, entity_id=payload.entity_id, role=role)
+    await session.commit()
+    return LinkFileResponse(link_id=link.id)
+
+
+@router.get("/entities/{entity_type}/{entity_id}/files", response_model=list[EntityFileListItem])
+@router.get("/entities/{entity_type}/{entity_id}/list", response_model=list[EntityFileListItem])
+async def list_entity_files_v2(
+    entity_type: str,
+    entity_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> list[EntityFileListItem]:
+    rows = (
+        await session.execute(
+            select(FileLink, FileRecord)
+            .join(FileRecord, FileRecord.id == FileLink.file_id)
+            .where(
+                FileLink.tenant_id == str(tenant.id),
+                FileLink.entity_type == entity_type,
+                FileLink.entity_id == entity_id,
+            )
+        )
+    ).all()
+    return [
+        EntityFileListItem(
+            file_id=file_rec.id,
+            role=link.role,
+            status=file_rec.status,
+            display_name=Path(file_rec.object_key).name,
+            size=file_rec.size_bytes,
+            link_id=link.id,
+        )
+        for link, file_rec in rows
+    ]
+
+
+@router.post("/{file_id}:signed-url", response_model=SignedUrlResponse)
+@router.post("/{file_id}/signed-url", response_model=SignedUrlResponse)
+async def get_signed_url_v2(
+    file_id: str,
+    payload: SignedUrlRequest,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> SignedUrlResponse:
+    svc = service.FileService(session=session, tenant_id=str(tenant.id))
+    url = await svc.get_signed_download_url(
+        file_id=file_id,
+        purpose=payload.action,
+        ttl=payload.ttl_seconds,
+        ip=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
+    await session.commit()
+    return SignedUrlResponse(signed_url=url)
+
+
+
+
+@router.delete("/{file_id}/link/{link_id}")
+async def delete_link_v2(
+    file_id: str,
+    link_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> dict[str, str]:
+    svc = service.FileService(session=session, tenant_id=str(tenant.id))
+    await svc.unlink_file_by_id(file_id=file_id, link_id=link_id)
+    await session.commit()
+    return {"status": "deleted"}
+
+
+@router.post("/abort-upload")
+async def abort_upload_v2(
+    payload: CompleteUploadRequest,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> dict[str, str]:
+    svc = service.FileService(session=session, tenant_id=str(tenant.id))
+    await svc.abort_upload(file_id=payload.file_id)
+    await session.commit()
+    return {"status": "aborted"}
+
+@router.post("/upload-multipart", response_model=FinalizeUploadResponse)
+async def upload_multipart_v1(
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> FinalizeUploadResponse:
+    svc = service.FileService(session=session, tenant_id=str(tenant.id))
+    filename = file.filename or "upload.bin"
+    content_type = file.content_type or "application/octet-stream"
+    file_record, _upload_url, _ = await svc.create_upload_session(filename=filename, content_type=content_type, size_bytes=0, metadata_json={})
+    from app.domains.files import s3
+
+    sha256 = hashlib.sha256()
+    chunks: list[bytes] = []
+    total_size = 0
+    while True:
+        chunk = await file.read(1024 * 1024)
+        if not chunk:
+            break
+        total_size += len(chunk)
+        sha256.update(chunk)
+        chunks.append(chunk)
+    payload = b"".join(chunks)
+    s3.put_object(data=payload, mime=content_type, key=file_record.object_key)
+    file_record.size_bytes = total_size
+    file_record.sha256 = sha256.hexdigest()
+    file_record = await svc.finalize_upload(file_id=file_record.id)
+    await session.commit()
+    return FinalizeUploadResponse(file_id=file_record.id, status=file_record.status)
+
+
+@router.get("", response_model=list[FileDto])
+async def list_files_v1(
+    status: str | None = None,
+    query: str | None = None,
+    meta_document_version_id: str | None = Query(default=None, alias="meta.document_version_id"),
+    updated_from: datetime | None = None,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> list[FileDto]:
+    stmt = select(FileRecord).where(FileRecord.tenant_id == str(tenant.id), FileRecord.deleted_at.is_(None))
+    if status:
+        stmt = stmt.where(FileRecord.status == status)
+    if query:
+        stmt = stmt.where(FileRecord.object_key.ilike(f"%{query}%"))
+    if meta_document_version_id:
+        stmt = stmt.where(FileRecord.metadata_json["document_version_id"].astext == meta_document_version_id)
+    if updated_from:
+        stmt = stmt.where(FileRecord.updated_at >= updated_from)
+    rows = (await session.execute(stmt.order_by(FileRecord.updated_at.desc()).limit(200))).scalars().all()
+    return [FileDto(
+        id=r.id,bucket=r.bucket,object_key=r.object_key,content_type=r.content_type,size_bytes=r.size_bytes,sha256=r.sha256,status=r.status,av_vendor=r.av_vendor,av_result_json=r.av_result_json or {},metadata_json=r.metadata_json or {},links=[],content_index=None
+    ) for r in rows]
+
+
+@router.post("/{file_id}/new-version", response_model=NewFileVersionResponse)
+async def create_new_version_v1(
+    file_id: str,
+    payload: NewFileVersionRequest,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> NewFileVersionResponse:
+    await BillingService(session).assert_allowed(tenant, "files.upload", meta={"delta_bytes": int(payload.size_bytes)})
+    svc = service.FileService(session=session, tenant_id=str(tenant.id))
+    version, upload_url, expires_in = await svc.create_new_version_upload_session(
+        file_id=file_id,
+        filename=payload.filename,
+        content_type=payload.content_type,
+        size_bytes=payload.size_bytes,
+        metadata_json=payload.metadata or payload.metadata_json or ({"sha256": payload.sha256} if payload.sha256 else None),
+    )
+    await session.commit()
+    return NewFileVersionResponse(
+        file_id=file_id,
+        version_id=version.id,
+        signed_put_url=upload_url,
+        expires_at=datetime.now(timezone.utc) + timedelta(seconds=expires_in),
+        status=version.status,
+    )
+
+
+@router.get("/{file_id}/versions", response_model=list[FileVersionDto])
+async def list_file_versions_v1(
+    file_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> list[FileVersionDto]:
+    rows = (
+        await session.execute(
+            select(FileVersion)
+            .where(FileVersion.tenant_id == str(tenant.id), FileVersion.file_id == file_id)
+            .order_by(FileVersion.version_no.desc())
+        )
+    ).scalars().all()
+    return [
+        FileVersionDto(
+            id=v.id,
+            file_id=v.file_id,
+            sha256=v.sha256,
+            size_bytes=v.size,
+            s3_version_id=None,
+            created_by=v.created_by,
+            created_at=v.created_at,
+        )
+        for v in rows
+    ]
+
+@router.delete("/{file_id}")
+async def delete_file_v1(file_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict[str, str]:
+    svc = service.FileService(session=session, tenant_id=str(tenant.id))
+    await svc.delete_file(file_id=file_id)
+    await session.commit()
+    return {"status":"deleted"}
