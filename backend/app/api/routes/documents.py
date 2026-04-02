@@ -64,6 +64,7 @@ from app.schemas.document import (
     DocumentHistoryEntryRead,
     DocumentPaginationRead,
     DocumentRead,
+    DocumentReadinessRead,
     DocumentStatusUpdate,
     DocumentUiListResponse,
     DocumentUiRead,
@@ -71,6 +72,7 @@ from app.schemas.document import (
 from app.schemas.task import TaskAcceptedResponse, TaskStatusResponse
 from app.services.audit import AuditService
 from app.services.billing import BillingService
+from app.services.document_readiness import compute_document_readiness
 from app.services.documents import (
     DocumentNotFoundError,
     DocumentWorkflowService,
@@ -88,7 +90,7 @@ logger = logging.getLogger(__name__)
 def _documents_bad_request(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail={"code": "documents_bad_request", "message": message},
+        detail={"code": "documents_bad_request", "type": "documents", "message": message},
     )
 
 
@@ -200,11 +202,11 @@ class DocGenerateRequest(BaseModel):
 def _map_document_status(document: Document) -> str:
     if document.job and document.job.status in {DocumentJobStatus.QUEUED, DocumentJobStatus.PROCESSING}:
         return "generating"
-    if document.job and document.job.status is DocumentJobStatus.FAILED:
+    if document.job and document.job.status == DocumentJobStatus.FAILED:
         return "error"
     if document.status in {DocumentStatus.GENERATED, DocumentStatus.APPROVED, DocumentStatus.SIGNED, DocumentStatus.ARCHIVED}:
         return "ready"
-    if document.status is DocumentStatus.REVOKED:
+    if document.status == DocumentStatus.REVOKED:
         return "error"
     return "draft"
 
@@ -312,6 +314,7 @@ def _document_read_query(tenant_id: str):
         .options(
             selectinload(Document.company),
             selectinload(Document.template),
+            selectinload(Document.template_version),
             selectinload(Document.file),
             selectinload(Document.job),
             selectinload(Document.versions).selectinload(DocumentVersion.file),
@@ -437,6 +440,36 @@ async def get_document(
         site_company_id=document.company_id,
     )
     return _build_document_ui_read(document)
+
+
+@router.get("/{document_id}/readiness", response_model=DocumentReadinessRead)
+async def get_document_readiness_endpoint(
+    document_id: str,
+    tenant: Tenant = TenantDep,
+    session: AsyncSession = SessionDep,
+    access: AccessContext = ReadAccessDep,
+) -> DocumentReadinessRead:
+    access.ensure_tenant_access(tenant.id, action="read document")
+    document = (
+        await session.execute(_document_read_query(str(tenant.id)).where(Document.id == document_id))
+    ).scalar_one_or_none()
+    if document is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
+    access.ensure_abac(
+        action="read document",
+        company_id=document.company_id,
+        document_id=document.id,
+        document_status=document.status.value if hasattr(document.status, "value") else str(document.status),
+        document_owner_id=document.created_by,
+        site_id=document.site_id,
+        site_company_id=document.company_id,
+    )
+    snap = compute_document_readiness(document)
+    return DocumentReadinessRead(
+        score=snap.score,
+        blockers=snap.blockers,
+        recommended_actions=snap.recommended_actions,
+    )
 
 
 @router.get("/{document_id}/status", response_model=DocumentUiRead)
@@ -676,7 +709,7 @@ async def _resolve_run(
             raise HTTPException(status.HTTP_409_CONFLICT, "Idempotency key already used")
         if existing.context != context:
             raise HTTPException(status.HTTP_409_CONFLICT, "Idempotency key already used")
-        if existing.status is PipelineRunStatus.ERROR:
+        if existing.status == PipelineRunStatus.ERROR:
             raise HTTPException(
                 status.HTTP_409_CONFLICT,
                 "Idempotency key refers to a failed generation task",

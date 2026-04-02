@@ -78,6 +78,14 @@ class DocumentUiListResponse(BaseSchema):
     pagination: DocumentPaginationRead
 
 
+class DocumentReadinessRead(BaseSchema):
+    """TZ §9.5 — score, blockers, recommended actions."""
+
+    score: int
+    blockers: list[str]
+    recommended_actions: list[str]
+
+
 class DocumentBatchItemRead(BaseSchema):
     id: str
     row_index: int

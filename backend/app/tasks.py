@@ -166,7 +166,7 @@ async def _generate_document_for_run(run_id: str, tenant_slug: str) -> tuple[str
                 metadata = dict(run.result_metadata or {})
                 existing_document_id = metadata.get("document_id")
                 existing_version_id = metadata.get("document_version_id")
-                if run.status is PipelineRunStatus.DONE and existing_document_id:
+                if run.status == PipelineRunStatus.DONE and existing_document_id:
                     return str(existing_document_id), str(existing_version_id or "")
 
                 company_id = metadata.get("company_id")
@@ -809,7 +809,7 @@ def generate_document_batch_item_task(batch_id: str, item_id: str, *, tenant_slu
                 item = await session.get(DocumentBatchItem, item_id)
                 if batch is None or item is None:
                     raise ValueError("Batch item not found")
-                if item.status is DocumentBatchItemStatus.SUCCEEDED:
+                if item.status == DocumentBatchItemStatus.SUCCEEDED:
                     return str(item.document_id or "")
 
                 item.status = DocumentBatchItemStatus.RUNNING

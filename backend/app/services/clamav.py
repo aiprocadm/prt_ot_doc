@@ -381,9 +381,9 @@ async def process_scan_request(
     if outcome.signature:
         log_payload["signature"] = outcome.signature
 
-    if outcome.status is ClamAVVerdict.INFECTED:
+    if outcome.status == ClamAVVerdict.INFECTED:
         logger.warning("files.clamav.detected", extra=log_payload)
-    elif outcome.status is ClamAVVerdict.ERROR:
+    elif outcome.status == ClamAVVerdict.ERROR:
         logger.error("files.clamav.error", extra=log_payload)
     else:
         logger.info("files.clamav.scanned", extra=log_payload)

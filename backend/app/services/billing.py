@@ -83,7 +83,7 @@ class BillingService:
                 status.HTTP_402_PAYMENT_REQUIRED,
                 detail={"code": "TENANT_SUSPENDED", "type": "billing", "message": "Tenant subscription is suspended"},
             )
-        if sub.status is BillingSubscriptionStatus.PAST_DUE:
+        if sub.status == BillingSubscriptionStatus.PAST_DUE:
             if sub.grace_until is None or sub.grace_until < now:
                 sub.status = BillingSubscriptionStatus.SUSPENDED
                 if self.session is not None:

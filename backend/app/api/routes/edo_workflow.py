@@ -203,7 +203,7 @@ async def _idempotent_or_replay(
         method=request.method.upper(),
         path=request.url.path,
     )
-    if not created and record.status is IdempotencyStatus.SUCCEEDED:
+    if not created and record.status == IdempotencyStatus.SUCCEEDED:
         payload = record.result_json or {}
         response.status_code = int(payload.get("status_code", 200))
         return service, payload.get("body", {})
