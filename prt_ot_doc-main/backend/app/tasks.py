@@ -719,6 +719,87 @@ def cleanup_idempotency_keys_task() -> int:
 
 
 @celery_app.task(
+    name="pipeline.watchdog",
+    autoretry_for=RETRYABLE_EXCEPTIONS,
+    retry_backoff=settings.celery.retry_backoff_seconds,
+    retry_backoff_max=settings.celery.retry_backoff_max_seconds,
+    retry_jitter=True,
+    retry_kwargs={"max_retries": settings.celery.task_max_retries},
+)
+def pipeline_watchdog_task(stuck_minutes: int = 30) -> int:
+    """Mark long-running pipeline jobs as errored for operator triage."""
+
+    async def _run() -> int:
+        cutoff = datetime.now(tz=timezone.utc) - timedelta(minutes=max(stuck_minutes, 5))
+        async with AsyncSessionLocal(tenant=settings.default_tenant_slug) as session:
+            tenants = list(
+                (await session.execute(select(Tenant).where(Tenant.is_active.is_(True))))
+                .scalars()
+                .all()
+            )
+        repaired = 0
+        for tenant in tenants:
+            with tenant_context(tenant.slug):
+                ensure_tenant_schema(tenant.slug)
+                async with session_scope(tenant=tenant.slug) as tenant_session:
+                    runs = (
+                        await tenant_session.execute(
+                            select(PipelineRun).where(
+                                PipelineRun.status == PipelineRunStatus.RUNNING,
+                                PipelineRun.started_at.is_not(None),
+                                PipelineRun.started_at < cutoff,
+                            )
+                        )
+                    ).scalars().all()
+                    if not runs:
+                        continue
+                    audit = AuditService(tenant_session)
+                    for run in runs:
+                        run.status = PipelineRunStatus.ERROR
+                        run.error = "watchdog_marked_stuck_run"
+                        run.finished_at = datetime.now(tz=timezone.utc)
+                        await audit.log_event(
+                            tenant_id=run.tenant_id,
+                            action="pipeline_watchdog_mark_error",
+                            object_type="pipeline_run",
+                            object_id=run.id,
+                            user_id=None,
+                            ip="system",
+                            details={"reason": "stuck_run_timeout", "stuck_minutes": stuck_minutes},
+                        )
+                        repaired += 1
+                    await tenant_session.flush()
+        return repaired
+
+    metrics = get_metrics()
+    queue = celery_app.conf.task_default_queue or "default"
+    task_name = "pipeline.watchdog"
+    metrics.record_celery_enqueue(queue=queue, task=task_name)
+    started = perf_counter()
+    try:
+        result = _run_coroutine(_run())
+    except Exception as exc:  # pragma: no cover - surfaced by Celery in production
+        duration = perf_counter() - started
+        metrics.record_celery_execution(
+            queue=queue,
+            task=task_name,
+            status="failed",
+            seconds=duration,
+            error_code=str(exc) or exc.__class__.__name__,
+        )
+        logger.exception("pipeline_watchdog_task failed", exc_info=exc)
+        raise
+    duration = perf_counter() - started
+    metrics.record_celery_execution(
+        queue=queue,
+        task=task_name,
+        status="succeeded",
+        seconds=duration,
+    )
+    return result
+
+
+@celery_app.task(
     name="app.tasks.generate_document",
     autoretry_for=RETRYABLE_EXCEPTIONS,
     retry_backoff=settings.celery.retry_backoff_seconds,

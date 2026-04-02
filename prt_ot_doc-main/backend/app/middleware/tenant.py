@@ -101,9 +101,12 @@ class TenantMiddleware(BaseHTTPMiddleware):
                     payload = verify_token(token, expected_type="access")
                     token_claims = payload
                 except Exception as exc:
-                    raise HTTPException(
+                    raise self._error(
                         status.HTTP_401_UNAUTHORIZED,
-                        "Invalid authentication token",
+                        correlation_id,
+                        code="AUTH_INVALID_TOKEN",
+                        message="Invalid authentication token",
+                        err_type="security",
                     ) from exc
                 raw_slug = str(payload.get("tenant") or "").strip()
                 token_slug = raw_slug or None

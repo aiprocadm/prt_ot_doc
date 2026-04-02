@@ -1,31 +1,23 @@
 # TZ_COVERAGE_MATRIX
 
-| TZ area | Status | Canonical implementation |
-|---|---|---|
-| Structural audit / frontend-backend roots | Done | `README.md`, `docs/PROJECT_STRUCTURE.md`, `docs/audit/REPOSITORY_AUDIT.md`, `docs/audit/REPOSITORY_AUDIT.json`, `scripts/repo_audit.py`, `tests/test_repo_audit.py` |
-| Canonical frontend root and `package.json` | Done | `frontend/package.json` |
-| Python entrypoint compatibility | Done | `backend/app/main.py`, `app/__init__.py` |
-| Branding profile inheritance | Done | `backend/app/modules/branding/service.py` |
-| Header/footer requisites split (`header_details` / `footer_details`) | Done | `backend/app/modules/branding/schemas.py`, `frontend/src/pages/branding/BrandingSettingsPage.tsx` |
-| Branch-branded header context (`branch_label` -> rendered headers) | Done | `backend/app/modules/branding/service.py`, `tests/api/test_branding_api.py` |
-| Letterhead first/odd/even header/footer support | Done | `backend/app/modules/headers/engine.py` |
-| Branding profile UI | Done | `frontend/src/pages/branding/BrandingSettingsPage.tsx` |
-| Wizard organization/site/layout selection | Done | `frontend/src/pages/documents/DocumentsWizardPage.tsx` |
-| Reproducibility metadata | Done | `backend/app/modules/branding/service.py` |
-| Persisted wizard branding preview/history | Done | `frontend/src/stores/documentsWizard.ts` |
-| Server-side branded generation history | Done | `backend/app/modules/branding/api.py`, `frontend/src/pages/branding/BrandingSettingsPage.tsx` |
-| Apply-headers payload handoff | Done | `backend/app/modules/branding/api.py` |
-| Branded document smoke command | Done | `scripts/branded_document_smoke.py`, `Makefile` |
-| Full automatic apply-headers in every generation route | Partial | dedicated endpoint/job exists, not universally auto-chained |
-| PDF / approval / archive continuation | Partial | foundation exists, depends on selected profile/orchestration |
+Status: `Done` / `Partial` / `Gap`. Priority: `P0` / `P1` / `P2`.
 
-| Notifications API boundary hardening | Done | `backend/app/api/routes/notifications.py`, `backend/app/modules/notifications/service.py`, `backend/app/modules/notifications/schemas.py`, `backend/tests/test_notifications_service.py` |
-| Notification enum validation / structured 422 behavior | Done | `backend/app/modules/notifications/service.py`, `backend/app/api/error_handlers.py` |
-| Training / LMS canonical doc | Done | `docs/TRAINING_AND_LMS.md` |
-| Risk engine canonical doc | Done | `docs/RISK_ENGINE.md` |
-| Acceptance scenarios canonical doc | Done | `docs/ACCEPTANCE_SCENARIOS.md` |
-| Custom template scope/type DTO alignment | Done | `backend/app/api/v1/router.py`, `backend/app/modules/templates/schemas.py`, `frontend/src/types/dto/templates.ts` |
-| Template upload/version/lint/preview canonical doc | Done | `docs/TEMPLATE_UPLOAD_AND_RENDERING.md` |
-| Demo access canonical doc | Done | `docs/DEMO_ACCESS.md` |
-| Owner bootstrap/access canonical doc | Done | `docs/OWNER_ADMIN_ACCESS.md` |
-| User role issuance and scope assignment doc | Done | `docs/USER_ACCESS_AND_ROLES.md` |
+| TZ area | Wave | Priority | Status | Canonical implementation / gap anchor |
+|---|---|---|---|---|
+| Baseline traceability (`TZ -> code -> tests`) | 0 | P0 | Partial | `docs/audit/TZ_COVERAGE_MATRIX.md`, `ACCEPTANCE_TEST_MATRIX.md`; needs per-item owner and target wave discipline |
+| Tenant context required for business routes | 1 | P0 | Done | `backend/app/middleware/tenant.py`, tests in `tests/test_tenant_header_required.py` |
+| Tenant isolation and scoped DB usage | 1 | P0 | Partial | `backend/app/db/session.py`, `backend/app/api/dependencies.py`; requires full endpoint sweep sign-off |
+| IAM (RBAC/ABAC) consistency across all modules | 1 | P0 | Partial | `backend/app/core/security.py`, `docs/authz.md`; route-level exceptions still need normalization |
+| Structured error contract (`code/type/message/details/field_errors/correlation_id/timestamp`) | 1 | P0 | Done | `backend/app/api/error_handlers.py` |
+| Audit + correlation coverage for critical operations | 1 | P0 | Partial | `backend/app/services/audit.py`, `backend/app/tasks.py`; requires complete cross-module checklist |
+| Reliability layer (idempotency/retries/DLQ/poison) | 1 | P0 | Partial | `backend/app/services/idempotency.py`, `backend/app/tasks.py`, `backend/app/api/routes/jobs.py` |
+| Self-healing / stuck jobs watchdog | 1 | P1 | Partial | `backend/app/tasks.py` + Celery beat; expanded watchdog policies required |
+| Document core pipeline unified end-to-end | 2 | P0 | Partial | `backend/app/modules/pipelines/*`, `backend/app/api/v1/router.py`; not all flows auto-chain generate->headers->pdf |
+| Document Readiness Score centralized and explainable | 2 | P0 | Partial | `backend/app/modules/projections/services.py`, `backend/app/api/routes/workspace.py`; full document-level canonical score pending |
+| Diff/compare/dependency map completeness | 2 | P1 | Gap | requires dedicated version-diff and dependency graph closures |
+| Risks/PPE/Training/Incidents/Inspections full contour | 3 | P1 | Partial | domain modules exist in `backend/app/domains/*`; not all lifecycle links finalized |
+| Universal timeline + attention center coverage | 3 | P1 | Partial | `frontend/src/components/common/AttentionPanel.tsx`, workspace APIs; universal event timeline still incomplete |
+| Frontend role workspaces + command workflows | 4 | P1 | Partial | dashboards/workspaces exist; command bar and full scenario UX require completion |
+| Mobile/offline conflict resolver maturity | 4 | P1 | Partial | `backend/app/api/routes/pwa_sync.py`, `frontend/src/components/common/ConnectivityBanner.tsx` |
+| Integrations/EDO/signature production adapters | 5 | P0 | Gap | stubs in `backend/app/services/integrations/stubs.py`; production adapters pending |
+| Acceptance quality gates (tests/perf/security) | cross-wave | P0 | Partial | quality gates configured, but full TZ traceability and SLO verification matrix still expanding |

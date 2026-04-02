@@ -75,7 +75,15 @@ celery_app.conf.beat_schedule = {
     "reminders-scan-hourly": {
         "task": "reminders.scan",
         "schedule": crontab(minute=0),
-    }
+    },
+    "idempotency-cleanup-daily": {
+        "task": "idempotency.cleanup",
+        "schedule": crontab(hour=3, minute=0),
+    },
+    "pipeline-watchdog-every-10-min": {
+        "task": "pipeline.watchdog",
+        "schedule": crontab(minute="*/10"),
+    },
 }
 
 celery_app.conf.task_queues = (

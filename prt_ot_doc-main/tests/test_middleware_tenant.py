@@ -217,3 +217,32 @@ async def test_tenant_middleware_requires_header_for_non_docs_openapi_suffix_pat
         await middleware.dispatch(request, call_next)
     assert exc_info.value.status_code == 400
     assert exc_info.value.detail["code"] == "TENANT_REQUIRED"
+
+
+@pytest.mark.asyncio
+async def test_tenant_middleware_returns_structured_error_for_invalid_token() -> None:
+    middleware = TenantMiddleware(_dummy_app)
+
+    async def call_next(request: Request) -> Response:
+        return Response(content=b"ok")
+
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/api/v1/documents",
+        "headers": [
+            (TENANT_HEADER.encode(), b"demo"),
+            (b"authorization", b"Bearer invalid-token"),
+        ],
+        "query_string": b"",
+        "client": ("test", 0),
+        "server": ("test", 80),
+        "scheme": "http",
+        "root_path": "",
+    }
+    request = Request(scope)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await middleware.dispatch(request, call_next)
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.detail["code"] == "AUTH_INVALID_TOKEN"

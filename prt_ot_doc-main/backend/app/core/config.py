@@ -414,6 +414,7 @@ class Settings(BaseSettings):
     use_edo_integration: bool = Field(False, alias="USE_EDO_INTEGRATION")
     use_frdo_integration: bool = Field(False, alias="USE_FRDO_INTEGRATION")
     use_eisot_integration: bool = Field(False, alias="USE_EISOT_INTEGRATION")
+    allow_stub_integrations: bool = Field(True, alias="ALLOW_STUB_INTEGRATIONS")
 
     json_max_bytes: int = Field(JSON_MAX_DEFAULT, alias="JSON_MAX")
     max_upload_size: int = Field(

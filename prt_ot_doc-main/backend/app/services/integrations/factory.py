@@ -24,10 +24,18 @@ from .stubs import (
 )
 
 
+def _stub_allowed() -> bool:
+    settings = get_settings()
+    # In production-like environments, stubs must be explicitly allowed.
+    if settings.app_env.lower() in {"prod", "production"} and not settings.allow_stub_integrations:
+        return False
+    return True
+
+
 @lru_cache()
 def get_accounting_integration() -> BaseAccountingIntegration:
     settings = get_settings()
-    if settings.use_1c_integration:
+    if settings.use_1c_integration and _stub_allowed():
         return StubAccountingIntegration()
     return DisabledAccountingIntegration()
 
@@ -35,7 +43,7 @@ def get_accounting_integration() -> BaseAccountingIntegration:
 @lru_cache()
 def get_edo_integration() -> BaseEDOIntegration:
     settings = get_settings()
-    if settings.use_edo_integration:
+    if settings.use_edo_integration and _stub_allowed():
         return StubEDOIntegration()
     return DisabledEDOIntegration()
 
@@ -43,7 +51,7 @@ def get_edo_integration() -> BaseEDOIntegration:
 @lru_cache()
 def get_frdo_integration() -> BaseFRDOIntegration:
     settings = get_settings()
-    if settings.use_frdo_integration:
+    if settings.use_frdo_integration and _stub_allowed():
         return StubFRDOIntegration()
     return DisabledFRDOIntegration()
 
@@ -51,7 +59,7 @@ def get_frdo_integration() -> BaseFRDOIntegration:
 @lru_cache()
 def get_eisot_integration() -> BaseEISOTIntegration:
     settings = get_settings()
-    if settings.use_eisot_integration:
+    if settings.use_eisot_integration and _stub_allowed():
         return StubEISOTIntegration()
     return DisabledEISOTIntegration()
 
