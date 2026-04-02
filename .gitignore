@@ -1,48 +1,51 @@
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
 *.pyd
-node_modules/
-.coverage
+*.egg-info/
+
+# Python tooling
+.venv/
 .mypy_cache/
 .pytest_cache/
+.hypothesis/
+.coverage
+coverage.xml
+htmlcov/
+
+# Environment files
 .env
+.env.*
+!.env.example
+
+# Frontend dependencies/build
+node_modules/
 frontend/node_modules/
 frontend/dist/
 frontend/coverage/
 frontend/.vite/
+frontend/dev-dist/
+frontend/.npm-ci.stamp
 .vite/
-.DS_Store
-.idea/
-.hypothesis/
-test.db
-*.py[cod]
-*.egg-info/
-.venv/
-.env
-coverage.xml
-htmlcov/
-.coverage
-frontend/node_modules/
-frontend/dist/
-*.log
-.DS_Store
-.idea/
-!.vscode/
-artifacts/
-.venv/
-.env
-pytest.ini
-.pytest_cache/
-*.egg-info/
-.mypy_cache/
-.coverage
-htmlcov/
+
+# Runtime/local data
 .storage/
 .local_storage/
-!.vscode/settings.json
 backend/.local_storage/
+test.db
 backend/dev.db
 dev.db
 runtime-dev.db
-frontend/dev-dist/
+
+# IDE/OS artifacts
+.DS_Store
+.idea/
+!.vscode/
+!.vscode/settings.json
+
+# Logs and artifacts
+*.log
+artifacts/
+
+# One-off migration drafts in repo root
+/migrate_routes_v*.py

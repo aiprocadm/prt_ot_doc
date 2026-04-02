@@ -28,6 +28,9 @@ jobs:
       - name: Scoped query guard
         run: python scripts/ci/check_scoped_queries.py
 
+      - name: Runtime/build artifact guard
+        run: python scripts/ci/check_runtime_artifacts.py
+
   backend-tests:
     runs-on: ubuntu-latest
     env:
