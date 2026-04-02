@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { getDocumentBatch } from "@/api/documents";
 import { getBrandingProfile, listLayoutPresets, listSites, type LayoutPresetDto, type SiteDto } from "@/api/branding";
 import { getPipelineRun } from "@/api/pipelines";
+import { usePolling } from "@/hooks/usePolling";
 import { useCompaniesStore } from "@/stores/companies";
 import { useDocumentsWizardStore } from "@/stores/documentsWizard";
 import { useTenantStore } from "@/stores/tenant";
@@ -48,33 +49,30 @@ export const useDocumentsWizardBootstrap = () => {
       .catch(() => undefined);
   }, [companyId, headerPreset, setPartial, siteId]);
 
-  useEffect(() => {
-    if (!taskId || !tenant) return;
-    if (pipelineRun && !["queued", "running"].includes(pipelineRun.status)) return;
-    const timer = window.setInterval(async () => {
-      try {
-        const run = await getPipelineRun(taskId);
-        setPartial({ pipelineRun: run });
-      } catch {
-        toast.error("Не удалось обновить timeline job.");
-      }
-    }, 3000);
-    return () => window.clearInterval(timer);
-  }, [pipelineRun, setPartial, taskId, tenant]);
+  usePolling(
+    async () => {
+      const run = await getPipelineRun(taskId);
+      setPartial({ pipelineRun: run });
+    },
+    3000,
+    {
+      enabled: Boolean(taskId && tenant && (!pipelineRun || ["queued", "running"].includes(pipelineRun.status))),
+      onError: () => toast.error("Не удалось обновить timeline job.")
+    }
+  );
 
-  useEffect(() => {
-    if (!batch?.id || !tenant) return;
-    if (!["queued", "running"].includes(batch.status)) return;
-    const timer = window.setInterval(async () => {
-      try {
-        const updated = await getDocumentBatch(batch.id);
-        setPartial({ batch: updated });
-      } catch {
-        toast.error("Не удалось обновить batch статус.");
-      }
-    }, 3000);
-    return () => window.clearInterval(timer);
-  }, [batch?.id, batch?.status, setPartial, tenant]);
+  usePolling(
+    async () => {
+      if (!batch?.id) return;
+      const updated = await getDocumentBatch(batch.id);
+      setPartial({ batch: updated });
+    },
+    3000,
+    {
+      enabled: Boolean(batch?.id && tenant && ["queued", "running"].includes(batch.status)),
+      onError: () => toast.error("Не удалось обновить batch статус.")
+    }
+  );
 
   return {
     tenant,
