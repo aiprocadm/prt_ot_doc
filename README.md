@@ -12,6 +12,7 @@ Production-minded modular monolith for B2B охрана труда / промы�
 - **Vite config:** `frontend/vite.config.ts`
 - **Alembic config:** `backend/app/migrations/alembic.ini`
 - **CLI wrapper:** `./ptd`
+- **No nested project copy:** не распаковывайте архив второй раз внутрь репозитория — каталог `prt_ot_doc-main/` в корне игнорируется и не является частью сборки (см. `.gitignore`).
 
 ## Structural audit summary
 This wave re-audited the repository and confirmed the following canonical paths:

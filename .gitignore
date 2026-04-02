@@ -49,3 +49,6 @@ artifacts/
 
 # One-off migration drafts in repo root
 /migrate_routes_v*.py
+
+# Nested copy of the repo (e.g. after unzipping an archive inside the clone)
+/prt_ot_doc-main/

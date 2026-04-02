@@ -14,6 +14,7 @@ BLOCKED_PATTERNS = (
     ".vite/**",
     "frontend/dev-dist/**",
     "frontend/.npm-ci.stamp",
+    "prt_ot_doc-main/**",
 )
 
 

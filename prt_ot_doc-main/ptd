@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-PYTHONPATH="${PYTHONPATH:-}:backend" exec python -m app.cli.main "$@"
