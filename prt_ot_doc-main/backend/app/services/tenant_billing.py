@@ -48,7 +48,7 @@ class SubscriptionService:
         ctx = await self.billing_service.get_context(tenant)
         if ctx.subscription is None:
             return None
-        if ctx.subscription.status is BillingSubscriptionStatus.PAST_DUE:
+        if ctx.subscription.status == BillingSubscriptionStatus.PAST_DUE:
             grace_until = ctx.subscription.grace_until
             now = datetime.now(tz=timezone.utc)
             if grace_until is None or now > grace_until:

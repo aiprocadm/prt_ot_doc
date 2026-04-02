@@ -51,7 +51,7 @@ def _pipeline_for_event(event_type: str) -> PipelineType:
         EventType.DOCUMENT_EXPORTED,
     }:
         return PipelineType.DOCUMENT
-    if resolved is EventType.RISK_ASSESSED:
+    if resolved == EventType.RISK_ASSESSED:
         return PipelineType.RISK
     if resolved in {EventType.PPE_ISSUED, EventType.PPE_RETURNED}:
         return PipelineType.PPE
@@ -212,13 +212,13 @@ class OutboxService:
         if created:
             if resolved in {EventType.DOCUMENT_CREATED, EventType.DOCUMENT_GENERATED}:
                 self.metrics.record_document_generated()
-            elif resolved is EventType.DOCUMENT_SIGNED:
+            elif resolved == EventType.DOCUMENT_SIGNED:
                 self.metrics.record_document_signed()
-            elif resolved is EventType.RISK_ASSESSED:
+            elif resolved == EventType.RISK_ASSESSED:
                 self.metrics.record_risk_assessed()
-            elif resolved is EventType.PPE_ISSUED:
+            elif resolved == EventType.PPE_ISSUED:
                 self.metrics.record_ppe_issued()
-            elif resolved is EventType.TRAINING_COMPLETED:
+            elif resolved == EventType.TRAINING_COMPLETED:
                 self.metrics.record_training_completed()
 
         self.metrics.record_pipeline_stage_end(

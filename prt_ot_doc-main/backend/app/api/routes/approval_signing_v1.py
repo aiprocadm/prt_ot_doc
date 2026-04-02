@@ -207,7 +207,7 @@ async def approvals_start(payload: ApprovalStartIn, request: Request, response: 
         idem = IdempotencyService(session=session, tenant_id=str(tenant.id), endpoint=request.url.path)
         norm = normalize_idempotency_key(key)
         rec, _ = await idem.acquire(key=norm, request_hash=make_request_hash(request.url.path, str(tenant.id), x_user_id, payload.model_dump(mode="json")), method="POST", path=request.url.path)
-        if rec.status is IdempotencyStatus.SUCCEEDED:
+        if rec.status == IdempotencyStatus.SUCCEEDED:
             return rec.result_json["body"]
     routes = (await session.execute(select(ApprovalRoute).where(ApprovalRoute.tenant_id == str(tenant.id), ApprovalRoute.is_active.is_(True)))).scalars().all()
     ranked = sorted(((r.priority, cond_matches(r.conditions or {}, payload.context), r) for r in routes), key=lambda i: (i[0], i[1]), reverse=True)
@@ -326,7 +326,7 @@ async def sign_request(payload: SignRequestIn, request: Request, response: Respo
     if key:
         idem = IdempotencyService(session=session, tenant_id=str(tenant.id), endpoint=request.url.path)
         rec, _ = await idem.acquire(key=normalize_idempotency_key(key), request_hash=make_request_hash(request.url.path, str(tenant.id), x_user_id, payload.model_dump(mode="json")), method="POST", path=request.url.path)
-        if rec.status is IdempotencyStatus.SUCCEEDED:
+        if rec.status == IdempotencyStatus.SUCCEEDED:
             return rec.result_json["body"]
     sig = SignatureRequest(tenant_id=str(tenant.id), object_type=payload.object_type, object_id=object_id, provider=payload.provider, status=SignatureRequestStatus.REQUESTED, payload_json={"kind": payload.kind or "un_ep", **(payload.payload or {})})
     session.add(sig)
