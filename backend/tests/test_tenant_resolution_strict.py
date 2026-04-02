@@ -56,23 +56,17 @@ async def test_get_auth_tenant_record_uses_verified_token_claim(monkeypatch: pyt
 
 
 @pytest.mark.asyncio
-async def test_internal_fallback_allowed_only_for_explicit_test_scenarios(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        dependencies,
-        "get_settings",
-        lambda: SimpleNamespace(default_tenant_slug="public", app_env="test"),
-    )
-    async def _fetch(identifier: str):
-        assert identifier == "test"
-        return SimpleNamespace(slug="test")
+async def test_internal_fallback_is_disabled_even_for_explicit_test_scenarios(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _fail_fetch(_identifier: str):  # pragma: no cover - must not be called
+        raise AssertionError("fallback lookup must stay disabled")
 
-    monkeypatch.setattr(dependencies, "_fetch_tenant_by_identifier", _fetch)
-
+    monkeypatch.setattr(dependencies, "_fetch_tenant_by_identifier", _fail_fetch)
     request = _request("/api/v1/auth/login")
     request.state.allow_internal_tenant_fallback = True
 
-    resolved = await dependencies.get_tenant_record(request)
-    assert resolved.slug == "test"
+    with pytest.raises(HTTPException) as exc_info:
+        await dependencies.get_tenant_record(request)
+    assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
 
 
 @pytest.mark.asyncio
