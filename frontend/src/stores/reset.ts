@@ -1,6 +1,7 @@
 import { useAuditStore } from "@/stores/audit";
 import { useCompaniesStore } from "@/stores/companies";
 import { useDocumentsStore } from "@/stores/documents";
+import { useDocumentsWizardStore } from "@/stores/documentsWizard";
 import { useFilesStore } from "@/stores/files";
 import { useNpaStore } from "@/stores/npa";
 import { usePacksStore } from "@/stores/packs";
@@ -13,6 +14,7 @@ export const resetTenantStores = () => {
   useAuditStore.getState().reset();
   useCompaniesStore.getState().reset();
   useDocumentsStore.getState().reset();
+  useDocumentsWizardStore.getState().reset();
   useFilesStore.getState().reset();
   useNpaStore.getState().reset();
   usePacksStore.getState().reset();
