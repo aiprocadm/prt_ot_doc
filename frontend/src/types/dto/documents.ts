@@ -28,3 +28,10 @@ export interface DocumentFiltersDto {
   company_id?: string;
   type?: string;
 }
+
+/** TZ §9.5 — backend GET /documents/{id}/readiness */
+export interface DocumentReadinessDto {
+  score: number;
+  blockers: string[];
+  recommended_actions: string[];
+}

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { ActionButton } from "@/components/permissions/ActionButton";
+import { getDocumentReadiness } from "@/api/documents";
 import { releaseApi, type ReleaseStatus } from "@/api/release";
 import { approvalsApi } from "@/api/approvals";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { PERMISSIONS } from "@/permissions/permissions";
 import { useAbility } from "@/permissions/useAbility";
 import { useDocumentsStore } from "@/stores/documents";
-import type { DocumentDto } from "@/types/dto/documents";
+import type { DocumentDto, DocumentReadinessDto } from "@/types/dto/documents";
 import { formatDate } from "@/utils/datetime";
 import { downloadBlob } from "@/utils/download";
 
@@ -23,6 +24,8 @@ export const DocumentPreview = ({ document, initialTab = "preview" }: DocumentPr
   const { refreshStatus, download } = useDocumentsStore();
   const [current, setCurrent] = useState(document);
   const [release, setRelease] = useState<ReleaseStatus>({ approval: "draft", signature: "pending", edo: "queued" });
+  const [readiness, setReadiness] = useState<DocumentReadinessDto | null>(null);
+  const [readinessLoading, setReadinessLoading] = useState(false);
   const [myTaskId, setMyTaskId] = useState<string | null>(null);
   const { can } = useAbility();
   const releaseTargetId = current.current_version_id ?? current.id;
@@ -38,6 +41,11 @@ export const DocumentPreview = ({ document, initialTab = "preview" }: DocumentPr
       const mine = items.find((it) => (it.instance_id || it.process_id));
       setMyTaskId(mine?.id ?? null);
     }).catch(() => undefined);
+    setReadinessLoading(true);
+    getDocumentReadiness(document.id)
+      .then(setReadiness)
+      .catch(() => setReadiness(null))
+      .finally(() => setReadinessLoading(false));
   }, [document]);
 
   const handleRefresh = async () => {
@@ -45,6 +53,15 @@ export const DocumentPreview = ({ document, initialTab = "preview" }: DocumentPr
     if (updated) {
       setCurrent(updated);
       toast.success("Статус обновлён");
+    }
+    setReadinessLoading(true);
+    try {
+      const next = await getDocumentReadiness(document.id);
+      setReadiness(next);
+    } catch {
+      setReadiness(null);
+    } finally {
+      setReadinessLoading(false);
     }
   };
 
@@ -104,6 +121,53 @@ export const DocumentPreview = ({ document, initialTab = "preview" }: DocumentPr
         </div>
       </CardHeader>
       <CardContent>
+        <div
+          className="mb-4 rounded-md border bg-muted/30 p-4"
+          data-testid="document-readiness-panel"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-sm font-semibold">Готовность к выпуску (readiness)</div>
+            {readinessLoading ? (
+              <span className="text-xs text-muted-foreground">Расчёт…</span>
+            ) : readiness ? (
+              <Badge variant={readiness.score >= 80 ? "default" : readiness.score >= 50 ? "secondary" : "destructive"}>
+                {readiness.score}%
+              </Badge>
+            ) : (
+              <span className="text-xs text-muted-foreground">Нет данных</span>
+            )}
+          </div>
+          {readiness && !readinessLoading ? (
+            <div className="mt-3 space-y-3 text-sm">
+              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-primary transition-[width]"
+                  style={{ width: `${Math.min(100, Math.max(0, readiness.score))}%` }}
+                />
+              </div>
+              {readiness.blockers.length > 0 ? (
+                <div>
+                  <p className="mb-1 text-xs font-medium text-destructive">Препятствия</p>
+                  <ul className="list-inside list-disc text-xs text-muted-foreground">
+                    {readiness.blockers.map((b, i) => (
+                      <li key={`blocker-${i}-${b.slice(0, 24)}`}>{b}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {readiness.recommended_actions.length > 0 ? (
+                <div>
+                  <p className="mb-1 text-xs font-medium text-foreground">Рекомендуемые действия</p>
+                  <ul className="list-inside list-disc text-xs text-muted-foreground">
+                    {readiness.recommended_actions.map((a, i) => (
+                      <li key={`action-${i}-${a.slice(0, 24)}`}>{a}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
         <div className="mb-4 grid gap-2 rounded-md border p-3 text-sm sm:grid-cols-3">
           <div><span className="text-muted-foreground">Approval:</span> <Badge variant="secondary">{release.approval}</Badge></div>
           <div><span className="text-muted-foreground">Signature:</span> <Badge variant="secondary">{release.signature}</Badge></div>

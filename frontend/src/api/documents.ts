@@ -1,4 +1,5 @@
 import { apiClient } from "@/api/client";
+import type { DocumentReadinessDto } from "@/types/dto/documents";
 
 export type WizardPipelineStatus = "queued" | "running" | "success" | "failed" | "canceled" | "done" | "error";
 
@@ -84,6 +85,11 @@ export const generateDocument = async (payload: GenerateDocumentRequest, idempot
 
 export const getGenerationTaskStatus = async (taskId: string) => {
   const response = await apiClient.get<TaskStatusResponse>(`/documents/tasks/${taskId}`);
+  return response.data;
+};
+
+export const getDocumentReadiness = async (documentId: string) => {
+  const response = await apiClient.get<DocumentReadinessDto>(`/documents/${documentId}/readiness`);
   return response.data;
 };
 
