@@ -202,7 +202,7 @@ class DocumentWorkflowService:
             details=details,
         )
 
-        if outcome == "success" and new_status is DocumentStatus.SIGNED:
+        if outcome == "success" and new_status == DocumentStatus.SIGNED:
             version_id = await self._get_latest_version_id(document.id)
             await audit_service.log_event(
                 tenant_id=document.tenant_id,
