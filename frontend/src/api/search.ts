@@ -47,7 +47,8 @@ export interface SavedSearchItem extends SearchMemoryItem {
   is_shared?: boolean;
 }
 
-export const fetchSearch = async (params: {
+export const fetchSearch = async (
+  params: {
   q?: string;
   types?: SearchType[];
   cursor?: string;
@@ -61,12 +62,15 @@ export const fetchSearch = async (params: {
   date_from?: string;
   date_to?: string;
   sort?: "relevance" | "updated_at" | "date";
-}) => {
+  },
+  options?: { signal?: AbortSignal }
+) => {
   const { data } = await apiClient.get<SearchResponse>("/search", {
+    signal: options?.signal,
     params: {
       ...params,
-      types: params.types?.join(","),
-    },
+      types: params.types?.join(",")
+    }
   });
   return data;
 };

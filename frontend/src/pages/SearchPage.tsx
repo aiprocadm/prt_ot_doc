@@ -1,14 +1,24 @@
 import { BookmarkPlus, Clock3, Filter, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 
-import { createSavedSearch, deleteSavedSearch, fetchRecentSearches, fetchSavedSearches, fetchSearch, type SavedSearchItem, type SearchItem, type SearchType } from "@/api/search";
+import {
+  createSavedSearch,
+  deleteSavedSearch,
+  fetchRecentSearches,
+  fetchSavedSearches,
+  fetchSearch,
+  type SavedSearchItem,
+  type SearchItem,
+  type SearchType
+} from "@/api/search";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { useDebounce } from "@/hooks/useDebounce";
 import type { ApiError } from "@/types/dto/common";
 
 const tabs: Array<SearchType | "tasks" | "npa" | "contracts" | "orders"> = ["documents", "files", "people", "sites", "incidents", "inspections", "risk", "ppe", "training", "jobs", "templates", "tasks", "npa", "contracts", "orders"];
@@ -22,6 +32,8 @@ type Facets = {
   risk_level_counts?: Record<string, number>;
 };
 
+const isExternalLink = (link: string) => /^https?:\/\//i.test(link);
+
 const SearchPage = () => {
   const [params, setParams] = useSearchParams();
   const [items, setItems] = useState<SearchItem[]>([]);
@@ -33,7 +45,12 @@ const SearchPage = () => {
   const [reloadNonce, setReloadNonce] = useState(0);
   const [recent, setRecent] = useState<Array<{ id: string; q: string; types: string[] }>>([]);
   const [saved, setSaved] = useState<SavedSearchItem[]>([]);
+  const searchRequestId = useRef(0);
+  const loadMoreRequestId = useRef(0);
+  const loadMoreInFlight = useRef(false);
+
   const q = params.get("q") ?? "";
+  const debouncedQ = useDebounce(q, 350);
   const type = (params.get("type") as SearchType | "tasks" | "npa" | "contracts" | "orders" | null) ?? "documents";
   const status = params.get("status") ?? "";
   const companyId = params.get("company_id") ?? "";
@@ -64,23 +81,41 @@ const SearchPage = () => {
   }, []);
 
   useEffect(() => {
-    if (!q.trim()) {
+    if (!debouncedQ.trim()) {
       setItems([]);
       setFacets({});
       setNextCursor(null);
       setError(null);
       return;
     }
+
+    const requestId = ++searchRequestId.current;
+    const controller = new AbortController();
+
     setLoading(true);
     setError(null);
-    fetchSearch({ q, types: activeTypes, status: status || undefined, company_id: companyId || undefined, site_id: siteId || undefined, project_id: projectId || undefined, risk_level: riskLevel || undefined })
+
+    fetchSearch(
+      {
+        q: debouncedQ,
+        types: activeTypes,
+        status: status || undefined,
+        company_id: companyId || undefined,
+        site_id: siteId || undefined,
+        project_id: projectId || undefined,
+        risk_level: riskLevel || undefined
+      },
+      { signal: controller.signal }
+    )
       .then((data) => {
+        if (searchRequestId.current !== requestId) return;
         setItems(data.items);
         setFacets(data.facets ?? {});
         setNextCursor(data.next_cursor ?? null);
         void loadMemory();
       })
       .catch((err) => {
+        if (controller.signal.aborted || searchRequestId.current !== requestId) return;
         const apiError = (err as ApiError) ?? { status: 500, message: "Не удалось загрузить результаты поиска" };
         setError({ status: apiError.status ?? 500, message: apiError.message ?? "Не удалось загрузить результаты поиска" });
         setItems([]);
@@ -88,23 +123,51 @@ const SearchPage = () => {
         setNextCursor(null);
       })
       .finally(() => {
+        if (searchRequestId.current !== requestId) return;
         setLoading(false);
       });
-  }, [q, activeTypes, status, companyId, siteId, projectId, riskLevel, reloadNonce]);
+
+    return () => {
+      controller.abort();
+    };
+  }, [debouncedQ, activeTypes, status, companyId, siteId, projectId, riskLevel, reloadNonce]);
 
   const loadMore = async () => {
-    if (!nextCursor) return;
+    if (!nextCursor || loadMoreInFlight.current) return;
+
+    const requestId = ++loadMoreRequestId.current;
+    const controller = new AbortController();
+
+    loadMoreInFlight.current = true;
     setLoadingMore(true);
+
     try {
-      const data = await fetchSearch({ q, types: activeTypes, cursor: nextCursor, status: status || undefined, company_id: companyId || undefined, site_id: siteId || undefined, project_id: projectId || undefined, risk_level: riskLevel || undefined });
+      const data = await fetchSearch(
+        {
+          q: debouncedQ,
+          types: activeTypes,
+          cursor: nextCursor,
+          status: status || undefined,
+          company_id: companyId || undefined,
+          site_id: siteId || undefined,
+          project_id: projectId || undefined,
+          risk_level: riskLevel || undefined
+        },
+        { signal: controller.signal }
+      );
+      if (loadMoreRequestId.current !== requestId) return;
       setItems((prev) => [...prev, ...data.items]);
       setNextCursor(data.next_cursor ?? null);
       setError(null);
     } catch (err) {
+      if (controller.signal.aborted || loadMoreRequestId.current !== requestId) return;
       const apiError = (err as ApiError) ?? { status: 500, message: "Не удалось загрузить дополнительные результаты" };
       setError({ status: apiError.status ?? 500, message: apiError.message ?? "Не удалось загрузить дополнительные результаты" });
     } finally {
-      setLoadingMore(false);
+      if (loadMoreRequestId.current === requestId) {
+        loadMoreInFlight.current = false;
+        setLoadingMore(false);
+      }
     }
   };
 
@@ -119,8 +182,8 @@ const SearchPage = () => {
         ...(companyId ? { company_id: companyId } : {}),
         ...(siteId ? { site_id: siteId } : {}),
         ...(projectId ? { project_id: projectId } : {}),
-        ...(riskLevel ? { risk_level: riskLevel } : {}),
-      },
+        ...(riskLevel ? { risk_level: riskLevel } : {})
+      }
     });
     await loadMemory();
   };
@@ -142,9 +205,7 @@ const SearchPage = () => {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">Search Center</h1>
-        <div className="rounded-full border px-3 py-1 text-xs text-muted-foreground">
-          Активных фильтров: {activeFilterCount}
-        </div>
+        <div className="rounded-full border px-3 py-1 text-xs text-muted-foreground">Активных фильтров: {activeFilterCount}</div>
       </div>
       <div className="grid gap-4 xl:grid-cols-[1.4fr,0.8fr]">
         <div className="space-y-4">
@@ -153,12 +214,7 @@ const SearchPage = () => {
               <Input value={q} placeholder="Поиск по системе" onChange={(e) => patchParams({ q: e.target.value })} />
               <div className="flex flex-wrap gap-2">
                 {tabs.map((tab) => (
-                  <Button
-                    key={tab}
-                    variant={tab === type ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => patchParams({ type: tab })}
-                  >
+                  <Button key={tab} variant={tab === type ? "default" : "outline"} size="sm" onClick={() => patchParams({ type: tab })}>
                     {tab} ({facets.type_counts?.[tab] ?? facets.type_counts?.[tab.replace(/s$/, "")] ?? 0})
                   </Button>
                 ))}
@@ -171,8 +227,16 @@ const SearchPage = () => {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2 text-base"><Filter className="h-4 w-4" /> Faceted filters</CardTitle>
-              <Button variant="ghost" size="sm" onClick={() => patchParams({ status: undefined, company_id: undefined, site_id: undefined, project_id: undefined, risk_level: undefined })}>Сбросить</Button>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Filter className="h-4 w-4" /> Faceted filters
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => patchParams({ status: undefined, company_id: undefined, site_id: undefined, project_id: undefined, risk_level: undefined })}
+              >
+                Сбросить
+              </Button>
             </CardHeader>
             <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
               <div className="space-y-2">
@@ -180,7 +244,9 @@ const SearchPage = () => {
                 <select className="h-10 rounded-md border px-3" value={status} onChange={(event) => patchParams({ status: event.target.value || undefined })}>
                   <option value="">Все</option>
                   {Object.entries(facets.status_counts ?? {}).map(([key, value]) => (
-                    <option key={key} value={key}>{key} ({value})</option>
+                    <option key={key} value={key}>
+                      {key} ({value})
+                    </option>
                   ))}
                 </select>
               </div>
@@ -192,17 +258,41 @@ const SearchPage = () => {
               <div className="space-y-2">
                 <label className="text-xs font-medium uppercase text-muted-foreground">Site scope</label>
                 <Input placeholder="site_id" value={siteId} onChange={(event) => patchParams({ site_id: event.target.value || undefined })} />
-                <div className="flex flex-wrap gap-1 text-xs text-muted-foreground">{Object.entries(facets.site_counts ?? {}).slice(0, 5).map(([key, value]) => <button type="button" key={key} className="rounded-full border px-2 py-0.5" onClick={() => patchParams({ site_id: key })}>{key} ({value})</button>)}</div>
+                <div className="flex flex-wrap gap-1 text-xs text-muted-foreground">
+                  {Object.entries(facets.site_counts ?? {})
+                    .slice(0, 5)
+                    .map(([key, value]) => (
+                      <button type="button" key={key} className="rounded-full border px-2 py-0.5" onClick={() => patchParams({ site_id: key })}>
+                        {key} ({value})
+                      </button>
+                    ))}
+                </div>
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-medium uppercase text-muted-foreground">Project scope</label>
                 <Input placeholder="project_id" value={projectId} onChange={(event) => patchParams({ project_id: event.target.value || undefined })} />
-                <div className="flex flex-wrap gap-1 text-xs text-muted-foreground">{Object.entries(facets.project_counts ?? {}).slice(0, 5).map(([key, value]) => <button type="button" key={key} className="rounded-full border px-2 py-0.5" onClick={() => patchParams({ project_id: key })}>{key} ({value})</button>)}</div>
+                <div className="flex flex-wrap gap-1 text-xs text-muted-foreground">
+                  {Object.entries(facets.project_counts ?? {})
+                    .slice(0, 5)
+                    .map(([key, value]) => (
+                      <button type="button" key={key} className="rounded-full border px-2 py-0.5" onClick={() => patchParams({ project_id: key })}>
+                        {key} ({value})
+                      </button>
+                    ))}
+                </div>
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-medium uppercase text-muted-foreground">Risk level</label>
                 <Input placeholder="risk_level" value={riskLevel} onChange={(event) => patchParams({ risk_level: event.target.value || undefined })} />
-                <div className="flex flex-wrap gap-1 text-xs text-muted-foreground">{Object.entries(facets.risk_level_counts ?? {}).slice(0, 5).map(([key, value]) => <button type="button" key={key} className="rounded-full border px-2 py-0.5" onClick={() => patchParams({ risk_level: key })}>{key} ({value})</button>)}</div>
+                <div className="flex flex-wrap gap-1 text-xs text-muted-foreground">
+                  {Object.entries(facets.risk_level_counts ?? {})
+                    .slice(0, 5)
+                    .map(([key, value]) => (
+                      <button type="button" key={key} className="rounded-full border px-2 py-0.5" onClick={() => patchParams({ risk_level: key })}>
+                        {key} ({value})
+                      </button>
+                    ))}
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -210,28 +300,44 @@ const SearchPage = () => {
           <div className="space-y-2">
             {loading ? <LoadingScreen label="Загрузка результатов поиска" /> : null}
             {!loading ? <ErrorState error={error ?? undefined} onRetry={() => setReloadNonce((prev) => prev + 1)} /> : null}
-            {!loading && !error && q.trim().length > 0 && items.length === 0 ? (
-              <EmptyState title="Ничего не найдено" description="Попробуйте изменить запрос или фильтры." />
-            ) : null}
-            {!loading && !error ? items.map((item) => (
-              <div key={`${item.entity_type}-${item.entity_id}`} className="rounded border p-3">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <div className="text-sm text-muted-foreground">{item.entity_type}</div>
-                    <a className="font-medium text-primary underline" href={item.deeplink ?? "#"}>{item.title}</a>
+            {!loading && !error && q.trim().length > 0 && items.length === 0 ? <EmptyState title="Ничего не найдено" description="Попробуйте изменить запрос или фильтры." /> : null}
+            {!loading && !error
+              ? items.map((item) => (
+                  <div key={`${item.entity_type}-${item.entity_id}`} className="rounded border p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm text-muted-foreground">{item.entity_type}</div>
+                        {item.deeplink && isExternalLink(item.deeplink) ? (
+                          <a className="font-medium text-primary underline" href={item.deeplink} target="_blank" rel="noreferrer">
+                            {item.title}
+                          </a>
+                        ) : (
+                          <Link className="font-medium text-primary underline" to={item.deeplink ?? "#"}>
+                            {item.title}
+                          </Link>
+                        )}
+                      </div>
+                      {item.status ? <div className="rounded-full border px-2 py-1 text-xs">{item.status}</div> : null}
+                    </div>
+                    {item.tags ? (
+                      <div className="mt-1 text-xs text-muted-foreground">{Object.entries(item.tags).slice(0, 4).map(([key, value]) => `${key}: ${String(value)}`).join(" · ")}</div>
+                    ) : null}
+                    {item.snippet ? <div className="mt-2 text-sm text-muted-foreground">{item.snippet}</div> : null}
                   </div>
-                  {item.status ? <div className="rounded-full border px-2 py-1 text-xs">{item.status}</div> : null}
-                </div>
-                {item.tags ? <div className="mt-1 text-xs text-muted-foreground">{Object.entries(item.tags).slice(0, 4).map(([key, value]) => `${key}: ${String(value)}`).join(" · ")}</div> : null}
-                {item.snippet ? <div className="mt-2 text-sm text-muted-foreground">{item.snippet}</div> : null}
-              </div>
-            )) : null}
+                ))
+              : null}
           </div>
-          {nextCursor ? <Button onClick={() => void loadMore()} variant="outline" disabled={loadingMore}>{loadingMore ? "Загрузка..." : "Загрузить ещё"}</Button> : null}
+          {nextCursor ? (
+            <Button onClick={() => void loadMore()} variant="outline" disabled={loadingMore}>
+              {loadingMore ? "Загрузка..." : "Загрузить ещё"}
+            </Button>
+          ) : null}
         </div>
         <div className="space-y-4">
           <Card>
-            <CardHeader><CardTitle>Недавние запросы</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle>Недавние запросы</CardTitle>
+            </CardHeader>
             <CardContent className="space-y-2">
               {recent.map((item) => (
                 <button key={item.id} type="button" className="flex w-full items-start gap-2 rounded border p-3 text-left hover:bg-muted" onClick={() => applySavedSearch(item)}>
@@ -245,7 +351,9 @@ const SearchPage = () => {
             </CardContent>
           </Card>
           <Card>
-            <CardHeader><CardTitle>Сохранённые поиски</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle>Сохранённые поиски</CardTitle>
+            </CardHeader>
             <CardContent className="space-y-2">
               {saved.map((item) => (
                 <div key={item.id} className="rounded border p-3">
@@ -253,7 +361,9 @@ const SearchPage = () => {
                     <button type="button" className="text-left" onClick={() => applySavedSearch(item)}>
                       <div className="font-medium">{item.name}</div>
                       <div className="text-xs text-muted-foreground">{item.q}</div>
-                      {Object.keys(item.filters ?? {}).length ? <div className="mt-1 text-xs text-muted-foreground">filters: {Object.entries(item.filters ?? {}).map(([key, value]) => `${key}=${String(value)}`).join(", ")}</div> : null}
+                      {Object.keys(item.filters ?? {}).length ? (
+                        <div className="mt-1 text-xs text-muted-foreground">filters: {Object.entries(item.filters ?? {}).map(([key, value]) => `${key}=${String(value)}`).join(", ")}</div>
+                      ) : null}
                     </button>
                     <Button variant="ghost" size="icon" onClick={() => void deleteSavedSearch(item.id).then(loadMemory)}>
                       <Trash2 className="h-4 w-4" />

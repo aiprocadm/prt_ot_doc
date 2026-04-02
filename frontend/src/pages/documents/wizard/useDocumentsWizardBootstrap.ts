@@ -1,10 +1,7 @@
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 
-import { getDocumentBatch } from "@/api/documents";
 import { getBrandingProfile, listLayoutPresets, listSites, type LayoutPresetDto, type SiteDto } from "@/api/branding";
-import { getPipelineRun } from "@/api/pipelines";
-import { usePolling } from "@/hooks/usePolling";
+import { useDocumentsWizardRuntimePolling } from "./useDocumentsWizardRuntimePolling";
 import { useCompaniesStore } from "@/stores/companies";
 import { useDocumentsWizardStore } from "@/stores/documentsWizard";
 import { useTenantStore } from "@/stores/tenant";
@@ -49,30 +46,14 @@ export const useDocumentsWizardBootstrap = () => {
       .catch(() => undefined);
   }, [companyId, headerPreset, setPartial, siteId]);
 
-  usePolling(
-    async () => {
-      const run = await getPipelineRun(taskId);
-      setPartial({ pipelineRun: run });
-    },
-    3000,
-    {
-      enabled: Boolean(taskId && tenant && (!pipelineRun || ["queued", "running"].includes(pipelineRun.status))),
-      onError: () => toast.error("Не удалось обновить timeline job.")
-    }
-  );
-
-  usePolling(
-    async () => {
-      if (!batch?.id) return;
-      const updated = await getDocumentBatch(batch.id);
-      setPartial({ batch: updated });
-    },
-    3000,
-    {
-      enabled: Boolean(batch?.id && tenant && ["queued", "running"].includes(batch.status)),
-      onError: () => toast.error("Не удалось обновить batch статус.")
-    }
-  );
+  useDocumentsWizardRuntimePolling({
+    tenantSlug: tenant?.slug,
+    taskId,
+    pipelineRun,
+    batch,
+    onPipelineRun: (nextPipelineRun) => setPartial({ pipelineRun: nextPipelineRun }),
+    onBatch: (nextBatch) => setPartial({ batch: nextBatch })
+  });
 
   return {
     tenant,
