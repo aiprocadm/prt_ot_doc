@@ -1,0 +1,11 @@
+# KNOWN_LIMITATIONS
+
+- Automatic inline chaining of `generate -> apply_headers -> pdf` is not universal across all document-generation entrypoints.
+- Brand asset selection is ID-based and assumes existing uploaded files.
+- `scripts/branded_document_smoke.py` validates the canonical document-core pipeline on a stub DOCX, not on a full tenant bootstrap with persistent storage/media uploads.
+- Repository still contains historical docs and compatibility modules that remain on disk for backward compatibility, even though the canonical paths are documented separately.
+- Repository still contains historical docs and compatibility modules that remain on disk for backward compatibility, even though the canonical paths are documented separately and surfaced by the repository audit snapshot.
+- Frontend bundle splitting is improved, but route-level chunking can still be refined further as modules grow.
+
+- Notifications center has real filtering/settings/templates/calendar foundations, but escalation policies and provider-specific delivery orchestration are not yet feature-complete.
+- Training and risk modules are coherent foundations with real code paths, but should not yet be marketed internally as fully closed TZ areas.
