@@ -599,9 +599,9 @@ class Settings(BaseSettings):
             self.jwt_public_key_pem = public_key
             return self
 
-        if self.app_env == "production":
+        if self.app_env in ("production", "staging"):
             raise SettingsError(
-                "PRIVATE_KEY_PEM and PUBLIC_KEY_PEM must be configured in production"
+                "PRIVATE_KEY_PEM and PUBLIC_KEY_PEM must be configured in production and staging"
             )
 
         logger.warning(
@@ -616,7 +616,7 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _ensure_production_secrets(self) -> Settings:
-        if self.app_env != "production":
+        if self.app_env not in ("production", "staging"):
             return self
 
         missing: list[str] = []
@@ -633,7 +633,7 @@ class Settings(BaseSettings):
 
         if missing:
             raise SettingsError(
-                "Production configuration must override defaults: "
+                f"{self.app_env.title()} configuration must override defaults: "
                 + ", ".join(missing)
             )
         return self
@@ -796,7 +796,7 @@ def bootstrap(role: Literal["api", "worker"]) -> Settings:
     }
     missing = [name for name, value in required_values.items() if not str(value).strip()]
     if missing:
-        raise RuntimeError(
+        raise SettingsError(
             "Missing required environment variables for "
             f"{role}: {', '.join(sorted(missing))}"
         )
@@ -804,10 +804,10 @@ def bootstrap(role: Literal["api", "worker"]) -> Settings:
         locale_name=settings.application.default_locale,
         timezone_name=settings.application.default_timezone,
     )
-    if settings.application.runtime.is_production and (
+    if settings.app_env in ("production", "staging") and (
         not settings.application.secret_key or settings.application.secret_key == "change-me"
     ):
-        raise SettingsError("SECRET_KEY must be configured")
+        raise SettingsError("SECRET_KEY must be configured for production and staging")
     return settings
 
 
