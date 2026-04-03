@@ -10,6 +10,7 @@
 | Изменение `_run_coroutine` / Celery sync entry | Потеря результатов, зависания, двойной event loop | Держать зелёными `tests/test_tasks_run_coroutine.py`; не вызывать coroutine из двух потоков одновременно |
 | Playwright против prod preview + PWA | Белый экран или нестабильная сессия | По умолчанию smoke на Vite dev; для preview использовать `E2E_PREVIEW=1` и осознанно про SW (см. `playwright.config.ts`) |
 | Ослабление `tsc` в тестах | Падение `npm run build` / ложная уверенность | Любые правки `*.test.tsx` должны проходить `tsc --noEmit` |
+| Guard `PipelineRun` vs session tenant | Редко: ложный mismatch при баге гидрации сессии | Проверять, что Celery/async session всегда проставляет `tenant_id`; держать `test_tasks_pipeline_run_tenant_guard.py` зелёным |
 
 ## Рекомендованный чеклист перед релизом
 

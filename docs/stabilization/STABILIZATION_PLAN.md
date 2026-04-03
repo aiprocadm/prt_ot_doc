@@ -1,45 +1,83 @@
-# План стабилизации (поэтапно)
+# План стабилизации (этапы 1–10)
 
-Принципы: не ломать публичные API; сначала тесты и наблюдаемость, затем рефакторинг; атомарные PR.
+Принципы: не ломать публичные API и tenant-модель; **сначала тесты и наблюдаемость**, затем рефакторинг; атомарные PR; спорные решения — в `ARCHITECTURE_DECISIONS_STABILIZATION.md`.
 
-## Фаза 0 — Зафиксировать поведение (1–2 спринта)
+---
 
-- [x] Критичные runtime-дефекты (импорт `func` в `api/v1/router.py`).
-- [x] Тесты на staging-конфигурацию (`tests/test_settings_staging_hardening.py`) с изоляцией env.
-- [x] Контракт `_run_coroutine` (`tests/test_tasks_run_coroutine.py`) до рефакторинга Celery/async bridge.
-- [ ] Инвентаризация эндпоинтов без tenant dependency (ручной чеклист + grep по `create_public_router`).
+## Этап 1 — Аудит (документация)
 
-## Фаза 1 — Конфигурация и CI gates
+- [x] Актуализировать `STABILIZATION_AUDIT.md` (severity, влияние, файлы, риск, смягчение).
+- [x] Актуализировать `STABILIZATION_PLAN.md` (этапы 1–10).
+- Корневые указатели: `STABILIZATION_AUDIT.md`, `STABILIZATION_PLAN.md` в корне репозитория.
 
-- [x] `CONFIGURATION_HARDENING.md`, ужесточение staging для инфраструктурных секретов.
-- [ ] Постепенно включить `ruff check backend/app`: сначала исправить F821/F841/E741 в hot-path модулях, затем E402 в `db/base.py` (или явные noqa с обоснованием).
-- [ ] Расширить `mypy` с `services,schemas` на `api/deps`, `middleware`, `core` — по одному пакету за PR.
+## Этап 2 — Тесты до рефакторинга
 
-## Фаза 2 — Декомпозиция God-files
+- [x] Контракт `_run_coroutine` — `tests/test_tasks_run_coroutine.py`.
+- [x] Tenant guard для `PipelineRun` в фоне — `tests/test_tasks_pipeline_run_tenant_guard.py`.
+- [ ] Расширить: batch/pipeline jobs по аналогии (PK + `tenant_id`).
+- [ ] Интеграция: два tenant + outbox + webhook (HTTP или task-level).
+- [ ] Frontend: logout / stale token (Vitest), не дублируя существующий `errorHandlingAuthRedirect`.
 
-- [ ] `tasks.py`: вынести группы задач в `app/tasks/` (documents, pdf, outbox, webhooks) с re-export из `tasks.py` для Celery autodiscover.
-- [ ] `models/models.py`: только re-exports; новые модели — в доменных модулях (уже частично в `modules/*`).
-- [ ] Крупные routes: выделить `services`/`use_cases` для телеобработчиков, оставить в route тонкий I/O.
+## Этап 3 — Background / reliability
 
-## Фаза 3 — Reliability (jobs, outbox, webhooks)
+- [x] Structured debug-логи для `_run_coroutine` (bridge, duration).
+- [ ] Единая политика retry / terminal failure (документ + код в `outbox` / Celery).
+- [ ] Свести дубли bridge в `runtime_bootstrap` и `tasks` (осторожно).
+- [ ] Убрать или изолировать `asyncio.run` на путях, которые могут вызываться при уже работающем loop (поэтапно).
 
-- [ ] Документ safe rerun для каждой критичной задачи (идемпотентность по ключу / по состоянию БД).
-- [ ] Единая политика retry: terminal exceptions vs transient; связь с DLQ.
-- [ ] Watchdog уже в beat — проверить метрики и алерты.
+## Этап 4 — Tenant safety end-to-end
 
-## Фаза 4 — Frontend predictable enterprise UI
+- [x] Guard: `run.tenant_id` vs `session.info["tenant_id"]` в `_generate_document_for_run`.
+- [ ] Аудит остальных задач с `session.get(..., id)` по tenant-моделям.
+- [ ] Прокидывание `tenant_id` / `correlation_id` в structured logs задач.
 
-- [ ] Единые паттерны: `LoadingScreen` / `ErrorState` / empty (чеклист по страницам).
-- [ ] Опционально: TanStack Query для новых экранов с тяжёлым server state; не мигрировать Zustand глобально в одном PR.
+## Этап 5 — God-files
 
-## Фаза 5 — E2E и регрессии
+- [ ] `app/tasks/` + compatibility re-exports.
+- [ ] Тонкие route handlers для documents, risk, packs, jobs, files, approvals, workspace, webhooks.
+- [ ] `models.py` — только re-exports для новых моделей.
 
-- [x] Каркас Playwright: `frontend/e2e/smoke.spec.ts`, `playwright.config.ts`, скрипты `e2e` / `e2e:install` (по умолчанию dev-сервер при `E2E_START_SERVER=1`; prod preview — `E2E_PREVIEW=1`).
-- [x] Ручной workflow `.github/workflows/e2e-smoke.yml` (GitHub Actions → workflow_dispatch).
-- [ ] Расширить сценарии: список документов, wizard/polling, 403 UI, logout — см. `REGRESSION_TEST_MATRIX.md`.
-- [ ] Опциональный job в основном `ci.yml` после выделенного тестового стенда и секретов (`E2E_USER_*`).
+## Этап 6 — Error handling
 
-## Фаза 6 — Observability
+- [ ] Единый контракт API error (code, type, message, field_errors, correlation_id).
+- [ ] Сузить `except Exception` в бизнес-слое; верхний infra-guard + логирование.
 
-- [ ] Метрики: latency по маршрутам, глубина очереди, длительность PDF, webhooks success/fail.
-- [ ] Запрет логирования сырого PII; маскирование в middleware.
+## Этап 7 — Static checks / CI
+
+- [ ] `mypy` staged (см. `STABILIZATION_AUDIT` R5).
+- [ ] Ruff: начать с `F821` на `backend/app`.
+- [ ] Регрессионные smoke gates (критические пути) — по мере готовности стенда.
+
+## Этап 8 — Integration + E2E
+
+- [ ] Integration: tenant, outbox, webhooks, jobs, permissions, document flow (расширение существующих `tests/integration/`).
+- [x] Playwright каркас: `frontend/e2e/smoke.spec.ts`, workflow `e2e-smoke.yml`.
+- [ ] Playwright: список документов, детали, минимальный generate/polling, forbidden, logout.
+
+## Этап 9 — Frontend stabilization
+
+- [ ] Auth bootstrap, redirect loops, tenant/token coherence — точечно.
+- [ ] Унификация loading/error/empty без смены глобального state-стека.
+- [x] Стратегия server-state без React Query — зафиксирована в ADR.
+
+## Этап 10 — Observability / runbook
+
+- [ ] Метрики: очередь, retries, webhooks, pipeline stages.
+- [ ] Health/readiness, отсутствие PII в логах.
+- [x] Обновлять `RUNBOOK_STABILIZATION.md` при изменении recovery paths.
+
+---
+
+## Легаси-фазы (краткая карта)
+
+Для обратной совместимости с прежними названиями в чатах:
+
+| Старые «фазы 0–6» | Соответствие |
+|-------------------|--------------|
+| Фаза 0 | Этапы 1–2 |
+| Фаза 1 | Этап 7 |
+| Фаза 2 | Этап 5 |
+| Фаза 3 | Этап 3 |
+| Фаза 4 | Этап 9 |
+| Фаза 5 | Этап 8 |
+| Фаза 6 | Этап 10 |

@@ -37,3 +37,28 @@
 **Контекст:** Файл `api/v1/router.py` содержит много inline SQL; отсутствие `func` — дефект времени выполнения.
 
 **Решение:** Минимальный fix — импорт. Долгосрочно — вынести запросы в repository/service слой.
+
+---
+
+## ADR-S05: Server-state на frontend без обязательного React Query
+
+**Контекст:** Платформа использует Zustand и хуки `useAsyncResource` / `usePolling`. Внедрение TanStack Query по всему приложению — риск большого регресса и дублирования источников правды.
+
+**Решение (на период стабилизации):**
+
+- Не внедрять React Query глобально в одном PR.
+- Для новых экранов с тяжёлым server-state допускается **точечное** подключение TanStack Query или выделенный «repository» слой с едиными правилами cache/invalidate.
+- Унифицировать **контракт** состояний: loading / error / empty через существующие `LoadingScreen`, `ErrorState`, `EmptyState` и соглашения в `STABILIZATION_PLAN` этап 9.
+- После `initialize()` auth не допускать бесконечных redirect loop: единая точка `AuthRedirectHandler` + тесты на 401.
+
+**Последствия:** Документировать ручной invalidate после мутаций в stores; периодически пересматривать экраны с наибольшим числом race/stale UI.
+
+---
+
+## ADR-S06: Tenant guard для фоновой загрузки `PipelineRun`
+
+**Контекст:** На SQLite (и в принципе при `session.get` по PK) ORM может вернуть строку другого tenant, если нет физической изоляции схемы.
+
+**Решение:** После `session.get(PipelineRun, run_id)` сравнивать `run.tenant_id` с `session.info["tenant_id"]` (после гидрации сессии). При несовпадении — `ValueError("Pipeline run not found")` + `logger.warning` с `pipeline.run.tenant_scope_mismatch`.
+
+**Последствия:** Легитимный вызов с неверным `tenant_slug` получает то же сообщение, что и при отсутствии run (не раскрываем факт существования чужого run).

@@ -99,11 +99,38 @@ DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.docu
 T = TypeVar("T")
 
 
+def _assert_pipeline_run_matches_session_tenant(session: AsyncSession, run: PipelineRun) -> None:
+    """Defense-in-depth: on SQLite (single schema) ``session.get`` by PK can cross tenant rows."""
+
+    session_tid = str(session.info.get("tenant_id") or "").strip()
+    if not session_tid:
+        return
+    if str(run.tenant_id) == session_tid:
+        return
+    logger.warning(
+        "pipeline.run.tenant_scope_mismatch",
+        extra={
+            "run_id": run.id,
+            "run_tenant_id": str(run.tenant_id),
+            "session_tenant_id": session_tid,
+        },
+    )
+    raise ValueError("Pipeline run not found")
+
+
 def _run_coroutine(coro: Coroutine[Any, Any, T]) -> T:
+    started = perf_counter()
     try:
         asyncio.get_running_loop()
     except RuntimeError:
-        return asyncio.run(coro)
+        logger.debug("tasks._run_coroutine", extra={"bridge": "asyncio.run"})
+        try:
+            return asyncio.run(coro)
+        finally:
+            logger.debug(
+                "tasks._run_coroutine.done",
+                extra={"bridge": "asyncio.run", "seconds": round(perf_counter() - started, 4)},
+            )
 
     result_holder: dict[str, T] = {}
     error_holder: list[BaseException] = []
@@ -114,9 +141,14 @@ def _run_coroutine(coro: Coroutine[Any, Any, T]) -> T:
         except BaseException as exc:  # pragma: no cover - defensive branch
             error_holder.append(exc)
 
+    logger.debug("tasks._run_coroutine", extra={"bridge": "thread_asyncio.run"})
     thread = threading.Thread(target=runner, daemon=True)
     thread.start()
     thread.join()
+    logger.debug(
+        "tasks._run_coroutine.done",
+        extra={"bridge": "thread_asyncio.run", "seconds": round(perf_counter() - started, 4)},
+    )
     if error_holder:
         raise error_holder[0]
     return result_holder["value"]
@@ -162,6 +194,7 @@ async def _generate_document_for_run(run_id: str, tenant_slug: str) -> tuple[str
                 run = await session.get(PipelineRun, run_id)
                 if run is None:
                     raise ValueError("Pipeline run not found")
+                _assert_pipeline_run_matches_session_tenant(session, run)
 
                 metadata = dict(run.result_metadata or {})
                 existing_document_id = metadata.get("document_id")

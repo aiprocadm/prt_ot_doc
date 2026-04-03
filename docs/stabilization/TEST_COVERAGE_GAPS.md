@@ -7,7 +7,7 @@
 | Tenant middleware | `test_middleware_tenant.py`, auth header tests | Автоматический тест на каждый новый публичный префикс |
 | Cross-tenant API | Частично (S3 keys) | HTTP integration: запрос ресурса чужого `tenant_id` → 404/403 |
 | Outbox / webhooks | Есть частично в tests | Дедуп webhook, poison message, terminal retry |
-| Pipelines / Celery | Unit частично; контракт `_run_coroutine` в `test_tasks_run_coroutine.py` | Идемпотентный rerun с фикстурой БД; интеграция «два tenant» для фоновых задач |
+| Pipelines / Celery | Unit частично; `_run_coroutine` — `test_tasks_run_coroutine.py`; tenant guard run — `test_tasks_pipeline_run_tenant_guard.py` | Те же guard’ы для batch/job путей; идемпотентный rerun; интеграция «два tenant» для outbox/webhook |
 | Migrations | Alembic heads | Тест «upgrade head» на чистой БД в CI (опционально job) |
 
 ## Frontend

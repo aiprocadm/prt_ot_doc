@@ -17,6 +17,7 @@
 4. **Зависшие PDF / pipeline**
    - Celery worker logs, очередь `pdf` / `default`.
    - Задача `pipeline.watchdog` (beat) — проверить расписание в `celery_app.py`.
+   - Сообщение `Pipeline run not found` при валидном `run_id`: искать `pipeline.run.tenant_scope_mismatch` — неверный `tenant_slug` в задаче или баг постановки в очередь; не ретраить без исправления аргументов.
 
 5. **Webhooks / outbox**
    - Таблица outbox: статусы, `attempts`, `next_retry_at`.
