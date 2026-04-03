@@ -62,3 +62,5 @@
 **Решение:** После `session.get(PipelineRun, run_id)` сравнивать `run.tenant_id` с `session.info["tenant_id"]` (после гидрации сессии). При несовпадении — `ValueError("Pipeline run not found")` + `logger.warning` с `pipeline.run.tenant_scope_mismatch`.
 
 **Последствия:** Легитимный вызов с неверным `tenant_slug` получает то же сообщение, что и при отсутствии run (не раскрываем факт существования чужого run).
+
+**Расширение:** Общая функция `_assert_tenant_row_matches_session` в `app/tasks.py` + `_assert_batch_item_scope` (включая проверку `item.batch_id == batch.id`). Те же проверки для batch/document job/PDF/EDO simulation и связанных `session.get` по PK на фоновых путях.

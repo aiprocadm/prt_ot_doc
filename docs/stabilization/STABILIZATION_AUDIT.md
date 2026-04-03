@@ -53,7 +53,7 @@
 | ID | Severity | Влияние | Файлы | Почему риск | Безопасное исправление |
 |----|----------|---------|-------|-------------|-------------------------|
 | R4.1 | **high** (до guard) | tenancy, security | `tasks.py` — `_generate_document_for_run` | PK `session.get` на SQLite видит чужой tenant | **Исправлено:** `_assert_pipeline_run_matches_session_tenant`; тесты `test_tasks_pipeline_run_tenant_guard.py` |
-| R4.2 | high | tenancy | outbox, webhooks, exports, batch tasks | Неверный `tenant_slug` в job | Аудит каждого entrypoint; интеграционные тесты два tenant |
+| R4.2 | high | tenancy | outbox, webhooks, exports, batch tasks | Неверный `tenant_slug` в job | **Частично:** guards в `tasks.py` для batch, PDF run/file, `DocumentJob`/`DocumentVersion`, EDO message; outbox/webhooks/export — отдельный аудит |
 | R4.3 | medium | observability | workers | Нет tenant в логах | Прокидывать `tenant_slug`/`tenant_id` в `extra` при старте задачи |
 
 ---
@@ -103,7 +103,7 @@
 - **Документ generation:** `test_documents_generate.py`, API-тесты
 - **401 / redirect (frontend):** `errorHandlingAuthRedirect.test.ts`
 - **Celery bridge:** `test_tasks_run_coroutine.py`
-- **Pipeline run tenant guard (фон):** `test_tasks_pipeline_run_tenant_guard.py`
+- **Pipeline run + batch item tenant guard (фон):** `test_tasks_pipeline_run_tenant_guard.py`
 
 ---
 

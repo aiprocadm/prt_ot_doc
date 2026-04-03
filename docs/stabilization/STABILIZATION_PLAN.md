@@ -14,7 +14,9 @@
 
 - [x] Контракт `_run_coroutine` — `tests/test_tasks_run_coroutine.py`.
 - [x] Tenant guard для `PipelineRun` в фоне — `tests/test_tasks_pipeline_run_tenant_guard.py`.
-- [ ] Расширить: batch/pipeline jobs по аналогии (PK + `tenant_id`).
+- [x] Batch item / batch run + `generate_document_task` failure path: PK + `tenant_id` (`_assert_batch_item_scope`, guard в `_mark_failed`).
+- [x] `apply_headers_job` (`DocumentJob`, `DocumentVersion`), `convert_pdf_job` (`PdfConversionRun`, `File`), `edo_status_simulation_job` (`EdoMessage`), inbound EDO webhook (`DocumentVersion` по `envelope.object_id`).
+- [ ] Остальные модули вне `tasks.py` с `session.get` по tenant-моделям — точечный аудит.
 - [ ] Интеграция: два tenant + outbox + webhook (HTTP или task-level).
 - [ ] Frontend: logout / stale token (Vitest), не дублируя существующий `errorHandlingAuthRedirect`.
 

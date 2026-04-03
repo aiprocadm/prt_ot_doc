@@ -99,23 +99,79 @@ DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.docu
 T = TypeVar("T")
 
 
-def _assert_pipeline_run_matches_session_tenant(session: AsyncSession, run: PipelineRun) -> None:
-    """Defense-in-depth: on SQLite (single schema) ``session.get`` by PK can cross tenant rows."""
+def _assert_tenant_row_matches_session(
+    session: AsyncSession,
+    row: object | None,
+    *,
+    mismatch_event: str,
+    not_found_message: str,
+) -> None:
+    """Defense-in-depth: on SQLite (single schema) ``session.get`` by PK can return another tenant's row."""
 
+    if row is None:
+        return
     session_tid = str(session.info.get("tenant_id") or "").strip()
     if not session_tid:
         return
-    if str(run.tenant_id) == session_tid:
+    row_tid = getattr(row, "tenant_id", None)
+    if row_tid is None:
+        return
+    if str(row_tid) == session_tid:
         return
     logger.warning(
-        "pipeline.run.tenant_scope_mismatch",
+        mismatch_event,
         extra={
-            "run_id": run.id,
-            "run_tenant_id": str(run.tenant_id),
+            "model": type(row).__name__,
+            "row_id": getattr(row, "id", None),
+            "row_tenant_id": str(row_tid),
             "session_tenant_id": session_tid,
         },
     )
-    raise ValueError("Pipeline run not found")
+    raise ValueError(not_found_message)
+
+
+def _assert_pipeline_run_matches_session_tenant(session: AsyncSession, run: PipelineRun) -> None:
+    _assert_tenant_row_matches_session(
+        session,
+        run,
+        mismatch_event="pipeline.run.tenant_scope_mismatch",
+        not_found_message="Pipeline run not found",
+    )
+
+
+def _assert_batch_item_scope(
+    session: AsyncSession,
+    batch: DocumentBatchRun | None,
+    item: DocumentBatchItem | None,
+    *,
+    batch_id: str,
+    item_id: str,
+) -> None:
+    if batch is None or item is None:
+        raise ValueError("Batch item not found")
+    _assert_tenant_row_matches_session(
+        session,
+        batch,
+        mismatch_event="document.batch_run.tenant_scope_mismatch",
+        not_found_message="Batch item not found",
+    )
+    _assert_tenant_row_matches_session(
+        session,
+        item,
+        mismatch_event="document.batch_item.tenant_scope_mismatch",
+        not_found_message="Batch item not found",
+    )
+    if str(item.batch_id) != str(batch.id):
+        logger.warning(
+            "document.batch_item.parent_mismatch",
+            extra={
+                "batch_id": batch_id,
+                "item_id": item_id,
+                "item_batch_id": item.batch_id,
+                "batch_row_id": batch.id,
+            },
+        )
+        raise ValueError("Batch item not found")
 
 
 def _run_coroutine(coro: Coroutine[Any, Any, T]) -> T:
@@ -212,28 +268,58 @@ async def _generate_document_for_run(run_id: str, tenant_slug: str) -> tuple[str
                 template_version = await session.get(TemplateVersion, run.template_version_id)
                 if template_version is None:
                     raise ValueError("Template version not found")
+                _assert_tenant_row_matches_session(
+                    session,
+                    template_version,
+                    mismatch_event="template_version.tenant_scope_mismatch",
+                    not_found_message="Template version not found",
+                )
                 if not template_version.payload_key:
                     raise ValueError("Template version payload is missing")
 
                 template = await session.get(Template, run.template_id)
                 if template is None:
                     raise ValueError("Template not found")
+                _assert_tenant_row_matches_session(
+                    session,
+                    template,
+                    mismatch_event="template.tenant_scope_mismatch",
+                    not_found_message="Template not found",
+                )
 
                 company = await session.get(Company, company_id)
                 if company is None:
                     raise ValueError("Company not found")
+                _assert_tenant_row_matches_session(
+                    session,
+                    company,
+                    mismatch_event="company.tenant_scope_mismatch",
+                    not_found_message="Company not found",
+                )
 
                 person = None
                 if person_id is not None:
                     person = await session.get(Person, person_id)
                     if person is None:
                         raise ValueError("Person not found")
+                    _assert_tenant_row_matches_session(
+                        session,
+                        person,
+                        mismatch_event="person.tenant_scope_mismatch",
+                        not_found_message="Person not found",
+                    )
                     if person.company_id != company.id:
                         raise ValueError("Person does not belong to company")
 
                 user = await session.get(User, initiated_by)
                 if user is None:
                     raise ValueError("Initiating user not found")
+                _assert_tenant_row_matches_session(
+                    session,
+                    user,
+                    mismatch_event="user.tenant_scope_mismatch",
+                    not_found_message="Initiating user not found",
+                )
 
                 run.status = PipelineRunStatus.RUNNING
                 run.started_at = datetime.now(tz=timezone.utc)
@@ -790,6 +876,7 @@ def generate_document_task(run_id: str, *, tenant_slug: str) -> str:
                 async with session_scope(tenant=tenant_slug) as session:
                     run = await session.get(PipelineRun, run_id)
                     if run:
+                        _assert_pipeline_run_matches_session_tenant(session, run)
                         run.status = PipelineRunStatus.ERROR
                         run.error = str(exception)[:255]
                         run.finished_at = datetime.now(tz=timezone.utc)
@@ -840,8 +927,7 @@ def generate_document_batch_item_task(batch_id: str, item_id: str, *, tenant_slu
             async with session_scope(tenant=tenant_slug) as session:
                 batch = await session.get(DocumentBatchRun, batch_id)
                 item = await session.get(DocumentBatchItem, item_id)
-                if batch is None or item is None:
-                    raise ValueError("Batch item not found")
+                _assert_batch_item_scope(session, batch, item, batch_id=batch_id, item_id=item_id)
                 if item.status == DocumentBatchItemStatus.SUCCEEDED:
                     return str(item.document_id or "")
 
@@ -862,8 +948,7 @@ def generate_document_batch_item_task(batch_id: str, item_id: str, *, tenant_slu
             async with session_scope(tenant=tenant_slug) as session:
                 batch = await session.get(DocumentBatchRun, batch_id)
                 item = await session.get(DocumentBatchItem, item_id)
-                if batch is None or item is None:
-                    raise ValueError("Batch item not found")
+                _assert_batch_item_scope(session, batch, item, batch_id=batch_id, item_id=item_id)
 
                 item.status = DocumentBatchItemStatus.SUCCEEDED
                 item.finished_at = datetime.now(tz=timezone.utc)
@@ -915,6 +1000,10 @@ async def _mark_batch_item_failed(
         batch = await session.get(DocumentBatchRun, batch_id)
         item = await session.get(DocumentBatchItem, item_id)
         if batch is None or item is None:
+            return
+        try:
+            _assert_batch_item_scope(session, batch, item, batch_id=batch_id, item_id=item_id)
+        except ValueError:
             return
         item.status = DocumentBatchItemStatus.FAILED
         item.error = error[:255]
@@ -1346,6 +1435,16 @@ async def _process_inbound_webhook(*, source: str, tenant_slug: str, payload: di
                 changed += 1
                 if envelope.object_type == "document_version":
                     version = await session.get(DocumentVersion, envelope.object_id)
+                    if version is not None:
+                        try:
+                            _assert_tenant_row_matches_session(
+                                session,
+                                version,
+                                mismatch_event="document_version.tenant_scope_mismatch",
+                                not_found_message="Document version not found",
+                            )
+                        except ValueError:
+                            version = None
                     if version is not None and target_status in {EdoEnvelopeStatus.SIGNED, EdoEnvelopeStatus.DELIVERED}:
                         version.status = DocumentVersionStatus.PUBLISHED
         if message is not None:
@@ -1414,6 +1513,12 @@ def apply_headers_job(*, job_id: str, tenant_slug: str) -> dict[str, str]:
                 job = await session.get(DocumentJob, job_id)
                 if job is None:
                     raise ValueError("Job not found")
+                _assert_tenant_row_matches_session(
+                    session,
+                    job,
+                    mismatch_event="document_job.tenant_scope_mismatch",
+                    not_found_message="Job not found",
+                )
                 step = (
                     await session.execute(
                         select(DocumentJobStep).where(
@@ -1426,6 +1531,12 @@ def apply_headers_job(*, job_id: str, tenant_slug: str) -> dict[str, str]:
                 version = await session.get(DocumentVersion, payload.get("document_version_id"))
                 if version is None:
                     raise ValueError("Document version not found")
+                _assert_tenant_row_matches_session(
+                    session,
+                    version,
+                    mismatch_event="document_version.tenant_scope_mismatch",
+                    not_found_message="Document version not found",
+                )
                 preset = await get_preset_by_code(
                     session, tenant_id=str(job.tenant_id), code=str(payload.get("preset_code"))
                 )
@@ -1522,6 +1633,15 @@ def convert_pdf_job(*, tenant_id: str, input_file_id: str, pdf_run_id: str, opti
                 run = await session.get(PdfConversionRun, pdf_run_id)
                 if run is None:
                     return {"status": "missing_run"}
+                try:
+                    _assert_tenant_row_matches_session(
+                        session,
+                        run,
+                        mismatch_event="pdf_conversion_run.tenant_scope_mismatch",
+                        not_found_message="missing_run",
+                    )
+                except ValueError:
+                    return {"status": "missing_run"}
                 run.status = PdfRunStatus.RUNNING.value
                 run.started_at = datetime.now(timezone.utc)
                 await session.flush()
@@ -1533,6 +1653,21 @@ def convert_pdf_job(*, tenant_id: str, input_file_id: str, pdf_run_id: str, opti
                         source = await session.get(File, input_file_id)
                         run = await session.get(PdfConversionRun, pdf_run_id)
                         if source is None or run is None:
+                            return {"status": "missing_input"}
+                        try:
+                            _assert_tenant_row_matches_session(
+                                session,
+                                run,
+                                mismatch_event="pdf_conversion_run.tenant_scope_mismatch",
+                                not_found_message="missing_input",
+                            )
+                            _assert_tenant_row_matches_session(
+                                session,
+                                source,
+                                mismatch_event="file.tenant_scope_mismatch",
+                                not_found_message="missing_input",
+                            )
+                        except ValueError:
                             return {"status": "missing_input"}
 
                         source_bytes = load_source_bytes(source)
@@ -1581,12 +1716,22 @@ def convert_pdf_job(*, tenant_id: str, input_file_id: str, pdf_run_id: str, opti
             async with session_scope(tenant=tenant_id) as session:
                 run = await session.get(PdfConversionRun, pdf_run_id)
                 if run is not None:
-                    run.attempts = attempts
-                    run.status = PdfRunStatus.FAILED.value
-                    run.ended_at = datetime.now(timezone.utc)
-                    run.error_code = map_failure(last_error) if last_error else "PDF_CONVERSION_FAILED"
-                    run.error_payload = {"error": str(last_error)[:500]} if last_error else {}
-                    await session.flush()
+                    try:
+                        _assert_tenant_row_matches_session(
+                            session,
+                            run,
+                            mismatch_event="pdf_conversion_run.tenant_scope_mismatch",
+                            not_found_message="missing_run",
+                        )
+                    except ValueError:
+                        pass
+                    else:
+                        run.attempts = attempts
+                        run.status = PdfRunStatus.FAILED.value
+                        run.ended_at = datetime.now(timezone.utc)
+                        run.error_code = map_failure(last_error) if last_error else "PDF_CONVERSION_FAILED"
+                        run.error_payload = {"error": str(last_error)[:500]} if last_error else {}
+                        await session.flush()
             return {"status": "failed", "attempts": attempts}
 
     return _run_coroutine(_run())
@@ -1699,6 +1844,15 @@ def edo_status_simulation_job(*, message_id: str, tenant_id: str, status: str) -
         async with session_scope(tenant=tenant_id) as session:
             message = await session.get(EdoMessage, message_id)
             if message is None:
+                return {"status": "missing", "message_id": message_id}
+            try:
+                _assert_tenant_row_matches_session(
+                    session,
+                    message,
+                    mismatch_event="edo_message.tenant_scope_mismatch",
+                    not_found_message="missing",
+                )
+            except ValueError:
                 return {"status": "missing", "message_id": message_id}
             message.status = EdoStatus(status)
             session.add(
