@@ -1,12 +1,13 @@
 """Data access helpers for templates and document jobs."""
 from __future__ import annotations
 
+from uuid import UUID
+
 from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from uuid import UUID
 
 from app.core.rbac_abac import actor_from_claims, apply_abac_filters
 from app.core.tenant import get_current_tenant

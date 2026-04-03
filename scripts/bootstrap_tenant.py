@@ -8,7 +8,6 @@ from pathlib import Path
 from app.db.session import AsyncSessionLocal
 from app.services.tenants.bootstrap import BootstrapTenantService
 
-
 ROOT = Path(__file__).resolve().parents[1]
 STARTER_PACK_ROOT = ROOT / "seed" / "tenant_starter_packs" / "v1"
 

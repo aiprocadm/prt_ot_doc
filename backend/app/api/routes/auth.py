@@ -15,9 +15,9 @@ from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
+from app.core.config import get_settings
 from app.core.rate_limit import ip_subject_key, limiter, login_per_identity
 from app.core.rbac_abac import ROLE_PERMISSIONS
-from app.core.config import get_settings
 from app.core.security import (
     AccessContext,
     decode_token,

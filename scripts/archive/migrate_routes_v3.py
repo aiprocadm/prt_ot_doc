@@ -2,10 +2,7 @@
 """Proper route migration using AST parsing."""
 
 import ast
-import os
 from pathlib import Path
-from typing import List, Tuple
-
 
 ROUTES_DIR = Path("/workspaces/prt_ot_doc/backend/app/api/routes")
 ALREADY_MIGRATED = {"tenants.py", "health.py", "ws_stub.py"}

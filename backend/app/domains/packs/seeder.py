@@ -18,10 +18,10 @@ from app.domains.packs.definitions import (
 from app.models.models import (
     DocumentPack,
     DocumentPackItem,
-    Tenant,
     Template,
     TemplateVersion,
     TemplateVersionStatus,
+    Tenant,
 )
 from app.repository import create_template
 from app.schemas.template import TemplateCreate, TemplateVersionMetadata

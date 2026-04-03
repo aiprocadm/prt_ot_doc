@@ -7,7 +7,6 @@ from pathlib import Path
 
 import uvicorn
 
-
 ROOT_DIR = Path(__file__).resolve().parents[1]
 BACKEND_DIR = ROOT_DIR / "backend"
 SQLITE_URL = f"sqlite+aiosqlite:///{ROOT_DIR / 'dev.db'}"
@@ -33,8 +32,8 @@ def _configure_env() -> None:
 
 
 def _prepare_metadata() -> None:
-    from app.core.runtime_bootstrap import prepare_runtime
     from app.core.config import bootstrap
+    from app.core.runtime_bootstrap import prepare_runtime
 
     prepare_runtime(bootstrap("api"))
 

@@ -1,10 +1,8 @@
 #!/usr/bin/env python
 """Advanced route migration - actually applies changes to files."""
 
-import os
 import re
 from pathlib import Path
-
 
 ROUTES_DIR = Path("/workspaces/prt_ot_doc/backend/app/api/routes")
 ALREADY_MIGRATED = {"tenants.py", "health.py", "ws_stub.py"}
