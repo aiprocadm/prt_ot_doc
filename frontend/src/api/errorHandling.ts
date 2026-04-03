@@ -2,7 +2,7 @@ import { toast } from "sonner";
 
 import type { ApiError } from "@/types/dto/common";
 import { tokenStorage } from "@/api/tokenStorage";
-import { setReturnTo } from "@/utils/returnTo";
+import { requestAuthRedirect } from "@/router/authRedirect";
 import { sessionStorageSetItem } from "@/utils/browserStorage";
 
 const AUTH_PATHS = ["/auth/login", "/auth/refresh", "/auth/logout"];
@@ -18,15 +18,6 @@ export { BILLING_ALERT_STORAGE_KEY };
 const isAuthPath = (url?: string) => {
   if (!url) return false;
   return AUTH_PATHS.some((path) => url.includes(path));
-};
-
-const redirectToLogin = () => {
-  if (typeof window === "undefined") return;
-  const current = `${window.location.pathname}${window.location.search}`;
-  if (!window.location.pathname.startsWith("/auth")) {
-    setReturnTo(current);
-  }
-  window.location.assign("/auth/login");
 };
 
 export const handleApiError = (error: ApiError, requestUrl?: string) => {
@@ -56,7 +47,7 @@ export const handleApiError = (error: ApiError, requestUrl?: string) => {
 
   if (status === 401 && !isAuthPath(requestUrl)) {
     tokenStorage.clear();
-    redirectToLogin();
+    requestAuthRedirect("unauthorized");
     return;
   }
 

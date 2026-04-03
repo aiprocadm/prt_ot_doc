@@ -4,6 +4,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthLayout } from "@/layouts/AuthLayout";
 import { MainLayout } from "@/layouts/MainLayout";
 import { AccessDeniedPage } from "@/pages/access/AccessDeniedPage";
+import { AuthRedirectHandler } from "@/router/AuthRedirectHandler";
 import { buildProtectedRouteGroups } from "@/router/routeGroups";
 import { LoginPage } from "@/router/pageRegistry";
 import { ProtectedRoute } from "@/router/ProtectedRoute";
@@ -25,6 +26,7 @@ const AppRouter = () => {
 
   return (
     <BrowserRouter>
+      <AuthRedirectHandler />
       <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Загрузка...</div>}>
         <Routes>
           <Route path="/auth" element={<AuthLayout />}>

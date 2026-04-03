@@ -53,6 +53,18 @@ const hydratePermissions = async (user: UserDto | null): Promise<UserDto | null>
     return user;
   }
 };
+
+const loadProfileWithPermissions = async (): Promise<{ profile: UserDto | null; profileError: ApiError | null }> => {
+  let profile: UserDto | null = null;
+  let profileError: ApiError | null = null;
+  try {
+    const { data: profileResponse } = await apiClient.get<UserDto>("/auth/me");
+    profile = await hydratePermissions(profileResponse);
+  } catch (error) {
+    profileError = (error as ApiError) ?? null;
+  }
+  return { profile, profileError };
+};
 export const useAuthStore = createWithEqualityFn<AuthState>()(
   immer((set, get) => ({
     user: null,
@@ -66,14 +78,7 @@ export const useAuthStore = createWithEqualityFn<AuthState>()(
       try {
         const data = await requestTokenRefresh();
         persistTokens(data);
-        let profile: UserDto | null = null;
-        let profileError: ApiError | null = null;
-        try {
-          const { data: profileResponse } = await apiClient.get<UserDto>("/auth/me");
-          profile = await hydratePermissions(profileResponse);
-        } catch (error) {
-          profileError = (error as ApiError) ?? null;
-        }
+        const { profile, profileError } = await loadProfileWithPermissions();
         set((state) => {
           state.user = profile;
           state.isAuthenticated = true;
@@ -103,14 +108,7 @@ export const useAuthStore = createWithEqualityFn<AuthState>()(
           password: payload.password
         });
         persistTokens(data);
-        let profile: UserDto | null = null;
-        let profileError: ApiError | null = null;
-        try {
-          const { data: profileData } = await apiClient.get<UserDto>("/auth/me");
-          profile = await hydratePermissions(profileData);
-        } catch (error) {
-          profileError = (error as ApiError) ?? null;
-        }
+        const { profile, profileError } = await loadProfileWithPermissions();
         set((state) => {
           state.user = profile;
           state.isAuthenticated = true;

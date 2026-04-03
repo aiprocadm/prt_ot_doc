@@ -3,6 +3,8 @@ import { Route } from "react-router-dom";
 
 import { PERMISSIONS, type Permission } from "@/permissions/permissions";
 import { ProtectedRoute } from "@/router/ProtectedRoute";
+import { documentCreateRoutes, documentReadRoutes } from "@/router/features/documentRoutes";
+import { searchAndFilesRoutes } from "@/router/features/searchAndFilesRoutes";
 import {
   ActivitiesPage,
   AdminLayoutPresetsPage,
@@ -10,7 +12,6 @@ import {
   ApprovalRoutesPage,
   ApprovalsInboxPage,
   ApprovalsOutboxPage,
-  ArchiveSearchPage,
   AuditPage,
   AuditPrepPage,
   BillingPage,
@@ -28,12 +29,9 @@ import {
   CorrectiveActionsPage,
   CrmFinancePage,
   DashboardPage,
-  DocumentsPage,
-  DocumentsWizardPage,
   EdoPage,
   ExecutiveDashboardPage,
   ExportsPage,
-  FilesPage,
   FindingsPage,
   FireInspectionsPage,
   FireSafetyPage,
@@ -65,7 +63,6 @@ import {
   ReportsPage,
   RiskPage,
   SafetyDashboardPage,
-  SearchPage,
   SettingsPage,
   SignaturesPage,
   TasksPage,
@@ -107,40 +104,15 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
     { permission: PERMISSIONS.PACK_VIEW, routes: [<Route key="/packs" path="/packs" element={<PacksPage />} />] },
     {
       permission: PERMISSIONS.DOCUMENT_VIEW,
-      routes: [
-        <Route key="/documents" path="/documents" element={<DocumentsPage />} />,
-        <Route key="/documents/branding" path="/documents/branding" element={<BrandingSettingsPage />} />,
-        <Route key="/approvals/inbox" path="/approvals/inbox" element={<ApprovalsInboxPage />} />,
-        <Route key="/approvals/outbox" path="/approvals/outbox" element={<ApprovalsOutboxPage />} />,
-        <Route key="/approval-routes" path="/approval-routes" element={<ApprovalRoutesPage />} />,
-        <Route key="/signatures" path="/signatures" element={<SignaturesPage />} />,
-        <Route key="/edo" path="/edo" element={<EdoPage />} />,
-        <Route key="/pipelines/profiles" path="/pipelines/profiles" element={<PipelineBuilderPage />} />,
-        <Route key="/pipelines/runs" path="/pipelines/runs" element={<PipelineRunsPage />} />,
-        <Route key="/pipelines/runs/:id" path="/pipelines/runs/:id" element={<PipelineRunDetailsPage />} />,
-        <Route key="/jobs" path="/jobs" element={<PipelineRunsPage />} />,
-        <Route key="/jobs/:id" path="/jobs/:id" element={<PipelineRunDetailsPage />} />,
-        <Route key="/package-profiles" path="/package-profiles" element={<PackageProfilesPage />} />,
-        <Route key="/package-presets" path="/package-presets" element={<PackagePresetsPage />} />,
-        <Route key="/generate-pack/:presetId" path="/generate-pack/:presetId" element={<GeneratePackWizardPage />} />,
-        <Route key="/pack-runs/:id" path="/pack-runs/:id" element={<PackRunDetailsPage />} />
-      ]
+      routes: documentReadRoutes()
     },
     {
       permission: PERMISSIONS.DOCUMENT_CREATE,
-      routes: [
-        <Route key="/documents/wizard" path="/documents/wizard" element={<DocumentsWizardPage />} />,
-        <Route key="/generation" path="/generation" element={<DocumentsWizardPage />} />
-      ]
+      routes: documentCreateRoutes()
     },
     {
       permission: PERMISSIONS.FILE_VIEW,
-      routes: [
-        <Route key="/files" path="/files" element={<FilesPage />} />,
-        <Route key="/archive" path="/archive" element={<ArchiveSearchPage />} />,
-        <Route key="/archive/search" path="/archive/search" element={<ArchiveSearchPage />} />,
-        <Route key="/search" path="/search" element={<SearchPage />} />
-      ]
+      routes: searchAndFilesRoutes()
     },
     {
       permission: PERMISSIONS.TASK_VIEW,
