@@ -12,8 +12,18 @@ from app.core.config import DEV_PRIVATE_KEY, DEV_PUBLIC_KEY, Settings, SettingsE
 
 @pytest.fixture(autouse=True)
 def _isolate_app_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    """Constructor kwargs must not be overridden by ambient APP_ENV in dev shells."""
-    monkeypatch.delenv("APP_ENV", raising=False)
+    """Constructor kwargs must not be overridden by ambient env in dev shells."""
+    for key in (
+        "APP_ENV",
+        "SECRET_KEY",
+        "S3_ACCESS_KEY",
+        "S3_SECRET_KEY",
+        "S3_BACKEND",
+        "POSTGRES_PASSWORD",
+        "PRIVATE_KEY_PEM",
+        "PUBLIC_KEY_PEM",
+    ):
+        monkeypatch.delenv(key, raising=False)
     config.reset_settings_cache()
     yield
     config.reset_settings_cache()
