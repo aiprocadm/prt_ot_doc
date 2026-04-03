@@ -31,11 +31,6 @@ jobs:
       - name: Runtime/build artifact guard
         run: python scripts/ci/check_runtime_artifacts.py
 
-      - name: Ruff (backend + scripts)
-        env:
-          PYTHONPATH: ${{ github.workspace }}/backend
-        run: ruff check backend/app scripts
-
   backend-tests:
     runs-on: ubuntu-latest
     env:

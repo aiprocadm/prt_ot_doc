@@ -599,9 +599,9 @@ class Settings(BaseSettings):
             self.jwt_public_key_pem = public_key
             return self
 
-        if self.app_env in ("production", "staging"):
+        if self.app_env == "production":
             raise SettingsError(
-                "PRIVATE_KEY_PEM and PUBLIC_KEY_PEM must be configured in production and staging"
+                "PRIVATE_KEY_PEM and PUBLIC_KEY_PEM must be configured in production"
             )
 
         logger.warning(
