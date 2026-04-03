@@ -63,4 +63,6 @@
 
 **Последствия:** Легитимный вызов с неверным `tenant_slug` получает то же сообщение, что и при отсутствии run (не раскрываем факт существования чужого run).
 
-**Расширение:** Общая функция `_assert_tenant_row_matches_session` в `app/tasks.py` + `_assert_batch_item_scope` (включая проверку `item.batch_id == batch.id`). Те же проверки для batch/document job/PDF/EDO simulation и связанных `session.get` по PK на фоновых путях.
+**Расширение:** Общая функция `assert_tenant_row_matches_session` в `app/db/tenant_row_guard.py` (в `tasks` импортируется как `_assert_tenant_row_matches_session`) + `_assert_batch_item_scope` в `tasks.py`. Те же проверки для batch/document job/PDF/EDO simulation, `celery/tasks/audit_export_job.py`, оркестраторов пайплайнов и связанных `session.get` по PK на фоновых путях.
+
+**Чеклист HTTP hot-path:** см. `docs/stabilization/TENANT_ROW_GET_CHECKLIST.md` (pattern «id из path/body → `session.get` без tenant в SQL») и обёртку `enforce_row_belongs_to_tenant` в `app/api/tenant_row_http.py`.

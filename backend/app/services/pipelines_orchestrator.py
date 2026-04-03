@@ -12,6 +12,7 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.tenant_row_guard import assert_tenant_row_matches_session
 from app.models.job_engine import (
     DocumentArtifact,
     DocumentJob,
@@ -25,6 +26,7 @@ from app.models.job_engine import (
 from app.models.models import Tenant, TenantQuota
 from app.modules.files.models import FileEntityType, FileLinkRole
 from app.modules.files.service import FileService
+from app.modules.pipelines.document_core_profile import DOCUMENT_CORE_PIPELINE_STEPS
 from app.modules.pipelines.graph import safe_eval_condition
 from app.modules.pipelines.models import PipelinePackageProfile, PipelineProfile
 from app.services.audit import AuditService, field_level_diff
@@ -35,18 +37,10 @@ from app.services.pipeline_step_handlers import (
     edo_step_handler,
     index_projection_step_handler,
     signature_step_handler,
+    validate_template_step_handler,
 )
 
-DEFAULT_STEPS = [
-    "render_docx",
-    "apply_headers",
-    "replace",
-    "convert_pdf",
-    "build_zip",
-    "sign",
-    "send_edo",
-    "archive",
-]
+DEFAULT_STEPS = list(DOCUMENT_CORE_PIPELINE_STEPS)
 INTERNAL_PROJECTION_STEPS = {"sign", "verify_signature", "index_file_content"}
 RETRYABLE = {"convert_pdf": 2, "send_edo": 2}
 STEP_ALIASES = {
@@ -158,6 +152,12 @@ class PipelineOrchestrator:
         job = await self.session.get(DocumentJob, job_id)
         if not job:
             raise ValueError("job_not_found")
+        assert_tenant_row_matches_session(
+            self.session,
+            job,
+            mismatch_event="pipelines_orchestrator.start_job.tenant_scope_mismatch",
+            not_found_message="job_not_found",
+        )
         prev = str(job.status)
         limit = await self._tenant_concurrency_limit(job)
         if limit is not None:
@@ -180,6 +180,12 @@ class PipelineOrchestrator:
         job = await self.session.get(DocumentJob, job_id)
         if not job:
             raise ValueError("job_not_found")
+        assert_tenant_row_matches_session(
+            self.session,
+            job,
+            mismatch_event="pipelines_orchestrator.continue_job.tenant_scope_mismatch",
+            not_found_message="job_not_found",
+        )
         if str(job.status) == DocumentJobStatus.CANCELED.value:
             queued_steps = (
                 (
@@ -217,6 +223,12 @@ class PipelineOrchestrator:
         job = await self.session.get(DocumentJob, job_id)
         if not job:
             raise ValueError("job_not_found")
+        assert_tenant_row_matches_session(
+            self.session,
+            job,
+            mismatch_event="pipelines_orchestrator.cancel_job.tenant_scope_mismatch",
+            not_found_message="job_not_found",
+        )
         job.status = DocumentJobStatus.CANCELED.value
         job.ended_at = datetime.now(timezone.utc)
         await self._release_tenant_slot(job)
@@ -247,6 +259,12 @@ class PipelineOrchestrator:
         job = await self.session.get(DocumentJob, job_id)
         if not job:
             raise ValueError("job_not_found")
+        assert_tenant_row_matches_session(
+            self.session,
+            job,
+            mismatch_event="pipelines_orchestrator.retry_job.tenant_scope_mismatch",
+            not_found_message="job_not_found",
+        )
         steps = (
             (
                 await self.session.execute(
@@ -293,11 +311,25 @@ class PipelineOrchestrator:
 
     async def run_step(self, *, job_id: str, step_id: str) -> DocumentJobStep:
         step = await self.session.get(DocumentJobStep, step_id)
-        if not step or step.job_id != job_id:
+        if not step:
+            raise ValueError("step_not_found")
+        assert_tenant_row_matches_session(
+            self.session,
+            step,
+            mismatch_event="pipelines_orchestrator.run_step.step_tenant_scope_mismatch",
+            not_found_message="step_not_found",
+        )
+        if step.job_id != job_id:
             raise ValueError("step_not_found")
         job = await self.session.get(DocumentJob, job_id)
         if not job:
             raise ValueError("job_not_found")
+        assert_tenant_row_matches_session(
+            self.session,
+            job,
+            mismatch_event="pipelines_orchestrator.run_step.job_tenant_scope_mismatch",
+            not_found_message="job_not_found",
+        )
         if str(job.status) == DocumentJobStatus.CANCELED.value:
             if str(step.status) in {JobStepStatus.QUEUED.value, JobStepStatus.RUNNING.value}:
                 step.status = JobStepStatus.CANCELED.value
@@ -506,7 +538,18 @@ class PipelineOrchestrator:
         if not profile_id:
             return None
         profile = await self.session.get(PipelineProfile, profile_id)
-        if profile is None or str(profile.tenant_id) != str(job.tenant_id):
+        if profile is None:
+            return None
+        try:
+            assert_tenant_row_matches_session(
+                self.session,
+                profile,
+                mismatch_event="pipelines_orchestrator.tenant_concurrency_limit.profile_tenant_scope_mismatch",
+                not_found_message="job_not_found",
+            )
+        except ValueError:
+            return None
+        if str(profile.tenant_id) != str(job.tenant_id):
             return None
         if getattr(profile, "concurrency_limit_per_tenant", None) is not None:
             try:
@@ -626,6 +669,10 @@ class PipelineOrchestrator:
         ]
 
     def _dispatch(self, step_key: str):
+        if step_key == "validate_template":
+            return lambda *, job, step: validate_template_step_handler(
+                session=self.session, job=job, step=step
+            )
         if step_key in {
             "render_docx",
             "apply_headers",

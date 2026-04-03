@@ -20,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.api.tenant_row_http import enforce_row_belongs_to_tenant
 from app.core.idempotency import compute_request_hash
 from app.models.models import Tenant
 from app.modules.files import service
@@ -185,8 +186,15 @@ async def get_file_v2(
     tenant: Tenant = Depends(get_tenant_record),
 ) -> FileDto:
     file_record = await session.get(FileRecord, file_id)
-    if file_record is None or file_record.tenant_id != str(tenant.id):
+    if file_record is None:
         raise HTTPException(status_code=404, detail="file_not_found")
+    enforce_row_belongs_to_tenant(
+        session,
+        file_record,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.modules.files.get_record.tenant_scope_mismatch",
+        detail="file_not_found",
+    )
     link_rows = (await session.execute(select(FileLink).where(FileLink.tenant_id == str(tenant.id), FileLink.file_id == file_id))).scalars().all()
     content_index = (await session.execute(select(FileContentIndex).where(FileContentIndex.file_id == file_id))).scalar_one_or_none()
     return FileDto(
@@ -214,8 +222,15 @@ async def reindex_file_content_v2(
     tenant: Tenant = Depends(get_tenant_record),
 ) -> ReindexFileResponse:
     file_record = await session.get(FileRecord, file_id)
-    if file_record is None or file_record.tenant_id != str(tenant.id):
+    if file_record is None:
         raise HTTPException(status_code=404, detail="file_not_found")
+    enforce_row_belongs_to_tenant(
+        session,
+        file_record,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.modules.files.reindex.tenant_scope_mismatch",
+        detail="file_not_found",
+    )
     from app.tasks import index_file_content_job
 
     index_file_content_job.apply_async(kwargs={"tenant_slug": session.info.get("tenant"), "file_id": file_id}, countdown=0)

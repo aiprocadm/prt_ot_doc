@@ -12,6 +12,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.api.tenant_row_http import enforce_row_belongs_to_tenant
+from app.db.tenant_row_guard import assert_tenant_row_matches_session
 from app.api.deps.tracing import get_trace_id
 from app.core.audit_decorator import audit_operation
 from app.core.idempotency import compute_request_hash
@@ -119,8 +121,15 @@ async def create_job(
                 )
             )
         ).scalar_one_or_none()
-    if profile is None or str(profile.tenant_id) != str(tenant.id) or not profile.is_active:
+    if profile is None or not profile.is_active:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "profile not found")
+    enforce_row_belongs_to_tenant(
+        session,
+        profile,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.jobs.create_job.profile_tenant_scope_mismatch",
+        detail="profile not found",
+    )
 
     request_hash = compute_request_hash(payload.model_dump())
     idem_service = IdempotencyService(
@@ -206,8 +215,15 @@ async def get_job(
     __: Any = _JobsReadDep,
 ) -> JobRead:
     job = await session.get(DocumentJob, job_id)
-    if job is None or str(job.tenant_id) != str(tenant.id):
+    if job is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+    enforce_row_belongs_to_tenant(
+        session,
+        job,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.jobs.get_job.tenant_scope_mismatch",
+        detail="Job not found",
+    )
     steps = (
         (
             await session.execute(
@@ -386,8 +402,15 @@ async def cancel_job(
     __: Any = _JobsCancelDep,
 ) -> JobRead:
     job = await session.get(DocumentJob, job_id)
-    if job is None or str(job.tenant_id) != str(tenant.id):
+    if job is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+    enforce_row_belongs_to_tenant(
+        session,
+        job,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.jobs.cancel_job.tenant_scope_mismatch",
+        detail="Job not found",
+    )
     await DocumentPipelineOrchestrator(session).cancel_job(job_id=job_id)
     await session.commit()
     return await get_job(job_id=job_id, session=session, tenant=tenant)
@@ -409,8 +432,15 @@ async def retry_job(
     __: Any = _JobsRetryDep,
 ) -> JobRead:
     job = await session.get(DocumentJob, job_id)
-    if job is None or str(job.tenant_id) != str(tenant.id):
+    if job is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+    enforce_row_belongs_to_tenant(
+        session,
+        job,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.jobs.retry_job.tenant_scope_mismatch",
+        detail="Job not found",
+    )
     if step_code:
         return await rerun_step(job_id=job_id, step=step_code, session=session, tenant=tenant)
     request = payload or RetryJobRequest(retry_failed_only=True)
@@ -435,8 +465,15 @@ async def rerun_step(
     __: Any = _JobsRetryDep,
 ) -> JobRead:
     job = await session.get(DocumentJob, job_id)
-    if job is None or str(job.tenant_id) != str(tenant.id):
+    if job is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+    enforce_row_belongs_to_tenant(
+        session,
+        job,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.jobs.rerun_step.tenant_scope_mismatch",
+        detail="Job not found",
+    )
     try:
         await DocumentPipelineOrchestrator(session).retry_step(job_id=job_id, step_code=step)
     except ValueError as exc:
@@ -456,11 +493,25 @@ async def retry_step_by_id(
     __: Any = _JobsRetryDep,
 ) -> JobRead:
     job = await session.get(DocumentJob, job_id)
-    if job is None or str(job.tenant_id) != str(tenant.id):
+    if job is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+    enforce_row_belongs_to_tenant(
+        session,
+        job,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.jobs.retry_step_by_id.job_tenant_scope_mismatch",
+        detail="Job not found",
+    )
     step = await session.get(DocumentJobStep, step_id)
     if step is None or step.job_id != job_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Step not found")
+    enforce_row_belongs_to_tenant(
+        session,
+        step,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.jobs.retry_step_by_id.step_tenant_scope_mismatch",
+        detail="Step not found",
+    )
     return await rerun_step(job_id=job_id, step=step.step_code, session=session, tenant=tenant)
 
 @router.get("/{job_id}/steps/{step_id}/logs")
@@ -473,11 +524,25 @@ async def get_step_logs(
     __: Any = _JobsReadDep,
 ) -> dict[str, Any]:
     job = await session.get(DocumentJob, job_id)
-    if job is None or str(job.tenant_id) != str(tenant.id):
+    if job is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+    enforce_row_belongs_to_tenant(
+        session,
+        job,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.jobs.step_logs.job_tenant_scope_mismatch",
+        detail="Job not found",
+    )
     step = await session.get(DocumentJobStep, step_id)
     if step is None or step.job_id != job_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Step not found")
+    enforce_row_belongs_to_tenant(
+        session,
+        step,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.jobs.step_logs.step_tenant_scope_mismatch",
+        detail="Step not found",
+    )
     from app.services.file_storage import FileStorageService
 
     storage = FileStorageService.default()
@@ -486,7 +551,14 @@ async def get_step_logs(
     key: str | None = None
     if step.logs_file_id:
         file_record = await session.get(FileRecord, step.logs_file_id)
-        if file_record is not None and str(file_record.tenant_id) == str(tenant.id):
+        if file_record is not None:
+            enforce_row_belongs_to_tenant(
+                session,
+                file_record,
+                tenant_id=str(tenant.id),
+                mismatch_event="api.jobs.step_logs.logs_file_tenant_scope_mismatch",
+                detail="Step not found",
+            )
             key = file_record.object_key
             logs_uri = f"s3://{key}"
 
@@ -508,8 +580,15 @@ async def get_job_steps(
     __: Any = _JobsReadDep,
 ) -> list[JobStepRead]:
     job = await session.get(DocumentJob, job_id)
-    if job is None or str(job.tenant_id) != str(tenant.id):
+    if job is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+    enforce_row_belongs_to_tenant(
+        session,
+        job,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.jobs.get_job_steps.tenant_scope_mismatch",
+        detail="Job not found",
+    )
     steps = (
         (
             await session.execute(
@@ -561,14 +640,31 @@ async def stream_jobs(
     __: Any = _JobsReadDep,
 ) -> StreamingResponse:
     job = await session.get(DocumentJob, job_id)
-    if job is None or str(job.tenant_id) != str(tenant.id):
+    if job is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+    enforce_row_belongs_to_tenant(
+        session,
+        job,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.jobs.stream_jobs.initial_tenant_scope_mismatch",
+        detail="Job not found",
+    )
 
     async def _stream() -> Any:
         previous_payload = None
         while True:
             run_obj = await session.get(DocumentJob, job_id)
-            if run_obj is None or str(run_obj.tenant_id) != str(tenant.id):
+            if run_obj is None:
+                break
+            try:
+                assert_tenant_row_matches_session(
+                    session,
+                    run_obj,
+                    mismatch_event="api.jobs.stream_jobs.poll_tenant_scope_mismatch",
+                    not_found_message="tenant_mismatch",
+                    expected_tenant_id=str(tenant.id),
+                )
+            except ValueError:
                 break
             steps = (
                 (

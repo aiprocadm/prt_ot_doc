@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_file_storage_service, get_session, get_tenant_record
+from app.db.tenant_row_guard import assert_tenant_row_matches_session
 from app.core.audit_decorator import audit_operation
 from app.core.config import get_settings
 from app.core.idempotency import compute_request_hash
@@ -60,18 +61,28 @@ from app.models.models import (
 from app.schemas.document import (
     DocumentBatchRunRead,
     DocumentCompanySummaryRead,
+    DocumentDependencyMapRead,
+    DocumentDependencyNpaBindingRead,
     DocumentFileLinkRead,
     DocumentHistoryEntryRead,
     DocumentPaginationRead,
+    DocumentPipelineStageRead,
     DocumentRead,
     DocumentReadinessRead,
     DocumentStatusUpdate,
     DocumentUiListResponse,
     DocumentUiRead,
+    DocumentVersionCompareRead,
+    DocumentVersionDataDiffRead,
 )
 from app.schemas.task import TaskAcceptedResponse, TaskStatusResponse
 from app.services.audit import AuditService
 from app.services.billing import BillingService
+from app.services.document_insights import (
+    build_document_dependency_map,
+    diff_version_data_json,
+    load_document_versions_for_compare,
+)
 from app.services.document_readiness import compute_document_readiness
 from app.services.documents import (
     DocumentNotFoundError,
@@ -469,6 +480,115 @@ async def get_document_readiness_endpoint(
         score=snap.score,
         blockers=snap.blockers,
         recommended_actions=snap.recommended_actions,
+        pipeline_stages=[
+            DocumentPipelineStageRead(
+                stage_id=s.stage_id,
+                label=s.label,
+                complete=s.complete,
+                detail=s.detail,
+            )
+            for s in snap.pipeline_stages
+        ],
+    )
+
+
+@router.get("/{document_id}/versions/compare", response_model=DocumentVersionCompareRead)
+async def compare_document_versions_endpoint(
+    document_id: str,
+    left_version_id: str = Query(...),
+    right_version_id: str = Query(...),
+    tenant: Tenant = TenantDep,
+    session: AsyncSession = SessionDep,
+    access: AccessContext = ReadAccessDep,
+) -> DocumentVersionCompareRead:
+    access.ensure_tenant_access(tenant.id, action="read document")
+    document = (
+        await session.execute(_document_read_query(str(tenant.id)).where(Document.id == document_id))
+    ).scalar_one_or_none()
+    if document is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
+    access.ensure_abac(
+        action="read document",
+        company_id=document.company_id,
+        document_id=document.id,
+        document_status=document.status.value if hasattr(document.status, "value") else str(document.status),
+        document_owner_id=document.created_by,
+        site_id=document.site_id,
+        site_company_id=document.company_id,
+    )
+    try:
+        left_v, right_v = await load_document_versions_for_compare(
+            session,
+            tenant_id=str(tenant.id),
+            document_id=document_id,
+            left_version_id=left_version_id,
+            right_version_id=right_version_id,
+        )
+    except ValueError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Version not found") from None
+
+    left_data = dict(left_v.data_json or {})
+    right_data = dict(right_v.data_json or {})
+    raw_diffs = diff_version_data_json(left_data, right_data)
+    return DocumentVersionCompareRead(
+        document_id=document_id,
+        left_version_id=left_v.id,
+        right_version_id=right_v.id,
+        diffs=[
+            DocumentVersionDataDiffRead(
+                field=d["field"],
+                before=d.get("before"),
+                after=d.get("after"),
+                change=str(d["change"]),
+            )
+            for d in raw_diffs
+        ],
+        template_version_changed=(
+            (left_v.template_version_id or "") != (right_v.template_version_id or "")
+            or (left_v.template_version or "") != (right_v.template_version or "")
+        ),
+    )
+
+
+@router.get("/{document_id}/dependency-map", response_model=DocumentDependencyMapRead)
+async def get_document_dependency_map_endpoint(
+    document_id: str,
+    tenant: Tenant = TenantDep,
+    session: AsyncSession = SessionDep,
+    access: AccessContext = ReadAccessDep,
+) -> DocumentDependencyMapRead:
+    access.ensure_tenant_access(tenant.id, action="read document")
+    document = (
+        await session.execute(_document_read_query(str(tenant.id)).where(Document.id == document_id))
+    ).scalar_one_or_none()
+    if document is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
+    access.ensure_abac(
+        action="read document",
+        company_id=document.company_id,
+        document_id=document.id,
+        document_status=document.status.value if hasattr(document.status, "value") else str(document.status),
+        document_owner_id=document.created_by,
+        site_id=document.site_id,
+        site_company_id=document.company_id,
+    )
+    raw = await build_document_dependency_map(session, tenant_id=str(tenant.id), document=document)
+    npa = [
+        DocumentDependencyNpaBindingRead(
+            binding_id=b["binding_id"],
+            npa_id=b["npa_id"],
+            npa_code=b["npa_code"],
+            npa_title=b["npa_title"],
+            ref=b.get("ref"),
+            entity_type=b["entity_type"],
+        )
+        for b in raw.get("npa_bindings") or []
+    ]
+    return DocumentDependencyMapRead(
+        template=raw.get("template"),
+        template_version=raw.get("template_version"),
+        npa_bindings=npa,
+        pipeline_profile_hint=raw.get("pipeline_profile_hint"),
     )
 
 
@@ -655,8 +775,19 @@ async def _ensure_company(session: AsyncSession, tenant: Tenant, company_id: str
     company = await session.get(Company, company_id)
     if company is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Company not found")
-    if str(company.tenant_id) != str(tenant.id):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Tenant mismatch for company resource")
+    try:
+        assert_tenant_row_matches_session(
+            session,
+            company,
+            mismatch_event="api.documents.ensure_company.tenant_scope_mismatch",
+            not_found_message="tenant_mismatch",
+            expected_tenant_id=str(tenant.id),
+        )
+    except ValueError:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Tenant mismatch for company resource",
+        ) from None
     return company
 
 
@@ -668,6 +799,19 @@ async def _ensure_person(
     person = await session.get(Person, person_id)
     if person is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Person not found")
+    try:
+        assert_tenant_row_matches_session(
+            session,
+            person,
+            mismatch_event="api.documents.ensure_person.tenant_scope_mismatch",
+            not_found_message="tenant_mismatch",
+            expected_tenant_id=str(company.tenant_id),
+        )
+    except ValueError:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Tenant mismatch for person resource",
+        ) from None
     if person.company_id != company.id:
         raise _documents_bad_request("person_id does not belong to the provided company")
     return person

@@ -32,6 +32,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.api.tenant_row_http import enforce_row_belongs_to_tenant
 from app.core.config import get_settings
 from app.core.metrics import get_metrics
 from app.core.rate_limit import ip_tenant_key, limiter, upload_per_tenant
@@ -567,11 +568,18 @@ async def get_file_details(
     TenantContextValidator.ensure_tenant_context(tenant)
 
     record = await session.get(StoredFile, file_id)
-    if record is None or record.tenant_id != tenant.id:
+    if record is None:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
             detail={"code": "not_found", "message": "File not found"},
         )
+    enforce_row_belongs_to_tenant(
+        session,
+        record,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.files.get_details.tenant_scope_mismatch",
+        detail={"code": "not_found", "message": "File not found"},
+    )
     _ensure_file_access(record, access)
 
     settings = get_settings()
@@ -722,12 +730,19 @@ async def download_file(
     TenantContextValidator.ensure_tenant_context(tenant)
 
     record = await session.get(StoredFile, file_id)
-    if record is None or record.tenant_id != tenant.id:
+    if record is None:
         _record_download_denied("not_found")
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
             detail={"code": "not_found", "message": "File not found"},
         )
+    enforce_row_belongs_to_tenant(
+        session,
+        record,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.files.download.tenant_scope_mismatch",
+        detail={"code": "not_found", "message": "File not found"},
+    )
 
     expected_prefix = f"tenants/{getattr(tenant, 's3_prefix', None) or tenant.id}/"
     if not str(record.storage_key).startswith(expected_prefix):

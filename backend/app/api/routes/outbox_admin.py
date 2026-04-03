@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.api.tenant_row_http import enforce_row_belongs_to_tenant
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, rbac
 from app.models.job_engine import OutboxEvent, OutboxEventStatus
@@ -120,8 +121,15 @@ async def get_outbox_entry(
 ) -> OutboxEntry:
     _ = access
     entry = await session.get(Outbox, outbox_id)
-    if entry is None or entry.tenant_id != tenant.id:
+    if entry is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Outbox entry not found")
+    enforce_row_belongs_to_tenant(
+        session,
+        entry,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.outbox_admin.get_entry.tenant_scope_mismatch",
+        detail="Outbox entry not found",
+    )
 
     return OutboxEntry(
         id=entry.id,
@@ -149,8 +157,15 @@ async def retry_outbox_entry(
 ) -> RetryResponse:
     _ = access
     entry = await session.get(Outbox, outbox_id)
-    if entry is None or entry.tenant_id != tenant.id:
+    if entry is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Outbox entry not found")
+    enforce_row_belongs_to_tenant(
+        session,
+        entry,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.outbox_admin.retry_entry.tenant_scope_mismatch",
+        detail="Outbox entry not found",
+    )
 
     if entry.status not in {OutboxStatus.DEAD, OutboxStatus.FAILED}:
         raise HTTPException(
@@ -217,8 +232,15 @@ async def requeue_outbox_event(
 ) -> OutboxEventEntry:
     _ = access
     event = await session.get(OutboxEvent, event_id)
-    if event is None or event.tenant_id != tenant.id:
+    if event is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Outbox event not found")
+    enforce_row_belongs_to_tenant(
+        session,
+        event,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.outbox_admin.requeue_event.tenant_scope_mismatch",
+        detail="Outbox event not found",
+    )
 
     if event.status not in {OutboxEventStatus.POISONED.value, OutboxEventStatus.FAILED.value}:
         raise HTTPException(status.HTTP_409_CONFLICT, "Only FAILED or DEAD events can be requeued")

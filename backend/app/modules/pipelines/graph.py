@@ -8,6 +8,7 @@ from typing import Any
 from pydantic import BaseModel, Field, model_validator
 
 NODE_KINDS = {
+    "validate_template",
     "render_docx",
     "apply_headers",
     "replace_dry_run",

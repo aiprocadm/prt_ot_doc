@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from app.models.document import Document, DocumentJobStatus, DocumentStatus, DocumentVersion
 from app.models.models import TemplateVersionStatus
+from app.modules.pipelines.document_core_profile import (
+    DOCUMENT_CORE_PIPELINE_STEPS,
+    DOCUMENT_CORE_STEP_LABELS_RU,
+)
 
 _UNUSABLE_TEMPLATE_STATUSES = frozenset(
     {
@@ -17,10 +21,19 @@ _UNUSABLE_TEMPLATE_STATUSES = frozenset(
 
 
 @dataclass(frozen=True, slots=True)
+class DocumentPipelineStageSnapshot:
+    stage_id: str
+    label: str
+    complete: bool
+    detail: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class DocumentReadinessSnapshot:
     score: int
     blockers: list[str]
     recommended_actions: list[str]
+    pipeline_stages: tuple[DocumentPipelineStageSnapshot, ...] = field(default_factory=tuple)
 
 
 def _latest_version(document: Document) -> DocumentVersion | None:
@@ -33,10 +46,20 @@ def compute_document_readiness(document: Document) -> DocumentReadinessSnapshot:
     """Derive a 0–100 score with human-readable blockers and next steps."""
 
     if document.status == DocumentStatus.REVOKED:
+        stages = tuple(
+            DocumentPipelineStageSnapshot(
+                stage_id=sid,
+                label=DOCUMENT_CORE_STEP_LABELS_RU.get(sid, sid),
+                complete=False,
+                detail="Документ отозван",
+            )
+            for sid in DOCUMENT_CORE_PIPELINE_STEPS
+        )
         return DocumentReadinessSnapshot(
             score=0,
             blockers=["Документ отозван"],
             recommended_actions=["Создайте новый документ или обратитесь к администратору аренды"],
+            pipeline_stages=stages,
         )
 
     blockers: list[str] = []
@@ -128,4 +151,112 @@ def compute_document_readiness(document: Document) -> DocumentReadinessSnapshot:
 
     uniq_actions = list(dict.fromkeys(actions))
 
-    return DocumentReadinessSnapshot(score=score, blockers=blockers, recommended_actions=uniq_actions)
+    template_ok = bool(document.template_version_id) and tv is not None and (
+        tv.status not in _UNUSABLE_TEMPLATE_STATUSES
+    )
+    pdf_hint = False
+    if latest and latest.file_key:
+        pdf_hint = ".pdf" in (latest.file_key or "").lower()
+    elif document.storage_key:
+        pdf_hint = ".pdf" in document.storage_key.lower()
+
+    replace_ok = latest is not None and bool((latest.data_json or {}))
+    job_ok = job is None or job.status not in (
+        DocumentJobStatus.FAILED,
+        DocumentJobStatus.QUEUED,
+        DocumentJobStatus.PROCESSING,
+    )
+
+    def _signature_ok() -> bool:
+        if latest is None:
+            return False
+        sig = (latest.signature_status or "").lower()
+        return sig in ("signed", "waived", "not_required")
+
+    def _edo_ok() -> bool:
+        if latest is None:
+            return False
+        edo = (latest.edo_status or "").lower()
+        if edo in ("failed", "rejected", "error"):
+            return False
+        return document.status not in (DocumentStatus.SIGNED, DocumentStatus.ARCHIVED) or edo in (
+            "sent",
+            "delivered",
+            "accepted",
+            "pending",
+            "",
+            "none",
+            "not_required",
+        )
+
+    stage_details: list[DocumentPipelineStageSnapshot] = []
+    for sid in DOCUMENT_CORE_PIPELINE_STEPS:
+        label = DOCUMENT_CORE_STEP_LABELS_RU.get(sid, sid)
+        complete = False
+        detail: str | None = None
+        if sid == "validate_template":
+            complete = template_ok
+            if not complete:
+                detail = "Нужна рабочая версия шаблона"
+        elif sid == "render_docx":
+            complete = has_file and job_ok
+            if job is not None and job.status == DocumentJobStatus.FAILED:
+                detail = "Ошибка генерации"
+            elif job is not None and job.status in (
+                DocumentJobStatus.QUEUED,
+                DocumentJobStatus.PROCESSING,
+            ):
+                detail = "Ожидайте завершения фоновой генерации"
+            elif not has_file:
+                detail = "Нет файла результата"
+        elif sid == "apply_headers":
+            complete = has_file
+            if not complete:
+                detail = "Нет собранного DOCX"
+        elif sid == "replace":
+            complete = replace_ok
+            if not complete:
+                detail = "Нет данных подстановки в версии"
+        elif sid == "convert_pdf":
+            complete = pdf_hint
+            if not complete and has_file:
+                detail = "PDF ещё не сформирован"
+            elif not has_file:
+                detail = "Нет исходного файла"
+        elif sid == "build_zip":
+            complete = True
+            detail = None
+        elif sid == "sign":
+            if document.status in (
+                DocumentStatus.DRAFT,
+                DocumentStatus.GENERATED,
+                DocumentStatus.REVIEW,
+            ):
+                complete = True
+            else:
+                complete = _signature_ok()
+                if not complete:
+                    detail = "Требуется подписание или исключение"
+        elif sid == "send_edo":
+            if document.status in (DocumentStatus.SIGNED, DocumentStatus.ARCHIVED):
+                complete = _edo_ok()
+            else:
+                complete = True
+            if not complete:
+                detail = "Проблема доставки в ЭДО"
+        elif sid == "archive":
+            complete = document.status == DocumentStatus.ARCHIVED
+            if not complete:
+                detail = "Документ не в архиве"
+        stage_details.append(
+            DocumentPipelineStageSnapshot(
+                stage_id=sid, label=label, complete=complete, detail=detail
+            )
+        )
+
+    return DocumentReadinessSnapshot(
+        score=score,
+        blockers=blockers,
+        recommended_actions=uniq_actions,
+        pipeline_stages=tuple(stage_details),
+    )

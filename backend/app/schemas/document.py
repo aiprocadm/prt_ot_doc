@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from pydantic import AliasChoices, Field
 
@@ -78,12 +79,53 @@ class DocumentUiListResponse(BaseSchema):
     pagination: DocumentPaginationRead
 
 
+class DocumentPipelineStageRead(BaseSchema):
+    """Этап канонического контура документа (согласован с document_core_profile)."""
+
+    stage_id: str
+    label: str
+    complete: bool
+    detail: str | None = None
+
+
 class DocumentReadinessRead(BaseSchema):
     """TZ §9.5 — score, blockers, recommended actions."""
 
     score: int
     blockers: list[str]
     recommended_actions: list[str]
+    pipeline_stages: list[DocumentPipelineStageRead] = Field(default_factory=list)
+
+
+class DocumentVersionDataDiffRead(BaseSchema):
+    field: str
+    before: Any = None
+    after: Any = None
+    change: str
+
+
+class DocumentVersionCompareRead(BaseSchema):
+    document_id: str
+    left_version_id: str
+    right_version_id: str
+    diffs: list[DocumentVersionDataDiffRead]
+    template_version_changed: bool
+
+
+class DocumentDependencyNpaBindingRead(BaseSchema):
+    binding_id: str
+    npa_id: str
+    npa_code: str
+    npa_title: str
+    ref: str | None = None
+    entity_type: str
+
+
+class DocumentDependencyMapRead(BaseSchema):
+    template: dict[str, Any] | None = None
+    template_version: dict[str, Any] | None = None
+    npa_bindings: list[DocumentDependencyNpaBindingRead] = Field(default_factory=list)
+    pipeline_profile_hint: dict[str, Any] | None = None
 
 
 class DocumentBatchItemRead(BaseSchema):

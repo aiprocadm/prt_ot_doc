@@ -4,6 +4,9 @@ import hashlib
 import json
 from typing import Any, Awaitable, Callable
 
+from sqlalchemy import select
+from sqlalchemy.exc import OperationalError, ProgrammingError
+
 from app.models.job_engine import DocumentArtifact, DocumentJob, DocumentJobStep
 from app.modules.files.models import FileEntityType, FileLinkRole
 from app.modules.files.service import FileService, build_artifact_name
@@ -11,6 +14,70 @@ from app.services.integrations.factory import get_edo_integration
 from app.services.integrations.interfaces import IntegrationDisabledError
 
 StepHandler = Callable[..., Awaitable[dict[str, Any]]]
+
+
+async def validate_template_step_handler(*, session, job: DocumentJob, step: DocumentJobStep) -> dict[str, Any]:
+    """Проверяет, что код шаблона и версия существуют и пригодны для генерации."""
+
+    from app.models.models import Template, TemplateVersion, TemplateVersionStatus
+
+    payload = job.input_payload_json or job.input or {}
+    code = (payload.get("template_code") or job.template_code or "").strip()
+    if not code:
+        raise ValueError("template_code_missing")
+
+    tenant_id = str(job.tenant_id)
+    try:
+        tpl = (
+            await session.execute(
+                select(Template).where(Template.tenant_id == tenant_id, Template.code == code)
+            )
+        ).scalar_one_or_none()
+    except (OperationalError, ProgrammingError):
+        return {
+            "status": "skipped",
+            "reason": "template_catalog_unavailable",
+            "step": "validate_template",
+        }
+    if tpl is None:
+        raise ValueError(f"template_not_found:{code}")
+
+    ver_spec = payload.get("template_version")
+    tv = None
+    if ver_spec is not None:
+        try:
+            ver_num = int(ver_spec)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("template_version_invalid") from exc
+        tv = (
+            await session.execute(
+                select(TemplateVersion).where(
+                    TemplateVersion.template_id == tpl.id,
+                    TemplateVersion.version == ver_num,
+                )
+            )
+        ).scalar_one_or_none()
+    elif tpl.current_version_id:
+        tv = await session.get(TemplateVersion, tpl.current_version_id)
+
+    if tv is None:
+        raise ValueError("template_version_not_found")
+
+    unusable = {
+        TemplateVersionStatus.DEPRECATED,
+        TemplateVersionStatus.ARCHIVED,
+        TemplateVersionStatus.DRAFT,
+    }
+    if tv.status in unusable:
+        raise ValueError(f"template_version_unusable:{tv.status.value}")
+
+    return {
+        "status": "ok",
+        "template_id": tpl.id,
+        "template_version_id": tv.id,
+        "template_version": tv.version,
+        "template_version_status": tv.status.value,
+    }
 
 
 async def artifact_step_handler(*, session, job: DocumentJob, step: DocumentJobStep, step_key: str) -> dict[str, Any]:

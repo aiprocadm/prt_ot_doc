@@ -165,6 +165,26 @@ export const DocumentPreview = ({ document, initialTab = "preview" }: DocumentPr
                   </ul>
                 </div>
               ) : null}
+              {readiness.pipeline_stages && readiness.pipeline_stages.length > 0 ? (
+                <div data-testid="document-pipeline-stages">
+                  <p className="mb-1 text-xs font-medium text-foreground">Контур выпуска</p>
+                  <ul className="space-y-1 text-xs text-muted-foreground">
+                    {readiness.pipeline_stages.map((s) => (
+                      <li key={s.stage_id} className="flex gap-2">
+                        <span className={s.complete ? "text-emerald-600" : "text-amber-600"}>
+                          {s.complete ? "✓" : "○"}
+                        </span>
+                        <span>
+                          {s.label}
+                          {s.detail ? (
+                            <span className="block text-[11px] text-muted-foreground/90">{s.detail}</span>
+                          ) : null}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>

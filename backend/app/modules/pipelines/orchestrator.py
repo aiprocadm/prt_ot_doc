@@ -7,6 +7,7 @@ from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.tenant_row_guard import assert_tenant_row_matches_session
 from app.models.job_engine import DocumentJob, DocumentJobStatus, DocumentJobStep, JobStepStatus
 from app.modules.pipelines.models import PipelineProfile
 from app.services.pipelines_orchestrator import DocumentPipelineOrchestrator
@@ -55,6 +56,12 @@ class PipelineEngine:
         job = await self.session.get(DocumentJob, job_id)
         if job is None:
             raise ValueError("job_not_found")
+        assert_tenant_row_matches_session(
+            self.session,
+            job,
+            mismatch_event="pipelines.engine.run_pipeline.tenant_scope_mismatch",
+            not_found_message="job_not_found",
+        )
         limits = profile.limits or {}
         max_parallel = int(limits.get("max_parallel") or 1)
         async with self.tenant_slot(tenant_id=str(job.tenant_id), max_parallel=max_parallel):
@@ -64,6 +71,12 @@ class PipelineEngine:
         job = await self.session.get(DocumentJob, job_id)
         if job is None:
             raise ValueError("job_not_found")
+        assert_tenant_row_matches_session(
+            self.session,
+            job,
+            mismatch_event="pipelines.engine.restart.tenant_scope_mismatch",
+            not_found_message="job_not_found",
+        )
         steps = (
             await self.session.execute(
                 select(DocumentJobStep).where(DocumentJobStep.job_id == job_id).order_by(DocumentJobStep.order.asc())
@@ -88,6 +101,12 @@ class PipelineEngine:
         job = await self.session.get(DocumentJob, job_id)
         if job is None:
             raise ValueError("job_not_found")
+        assert_tenant_row_matches_session(
+            self.session,
+            job,
+            mismatch_event="pipelines.engine.cancel.tenant_scope_mismatch",
+            not_found_message="job_not_found",
+        )
         job.status = DocumentJobStatus.CANCELED.value
         job.ended_at = datetime.now(timezone.utc)
         steps = (

@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
+from app.api.tenant_row_http import enforce_row_belongs_to_tenant
 from app.api.models.webhook_admin import (
     WebhookDeliveryWithDiagnostics,
     WebhookFailureDiagnostics,
@@ -140,8 +141,15 @@ async def update_webhook(webhook_id: str, payload: WebhookEndpointIn, tenant: Te
     TenantContextValidator.ensure_tenant_context(tenant)
 
     row = await session.get(WebhookEndpoint, webhook_id)
-    if row is None or row.tenant_id != tenant.id:
+    if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "webhook_not_found")
+    enforce_row_belongs_to_tenant(
+        session,
+        row,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.webhooks.endpoint_by_id.tenant_scope_mismatch",
+        detail="webhook_not_found",
+    )
     row.name = payload.name
     row.url = payload.url
     row.secret = payload.secret
@@ -161,8 +169,15 @@ async def delete_webhook(webhook_id: str, tenant: TenantDep, _: AdminAccess, ses
     TenantContextValidator.ensure_tenant_context(tenant)
 
     row = await session.get(WebhookEndpoint, webhook_id)
-    if row is None or row.tenant_id != tenant.id:
+    if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "webhook_not_found")
+    enforce_row_belongs_to_tenant(
+        session,
+        row,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.webhooks.endpoint_by_id.tenant_scope_mismatch",
+        detail="webhook_not_found",
+    )
     await session.delete(row)
     await session.commit()
 
@@ -174,8 +189,15 @@ async def rotate_webhook_secret(webhook_id: str, tenant: TenantDep, _: AdminAcce
     TenantContextValidator.ensure_tenant_context(tenant)
 
     row = await session.get(WebhookEndpoint, webhook_id)
-    if row is None or row.tenant_id != tenant.id:
+    if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "webhook_not_found")
+    enforce_row_belongs_to_tenant(
+        session,
+        row,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.webhooks.endpoint_by_id.tenant_scope_mismatch",
+        detail="webhook_not_found",
+    )
     new_secret = secrets.token_urlsafe(32)
     row.secret = new_secret
     row.updated_at = datetime.now(timezone.utc)
@@ -191,8 +213,15 @@ async def disable_webhook(webhook_id: str, tenant: TenantDep, _: AdminAccess, se
     TenantContextValidator.ensure_tenant_context(tenant)
 
     row = await session.get(WebhookEndpoint, webhook_id)
-    if row is None or row.tenant_id != tenant.id:
+    if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "webhook_not_found")
+    enforce_row_belongs_to_tenant(
+        session,
+        row,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.webhooks.endpoint_by_id.tenant_scope_mismatch",
+        detail="webhook_not_found",
+    )
     row.is_enabled = False
     await session.commit()
     await session.refresh(row)
@@ -206,8 +235,15 @@ async def enable_webhook(webhook_id: str, tenant: TenantDep, _: AdminAccess, ses
     TenantContextValidator.ensure_tenant_context(tenant)
 
     row = await session.get(WebhookEndpoint, webhook_id)
-    if row is None or row.tenant_id != tenant.id:
+    if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "webhook_not_found")
+    enforce_row_belongs_to_tenant(
+        session,
+        row,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.webhooks.endpoint_by_id.tenant_scope_mismatch",
+        detail="webhook_not_found",
+    )
     row.is_enabled = True
     await session.commit()
     await session.refresh(row)
@@ -258,8 +294,15 @@ async def list_endpoint_deliveries(webhook_id: str, tenant: TenantDep, _: AdminA
     TenantContextValidator.ensure_tenant_context(tenant)
 
     row = await session.get(WebhookEndpoint, webhook_id)
-    if row is None or row.tenant_id != tenant.id:
+    if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "webhook_not_found")
+    enforce_row_belongs_to_tenant(
+        session,
+        row,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.webhooks.endpoint_by_id.tenant_scope_mismatch",
+        detail="webhook_not_found",
+    )
     rows = (
         await session.execute(
             select(WebhookDelivery).where(
@@ -294,8 +337,15 @@ async def test_endpoint(webhook_id: str, tenant: TenantDep, _: AdminAccess, sess
     TenantContextValidator.ensure_tenant_context(tenant)
 
     row = await session.get(WebhookEndpoint, webhook_id)
-    if row is None or row.tenant_id != tenant.id:
+    if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "webhook_not_found")
+    enforce_row_belongs_to_tenant(
+        session,
+        row,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.webhooks.endpoint_by_id.tenant_scope_mismatch",
+        detail="webhook_not_found",
+    )
     event = Outbox(
         tenant_id=str(tenant.id),
         event_type="DocumentGenerated",
@@ -365,8 +415,15 @@ async def get_delivery_diagnostics(
     TenantContextValidator.ensure_tenant_context(tenant)
 
     delivery = await session.get(WebhookDelivery, delivery_id)
-    if delivery is None or delivery.tenant_id != tenant.id:
+    if delivery is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "delivery_not_found")
+    enforce_row_belongs_to_tenant(
+        session,
+        delivery,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.webhooks.delivery_diagnostics.tenant_scope_mismatch",
+        detail="delivery_not_found",
+    )
 
     diag = _extract_failure_diagnostics(delivery)
     if diag is None:
@@ -392,8 +449,15 @@ async def get_delivery_retry_eligibility(
     TenantContextValidator.ensure_tenant_context(tenant)
 
     delivery = await session.get(WebhookDelivery, delivery_id)
-    if delivery is None or delivery.tenant_id != tenant.id:
+    if delivery is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "delivery_not_found")
+    enforce_row_belongs_to_tenant(
+        session,
+        delivery,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.webhooks.delivery_retry_eligibility.tenant_scope_mismatch",
+        detail="delivery_not_found",
+    )
 
     diag = _extract_failure_diagnostics(delivery)
     if diag is None:
@@ -452,8 +516,15 @@ async def list_failed_deliveries_with_diagnostics(
     TenantContextValidator.ensure_tenant_context(tenant)
 
     endpoint = await session.get(WebhookEndpoint, endpoint_id)
-    if endpoint is None or endpoint.tenant_id != tenant.id:
+    if endpoint is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "endpoint_not_found")
+    enforce_row_belongs_to_tenant(
+        session,
+        endpoint,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.webhooks.failed_deliveries_endpoint.tenant_scope_mismatch",
+        detail="endpoint_not_found",
+    )
 
     rows = (
         await session.execute(
@@ -498,8 +569,15 @@ async def retry_delivery(delivery_id: str, tenant: TenantDep, _: AdminAccess, se
     TenantContextValidator.ensure_tenant_context(tenant)
 
     delivery = await session.get(WebhookDelivery, delivery_id)
-    if delivery is None or delivery.tenant_id != tenant.id:
+    if delivery is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "delivery_not_found")
+    enforce_row_belongs_to_tenant(
+        session,
+        delivery,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.webhooks.delivery_retry.tenant_scope_mismatch",
+        detail="delivery_not_found",
+    )
 
     if delivery.status == "success":
         raise HTTPException(status.HTTP_409_CONFLICT, "Already delivered successfully")
@@ -530,8 +608,15 @@ async def replay_event(
     TenantContextValidator.ensure_tenant_context(tenant)
 
     event = await session.get(Outbox, event_id)
-    if event is None or event.tenant_id != tenant.id:
+    if event is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "event_not_found")
+    enforce_row_belongs_to_tenant(
+        session,
+        event,
+        tenant_id=str(tenant.id),
+        mismatch_event="api.webhooks.replay_outbox.tenant_scope_mismatch",
+        detail="event_not_found",
+    )
     event.status = OutboxStatus.PENDING
     event.next_attempt_at = datetime.now(tz=timezone.utc)
     await session.commit()

@@ -10,6 +10,7 @@ from sqlalchemy import select
 
 from app.core.tenant import tenant_context
 from app.db.session import ensure_tenant_schema, session_scope
+from app.db.tenant_row_guard import assert_tenant_row_matches_session
 from app.models.models import AuditExportJob, AuditLog
 from app.services.celery_app import celery_app
 from app.services.file_storage import FileStorageService
@@ -26,10 +27,20 @@ def export_audit_job(*, export_id: str, tenant_id: str) -> dict[str, str]:
                 job = await session.get(AuditExportJob, export_id)
                 if job is None:
                     return {"status": "missing"}
+                try:
+                    assert_tenant_row_matches_session(
+                        session,
+                        job,
+                        mismatch_event="audit_export_job.tenant_scope_mismatch",
+                        not_found_message="missing",
+                    )
+                except ValueError:
+                    return {"status": "missing"}
+                resolved_tenant_id = str(session.info.get("tenant_id") or "").strip() or tenant_id
                 job.status = "running"
                 await session.flush()
 
-                stmt = select(AuditLog).where(AuditLog.tenant_id == tenant_id)
+                stmt = select(AuditLog).where(AuditLog.tenant_id == resolved_tenant_id)
                 filters = job.filters or {}
                 if filters.get("entity_type"):
                     stmt = stmt.where(AuditLog.object_type == filters["entity_type"])

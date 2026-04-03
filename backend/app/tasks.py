@@ -22,6 +22,7 @@ from app.core.metrics import PipelineStage, PipelineType, StageResult, get_metri
 from app.core.payload_constraints import normalize_output_basename
 from app.core.tenant import tenant_context
 from app.db import AsyncSessionLocal, ensure_tenant_schema, session_scope
+from app.db.tenant_row_guard import assert_tenant_row_matches_session as _assert_tenant_row_matches_session
 from app.domains.files import s3
 from app.domains.files.utils import build_dated_prefix
 from app.domains.templating.renderer import render_docx
@@ -97,37 +98,6 @@ logger = logging.getLogger(__name__)
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 T = TypeVar("T")
-
-
-def _assert_tenant_row_matches_session(
-    session: AsyncSession,
-    row: object | None,
-    *,
-    mismatch_event: str,
-    not_found_message: str,
-) -> None:
-    """Defense-in-depth: on SQLite (single schema) ``session.get`` by PK can return another tenant's row."""
-
-    if row is None:
-        return
-    session_tid = str(session.info.get("tenant_id") or "").strip()
-    if not session_tid:
-        return
-    row_tid = getattr(row, "tenant_id", None)
-    if row_tid is None:
-        return
-    if str(row_tid) == session_tid:
-        return
-    logger.warning(
-        mismatch_event,
-        extra={
-            "model": type(row).__name__,
-            "row_id": getattr(row, "id", None),
-            "row_tenant_id": str(row_tid),
-            "session_tenant_id": session_tid,
-        },
-    )
-    raise ValueError(not_found_message)
 
 
 def _assert_pipeline_run_matches_session_tenant(session: AsyncSession, run: PipelineRun) -> None:
