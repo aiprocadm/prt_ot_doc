@@ -1,34 +1,119 @@
-# Стабилизация платформы — технический аудит
+# Стабилизация платформы — технический аудит (фактический код)
 
-Дата: 2026-04-03. Источник: обзор кода `backend/app`, `frontend/src`, `tests/`, CI, конфигурации.
+Дата обновления: 2026-04-03. Метод: чтение исходников, grep по опасным паттернам, обзор `tests/` и CI.
 
-## Краткое резюме
+## Executive summary
 
-- **Критично исправлено в рамках спринта:** отсутствие импорта `sqlalchemy.func` в `backend/app/api/v1/router.py` (потенциальный `NameError` на путях подсчёта usage шаблонов).
-- **Усилено:** `APP_ENV=staging` теперь проходит те же проверки «не дефолтных» секретов, что и production (кроме явных JWT-ключей — для staging допускается dev-пара с предупреждением, как и для development).
-- **Документировано:** план этапов, пробелы тестов, риски регрессий, runbook, конфигурация.
-- **Намеренно не сделано за один проход:** полный ruff-порог на весь `backend/app` (накопленный технический долг ~40+ замечаний), расширение mypy за пределы `services`/`schemas`, полный Playwright E2E в CI — см. `STABILIZATION_PLAN.md` и `TEST_COVERAGE_GAPS.md`.
+| Зона | Оценка | Комментарий |
+|------|--------|-------------|
+| Tenant HTTP boundary | Хорошо | `X-Tenant` обязателен; mismatch с JWT → `403` / `TENANT_SCOPE_MISMATCH` |
+| Tenant в фоне | Требует ревью | Задачи принимают `tenant_slug`; нужен аудит всех entrypoints Celery |
+| Async/sync bridges | **High risk** | `tasks._run_coroutine`, `db/session.py`, `runtime_bootstrap._run_coro_sync` |
+| God-files | **Maintainability** | `tasks.py`, `models.py`, `api/v1/router.py`, крупные routes |
+| Static analysis | Слабый gate | mypy только `services`+`schemas`; ruff на весь пакет — большой бэклог |
+| Integration / E2E | Разреженно | Мало `integration_tests/`; Playwright smoke добавлен (`frontend/e2e/`), отдельный workflow `e2e-smoke.yml` (ручной запуск) |
 
-## Таблица находок
+**Недавние артефакты стабилизации (код):** контрактные тесты `tests/test_tasks_run_coroutine.py`; исправление `tsc` в `searchPageStates.test.tsx` (раньше ломал `npm run build`); Playwright по умолчанию на **dev-сервере** при `E2E_START_SERVER=1` из‑за взаимодействия prod+PWA и `serviceWorkers: block`.
 
-| ID | Серьёзность | Влияние | Модуль / файлы | Риск | Статус |
-|----|-------------|---------|----------------|------|--------|
-| A1 | **Critical** | runtime | `api/v1/router.py` | Использование `func.count` / `func.max` без импорта `func` — падение API при вызове затронутых эндпоинтов | **Исправлено** (`from sqlalchemy import func, select`) |
-| A2 | **High** | maintainability, runtime | `app/core/runtime_bootstrap.py` (`_run_coro_sync`) | Мост sync/async через отдельный поток и `asyncio.run` при уже запущенном loop — хрупко для вложенных контекстов | Зафиксировано; поэтапная замена на явный async startup |
-| A3 | **High** | maintainability | `backend/app/tasks.py` (~1.5k+ строк), `models/models.py` (~2.2k+ строк) | God-объекты, сложность ревью и регрессий | План декомпозиции по доменам без смены контрактов |
-| A4 | **High** | tenancy, security | Публичные префиксы в `middleware/tenant.py` | Широкие исключения для webhooks/portal/auth — необходимы периодические ревью на «обход» tenant header | Мониторинг + тесты на каждый новый публичный префикс |
-| A5 | **Medium** | security, configuration | `core/config.py`, `bootstrap()` | Переменные окружения могли переопределять явные kwargs в тестах/утилитах; staging ранее не требовал смены dev-default секретов | **Частично:** staging ≈ production для SECRET/DB/S3; тесты с изоляцией env |
-| A6 | **Medium** | testability | CI `lint-and-static` | Нет ruff/black/mypy gate на весь пакет — опасные ошибки (F821) проходили до runtime | Ruff в CI отложен из‑за бэклога; критичный F821 устранён точечно |
-| A7 | **Medium** | observability | Metrics `/metrics` за флагом, логирование | Не везде гарантированы `tenant_id` / `user_id` в структурированных логах воркеров | Унификация контекста в `ObservabilityMiddleware` + задачи Celery |
-| A8 | **Medium** | reliability | outbox, webhooks, idempotency | Требуется перекрёстная проверка terminal state retries и DLQ | См. `STABILIZATION_PLAN` фаза 3 |
-| A9 | **Low** | UX, frontend | Крупные страницы, Zustand без единого data layer | Рассинхрон прав и UI при ошибках загрузки профиля | Частично снято рефакторингом Search/роутинга; TanStack Query — поэтапно |
+---
 
-## Сильные стороны (уже в коде)
+## Таблица проблем (severity / влияние / файлы / почему опасно / как чинить без регрессии)
 
-- Middleware tenant: обязательный `X-Tenant` для `/api/v1/*`, структурированные ошибки с `correlation_id`.
-- Набор тестов: `test_middleware_tenant.py`, `test_tenant_header_required.py`, `integration/test_tenant_isolation.py` (S3 keys), contract/OpenAPI тесты.
-- CI: pytest, frontend `ci` script, alembic heads, docker smoke, scoped query guard, artifact guard.
+### B1 — `tasks._run_coroutine`: `asyncio.run` + `threading.Thread`
 
-## План устранения (этапы)
+- **Severity:** high  
+- **Влияние:** runtime, observability, deadlock risk (редко)  
+- **Файлы:** `backend/app/tasks.py` (~L102–122)  
+- **Почему опасно:** При уже запущенном event loop Celery/тест создаётся **daemon**-поток с **отдельным** `asyncio.run`. Сложно дебажить, возможны edge cases с TLS/contextvars и закрытием loop.  
+- **Как чинить:** (1) Зафиксировать контракт тестами. (2) Для worker — поэтапно переводить entrypoints на **нативный async** (`celery` с pool async или отдельный async worker process). (3) До миграции — явное structured logging при входе/выходе `_run_coroutine`, документировать «только из sync Celery task».
 
-См. `STABILIZATION_PLAN.md`.
+### B2 — `db/session.py`: `Thread` + `asyncio.run`
+
+- **Severity:** high  
+- **Влияние:** runtime, data integrity (schema ops)  
+- **Файлы:** `backend/app/db/session.py` (~L224, L287, L317, L482)  
+- **Почему опасно:** Те же анти-паттерны на пути создания/удаления схем и dispose engine.  
+- **Как чинить:** Выделить sync-only CLI/миграции vs async API; убрать `asyncio.run` из горячего пути запросов (убедиться, что не вызывается при обычном API).
+
+### B3 — `runtime_bootstrap._run_coro_sync`
+
+- **Severity:** medium–high  
+- **Влияние:** startup reliability  
+- **Файлы:** `backend/app/core/runtime_bootstrap.py`  
+- **Почему опасно:** Дублирует логику с `tasks._run_coroutine`.  
+- **Как чинить:** Единый утилитный слой с явным контрактом «вызывать только до старта loop»; тесты на dockerless SQLite bootstrap.
+
+### B4 — Giant files
+
+- **Severity:** medium (накопление → high)  
+- **Влияние:** maintainability, testability, регрессии при ревью  
+- **Файлы:**  
+  - `backend/app/models/models.py` (~2.2k+ строк)  
+  - `backend/app/tasks.py` (~1.7k+ строк)  
+  - `backend/app/api/v1/router.py`  
+  - `backend/app/api/routes/risk.py`, `documents.py`, …  
+  - `backend/app/services/pipeline.py`  
+- **Почему опасно:** Смешение ответственности, сложно изолировать изменения.  
+- **Как чинить:** Вынос в пакеты с **re-export** и сохранением имён задач/роутов; сначала тесты на публичное поведение, потом move.
+
+### B5 — Broad `except` в критических зонах
+
+- **Severity:** medium  
+- **Влияние:** observability, data consistency (тихие сбои)  
+- **Файлы:** поиск `except Exception` в `tasks.py`, `pipeline.py`, webhooks  
+- **Почему опасно:** Потеря причины сбоя, повторные неидемпотентные side effects.  
+- **Как чинить:** Сужение типов, обязательный `logger.exception` + correlation/tenant; terminal vs transient классы исключений.
+
+### B6 — Tenant isolation за пределами HTTP
+
+- **Severity:** high (если найдётся дыра)  
+- **Влияние:** security, tenancy  
+- **Файлы:** `tasks.py`, `services/outbox.py`, export/webhook handlers, `pipeline`  
+- **Почему опасно:** Один неверный `tenant_id` в запросе — cross-tenant утечка.  
+- **Как чинить:** Интеграционные тесты «два tenant + job»; статический grep `AsyncSessionLocal` без tenant; чеклист для новых задач.
+
+### B7 — Mypy scope
+
+- **Severity:** medium  
+- **Влияние:** testability, runtime (косвенно)  
+- **Файлы:** `pyproject.toml` `[tool.mypy] files = ...`  
+- **Почему опасно:** Ошибки типов в `api/`, `middleware/`, `tasks` не ловятся до runtime.  
+- **Как чинить:** Пошаговое добавление пакетов + `[[tool.mypy.overrides]]` для шумных модулей; отдельный CI job `mypy-staged`.
+
+### B8 — Frontend: нет единого server-state слоя
+
+- **Severity:** low–medium  
+- **Влияние:** UX, stale state  
+- **Файлы:** `frontend/src` (Zustand, локальные hooks)  
+- **Почему опасно:** Дублирование loading/error, рассинхрон после мутаций.  
+- **Как чинить:** TanStack Query для новых экранов; унификация empty/error (чеклист); не ломать существующие stores в одном PR.
+
+### B9 — Импорт `func` в `api/v1/router.py`
+
+- **Severity:** critical (до фикса)  
+- **Статус:** исправлено (`from sqlalchemy import func, select`).
+
+### B10 — Staging secrets
+
+- **Severity:** high (ops)  
+- **Статус:** см. `CONFIGURATION_HARDENING.md`; тесты `test_settings_staging_hardening.py`.
+
+---
+
+## Уже подтверждённые тестами (не дублировать без необходимости)
+
+- **TENANT_SCOPE_MISMATCH:** `tests/test_rbac_abac.py` (read/write с чужим `x-tenant`), `tests/test_tenant_security.py` (`test_header_token_tenant_mismatch_denied`).
+- **Outbox + tenant webhook routing:** `tests/test_tasks.py` (`test_dispatch_outbox_events_resolves_webhook_endpoints_by_tenant_id`).
+- **Idempotency pipeline:** `tests/test_services_pipeline_extra.py`, `tests/test_services_idempotency_unit.py`.
+- **S3 key tenant prefix:** `tests/integration/test_tenant_isolation.py`.
+
+---
+
+## Следующий приоритет (после этого спринта)
+
+1. Тесты на `_run_coroutine` (контракт до рефактора) — см. `tests/test_tasks_run_coroutine.py`.  
+2. Интеграция: фоновая задача с двумя tenant — нет cross-read.  
+3. Узкий ruff gate `--select F821` в CI.  
+4. Playwright smoke (локально / opt-in CI) — см. `frontend/e2e/`.
+
+План этапов: `STABILIZATION_PLAN.md`.

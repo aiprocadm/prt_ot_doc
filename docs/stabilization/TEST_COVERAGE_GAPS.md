@@ -7,7 +7,7 @@
 | Tenant middleware | `test_middleware_tenant.py`, auth header tests | Автоматический тест на каждый новый публичный префикс |
 | Cross-tenant API | Частично (S3 keys) | HTTP integration: запрос ресурса чужого `tenant_id` → 404/403 |
 | Outbox / webhooks | Есть частично в tests | Дедуп webhook, poison message, terminal retry |
-| Pipelines / Celery | Unit частично | Идемпотентный rerun с фикстурой БД |
+| Pipelines / Celery | Unit частично; контракт `_run_coroutine` в `test_tasks_run_coroutine.py` | Идемпотентный rerun с фикстурой БД; интеграция «два tenant» для фоновых задач |
 | Migrations | Alembic heads | Тест «upgrade head» на чистой БД в CI (опционально job) |
 
 ## Frontend
@@ -20,14 +20,22 @@
 
 ## E2E (Playwright)
 
-**Статус:** не внедрён в CI (намеренно в этом спринте).
+**Статус:** каркас в репозитории; в основном `ci.yml` не включён (отдельный workflow `e2e-smoke.yml`, ручной запуск).
 
-**Минимальный набор для следующего этапа:**
+**Уже есть (`frontend/e2e/smoke.spec.ts`):**
 
-1. Login (happy / wrong password).
-2. Запрос с `X-Tenant` (или UI выбора tenant, если есть).
-3. Documents: список / открытие (mock или test tenant).
-4. 403: пользователь без права → ожидаемый redirect/страница.
+- Страница логина (видимость полей).
+- Редирект с `/documents` на `/auth/login` без сессии.
+- Условный happy-path логина при `E2E_USER_EMAIL` / `E2E_USER_PASSWORD`.
+
+**Запуск:** `cd frontend && npm run e2e:install && E2E_START_SERVER=1 npm run e2e` (dev). Для prod-сборки: `E2E_PREVIEW=1 E2E_START_SERVER=1 npm run e2e`.
+
+**Следующий этап:**
+
+1. Login (wrong password / ошибка API).
+2. Документы: список / карточка при поднятом бэкенде.
+3. 403 / `no-access` под отдельной ролью.
+4. Logout и повторный заход.
 
 ## Contract / OpenAPI
 

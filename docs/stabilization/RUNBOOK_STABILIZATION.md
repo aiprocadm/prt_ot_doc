@@ -32,3 +32,12 @@
 
 - JUnit: `artifacts/backend-junit.xml` (CI).
 - Docker smoke логи: артефакт `smoke-logs` при падении job `smoke-compose`.
+
+## E2E (Playwright)
+
+1. Один раз: `cd frontend && npm run e2e:install`.
+2. Локально без бэкенда: `E2E_START_SERVER=1 npm run e2e` (поднимется Vite dev, проверяются логин-форма и редирект с защищённого маршрута).
+3. Против уже запущенного стека: `E2E_BASE_URL=http://127.0.0.1:5173 npm run e2e` (порт подставить свой).
+4. Полный логин: задать `E2E_USER_EMAIL`, `E2E_USER_PASSWORD`, при необходимости `E2E_TENANT`.
+5. Регрессия **production** бандла: `E2E_PREVIEW=1 E2E_START_SERVER=1 npm run e2e` (дольше; учитывать PWA/SW).
+6. CI: Actions → **E2E smoke (Playwright)** → Run workflow.

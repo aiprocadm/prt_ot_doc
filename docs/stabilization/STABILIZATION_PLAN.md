@@ -6,6 +6,7 @@
 
 - [x] Критичные runtime-дефекты (импорт `func` в `api/v1/router.py`).
 - [x] Тесты на staging-конфигурацию (`tests/test_settings_staging_hardening.py`) с изоляцией env.
+- [x] Контракт `_run_coroutine` (`tests/test_tasks_run_coroutine.py`) до рефакторинга Celery/async bridge.
 - [ ] Инвентаризация эндпоинтов без tenant dependency (ручной чеклист + grep по `create_public_router`).
 
 ## Фаза 1 — Конфигурация и CI gates
@@ -33,8 +34,10 @@
 
 ## Фаза 5 — E2E и регрессии
 
-- [ ] Playwright smoke (login, tenant header, documents list, 403 redirect) — см. `REGRESSION_TEST_MATRIX.md`.
-- [ ] Подключить job в CI после стабилизации сидов/фикстур.
+- [x] Каркас Playwright: `frontend/e2e/smoke.spec.ts`, `playwright.config.ts`, скрипты `e2e` / `e2e:install` (по умолчанию dev-сервер при `E2E_START_SERVER=1`; prod preview — `E2E_PREVIEW=1`).
+- [x] Ручной workflow `.github/workflows/e2e-smoke.yml` (GitHub Actions → workflow_dispatch).
+- [ ] Расширить сценарии: список документов, wizard/polling, 403 UI, logout — см. `REGRESSION_TEST_MATRIX.md`.
+- [ ] Опциональный job в основном `ci.yml` после выделенного тестового стенда и секретов (`E2E_USER_*`).
 
 ## Фаза 6 — Observability
 

@@ -82,20 +82,28 @@ describe("SearchPage states", () => {
   });
 
   it("ignores stale responses from older search requests", async () => {
-    let resolveFirst: ((value: { items: Array<{ kind: "entity"; entity_type: string; entity_id: string; title: string }>; facets: {}; next_cursor: null }) => void) | null = null;
-    let resolveSecond: ((value: { items: Array<{ kind: "entity"; entity_type: string; entity_id: string; title: string }>; facets: {}; next_cursor: null }) => void) | null = null;
+    type SearchPayload = {
+      items: Array<{ kind: "entity"; entity_type: string; entity_id: string; title: string }>;
+      facets: Record<string, unknown>;
+      next_cursor: null;
+    };
+
+    const resolvers: {
+      first: ((value: SearchPayload) => void) | null;
+      second: ((value: SearchPayload) => void) | null;
+    } = { first: null, second: null };
 
     fetchSearchMock
       .mockImplementationOnce(
         () =>
-          new Promise((resolve) => {
-            resolveFirst = resolve;
+          new Promise<SearchPayload>((resolve) => {
+            resolvers.first = resolve;
           })
       )
       .mockImplementationOnce(
         () =>
-          new Promise((resolve) => {
-            resolveSecond = resolve;
+          new Promise<SearchPayload>((resolve) => {
+            resolvers.second = resolve;
           })
       );
 
@@ -113,7 +121,7 @@ describe("SearchPage states", () => {
 
     await waitFor(() => expect(fetchSearchMock).toHaveBeenCalledTimes(2), { timeout: 1200 });
 
-    resolveSecond?.({
+    resolvers.second!({
       items: [{ kind: "entity", entity_type: "documents", entity_id: "new", title: "Second result" }],
       facets: {},
       next_cursor: null
@@ -121,7 +129,7 @@ describe("SearchPage states", () => {
 
     expect(await screen.findByText("Second result")).toBeInTheDocument();
 
-    resolveFirst?.({
+    resolvers.first!({
       items: [{ kind: "entity", entity_type: "documents", entity_id: "old", title: "First result" }],
       facets: {},
       next_cursor: null
