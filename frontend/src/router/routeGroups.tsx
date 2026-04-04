@@ -65,13 +65,16 @@ import {
   SafetyDashboardPage,
   SettingsPage,
   SignaturesPage,
+  SyncConflictHelpPage,
   TasksPage,
   TemplatesPage,
   TrainingDashboardPage,
   TrainingPage,
   TrendsPage,
   WarehousePage,
-  WorkflowPage
+  WorkflowPage,
+  WorkspaceAttentionPage,
+  WorkspaceDataQualityPage
 } from "@/router/pageRegistry";
 
 type GuardedRouteGroup = {
@@ -95,7 +98,9 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
         <Route key="/dashboard/safety" path="/dashboard/safety" element={<SafetyDashboardPage />} />,
         <Route key="/dashboard/training" path="/dashboard/training" element={<TrainingDashboardPage />} />,
         <Route key="/dashboard/ppe" path="/dashboard/ppe" element={<PpeDashboardPage />} />,
-        <Route key="/dashboard/client-delivery" path="/dashboard/client-delivery" element={<ClientDeliveryDashboardPage />} />
+        <Route key="/dashboard/client-delivery" path="/dashboard/client-delivery" element={<ClientDeliveryDashboardPage />} />,
+        <Route key="/workspace/attention" path="/workspace/attention" element={<WorkspaceAttentionPage />} />,
+        <Route key="/workspace/data-quality" path="/workspace/data-quality" element={<WorkspaceDataQualityPage />} />
       ]
     },
     { permission: PERMISSIONS.COMPANY_VIEW, routes: [<Route key="/companies" path="/companies" element={<CompaniesPage />} />] },
@@ -165,7 +170,13 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
     },
     { permission: PERMISSIONS.NPA_VIEW, routes: [<Route key="/npa" path="/npa" element={<NpaPage />} />] },
     { permission: PERMISSIONS.AUDIT_VIEW, routes: [<Route key="/audit" path="/audit" element={<AuditPage />} />] },
-    { permission: PERMISSIONS.SETTINGS_VIEW, routes: [<Route key="/settings" path="/settings" element={<SettingsPage />} />] },
+    {
+      permission: PERMISSIONS.SETTINGS_VIEW,
+      routes: [
+        <Route key="/settings" path="/settings" element={<SettingsPage />} />,
+        <Route key="/help/sync-conflicts" path="/help/sync-conflicts" element={<SyncConflictHelpPage />} />
+      ]
+    },
     {
       permission: PERMISSIONS.REPORTS_VIEW,
       routes: [

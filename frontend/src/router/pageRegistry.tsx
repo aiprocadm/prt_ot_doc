@@ -54,5 +54,8 @@ export const WarehousePage = lazy(() => import("@/pages/warehouse/WarehousePage"
 export const CrmFinancePage = lazy(() => import("@/pages/crm-finance/CrmFinancePage"));
 export const IntegrationsPage = lazy(() => import("@/pages/integrations/IntegrationsPage"));
 export const WorkflowPage = lazy(() => import("@/pages/workflow/WorkflowPage"));
+export const WorkspaceAttentionPage = lazy(() => import("@/pages/workspace/WorkspaceAttentionPage"));
+export const WorkspaceDataQualityPage = lazy(() => import("@/pages/workspace/WorkspaceDataQualityPage"));
+export const SyncConflictHelpPage = lazy(() => import("@/pages/help/SyncConflictHelpPage"));
 export * from "@/router/pageRegistry/documents";
 export * from "@/router/pageRegistry/search";

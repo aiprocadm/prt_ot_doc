@@ -27,6 +27,9 @@
 | Frontend production bundle stability | `frontend/vite.config.ts`, `npm --prefix frontend run build` | `npm --prefix frontend run build` |
 | Frontend no-dead-end wizard actions | `frontend/src/__tests__/GeneratePackWizardPage.test.tsx`, `frontend/src/__tests__/DocumentsWizardPage.test.tsx` | `cd frontend && npx vitest run GeneratePackWizardPage DocumentsWizardPage` |
 | Frontend branded preview state continuity | `frontend/src/stores/documentsWizard.ts`, `frontend/src/__tests__/DocumentsWizardPage.test.tsx` | `cd frontend && npx vitest run src/__tests__/DocumentsWizardPage.test.tsx` |
+| TZ Wave 3 — document signed → follow-up task | `backend/app/services/domain_hooks.py`, `tests/services/test_domain_hooks_document_signed.py` | `./scripts/pytest.sh tests/services/test_domain_hooks_document_signed.py` |
+| TZ Wave 5 — EDO adapter factory (stub vs HTTP) | `backend/app/services/integrations/factory.py`, `tests/services/test_edo_integration_factory.py` | `./scripts/pytest.sh tests/services/test_edo_integration_factory.py` |
+| TZ Wave 4 — workspace hub routes render | `frontend/src/pages/workspace/WorkspaceAttentionPage.tsx`, `WorkspaceDataQualityPage.tsx`, `SyncConflictHelpPage.tsx` | `npm --prefix frontend run build` |
 
 ## 3. Acceptance bundle commands
 

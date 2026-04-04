@@ -32,6 +32,11 @@
 3. Для staging/production: реальный S3-совместимый backend и bucket.
 4. Включить JSON-логи в prod: `LOG_JSON=true` (если поддерживается).
 
+## Интеграции (ЭДО HTTP)
+
+- `USE_EDO_INTEGRATION=true` + непустой `EDO_INTEGRATION_BASE_URL` переключает фабрику на `HttpEDOIntegration` (см. `docs/integrations/PRODUCTION_ADAPTERS.md`).
+- `EDO_INTEGRATION_API_TOKEN` хранить только в секретах окружения; не коммитить в `.env` репозитория.
+
 ## Fail-fast (идеи на следующий этап)
 
 - Проверка доступности Redis/S3 при старте (опционально, с таймаутом).

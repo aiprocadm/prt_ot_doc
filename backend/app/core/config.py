@@ -415,6 +415,14 @@ class Settings(BaseSettings):
     use_frdo_integration: bool = Field(False, alias="USE_FRDO_INTEGRATION")
     use_eisot_integration: bool = Field(False, alias="USE_EISOT_INTEGRATION")
 
+    edo_integration_base_url: str | None = Field(None, alias="EDO_INTEGRATION_BASE_URL")
+    edo_integration_api_token: str | None = Field(None, alias="EDO_INTEGRATION_API_TOKEN")
+    edo_integration_timeout_seconds: float = Field(30.0, alias="EDO_INTEGRATION_TIMEOUT_SECONDS")
+    edo_integration_outbound_path: str = Field(
+        "/v1/outbound/documents",
+        alias="EDO_INTEGRATION_OUTBOUND_PATH",
+    )
+
     json_max_bytes: int = Field(JSON_MAX_DEFAULT, alias="JSON_MAX")
     max_upload_size: int = Field(
         MAX_UPLOAD_SIZE_DEFAULT,

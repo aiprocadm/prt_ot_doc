@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.document import Document, DocumentStatus, DocumentVersion
 from app.services.audit import AuditService
+from app.services.domain_hooks import on_document_signed_create_followup_task
 from app.services.events import EventType
 from app.services.outbox import OutboxService
 
@@ -229,6 +230,11 @@ class DocumentWorkflowService:
                     "signed_at": datetime.now(tz=timezone.utc),
                     "signed_file_id": document.signed_file_id,
                 },
+            )
+            await on_document_signed_create_followup_task(
+                self.session,
+                document=document,
+                actor_id=actor_id,
             )
 
     async def _get_latest_version_id(self, document_id: str) -> str:

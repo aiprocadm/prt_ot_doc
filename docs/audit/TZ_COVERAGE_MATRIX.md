@@ -29,3 +29,13 @@
 | Demo access canonical doc | Done | `docs/DEMO_ACCESS.md` |
 | Owner bootstrap/access canonical doc | Done | `docs/OWNER_ADMIN_ACCESS.md` |
 | User role issuance and scope assignment doc | Done | `docs/USER_ACCESS_AND_ROLES.md` |
+
+## Waves 3–5 (TZ rollout) — incremental implementation
+
+| TZ area | Status | Canonical implementation |
+|---|---|---|
+| Cross-domain link: signed document → universal task | Done | `backend/app/services/domain_hooks.py`, `backend/app/services/documents.py`, `tests/services/test_domain_hooks_document_signed.py` |
+| EDO production HTTP adapter (config-gated) | Done | `backend/app/services/integrations/http_edo.py`, `backend/app/services/integrations/factory.py`, `backend/app/core/config.py`, `docs/integrations/PRODUCTION_ADAPTERS.md`, `tests/services/test_edo_integration_factory.py` |
+| Role-based workspace UX: attention + data quality hubs | Done | `frontend/src/pages/workspace/*`, `frontend/src/router/routeGroups.tsx`, `frontend/src/components/layout/SideNav.tsx` |
+| Offline / sync conflict operator guidance | Done | `frontend/src/pages/help/SyncConflictHelpPage.tsx`, route `/help/sync-conflicts` |
+| Acceptance traceability (Wave 3–5 slice) | Done | `ACCEPTANCE_TEST_MATRIX.md` (section below), this table |

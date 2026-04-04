@@ -12,6 +12,7 @@ from .interfaces import (
     BaseEISOTIntegration,
     BaseFRDOIntegration,
 )
+from .http_edo import HttpEDOIntegration
 from .stubs import (
     DisabledAccountingIntegration,
     DisabledEDOIntegration,
@@ -35,9 +36,17 @@ def get_accounting_integration() -> BaseAccountingIntegration:
 @lru_cache()
 def get_edo_integration() -> BaseEDOIntegration:
     settings = get_settings()
-    if settings.use_edo_integration:
-        return StubEDOIntegration()
-    return DisabledEDOIntegration()
+    if not settings.use_edo_integration:
+        return DisabledEDOIntegration()
+    base = (settings.edo_integration_base_url or "").strip()
+    if base:
+        return HttpEDOIntegration(
+            base_url=base,
+            api_token=settings.edo_integration_api_token,
+            timeout_seconds=settings.edo_integration_timeout_seconds,
+            outbound_path=settings.edo_integration_outbound_path,
+        )
+    return StubEDOIntegration()
 
 
 @lru_cache()
