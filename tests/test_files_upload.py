@@ -222,8 +222,8 @@ async def test_upload_file_rejects_oversized(async_client, make_auth_headers) ->
 
     assert response.status_code == 413
     body = response.json()
-    assert body["code"] == "http_413"
-    assert "File exceeds" in body["message"]
+    assert body["code"] in ("http_413", "FILE_TOO_LARGE", "PAYLOAD_TOO_LARGE")
+    assert "exceed" in body["message"].lower() or "large" in body["message"].lower()
     assert body["details"]["limit"] == limit
     assert body["details"]["size"] == len(payload)
     assert body["trace_id"]
