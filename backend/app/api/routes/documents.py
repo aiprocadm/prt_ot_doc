@@ -99,6 +99,16 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def _generate_internal_error_problem() -> dict[str, Any]:
+    """Клиентский ответ и тело для idempotency store без утечки внутренних исключений."""
+
+    return api_problem_detail(
+        code="INTERNAL_ERROR",
+        message="Произошла внутренняя ошибка при обработке запроса.",
+        error_type="server",
+    )
+
+
 def _documents_bad_request(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
@@ -1102,10 +1112,14 @@ async def generate_document(
         await session.commit()
         raise
     except Exception as exc:
+        logger.exception(
+            "documents.generate.unexpected_failure",
+            extra={"correlation_id": correlation_id},
+        )
         await idempotency.store_failure(
             record,
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"detail": str(exc)},
+            detail={"detail": _generate_internal_error_problem()},
         )
         await session.commit()
         raise
@@ -1127,10 +1141,13 @@ async def generate_document(
                 await idempotency.store_failure(
                     stored,
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail={"detail": str(exc)},
+                    detail={"detail": _generate_internal_error_problem()},
                 )
                 await session.commit()
-            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(exc)) from exc
+            raise HTTPException(
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
+                _generate_internal_error_problem(),
+            ) from exc
 
     response.status_code = status.HTTP_202_ACCEPTED
     return result
