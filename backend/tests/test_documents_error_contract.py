@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException, status
@@ -11,15 +12,16 @@ def test_serialize_payload_raises_structured_bad_request_for_non_serializable_da
         _serialize_payload({"value": {1, 2, 3}})
 
     assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
-    assert exc_info.value.detail == {
-        "code": "documents_bad_request",
-        "message": "data must be JSON serializable",
-    }
+    detail = exc_info.value.detail
+    assert detail["code"] == "documents_bad_request"
+    assert detail["error_code"] == "documents_bad_request"
+    assert detail["type"] == "documents"
+    assert detail["message"] == "data must be JSON serializable"
 
 
 @pytest.mark.asyncio
 async def test_fetch_template_requires_template_code_with_structured_bad_request() -> None:
-    tenant = SimpleNamespace(slug="tenant-a")
+    tenant = SimpleNamespace(id=uuid4(), slug="tenant-a")
 
     with pytest.raises(HTTPException) as exc_info:
         await _fetch_template(
@@ -31,15 +33,14 @@ async def test_fetch_template_requires_template_code_with_structured_bad_request
         )
 
     assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
-    assert exc_info.value.detail == {
-        "code": "documents_bad_request",
-        "message": "template_code is required for template selection",
-    }
+    d = exc_info.value.detail
+    assert d["code"] == "documents_bad_request"
+    assert d["message"] == "template_code is required for template selection"
 
 
 @pytest.mark.asyncio
 async def test_fetch_template_requires_template_version_with_structured_bad_request() -> None:
-    tenant = SimpleNamespace(slug="tenant-a")
+    tenant = SimpleNamespace(id=uuid4(), slug="tenant-a")
 
     with pytest.raises(HTTPException) as exc_info:
         await _fetch_template(
@@ -51,7 +52,6 @@ async def test_fetch_template_requires_template_version_with_structured_bad_requ
         )
 
     assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
-    assert exc_info.value.detail == {
-        "code": "documents_bad_request",
-        "message": "template_version is required for template selection",
-    }
+    d = exc_info.value.detail
+    assert d["code"] == "documents_bad_request"
+    assert d["message"] == "template_version is required for template selection"

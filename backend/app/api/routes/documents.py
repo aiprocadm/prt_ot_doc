@@ -30,6 +30,7 @@ from app.api.dependencies import get_file_storage_service, get_session, get_tena
 from app.db.tenant_row_guard import assert_tenant_row_matches_session
 from app.core.audit_decorator import audit_operation
 from app.core.config import get_settings
+from app.core.errors import api_problem_detail
 from app.core.idempotency import compute_request_hash
 from app.core.payload_constraints import PayloadConstraintError, enforce_mapping_constraints
 from app.core.rate_limit import generate_per_tenant, ip_tenant_key, limiter
@@ -101,7 +102,11 @@ logger = logging.getLogger(__name__)
 def _documents_bad_request(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail={"code": "documents_bad_request", "type": "documents", "message": message},
+        detail=api_problem_detail(
+            code="documents_bad_request",
+            message=message,
+            error_type="documents",
+        ),
     )
 
 
