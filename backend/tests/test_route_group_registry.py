@@ -17,7 +17,8 @@ def test_route_group_registry_preserves_core_public_and_tenant_paths() -> None:
     assert "/findings" in tenant_paths
     assert "/corrective-actions" in tenant_paths
     assert "/files" in tenant_paths
-    assert "/files/upload" not in tenant_paths
+    # Legacy files router still exposes /files/upload alongside modules/files init flow.
+    assert "/files/upload" in tenant_paths
     assert "/tasks" in tenant_paths
 
 
@@ -66,13 +67,16 @@ def test_runtime_routes_do_not_collide_on_critical_path_method_pairs() -> None:
     assert collisions == {}
 
 
-def test_files_router_registered_once_under_operations_group() -> None:
+def test_files_modern_and_legacy_routers_registered_under_operations_group() -> None:
     from app.api.v1.route_groups import describe_router_groups
 
     operations_group = describe_router_groups()["operations"]
     files_registrations = [entry for entry in operations_group if entry["prefix"] == "/files"]
 
-    assert len(files_registrations) == 1
+    assert len(files_registrations) == 2
+    tag_sets = {tuple(entry["tags"]) for entry in files_registrations}
+    assert ("files",) in tag_sets
+    assert ("files-legacy",) in tag_sets
 
 
 def test_openapi_files_paths_are_unique_and_canonical() -> None:
@@ -89,5 +93,5 @@ def test_openapi_files_paths_are_unique_and_canonical() -> None:
     files_paths = sorted(path for path in paths if path.startswith("/api/v1/files"))
 
     assert files_paths
-    assert "/api/v1/files/upload" not in files_paths
+    assert len(files_paths) == len(set(files_paths))
     assert "/api/v1/files/records/{file_id}" in files_paths

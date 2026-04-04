@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import os
+import shutil
 import threading
 import time
 import unicodedata
@@ -254,14 +255,11 @@ class _LocalAdapter:
         self._path(key).unlink(missing_ok=True)
 
     def clear(self) -> None:
-        if self._root.exists():
-            for path in sorted(self._root.rglob("*"), reverse=True):
-                if path.is_file():
-                    path.unlink(missing_ok=True)
-                elif path.is_dir():
-                    path.rmdir()
         with self._lock:
             self._meta.clear()
+        if self._root.exists():
+            shutil.rmtree(self._root, ignore_errors=True)
+            self._root.mkdir(parents=True, exist_ok=True)
 
     def ensure_ready(self) -> None:
         self._root.mkdir(parents=True, exist_ok=True)

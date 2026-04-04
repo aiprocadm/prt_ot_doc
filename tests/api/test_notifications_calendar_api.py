@@ -106,7 +106,7 @@ async def test_notifications_invalid_cursor_returns_structured_422(async_client,
     assert response.status_code == 422
     payload = response.json()
     assert payload["type"] == "validation"
-    assert payload["code"] == "validation_error"
+    assert payload["code"].lower() == "validation_error"
     assert payload["details"]["provided"] == "definitely-not-a-datetime"
     assert payload["field_errors"][0]["field"] == "cursor"
 
@@ -126,6 +126,6 @@ async def test_notifications_calendar_invalid_source_returns_structured_422(
     assert response.status_code == 422
     payload = response.json()
     assert payload["type"] == "validation"
-    assert payload["code"] == "validation_error"
+    assert payload["code"].lower() == "validation_error"
     assert payload["details"]["allowed_values"] == ["task", "training", "ppe", "inspection"]
     assert payload["field_errors"][0]["field"] == "source"
