@@ -9,10 +9,9 @@ def test_pack_bad_request_returns_structured_detail() -> None:
 
     assert isinstance(exc, HTTPException)
     assert exc.status_code == status.HTTP_400_BAD_REQUEST
-    assert exc.detail == {
-        "code": "pack_validation_error",
-        "message": "Site does not belong to company",
-    }
+    assert exc.detail["code"] == "PACK_VALIDATION_ERROR"
+    assert exc.detail["error_code"] == "PACK_VALIDATION_ERROR"
+    assert exc.detail["message"] == "Site does not belong to company"
 
 
 def test_validate_pack_output_selection_raises_structured_bad_request() -> None:
@@ -20,10 +19,9 @@ def test_validate_pack_output_selection_raises_structured_bad_request() -> None:
         _validate_pack_output_selection(False, False)
 
     assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
-    assert exc_info.value.detail == {
-        "code": "pack_validation_error",
-        "message": "At least one of include_docx or include_pdf must be enabled",
-    }
+    assert exc_info.value.detail["code"] == "PACK_VALIDATION_ERROR"
+    assert exc_info.value.detail["error_code"] == "PACK_VALIDATION_ERROR"
+    assert exc_info.value.detail["message"] == "At least one of include_docx or include_pdf must be enabled"
 
 
 def test_validate_pack_output_selection_accepts_any_enabled_output() -> None:

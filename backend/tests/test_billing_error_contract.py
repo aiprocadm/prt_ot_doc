@@ -8,7 +8,6 @@ def test_billing_bad_request_returns_structured_detail() -> None:
 
     assert isinstance(exc, HTTPException)
     assert exc.status_code == status.HTTP_400_BAD_REQUEST
-    assert exc.detail == {
-        "code": "IDEMPOTENCY_REQUIRED",
-        "message": "Idempotency-Key required",
-    }
+    assert exc.detail["code"] == "IDEMPOTENCY_REQUIRED"
+    assert exc.detail["error_code"] == "IDEMPOTENCY_REQUIRED"
+    assert exc.detail["message"] == "Idempotency-Key required"

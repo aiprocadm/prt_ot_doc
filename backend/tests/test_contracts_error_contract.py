@@ -7,17 +7,15 @@ def test_contracts_bad_request_has_structured_error_detail() -> None:
     exc = _contract_bad_request("department mismatch")
 
     assert exc.status_code == 400
-    assert exc.detail == {
-        "code": "contract_validation_error",
-        "message": "department mismatch",
-    }
+    assert exc.detail["code"] == "CONTRACT_VALIDATION_ERROR"
+    assert exc.detail["error_code"] == "CONTRACT_VALIDATION_ERROR"
+    assert exc.detail["message"] == "department mismatch"
 
 
 def test_contracts_unprocessable_has_structured_error_detail() -> None:
     exc = _contract_unprocessable("unsupported contract status")
 
     assert exc.status_code == 422
-    assert exc.detail == {
-        "code": "contract_validation_error",
-        "message": "unsupported contract status",
-    }
+    assert exc.detail["code"] == "CONTRACT_VALIDATION_ERROR"
+    assert exc.detail["error_code"] == "CONTRACT_VALIDATION_ERROR"
+    assert exc.detail["message"] == "unsupported contract status"

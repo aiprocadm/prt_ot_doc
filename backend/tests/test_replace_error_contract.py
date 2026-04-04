@@ -27,10 +27,9 @@ def test_require_tenant_raises_structured_bad_request() -> None:
         _require_tenant(request)
 
     assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
-    assert exc_info.value.detail == {
-        "code": "replace_bad_request",
-        "message": "X-Tenant header is required",
-    }
+    assert exc_info.value.detail["code"] == "REPLACE_BAD_REQUEST"
+    assert exc_info.value.detail["error_code"] == "REPLACE_BAD_REQUEST"
+    assert exc_info.value.detail["message"] == "X-Tenant header is required"
 
 
 def test_parse_map_raises_structured_unprocessable_for_empty_from() -> None:
@@ -40,10 +39,9 @@ def test_parse_map_raises_structured_unprocessable_for_empty_from() -> None:
         _parse_map(content)
 
     assert exc_info.value.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-    assert exc_info.value.detail == {
-        "code": "replace_validation_error",
-        "message": "from cannot be empty",
-    }
+    assert exc_info.value.detail["code"] == "REPLACE_VALIDATION_ERROR"
+    assert exc_info.value.detail["error_code"] == "REPLACE_VALIDATION_ERROR"
+    assert exc_info.value.detail["message"] == "from cannot be empty"
 
 
 def test_replace_access_roles_read_write_parity() -> None:
