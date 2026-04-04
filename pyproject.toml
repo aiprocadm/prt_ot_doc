@@ -4,6 +4,7 @@ asyncio_default_fixture_loop_scope = "function"
 testpaths = [
     "tests",
     "integration_tests",
+    "backend/tests",
 ]
 addopts = "-q"
 markers = [
