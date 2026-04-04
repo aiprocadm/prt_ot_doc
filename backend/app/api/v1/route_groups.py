@@ -57,6 +57,7 @@ from app.api.routes import (
     webhooks,
     workspace,
 )
+from app.api.routes.files import router as legacy_files_router
 from app.modules.analytics.api import router as analytics_router
 from app.modules.branding.api import router as branding_router
 from app.modules.client_portal.api import internal_router as portal_requests_router
@@ -116,6 +117,7 @@ COMPLIANCE_AND_ADMIN_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
 
 OPERATIONS_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
     (files_v1_router, {"prefix": "/files", "tags": ["files"]}),
+    (legacy_files_router, {"prefix": "/files", "tags": ["files-legacy"]}),
     (packs.router, {"prefix": "/packs", "tags": ["packs"]}),
     (client_portal.presets_router, {}),
     (client_portal.internal_router, {}),
