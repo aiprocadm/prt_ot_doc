@@ -12,3 +12,5 @@
 | [CONFIGURATION_HARDENING.md](./CONFIGURATION_HARDENING.md) | Конфигурация и env |
 
 Короткая ссылка из корня репозитория: `docs/stabilization/`.
+
+Дополнительно: корневой пакет `app/` — shim к `backend/app` (см. `CONFIGURATION_HARDENING.md`). E2E Playwright: по умолчанию ручной запуск workflow; ночной cron — в `.github/workflows/e2e-smoke.yml`.

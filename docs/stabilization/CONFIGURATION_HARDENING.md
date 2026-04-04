@@ -9,6 +9,16 @@
 - Обязательны непустые `PRIVATE_KEY_PEM` и `PUBLIC_KEY_PEM` (не dev-пара).
 - Запрещены: `SECRET_KEY=change-me`, `POSTGRES_PASSWORD=change_me`, локальные `S3_ACCESS_KEY`/`S3_SECRET_KEY` по умолчанию, `S3_BACKEND=memory`.
 - Реализовано в `_ensure_production_secrets` и `_ensure_jwt_keys`.
+- **OpenAPI/Swagger:** интерактивная документация и `/api/openapi.json` **всегда отключены** (`Settings._disable_openapi_in_production`), независимо от `ENABLE_OPENAPI_DOCS`. Публичная схема для интеграций — артефакт `docs/openapi.yaml` и контрактные тесты `tests/contract/`.
+
+## OpenAPI / tenant middleware
+
+- При `ENABLE_OPENAPI_DOCS=true` (не production) пути `/api/docs`, `/api/openapi.json`, `/api/redoc` и oauth2-redirect обходят требование `X-Tenant` в `TenantMiddleware` и совпадают с URL, которые выставляет `create_app`.
+- В production эти маршруты не регистрируются в FastAPI.
+
+## Корневой пакет `app/` в репозитории
+
+- Файл `app/__init__.py` в **корне** репозитория — это **shim**: добавляет `backend/app` в `__path__`, чтобы импорты `app.*` работали при `PYTHONPATH=backend` или запуске из корня. Не удалять без миграции всех entrypoints и документации.
 
 ## Staging (`APP_ENV=staging`)
 

@@ -1,9 +1,12 @@
 # Ручной запуск: полный smoke требует бэкенд для логина (E2E_USER_*).
 # Без секретов выполняются только тесты с preview (страница логина + редирект).
+# Расписание: еженедельный прогон (ветка default); при необходимости задайте secrets в форке.
 name: E2E smoke (Playwright)
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "0 5 * * 1"
 
 jobs:
   playwright-smoke:

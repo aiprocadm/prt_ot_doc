@@ -54,6 +54,29 @@ describe("ArchiveSearch", () => {
     });
   });
 
+  it("renders snippet as plain text without HTML injection", async () => {
+    const xss = '<img src=x onerror="window.__xss=1">';
+    fetchSearchMock.mockResolvedValueOnce({
+      items: [
+        {
+          kind: "entity",
+          entity_type: "documents",
+          entity_id: "doc-1",
+          title: "Test",
+          snippet: xss,
+        },
+      ],
+      facets: {},
+    });
+
+    const { container } = renderPage();
+
+    await waitFor(() => expect(fetchSearchMock).toHaveBeenCalled());
+    expect(await screen.findByText(xss, { exact: false })).toBeInTheDocument();
+    expect(container.querySelector("img")).toBeNull();
+    expect((window as unknown as { __xss?: number }).__xss).toBeUndefined();
+  });
+
   it("saves and applies saved view", async () => {
     renderPage("/archive?status=ready&type=documents");
     await waitFor(() => expect(fetchSearchMock).toHaveBeenCalled());

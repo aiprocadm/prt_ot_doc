@@ -458,6 +458,7 @@ class Settings(BaseSettings):
     clamav_unix_socket: str | None = Field(None, alias="CLAMAV_UNIX_SOCKET")
 
     enable_metrics: bool = Field(True, alias="ENABLE_METRICS")
+    enable_openapi_docs: bool = Field(True, alias="ENABLE_OPENAPI_DOCS")
     enable_gzip: bool = Field(True, alias="ENABLE_GZIP")
     max_request_body_bytes: int = Field(1_048_576, alias="MAX_REQUEST_BODY_BYTES")
     request_timeout_seconds: float = Field(15.0, alias="REQUEST_TIMEOUT_SECONDS")
@@ -660,6 +661,14 @@ class Settings(BaseSettings):
                 f"{self.app_env.title()} configuration must override defaults: "
                 + ", ".join(missing)
             )
+        return self
+
+    @model_validator(mode="after")
+    def _disable_openapi_in_production(self) -> Settings:
+        """Production must not expose interactive OpenAPI/Swagger (override ENABLE_OPENAPI_DOCS)."""
+
+        if self.app_env == "production":
+            self.enable_openapi_docs = False
         return self
 
     @property

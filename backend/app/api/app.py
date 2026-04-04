@@ -164,11 +164,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     settings = settings or bootstrap("api")
 
+    api_prefix = settings.api_prefix.rstrip("/") or ""
+    if settings.enable_openapi_docs:
+        docs_url = f"{api_prefix}/docs"
+        openapi_url = f"{api_prefix}/openapi.json"
+        redoc_url = f"{api_prefix}/redoc"
+    else:
+        docs_url = None
+        openapi_url = None
+        redoc_url = None
+
     app = FastAPI(
         title=settings.app_name,
         debug=False,
-        docs_url=f"{settings.api_prefix}/docs",
-        openapi_url=f"{settings.api_prefix}/openapi.json",
+        docs_url=docs_url,
+        openapi_url=openapi_url,
+        redoc_url=redoc_url,
         lifespan=_create_lifespan(settings),
     )
 

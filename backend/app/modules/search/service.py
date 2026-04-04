@@ -151,11 +151,11 @@ class SearchService:
         cursor: str | None,
     ) -> dict[str, Any]:
         offset = int(cursor or "0") if (cursor or "0").isdigit() else 0
-        stmt = select(SearchIndexEntry).where(SearchIndexEntry.tenant_id == self.tenant_id)
+        criteria: list = [SearchIndexEntry.tenant_id == self.tenant_id]
         query = q.strip()
         if query:
             like = f"%{query}%"
-            stmt = stmt.where(
+            criteria.append(
                 or_(
                     SearchIndexEntry.title.ilike(like),
                     SearchIndexEntry.subtitle.ilike(like),
@@ -164,23 +164,26 @@ class SearchService:
             )
         resolved_types = self._resolve_entity_types(types)
         if resolved_types:
-            stmt = stmt.where(SearchIndexEntry.entity_type.in_(resolved_types))
+            criteria.append(SearchIndexEntry.entity_type.in_(resolved_types))
         if filters.status:
-            stmt = stmt.where(SearchIndexEntry.status == filters.status)
+            criteria.append(SearchIndexEntry.status == filters.status)
         if filters.site_id:
-            stmt = stmt.where(SearchIndexEntry.tags_json["site_id"].astext == filters.site_id)
+            criteria.append(SearchIndexEntry.tags_json["site_id"].astext == filters.site_id)
         if filters.company_id:
-            stmt = stmt.where(SearchIndexEntry.tags_json["company_id"].astext == filters.company_id)
+            criteria.append(SearchIndexEntry.tags_json["company_id"].astext == filters.company_id)
         if filters.contractor_id:
-            stmt = stmt.where(SearchIndexEntry.tags_json["contractor_id"].astext == filters.contractor_id)
+            criteria.append(SearchIndexEntry.tags_json["contractor_id"].astext == filters.contractor_id)
         if filters.project_id:
-            stmt = stmt.where(SearchIndexEntry.tags_json["project_id"].astext == filters.project_id)
+            criteria.append(SearchIndexEntry.tags_json["project_id"].astext == filters.project_id)
         if filters.risk_level:
-            stmt = stmt.where(SearchIndexEntry.tags_json["risk_level"].astext == filters.risk_level)
+            criteria.append(SearchIndexEntry.tags_json["risk_level"].astext == filters.risk_level)
         if filters.date_from:
-            stmt = stmt.where(func.date(SearchIndexEntry.updated_at) >= filters.date_from)
+            criteria.append(func.date(SearchIndexEntry.updated_at) >= filters.date_from)
         if filters.date_to:
-            stmt = stmt.where(func.date(SearchIndexEntry.updated_at) <= filters.date_to)
+            criteria.append(func.date(SearchIndexEntry.updated_at) <= filters.date_to)
+
+        filter_expr = and_(*criteria)
+        stmt = select(SearchIndexEntry).where(filter_expr)
 
         if sort == "updated_at":
             order_by = desc(SearchIndexEntry.updated_at)
@@ -202,16 +205,44 @@ class SearchService:
                 order_by = desc(SearchIndexEntry.updated_at)
         facet_stmt = (
             select(SearchIndexEntry.entity_type, func.count())
-            .where(*stmt._where_criteria)
+            .where(filter_expr)
             .group_by(SearchIndexEntry.entity_type)
         )
         facet_rows = (await self.session.execute(facet_stmt)).all()
-        status_rows = (await self.session.execute(select(SearchIndexEntry.status, func.count()).where(*stmt._where_criteria).group_by(SearchIndexEntry.status))).all()
-        company_rows = (await self.session.execute(select(SearchIndexEntry.tags_json["company_id"].astext, func.count()).where(*stmt._where_criteria, SearchIndexEntry.tags_json["company_id"].astext.is_not(None)).group_by(SearchIndexEntry.tags_json["company_id"].astext))).all()
-        site_rows = (await self.session.execute(select(SearchIndexEntry.tags_json["site_id"].astext, func.count()).where(*stmt._where_criteria, SearchIndexEntry.tags_json["site_id"].astext.is_not(None)).group_by(SearchIndexEntry.tags_json["site_id"].astext))).all()
-        project_rows = (await self.session.execute(select(SearchIndexEntry.tags_json["project_id"].astext, func.count()).where(*stmt._where_criteria, SearchIndexEntry.tags_json["project_id"].astext.is_not(None)).group_by(SearchIndexEntry.tags_json["project_id"].astext))).all()
-        risk_rows = (await self.session.execute(select(SearchIndexEntry.tags_json["risk_level"].astext, func.count()).where(*stmt._where_criteria, SearchIndexEntry.tags_json["risk_level"].astext.is_not(None)).group_by(SearchIndexEntry.tags_json["risk_level"].astext))).all()
-        total = int(await self.session.scalar(select(func.count()).select_from(SearchIndexEntry).where(*stmt._where_criteria)) or 0)
+        status_rows = (
+            await self.session.execute(
+                select(SearchIndexEntry.status, func.count()).where(filter_expr).group_by(SearchIndexEntry.status)
+            )
+        ).all()
+        company_rows = (
+            await self.session.execute(
+                select(SearchIndexEntry.tags_json["company_id"].astext, func.count())
+                .where(filter_expr, SearchIndexEntry.tags_json["company_id"].astext.is_not(None))
+                .group_by(SearchIndexEntry.tags_json["company_id"].astext)
+            )
+        ).all()
+        site_rows = (
+            await self.session.execute(
+                select(SearchIndexEntry.tags_json["site_id"].astext, func.count())
+                .where(filter_expr, SearchIndexEntry.tags_json["site_id"].astext.is_not(None))
+                .group_by(SearchIndexEntry.tags_json["site_id"].astext)
+            )
+        ).all()
+        project_rows = (
+            await self.session.execute(
+                select(SearchIndexEntry.tags_json["project_id"].astext, func.count())
+                .where(filter_expr, SearchIndexEntry.tags_json["project_id"].astext.is_not(None))
+                .group_by(SearchIndexEntry.tags_json["project_id"].astext)
+            )
+        ).all()
+        risk_rows = (
+            await self.session.execute(
+                select(SearchIndexEntry.tags_json["risk_level"].astext, func.count())
+                .where(filter_expr, SearchIndexEntry.tags_json["risk_level"].astext.is_not(None))
+                .group_by(SearchIndexEntry.tags_json["risk_level"].astext)
+            )
+        ).all()
+        total = int(await self.session.scalar(select(func.count()).select_from(SearchIndexEntry).where(filter_expr)) or 0)
         rows = (await self.session.execute(stmt.order_by(*order_by).offset(offset).limit(limit + 1))) if isinstance(order_by, list) else (await self.session.execute(stmt.order_by(order_by).offset(offset).limit(limit + 1)))
         rows = rows.scalars().all()
         has_more = len(rows) > limit

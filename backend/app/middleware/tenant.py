@@ -12,7 +12,7 @@ from starlette.responses import Response
 from starlette.types import ASGIApp
 
 from app.api.deps.tracing import get_trace_id
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.core.security import verify_token
 from app.core.tenant import TENANT_HEADER, tenant_required
 from app.db.session import AsyncSessionLocal
@@ -38,8 +38,23 @@ class TenantMiddleware(BaseHTTPMiddleware):
             "/api/v1/auth",
             "/api/v1/portal",
         )
-        self._docs_paths = {"/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"}
         self._public_paths: set[str] = set()
+
+    @staticmethod
+    def _openapi_public_paths(settings: Settings) -> frozenset[str]:
+        """Paths that skip tenant resolution; must match FastAPI docs/openapi/redoc URLs."""
+
+        if not settings.enable_openapi_docs:
+            return frozenset()
+        prefix = settings.api_prefix.rstrip("/") or ""
+        return frozenset(
+            {
+                f"{prefix}/docs",
+                f"{prefix}/docs/oauth2-redirect",
+                f"{prefix}/openapi.json",
+                f"{prefix}/redoc",
+            }
+        )
 
     def _is_public_path(self, path: str) -> bool:
         if path in self._public_paths:
@@ -71,7 +86,8 @@ class TenantMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):  # type: ignore[override]
         path = request.url.path
-        correlation_id = get_trace_id(request, get_settings().trace_header_name)
+        settings = get_settings()
+        correlation_id = get_trace_id(request, settings.trace_header_name)
         request.state.correlation_id = correlation_id
 
         if path == "/metrics" and not self._metrics_enabled:
@@ -80,7 +96,7 @@ class TenantMiddleware(BaseHTTPMiddleware):
         if (
             path in self._system_paths
             or (self._metrics_enabled and path == "/metrics")
-            or path in self._docs_paths
+            or path in self._openapi_public_paths(settings)
             or self._is_public_path(path)
         ):
             if path.startswith("/api/v1/webhooks/inbound/") or path.startswith("/api/v1/edo/webhooks/") or path.startswith("/api/v1/edo/webhook/status"):

@@ -147,7 +147,7 @@ const ArchiveSearch = () => {
               <tr key={`${item.entity_type}-${item.entity_id}`} className="border-t align-top">
                 <td className="py-2"><a className="text-primary underline" href={item.deeplink ?? "#"}>{item.title}</a></td>
                 <td className="py-2">{item.entity_type}</td>
-                <td className="py-2 text-muted-foreground" dangerouslySetInnerHTML={{ __html: item.snippet ?? "—" }} />
+                <td className="py-2 whitespace-pre-wrap break-words text-muted-foreground">{item.snippet ?? "—"}</td>
                 <td className="py-2 text-right">
                   {item.file_id ? <Button size="sm" variant="outline" onClick={() => void openFile(item.file_id)}>Скачать</Button> : null}
                 </td>

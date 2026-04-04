@@ -38,6 +38,7 @@ async def test_create_app_configures_middlewares_and_routes() -> None:
     assert app.title == "Docs"
     assert app.docs_url == "/api/docs"
     assert app.openapi_url == "/api/openapi.json"
+    assert app.redoc_url == "/api/redoc"
     assert app.state.settings is settings
     assert app.state.debug is settings.debug
 
