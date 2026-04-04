@@ -40,7 +40,7 @@ async def test_document_generate_idempotency(
         session.info["tenant"] = tenant.slug
 
         template = Template(
-            tenant_id=tenant.slug,
+            tenant_id=tenant.id,
             name="SAFETY_DOC",
             description="",
             metadata_json={},
@@ -50,7 +50,7 @@ async def test_document_generate_idempotency(
         await session.flush()
 
         version = TemplateVersion(
-            tenant_id=tenant.slug,
+            tenant_id=tenant.id,
             template_id=template.id,
             version=1,
             checksum=b"checksum",
@@ -85,7 +85,7 @@ async def test_document_generate_idempotency(
 
         return _Result()
 
-    monkeypatch.setattr("app.tasks.generate_document_task.apply_async", fake_apply_async)
+    monkeypatch.setattr("app.tasks._core.generate_document_task.apply_async", fake_apply_async)
 
     headers = {**await make_auth_headers(), "Idempotency-Key": "doc-key-123"}
     payload = {
@@ -149,7 +149,7 @@ async def test_pack_run_idempotency(
         await session.flush()
 
         template = Template(
-            tenant_id=tenant.slug,
+            tenant_id=tenant.id,
             name="ENTRY_FORM",
             description="",
             metadata_json={},
@@ -159,7 +159,7 @@ async def test_pack_run_idempotency(
         await session.flush()
 
         version = TemplateVersion(
-            tenant_id=tenant.slug,
+            tenant_id=tenant.id,
             template_id=template.id,
             version=1,
             checksum=b"checksum",
@@ -169,7 +169,7 @@ async def test_pack_run_idempotency(
         session.add(version)
 
         pack = DocumentPack(
-            tenant_id=tenant.slug,
+            tenant_id=tenant.id,
             code="ENTRY",
             name="Entry Pack",
             description="",
@@ -178,7 +178,7 @@ async def test_pack_run_idempotency(
         await session.flush()
 
         item = DocumentPackItem(
-            tenant_id=tenant.slug,
+            tenant_id=tenant.id,
             pack_id=pack.id,
             template_id=template.id,
             template_version_id=version.id,
