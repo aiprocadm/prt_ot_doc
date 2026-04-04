@@ -12,13 +12,13 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
-from app.api.tenant_row_http import enforce_row_belongs_to_tenant
-from app.core.errors import api_problem_detail
-from app.db.tenant_row_guard import assert_tenant_row_matches_session
 from app.api.deps.tracing import get_trace_id
+from app.api.tenant_row_http import enforce_row_belongs_to_tenant
 from app.core.audit_decorator import audit_operation
+from app.core.errors import api_problem_detail
 from app.core.idempotency import compute_request_hash
 from app.core.security import rbac
+from app.db.tenant_row_guard import assert_tenant_row_matches_session
 from app.models.job_engine import (
     DocumentArtifact,
     DocumentJob,
