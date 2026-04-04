@@ -34,8 +34,9 @@ class HttpEDOIntegration(BaseEDOIntegration):
         outbound_path: str = "/v1/outbound/documents",
         app_env: str = "development",
     ) -> None:
-        assert_safe_http_base_url(base_url.strip(), app_env=app_env)
-        self._base = base_url.rstrip("/")
+        normalized = base_url.strip()
+        assert_safe_http_base_url(normalized, app_env=app_env)
+        self._base = normalized.rstrip("/")
         self._token = (api_token or "").strip() or None
         self._timeout = timeout_seconds
         self._outbound_path = outbound_path if outbound_path.startswith("/") else f"/{outbound_path}"
