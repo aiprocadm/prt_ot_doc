@@ -16,6 +16,7 @@ def _reset_integration_cache():
 
 def test_edo_disabled_when_flag_off(monkeypatch: pytest.MonkeyPatch) -> None:
     class S:
+        app_env = "test"
         use_edo_integration = False
         edo_integration_base_url = "https://should-not-matter"
         edo_integration_api_token = None
@@ -30,6 +31,7 @@ def test_edo_disabled_when_flag_off(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_edo_stub_when_flag_on_without_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
     class S:
+        app_env = "test"
         use_edo_integration = True
         edo_integration_base_url = None
         edo_integration_api_token = None
@@ -44,6 +46,7 @@ def test_edo_stub_when_flag_on_without_base_url(monkeypatch: pytest.MonkeyPatch)
 
 def test_edo_http_when_flag_on_with_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
     class S:
+        app_env = "test"
         use_edo_integration = True
         edo_integration_base_url = "https://edo.operator.local"
         edo_integration_api_token = "secret"

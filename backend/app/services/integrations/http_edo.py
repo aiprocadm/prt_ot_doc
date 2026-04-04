@@ -13,6 +13,8 @@ from typing import Any
 
 import httpx
 
+from app.core.integration_url_validation import assert_safe_http_base_url
+
 from .interfaces import BaseEDOIntegration, IntegrationStatus
 
 logger = logging.getLogger(__name__)
@@ -30,7 +32,9 @@ class HttpEDOIntegration(BaseEDOIntegration):
         api_token: str | None = None,
         timeout_seconds: float = 30.0,
         outbound_path: str = "/v1/outbound/documents",
+        app_env: str = "development",
     ) -> None:
+        assert_safe_http_base_url(base_url.strip(), app_env=app_env)
         self._base = base_url.rstrip("/")
         self._token = (api_token or "").strip() or None
         self._timeout = timeout_seconds

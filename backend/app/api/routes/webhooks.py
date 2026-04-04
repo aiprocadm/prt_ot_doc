@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import secrets
 from datetime import datetime, timezone
 from typing import Annotated, Any
@@ -18,7 +20,9 @@ from app.api.models.webhook_admin import (
 )
 from app.api.tenant_row_http import enforce_row_belongs_to_tenant
 from app.core.audit_decorator import audit_operation
+from app.core.config import get_settings
 from app.core.errors import api_problem_detail
+from app.core.inbound_webhook_auth import verify_inbound_webhook_body_hmac
 from app.core.security import AccessContext, rbac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.job_engine import InboundWebhookDedup
@@ -658,13 +662,33 @@ async def inbound_webhook(
     session: SessionDep,
 ) -> dict[str, str]:
     raw = await request.body()
-    payload = await request.json()
+    verify_inbound_webhook_body_hmac(settings=get_settings(), raw_body=raw, request=request)
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail=api_problem_detail(
+                code="INVALID_JSON",
+                message="Request body must be valid JSON",
+                error_type="validation",
+            ),
+        ) from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail=api_problem_detail(
+                code="INVALID_JSON",
+                message="Inbound webhook JSON must be an object",
+                error_type="validation",
+            ),
+        )
     dedup_key = compute_inbound_dedup_key(payload, raw)
     row = InboundWebhookDedup(
         tenant_id=tenant.id,
         source=source,
         dedup_key=dedup_key,
-        payload_hash=__import__("hashlib").sha256(raw).hexdigest(),
+        payload_hash=hashlib.sha256(raw).hexdigest(),
         received_at=datetime.now(timezone.utc),
     )
     session.add(row)

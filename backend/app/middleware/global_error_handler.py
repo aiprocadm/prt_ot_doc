@@ -13,6 +13,12 @@ from app.core.correlation_id import CorrelationIDManager, get_logger
 
 logger = get_logger(__name__)
 
+_CLIENT_SAFE_MESSAGES: dict[str, str] = {
+    "TENANT_INVALID": "Некорректный контекст организации.",
+    "PERMISSION_DENIED": "Недостаточно прав для выполнения операции.",
+    "VALIDATION_ERROR": "Запрос не может быть обработан.",
+}
+
 
 class GlobalErrorHandlerMiddleware(BaseHTTPMiddleware):
     """Global middleware for standardized error handling."""
@@ -51,15 +57,18 @@ class GlobalErrorHandlerMiddleware(BaseHTTPMiddleware):
 
     def _handle_value_error(self, exc: ValueError, request: Request):
         """Handle ValueError (validation, tenant context, etc.)."""
-        error_message = str(exc)
+        internal_message = str(exc)
         status_code, error_code = self._classify_value_error(exc)
+        client_message = _CLIENT_SAFE_MESSAGES.get(error_code, _CLIENT_SAFE_MESSAGES["VALIDATION_ERROR"])
 
         logger.warning(
-            f"Validation error: {error_message}",
+            "Validation error: %s",
+            internal_message,
             extra={
                 "error_code": error_code,
                 "request_path": request.url.path,
                 "method": request.method,
+                "internal_message": internal_message,
             },
         )
 
@@ -67,17 +76,20 @@ class GlobalErrorHandlerMiddleware(BaseHTTPMiddleware):
             request,
             status_code=status_code,
             code=error_code,
-            message=error_message,
+            message=client_message,
             details={"source": "ValueError"},
         )
 
     def _handle_permission_error(self, exc: PermissionError, request: Request):
         """Handle PermissionError."""
+        internal_message = str(exc)
         logger.warning(
-            f"Permission denied: {str(exc)}",
+            "Permission denied: %s",
+            internal_message,
             extra={
                 "request_path": request.url.path,
                 "method": request.method,
+                "internal_message": internal_message,
             },
         )
 
@@ -85,7 +97,7 @@ class GlobalErrorHandlerMiddleware(BaseHTTPMiddleware):
             request,
             status_code=status.HTTP_403_FORBIDDEN,
             code="PERMISSION_DENIED",
-            message=str(exc),
+            message=_CLIENT_SAFE_MESSAGES["PERMISSION_DENIED"],
             details={"source": "PermissionError"},
         )
 

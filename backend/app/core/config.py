@@ -391,6 +391,7 @@ class Settings(BaseSettings):
         default_factory=list, alias="WEBHOOK_URLS_TRAINING_ASSIGNED"
     )
     webhook_timeout_seconds: float = Field(10.0, alias="WEBHOOK_TIMEOUT_SECONDS")
+    inbound_webhook_hmac_secret: str = Field("", alias="INBOUND_WEBHOOK_HMAC_SECRET")
     log_level: str = Field("INFO", alias="LOG_LEVEL")
     log_json: bool = Field(True, alias="LOG_JSON")
 
@@ -623,6 +624,19 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
+    def _validate_edo_integration_base_url(self) -> Settings:
+        base = (self.edo_integration_base_url or "").strip()
+        if not base:
+            return self
+        from app.core.integration_url_validation import UnsafeIntegrationURLError, assert_safe_http_base_url
+
+        try:
+            assert_safe_http_base_url(base, app_env=self.app_env)
+        except UnsafeIntegrationURLError as exc:
+            raise ValueError(str(exc)) from exc
+        return self
+
+    @model_validator(mode="after")
     def _ensure_production_secrets(self) -> Settings:
         if self.app_env not in ("production", "staging"):
             return self
@@ -773,6 +787,7 @@ class Settings(BaseSettings):
             "admin_password",
             "jwt_private_key_pem",
             "portal_token_salt",
+            "inbound_webhook_hmac_secret",
         ):
             if key in payload and payload[key]:
                 payload[key] = "***"

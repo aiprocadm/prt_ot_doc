@@ -35,6 +35,32 @@ from app.services.dev_bootstrap import bootstrap_admin_user
 
 __all__ = ["create_app", "SettingsError"]
 
+_CORS_ALLOW_METHODS = ("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+_CORS_ALLOW_HEADERS = (
+    "Accept",
+    "Accept-Language",
+    "Authorization",
+    "Cache-Control",
+    "Content-Type",
+    "Idempotency-Key",
+    "If-Match",
+    "If-None-Match",
+    "X-Actor-Id",
+    "X-Attributes",
+    "X-Correlation-Id",
+    "X-Inbound-Webhook-Signature",
+    "X-Replace-Options",
+    "X-Request-Id",
+    "X-Roles",
+    "X-Signature",
+    "X-Tenant",
+    "X-Tenant-Code",
+    "X-Tenant-Slug",
+    "X-Trace-Id",
+    "X-User-Id",
+    "X-Webhook-Signature",
+)
+
 
 def _normalize_patterns(values: Iterable[str]) -> list[str]:
     patterns = [value for value in (value.strip() for value in values) if value]
@@ -44,7 +70,7 @@ def _normalize_patterns(values: Iterable[str]) -> list[str]:
 def _configure_middlewares(app: FastAPI, settings: Settings) -> None:
     # Global error handler must be first to catch all exceptions
     app.add_middleware(GlobalErrorHandlerMiddleware)
-    
+
     allowed_hosts = _normalize_patterns(settings.allowed_hosts)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
 
@@ -53,8 +79,8 @@ def _configure_middlewares(app: FastAPI, settings: Settings) -> None:
         CORSMiddleware,
         allow_origins=allow_origins,
         allow_credentials=settings.cors_allow_credentials,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=list(_CORS_ALLOW_METHODS),
+        allow_headers=list(_CORS_ALLOW_HEADERS),
     )
     app.add_middleware(TenantMiddleware, metrics_enabled=settings.enable_metrics)
     app.add_middleware(BillingGuardMiddleware)
@@ -165,6 +191,3 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_exception_handlers(app)
 
     return app
-
-
-app = create_app()

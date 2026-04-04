@@ -10,7 +10,7 @@ import json
 import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Annotated, Any, Collection, Final, Mapping
+from typing import Annotated, Any, Collection, Mapping
 from uuid import UUID
 
 from fastapi import (
@@ -129,11 +129,10 @@ ReadAccessDep = Annotated[
 ]
 
 
-def _max_upload_bytes() -> int:
+def max_upload_bytes() -> int:
+    """Return the active max upload size; read from settings on each call (not at import)."""
+
     return get_settings().max_upload_size
-
-
-MAX_UPLOAD_BYTES: Final[int] = _max_upload_bytes()
 
 
 class FileUploadResponse(BaseModel):

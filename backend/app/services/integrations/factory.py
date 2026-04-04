@@ -45,6 +45,7 @@ def get_edo_integration() -> BaseEDOIntegration:
             api_token=settings.edo_integration_api_token,
             timeout_seconds=settings.edo_integration_timeout_seconds,
             outbound_path=settings.edo_integration_outbound_path,
+            app_env=settings.app_env,
         )
     return StubEDOIntegration()
 
