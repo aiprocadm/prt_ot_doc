@@ -1293,7 +1293,10 @@ async def get_document_batch(
     batch = (
         await session.execute(
             select(DocumentBatchRun)
-            .where(DocumentBatchRun.id == batch_id)
+            .where(
+                DocumentBatchRun.id == batch_id,
+                DocumentBatchRun.tenant_id == str(tenant.id),
+            )
             .options(selectinload(DocumentBatchRun.items))
         )
     ).scalar_one_or_none()

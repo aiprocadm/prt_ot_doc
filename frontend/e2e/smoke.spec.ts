@@ -51,4 +51,64 @@ test.describe("smoke", () => {
     await page.getByRole("button", { name: "Войти" }).click();
     await expect(page).not.toHaveURL(/\/auth\/login/, { timeout: 45_000 });
   });
+
+  test("documents list and open first card when API available", async ({ page }) => {
+    test.skip(
+      !process.env.E2E_USER_EMAIL || !process.env.E2E_USER_PASSWORD,
+      "Set E2E_USER_EMAIL and E2E_USER_PASSWORD"
+    );
+    const tenant = process.env.E2E_TENANT ?? "demo";
+    await page.goto("/auth/login", { waitUntil: "domcontentloaded" });
+    await page.getByLabel("Tenant").fill(tenant);
+    await page.getByLabel("E-mail").fill(process.env.E2E_USER_EMAIL!);
+    await page.getByLabel("Пароль").fill(process.env.E2E_USER_PASSWORD!);
+    await page.getByRole("button", { name: "Войти" }).click();
+    await expect(page).not.toHaveURL(/\/auth\/login/, { timeout: 45_000 });
+
+    await page.goto("/documents", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "Документы" })).toBeVisible({ timeout: 30_000 });
+
+    const nameCellButton = page.locator("table tbody tr").first().getByRole("button").first();
+    if ((await nameCellButton.count()) > 0) {
+      await nameCellButton.click();
+      await expect(page.getByRole("tab", { name: "Предпросмотр" })).toBeVisible({ timeout: 15_000 });
+    }
+  });
+
+  test("logout returns to login", async ({ page }) => {
+    test.skip(
+      !process.env.E2E_USER_EMAIL || !process.env.E2E_USER_PASSWORD,
+      "Set E2E_USER_EMAIL and E2E_USER_PASSWORD"
+    );
+    const tenant = process.env.E2E_TENANT ?? "demo";
+    await page.goto("/auth/login", { waitUntil: "domcontentloaded" });
+    await page.getByLabel("Tenant").fill(tenant);
+    await page.getByLabel("E-mail").fill(process.env.E2E_USER_EMAIL!);
+    await page.getByLabel("Пароль").fill(process.env.E2E_USER_PASSWORD!);
+    await page.getByRole("button", { name: "Войти" }).click();
+    await expect(page).not.toHaveURL(/\/auth\/login/, { timeout: 45_000 });
+
+    const profileTrigger = page.getByTestId("user-menu-trigger");
+    await expect(profileTrigger).toBeVisible({ timeout: 20_000 });
+    await profileTrigger.click();
+    await page.getByRole("menuitem", { name: /Выйти/i }).click();
+    await expect(page).toHaveURL(/\/auth\/login/, { timeout: 30_000 });
+  });
+
+  test("limited user sees access denied on documents", async ({ page }) => {
+    test.skip(
+      !process.env.E2E_LIMITED_USER_EMAIL || !process.env.E2E_LIMITED_USER_PASSWORD,
+      "Set E2E_LIMITED_USER_EMAIL and E2E_LIMITED_USER_PASSWORD (роль без DOCUMENT_VIEW)"
+    );
+    const tenant = process.env.E2E_TENANT ?? "demo";
+    await page.goto("/auth/login", { waitUntil: "domcontentloaded" });
+    await page.getByLabel("Tenant").fill(tenant);
+    await page.getByLabel("E-mail").fill(process.env.E2E_LIMITED_USER_EMAIL!);
+    await page.getByLabel("Пароль").fill(process.env.E2E_LIMITED_USER_PASSWORD!);
+    await page.getByRole("button", { name: "Войти" }).click();
+    await expect(page).not.toHaveURL(/\/auth\/login/, { timeout: 45_000 });
+
+    await page.goto("/documents", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "Доступ ограничен" })).toBeVisible({ timeout: 30_000 });
+  });
 });

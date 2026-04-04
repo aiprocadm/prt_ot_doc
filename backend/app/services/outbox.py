@@ -492,6 +492,7 @@ class OutboxProcessor:
             )
         return DispatchResult(status=OutboxStatus.SENT)
 
+    # Классификация HTTP → FAILED (retry по политике outbox) vs DEAD (terminal): см. RETRY_VS_TERMINAL_OUTBOX_CELERY.md
     def _classify_http_error(self, status_code: int | None) -> OutboxStatus:
         if status_code is None:
             return OutboxStatus.FAILED

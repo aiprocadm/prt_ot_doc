@@ -4,15 +4,31 @@
 
 Соответствует **этапу 2** плана стабилизации: до крупного рефакторинга закрывать критичные зоны тестами.
 
+### Матрица: ресурс × cross-tenant × ожидаемый HTTP
+
+Условие: валидный JWT и `X-Tenant` = **аренда B**; сущность создана в **аренде A** (id известен).
+
+| Ресурс | Маршрут (пример) | Ожидаемый статус | Тест / примечание |
+|--------|------------------|------------------|-------------------|
+| Job | `GET /api/v1/jobs/{id}` | **404** | `tests/test_jobs_api.py::test_get_job_returns_404_when_job_belongs_to_different_tenant` |
+| Document | `GET /api/v1/documents/{id}` | **404** | `tests/integration/test_two_tenant_outbox_webhook_documents.py` (JWT совпадает с B) |
+| Document batch | `GET /api/v1/documents/batch/{id}` | **404** | `tests/integration/test_cross_tenant_resource_matrix.py` (фильтр `tenant_id` в запросе) |
+| File (v2) | `GET /api/v1/files/records/{id}` | **404** | `tests/integration/test_cross_tenant_resource_matrix.py` |
+| Outbox (admin) | `GET /api/v1/admin/outbox/{id}` | **404** | `tests/integration/test_cross_tenant_resource_matrix.py` |
+| Webhook delivery | `GET /api/v1/webhooks/deliveries/{id}/diagnostics` | **404** | `tests/integration/test_two_tenant_outbox_webhook_documents.py` |
+| JWT tenant ≠ header tenant | любой маршрут с `ReadAccessDep` / `abac` | **403** tenant mismatch | Явный сценарий «токен A + X-Tenant B» — в бэклоге |
+
+Дополнительно: **retry vs terminal** для outbox/Celery — `docs/stabilization/RETRY_VS_TERMINAL_OUTBOX_CELERY.md`, контрактные проверки `tests/test_retry_terminal_contract.py`.
+
 ## Backend
 
 | Область | Есть сейчас | Не хватает (приоритет) |
 |---------|-------------|-------------------------|
 | Tenant middleware | `test_middleware_tenant.py`, auth header | Автоматический чеклист при добавлении публичных префиксов |
-| X-Tenant vs JWT / scope | `test_auth_tenant_header_enforcement`, `test_tenant_security` | Явный сценарий «токен аренды A + header B» → 400/403 |
-| Cross-tenant API (HTTP) | Частично (S3 keys, guards); **GET `/jobs/{id}`** — `test_jobs_api.test_get_job_returns_404_when_job_belongs_to_different_tenant` | Таблица: resource × чужой id × ожидаемый 404/403 для documents, files, batch, outbox |
+| X-Tenant vs JWT / scope | `test_auth_tenant_header_enforcement`, `test_tenant_security` | Явный HTTP-тест «токен аренды A + header B» → 400/403 (см. матрицу выше) |
+| Cross-tenant API (HTTP) | Матрица выше + outbox dispatch (два tenant) | Расширять таблицу при новых `enforce_row` / `get(PK)` |
 | Protected routes / permission guards | `test_rbac_abac`, `test_next*` | Матрица роль × endpoint для критичных write-path |
-| Background jobs happy/fail | `test_tasks_run_coroutine`, `test_tasks_pipeline_run_tenant_guard`, `test_next10_job_engine` | Явные тесты terminal failure vs retry для 2–3 ключевых задач |
+| Background jobs happy/fail | `test_tasks_run_coroutine`, `test_tasks_pipeline_run_tenant_guard`, `test_next10_job_engine` | Контракт HTTP-классификации outbox + `RETRYABLE_EXCEPTIONS`: `tests/test_retry_terminal_contract.py` |
 | Pipeline orchestrator | `backend/tests/test_next39_pipeline_orchestrator.py` | Интеграция с реальной БД-фикстурой tenant + template (если отличается от unit) |
 | Outbox dispatch | `test_outbox_dispatch`, `test_next43_outbox_webhooks` | Два tenant: событие одного не видно/не обрабатывается в контексте другого |
 | Webhook deduplication | Частично | Повтор того же delivery id / payload — идемпотентность |
@@ -43,10 +59,10 @@
 **Целевой минимум для регрессии (этап 8):**
 
 1. Неверный пароль / ошибка API при логине.
-2. Документы: список и открытие карточки (при поднятом API).
-3. Минимальный путь generate + ожидание статуса (poll или один refresh).
-4. 403 / экран «нет доступа» под ограниченной ролью.
-5. Logout и повторный заход.
+2. Документы: список и открытие карточки — в `smoke.spec.ts` при `E2E_USER_*`.
+3. Минимальный путь generate + ожидание статуса (poll или один refresh) — в бэклоге.
+4. Ограниченная роль: `E2E_LIMITED_USER_EMAIL` / `E2E_LIMITED_USER_PASSWORD` → экран «Доступ ограничен» на `/documents`.
+5. Logout через меню пользователя (`data-testid="user-menu-trigger"`).
 
 **Запуск:** `cd frontend && npm run e2e:install && E2E_START_SERVER=1 npm run e2e`. Для prod-бандла: `E2E_PREVIEW=1`.
 

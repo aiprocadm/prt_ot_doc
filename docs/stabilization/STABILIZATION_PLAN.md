@@ -38,7 +38,7 @@
 | 401/403 flows | частично | API + `errorHandlingAuthRedirect.test.ts` |
 | Frontend auth bootstrap / stale token | частично | Добавить сценарии без дублирования существующих тестов |
 
-**Открыто:** интеграция «два tenant» для outbox + job; Playwright beyond smoke.
+**Открыто:** явный тест JWT A + header B; generate+polling в Playwright.
 
 ---
 
@@ -49,10 +49,10 @@
 | Действие | Статус |
 |----------|--------|
 | Structured debug `_run_coroutine` (bridge, duration) | [x] |
-| Документ: retry vs terminal (outbox + Celery) | [ ] |
+| Документ: retry vs terminal (outbox + Celery) | [x] `RETRY_VS_TERMINAL_OUTBOX_CELERY.md` |
 | Свести дубли bridge (`runtime_bootstrap` vs `tasks`) | [ ] |
 | Убрать/изолировать опасные вызовы при вложенном loop | [ ] поэтапно |
-| Явные retry semantics / terminal failure | [ ] |
+| Явные retry semantics / terminal failure | частично [x] `tests/test_retry_terminal_contract.py` |
 | Разделение orchestration / execution / reconciliation | [ ] после тестов |
 
 ---
@@ -65,7 +65,7 @@
 | Row-level enforcement на чувствительных API (jobs, files, …) | частично [x] |
 | Аудит всех worker путей с `session.get(PK)` | [ ] |
 | `tenant_id` / `correlation_id` в structured logs задач | [ ] |
-| Integration tests подтверждают изоляцию | [ ] |
+| Integration tests подтверждают изоляцию | частично [x] матрица в `TEST_COVERAGE_GAPS.md` |
 
 ---
 
@@ -95,8 +95,8 @@
 
 | Действие | Статус |
 |----------|--------|
-| Mypy staged за пределы `services`/`schemas` | [ ] |
-| Ruff F821 (или эквивалент) на `backend/app` | [ ] |
+| Mypy staged за пределы `services`/`schemas` | частично [x] `scripts/ci/static_gates.sh` |
+| Ruff F821 (или эквивалент) на `backend/app` | [x] тот же скрипт + job в CI |
 | Документировать staged scope в ADR / audit | [ ] |
 | Регрессионные smoke gates на critical paths | [ ] |
 
@@ -108,7 +108,7 @@
 |----------|--------|
 | Integration: tenant, outbox, webhooks, jobs, permissions, document flow | [ ] расширение `tests/integration/` |
 | Playwright каркас | [x] `frontend/e2e/smoke.spec.ts`, workflow `e2e-smoke.yml` |
-| Playwright: login errors, documents list/detail, minimal generate, 403, logout | [ ] |
+| Playwright: login errors, documents list/detail, minimal generate, 403, logout | частично [x] list/detail, limited role, logout — `smoke.spec.ts` |
 
 ---
 

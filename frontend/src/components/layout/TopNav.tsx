@@ -97,7 +97,7 @@ export const TopNav = () => {
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="gap-2">
+              <Button variant="ghost" className="gap-2" data-testid="user-menu-trigger">
                 <Settings className="h-4 w-4" />
                 <span className="hidden sm:inline">{user?.full_name ?? user?.email ?? "Профиль"}</span>
               </Button>

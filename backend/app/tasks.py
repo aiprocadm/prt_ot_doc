@@ -196,6 +196,7 @@ async def _resolve_task_tenant_scope(
     return tenant_id, tenant_scope
 
 
+# См. матрицу retry vs terminal: docs/stabilization/RETRY_VS_TERMINAL_OUTBOX_CELERY.md
 RETRYABLE_EXCEPTIONS: tuple[type[BaseException], ...] = (
     ClientError,
     SQLAlchemyError,
