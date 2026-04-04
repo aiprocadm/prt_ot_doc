@@ -6,7 +6,7 @@ import { tenantStorage } from "@/api/tenantStorage";
 import { resetTenantStores } from "@/stores/reset";
 import { useTenantStore } from "@/stores/tenant";
 import type { ApiError } from "@/types/dto/common";
-import type { LoginRequestDto, LoginResponseDto, PermissionsResponseDto, RefreshResponseDto, UserDto } from "@/types/dto/auth";
+import type { LoginRequestDto, LoginResponseDto, PermissionsResponseDto, UserDto } from "@/types/dto/auth";
 
 type LoginActionPayload = LoginRequestDto & {
   tenant: string;

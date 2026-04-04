@@ -60,7 +60,11 @@ describe("BillingPage", () => {
     );
 
     await screen.findByText("Тариф и статус");
-    fireEvent.click(screen.getByRole("button", { name: "Сменить" }));
+    const switchPlanButtons = screen
+      .getAllByRole("button")
+      .filter((el) => (el.textContent ?? "").trim() === "Сменить");
+    expect(switchPlanButtons.length).toBeGreaterThanOrEqual(1);
+    fireEvent.click(switchPlanButtons[0]!);
 
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent("plan change failed");

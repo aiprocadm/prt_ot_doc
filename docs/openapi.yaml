@@ -63,11 +63,14 @@ paths:
       summary: Обновление access токена
       operationId: refreshToken
       requestBody:
-        required: true
+        required: false
+        description: Тело опционально — refresh может передаваться в HttpOnly cookie.
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RefreshRequest'
+              anyOf:
+                - $ref: '#/components/schemas/RefreshRequest'
+                - type: 'null'
       responses:
         '200':
           description: Новые токены
@@ -1761,19 +1764,15 @@ components:
           type: string
     RefreshRequest:
       type: object
-      additionalProperties: false
-      required: [refresh_token]
       properties:
         refresh_token:
           type: string
           minLength: 1
     TokenPair:
       type: object
-      required: [access_token, refresh_token]
+      required: [access_token]
       properties:
         access_token:
-          type: string
-        refresh_token:
           type: string
     MeResponse:
       type: object

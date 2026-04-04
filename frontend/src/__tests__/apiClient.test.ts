@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-imports -- axios-mock-adapter must wrap the same axios instance as the app */
 import axios from "axios";
 import MockAdapter from "axios-mock-adapter";
 import { beforeEach, describe, expect, it, vi } from "vitest";

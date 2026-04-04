@@ -111,8 +111,6 @@ export const BrandingStep = ({
   companyId,
   siteId,
   headerPreset,
-  templateCode,
-  templateVersion,
   companies,
   sites,
   layoutPresets,
@@ -127,8 +125,6 @@ export const BrandingStep = ({
   | "companyId"
   | "siteId"
   | "headerPreset"
-  | "templateCode"
-  | "templateVersion"
   | "companies"
   | "sites"
   | "layoutPresets"
@@ -261,12 +257,11 @@ export const RunStep = ({
   templateCode,
   companyId,
   idempotencyKey,
-  templateVersion,
   pipelineRun,
   setPartial,
   onRunBatch,
   onRunSinglePipeline,
-}: Pick<SharedProps, "canCallApi" | "sourceFile" | "templateCode" | "companyId" | "idempotencyKey" | "templateVersion" | "pipelineRun" | "setPartial"> & {
+}: Pick<SharedProps, "canCallApi" | "sourceFile" | "templateCode" | "companyId" | "idempotencyKey" | "pipelineRun" | "setPartial"> & {
   onRunBatch: () => Promise<void>;
   onRunSinglePipeline: () => Promise<void>;
 }) => (
