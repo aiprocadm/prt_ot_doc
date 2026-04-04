@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
+from app.core.errors import api_problem_detail
 from app.core.security import rbac
 from app.models.models import (
     BriefingEntry,
@@ -121,7 +122,7 @@ async def _audit(session: AsyncSession, request: Request, *, tenant_id: str, act
 def _briefing_bad_request(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail={"code": "briefing_validation_error", "message": message},
+        detail=api_problem_detail(code="BRIEFING_VALIDATION_ERROR", message=message, error_type="briefings"),
     )
 
 

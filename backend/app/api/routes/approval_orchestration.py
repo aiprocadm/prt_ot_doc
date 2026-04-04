@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.api.deps.tracing import get_trace_id
 from app.core.audit_decorator import audit_operation
+from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
 from app.models.document import DocumentVersion
 from app.models.models import PackRun, Tenant
@@ -56,17 +57,23 @@ EditorAccess = Annotated[
 def _approval_orchestration_unprocessable(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        detail={"code": "approval_orchestration_validation_error", "message": message},
+        detail=api_problem_detail(
+            code="APPROVAL_ORCHESTRATION_VALIDATION_ERROR",
+            message=message,
+            error_type="approvals",
+        ),
     )
 
 
 def _approval_orchestration_not_found(resource: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
-        detail={
-            "code": "approval_orchestration_not_found",
-            "message": f"{resource} not found",
-        },
+        detail=api_problem_detail(
+            code="APPROVAL_ORCHESTRATION_NOT_FOUND",
+            message=f"{resource} not found",
+            details={"resource": resource},
+            error_type="approvals",
+        ),
     )
 
 

@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.security import AccessContext, abac
+from app.core.errors import api_problem_detail
 from app.core.tenant_validation import TenantContextValidator
 from app.domains.incidents import add_inspection_result, register_inspection, update_inspection
 from app.models.models import (
@@ -57,7 +58,7 @@ EditorAccess = Annotated[
 def _inspection_bad_request(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail={"code": "inspection_validation_error", "message": message},
+        detail=api_problem_detail(code="INSPECTION_VALIDATION_ERROR", message=message, error_type="inspections"),
     )
 
 

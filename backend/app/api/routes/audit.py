@@ -13,6 +13,7 @@ from app.api.dependencies import get_correlation_id, get_session, get_tenant_rec
 from app.celery.tasks.audit_export_job import export_audit_job
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, rbac
+from app.core.errors import api_problem_detail
 from app.core.tenant_validation import TenantContextValidator
 from app.models.models import AuditExportJob, AuditLog, Tenant
 from app.services.file_storage import FileStorageService
@@ -68,7 +69,7 @@ class AuditExportRead(BaseModel):
 def _audit_bad_request(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail={"code": "audit_validation_error", "message": message},
+        detail=api_problem_detail(code="AUDIT_VALIDATION_ERROR", message=message, error_type="audit"),
     )
 
 

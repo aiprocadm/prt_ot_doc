@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
+from app.core.errors import api_problem_detail
 from app.core.tenant_validation import TenantContextValidator
 from app.domains.incidents import append_log_entry, register_incident, update_incident
 from app.models.models import (
@@ -57,7 +58,7 @@ EditorAccess = Annotated[
 def _incident_bad_request(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail={"code": "incident_validation_error", "message": message},
+        detail=api_problem_detail(code="INCIDENT_VALIDATION_ERROR", message=message, error_type="incidents"),
     )
 
 

@@ -16,6 +16,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.config import get_settings
+from app.core.errors import api_problem_detail
 from app.core.idempotency import compute_request_hash
 from app.core.query import (
     DEFAULT_PER_PAGE,
@@ -85,7 +86,7 @@ TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 def _pack_bad_request(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail={"code": "pack_validation_error", "message": message},
+        detail=api_problem_detail(code="PACK_VALIDATION_ERROR", message=message, error_type="packs"),
     )
 
 
@@ -898,16 +899,21 @@ async def download_pack_archive(
     if not normalized_key:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            detail={"code": "invalid_storage_key", "message": "storage_key must not be empty"},
+            detail=api_problem_detail(
+                code="INVALID_STORAGE_KEY",
+                message="storage_key must not be empty",
+                error_type="packs",
+            ),
         )
     tenant_prefix = f"{tenant_prefix_path(tenant.slug)}/"
     if not normalized_key.startswith(tenant_prefix):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
-            detail={
-                "code": "forbidden_storage_key",
-                "message": "storage_key does not belong to tenant",
-            },
+            detail=api_problem_detail(
+                code="FORBIDDEN_STORAGE_KEY",
+                message="storage_key does not belong to tenant",
+                error_type="packs",
+            ),
         )
     settings = get_settings()
     if settings.s3_backend == "minio":
@@ -927,13 +933,21 @@ async def download_pack_archive(
     except ValueError as exc:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            detail={"code": "malformed_storage_key", "message": "storage_key is malformed"},
+            detail=api_problem_detail(
+                code="MALFORMED_STORAGE_KEY",
+                message="storage_key is malformed",
+                error_type="packs",
+            ),
         ) from exc
 
     if payload is None:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
-            detail={"code": "pack_archive_not_found", "message": "Archive not found"},
+            detail=api_problem_detail(
+                code="PACK_ARCHIVE_NOT_FOUND",
+                message="Archive not found",
+                error_type="packs",
+            ),
         )
     filename = normalized_key.rsplit("/", 1)[-1] or "package.zip"
     logger.info(
@@ -981,7 +995,11 @@ async def download_pack_files_archive(
     if not files:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
-            detail={"code": "pack_archive_not_found", "message": "No clean files for this pack"},
+            detail=api_problem_detail(
+                code="PACK_ARCHIVE_NOT_FOUND",
+                message="No clean files for this pack",
+                error_type="packs",
+            ),
         )
 
     buffer = BytesIO()

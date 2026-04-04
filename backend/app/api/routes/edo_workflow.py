@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.api.deps.tracing import get_trace_id
 from app.core.audit_decorator import audit_operation
+from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
 from app.models.document import DocumentVersion
 from app.models.job_engine import InboundWebhookDedup
@@ -56,21 +57,26 @@ AccessDep = Depends(abac(_tenant_resource_id, required_roles=["admin", "employee
 def _edo_unprocessable(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        detail={"code": "edo_validation_error", "message": message},
+        detail=api_problem_detail(code="EDO_VALIDATION_ERROR", message=message, error_type="edo"),
     )
 
 
 def _edo_not_found(resource: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
-        detail={"code": "edo_not_found", "message": f"{resource} not found"},
+        detail=api_problem_detail(
+            code="EDO_NOT_FOUND",
+            message=f"{resource} not found",
+            details={"resource": resource},
+            error_type="edo",
+        ),
     )
 
 
 def _edo_unauthorized(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail={"code": "edo_unauthorized", "message": message},
+        detail=api_problem_detail(code="EDO_UNAUTHORIZED", message=message, error_type="edo"),
     )
 
 

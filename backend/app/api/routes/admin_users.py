@@ -10,7 +10,9 @@ from sqlalchemy.orm import selectinload
 from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, rbac
+from app.core.errors import api_problem_detail
 from app.core.tenant_validation import TenantContextValidator
+from app.core.errors import api_problem_detail
 from app.models.models import RoleEnum, Tenant, User, UserAttribute, UserRole
 from app.schemas.admin_user import (
     UserAttributesRequest,
@@ -30,7 +32,11 @@ AdminAccess = Depends(rbac(["admin", "owner"]))
 def _admin_user_unprocessable(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        detail={"code": "admin_user_validation_error", "message": message},
+        detail=api_problem_detail(
+            code="ADMIN_USER_VALIDATION_ERROR",
+            message=message,
+            error_type="admin",
+        ),
     )
 
 

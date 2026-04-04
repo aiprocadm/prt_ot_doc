@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
+from app.core.errors import api_problem_detail
 from app.core.tenant_validation import TenantContextValidator
 from app.models.models import Tenant
 from app.modules.replace.engine import ReplaceOptions, replace_docx_bytes
@@ -61,14 +62,14 @@ _FILES: dict[str, bytes] = {}
 def _replace_bad_request(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail={"code": "replace_bad_request", "message": message},
+        detail=api_problem_detail(code="REPLACE_BAD_REQUEST", message=message, error_type="replace"),
     )
 
 
 def _replace_unprocessable(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        detail={"code": "replace_validation_error", "message": message},
+        detail=api_problem_detail(code="REPLACE_VALIDATION_ERROR", message=message, error_type="replace"),
     )
 
 

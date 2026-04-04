@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
+from app.core.errors import api_problem_detail
 from app.core.tenant_validation import TenantContextValidator
 from app.models.finance import Contract, ContractStatus, Department
 from app.models.models import Company, Site, Tenant
@@ -42,14 +43,14 @@ WriteAccess = Annotated[
 def _contract_bad_request(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail={"code": "contract_validation_error", "message": message},
+        detail=api_problem_detail(code="CONTRACT_VALIDATION_ERROR", message=message, error_type="contracts"),
     )
 
 
 def _contract_unprocessable(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        detail={"code": "contract_validation_error", "message": message},
+        detail=api_problem_detail(code="CONTRACT_VALIDATION_ERROR", message=message, error_type="contracts"),
     )
 
 

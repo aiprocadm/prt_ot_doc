@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
+from app.core.errors import api_problem_detail
 from app.core.tenant_validation import TenantContextValidator
 from app.domains.training import (
     assign_training_plan,
@@ -70,7 +71,7 @@ EditorAccess = Annotated[
 def _training_bad_request(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail={"code": "training_validation_error", "message": message},
+        detail=api_problem_detail(code="TRAINING_VALIDATION_ERROR", message=message, error_type="training"),
     )
 
 

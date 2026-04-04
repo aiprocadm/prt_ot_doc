@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.api.deps.tracing import get_trace_id
 from app.core.audit_decorator import audit_operation
+from app.core.errors import api_problem_detail
 from app.models.approval_signing import (
     ApprovalDecisionLog,
     ApprovalProcess,
@@ -42,16 +43,13 @@ router = APIRouter()
 def _approval_signing_error(*, code: str, message: str, status_code: int) -> HTTPException:
     return HTTPException(
         status_code=status_code,
-        detail={
-            "code": code,
-            "message": message,
-        },
+        detail=api_problem_detail(code=code, message=message, error_type="approval_signing"),
     )
 
 
 def _approval_signing_unprocessable(message: str) -> HTTPException:
     return _approval_signing_error(
-        code="approval_signing_validation_error",
+        code="APPROVAL_SIGNING_VALIDATION_ERROR",
         message=message,
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
     )
@@ -59,7 +57,7 @@ def _approval_signing_unprocessable(message: str) -> HTTPException:
 
 def _approval_signing_not_found(resource: str) -> HTTPException:
     return _approval_signing_error(
-        code="approval_signing_not_found",
+        code="APPROVAL_SIGNING_NOT_FOUND",
         message=f"{resource} not found",
         status_code=status.HTTP_404_NOT_FOUND,
     )
@@ -67,7 +65,7 @@ def _approval_signing_not_found(resource: str) -> HTTPException:
 
 def _approval_signing_forbidden(message: str) -> HTTPException:
     return _approval_signing_error(
-        code="approval_signing_forbidden",
+        code="APPROVAL_SIGNING_FORBIDDEN",
         message=message,
         status_code=status.HTTP_403_FORBIDDEN,
     )
@@ -75,7 +73,7 @@ def _approval_signing_forbidden(message: str) -> HTTPException:
 
 def _approval_signing_unauthorized(message: str) -> HTTPException:
     return _approval_signing_error(
-        code="approval_signing_unauthorized",
+        code="APPROVAL_SIGNING_UNAUTHORIZED",
         message=message,
         status_code=status.HTTP_401_UNAUTHORIZED,
     )
@@ -83,7 +81,7 @@ def _approval_signing_unauthorized(message: str) -> HTTPException:
 
 def _approval_signing_conflict(message: str) -> HTTPException:
     return _approval_signing_error(
-        code="approval_signing_conflict",
+        code="APPROVAL_SIGNING_CONFLICT",
         message=message,
         status_code=status.HTTP_409_CONFLICT,
     )

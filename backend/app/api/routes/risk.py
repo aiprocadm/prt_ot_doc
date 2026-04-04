@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.errors import api_problem_detail
 from app.core.idempotency import compute_request_hash
 from app.core.metrics import get_metrics
 from app.core.security import AccessContext, AuthContext, abac, get_auth_ctx, rbac
@@ -73,14 +74,14 @@ RiskReadAccess = Annotated[
 def _risk_unprocessable(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        detail={"code": "risk_validation_error", "message": message},
+        detail=api_problem_detail(code="RISK_VALIDATION_ERROR", message=message, error_type="risk"),
     )
 
 
 def _risk_bad_request(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail={"code": "risk_bad_request", "message": message},
+        detail=api_problem_detail(code="RISK_BAD_REQUEST", message=message, error_type="risk"),
     )
 
 

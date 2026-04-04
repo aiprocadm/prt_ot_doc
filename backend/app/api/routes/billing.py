@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
+from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
 from app.models.models import BillingSubscription, BillingSubscriptionStatus, Tenant
 from app.schemas.billing import (
@@ -28,7 +29,7 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 def _billing_bad_request(code: str, message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail={"code": code, "message": message},
+        detail=api_problem_detail(code=code, message=message, error_type="billing"),
     )
 
 

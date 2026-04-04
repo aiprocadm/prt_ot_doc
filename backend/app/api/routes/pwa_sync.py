@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
+from app.core.errors import api_problem_detail
 from app.core.rbac_abac import ROLE_PERMISSIONS
 from app.core.security import AccessContext, rbac
 from app.models.models import (
@@ -320,10 +321,11 @@ def _validate_payload_required_fields(payload: dict[str, Any], required_fields: 
     if missing:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={
-                "code": "pwa_sync_validation_error",
-                "message": f"missing required fields: {', '.join(missing)}",
-            },
+            detail=api_problem_detail(
+                code="PWA_SYNC_VALIDATION_ERROR",
+                message=f"missing required fields: {', '.join(missing)}",
+                error_type="pwa",
+            ),
         )
 
 
@@ -340,7 +342,11 @@ def _ensure_owner_or_admin(*, access: AccessContext, owner_user_id: str) -> None
     if owner_user_id != current_user_id and "admin" not in roles:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": "pwa_sync_forbidden", "message": "batch is not available for current user"},
+            detail=api_problem_detail(
+                code="PWA_SYNC_FORBIDDEN",
+                message="batch is not available for current user",
+                error_type="pwa",
+            ),
         )
 
 
