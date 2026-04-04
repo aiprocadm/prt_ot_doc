@@ -7,7 +7,7 @@
 | Ужесточение `APP_ENV=staging` | Staging не поднимается со старым `.env` | `CONFIGURATION_HARDENING.md`; локально допустим `development` |
 | `bootstrap()` → `SettingsError` | Редко: узкий `except` не на `RuntimeError` | `SettingsError` наследует `RuntimeError` — совместимость сохранена |
 | Импорт `func` в router | Поведение не меняется | Регрессионные тесты на затронутые эндпоинты |
-| Декомпозиция `tasks.py` | Celery не находит задачи | Сохранить имена задач и точки входа; contract-тест `import app.tasks` |
+| Декомпозиция `tasks.py` | Celery не находит задачи | Пакет `app/tasks/` + `import app.tasks`; тест `tests/test_tasks_package_import.py`; monkeypatch фона — `app.tasks._core` |
 | Рефакторинг tenant middleware | Ложные 403/400 | `TenantMiddleware._public_prefixes` + интеграционные тесты |
 | Изменение `_run_coroutine` / Celery sync entry | Потеря результатов, зависания, двойной event loop | Держать зелёными `tests/test_tasks_run_coroutine.py` |
 | Playwright против prod preview + PWA | Нестабильная сессия / SW | `E2E_PREVIEW=1` осознанно; см. `playwright.config.ts` |
