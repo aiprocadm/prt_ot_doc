@@ -225,6 +225,8 @@ def _decode_complex_value_with_fallback(
     return value
 
 
+# NOTE: patching pydantic-settings is brittle across upgrades; prefer a custom
+# SettingsSource when bumping pydantic-settings major versions.
 settings_sources.PydanticBaseSettingsSource.decode_complex_value = (
     _decode_complex_value_with_fallback
 )

@@ -20,7 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import get_settings
+from app.core.config import get_settings
 from app.core.metrics import PipelineStage, PipelineType, StageResult, get_metrics
 from app.core.payload_constraints import normalize_output_basename
 from app.core.tenant import tenant_context

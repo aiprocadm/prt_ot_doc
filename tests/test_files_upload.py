@@ -13,7 +13,7 @@ import pytest
 from botocore.exceptions import ClientError
 from sqlalchemy import select
 
-from app.api.routes.files import MAX_UPLOAD_BYTES
+from app.api.routes.files import max_upload_bytes
 from app.core.config import get_settings
 from app.domains.files import s3
 from app.models.file import File as StoredFile
@@ -210,7 +210,8 @@ async def test_upload_file_happy_path(async_client, make_auth_headers, sessionma
 @pytest.mark.anyio
 @pytest.mark.usefixtures("aws")
 async def test_upload_file_rejects_oversized(async_client, make_auth_headers) -> None:
-    payload = b"a" * (MAX_UPLOAD_BYTES + 1)
+    limit = max_upload_bytes()
+    payload = b"a" * (limit + 1)
     headers = {**dict(async_client.headers), **await make_auth_headers()}
 
     response = await async_client.post(
@@ -223,7 +224,7 @@ async def test_upload_file_rejects_oversized(async_client, make_auth_headers) ->
     body = response.json()
     assert body["code"] == "http_413"
     assert "File exceeds" in body["message"]
-    assert body["details"]["limit"] == MAX_UPLOAD_BYTES
+    assert body["details"]["limit"] == limit
     assert body["details"]["size"] == len(payload)
     assert body["trace_id"]
 

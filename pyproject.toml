@@ -43,7 +43,12 @@ python_version = "3.12"
 ignore_missing_imports = true
 # Основной объём типов: services + schemas. Дополнительный «staged» слой в CI:
 # `scripts/ci/static_gates.sh` — tenant_row_guard + tenant_row_http с --follow-imports=skip.
-files = ["backend/app/services", "backend/app/schemas"]
+files = [
+    "backend/app/services",
+    "backend/app/schemas",
+    "backend/app/core/integration_url_validation.py",
+    "backend/app/core/inbound_webhook_auth.py",
+]
 warn_unused_ignores = true
 
 [[tool.mypy.overrides]]
