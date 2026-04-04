@@ -489,3 +489,41 @@ async def test_retry_job_with_step_code_query(async_client, make_auth_headers, s
     resp = await async_client.post(f"/api/v1/jobs/{job_id}/retry", params={"step_code": "convert_pdf"}, headers=headers)
     assert resp.status_code == 200, resp.text
     assert resp.json()["job"]["id"] == job_id
+
+
+@pytest.mark.anyio
+async def test_get_job_returns_404_when_job_belongs_to_different_tenant(
+    async_client,
+    make_auth_headers,
+    sessionmaker,
+    data_factory,
+) -> None:
+    """Cross-tenant: id известен, но строка job привязана к другой аренде — не отдавать ресурс."""
+    async with sessionmaker() as session:
+        tenant_owner = await data_factory.ensure_tenant(slug="jobs-owner", session=session)
+        tenant_other = await data_factory.ensure_tenant(slug="jobs-other", session=session)
+        job = DocumentJob(
+            tenant_id=str(tenant_owner.id),
+            kind="pipeline",
+            status=DocumentJobStatus.QUEUED.value,
+            pipeline_profile_id=None,
+            preset_id=None,
+            input_sha256="c" * 64,
+            request_hash="d" * 64,
+            idempotency_key="idem-cross-tenant-job",
+            template_code="TMP",
+            template_version=1,
+            correlation_id="corr-cross",
+            created_by="user-1",
+        )
+        session.add(job)
+        await session.commit()
+        job_id = job.id
+
+    await _ensure_global_tenant(slug=tenant_owner.slug, tenant_id=str(tenant_owner.id))
+    await _ensure_global_tenant(slug=tenant_other.slug, tenant_id=str(tenant_other.id))
+
+    headers = await make_auth_headers()
+    headers["x-tenant"] = str(tenant_other.id)
+    response = await async_client.get(f"/api/v1/jobs/{job_id}", headers=headers)
+    assert response.status_code == 404

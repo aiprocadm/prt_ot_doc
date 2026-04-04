@@ -1,44 +1,66 @@
 # Runbook: стабилизация и инциденты
 
+**Обновлено:** 2026-04-04  
+
 ## Быстрая диагностика API
 
 1. **Сервис не стартует**
-   - Логи: `app.startup` / `SettingsError` / `Missing required environment variables`.
-   - Проверить `APP_ENV`: для `staging`/`production` — не должно быть `change-me`, `prt_local_*`, `S3_BACKEND=memory` (см. `CONFIGURATION_HARDENING.md`).
+   - Логи: `app.startup` / `SettingsError` / missing env.
+   - Проверить `APP_ENV`: для `staging`/`production` — см. `CONFIGURATION_HARDENING.md`.
 
 2. **400 TENANT_REQUIRED**
    - Клиент не передаёт `X-Tenant` на `/api/v1/*`.
-   - Исключение: пути из `TenantMiddleware._public_prefixes` и системные `/health`.
+   - Исключение: пути из `TenantMiddleware._public_prefixes` и `/health`.
 
 3. **401 / массовый logout**
-   - Проверить refresh, clock skew, истечение JWT.
-   - Frontend: событие `app:auth-required` и `requestAuthRedirect`.
+   - Refresh, clock skew, истечение JWT.
+   - Frontend: `app:auth-required`, `requestAuthRedirect`.
 
-4. **Зависшие PDF / pipeline**
-   - Celery worker logs, очередь `pdf` / `default`.
-   - Задача `pipeline.watchdog` (beat) — проверить расписание в `celery_app.py`.
-   - Сообщение `Pipeline run not found` при валидном `run_id`: искать `pipeline.run.tenant_scope_mismatch` — неверный `tenant_slug` в задаче или баг постановки в очередь; не ретраить без исправления аргументов.
+4. **Structured API errors**
+   - Ожидаемый контракт (целевой): `code`, `type`, `message`, `details`, `field_errors`, `correlation_id`.
+   - Если клиент получает строку вместо объекта — проверить версию `error_handlers` и формат исключения.
 
-5. **Webhooks / outbox**
-   - Таблица outbox: статусы, `attempts`, `next_retry_at`.
-   - Логи доставки; дедупликация по idempotency / event id.
+5. **403 / 404 на своём ресурсе после деплоя**
+   - Проверить, что в сессии выставлены `tenant_id` / `tenant_slug` (middleware + dependency).
+   - Логи с суффиксом `*_tenant_scope_mismatch` — несоответствие строки модели и контекста сессии; не ретраить без исправления данных/аргументов задачи.
+
+6. **Зависшие PDF / pipeline**
+   - Celery worker logs, очереди.
+   - `pipeline.watchdog` (beat) — расписание в `celery_app.py`.
+   - `pipeline.run.tenant_scope_mismatch` / `job_not_found` при валидном id: неверный `tenant_slug` в kwargs задачи.
+
+7. **Webhooks / outbox**
+   - Статусы, `attempts`, `next_retry_at`, poison / dead.
+   - Дедупликация по idempotency / event id.
 
 ## Восстановление после сбоя
 
 1. Не повторять опасные задачи без проверки idempotency key.
-2. Для «застрявших» `in_progress` outbox — см. таймаут `OUTBOX_IN_PROGRESS_TIMEOUT_SECONDS`.
-3. После деплоя: `alembic upgrade head`, smoke health, один бизнес-запрос с tenant header.
+2. «Застрявшие» in-progress outbox — см. `OUTBOX_IN_PROGRESS_TIMEOUT_SECONDS` (если задано).
+3. После деплоя: `alembic upgrade head`, health, один бизнес-запрос с tenant header.
+
+## Наблюдаемость (этап 10)
+
+- Искать по `correlation_id` от клиента через API-логи и worker-логи.
+- В worker-задачах при расследовании проверять наличие `tenant_slug` / `tenant_id` в `extra`.
+- Не логировать PII (паспорт, email в payload) — в коде уже есть санитизация в отдельных путях; новые логи проходить чеклист.
 
 ## Контакты и артефакты
 
-- JUnit: `artifacts/backend-junit.xml` (CI).
-- Docker smoke логи: артефакт `smoke-logs` при падении job `smoke-compose`.
+- JUnit: `artifacts/backend-junit.xml` (если включено в CI).
+- Docker smoke: артефакты логов при падении job.
 
 ## E2E (Playwright)
 
 1. Один раз: `cd frontend && npm run e2e:install`.
-2. Локально без бэкенда: `E2E_START_SERVER=1 npm run e2e` (поднимется Vite dev, проверяются логин-форма и редирект с защищённого маршрута).
-3. Против уже запущенного стека: `E2E_BASE_URL=http://127.0.0.1:5173 npm run e2e` (порт подставить свой).
-4. Полный логин: задать `E2E_USER_EMAIL`, `E2E_USER_PASSWORD`, при необходимости `E2E_TENANT`.
-5. Регрессия **production** бандла: `E2E_PREVIEW=1 E2E_START_SERVER=1 npm run e2e` (дольше; учитывать PWA/SW).
-6. CI: Actions → **E2E smoke (Playwright)** → Run workflow.
+2. Локально: `E2E_START_SERVER=1 npm run e2e`.
+3. Против своего URL: `E2E_BASE_URL=... npm run e2e`.
+4. Полный логин: `E2E_USER_EMAIL`, `E2E_USER_PASSWORD`, при необходимости `E2E_TENANT`.
+5. Prod-бандл: `E2E_PREVIEW=1 E2E_START_SERVER=1 npm run e2e`.
+6. CI: workflow **E2E smoke (Playwright)** при необходимости.
+
+## Связанные документы
+
+- Риски релиза: `REGRESSION_RISKS_AND_MITIGATIONS.md`
+- Пробелы тестов: `TEST_COVERAGE_GAPS.md`
+- Аудит: `STABILIZATION_AUDIT.md`
