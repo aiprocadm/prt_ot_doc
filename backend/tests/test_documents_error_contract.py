@@ -13,8 +13,8 @@ def test_serialize_payload_raises_structured_bad_request_for_non_serializable_da
 
     assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
     detail = exc_info.value.detail
-    assert detail["code"] == "documents_bad_request"
-    assert detail["error_code"] == "documents_bad_request"
+    assert detail["code"] == "DOCUMENTS_BAD_REQUEST"
+    assert detail["error_code"] == "DOCUMENTS_BAD_REQUEST"
     assert detail["type"] == "documents"
     assert detail["message"] == "data must be JSON serializable"
 
@@ -34,7 +34,8 @@ async def test_fetch_template_requires_template_code_with_structured_bad_request
 
     assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
     d = exc_info.value.detail
-    assert d["code"] == "documents_bad_request"
+    assert d["code"] == "DOCUMENTS_BAD_REQUEST"
+    assert d["error_code"] == "DOCUMENTS_BAD_REQUEST"
     assert d["message"] == "template_code is required for template selection"
 
 
@@ -53,5 +54,6 @@ async def test_fetch_template_requires_template_version_with_structured_bad_requ
 
     assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
     d = exc_info.value.detail
-    assert d["code"] == "documents_bad_request"
+    assert d["code"] == "DOCUMENTS_BAD_REQUEST"
+    assert d["error_code"] == "DOCUMENTS_BAD_REQUEST"
     assert d["message"] == "template_version is required for template selection"
