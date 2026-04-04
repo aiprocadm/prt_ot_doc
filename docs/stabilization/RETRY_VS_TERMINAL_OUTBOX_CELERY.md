@@ -26,7 +26,7 @@
 
 Исключения **вне** `RETRYABLE_EXCEPTIONS` (ошибки валидации, доменные `ValueError` после guard’ов и т.д.) **не** получают автоповтор Celery — это сознательный «terminal path» на уровне задачи (состояние в БД обновляется внутри `_run`, если предусмотрено).
 
-Константа: `RETRYABLE_EXCEPTIONS` в `backend/app/tasks.py` (рядом с декораторами задач).
+Константа: `RETRYABLE_EXCEPTIONS` в `backend/app/tasks/_core.py` (рядом с декораторами задач).
 
 ## Связь слоёв
 

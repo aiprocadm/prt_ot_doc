@@ -73,7 +73,7 @@
 
 | Действие | Статус |
 |----------|--------|
-| `app/tasks/*.py` + compatibility re-exports | [ ] |
+| `app/tasks/*.py` + compatibility re-exports | частично [x] пакет `app/tasks/` (`_core.py` + `__init__.py` с делегированием); дальнейший сплит `_core` по доменам |
 | Тонкие handlers: documents, risk, packs, jobs, files, approvals, workspace, webhooks | [ ] |
 | `models.py` — re-exports для новых модулей | [ ] по мере появления сущностей |
 
@@ -106,7 +106,7 @@
 
 | Действие | Статус |
 |----------|--------|
-| Integration: tenant, outbox, webhooks, jobs, permissions, document flow | [ ] расширение `tests/integration/` |
+| Integration: tenant, outbox, webhooks, jobs, permissions, document flow | частично [x] `test_cross_tenant_resource_matrix.py`, `test_two_tenant_outbox_webhook_documents.py`, матрица в `TEST_COVERAGE_GAPS.md` |
 | Playwright каркас | [x] `frontend/e2e/smoke.spec.ts`, workflow `e2e-smoke.yml` |
 | Playwright: login errors, documents list/detail, minimal generate, 403, logout | частично [x] list/detail, limited role, logout — `smoke.spec.ts` |
 

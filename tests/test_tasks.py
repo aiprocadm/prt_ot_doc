@@ -8,7 +8,8 @@ from types import SimpleNamespace
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app import tasks
+import app.tasks as tasks
+import app.tasks._core as tasks_core
 from app.db import Base, SharedBase
 from app.models.job_engine import OutboxEvent, OutboxEventStatus
 from app.models.models import Template, TemplateVersion, Tenant, WebhookDelivery, WebhookEndpoint
@@ -49,7 +50,7 @@ def test_register_template_task(monkeypatch) -> None:
                 await session.rollback()
                 raise
 
-    monkeypatch.setattr(tasks, "session_scope", override_scope)
+    monkeypatch.setattr(tasks_core, "session_scope", override_scope)
 
     version_id = tasks.register_template_task(
         tenant.slug,
@@ -137,7 +138,7 @@ def test_dispatch_outbox_events_resolves_webhook_endpoints_by_tenant_id(monkeypa
                 raise
 
     tenant_obj = tenant
-    monkeypatch.setattr(tasks, "session_scope", override_scope)
+    monkeypatch.setattr(tasks_core, "session_scope", override_scope)
 
     calls: list[dict[str, object]] = []
 

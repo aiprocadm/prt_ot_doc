@@ -12,6 +12,7 @@ import pytest
 from sqlalchemy import select
 
 import app.tasks as task_module
+import app.tasks._core as task_core
 from app.models.document import (
     DocumentBatchItem,
     DocumentBatchItemStatus,
@@ -48,8 +49,8 @@ def override_task_session_scope(monkeypatch, sessionmaker):
                 await session.rollback()
                 raise
 
-    monkeypatch.setattr(task_module, "session_scope", _scope)
-    monkeypatch.setattr(task_module, "ensure_tenant_schema", lambda _slug: None)
+    monkeypatch.setattr(task_core, "session_scope", _scope)
+    monkeypatch.setattr(task_core, "ensure_tenant_schema", lambda _slug: None)
 
 
 @pytest.mark.asyncio()

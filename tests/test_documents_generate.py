@@ -10,7 +10,7 @@ from httpx import AsyncClient
 mock_aws = pytest.importorskip("moto").mock_aws
 from sqlalchemy import select
 
-import app.tasks as task_module
+import app.tasks._core as task_core
 from app.core.config import get_settings
 from app.core.security import issue_access_token
 from app.db.session import AsyncSessionLocal
@@ -85,8 +85,8 @@ def override_task_session_scope(monkeypatch: pytest.MonkeyPatch, sessionmaker) -
                 await session.rollback()
                 raise
 
-    monkeypatch.setattr(task_module, "session_scope", _scope)
-    monkeypatch.setattr(task_module, "ensure_tenant_schema", lambda slug: None)
+    monkeypatch.setattr(task_core, "session_scope", _scope)
+    monkeypatch.setattr(task_core, "ensure_tenant_schema", lambda slug: None)
 
 def _build_template_bytes() -> bytes:
     doc = DocxDocument()

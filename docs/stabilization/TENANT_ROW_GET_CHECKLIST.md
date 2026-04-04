@@ -22,7 +22,7 @@
 | Webhooks | `app/api/routes/webhooks.py` — `WebhookEndpoint`, `WebhookDelivery`, `Outbox` (replay) |
 | Outbox admin | `app/api/routes/outbox_admin.py` — `Outbox`, `OutboxEvent` |
 | Documents generate | `app/api/routes/documents.py` — `_ensure_company` / `_ensure_person` (`Company` / `Person`) |
-| Фоновые задачи | `app/tasks.py`, `app/celery/tasks/*`, `app/services/pipelines_orchestrator.py`, `app/modules/pipelines/orchestrator.py` |
+| Фоновые задачи | `app/tasks/` (`_core.py`), `app/celery/tasks/*`, `app/services/pipelines_orchestrator.py`, `app/modules/pipelines/orchestrator.py` |
 
 ## Бэклог для аудита
 
