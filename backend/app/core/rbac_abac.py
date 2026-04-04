@@ -10,6 +10,7 @@ from sqlalchemy import and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 
+from app.core.errors import api_problem_detail
 from app.services.audit import AuditService
 
 
@@ -443,15 +444,15 @@ policy_engine = PolicyEngine()
 
 
 def policy_forbidden(reason: str, *, correlation_id: str | None = None) -> HTTPException:
+    _ = correlation_id
     return HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail={
-            "code": "forbidden",
-            "type": "policy",
-            "message": "forbidden",
-            "reason_code": reason,
-            "correlation-id": correlation_id,
-        },
+        detail=api_problem_detail(
+            code="FORBIDDEN",
+            message="Forbidden",
+            error_type="policy",
+            details={"reason_code": reason},
+        ),
     )
 
 

@@ -104,7 +104,7 @@ class GlobalErrorHandlerMiddleware(BaseHTTPMiddleware):
         return json_error_response_for_request(
             request,
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            code="internal",
+            code="INTERNAL_ERROR",
             message="Internal server error",
             details={},
         )

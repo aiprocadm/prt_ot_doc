@@ -34,6 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_session, get_tenant_record
 from app.api.tenant_row_http import enforce_row_belongs_to_tenant
 from app.core.config import get_settings
+from app.core.errors import api_problem_detail
 from app.core.metrics import get_metrics
 from app.core.rate_limit import ip_tenant_key, limiter, upload_per_tenant
 from app.core.security import AccessContext, abac
@@ -55,6 +56,14 @@ from app.tenancy_quotas import assert_quota
 router = APIRouter()
 
 logger = logging.getLogger(__name__)
+
+
+def _file_problem(*, code: str, message: str, **ctx: Any) -> dict[str, Any]:
+    details = {k: v for k, v in ctx.items() if v is not None}
+    return api_problem_detail(code=code, message=message, details=details or None, error_type="files")
+
+
+_FILE_NOT_FOUND = _file_problem(code="FILE_NOT_FOUND", message="File not found")
 
 _RESERVED_LOG_KEYS = {"message"}
 
@@ -172,10 +181,7 @@ def _ensure_allowed_mime(mime: str, allowed: Collection[str]) -> str:
     if allowed and normalized not in allowed:
         raise HTTPException(
             status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail={
-                "code": "http_415",
-                "message": "Unsupported MIME type",
-            },
+            detail=_file_problem(code="UNSUPPORTED_MEDIA_TYPE", message="Unsupported MIME type"),
         )
     return normalized
 
@@ -196,13 +202,17 @@ def _storage_http_exception(error: s3.S3OperationError) -> HTTPException:
     if storage_code == "NoSuchBucket":
         storage_code = "storage_unavailable"
     storage_message = detail.get("message", "Object storage request failed")
-    enriched_detail = {
-        "code": f"http_{status_code}",
-        "message": storage_message,
-        "storage_code": storage_code,
-        **{k: v for k, v in detail.items() if k not in {"code", "message"}},
-    }
-    return HTTPException(status_code, detail=enriched_detail)
+    extra = {k: v for k, v in detail.items() if k not in {"code", "message"}}
+    nested = {"storage_code": storage_code, **extra}
+    return HTTPException(
+        status_code,
+        detail=api_problem_detail(
+            code=f"HTTP_{status_code}",
+            message=storage_message,
+            details=nested,
+            error_type="files",
+        ),
+    )
 
 
 async def _ingest_upload(
@@ -227,12 +237,12 @@ async def _ingest_upload(
             mebibytes = max(1, limit // (1024 * 1024))
             raise HTTPException(
                 status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                detail={
-                    "code": "http_413",
-                    "message": f"File exceeds {mebibytes} MiB limit",
-                    "limit": limit,
-                    "size": total,
-                },
+                detail=_file_problem(
+                    code="FILE_TOO_LARGE",
+                    message=f"File exceeds {mebibytes} MiB limit",
+                    limit=limit,
+                    size=total,
+                ),
             )
 
         if sample is None and chunk:
@@ -260,23 +270,23 @@ async def _ingest_upload(
     if provided_extension and expected_extension and provided_extension != expected_extension:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            detail={
-                "code": "http_400",
-                "message": "File extension does not match detected content",
-                "expected_extension": expected_extension,
-                "provided_extension": provided_extension,
-            },
+            detail=_file_problem(
+                code="FILE_EXTENSION_MISMATCH",
+                message="File extension does not match detected content",
+                expected_extension=expected_extension,
+                provided_extension=provided_extension,
+            ),
         )
 
     effective_extension = normalized_detected_extension or expected_extension
     if effective_extension is None or effective_extension not in allowed_extensions:
         raise HTTPException(
             status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail={
-                "code": "http_415",
-                "message": "Unsupported file extension",
-                "extension": effective_extension,
-            },
+            detail=_file_problem(
+                code="UNSUPPORTED_FILE_EXTENSION",
+                message="Unsupported file extension",
+                extension=effective_extension,
+            ),
         )
 
     extension = (
@@ -407,11 +417,11 @@ async def _persist_and_audit(
             await session.rollback()
             raise HTTPException(
                 status.HTTP_409_CONFLICT,
-                detail={
-                    "code": "http_409",
-                    "message": "File metadata already exists for the computed storage key",
-                    "storage_key": key,
-                },
+                detail=_file_problem(
+                    code="FILE_RECORD_CONFLICT",
+                    message="File metadata already exists for the computed storage key",
+                    storage_key=key,
+                ),
             ) from exc
         await session.refresh(record)
     else:
@@ -424,11 +434,11 @@ async def _persist_and_audit(
             await session.rollback()
             raise HTTPException(
                 status.HTTP_409_CONFLICT,
-                detail={
-                    "code": "http_409",
-                    "message": "Storage key is already occupied by another file",
-                    "storage_key": key,
-                },
+                detail=_file_problem(
+                    code="STORAGE_KEY_OCCUPIED",
+                    message="Storage key is already occupied by another file",
+                    storage_key=key,
+                ),
             )
 
     download_url: str | None = None
@@ -571,14 +581,14 @@ async def get_file_details(
     if record is None:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
-            detail={"code": "not_found", "message": "File not found"},
+            detail=_FILE_NOT_FOUND,
         )
     enforce_row_belongs_to_tenant(
         session,
         record,
         tenant_id=str(tenant.id),
         mismatch_event="api.files.get_details.tenant_scope_mismatch",
-        detail={"code": "not_found", "message": "File not found"},
+        detail=_FILE_NOT_FOUND,
     )
     _ensure_file_access(record, access)
 
@@ -601,12 +611,12 @@ async def get_file_details(
         if metadata is None:
             raise HTTPException(
                 status.HTTP_404_NOT_FOUND,
-                detail={
-                    "code": "http_404",
-                    "message": "File not found in object storage",
-                    "storage_code": "storage_not_found",
-                    "storage_key": record.storage_key,
-                },
+                detail=_file_problem(
+                    code="FILE_NOT_IN_OBJECT_STORAGE",
+                    message="File not found in object storage",
+                    storage_code="storage_not_found",
+                    storage_key=record.storage_key,
+                ),
             )
 
         try:
@@ -663,11 +673,11 @@ async def upload_template(
         except json.JSONDecodeError as exc:
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "code": "http_400",
-                    "message": "Invalid metadata JSON",
-                    "error": str(exc),
-                },
+                detail=_file_problem(
+                    code="INVALID_METADATA_JSON",
+                    message="Invalid metadata JSON",
+                    error=str(exc),
+                ),
             ) from exc
 
     payload, mime, sha256_hash, extension = await _ingest_upload(
@@ -734,14 +744,14 @@ async def download_file(
         _record_download_denied("not_found")
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
-            detail={"code": "not_found", "message": "File not found"},
+            detail=_FILE_NOT_FOUND,
         )
     enforce_row_belongs_to_tenant(
         session,
         record,
         tenant_id=str(tenant.id),
         mismatch_event="api.files.download.tenant_scope_mismatch",
-        detail={"code": "not_found", "message": "File not found"},
+        detail=_FILE_NOT_FOUND,
     )
 
     expected_prefix = f"tenants/{getattr(tenant, 's3_prefix', None) or tenant.id}/"
@@ -749,7 +759,7 @@ async def download_file(
         _record_download_denied("forbidden_prefix")
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
-            detail={"code": "not_found", "message": "File not found"},
+            detail=_FILE_NOT_FOUND,
         )
 
     try:
@@ -762,11 +772,11 @@ async def download_file(
         _record_download_denied("quarantined")
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            detail={
-                "code": "file_unavailable",
-                "message": "File is not available for download until antivirus scan is clean",
-                "scan_status": record.scan_status,
-            },
+            detail=_file_problem(
+                code="FILE_NOT_READY",
+                message="File is not available for download until antivirus scan is clean",
+                scan_status=record.scan_status,
+            ),
         )
 
     settings = get_settings()
@@ -774,10 +784,10 @@ async def download_file(
         _record_download_denied("storage_unavailable")
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "code": "storage_unavailable",
-                "message": "Presigned downloads are unavailable for the configured storage backend",
-            },
+            detail=_file_problem(
+                code="STORAGE_UNAVAILABLE",
+                message="Presigned downloads are unavailable for the configured storage backend",
+            ),
         )
 
     try:
@@ -798,12 +808,12 @@ async def download_file(
         _record_download_denied("storage_not_found")
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
-            detail={
-                "code": "http_404",
-                "message": "File not found in object storage",
-                "storage_code": "storage_not_found",
-                "storage_key": record.storage_key,
-            },
+            detail=_file_problem(
+                code="FILE_NOT_IN_OBJECT_STORAGE",
+                message="File not found in object storage",
+                storage_code="storage_not_found",
+                storage_key=record.storage_key,
+            ),
         )
 
     expires_in = settings.presign_download_ttl_seconds

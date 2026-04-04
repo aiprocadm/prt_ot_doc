@@ -22,7 +22,9 @@ def infer_error_type_from_code(code: str) -> str:
 
     if code.startswith("TENANT_"):
         return "tenant"
-    if code in {"PERMISSION_DENIED", "AUTHENTICATION_REQUIRED", "UNAUTHORIZED"}:
+    if code in {"PERMISSION_DENIED", "AUTHENTICATION_REQUIRED", "UNAUTHORIZED", "FORBIDDEN"}:
+        return "security"
+    if code.endswith("_FORBIDDEN"):
         return "security"
     if code in {"NOT_FOUND", "TENANT_NOT_FOUND"}:
         return "not_found"

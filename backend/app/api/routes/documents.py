@@ -103,7 +103,7 @@ def _documents_bad_request(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
         detail=api_problem_detail(
-            code="documents_bad_request",
+            code="DOCUMENTS_BAD_REQUEST",
             message=message,
             error_type="documents",
         ),
