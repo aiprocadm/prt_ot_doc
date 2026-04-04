@@ -22,20 +22,6 @@ def tenant_queue_name(tenant_id: str) -> str:
     return f"tenant.{tenant_id}"
 
 
-def route_task_by_tenant(name, args, kwargs, options, task=None, **kw):
-    tenant_id = None
-    if isinstance(kwargs, dict):
-        tenant_id = kwargs.get("tenant_id") or kwargs.get("tenant_slug")
-    headers = options.get("headers") if isinstance(options, dict) else None
-    if not tenant_id and isinstance(headers, dict):
-        tenant_id = headers.get("tenant_id")
-    if tenant_id:
-        queue = tenant_queue_name(str(tenant_id))
-        return {"queue": queue, "routing_key": queue}
-    if name in {"pipeline.run", "documents.generate"}:
-        raise ValueError("missing_tenant")
-    return None
-
 celery_app = Celery(
     settings.app_name,
     broker=settings.redis.broker_url,
@@ -82,6 +68,40 @@ celery_app.conf.task_queues = (
     Queue(default_queue, routing_key=default_queue),
     Queue(pdf_queue, routing_key=pdf_queue),
 )
+
+
+def route_task_by_tenant(name, args, kwargs, options, task=None, **kw):
+    tenant_id = None
+    if isinstance(kwargs, dict):
+        tenant_id = kwargs.get("tenant_id") or kwargs.get("tenant_slug")
+    headers = options.get("headers") if isinstance(options, dict) else None
+    if not tenant_id and isinstance(headers, dict):
+        tenant_id = headers.get("tenant_id")
+
+    has_tenant_scope = bool(tenant_id)
+    if tenant_id:
+        queue = tenant_queue_name(str(tenant_id))
+        registered = celery_app.conf.task_queues
+        known_names: set[str] = set()
+        for q in registered or ():
+            qname = getattr(q, "name", None)
+            if qname:
+                known_names.add(str(qname))
+        if queue in known_names:
+            return {"queue": queue, "routing_key": queue}
+        logger.info(
+            "celery.route.tenant_queue_fallback",
+            extra={
+                "task": name,
+                "computed_queue": queue,
+                "reason": "queue_not_in_task_queues",
+            },
+        )
+
+    if name in {"pipeline.run", "documents.generate"} and not has_tenant_scope:
+        raise ValueError("missing_tenant")
+    return None
+
 
 celery_app.conf.task_routes = (route_task_by_tenant, {
     "app.tasks.*": {"queue": default_queue},

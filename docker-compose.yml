@@ -105,7 +105,18 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-    command: ["celery", "-A", "app.services.celery_app.celery_app", "worker", "-Q", "default", "-l", "info"]
+    # Consume default + pdf; per-tenant queues (tenant.*) require registering Queue + -Q or routing fallback.
+    command:
+      [
+        "celery",
+        "-A",
+        "app.services.celery_app.celery_app",
+        "worker",
+        "-Q",
+        "default,pdf",
+        "-l",
+        "info",
+      ]
 
   beat:
     build:
