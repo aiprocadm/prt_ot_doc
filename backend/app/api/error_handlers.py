@@ -143,10 +143,14 @@ def _build_response(
     trace_header: str,
     headers: Mapping[str, str] | None = None,
     detail_payload: Any | None = None,
+    error_type: str | None = None,
 ) -> JSONResponse:
+    resolved_error_type = (
+        error_type if error_type is not None else _resolve_error_type(status_code, details)
+    )
     payload = ErrorPayload(
         code=code,
-        error_type=_resolve_error_type(status_code, details),
+        error_type=resolved_error_type,
         message=message,
         details=details,
         field_errors=field_errors or [],
@@ -329,12 +333,15 @@ def _handle_http_exception(
     custom_details: Mapping[str, Any] | None = details
     field_errors: list[dict[str, Any]] = []
     code_override: str | None = None
+    error_type_override: str | None = None
 
     if isinstance(details, Mapping):
         mutable = dict(details)
-        candidate = mutable.get("code")
+        candidate = mutable.get("code") or mutable.get("error_code")
         if isinstance(candidate, str) and candidate.strip():
-            code_override = mutable.pop("code", None)
+            code_override = candidate.strip()
+            mutable.pop("code", None)
+            mutable.pop("error_code", None)
         if mutable.get("message") == message:
             mutable.pop("message")
         if mutable.get("detail") == message:
@@ -342,6 +349,18 @@ def _handle_http_exception(
         raw_field_errors = mutable.pop("field_errors", [])
         if isinstance(raw_field_errors, list):
             field_errors = [item for item in raw_field_errors if isinstance(item, dict)]
+        legacy_field = mutable.pop("field", None)
+        if isinstance(legacy_field, str) and legacy_field.strip() and not field_errors:
+            field_errors = [
+                {
+                    "field": legacy_field.strip(),
+                    "message": message,
+                    "type": "validation_error",
+                }
+            ]
+        error_type_override = _resolve_error_type(exc.status_code, mutable)
+        for drop in ("correlation_id", "timestamp", "type"):
+            mutable.pop(drop, None)
         custom_details = mutable
 
     code = code_override or _resolve_error_code(exc.status_code)
@@ -377,6 +396,7 @@ def _handle_http_exception(
         trace_header=trace_header,
         headers=exc.headers,
         detail_payload=exc.detail,
+        error_type=error_type_override,
     )
 
 
@@ -405,4 +425,29 @@ def _handle_unexpected_exception(
     )
 
 
-__all__ = ["register_exception_handlers", "TRACE_HEADER"]
+def json_error_response_for_request(
+    request: Request,
+    *,
+    status_code: int,
+    code: str,
+    message: str,
+    details: Mapping[str, Any] | None = None,
+    field_errors: list[dict[str, Any]] | None = None,
+) -> JSONResponse:
+    """Публичный JSON-ответ с телом контракта :mod:`app.api.error_handlers` (для middleware и утилит)."""
+
+    settings = getattr(request.app.state, "settings", None) or get_settings()
+    trace_header = settings.trace_header_name
+    trace_id = get_trace_id(request, trace_header)
+    return _build_response(
+        status_code=status_code,
+        code=code,
+        message=message,
+        details=dict(details) if details else {},
+        field_errors=field_errors or [],
+        trace_id=trace_id,
+        trace_header=trace_header,
+    )
+
+
+__all__ = ["register_exception_handlers", "TRACE_HEADER", "json_error_response_for_request"]

@@ -8,7 +8,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import ERROR_CODES, ErrorBuilder
+from app.core.errors import ERROR_CODES, api_problem_detail
 from app.models.models import Tenant
 
 
@@ -67,7 +67,7 @@ class TenantContextValidator:
 
         Args:
             error_code: Error code from ERROR_CODES
-            correlation_id: Request correlation ID
+            correlation_id: Deprecated for detail body; final ``trace_id`` comes from request handlers.
             field: Field name (if applicable)
             details: Additional details
 
@@ -77,17 +77,12 @@ class TenantContextValidator:
         status_code, default_message = ERROR_CODES.get(
             error_code, (500, "Unknown error")
         )
-        error = (
-            ErrorBuilder()
-            .with_code(error_code)
-            .with_message(default_message)
-            .with_correlation_id(correlation_id)
+        return api_problem_detail(
+            code=error_code,
+            message=default_message,
+            details=details,
+            field=field,
         )
-        if field:
-            error = error.with_field(field)
-        if details:
-            error = error.with_details(details)
-        return error.build().model_dump()
 
 
 def validate_tenant_in_operation(
