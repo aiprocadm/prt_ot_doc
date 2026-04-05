@@ -800,6 +800,8 @@ async def preview_template_version(
         if not created:
             return await idem_service.respond_from_store(idem_record, model=PreviewResponse)
     template = await session.get(Template, template_id)
+    if template is None or template.tenant_id not in _tenant_scope(tenant) or template.deleted_at is not None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Template not found")
     passport = build_passport(
         code=template.code or template.name,
         version=version.version,
@@ -941,7 +943,7 @@ async def create_template_version(
     status_value: str = Form("active"),
 ) -> dict[str, str]:
     template = await session.get(Template, template_id)
-    if template is None:
+    if template is None or template.tenant_id not in _tenant_scope(tenant) or template.deleted_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Template not found")
     await BillingService(session).assert_allowed(tenant, "templates.create")
     payload = await file.read(MAX_TEMPLATE_SIZE_BYTES + 1)

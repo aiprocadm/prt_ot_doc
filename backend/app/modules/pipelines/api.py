@@ -364,7 +364,7 @@ async def retry_step_run(run_id: str, step_run_id: str, session: AsyncSession = 
     if run is None or str(run.tenant_id) != str(tenant.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "run not found")
     step = await session.get(DocumentJobStep, step_run_id)
-    if step is None or step.job_id != run_id:
+    if step is None or step.job_id != run_id or str(step.tenant_id) != str(tenant.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "step run not found")
     await DocumentPipelineOrchestrator(session).retry_step(job_id=run_id, step_code=step.step_code)
     await session.commit()

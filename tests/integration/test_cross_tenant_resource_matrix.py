@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from io import BytesIO
 
 import pytest
+from docx import Document as DocxDocument
 from sqlalchemy import select
 
 from app.core.security import issue_access_token
@@ -17,6 +19,16 @@ from app.models.document import (
     DocumentBatchStatus,
 )
 from app.models.models import Outbox, OutboxStatus, RoleEnum, Template, TemplateVersion, TemplateVersionStatus, Tenant
+
+DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+def _minimal_docx_bytes() -> bytes:
+    doc = DocxDocument()
+    doc.add_paragraph("cross-tenant tpl")
+    buf = BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
 from app.modules.files.models import FileRecord, FileStatus
 
 
@@ -184,6 +196,38 @@ async def test_documents_batch_get_returns_404_for_other_tenant_batch(
 
     response = await async_client.get(
         f"/api/v1/documents/batch/{batch_id}",
+        headers=_headers_tenant_b(user_id=user_b_id, tenant_b=tb),
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_legacy_post_template_version_returns_404_for_other_tenant_template(
+    async_client,
+    sessionmaker,
+    data_factory,
+) -> None:
+    async with sessionmaker() as session:
+        ta = await data_factory.ensure_tenant(slug="tpl-ver-mx-a", session=session)
+        tb = await data_factory.ensure_tenant(slug="tpl-ver-mx-b", session=session)
+        user_b = await data_factory.create_user(tenant=tb, role=RoleEnum.ADMIN, session=session)
+        template = Template(
+            tenant_id=ta.id,
+            name="tpl-ver-mx-name",
+            code="tpl-ver-mx-code",
+            metadata_json={},
+        )
+        session.add(template)
+        await session.commit()
+        template_id = template.id
+        user_b_id = user_b.id
+
+    await _ensure_global_tenant(slug=ta.slug, tenant_id=str(ta.id))
+    await _ensure_global_tenant(slug=tb.slug, tenant_id=str(tb.id))
+
+    response = await async_client.post(
+        f"/api/v1/templates/{template_id}/versions",
+        files={"file": ("t.docx", _minimal_docx_bytes(), DOCX_CONTENT_TYPE)},
         headers=_headers_tenant_b(user_id=user_b_id, tenant_b=tb),
     )
     assert response.status_code == 404

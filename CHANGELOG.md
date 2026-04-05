@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 2026-04-05
+- Закрыт пробел изоляции аренды на `POST /api/v1/templates/{template_id}/versions` (legacy multipart): без проверки `template.tenant_id` можно было привязать версию к чужому шаблону при валидном JWT другой аренды на SQLite/единой схеме. Добавлена та же семантика «не найдено», что у catalog/upload (`_tenant_scope` + `deleted_at`).
+- В `preview_template_version` после повторного `session.get(Template)` добавлена явная проверка аренды и soft-delete, чтобы не обращаться к полям при несогласованных данных.
+- В `POST .../pipelines/runs/{run_id}/steps/{step_run_id}:retry` добавлена проверка `DocumentJobStep.tenant_id` против текущего тенанта (защита от подбора id шага).
+- Восстановлен реэкспорт `roles_from_jwt_claims` из пакета `app.core.security` (используется `TenantMiddleware` и unit-тесты); без него импорт приложения падал.
+- Регрессия: `tests/integration/test_cross_tenant_resource_matrix.py::test_legacy_post_template_version_returns_404_for_other_tenant_template`.
+
 ## 2026-03-29
 - Hardened tenant identity handling across document-core so `tenant.id` is again the canonical persistence identifier for `Template`, `TemplateVersion`, `DocumentPack`, `DocumentPackItem`, and `PipelineRun`, while `tenant.slug` remains routing-only and `tenant_schema` remains schema-only.
 - Updated session/dependency contract to hydrate `session.info` with `tenant_id`, `tenant_slug`, and `tenant_schema`; legacy `session.info["tenant"]` now survives only as a backward-compatible slug alias.

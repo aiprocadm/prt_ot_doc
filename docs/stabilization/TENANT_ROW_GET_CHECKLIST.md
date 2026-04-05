@@ -22,6 +22,8 @@
 | Webhooks | `app/api/routes/webhooks.py` — `WebhookEndpoint`, `WebhookDelivery`, `Outbox` (replay) |
 | Outbox admin | `app/api/routes/outbox_admin.py` — `Outbox`, `OutboxEvent` |
 | Documents generate | `app/api/routes/documents.py` — `_ensure_company` / `_ensure_person` (`Company` / `Person`) |
+| Templates API (v1 router) | `app/api/v1/router.py` — `POST /templates/{id}/versions` (legacy multipart): после исправления 2026-04-05 проверка `_tenant_scope` + `deleted_at`, как у catalog/upload; preview повторно валидирует `Template` |
+| Pipelines HTTP | `app/modules/pipelines/api.py` — retry шага: `DocumentJobStep.tenant_id` должен совпадать с текущим тенантом |
 | Фоновые задачи | `app/tasks/` (`_core.py`), `app/celery/tasks/*`, `app/services/pipelines_orchestrator.py`, `app/modules/pipelines/orchestrator.py` |
 
 ## Бэклог для аудита
