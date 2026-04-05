@@ -180,7 +180,7 @@ const NotificationsPage = () => {
           {!loading ? items.map((item) => (
             <div key={item.id} className={`rounded-md border p-3 ${item.is_read ? "bg-muted/30" : "border-primary/40"}`}>
               <div className="flex items-start gap-3">
-                <input type="checkbox" className="mt-1" checked={selectedIds.includes(item.id)} onChange={() => toggleSelected(item.id)} aria-label={`select-${item.id}`} />
+                <input type="checkbox" className="mt-1" checked={selectedIds.includes(item.id)} onChange={() => toggleSelected(item.id)} aria-label={`Выбрать уведомление ${item.id}`} />
                 <div className="flex-1">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
@@ -195,8 +195,8 @@ const NotificationsPage = () => {
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                     <span className="rounded-full border px-2 py-1">{item.type}</span>
-                    <span className="rounded-full border px-2 py-1">{item.is_read ? "read" : "unread"}</span>
-                    {!item.is_read ? <Button size="sm" variant="ghost" onClick={() => void markRead([item.id])}>Mark read</Button> : null}
+                    <span className="rounded-full border px-2 py-1">{item.is_read ? "прочитано" : "непрочитано"}</span>
+                    {!item.is_read ? <Button size="sm" variant="ghost" onClick={() => void markRead([item.id])}>Пометить прочитанным</Button> : null}
                     {item.deeplink || item.payload?.deeplink ? (
                       <Link className="text-primary underline" to={item.deeplink ?? item.payload?.deeplink ?? "#"}>
                         Открыть связанную сущность
@@ -211,23 +211,23 @@ const NotificationsPage = () => {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Предпочтения и quiet hours</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Предпочтения и тихие часы</CardTitle></CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2">
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(settings?.email_enabled)} onChange={(e) => setSettings((prev) => (prev ? { ...prev, email_enabled: e.target.checked } : prev))} /> Email</label>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(settings?.email_enabled)} onChange={(e) => setSettings((prev) => (prev ? { ...prev, email_enabled: e.target.checked } : prev))} /> Электронная почта</label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(settings?.telegram_enabled)} onChange={(e) => setSettings((prev) => (prev ? { ...prev, telegram_enabled: e.target.checked } : prev))} /> Telegram</label>
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(settings?.inapp_enabled)} onChange={(e) => setSettings((prev) => (prev ? { ...prev, inapp_enabled: e.target.checked } : prev))} /> In-app</label>
-          <Input placeholder="Digest mode (off/daily/weekly)" value={settings?.digest_mode ?? ""} onChange={(e) => setSettings((prev) => (prev ? { ...prev, digest_mode: e.target.value } : prev))} />
-          <Input placeholder="Email" value={settings?.email ?? ""} onChange={(e) => setSettings((prev) => (prev ? { ...prev, email: e.target.value } : prev))} />
-          <Input placeholder="Telegram chat id" value={settings?.telegram_chat_id ?? ""} onChange={(e) => setSettings((prev) => (prev ? { ...prev, telegram_chat_id: e.target.value } : prev))} />
-          <Input placeholder="Quiet hours from (22:00)" value={settings?.quiet_hours?.from ?? ""} onChange={(e) => setSettings((prev) => (prev ? { ...prev, quiet_hours: { ...(prev.quiet_hours ?? {}), from: e.target.value } } : prev))} />
-          <Input placeholder="Quiet hours to (08:00)" value={settings?.quiet_hours?.to ?? ""} onChange={(e) => setSettings((prev) => (prev ? { ...prev, quiet_hours: { ...(prev.quiet_hours ?? {}), to: e.target.value } } : prev))} />
-          <Input placeholder="Timezone (Europe/Moscow)" value={settings?.quiet_hours?.tz ?? ""} onChange={(e) => setSettings((prev) => (prev ? { ...prev, quiet_hours: { ...(prev.quiet_hours ?? {}), tz: e.target.value } } : prev))} />
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(settings?.inapp_enabled)} onChange={(e) => setSettings((prev) => (prev ? { ...prev, inapp_enabled: e.target.checked } : prev))} /> В приложении</label>
+          <Input placeholder="Режим дайджеста: off / daily / weekly" value={settings?.digest_mode ?? ""} onChange={(e) => setSettings((prev) => (prev ? { ...prev, digest_mode: e.target.value } : prev))} />
+          <Input placeholder="Адрес электронной почты" value={settings?.email ?? ""} onChange={(e) => setSettings((prev) => (prev ? { ...prev, email: e.target.value } : prev))} />
+          <Input placeholder="ID чата Telegram" value={settings?.telegram_chat_id ?? ""} onChange={(e) => setSettings((prev) => (prev ? { ...prev, telegram_chat_id: e.target.value } : prev))} />
+          <Input placeholder="Тихие часы: с (например 22:00)" value={settings?.quiet_hours?.from ?? ""} onChange={(e) => setSettings((prev) => (prev ? { ...prev, quiet_hours: { ...(prev.quiet_hours ?? {}), from: e.target.value } } : prev))} />
+          <Input placeholder="Тихие часы: до (например 08:00)" value={settings?.quiet_hours?.to ?? ""} onChange={(e) => setSettings((prev) => (prev ? { ...prev, quiet_hours: { ...(prev.quiet_hours ?? {}), to: e.target.value } } : prev))} />
+          <Input placeholder="Часовой пояс (Europe/Moscow)" value={settings?.quiet_hours?.tz ?? ""} onChange={(e) => setSettings((prev) => (prev ? { ...prev, quiet_hours: { ...(prev.quiet_hours ?? {}), tz: e.target.value } } : prev))} />
           <Button className="md:col-span-2" onClick={() => void saveSettings()}>Сохранить настройки</Button>
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Notification templates foundation</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Шаблоны уведомлений</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           {templates.length ? templates.map((template) => (
             <div key={template.id} className="rounded border p-3">
@@ -236,12 +236,12 @@ const NotificationsPage = () => {
                   <div className="font-medium">{template.code}</div>
                   <div className="text-xs text-muted-foreground">{template.type} · {template.channel} · {template.locale}</div>
                 </div>
-                <div className="rounded-full border px-2 py-1 text-xs">{template.is_active ? "active" : "disabled"}</div>
+                <div className="rounded-full border px-2 py-1 text-xs">{template.is_active ? "активен" : "отключён"}</div>
               </div>
               <div className="mt-2 text-sm text-muted-foreground">{template.title_template ?? template.subject_template ?? "Без заголовка"}</div>
               <div className="mt-1 text-xs text-muted-foreground line-clamp-2">{template.body_template}</div>
             </div>
-          )) : <div className="text-sm text-muted-foreground">Шаблоны пока не настроены — foundation для tenant-scoped templates готов.</div>}
+          )) : <div className="text-sm text-muted-foreground">Шаблоны пока не настроены — база для шаблонов в области тенанта готова.</div>}
         </CardContent>
       </Card>
     </div>

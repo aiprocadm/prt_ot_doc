@@ -118,12 +118,12 @@ const IntegrationsPage = () => {
     <div className="space-y-4">
       <RegistryPageHeader
         title="Интеграции"
-        description="Delivery history, retry-safe обработка и прозрачность статусов интеграций через outbox/event pipeline."
+        description="История доставок, безопасные повторы и прозрачность статусов интеграций через исходящую очередь и конвейер событий."
       />
       <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
       {loading ? <LoadingScreen label="Загрузка интеграций" /> : null}
       {!loading && !error && data.deliveries.length + data.events.length === 0 ? (
-        <EmptyState title="Интеграционные события отсутствуют" description="После первых webhook/outbox операций здесь появится журнал доставок." />
+        <EmptyState title="Интеграционные события отсутствуют" description="После первых операций с вебхуками и исходящей очередью здесь появится журнал доставок." />
       ) : null}
 
       <div className="grid gap-4 md:grid-cols-4">
@@ -135,7 +135,7 @@ const IntegrationsPage = () => {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Provider readiness</CardTitle>
+          <CardTitle className="text-base">Готовность провайдеров</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-3">

@@ -339,7 +339,7 @@ export const ExportStep = ({
   onOpenArtifact,
 }: Pick<SharedProps, "pipelineRun"> & { onOpenArtifact: () => Promise<void> }) => (
   <div className="space-y-3">
-    <p className="text-sm text-muted-foreground">Экспорт доступен после успешного pipeline. Ссылки берутся из artifacts и эндпоинтов `/api/v1/files/...`.</p>
+    <p className="text-sm text-muted-foreground">Экспорт доступен после успешного пайплайна. Ссылки берутся из артефактов и эндпоинтов `/api/v1/files/...`.</p>
     <Button variant="outline" disabled={!pipelineRun?.artifacts} onClick={() => void onOpenArtifact()}>
       Скачать первый артефакт (ZIP/PDF)
     </Button>
@@ -357,10 +357,10 @@ export const ArchiveStep = ({
       <p className="mt-1 text-sm">{archiveStatus.description}</p>
       <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
         <div>
-          <span className="text-muted-foreground">Pipeline:</span> <span className="font-medium">{pipelineRun?.status ?? "не запускался"}</span>
+          <span className="text-muted-foreground">Пайплайн:</span> <span className="font-medium">{pipelineRun?.status ?? "не запускался"}</span>
         </div>
         <div>
-          <span className="text-muted-foreground">Batch:</span> <span className="font-medium">{batch?.status ?? "не запускался"}</span>
+          <span className="text-muted-foreground">Пакет:</span> <span className="font-medium">{batch?.status ?? "не запускался"}</span>
         </div>
       </div>
     </div>
