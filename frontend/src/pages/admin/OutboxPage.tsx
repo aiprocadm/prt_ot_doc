@@ -59,7 +59,7 @@ const OutboxPage = () => {
       setSecret("");
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Не удалось создать webhook endpoint");
+      setError(err instanceof Error ? err.message : "Не удалось создать точку вебхука");
     }
   };
 
@@ -69,7 +69,7 @@ const OutboxPage = () => {
       await apiClient.post(`/webhooks/endpoints/${id}:test`);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Не удалось выполнить тест webhook endpoint");
+      setError(err instanceof Error ? err.message : "Не удалось выполнить тест точки вебхука");
     }
   };
 
@@ -79,7 +79,7 @@ const OutboxPage = () => {
 
   return (
     <div className="space-y-4">
-      <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Integrations / Webhooks" }]} />
+      <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Интеграции и вебхуки" }]} />
       <ErrorState
         error={
           error
@@ -91,27 +91,27 @@ const OutboxPage = () => {
       {loading ? <LoadingScreen label="Загрузка интеграций" /> : null}
       <Card>
         <CardHeader>
-          <CardTitle>Webhook subscriptions</CardTitle>
+          <CardTitle>Подписки на вебхуки</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={createEndpoint} className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-4">
-            <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://example/webhook" required />
-            <Input value={secret} onChange={(e) => setSecret(e.target.value)} placeholder="secret" />
-            <Input value={eventTypes} onChange={(e) => setEventTypes(e.target.value)} placeholder="event types" />
-            <Button type="submit" disabled={loading}>Create</Button>
+            <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://example.com/webhook" required />
+            <Input value={secret} onChange={(e) => setSecret(e.target.value)} placeholder="Секрет" />
+            <Input value={eventTypes} onChange={(e) => setEventTypes(e.target.value)} placeholder="Типы событий через запятую" />
+            <Button type="submit" disabled={loading}>Создать</Button>
           </form>
           {endpoints.length === 0 ? (
             <EmptyState
-              title="Webhook endpoints отсутствуют"
-              description="Создайте первый endpoint, чтобы начать проверку delivery и интеграционных уведомлений."
+              title="Точки вебхуков отсутствуют"
+              description="Создайте первую точку, чтобы начать проверку доставки и интеграционных уведомлений."
             />
           ) : (
             <ul className="space-y-1 text-sm">
               {endpoints.map((item) => (
                 <li key={item.id}>
-                  {item.url} — <b>{item.enabled ? "enabled" : "disabled"}</b> ({item.subscribed_events.join(", ") || "all"})
+                  {item.url} — <b>{item.enabled ? "включено" : "отключено"}</b> ({item.subscribed_events.join(", ") || "все"})
                   <Button size="sm" className="ml-2" onClick={() => void runTest(item.id)} disabled={loading}>
-                    Test
+                    Тест
                   </Button>
                 </li>
               ))}
@@ -121,19 +121,19 @@ const OutboxPage = () => {
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle>Deliveries</CardTitle>
+          <CardTitle>Доставки</CardTitle>
         </CardHeader>
         <CardContent>
           {deliveries.length === 0 ? (
             <EmptyState
-              title="Delivery history пуста"
-              description="После первой отправки webhook здесь появится история доставок."
+              title="История доставок пуста"
+              description="После первой отправки вебхука здесь появится история доставок."
             />
           ) : (
             <ul className="space-y-1 text-sm">
               {deliveries.slice(0, 20).map((item) => (
                 <li key={item.id}>
-                  {item.event_id} → {item.endpoint_id} — <b>{item.status}</b> (attempts: {item.attempts})
+                  {item.event_id} → {item.endpoint_id} — <b>{item.status}</b> (попыток: {item.attempts})
                 </li>
               ))}
             </ul>
@@ -142,25 +142,25 @@ const OutboxPage = () => {
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle>Job outbox timeline / events emitted</CardTitle>
+          <CardTitle>Хронология исходящей очереди заданий</CardTitle>
         </CardHeader>
         <CardContent>
           {items.length === 0 ? (
             <EmptyState
-              title="Outbox events отсутствуют"
-              description="После первых фоновых событий здесь появится timeline интеграционных сообщений."
+              title="Событий исходящей очереди нет"
+              description="После первых фоновых событий здесь появится хронология интеграционных сообщений."
             />
           ) : (
             <ul className="space-y-1 text-sm">
               {items.map((item) => (
                 <li key={item.id}>
-                  {item.event_type} — <b>{item.status}</b> (attempts: {item.attempts})
+                  {item.event_type} — <b>{item.status}</b> (попыток: {item.attempts})
                 </li>
               ))}
             </ul>
           )}
           <Button className="mt-3" onClick={() => void load()} disabled={loading}>
-            Refresh
+            Обновить
           </Button>
         </CardContent>
       </Card>

@@ -79,44 +79,44 @@ const AdminPage = () => {
             </CardContent>
           </Card>
           <Card>
-            <CardHeader><CardTitle className="text-base">Provider status</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">Статус провайдеров</CardTitle></CardHeader>
             <CardContent className="space-y-2 text-sm">
               {data.providerStatus ? (
                 <>
-                  <p>Production ready: {data.providerStatus.production_ready ? "yes" : "no"}</p>
-                  <p>Blocking providers: {data.providerStatus.blocking_for_golive.length}</p>
+                  <p>Готовность к продакшену: {data.providerStatus.production_ready ? "да" : "нет"}</p>
+                  <p>Блокирующих провайдеров: {data.providerStatus.blocking_for_golive.length}</p>
                   {data.providerStatus.providers.slice(0, 3).map((provider) => <p key={provider.name}>{provider.name} · {provider.mode} · {provider.adapter}</p>)}
                 </>
               ) : (
-                <p className="text-muted-foreground">Provider status временно недоступен</p>
+                <p className="text-muted-foreground">Статус провайдеров временно недоступен</p>
               )}
             </CardContent>
           </Card>
           <Card>
-            <CardHeader><CardTitle className="text-base">Role projection</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">Проекция роли</CardTitle></CardHeader>
             <CardContent className="space-y-2 text-sm">
               {data.roleSummary ? (
                 <>
-                  <p>Role: {data.roleSummary.role}</p>
-                  <p>Open tasks: {data.roleSummary.open_tasks}</p>
-                  <p>Overdue tasks: {data.roleSummary.overdue_tasks}</p>
-                  <p>Overdue deadlines: {data.roleSummary.overdue_deadlines}</p>
+                  <p>Роль: {data.roleSummary.role}</p>
+                  <p>Открытых задач: {data.roleSummary.open_tasks}</p>
+                  <p>Просроченных задач: {data.roleSummary.overdue_tasks}</p>
+                  <p>Просроченных сроков: {data.roleSummary.overdue_deadlines}</p>
                 </>
               ) : (
-                <p className="text-muted-foreground">Role summary временно недоступен</p>
+                <p className="text-muted-foreground">Сводка по роли временно недоступна</p>
               )}
             </CardContent>
           </Card>
           <Card>
-            <CardHeader><CardTitle className="text-base">Outbox</CardTitle></CardHeader>
-            <CardContent className="space-y-2 text-sm">{data.outbox.slice(0, 5).map((item) => <p key={item.id}>{item.event_type} · {item.status} · attempts {item.attempts}</p>)}</CardContent>
+            <CardHeader><CardTitle className="text-base">Исходящая очередь</CardTitle></CardHeader>
+            <CardContent className="space-y-2 text-sm">{data.outbox.slice(0, 5).map((item) => <p key={item.id}>{item.event_type} · {item.status} · попыток {item.attempts}</p>)}</CardContent>
           </Card>
           <Card>
-            <CardHeader><CardTitle className="text-base">Webhook endpoints</CardTitle></CardHeader>
-            <CardContent className="space-y-2 text-sm">{data.webhooks.slice(0, 5).map((item) => <p key={item.id}>{item.code || item.id} · {item.is_active ? "active" : "disabled"}</p>)}</CardContent>
+            <CardHeader><CardTitle className="text-base">Точки вебхуков</CardTitle></CardHeader>
+            <CardContent className="space-y-2 text-sm">{data.webhooks.slice(0, 5).map((item) => <p key={item.id}>{item.code || item.id} · {item.is_active ? "активна" : "отключена"}</p>)}</CardContent>
           </Card>
           <Card>
-            <CardHeader><CardTitle className="text-base">Audit feed</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">Лента аудита</CardTitle></CardHeader>
             <CardContent className="space-y-2 text-sm">
               {data.auditItems.length ? data.auditItems.slice(0, 5).map((item) => <p key={item.id}>{item.action} · {item.object_type}</p>) : <p className="text-muted-foreground">События аудита отсутствуют</p>}
             </CardContent>
