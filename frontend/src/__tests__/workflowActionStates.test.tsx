@@ -41,9 +41,9 @@ describe("workflow action states", () => {
       </MemoryRouter>
     );
 
-    await screen.findByText(/workflow данные отсутствуют/i);
+    await screen.findByText(/нет данных по процессам/i);
     fireEvent.change(screen.getByPlaceholderText("Код процесса"), { target: { value: "custom-flow" } });
-    fireEvent.click(screen.getByRole("button", { name: "Create draft" }));
+    fireEvent.click(screen.getByRole("button", { name: "Создать черновик" }));
 
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent("create workflow failed");
@@ -85,7 +85,7 @@ describe("workflow action states", () => {
     );
 
     await screen.findByText("Approve document");
-    fireEvent.click(screen.getByRole("button", { name: "Complete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Завершить" }));
 
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent("complete failed");

@@ -176,7 +176,7 @@ describe("BrandingSettingsPage", () => {
     });
 
     expect((await screen.findAllByText(/АО Тест \/ Main site/i)).length).toBeGreaterThan(0);
-    expect(screen.getByText(/все placeholders разрешены/i)).toBeInTheDocument();
+    expect(screen.getByText(/все плейсхолдеры разрешены/i)).toBeInTheDocument();
     expect(screen.getAllByText(/2026-03-26T01:00:00Z/i).length).toBeGreaterThan(0);
     expect(brandingApiMock.previewBranding).toHaveBeenCalledWith(
       expect.objectContaining({

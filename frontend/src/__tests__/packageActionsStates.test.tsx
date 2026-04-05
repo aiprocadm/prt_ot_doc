@@ -31,16 +31,16 @@ describe("package action states", () => {
       </MemoryRouter>
     );
 
-    await screen.findByText(/package profiles отсутствуют/i);
-    fireEvent.change(screen.getByPlaceholderText("code"), { target: { value: "pack-default" } });
-    fireEvent.change(screen.getByPlaceholderText("name"), { target: { value: "Pack profile" } });
-    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    await screen.findByText(/профили пакетов отсутствуют/i);
+    fireEvent.change(screen.getByPlaceholderText("Код"), { target: { value: "pack-default" } });
+    fireEvent.change(screen.getByPlaceholderText("Название"), { target: { value: "Pack profile" } });
+    fireEvent.click(screen.getByRole("button", { name: "Создать" }));
 
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent("profile create failed");
     });
-    expect(screen.getByPlaceholderText("code")).toHaveValue("pack-default");
-    expect(screen.getByPlaceholderText("name")).toHaveValue("Pack profile");
+    expect(screen.getByPlaceholderText("Код")).toHaveValue("pack-default");
+    expect(screen.getByPlaceholderText("Название")).toHaveValue("Pack profile");
   });
 
   it("shows error when preset validation fails without reloading away the list", async () => {
@@ -62,7 +62,7 @@ describe("package action states", () => {
     );
 
     await screen.findByText(/pack-a — pack a \(draft\)/i);
-    fireEvent.click(screen.getByRole("button", { name: "Validate" }));
+    fireEvent.click(screen.getByRole("button", { name: "Проверить" }));
 
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent("preset validate failed");

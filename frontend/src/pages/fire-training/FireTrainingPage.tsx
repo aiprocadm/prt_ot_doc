@@ -35,7 +35,7 @@ const FireTrainingPage = () => {
       {!loading && !error && data.overdueEntries.length > 0 ? (
         <Card className="border-orange-200 bg-orange-50/40">
           <CardHeader>
-            <CardTitle className="text-base">Blockers и next actions</CardTitle>
+            <CardTitle className="text-base">Блокеры и дальнейшие действия</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             <p>Найдено просроченных записей инструктажей: {data.overdueEntries.length}. Требуется закрыть задолженность до следующей волны проверок.</p>

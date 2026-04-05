@@ -83,6 +83,6 @@ describe("Inspection/fire next actions", () => {
     );
 
     expect(await screen.findByText(/блокеры и дальнейшие действия/i)).toBeInTheDocument();
-    expect(screen.getByText(/открытых blockers по предписаниям/i)).toBeInTheDocument();
+    expect(screen.getByText(/открытых ограничений по предписаниям/i)).toBeInTheDocument();
   });
 });
