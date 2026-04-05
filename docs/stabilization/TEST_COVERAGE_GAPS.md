@@ -18,6 +18,7 @@
 | Webhook delivery | `GET /api/v1/webhooks/deliveries/{id}/diagnostics` | **404** | `tests/integration/test_two_tenant_outbox_webhook_documents.py` |
 | JWT tenant ≠ header tenant | любой маршрут с `ReadAccessDep` / `abac` | **403** tenant mismatch | `tests/test_rbac_abac.py` (`TENANT_SCOPE_MISMATCH` на `GET /api/v1/templates` и `POST /api/v1/companies`); `tests/test_tenant_security.py::test_header_token_tenant_mismatch_denied` |
 | Template (legacy multipart) | `POST /api/v1/templates/{id}/versions` | **404** при `template.tenant_id` вне текущей аренды | `tests/integration/test_cross_tenant_resource_matrix.py::test_legacy_post_template_version_returns_404_for_other_tenant_template` |
+| PWA offline batch | логика `OfflineSyncService.apply_batch` (briefing_entry) | батч **failed** + `tenant_scope_mismatch`, если entry не той аренды | `tests/services/test_training_briefings_next_services.py::test_offline_sync_fails_when_briefing_entry_other_tenant` |
 
 Дополнительно: **retry vs terminal** для outbox/Celery — `docs/stabilization/RETRY_VS_TERMINAL_OUTBOX_CELERY.md`, контрактные проверки `tests/test_retry_terminal_contract.py`.
 

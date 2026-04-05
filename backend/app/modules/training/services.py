@@ -106,7 +106,11 @@ class TrainingEnrollmentService:
             enrollment.progress_percent = 100
             enrollment.completed_at = datetime.now(tz=timezone.utc)
             program = await session.get(TrainingProgram, enrollment.training_program_id)
-            if program and program.validity_months:
+            if (
+                program
+                and str(program.tenant_id) == str(enrollment.tenant_id)
+                and program.validity_months
+            ):
                 enrollment.expires_at = self._add_months(enrollment.completed_at, program.validity_months).replace(microsecond=0)
         else:
             enrollment.status = "failed"

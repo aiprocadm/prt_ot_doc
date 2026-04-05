@@ -262,7 +262,11 @@ async def approval_decide(task_id: str, payload: DecideIn, request: Request, res
     if task.assignee_id != x_user_id:
         raise _approval_signing_forbidden("Task assignee mismatch")
     process = await session.get(ApprovalProcess, task.process_id)
+    if process is None or str(process.tenant_id) != str(tenant.id):
+        raise _approval_signing_not_found("process")
     route = await session.get(ApprovalRoute, process.route_id)
+    if route is None or str(route.tenant_id) != str(tenant.id):
+        raise _approval_signing_not_found("route")
     task.status = ApprovalTaskStatus.DONE
     task.decision = payload.decision
     task.comment = payload.comment
