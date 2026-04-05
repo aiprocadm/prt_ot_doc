@@ -419,18 +419,18 @@ Shared-like tenant таблица (см. `backend/app/models/risk.py`): `code`, 
 ### Outbox (`outbox`)
 | `event_type`, `payload` (json), `processed_at`. Используется для паттерна transactional outbox.
 
-## Известные расхождения моделей и Pydantic-схем
-1. **Person** — модель содержит `phone`, `email`, `birth_date`, `employment_status`,
-   `current_ppe`, однако `backend/app/schemas/person.py::PersonRead` публикует только
-   базовые паспортные поля. *TODO: расширить `PersonRead` минимум `phone`,
-   `email`, `employment_status`, чтобы API отражало фактические данные.*
-2. **Document** — ORM хранит `site_id`, `template_version_id`, `file_id`,
-   `signed_file_id`, `content_sha256`, `job_id`, но `DocumentRead`
-   (в `backend/app/schemas/document.py`) возвращает лишь `company_id`, `template_id`,
-   `person_id`, `status`, `storage_key`. *TODO: дополнить схему, иначе API теряет
-   важные ссылки (подписанный файл, площадка, шаблонная версия).* 
-3. **DocumentPack** — в API (`PackListItem`) отсутствуют поля `module` и
-   `scenario_type`, хотя они обязательны в таблице `document_pack`. *TODO:
-   добавить эти атрибуты в выдачу пакетов, чтобы клиенты понимали контекст.*
+## Согласование моделей и Pydantic-схем (актуально)
+Следующие расхождения, ранее отмеченные здесь, **закрыты в коде**:
+- **Person** — `PersonRead` / `PersonCreate` / `PersonUpdate` включают `employment_status`
+  (и по-прежнему `phone`, `email`, и др.). Создание/обновление персоны в
+  `backend/app/api/routes/persons.py` записывает `employment_status` в ORM.
+- **Document** — `DocumentRead` дополнен полями `site_id`, `template_version_id`,
+  `file_id`, `signed_file_id`, `content_sha256`, `job_id` (см. `schemas/document.py`).
+- **DocumentPack** — `PackListItem` и `_pack_to_list_item` отдают `module` и
+  `scenario_type` в строковом виде (значения enum).
+
+Оставшийся технический долг по выдаче (например расширение `DocumentRead` полями
+`department_id` / `contract_id` без явного запроса в API) фиксируется отдельно
+по мере появления клиентских контрактов.
 
 Обновляя модели/миграции, обязательно синхронизируйте этот документ.

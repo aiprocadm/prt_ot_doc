@@ -2300,6 +2300,15 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PPEItem'
+        working_conditions_class:
+          type: string
+        hazardous_factors:
+          type: array
+          items:
+            type: string
+        employment_status:
+          type: string
+          enum: [active, on_leave, suspended, terminated]
     PersonCreate:
       type: object
       required: [company_id, first_name, last_name]
@@ -2341,6 +2350,15 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PPEItem'
+        working_conditions_class:
+          type: string
+        hazardous_factors:
+          type: array
+          items:
+            type: string
+        employment_status:
+          type: string
+          enum: [active, on_leave, suspended, terminated]
     PersonUpdate:
       type: object
       properties:
@@ -2369,6 +2387,15 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PPEItem'
+        working_conditions_class:
+          type: string
+        hazardous_factors:
+          type: array
+          items:
+            type: string
+        employment_status:
+          type: string
+          enum: [active, on_leave, suspended, terminated]
     PersonList:
       type: object
       properties:
@@ -2789,33 +2816,47 @@ components:
             $ref: '#/components/schemas/TemplateVersion'
     DocumentPack:
       type: object
-      required: [id, code, title]
+      required: [id, code, name, module, scenario_type, is_active, created_at, updated_at]
       properties:
         id:
           type: string
           format: uuid
         code:
           type: string
-        title:
+        name:
           type: string
         description:
           type: string
         module:
           type: string
+          enum: [ot, fire_safety, health, custom]
+        scenario_type:
+          type: string
+          enum: [document_batch, report, workflow]
         is_active:
           type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
     DocumentPackCreate:
       type: object
-      required: [code, title]
+      required: [code, name]
       properties:
         code:
           type: string
-        title:
+        name:
           type: string
         description:
           type: string
         module:
           type: string
+          enum: [ot, fire_safety, health, custom]
+        scenario_type:
+          type: string
+          enum: [document_batch, report, workflow]
         items:
           type: array
           items:
@@ -2834,12 +2875,16 @@ components:
     DocumentPackUpdate:
       type: object
       properties:
-        title:
+        name:
           type: string
         description:
           type: string
         module:
           type: string
+          enum: [ot, fire_safety, health, custom]
+        scenario_type:
+          type: string
+          enum: [document_batch, report, workflow]
         is_active:
           type: boolean
         items:
@@ -2946,11 +2991,34 @@ components:
           type: string
           format: uuid
           nullable: true
+        site_id:
+          type: string
+          format: uuid
+          nullable: true
+        template_version_id:
+          type: string
+          format: uuid
+          nullable: true
         status:
           type: string
-          enum: [draft, review, signed, archived]
+          enum: [draft, generated, review, approved, signed, archived, revoked]
         storage_key:
           type: string
+          nullable: true
+        file_id:
+          type: string
+          format: uuid
+          nullable: true
+        signed_file_id:
+          type: string
+          format: uuid
+          nullable: true
+        content_sha256:
+          type: string
+          nullable: true
+        job_id:
+          type: string
+          format: uuid
           nullable: true
         created_by:
           type: string
@@ -2967,7 +3035,7 @@ components:
       properties:
         to:
           type: string
-          enum: [draft, review, signed, archived]
+          enum: [draft, generated, review, approved, signed, archived, revoked]
     DocumentList:
       type: object
       properties:

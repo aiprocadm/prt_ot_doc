@@ -4,6 +4,7 @@ from datetime import date
 
 from pydantic import EmailStr, Field, computed_field
 
+from app.models.models import EmploymentStatus
 from app.schemas.base import BaseSchema
 
 
@@ -41,6 +42,7 @@ class PersonRead(BaseSchema):
     passport: str | None = None
     email: EmailStr | None = None
     phone: str | None = None
+    employment_status: EmploymentStatus = EmploymentStatus.ACTIVE
     current_ppe: list[PPEItem] = Field(default_factory=list)
     working_conditions_class: str | None = None
     hazardous_factors: list[str] = Field(default_factory=list)
@@ -71,6 +73,7 @@ class PersonCreate(BaseSchema):
     passport: str | None = Field(default=None, max_length=64)
     email: EmailStr | None = None
     phone: str | None = Field(default=None, max_length=32)
+    employment_status: EmploymentStatus = EmploymentStatus.ACTIVE
     current_ppe: list[PPEItem] = Field(default_factory=list)
     working_conditions_class: str | None = Field(default=None, max_length=32)
     hazardous_factors: list[str] = Field(default_factory=list)
@@ -91,6 +94,7 @@ class PersonUpdate(BaseSchema):
     passport: str | None = Field(default=None, max_length=64)
     email: EmailStr | None = None
     phone: str | None = Field(default=None, max_length=32)
+    employment_status: EmploymentStatus | None = None
     current_ppe: list[PPEItem] | None = None
     working_conditions_class: str | None = Field(default=None, max_length=32)
     hazardous_factors: list[str] | None = None

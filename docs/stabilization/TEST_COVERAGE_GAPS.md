@@ -1,6 +1,6 @@
 # Пробелы покрытия тестами
 
-**Обновлено:** 2026-04-04  
+**Обновлено:** 2026-04-05  
 
 Соответствует **этапу 2** плана стабилизации: до крупного рефакторинга закрывать критичные зоны тестами.
 
@@ -16,7 +16,7 @@
 | File (v2) | `GET /api/v1/files/records/{id}` | **404** | `tests/integration/test_cross_tenant_resource_matrix.py` |
 | Outbox (admin) | `GET /api/v1/admin/outbox/{id}` | **404** | `tests/integration/test_cross_tenant_resource_matrix.py` |
 | Webhook delivery | `GET /api/v1/webhooks/deliveries/{id}/diagnostics` | **404** | `tests/integration/test_two_tenant_outbox_webhook_documents.py` |
-| JWT tenant ≠ header tenant | любой маршрут с `ReadAccessDep` / `abac` | **403** tenant mismatch | Явный сценарий «токен A + X-Tenant B» — в бэклоге |
+| JWT tenant ≠ header tenant | любой маршрут с `ReadAccessDep` / `abac` | **403** tenant mismatch | `tests/test_rbac_abac.py` (`TENANT_SCOPE_MISMATCH` на `GET /api/v1/templates` и `POST /api/v1/companies`); `tests/test_tenant_security.py::test_header_token_tenant_mismatch_denied` |
 
 Дополнительно: **retry vs terminal** для outbox/Celery — `docs/stabilization/RETRY_VS_TERMINAL_OUTBOX_CELERY.md`, контрактные проверки `tests/test_retry_terminal_contract.py`.
 
@@ -25,7 +25,7 @@
 | Область | Есть сейчас | Не хватает (приоритет) |
 |---------|-------------|-------------------------|
 | Tenant middleware | `test_middleware_tenant.py`, auth header | Автоматический чеклист при добавлении публичных префиксов |
-| X-Tenant vs JWT / scope | `test_auth_tenant_header_enforcement`, `test_tenant_security` | Явный HTTP-тест «токен аренды A + header B» → 400/403 (см. матрицу выше) |
+| X-Tenant vs JWT / scope | `test_rbac_abac`, `test_tenant_security`, `test_auth_tenant_header_enforcement` | Держать в зелёном при смене `TenantMiddleware` / `rbac()` |
 | Cross-tenant API (HTTP) | Матрица выше + outbox dispatch (два tenant) | Расширять таблицу при новых `enforce_row` / `get(PK)` |
 | Protected routes / permission guards | `test_rbac_abac`, `test_next*` | Матрица роль × endpoint для критичных write-path |
 | Background jobs happy/fail | `test_tasks_run_coroutine`, `test_tasks_pipeline_run_tenant_guard`, `test_next10_job_engine` | Контракт HTTP-классификации outbox + `RETRYABLE_EXCEPTIONS`: `tests/test_retry_terminal_contract.py` |
@@ -58,7 +58,7 @@
 
 **Целевой минимум для регрессии (этап 8):**
 
-1. Неверный пароль / ошибка API при логине.
+1. Неверный пароль / ошибка API при логине — `frontend/e2e/smoke.spec.ts` «login wrong password shows inline error» (нужен `E2E_USER_EMAIL`).
 2. Документы: список и открытие карточки — в `smoke.spec.ts` при `E2E_USER_*`.
 3. Минимальный путь generate + ожидание статуса (poll или один refresh) — в бэклоге.
 4. Ограниченная роль: `E2E_LIMITED_USER_EMAIL` / `E2E_LIMITED_USER_PASSWORD` → экран «Доступ ограничен» на `/documents`.

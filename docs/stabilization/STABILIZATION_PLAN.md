@@ -38,7 +38,7 @@
 | 401/403 flows | частично | API + `errorHandlingAuthRedirect.test.ts` |
 | Frontend auth bootstrap / stale token | частично | Добавить сценарии без дублирования существующих тестов |
 
-**Открыто:** явный тест JWT A + header B; generate+polling в Playwright.
+**Открыто:** явный тест JWT A + header B; generate+polling в Playwright (R11 сейчас покрывает login → `/documents`; расширение — wizard/поллинг).
 
 ---
 

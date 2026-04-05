@@ -190,6 +190,7 @@ async def create_person_endpoint(
         passport=_clean_string(payload.passport),
         email=_clean_string(str(payload.email)) if payload.email else None,
         phone=_clean_string(payload.phone),
+        employment_status=payload.employment_status,
         current_ppe=_serialize_records(payload.current_ppe),
         working_conditions_class=_clean_string(payload.working_conditions_class),
         hazardous_factors=_clean_list(payload.hazardous_factors),
@@ -295,6 +296,8 @@ async def update_person_endpoint(
         person.email = _clean_string(str(data["email"])) if data["email"] else None
     if "hazardous_factors" in data:
         person.hazardous_factors = _clean_list(data.get("hazardous_factors"))
+    if "employment_status" in data:
+        person.employment_status = data["employment_status"]
 
     try:
         await session.commit()

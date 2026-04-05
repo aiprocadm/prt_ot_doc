@@ -1,7 +1,8 @@
 import { defineConfig } from "@playwright/test";
 
 const startServer = process.env.E2E_START_SERVER === "1";
-const baseURL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:4173";
+/** Пустая строка из CI env не должна ломать URL (?? не срабатывает для ""). */
+const baseURL = (process.env.E2E_BASE_URL ?? "").trim() || "http://127.0.0.1:4173";
 /** По умолчанию dev-сервер: в DEV `registerPwa` снимает SW и нет white-screen при block SW. Для регрессии prod-сборки: E2E_PREVIEW=1. */
 const usePreview = process.env.E2E_PREVIEW === "1";
 

@@ -13,4 +13,4 @@
 
 Короткая ссылка из корня репозитория: `docs/stabilization/`.
 
-Дополнительно: корневой пакет `app/` — shim к `backend/app` (см. `CONFIGURATION_HARDENING.md`). E2E Playwright: по умолчанию ручной запуск workflow; ночной cron — в `.github/workflows/e2e-smoke.yml`.
+Дополнительно: корневой пакет `app/` — shim к `backend/app` (см. `CONFIGURATION_HARDENING.md`). E2E Playwright: `frontend/e2e/smoke.spec.ts` (матрица R11/R12 в `REGRESSION_TEST_MATRIX.md`); workflow `.github/workflows/e2e-smoke.yml` (секреты учёток — опционально).

@@ -38,7 +38,24 @@ test.describe("smoke", () => {
     await expect(page).toHaveURL(/\/auth\/login/, { timeout: 30_000 });
   });
 
-  test("login happy path", async ({ page }) => {
+  /**
+   * Неверный пароль → сообщение под полем пароля (docs/stabilization/TEST_COVERAGE_GAPS.md).
+   * Нужен только E2E_USER_EMAIL (тот же tenant, что и для happy path).
+   */
+  test("login wrong password shows inline error", async ({ page }) => {
+    test.skip(!process.env.E2E_USER_EMAIL, "Set E2E_USER_EMAIL (password may be wrong on purpose)");
+    const tenant = process.env.E2E_TENANT ?? "demo";
+    await page.goto("/auth/login", { waitUntil: "domcontentloaded" });
+    await page.getByLabel("Tenant").fill(tenant);
+    await page.getByLabel("E-mail").fill(process.env.E2E_USER_EMAIL!);
+    await page.getByLabel("Пароль").fill("__e2e_wrong_password__");
+    await page.getByRole("button", { name: "Войти" }).click();
+    await expect(page.locator("form p.text-destructive").first()).toBeVisible({ timeout: 20_000 });
+    await expect(page).toHaveURL(/\/auth\/login/);
+  });
+
+  /** REGRESSION_TEST_MATRIX.md — R11 (шаг 1: вход с tenant). */
+  test("R11 login happy path", async ({ page }) => {
     test.skip(
       !process.env.E2E_USER_EMAIL || !process.env.E2E_USER_PASSWORD,
       "Set E2E_USER_EMAIL and E2E_USER_PASSWORD for full login"
@@ -52,7 +69,8 @@ test.describe("smoke", () => {
     await expect(page).not.toHaveURL(/\/auth\/login/, { timeout: 45_000 });
   });
 
-  test("documents list and open first card when API available", async ({ page }) => {
+  /** REGRESSION_TEST_MATRIX.md — R11 (шаг 2: список документов после логина). */
+  test("R11 documents list after login", async ({ page }) => {
     test.skip(
       !process.env.E2E_USER_EMAIL || !process.env.E2E_USER_PASSWORD,
       "Set E2E_USER_EMAIL and E2E_USER_PASSWORD"
@@ -95,7 +113,8 @@ test.describe("smoke", () => {
     await expect(page).toHaveURL(/\/auth\/login/, { timeout: 30_000 });
   });
 
-  test("limited user sees access denied on documents", async ({ page }) => {
+  /** REGRESSION_TEST_MATRIX.md — R12 (нет DOCUMENT_VIEW → AccessDenied). */
+  test("R12 limited user denied on documents route", async ({ page }) => {
     test.skip(
       !process.env.E2E_LIMITED_USER_EMAIL || !process.env.E2E_LIMITED_USER_PASSWORD,
       "Set E2E_LIMITED_USER_EMAIL and E2E_LIMITED_USER_PASSWORD (роль без DOCUMENT_VIEW)"

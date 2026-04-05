@@ -18,8 +18,14 @@ class DocumentRead(BaseSchema):
     company_id: str
     template_id: str
     person_id: str | None = None
+    site_id: str | None = None
+    template_version_id: str | None = None
     status: DocumentStatus
     storage_key: str | None = None
+    file_id: str | None = None
+    signed_file_id: str | None = None
+    content_sha256: str | None = None
+    job_id: str | None = None
     created_by: str
     created_at: datetime
     updated_at: datetime

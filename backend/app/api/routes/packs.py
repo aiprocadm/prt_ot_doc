@@ -158,11 +158,19 @@ def _tenant_scope_values(tenant: Tenant) -> tuple[str, ...]:
 
 
 def _pack_to_list_item(pack: DocumentPack) -> PackListItem:
+    mod = pack.module.value if hasattr(pack.module, "value") else str(pack.module)
+    scen = (
+        pack.scenario_type.value
+        if hasattr(pack.scenario_type, "value")
+        else str(pack.scenario_type)
+    )
     return PackListItem(
         id=pack.id,
         code=pack.code,
         name=pack.name,
         description=pack.description,
+        module=mod,
+        scenario_type=scen,
         is_active=pack.is_active,
         created_at=pack.created_at,
         updated_at=pack.updated_at,

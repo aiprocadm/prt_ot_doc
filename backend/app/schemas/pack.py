@@ -13,6 +13,8 @@ class PackListItem(BaseSchema):
     code: str
     name: str
     description: str | None = None
+    module: str
+    scenario_type: str
     is_active: bool
     created_at: datetime
     updated_at: datetime

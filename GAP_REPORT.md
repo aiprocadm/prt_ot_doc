@@ -1,6 +1,7 @@
 # GAP_REPORT
 
 ## Closed in this wave
+- Выровнены Pydantic-схемы с ORM по `docs/DOMAIN_MODEL.md`: `employment_status` у персон, расширенный `DocumentRead`, `module`/`scenario_type` в списке document packs; обновлён фрагмент `docs/openapi.yaml` (Person, Document, DocumentPack).
 - Revalidated canonical backend/frontend roots and active entrypoints.
 - Reconfirmed `frontend/package.json` as the only active frontend manifest.
 - Added explicit `header_details` support to the branding profile so organization requisites can be managed separately for header and footer layouts.

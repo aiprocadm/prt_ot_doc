@@ -1,6 +1,11 @@
-# Ручной запуск: полный smoke требует бэкенд для логина (E2E_USER_*).
-# Без секретов выполняются только тесты с preview (страница логина + редирект).
-# Расписание: еженедельный прогон (ветка default); при необходимости задайте secrets в форке.
+# Ручной запуск. Без секретов: страница логина + редирект с /documents (без API логина).
+# Для матрицы R11/R12 (docs/stabilization/REGRESSION_TEST_MATRIX.md) задайте secrets:
+#   E2E_USER_EMAIL, E2E_USER_PASSWORD — полный пользователь;
+#   E2E_LIMITED_USER_EMAIL, E2E_LIMITED_USER_PASSWORD — без DOCUMENT_VIEW;
+#   E2E_TENANT — опционально (default demo в тестах).
+# Полноценный логин в CI требует доступный API бэкенда (тот же tenant/CORS, что и у фронта на 127.0.0.1:4173).
+# Явный E2E_BASE_URL в job не задаётся: пустой secret дал бы "" и сломал бы default в playwright.config.
+# Расписание: еженедельный прогон; при пустых secrets тесты с skip не падают.
 name: E2E smoke (Playwright)
 
 on:
@@ -29,7 +34,12 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
-      - name: Run smoke (Playwright starts build + preview)
+      - name: Run smoke (Playwright starts dev server)
         env:
           E2E_START_SERVER: "1"
+          E2E_USER_EMAIL: ${{ secrets.E2E_USER_EMAIL }}
+          E2E_USER_PASSWORD: ${{ secrets.E2E_USER_PASSWORD }}
+          E2E_LIMITED_USER_EMAIL: ${{ secrets.E2E_LIMITED_USER_EMAIL }}
+          E2E_LIMITED_USER_PASSWORD: ${{ secrets.E2E_LIMITED_USER_PASSWORD }}
+          E2E_TENANT: ${{ secrets.E2E_TENANT }}
         run: npm run e2e
