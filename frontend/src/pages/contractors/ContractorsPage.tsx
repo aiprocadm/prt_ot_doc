@@ -95,12 +95,12 @@ const ContractorsPage = () => {
           <div className="mt-3 flex flex-wrap gap-2">
             {focusSummaryLink ? (
               <Button size="sm" variant={focusedView === "summary" ? "default" : "outline"} asChild>
-                <Link to={focusSummaryLink}>Summary</Link>
+                <Link to={focusSummaryLink}>Сводка</Link>
               </Button>
             ) : null}
             {focusTimelineLink ? (
               <Button size="sm" variant={focusedView === "timeline" ? "default" : "outline"} asChild>
-                <Link to={focusTimelineLink}>Timeline</Link>
+                <Link to={focusTimelineLink}>Хронология</Link>
               </Button>
             ) : null}
             <Button size="sm" variant="ghost" asChild>

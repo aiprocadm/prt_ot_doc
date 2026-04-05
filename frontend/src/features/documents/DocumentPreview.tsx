@@ -214,7 +214,7 @@ export const DocumentPreview = ({ document, initialTab = "preview" }: DocumentPr
           <TabsList>
             <TabsTrigger value="preview">Предпросмотр</TabsTrigger>
             <TabsTrigger value="history">История</TabsTrigger>
-            <TabsTrigger value="timeline">Timeline</TabsTrigger>
+            <TabsTrigger value="timeline">Хронология</TabsTrigger>
           </TabsList>
           <TabsContent value="preview" className="space-y-3">
             {current.storage?.url ? (

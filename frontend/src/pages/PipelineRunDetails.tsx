@@ -127,7 +127,7 @@ const PipelineRunDetails = () => {
       });
   }, [run?.run_id]);
   if (loading) {
-    return <LoadingScreen label="Загрузка pipeline run" />;
+    return <LoadingScreen label="Загрузка запуска пайплайна" />;
   }
 
   if (error) {
@@ -138,7 +138,7 @@ const PipelineRunDetails = () => {
     return (
       <section className="space-y-4">
         <EmptyState
-          title="Pipeline run не найден"
+          title="Запуск пайплайна не найден"
           description="Проверьте идентификатор запуска или обновите страницу после повторного запуска задачи."
         />
       </section>
@@ -147,7 +147,7 @@ const PipelineRunDetails = () => {
 
   return (
     <section className="space-y-4">
-      <h1 className="text-xl font-semibold">Job {run.run_id}</h1>
+      <h1 className="text-xl font-semibold">Задание {run.run_id}</h1>
       <div className="flex gap-2">
         <button
           className="rounded border px-3 py-1"
@@ -174,7 +174,7 @@ const PipelineRunDetails = () => {
                 .catch((actionError) => setError(actionError as ApiError))
             }
           >
-            Retry step
+            Повторить шаг
           </button>
         ) : null}
         <button
@@ -188,7 +188,7 @@ const PipelineRunDetails = () => {
               .catch((actionError) => setError(actionError as ApiError))
           }
         >
-          Cancel
+          Отменить
         </button>
       </div>
       <JobTimeline steps={run.step_runs} />
@@ -209,7 +209,7 @@ const PipelineRunDetails = () => {
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         <div className="rounded border p-3 text-sm">
-          <h2 className="mb-2 font-medium">Step logs</h2>
+          <h2 className="mb-2 font-medium">Логи шагов</h2>
           <div className="max-h-56 space-y-1 overflow-auto">
             {stepLogs.length === 0 ? (
               <EmptyState
@@ -226,7 +226,7 @@ const PipelineRunDetails = () => {
           </div>
         </div>
         <div className="rounded border p-3 text-sm">
-          <h2 className="mb-2 font-medium">Artifacts</h2>
+          <h2 className="mb-2 font-medium">Артефакты</h2>
           <FileList entityType="job" entityId={run.run_id} />
         </div>
       </div>

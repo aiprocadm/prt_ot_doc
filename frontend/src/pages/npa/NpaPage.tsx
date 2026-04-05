@@ -101,12 +101,12 @@ const NpaPage = () => {
         </div>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Impact analysis</CardTitle>
-            <Button variant="outline" onClick={() => void createUpdateTasks()} disabled={!selectedId}>Create update tasks</Button>
+            <CardTitle>Анализ влияния</CardTitle>
+            <Button variant="outline" onClick={() => void createUpdateTasks()} disabled={!selectedId}>Создать задачи обновления</Button>
           </CardHeader>
           <CardContent className="space-y-4">
             {detailLoading ? (
-              <LoadingScreen label="Загрузка impact analysis" />
+              <LoadingScreen label="Загрузка анализа влияния" />
             ) : detail ? (
               <>
                 <div>
@@ -114,7 +114,7 @@ const NpaPage = () => {
                   <div className="text-sm text-muted-foreground">{detail.act.title} · {detail.act.edition}</div>
                 </div>
                 <div>
-                  <div className="text-xs font-medium uppercase text-muted-foreground">Revisions</div>
+                  <div className="text-xs font-medium uppercase text-muted-foreground">Редакции</div>
                   <div className="space-y-2 mt-2">
                     {detail.revisions.map((revision) => (
                       <div key={revision.id} className="rounded border p-3">
@@ -126,7 +126,7 @@ const NpaPage = () => {
                   </div>
                 </div>
                 <div>
-                  <div className="text-xs font-medium uppercase text-muted-foreground">Linked entities</div>
+                  <div className="text-xs font-medium uppercase text-muted-foreground">Связанные сущности</div>
                   <div className="mt-2 grid gap-2 md:grid-cols-2">
                     {Object.entries(detail.summary).map(([key, value]) => (
                       <div key={key} className="rounded border p-3 text-sm">{key}: <span className="font-medium">{value}</span></div>
@@ -142,13 +142,13 @@ const NpaPage = () => {
                   </div>
                 </div>
                 <div>
-                  <div className="text-xs font-medium uppercase text-muted-foreground">Tasks foundation</div>
+                  <div className="text-xs font-medium uppercase text-muted-foreground">База задач</div>
                   <ul className="mt-2 list-disc pl-5 text-sm text-muted-foreground">
                     {detail.tasks_to_create.map((task) => <li key={task.code}>{task.title} · {task.count}</li>)}
                   </ul>
                 </div>
               </>
-            ) : <div className="text-sm text-muted-foreground">Выберите НПА для просмотра ревизий и impact analysis.</div>}
+            ) : <div className="text-sm text-muted-foreground">Выберите НПА для просмотра редакций и анализа влияния.</div>}
           </CardContent>
         </Card>
       </div>

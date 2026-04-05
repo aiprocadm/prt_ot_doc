@@ -53,7 +53,7 @@ const ClientPortalPackagesPage = () => {
                   <div className="space-y-2">{selected.files.map((file) => <div key={`${file.kind}-${file.sha256}`} className="rounded border p-3 text-sm"><div className="font-medium">{file.kind}</div><div className="text-muted-foreground">SHA256: {file.sha256 ?? "—"} · Размер: {file.size ?? "—"}</div>{file.signed_url ? <a className="text-primary underline" href={file.signed_url}>Скачать</a> : null}</div>)}</div>
                 </div>
                 <div>
-                  <div className="mb-2 text-sm font-medium">Timeline</div>
+                  <div className="mb-2 text-sm font-medium">Хронология</div>
                   <div className="flex flex-wrap gap-2">{selected.history.status_flow.map((status) => <StatusBadge key={status} status={status} />)}</div>
                   <div className="mt-3 space-y-2">{selected.events.map((event) => <div key={event.id} className="rounded border p-3 text-sm">{event.type} · {formatDate(event.created_at)}</div>)}</div>
                 </div>

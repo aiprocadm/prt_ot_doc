@@ -66,9 +66,9 @@ const CalendarPage = () => {
         <CardHeader className="flex flex-row items-center justify-between gap-2">
           <CardTitle>Календарь мероприятий</CardTitle>
           <div className="flex flex-wrap gap-2">
-            <Button variant={mode === "month" ? "default" : "outline"} onClick={() => setMode("month")}>Month</Button>
-            <Button variant={mode === "week" ? "default" : "outline"} onClick={() => setMode("week")}>Week</Button>
-            <Button variant={mode === "list" ? "default" : "outline"} onClick={() => setMode("list")}>List</Button>
+            <Button variant={mode === "month" ? "default" : "outline"} onClick={() => setMode("month")}>Месяц</Button>
+            <Button variant={mode === "week" ? "default" : "outline"} onClick={() => setMode("week")}>Неделя</Button>
+            <Button variant={mode === "list" ? "default" : "outline"} onClick={() => setMode("list")}>Список</Button>
             <Button variant={source === "all" ? "default" : "outline"} onClick={() => setSource("all")}>Все</Button>
             <Button variant={source === "training" ? "default" : "outline"} onClick={() => setSource("training")}>Обучение</Button>
             <Button variant={source === "ppe" ? "default" : "outline"} onClick={() => setSource("ppe")}>СИЗ</Button>
