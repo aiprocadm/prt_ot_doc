@@ -20,6 +20,8 @@ import { useDocumentsStore } from "@/stores/documents";
 import type { DocumentDto } from "@/types/dto/documents";
 import { entityCardLink } from "@/utils/workspaceNavigation";
 
+const EMPTY_DOCUMENTS: DocumentDto[] = [];
+
 const DocumentsPage = () => {
   const { list, items, pagination, loading, error, getById } = useDocumentsStore();
   const [selectedDocument, setSelectedDocument] = useState<DocumentDto | null>(null);
@@ -29,7 +31,7 @@ const DocumentsPage = () => {
   const focusedEntityType = searchParams.get("entity_type") ?? undefined;
   const focusedEntityId = searchParams.get("entity_id") ?? undefined;
   const focusedView = searchParams.get("view") === "timeline" ? "timeline" : "summary";
-  const safeItems = Array.isArray(items) ? items : [];
+  const safeItems = useMemo(() => (Array.isArray(items) ? items : EMPTY_DOCUMENTS), [items]);
   const safePagination = pagination ?? { page: 1, page_size: 10, total: safeItems.length };
 
   const statusCounts = safeItems.reduce(
@@ -55,11 +57,17 @@ const DocumentsPage = () => {
 
     const existing = safeItems.find((doc) => doc.id === focusedEntityId);
     if (existing) {
-      setSelectedDocument(existing);
+      setSelectedDocument((prev) =>
+        prev?.id === existing.id && prev.updated_at === existing.updated_at ? prev : existing
+      );
       return;
     }
     void getById(focusedEntityId).then((doc) => {
-      if (doc) setSelectedDocument(doc);
+      if (doc) {
+        setSelectedDocument((prev) =>
+          prev?.id === doc.id && prev.updated_at === doc.updated_at ? prev : doc
+        );
+      }
     });
   }, [canView, focusedEntityId, focusedEntityType, getById, safeItems]);
 
