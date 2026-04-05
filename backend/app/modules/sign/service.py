@@ -41,7 +41,11 @@ class SignatureRequestService:
     async def create(self, request: SignatureRequest) -> SignatureRequest:
         if request.approval_instance_id:
             approval = await self.session.get(ApprovalInstance, request.approval_instance_id)
-            if not approval or approval.status != ApprovalInstanceStatus.APPROVED:
+            if (
+                not approval
+                or str(approval.tenant_id) != str(self.tenant_id)
+                or approval.status != ApprovalInstanceStatus.APPROVED
+            ):
                 raise HTTPException(status.HTTP_409_CONFLICT, "Approval instance must be approved")
         meta = await self.provider.create_signature_request(request)
         request.external_request_id = meta.get("external_request_id")

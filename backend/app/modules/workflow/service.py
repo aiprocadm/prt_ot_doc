@@ -181,7 +181,7 @@ class WorkflowService:
         if version is None or version.tenant_id != self.tenant_id:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "workflow definition version not found")
         definition = await self.session.get(WorkflowDefinition, version.definition_id)
-        if definition is None:
+        if definition is None or str(definition.tenant_id) != str(self.tenant_id):
             raise HTTPException(status.HTTP_404_NOT_FOUND, "workflow definition not found")
         if entity_type != definition.entity_type:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "workflow entity_type does not match process definition")
@@ -220,7 +220,7 @@ class WorkflowService:
         task.completed_at = datetime.now(tz=timezone.utc)
         task.task_payload = {**(task.task_payload or {}), **(payload or {}), "decision": decision}
         instance = await self.session.get(WorkflowInstance, task.instance_id)
-        if instance is None:
+        if instance is None or str(instance.tenant_id) != str(self.tenant_id):
             raise HTTPException(status.HTTP_404_NOT_FOUND, "workflow instance not found")
         instance.context_json = {**(instance.context_json or {}), **(payload or {}), "last_decision": decision}
         await self._append_event(instance.id, task.node_id, "human_task_completed", actor_user_id, {"task_id": task.id, "decision": decision})
@@ -262,7 +262,7 @@ class WorkflowService:
         processed = 0
         for instance in rows:
             version = await self.session.get(WorkflowDefinitionVersion, instance.definition_version_id)
-            if version is None:
+            if version is None or str(version.tenant_id) != str(self.tenant_id):
                 continue
             node = self._node_map(version.graph_json).get(instance.current_node_id or "")
             if node and node.get("type") == "timer":
@@ -275,7 +275,7 @@ class WorkflowService:
 
     async def _advance(self, instance: WorkflowInstance, *, actor_user_id: str | None, from_node_id: str | None = None) -> None:
         version = await self.session.get(WorkflowDefinitionVersion, instance.definition_version_id)
-        if version is None:
+        if version is None or str(version.tenant_id) != str(self.tenant_id):
             raise HTTPException(status.HTTP_404_NOT_FOUND, "workflow version not found")
         graph = version.graph_json or {}
         node_map = self._node_map(graph)

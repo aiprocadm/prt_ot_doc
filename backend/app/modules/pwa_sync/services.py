@@ -13,7 +13,10 @@ class OfflineSyncService:
         if entity_type == "briefing_entry":
             entry_id = payload.get("id")
             entry = await session.get(BriefingEntry, entry_id) if entry_id else None
-            if entry and entry.status in {"completed", "signed_employee", "signed_instructor"}:
+            if entry is not None and str(entry.tenant_id) != str(batch.tenant_id):
+                batch.status = "failed"
+                batch.error_payload = {"error": "tenant_scope_mismatch", "entity": "briefing_entry"}
+            elif entry and entry.status in {"completed", "signed_employee", "signed_instructor"}:
                 batch.status = "failed"
                 batch.error_payload = {"error": "conflict_final_record"}
             else:
@@ -28,6 +31,10 @@ class OfflineSyncService:
         await session.flush()
         return media
 
-    async def get_status(self, session: AsyncSession, batch_id: str) -> OfflineSyncBatch | None:
+    async def get_status(
+        self, session: AsyncSession, batch_id: str, *, tenant_id: str | None = None
+    ) -> OfflineSyncBatch | None:
         stmt = select(OfflineSyncBatch).where(OfflineSyncBatch.id == batch_id)
+        if tenant_id is not None:
+            stmt = stmt.where(OfflineSyncBatch.tenant_id == tenant_id)
         return (await session.execute(stmt)).scalar_one_or_none()

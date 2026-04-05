@@ -26,9 +26,11 @@
 | Pipelines HTTP | `app/modules/pipelines/api.py` — retry шага: `DocumentJobStep.tenant_id` должен совпадать с текущим тенантом |
 | Фоновые задачи | `app/tasks/` (`_core.py`), `app/celery/tasks/*`, `app/services/pipelines_orchestrator.py`, `app/modules/pipelines/orchestrator.py` |
 
-## Бэклог для аудита
+## Инвентаризация (актуальный снимок)
 
-Прогнать поиск `session.get` в `app/api/`, `app/modules/`, `app/services/` и для каждого вызова отметить: источник id, есть ли фильтр по тенанту или guard. Особое внимание: `app/api/v1/router.py` (шаблоны), `app/modules/pipelines/api.py`, `app/modules/files/*`, EDO/approval маршруты.
+Полный проход `session.get` / `self.session.get` по `app/api/`, `app/modules/`, `app/services/` зафиксирован в **[TENANT_ROW_GET_INVENTORY.md](./TENANT_ROW_GET_INVENTORY.md)** (дата снимка в шапке файла).
+
+Как сопровождать: при добавлении маршрута с загрузкой по PK из path/body — обновить соответствующую строку/раздел в инвентаризации и при необходимости расширить матрицу тестов в `docs/stabilization/TEST_COVERAGE_GAPS.md`.
 
 ## Связанные документы
 

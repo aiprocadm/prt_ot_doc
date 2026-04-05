@@ -6,6 +6,12 @@
 - В `POST .../pipelines/runs/{run_id}/steps/{step_run_id}:retry` добавлена проверка `DocumentJobStep.tenant_id` против текущего тенанта (защита от подбора id шага).
 - Восстановлен реэкспорт `roles_from_jwt_claims` из пакета `app.core.security` (используется `TenantMiddleware` и unit-тесты); без него импорт приложения падал.
 - Регрессия: `tests/integration/test_cross_tenant_resource_matrix.py::test_legacy_post_template_version_returns_404_for_other_tenant_template`.
+- Инвентаризация tenant row `session.get`: добавлен `docs/stabilization/TENANT_ROW_GET_INVENTORY.md`; чеклист ссылается на него вместо сырого бэклога.
+- EDO workflow: проверка аренды для `ApprovalRoute` при передаче `route_id`, для `DocumentVersion` при старте approval и создании подписи, для route при шаге approve.
+- Пакеты: сверка `TemplateVersion.tenant_id` с пакетом в `packs.run`; в `modules/packs/api.py` — при валидации preset.
+- `document_insights`: не подмешивать шаблон/версию/NPA чужой аренды при fallback `get` по PK.
+- Workflow/sign: дополнительные проверки `tenant_id` для definition/instance/version и для `ApprovalInstance` в модуле подписи.
+- PWA offline sync: `OfflineSyncService.apply_batch` отклоняет батч, если `BriefingEntry` из другой аренды, чем `OfflineSyncBatch`; `get_status` принимает `tenant_id` и фильтрует в SQL; тест `test_offline_sync_fails_when_briefing_entry_other_tenant`.
 
 ## 2026-03-29
 - Hardened tenant identity handling across document-core so `tenant.id` is again the canonical persistence identifier for `Template`, `TemplateVersion`, `DocumentPack`, `DocumentPackItem`, and `PipelineRun`, while `tenant.slug` remains routing-only and `tenant_schema` remains schema-only.

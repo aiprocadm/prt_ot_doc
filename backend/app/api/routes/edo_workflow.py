@@ -292,7 +292,9 @@ async def start_approval_request(
         return replay
     route = None
     if payload.route_id:
-        route = await session.get(ApprovalRoute, payload.route_id)
+        cand = await session.get(ApprovalRoute, payload.route_id)
+        if cand is not None and str(cand.tenant_id) == str(tenant.id):
+            route = cand
     elif payload.route_code:
         route = (
             await session.execute(
@@ -305,7 +307,8 @@ async def start_approval_request(
         ).scalar_one_or_none()
     if route is None:
         raise _edo_not_found("approval_route")
-    if await session.get(DocumentVersion, payload.document_version_id) is None:
+    doc_ver = await session.get(DocumentVersion, payload.document_version_id)
+    if doc_ver is None or str(doc_ver.tenant_id) != str(tenant.id):
         raise _edo_not_found("document_version")
 
     approval_request = ApprovalRequest(
@@ -405,7 +408,7 @@ async def decide_approval_request(
 
     if payload.decision is ApprovalDecisionType.APPROVE:
         route = await session.get(ApprovalRoute, approval_request.route_id)
-        if route is None:
+        if route is None or str(route.tenant_id) != str(tenant.id):
             raise _edo_not_found("approval_route")
         rules = ApprovalRules.validate_rules(route.rules_json)
         next_index = approval_request.current_step_index + 1
@@ -449,7 +452,8 @@ async def create_signature(
     access: AccessContext = AccessDep,
 ):
     cid = _correlation_id(request, response)
-    if await session.get(DocumentVersion, payload.document_version_id) is None:
+    doc_ver = await session.get(DocumentVersion, payload.document_version_id)
+    if doc_ver is None or str(doc_ver.tenant_id) != str(tenant.id):
         raise _edo_not_found("document_version")
     now = datetime.now(tz=timezone.utc)
     signature = Signature(

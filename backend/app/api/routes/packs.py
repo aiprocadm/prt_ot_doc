@@ -786,6 +786,11 @@ async def run_pack(
                         status.HTTP_409_CONFLICT,
                         "Pack item references missing template version",
                     )
+                if str(version.tenant_id) != str(pack.tenant_id):
+                    raise HTTPException(
+                        status.HTTP_409_CONFLICT,
+                        "Pack item template version tenant mismatch",
+                    )
                 if version.template_id != template.id:
                     raise HTTPException(
                         status.HTTP_409_CONFLICT,

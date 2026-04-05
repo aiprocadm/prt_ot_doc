@@ -379,8 +379,8 @@ async def sync_status(
     session: AsyncSession = Depends(get_session),
     access: AccessContext = Depends(rbac()),
 ):
-    batch = await OfflineSyncService().get_status(session, batch_id)
-    if not batch or batch.tenant_id != tenant.id:
+    batch = await OfflineSyncService().get_status(session, batch_id, tenant_id=str(tenant.id))
+    if not batch:
         raise HTTPException(404, "Batch not found")
     _ensure_owner_or_admin(access=access, owner_user_id=str(batch.user_id))
     return batch

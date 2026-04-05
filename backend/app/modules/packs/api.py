@@ -250,6 +250,8 @@ async def validate_preset(preset_id: str, session: AsyncSession = Depends(get_se
         tv = await session.get(TemplateVersion, item.template_version_id)
         if tv is None or tv.deleted_at is not None:
             errors.append(f"template_version_id={item.template_version_id} is not available")
+        elif str(tv.tenant_id) != str(preset.tenant_id):
+            errors.append(f"template_version_id={item.template_version_id} tenant mismatch for preset")
     warnings.extend(NamingRuleEngine().validate_rule(preset.naming_rule))
     return {"ok": not errors, "errors": errors, "warnings": warnings, "items_count": len(items)}
 

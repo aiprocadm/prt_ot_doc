@@ -76,11 +76,15 @@ async def build_document_dependency_map(
 
     template: Template | None = document.template
     if template is None and document.template_id:
-        template = await session.get(Template, document.template_id)
+        t_row = await session.get(Template, document.template_id)
+        if t_row is not None and str(t_row.tenant_id) == str(tenant_id):
+            template = t_row
 
     tv: TemplateVersion | None = document.template_version
     if tv is None and document.template_version_id:
-        tv = await session.get(TemplateVersion, document.template_version_id)
+        v_row = await session.get(TemplateVersion, document.template_version_id)
+        if v_row is not None and str(v_row.tenant_id) == str(tenant_id):
+            tv = v_row
 
     npa_bindings_raw: list[NPABinding] = []
     seen_binding_ids: set[str] = set()
@@ -110,6 +114,8 @@ async def build_document_dependency_map(
     npa_payload: list[dict[str, Any]] = []
     for binding in npa_bindings_raw:
         npa = await session.get(NPA, binding.npa_id)
+        if npa is not None and str(npa.tenant_id) != str(tenant_id):
+            npa = None
         npa_payload.append(
             {
                 "binding_id": binding.id,
