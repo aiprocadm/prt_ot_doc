@@ -87,6 +87,13 @@ export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFo
     try {
       const result = initialData ? await update(initialData.id, values) : await create(values);
       onSubmitted?.(result);
+      const cid = result.company_id ?? values.company_id;
+      if (cid) {
+        const { item, getById } = useCompaniesStore.getState();
+        if (item?.id === cid) {
+          void getById(cid);
+        }
+      }
       toast.success(initialData ? "Сотрудник обновлён" : "Сотрудник добавлен");
       setOpen(false);
       if (!initialData) {

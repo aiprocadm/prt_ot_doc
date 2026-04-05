@@ -17,6 +17,8 @@ interface PersonFilters {
 }
 
 interface PersonsState extends PaginatedState<PersonDto, PersonFilters> {
+  /** Увеличивается при create/update/delete — карточка компании перезагружает список сотрудников. */
+  personsRegistryRevision: number;
   list: (params?: Partial<PersonFilters>) => Promise<void>;
   getById: (id: string) => Promise<PersonDto | null>;
   create: (payload: PersonFormValues) => Promise<PersonDto>;
@@ -36,6 +38,7 @@ export const usePersonsStore = create<PersonsState>()(
     pagination: defaultPagination(),
     loading: false,
     error: null,
+    personsRegistryRevision: 0,
     setFilters: (filters) => {
       set((state) => {
         state.filters = { ...state.filters, ...filters };
@@ -59,7 +62,8 @@ export const usePersonsStore = create<PersonsState>()(
         filters: {},
         pagination: defaultPagination(),
         loading: false,
-        error: null
+        error: null,
+        personsRegistryRevision: 0
       }));
     },
     list: async (params) => {
@@ -114,6 +118,7 @@ export const usePersonsStore = create<PersonsState>()(
       set((state) => {
         state.items.unshift(normalized);
         state.pagination.total += 1;
+        state.personsRegistryRevision += 1;
       });
       return normalized;
     },
@@ -126,6 +131,7 @@ export const usePersonsStore = create<PersonsState>()(
         if (state.item?.id === id) {
           state.item = normalized;
         }
+        state.personsRegistryRevision += 1;
       });
       return normalized;
     },
@@ -135,6 +141,7 @@ export const usePersonsStore = create<PersonsState>()(
         state.items = state.items.filter((person) => person.id !== id);
         state.pagination.total = Math.max(0, state.pagination.total - 1);
         if (state.item?.id === id) state.item = null;
+        state.personsRegistryRevision += 1;
       });
     }
   }))

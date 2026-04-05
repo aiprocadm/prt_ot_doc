@@ -17,7 +17,7 @@ import { useCompaniesStore } from "@/stores/companies";
 import type { CompanyDto } from "@/types/dto/companies";
 
 const CompaniesPage = () => {
-  const { list, getById, items, loading, error } = useCompaniesStore();
+  const { list, getById, items, loading, error, item: storeCompanyDetail } = useCompaniesStore();
   const { setSidebar } = useSidebar();
   const [selectedCompany, setSelectedCompany] = useState<CompanyDto | null>(null);
 
@@ -29,6 +29,12 @@ const CompaniesPage = () => {
   useEffect(() => {
     void list().catch(() => undefined);
   }, [list]);
+
+  useEffect(() => {
+    if (!selectedCompany || !storeCompanyDetail) return;
+    if (selectedCompany.id !== storeCompanyDetail.id) return;
+    setSelectedCompany(storeCompanyDetail);
+  }, [storeCompanyDetail, selectedCompany?.id]);
 
   const handleSelect = useCallback(
     async (company: CompanyDto) => {

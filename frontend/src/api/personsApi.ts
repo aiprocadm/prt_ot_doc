@@ -1,3 +1,4 @@
+import { apiClient } from "@/api/client";
 import type { PersonDto, PersonStatus } from "@/types/dto/persons";
 import type { PersonFormValues } from "@/types/forms/persons";
 
@@ -75,3 +76,17 @@ export const buildPersonPatchBody = (values: PersonFormValues) => ({
   phone: values.phone?.trim() || undefined,
   employment_status: toApiEmploymentStatus(values.status)
 });
+
+type PersonListResponse = { items?: unknown[]; total?: number };
+
+/**
+ * Список сотрудников по организации (API компании не отдаёт вложенных persons).
+ * Берём страницу реестра и фильтруем по company_id (бэкенд пока без query company_id).
+ */
+export async function fetchPersonsForCompany(companyId: string, listLimit = 200): Promise<PersonDto[]> {
+  const { data } = await apiClient.get<PersonListResponse>("/persons", {
+    params: { limit: listLimit, offset: 0 }
+  });
+  const rows = (data.items ?? []).map((row) => normalizePersonRead(row));
+  return rows.filter((p) => p.company_id === companyId);
+}
