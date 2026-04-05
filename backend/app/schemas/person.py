@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 from pydantic import EmailStr, Field, computed_field, field_validator
@@ -15,6 +15,41 @@ def _empty_str_to_none(value: object) -> object:
     if isinstance(value, str) and not value.strip():
         return None
     return value
+
+
+def _parse_date_string(raw: str) -> date | None:
+    text = raw.strip()
+    if not text:
+        return None
+    try:
+        return date.fromisoformat(text[:10])
+    except ValueError:
+        pass
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).date()
+    except ValueError:
+        return None
+
+
+def _normalize_optional_date_in_row(row: dict[str, Any], key: str) -> None:
+    if key not in row:
+        return
+    val = row[key]
+    if val is None:
+        return
+    if isinstance(val, date):
+        return
+    if isinstance(val, datetime):
+        row[key] = val.date()
+        return
+    if isinstance(val, str):
+        parsed = _parse_date_string(val)
+        if parsed is not None:
+            row[key] = parsed
+        else:
+            row.pop(key, None)
+        return
+    row.pop(key, None)
 
 
 def _sanitize_qualifications_list(value: Any) -> list[dict[str, Any]]:
@@ -32,6 +67,8 @@ def _sanitize_qualifications_list(value: Any) -> list[dict[str, Any]]:
         kind = row.get("kind")
         if kind is None or (isinstance(kind, str) and not kind.strip()):
             row.pop("kind", None)
+        for dk in ("issued_at", "valid_until"):
+            _normalize_optional_date_in_row(row, dk)
         out.append(row)
     return out
 
@@ -48,7 +85,22 @@ def _sanitize_ppe_list(value: Any) -> list[dict[str, Any]]:
             continue
         row = dict(item)
         row["name"] = name
+        for dk in ("issued_at", "expires_at"):
+            _normalize_optional_date_in_row(row, dk)
         out.append(row)
+    return out
+
+
+def _sanitize_hazardous_factors_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    out: list[str] = []
+    for item in value:
+        if item is None or isinstance(item, (dict, list)):
+            continue
+        text = str(item).strip()
+        if text:
+            out.append(text)
     return out
 
 
@@ -105,6 +157,25 @@ class PersonRead(BaseSchema):
     @classmethod
     def _ppe_drop_invalid(cls, value: Any) -> Any:
         return _sanitize_ppe_list(value)
+
+    @field_validator("hazardous_factors", mode="before")
+    @classmethod
+    def _hazardous_factors_sanitize(cls, value: Any) -> Any:
+        return _sanitize_hazardous_factors_list(value)
+
+    @field_validator("employment_status", mode="before")
+    @classmethod
+    def _employment_status_coerce(cls, value: object) -> object:
+        if value is None:
+            return EmploymentStatus.ACTIVE
+        if isinstance(value, EmploymentStatus):
+            return value
+        if isinstance(value, str):
+            try:
+                return EmploymentStatus(value)
+            except ValueError:
+                return EmploymentStatus.ACTIVE
+        return EmploymentStatus.ACTIVE
 
     @computed_field(return_type=str)
     def fio(self) -> str:

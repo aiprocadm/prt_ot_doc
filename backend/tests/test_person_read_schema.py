@@ -39,3 +39,28 @@ def test_person_read_drops_ppe_rows_without_name() -> None:
     model = PersonRead.model_validate(data)
     assert len(model.current_ppe) == 1
     assert model.current_ppe[0].name == "Каска"
+
+
+def test_person_read_coerces_hazardous_factors_to_strings() -> None:
+    data = _base_person_payload()
+    data["hazardous_factors"] = [1, "  шум  ", None, {"x": 1}, []]
+    model = PersonRead.model_validate(data)
+    assert model.hazardous_factors == ["1", "шум"]
+
+
+def test_person_read_strips_invalid_qualification_dates() -> None:
+    data = _base_person_payload()
+    data["qualifications"] = [
+        {"name": "Допуск", "issued_at": "notadate", "valid_until": "2020-01-02"},
+    ]
+    model = PersonRead.model_validate(data)
+    assert len(model.qualifications) == 1
+    assert model.qualifications[0].issued_at is None
+    assert model.qualifications[0].valid_until.isoformat() == "2020-01-02"
+
+
+def test_person_read_coerces_unknown_employment_status() -> None:
+    data = _base_person_payload()
+    data["employment_status"] = "weird"
+    model = PersonRead.model_validate(data)
+    assert model.employment_status == EmploymentStatus.ACTIVE

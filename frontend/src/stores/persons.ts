@@ -72,8 +72,11 @@ export const usePersonsStore = create<PersonsState>()(
         state.error = null;
       });
       const { page, page_size: pageSize } = get().pagination;
-      const limit = pageSize;
-      const offset = (page - 1) * pageSize;
+      const rawLimit = Number(pageSize);
+      const limit = Math.min(200, Math.max(1, Number.isFinite(rawLimit) ? rawLimit : 10));
+      const rawPage = Number(page);
+      const safePage = Number.isFinite(rawPage) && rawPage >= 1 ? Math.floor(rawPage) : 1;
+      const offset = Math.max(0, (safePage - 1) * limit);
       const query = { ...get().filters, ...params, limit, offset };
       try {
         const { data } = await apiClient.get<PersonListResponse>("/persons", { params: query });
