@@ -14,6 +14,7 @@
 - PWA offline sync: `OfflineSyncService.apply_batch` отклоняет батч, если `BriefingEntry` из другой аренды, чем `OfflineSyncBatch`; `get_status` принимает `tenant_id` и фильтрует в SQL; тест `test_offline_sync_fails_when_briefing_entry_other_tenant`.
 - Approval signing v1: после валидного `ApprovalTask` проверяются `ApprovalProcess` и `ApprovalRoute` на совпадение с текущим тенантом перед решением по задаче.
 - Training: при успешной сдаче теста срок действия (`expires_at`) из `TrainingProgram.validity_months` выставляется только если программа в той же аренде, что и enrollment.
+- Pipeline: `validate_template_step_handler` ограничивает выбор `TemplateVersion` по `tenant_id` и отбрасывает `current_version_id`, указывающий на чужую аренду или другой шаблон; `PackGenerationPipeline.plan_documents` проверяет совпадение аренды версии с пакетом.
 
 ## 2026-03-29
 - Hardened tenant identity handling across document-core so `tenant.id` is again the canonical persistence identifier for `Template`, `TemplateVersion`, `DocumentPack`, `DocumentPackItem`, and `PipelineRun`, while `tenant.slug` remains routing-only and `tenant_schema` remains schema-only.

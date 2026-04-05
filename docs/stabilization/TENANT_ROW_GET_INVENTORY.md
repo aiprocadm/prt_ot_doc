@@ -101,8 +101,8 @@ rg "await session\.get\(|await self\.session\.get\(" backend/app/api backend/app
 |------|--------|-------------|
 | `pipelines_orchestrator.py` | **A** | `assert_tenant_row_matches_session` на job/step/profile |
 | `document_insights.py` | **D** | Усилено 2026-04-05: `Template`/`TemplateVersion`/`NPA` только при совпадении `tenant_id` с аргументом функции |
-| `pipeline_step_handlers.py` | **C/D** | `TemplateVersion` по `tpl.current_version_id` при уже загруженном шаблоне в контексте задачи |
-| `package_pipeline.py` | **C/D** | Версия по item FK — при сомнениях добавить явный tenant assert |
+| `pipeline_step_handlers.py` | **B** | Выбор версии по номеру с `TemplateVersion.tenant_id == job.tenant_id`; при `get(current_version_id)` — отбрасывание строк с чужим tenant или чужим `template_id` |
+| `package_pipeline.py` | **B** | После резолва версии — `version.tenant_id` vs `pack.tenant_id` |
 | `billing.py` | **N/A** | `BillingPlan` без tenant на строке подписки — план глобальный по продукту |
 | `obligations.py` | **D** | Загрузка `Prescription` по `task.entity_id` в worker-контексте |
 
@@ -119,6 +119,8 @@ rg "await session\.get\(|await self\.session\.get\(" backend/app/api backend/app
 - `modules/pwa_sync/services.py` + `api/routes/pwa_sync.py`: сверка entry↔batch, статус батча по SQL с `tenant_id`.
 - `approval_signing_v1.py`: tenant для process/route в decide task.
 - `modules/training/services.py`: tenant при загрузке `TrainingProgram` для `expires_at` после попытки теста.
+- `services/pipeline_step_handlers.py`: фильтр `tenant_id` при выборе версии по номеру; защита `get(current_version_id)` от чужой аренды / чужого шаблона.
+- `services/package_pipeline.py`: сверка `TemplateVersion.tenant_id` с `DocumentPack.tenant_id` в `plan_documents`.
 
 Подробнее — [CHANGELOG.md](../../CHANGELOG.md).
 

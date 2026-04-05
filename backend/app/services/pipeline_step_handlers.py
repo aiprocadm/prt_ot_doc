@@ -52,6 +52,7 @@ async def validate_template_step_handler(*, session, job: DocumentJob, step: Doc
         tv = (
             await session.execute(
                 select(TemplateVersion).where(
+                    TemplateVersion.tenant_id == tenant_id,
                     TemplateVersion.template_id == tpl.id,
                     TemplateVersion.version == ver_num,
                 )
@@ -59,6 +60,10 @@ async def validate_template_step_handler(*, session, job: DocumentJob, step: Doc
         ).scalar_one_or_none()
     elif tpl.current_version_id:
         tv = await session.get(TemplateVersion, tpl.current_version_id)
+        if tv is not None and (
+            str(tv.tenant_id) != tenant_id or str(tv.template_id) != str(tpl.id)
+        ):
+            tv = None
 
     if tv is None:
         raise ValueError("template_version_not_found")

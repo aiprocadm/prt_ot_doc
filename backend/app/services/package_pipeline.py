@@ -114,6 +114,8 @@ class PackGenerationPipeline:
                     version = await session.get(TemplateVersion, item.template_version_id)
                 if version is None:
                     raise ValueError("Pack item references missing template version")
+                if str(version.tenant_id) != str(pack.tenant_id):
+                    raise ValueError("Pack item template version tenant mismatch")
                 if version.template_id != template.id:
                     raise ValueError("Pack item template version mismatch")
                 person_id = person.id if person else None
