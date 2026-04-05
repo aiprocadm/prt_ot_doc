@@ -51,12 +51,12 @@ const AdminPage = () => {
           </>
         }
         stats={[
-          { label: "Tenant", value: data.tenancy.tenant.slug || "—" },
-          { label: "Outbox", value: data.outbox.length },
-          { label: "Webhooks", value: data.webhooks.length },
-          { label: "API tokens", value: data.apiTokens.length },
-          { label: "Stub/mock providers", value: providerSummary?.non_production_total ?? "—" },
-          { label: "Readiness blockers", value: attentionSummary?.readiness_blockers ?? "—" }
+          { label: "Тенант", value: data.tenancy.tenant.slug || "—" },
+          { label: "Исходящая очередь", value: data.outbox.length },
+          { label: "Вебхуки", value: data.webhooks.length },
+          { label: "API-токены", value: data.apiTokens.length },
+          { label: "Непродакшен-провайдеры", value: providerSummary?.non_production_total ?? "—" },
+          { label: "Блокеры готовности", value: attentionSummary?.readiness_blockers ?? "—" }
         ]}
       />
       <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
@@ -64,17 +64,17 @@ const AdminPage = () => {
       {!loading && !error ? (
         <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
           <Card>
-            <CardHeader><CardTitle className="text-base">Tenant health score</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">Оценка здоровья тенанта</CardTitle></CardHeader>
             <CardContent className="space-y-2 text-sm">
               {data.tenantHealth ? (
                 <>
-                  <p>Score: {data.tenantHealth.score} / 100</p>
-                  <p>Grade: {data.tenantHealth.grade}</p>
-                  <p>Failed jobs (24h): {data.tenantHealth.failed_jobs_last24h}</p>
-                  <p>Poisoned events: {data.tenantHealth.outbox_events_poisoned}</p>
+                  <p>Балл: {data.tenantHealth.score} / 100</p>
+                  <p>Оценка: {data.tenantHealth.grade}</p>
+                  <p>Сбойных заданий (24 ч): {data.tenantHealth.failed_jobs_last24h}</p>
+                  <p>Отравленных событий: {data.tenantHealth.outbox_events_poisoned}</p>
                 </>
               ) : (
-                <p className="text-muted-foreground">Health score временно недоступен</p>
+                <p className="text-muted-foreground">Оценка здоровья временно недоступна</p>
               )}
             </CardContent>
           </Card>

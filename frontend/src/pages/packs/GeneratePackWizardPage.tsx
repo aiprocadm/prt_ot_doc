@@ -269,7 +269,7 @@ const GeneratePackWizardPage = () => {
                 id="idempotency-key"
                 value={idempotencyKey}
                 onChange={(e) => setIdempotencyKey(e.target.value)}
-                placeholder="wizard-timestamp"
+                placeholder="метка-времени мастера"
               />
               <p className="text-xs text-muted-foreground">
                 Повторный запрос с тем же ключом вернёт результат первого запуска.
