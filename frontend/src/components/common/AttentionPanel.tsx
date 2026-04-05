@@ -6,7 +6,7 @@ import { workspaceApi, type ReadinessBlocker, type WorkspaceAttentionDto } from 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { blockerActionPath } from "@/utils/workspaceNavigation";
+import { blockerActionLabel, blockerActionPath } from "@/utils/workspaceNavigation";
 
 const blockerLink = (blocker: ReadinessBlocker) => blockerActionPath(blocker.code, blocker.entity_type);
 
@@ -28,6 +28,7 @@ interface BlockerRowProps {
 
 const BlockerRow = ({ blocker }: BlockerRowProps) => {
   const href = blockerLink(blocker);
+  const actionLabel = blockerActionLabel(blocker.code);
   return (
     <div className="flex items-start gap-3 rounded-md border bg-muted/30 p-3">
       {severityIcon(blocker.severity)}
@@ -41,10 +42,16 @@ const BlockerRow = ({ blocker }: BlockerRowProps) => {
         <p className="text-xs text-muted-foreground mt-0.5">{blocker.reason}</p>
         <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">{blocker.action_hint}</p>
         <Link to={href} className="mt-2 inline-flex text-xs font-medium text-blue-600 hover:underline">
-          Открыть рабочий экран
+          {actionLabel}
         </Link>
       </div>
-      <Button asChild size="sm" variant="ghost" className="shrink-0" aria-label={`Открыть ${blocker.title}`}>
+      <Button
+        asChild
+        size="sm"
+        variant="ghost"
+        className="shrink-0"
+        aria-label={`Перейти: ${actionLabel}`}
+      >
         <Link to={href}>
           <ArrowRight className="h-3.5 w-3.5" />
         </Link>
@@ -53,7 +60,12 @@ const BlockerRow = ({ blocker }: BlockerRowProps) => {
   );
 };
 
-export const AttentionPanel = () => {
+interface AttentionPanelProps {
+  /** На странице «Центр внимания» заголовок уже есть снаружи — дублировать не нужно. */
+  showOuterTitle?: boolean;
+}
+
+export const AttentionPanel = ({ showOuterTitle = true }: AttentionPanelProps) => {
   const [data, setData] = useState<WorkspaceAttentionDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -79,15 +91,21 @@ export const AttentionPanel = () => {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base flex items-center gap-2">
-            {allClear ? (
-              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-            ) : (
-              <AlertCircle className="h-4 w-4 text-destructive" />
-            )}
-            Центр внимания
-          </CardTitle>
+        <div
+          className={
+            showOuterTitle ? "flex items-center justify-between" : "flex items-center justify-end gap-2"
+          }
+        >
+          {showOuterTitle ? (
+            <CardTitle className="text-base flex items-center gap-2">
+              {allClear ? (
+                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+              ) : (
+                <AlertCircle className="h-4 w-4 text-destructive" />
+              )}
+              Центр внимания
+            </CardTitle>
+          ) : null}
           <Button variant="ghost" size="sm" onClick={load} disabled={loading}>
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
           </Button>

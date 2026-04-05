@@ -1,6 +1,7 @@
 import { Bell, CalendarDays, ClipboardList, Search } from "lucide-react";
 import { Link } from "react-router-dom";
 
+import { AttentionPanel } from "@/components/common/AttentionPanel";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -18,11 +19,14 @@ export default function WorkspaceAttentionPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Центр внимания</h1>
         <p className="text-muted-foreground mt-1 max-w-2xl text-sm">
-          Сводка операционных точек ТЗ: задачи, уведомления и календарь в одном месте навигации (role-based доступ
-          сохраняется через права на целевые разделы).
+          Сводка рисков, блокеров готовности и задач — те же данные, что на дашборде. Ниже — быстрые переходы в
+          смежные разделы (доступ по ролям).
         </p>
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
+      <AttentionPanel showOuterTitle={false} />
+      <div>
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Быстрые переходы</h2>
+        <div className="grid gap-4 md:grid-cols-2">
         {links.map(({ to, label, icon: Icon, description }) => (
           <Link key={to} to={to} className="block">
             <Card className="h-full transition-colors hover:bg-muted/40">
@@ -37,6 +41,7 @@ export default function WorkspaceAttentionPage() {
             </Card>
           </Link>
         ))}
+        </div>
       </div>
     </div>
   );

@@ -131,12 +131,12 @@ async def _readiness_blockers(
         blockers.append(
             ReadinessBlocker(
                 code="employees_missing_contacts",
-                title="Employee profile gaps",
+                title="Неполные контакты сотрудников",
                 severity="high",
                 count=missing_employee_contacts,
-                reason="Employees missing email or phone break notification and assignment flows",
+                reason="Без email или телефона ломаются уведомления и назначения (обучение, задачи, СИЗ)",
                 entity_type="person",
-                action_hint="Complete employee contact fields",
+                action_hint="Заполните email и телефон в карточках сотрудников",
             )
         )
 
@@ -164,12 +164,12 @@ async def _readiness_blockers(
         blockers.append(
             ReadinessBlocker(
                 code="templates_not_ready",
-                title="No ready templates",
+                title="Нет готовых шаблонов",
                 severity="critical",
                 count=1,
-                reason="Document lifecycle cannot run without ready template versions",
+                reason="Без активной версии шаблона недоступен жизненный цикл документов",
                 entity_type="template_version",
-                action_hint="Upload/lint/activate at least one template version",
+                action_hint="Загрузите шаблон, проверьте линтером и активируйте версию",
             )
         )
 
@@ -193,12 +193,12 @@ async def _readiness_blockers(
         blockers.append(
             ReadinessBlocker(
                 code="training_overdue",
-                title="Overdue training assignments",
+                title="Просроченные назначения обучения",
                 severity="high",
                 count=overdue_training,
-                reason="Overdue training blocks readiness and increases compliance risk",
+                reason="Просрочка снижает готовность и повышает регуляторные риски",
                 entity_type="training_enrollment",
-                action_hint="Close overdue training enrollments or re-plan deadlines",
+                action_hint="Закройте просроченные назначения или перенесите сроки",
             )
         )
 
@@ -222,12 +222,12 @@ async def _readiness_blockers(
         blockers.append(
             ReadinessBlocker(
                 code="ppe_expired",
-                title="Expired issued PPE",
+                title="Просроченная выданная СИЗ",
                 severity="high",
                 count=expired_ppe,
-                reason="Expired issued PPE indicates unresolved replacement obligations",
+                reason="Истёкший срок СИЗ означает незакрытые обязанности по замене или возврату",
                 entity_type="ppe_issue",
-                action_hint="Issue replacement PPE or mark return/loss status",
+                action_hint="Выдайте замену или отметьте возврат/утрату",
             )
         )
 
@@ -251,12 +251,12 @@ async def _readiness_blockers(
         blockers.append(
             ReadinessBlocker(
                 code="contracts_expired",
-                title="Expired active contracts",
+                title="Истёкшие активные договоры",
                 severity="critical",
                 count=expired_active_contracts,
-                reason="Expired active contracts break contractor readiness and package flows",
+                reason="Просроченный договор ломает готовность контрагентов и сценарии пакетов",
                 entity_type="contract",
-                action_hint="Close expired contracts or extend validity",
+                action_hint="Закройте договор или продлите срок действия",
             )
         )
 
@@ -373,13 +373,13 @@ async def workspace_attention(
         due_at = task.due_at.astimezone(timezone.utc) if task.due_at else None
         if due_at and due_at < now:
             severity = "critical"
-            reason = "Task is overdue"
+            reason = "Задача просрочена"
         elif due_at and due_at <= soon_threshold:
             severity = "high"
-            reason = "Task is due soon"
+            reason = "Срок задачи скоро"
         else:
             severity = "medium"
-            reason = "Open task"
+            reason = "Открытая задача"
         items.append(
             AttentionItem(
                 item_type="task",
@@ -396,15 +396,15 @@ async def workspace_attention(
 
     recs: list[str] = []
     if overdue_task_total > 0:
-        recs.append("Resolve overdue tasks first")
+        recs.append("Сначала закройте просроченные задачи")
     if overdue_deadline_total > 0:
-        recs.append("Address overdue compliance deadlines")
+        recs.append("Разберите просроченные обязательства соответствия")
     if failed_sync > 0:
-        recs.append("Review failed offline sync batches before next field upload")
+        recs.append("Проверьте неудачные пакеты offline-синхронизации перед следующей выгрузкой")
     if blockers:
-        recs.append("Resolve readiness blockers before launching dependent scenarios")
+        recs.append("Устраните блокеры готовности перед запуском зависимых сценариев")
     if not recs:
-        recs.append("No critical blockers detected. Continue planned work queue")
+        recs.append("Критичных блокеров не обнаружено — продолжайте плановую работу")
 
     return WorkspaceAttentionResponse(
         generated_at=now,
