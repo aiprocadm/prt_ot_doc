@@ -20,9 +20,12 @@ interface DocumentPreviewProps {
   initialTab?: "preview" | "history" | "timeline";
 }
 
+type PreviewTab = NonNullable<DocumentPreviewProps["initialTab"]>;
+
 export const DocumentPreview = ({ document, initialTab = "preview" }: DocumentPreviewProps) => {
   const { refreshStatus, download } = useDocumentsStore();
   const [current, setCurrent] = useState(document);
+  const [activeTab, setActiveTab] = useState<PreviewTab>(initialTab);
   const [release, setRelease] = useState<ReleaseStatus>({ approval: "draft", signature: "pending", edo: "queued" });
   const [readiness, setReadiness] = useState<DocumentReadinessDto | null>(null);
   const [readinessLoading, setReadinessLoading] = useState(false);
@@ -33,6 +36,10 @@ export const DocumentPreview = ({ document, initialTab = "preview" }: DocumentPr
     status: current.status,
     company_id: current.company?.id
   };
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
 
   useEffect(() => {
     setCurrent(document);
@@ -145,21 +152,21 @@ export const DocumentPreview = ({ document, initialTab = "preview" }: DocumentPr
                   style={{ width: `${Math.min(100, Math.max(0, readiness.score))}%` }}
                 />
               </div>
-              {readiness.blockers.length > 0 ? (
+              {(readiness.blockers?.length ?? 0) > 0 ? (
                 <div>
                   <p className="mb-1 text-xs font-medium text-destructive">Препятствия</p>
                   <ul className="list-inside list-disc text-xs text-muted-foreground">
-                    {readiness.blockers.map((b, i) => (
+                    {(readiness.blockers ?? []).map((b, i) => (
                       <li key={`blocker-${i}-${b.slice(0, 24)}`}>{b}</li>
                     ))}
                   </ul>
                 </div>
               ) : null}
-              {readiness.recommended_actions.length > 0 ? (
+              {(readiness.recommended_actions?.length ?? 0) > 0 ? (
                 <div>
                   <p className="mb-1 text-xs font-medium text-foreground">Рекомендуемые действия</p>
                   <ul className="list-inside list-disc text-xs text-muted-foreground">
-                    {readiness.recommended_actions.map((a, i) => (
+                    {(readiness.recommended_actions ?? []).map((a, i) => (
                       <li key={`action-${i}-${a.slice(0, 24)}`}>{a}</li>
                     ))}
                   </ul>
@@ -203,7 +210,7 @@ export const DocumentPreview = ({ document, initialTab = "preview" }: DocumentPr
             Режим только для чтения
           </div>
         )}
-        <Tabs defaultValue={initialTab} className="space-y-4">
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as PreviewTab)} className="space-y-4">
           <TabsList>
             <TabsTrigger value="preview">Предпросмотр</TabsTrigger>
             <TabsTrigger value="history">История</TabsTrigger>

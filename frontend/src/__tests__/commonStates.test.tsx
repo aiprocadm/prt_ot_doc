@@ -40,4 +40,22 @@ describe("common states", () => {
     await user.click(screen.getByRole("button", { name: "Повторить" }));
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
+
+  it("shows friendly copy for INTERNAL_ERROR while keeping code line", () => {
+    render(
+      <ErrorState
+        error={{
+          status: 500,
+          code: "INTERNAL_ERROR",
+          message: "Internal server error",
+          correlation_id: "ef0d63642f1547538ab5ee7f9f8ca4d5",
+          field_errors: []
+        }}
+      />
+    );
+
+    expect(screen.getByText(/На сервере произошла ошибка/)).toBeInTheDocument();
+    expect(screen.getByText(/Код: INTERNAL_ERROR/)).toBeInTheDocument();
+    expect(screen.getByText(/Correlation ID: ef0d63642f1547538ab5ee7f9f8ca4d5/)).toBeInTheDocument();
+  });
 });

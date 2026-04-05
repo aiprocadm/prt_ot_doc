@@ -1,4 +1,4 @@
-import axios, { type AxiosError, type AxiosInstance } from "axios";
+import axios, { type AxiosError, type AxiosInstance, type InternalAxiosRequestConfig } from "axios";
 import { appConfig } from "@/config/env";
 import { handleApiError } from "@/api/errorHandling";
 import { tokenStorage } from "@/api/tokenStorage";
@@ -40,6 +40,13 @@ const isTenantRequiredPath = (path: string) => {
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
+
+type RequestWithServerRetry = InternalAxiosRequestConfig & { _serverRetryCount?: number };
+
+const SERVER_RETRY_STATUSES = new Set([500, 502, 503, 504]);
+const MAX_SERVER_RETRIES = 2;
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 const normalizeFieldErrors = (value: unknown): ApiFieldError[] => {
   if (!Array.isArray(value)) return [];
@@ -199,6 +206,18 @@ apiClient.interceptors.response.use(
       const newToken = await refreshToken();
       if (newToken && originalRequest.headers) {
         originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        return apiClient(originalRequest);
+      }
+    }
+
+    if (originalRequest) {
+      const method = (originalRequest.method ?? "get").toLowerCase();
+      const cfg = originalRequest as RequestWithServerRetry;
+      const attempt = cfg._serverRetryCount ?? 0;
+      if (method === "get" && SERVER_RETRY_STATUSES.has(status) && attempt < MAX_SERVER_RETRIES) {
+        cfg._serverRetryCount = attempt + 1;
+        const backoff = 400 * 2 ** attempt + Math.floor(Math.random() * 250);
+        await sleep(backoff);
         return apiClient(originalRequest);
       }
     }

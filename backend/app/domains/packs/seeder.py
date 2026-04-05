@@ -23,7 +23,7 @@ from app.models.models import (
     TemplateVersionStatus,
     Tenant,
 )
-from app.repository import create_template
+from app.repository import create_template, get_active_template_with_version
 from app.schemas.template import TemplateCreate, TemplateVersionMetadata
 from app.services.file_storage import FileStorageService
 
@@ -80,15 +80,26 @@ async def _ensure_template(
         profile={},
     )
 
-    version = await create_template(
-        session,
-        tenant_slug,
-        payload,
-        storage_key=key,
-        checksum=checksum,
-        version_metadata=version_metadata,
-        tenant_slug=tenant_slug,
-    )
+    try:
+        version = await create_template(
+            session,
+            tenant_slug,
+            payload,
+            storage_key=key,
+            checksum=checksum,
+            version_metadata=version_metadata,
+            tenant_slug=tenant_slug,
+        )
+    except ValueError as exc:
+        # Re-runs after partial seed or non-deterministic DOCX bytes: reuse existing template.
+        if str(exc) != "Template with this name already exists":
+            raise
+        existing = await get_active_template_with_version(session, template_spec.code, tenant_slug)
+        if existing is None:
+            raise
+        template, _version = existing
+        return template
+
     template = await session.get(Template, version.template_id)
     if template is None:  # pragma: no cover - defensive
         raise RuntimeError(

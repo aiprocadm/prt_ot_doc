@@ -59,6 +59,17 @@ export const DashboardPage = () => {
     fetchOperational();
   }, [fetchOperational, fetchSummary]);
 
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      if (error) void fetchSummary();
+      if (operationalError) void fetchOperational();
+      if (taskInboxError) void reloadTaskInbox();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [error, operationalError, taskInboxError, fetchOperational, fetchSummary, reloadTaskInbox]);
+
   const trainingStatus = summary?.training.status ?? "ok";
   const trainingLabel = trainingStatusLabels[trainingStatus] ?? trainingStatus;
 
