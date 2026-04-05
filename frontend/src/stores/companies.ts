@@ -110,7 +110,10 @@ export const useCompaniesStore = create<CompaniesState>()(
         state.loading = true;
         state.error = null;
       });
-      const query = { ...get().filters, ...params, page: get().pagination.page, page_size: get().pagination.page_size };
+      const { page, page_size: pageSize } = get().pagination;
+      const limit = pageSize;
+      const offset = (page - 1) * pageSize;
+      const query = { ...get().filters, ...params, limit, offset };
       try {
         const { data } = await apiClient.get<PaginatedResponse<CompanyDto> | LegacyCompaniesResponse>("/companies", { params: query });
         const normalized = normalizeCompaniesResponse(data, get().pagination);

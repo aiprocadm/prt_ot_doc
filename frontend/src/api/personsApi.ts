@@ -1,0 +1,77 @@
+import type { PersonDto, PersonStatus } from "@/types/dto/persons";
+import type { PersonFormValues } from "@/types/forms/persons";
+
+type ApiEmploymentStatus = "active" | "on_leave" | "suspended" | "terminated";
+
+const toApiEmploymentStatus = (status: PersonFormValues["status"]): ApiEmploymentStatus => {
+  switch (status) {
+    case "inactive":
+      return "suspended";
+    case "dismissed":
+      return "terminated";
+    default:
+      return "active";
+  }
+};
+
+export const employmentStatusToUi = (value: string | undefined): PersonStatus => {
+  switch (value) {
+    case "terminated":
+      return "dismissed";
+    case "suspended":
+    case "on_leave":
+      return "inactive";
+    default:
+      return "active";
+  }
+};
+
+export const normalizePersonRead = (raw: unknown): PersonDto => {
+  const r = raw as Record<string, unknown>;
+  const employment = String(r.employment_status ?? "");
+  const fio = typeof r.fio === "string" ? r.fio.trim() : "";
+  const first = String(r.first_name ?? "");
+  const last = String(r.last_name ?? "");
+  const middle = r.middle_name != null ? String(r.middle_name) : undefined;
+  const fullName =
+    typeof r.full_name === "string" && r.full_name.trim()
+      ? String(r.full_name).trim()
+      : fio || [last, first, middle].filter(Boolean).join(" ").trim() || first || last;
+
+  const now = new Date().toISOString();
+
+  return {
+    id: String(r.id),
+    created_at: typeof r.created_at === "string" ? r.created_at : now,
+    updated_at: typeof r.updated_at === "string" ? r.updated_at : typeof r.created_at === "string" ? r.created_at : now,
+    first_name: first,
+    last_name: last,
+    middle_name: middle,
+    full_name: fullName,
+    position: typeof r.position === "string" ? r.position : undefined,
+    email: r.email != null ? String(r.email) : undefined,
+    phone: r.phone != null ? String(r.phone) : undefined,
+    status: employmentStatusToUi(employment),
+    company_id: typeof r.company_id === "string" ? r.company_id : undefined
+  };
+};
+
+export const buildPersonCreateBody = (values: PersonFormValues) => ({
+  company_id: values.company_id,
+  first_name: values.first_name.trim(),
+  last_name: values.last_name.trim(),
+  middle_name: values.middle_name?.trim() || undefined,
+  email: values.email?.trim() || undefined,
+  phone: values.phone?.trim() || undefined,
+  employment_status: toApiEmploymentStatus(values.status)
+});
+
+export const buildPersonPatchBody = (values: PersonFormValues) => ({
+  company_id: values.company_id,
+  first_name: values.first_name.trim(),
+  last_name: values.last_name.trim(),
+  middle_name: values.middle_name?.trim() || undefined,
+  email: values.email?.trim() || undefined,
+  phone: values.phone?.trim() || undefined,
+  employment_status: toApiEmploymentStatus(values.status)
+});

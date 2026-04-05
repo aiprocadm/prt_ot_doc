@@ -1,10 +1,15 @@
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
+
 import { apiClient } from "@/api/client";
+import { buildPersonCreateBody, buildPersonPatchBody, normalizePersonRead } from "@/api/personsApi";
 import { defaultPagination } from "@/stores/helpers";
 import type { PaginatedState } from "@/stores/types";
-import type { ApiError, PaginatedResponse } from "@/types/dto/common";
-import type { PersonDto, PersonStatus, UpdatePersonDto } from "@/types/dto/persons";
+import type { ApiError } from "@/types/dto/common";
+import type { PersonDto, PersonStatus } from "@/types/dto/persons";
+import type { PersonFormValues } from "@/types/forms/persons";
+
+type PersonListResponse = { items: unknown[]; total: number };
 
 interface PersonFilters {
   search?: string;
@@ -14,8 +19,8 @@ interface PersonFilters {
 interface PersonsState extends PaginatedState<PersonDto, PersonFilters> {
   list: (params?: Partial<PersonFilters>) => Promise<void>;
   getById: (id: string) => Promise<PersonDto | null>;
-  create: (payload: UpdatePersonDto) => Promise<PersonDto>;
-  update: (id: string, payload: UpdatePersonDto) => Promise<PersonDto>;
+  create: (payload: PersonFormValues) => Promise<PersonDto>;
+  update: (id: string, payload: PersonFormValues) => Promise<PersonDto>;
   remove: (id: string) => Promise<void>;
   setFilters: (filters: Partial<PersonFilters>) => void;
   setPage: (page: number) => void;
@@ -62,12 +67,20 @@ export const usePersonsStore = create<PersonsState>()(
         state.loading = true;
         state.error = null;
       });
-      const query = { ...get().filters, ...params, page: get().pagination.page, page_size: get().pagination.page_size };
+      const { page, page_size: pageSize } = get().pagination;
+      const limit = pageSize;
+      const offset = (page - 1) * pageSize;
+      const query = { ...get().filters, ...params, limit, offset };
       try {
-        const { data } = await apiClient.get<PaginatedResponse<PersonDto>>("/persons", { params: query });
+        const { data } = await apiClient.get<PersonListResponse>("/persons", { params: query });
+        const items = (data.items ?? []).map((row) => normalizePersonRead(row));
         set((state) => {
-          state.items = data.items;
-          state.pagination = data.pagination;
+          state.items = items;
+          state.pagination = {
+            page,
+            page_size: pageSize,
+            total: data.total ?? items.length
+          };
         });
       } catch (error) {
         set((state) => {
@@ -81,11 +94,12 @@ export const usePersonsStore = create<PersonsState>()(
     },
     getById: async (id) => {
       try {
-        const { data } = await apiClient.get<PersonDto>(`/persons/${id}`);
+        const { data } = await apiClient.get<unknown>(`/persons/${id}`);
+        const normalized = normalizePersonRead(data);
         set((state) => {
-          state.item = data;
+          state.item = normalized;
         });
-        return data;
+        return normalized;
       } catch (error) {
         set((state) => {
           state.error = error as ApiError;
@@ -94,22 +108,26 @@ export const usePersonsStore = create<PersonsState>()(
       }
     },
     create: async (payload) => {
-      const { data } = await apiClient.post<PersonDto>("/persons", payload);
+      const body = buildPersonCreateBody(payload);
+      const { data } = await apiClient.post<unknown>("/persons", body);
+      const normalized = normalizePersonRead(data);
       set((state) => {
-        state.items.unshift(data);
+        state.items.unshift(normalized);
         state.pagination.total += 1;
       });
-      return data;
+      return normalized;
     },
     update: async (id, payload) => {
-      const { data } = await apiClient.put<PersonDto>(`/persons/${id}`, payload);
+      const body = buildPersonPatchBody(payload);
+      const { data } = await apiClient.patch<unknown>(`/persons/${id}`, body);
+      const normalized = normalizePersonRead(data);
       set((state) => {
-        state.items = state.items.map((person) => (person.id === id ? data : person));
+        state.items = state.items.map((person) => (person.id === id ? normalized : person));
         if (state.item?.id === id) {
-          state.item = data;
+          state.item = normalized;
         }
       });
-      return data;
+      return normalized;
     },
     remove: async (id) => {
       await apiClient.delete(`/persons/${id}`);

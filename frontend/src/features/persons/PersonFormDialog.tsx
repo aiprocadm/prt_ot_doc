@@ -1,11 +1,13 @@
 import { useEffect, type ReactNode } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useCompaniesStore } from "@/stores/companies";
 import { usePersonsStore } from "@/stores/persons";
 import type { PersonDto } from "@/types/dto/persons";
 import { personSchema, type PersonFormValues } from "@/types/forms/persons";
@@ -17,9 +19,12 @@ interface PersonFormDialogProps {
 }
 
 export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFormDialogProps) => {
+  const { list: listCompanies, items: companies } = useCompaniesStore();
+
   const form = useForm<PersonFormValues>({
     resolver: zodResolver(personSchema),
     defaultValues: {
+      company_id: initialData?.company_id ?? "",
       first_name: initialData?.first_name ?? "",
       last_name: initialData?.last_name ?? "",
       middle_name: initialData?.middle_name ?? "",
@@ -33,8 +38,13 @@ export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFo
   const { create, update } = usePersonsStore();
 
   useEffect(() => {
+    void listCompanies().catch(() => undefined);
+  }, [listCompanies]);
+
+  useEffect(() => {
     if (initialData) {
       form.reset({
+        company_id: initialData.company_id ?? "",
         first_name: initialData.first_name,
         last_name: initialData.last_name,
         middle_name: initialData.middle_name ?? "",
@@ -47,15 +57,18 @@ export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFo
   }, [initialData, form]);
 
   const onSubmit = async (values: PersonFormValues) => {
-    const payload = {
-      ...values,
-      middle_name: values.middle_name || undefined,
-      position: values.position || undefined,
-      email: values.email || undefined,
-      phone: values.phone || undefined
-    };
-    const result = initialData ? await update(initialData.id, payload) : await create(payload);
-    onSubmitted?.(result);
+    try {
+      const result = initialData ? await update(initialData.id, values) : await create(values);
+      onSubmitted?.(result);
+      toast.success(initialData ? "Сотрудник обновлён" : "Сотрудник добавлен");
+    } catch (err: unknown) {
+      const msg =
+        err && typeof err === "object" && "message" in err && typeof (err as { message: string }).message === "string"
+          ? (err as { message: string }).message
+          : "Не удалось сохранить сотрудника";
+      toast.error(msg);
+      throw err;
+    }
   };
 
   return (
@@ -66,15 +79,47 @@ export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFo
           <DialogTitle>{initialData ? "Редактировать сотрудника" : "Новый сотрудник"}</DialogTitle>
           <DialogDescription>Добавьте или обновите данные сотрудника.</DialogDescription>
         </DialogHeader>
-        <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
+        <form
+          className="space-y-4"
+          onSubmit={form.handleSubmit(async (values) => {
+            try {
+              await onSubmit(values);
+            } catch {
+              /* toast в onSubmit */
+            }
+          })}
+        >
+          <div className="space-y-2">
+            <Label htmlFor="company_id">Компания</Label>
+            <select id="company_id" className="h-10 w-full rounded-md border px-3" {...form.register("company_id")}>
+              <option value="">— Выберите компанию —</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            {form.formState.errors.company_id && (
+              <p className="text-xs text-destructive">{form.formState.errors.company_id.message}</p>
+            )}
+            {companies.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Сначала создайте компанию в разделе «Компании».</p>
+            ) : null}
+          </div>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="first_name">Имя</Label>
               <Input id="first_name" {...form.register("first_name")} />
+              {form.formState.errors.first_name && (
+                <p className="text-xs text-destructive">{form.formState.errors.first_name.message}</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="last_name">Фамилия</Label>
               <Input id="last_name" {...form.register("last_name")} />
+              {form.formState.errors.last_name && (
+                <p className="text-xs text-destructive">{form.formState.errors.last_name.message}</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="middle_name">Отчество</Label>
@@ -87,6 +132,7 @@ export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFo
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input id="email" type="email" {...form.register("email")} />
+              {form.formState.errors.email && <p className="text-xs text-destructive">{form.formState.errors.email.message}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="phone">Телефон</Label>

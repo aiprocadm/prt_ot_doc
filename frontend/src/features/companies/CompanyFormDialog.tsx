@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -55,17 +56,30 @@ export const CompanyFormDialog = ({ trigger, initialData, onSubmitted }: Company
 
   const onSubmit = async (values: CompanyFormValues) => {
     const payload = {
-      ...values,
-      kpp: values.kpp || undefined,
-      ogrn: values.ogrn || undefined,
-      address: values.address || undefined,
-      email: values.email || undefined,
-      phone: values.phone || undefined,
-      website: values.website || undefined
+      name: values.name.trim(),
+      inn: values.inn.trim() || undefined,
+      kpp: values.kpp?.trim() || undefined,
+      ogrn: values.ogrn?.trim() || undefined,
+      address: values.address?.trim() || undefined,
+      email: values.email?.trim() || undefined,
+      phone_numbers: values.phone?.trim() ? [values.phone.trim()] : undefined,
+      website: values.website?.trim() || undefined,
+      status: values.status,
+      tags: values.tags
     };
 
-    const result = initialData ? await update(initialData.id, payload) : await create(payload);
-    onSubmitted?.(result);
+    try {
+      const result = initialData ? await update(initialData.id, payload) : await create(payload);
+      onSubmitted?.(result);
+      toast.success(initialData ? "Компания обновлена" : "Компания создана");
+    } catch (err: unknown) {
+      const msg =
+        err && typeof err === "object" && "message" in err && typeof (err as { message: string }).message === "string"
+          ? (err as { message: string }).message
+          : "Не удалось сохранить компанию";
+      toast.error(msg);
+      throw err;
+    }
   };
 
   return (
@@ -79,7 +93,11 @@ export const CompanyFormDialog = ({ trigger, initialData, onSubmitted }: Company
         <form
           className="space-y-4"
           onSubmit={form.handleSubmit(async (values) => {
-            await onSubmit(values);
+            try {
+              await onSubmit(values);
+            } catch {
+              /* toast в onSubmit */
+            }
           })}
         >
           <div className="grid gap-4 md:grid-cols-2">
@@ -98,7 +116,7 @@ export const CompanyFormDialog = ({ trigger, initialData, onSubmitted }: Company
             </div>
             <div className="space-y-2">
               <Label htmlFor="inn">ИНН</Label>
-              <Input id="inn" {...form.register("inn")} />
+              <Input id="inn" {...form.register("inn")} placeholder="10 или 12 цифр (необязательно)" />
               {form.formState.errors.inn && <p className="text-xs text-destructive">{form.formState.errors.inn.message}</p>}
             </div>
             <div className="space-y-2">
@@ -111,11 +129,13 @@ export const CompanyFormDialog = ({ trigger, initialData, onSubmitted }: Company
             </div>
             <div className="space-y-2">
               <Label htmlFor="website">Сайт</Label>
-              <Input id="website" type="url" {...form.register("website")} />
+              <Input id="website" type="url" {...form.register("website")} placeholder="https://…" />
+              {form.formState.errors.website && <p className="text-xs text-destructive">{form.formState.errors.website.message}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input id="email" type="email" {...form.register("email")} />
+              {form.formState.errors.email && <p className="text-xs text-destructive">{form.formState.errors.email.message}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="phone">Телефон</Label>
