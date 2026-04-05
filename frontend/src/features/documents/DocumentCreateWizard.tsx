@@ -74,9 +74,9 @@ export const DocumentCreateWizard = () => {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-3 md:grid-cols-3">
-          <Input placeholder="template_code" value={templateCode} onChange={(event) => setTemplateCode(event.target.value)} />
+          <Input placeholder="Код шаблона" value={templateCode} onChange={(event) => setTemplateCode(event.target.value)} />
           <Input
-            placeholder="template_version"
+            placeholder="Версия шаблона"
             type="number"
             min={1}
             value={templateVersion}

@@ -41,12 +41,12 @@ const ApprovalTaskCard = ({ task, onChanged }: Props) => {
         </Button>
       </div>
       <div className="flex gap-2">
-        <Input placeholder="Delegate user id" value={delegateTo} onChange={(e) => setDelegateTo(e.target.value)} />
+        <Input placeholder="ID пользователя для делегирования" value={delegateTo} onChange={(e) => setDelegateTo(e.target.value)} />
         <Button
           disabled={busy || !delegateTo.trim()}
           onClick={() => run(() => approvalsApi.decide(task.id, "delegate", { delegate_to: delegateTo, comment }))}
         >
-          Delegate
+          Делегировать
         </Button>
       </div>
     </div>

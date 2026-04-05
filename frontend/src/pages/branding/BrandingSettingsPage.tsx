@@ -36,7 +36,7 @@ const parseJsonSafe = <T,>(value: string, fallback: T): T => {
   try {
     return JSON.parse(value) as T;
   } catch {
-    throw new Error("Некорректный JSON в metadata/signatories");
+    throw new Error("Некорректный JSON в метаданных или подписантах");
   }
 };
 
@@ -362,7 +362,7 @@ const BrandingSettingsPage = () => {
                 />
               </div>
               <div>
-                <Label>Header requisites</Label>
+                <Label>Реквизиты в шапке</Label>
                 <Textarea
                   rows={4}
                   value={form.header_details}
@@ -373,7 +373,7 @@ const BrandingSettingsPage = () => {
 
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <Label>Footer requisites</Label>
+                <Label>Реквизиты в подвале</Label>
                 <Textarea
                   rows={4}
                   value={form.footer_details}
@@ -383,7 +383,7 @@ const BrandingSettingsPage = () => {
             </div>
 
             <div>
-              <Label>Служебные надписи / branch notes</Label>
+              <Label>Служебные надписи / примечания по ветке</Label>
               <Textarea
                 rows={3}
                 value={form.service_notes}
@@ -421,21 +421,21 @@ const BrandingSettingsPage = () => {
             <Separator />
             <div className="grid gap-4 md:grid-cols-3">
               <div>
-                <Label>logo_file_id</Label>
+                <Label>ID файла логотипа</Label>
                 <Input
                   value={form.logo_file_id}
                   onChange={(e) => setForm((s) => ({ ...s, logo_file_id: e.target.value }))}
                 />
               </div>
               <div>
-                <Label>stamp_file_id</Label>
+                <Label>ID файла печати</Label>
                 <Input
                   value={form.stamp_file_id}
                   onChange={(e) => setForm((s) => ({ ...s, stamp_file_id: e.target.value }))}
                 />
               </div>
               <div>
-                <Label>signature_file_id</Label>
+                <Label>ID файла подписи</Label>
                 <Input
                   value={form.signature_file_id}
                   onChange={(e) => setForm((s) => ({ ...s, signature_file_id: e.target.value }))}
@@ -445,7 +445,7 @@ const BrandingSettingsPage = () => {
 
             <div className="grid gap-4 md:grid-cols-3">
               <div>
-                <Label>Primary color</Label>
+                <Label>Основной цвет</Label>
                 <Input
                   value={form.palette_primary}
                   onChange={(e) => setForm((s) => ({ ...s, palette_primary: e.target.value }))}
@@ -453,14 +453,14 @@ const BrandingSettingsPage = () => {
                 />
               </div>
               <div>
-                <Label>Secondary color</Label>
+                <Label>Дополнительный цвет</Label>
                 <Input
                   value={form.palette_secondary}
                   onChange={(e) => setForm((s) => ({ ...s, palette_secondary: e.target.value }))}
                 />
               </div>
               <div>
-                <Label>Accent color</Label>
+                <Label>Акцентный цвет</Label>
                 <Input
                   value={form.palette_accent}
                   onChange={(e) => setForm((s) => ({ ...s, palette_accent: e.target.value }))}
@@ -470,9 +470,9 @@ const BrandingSettingsPage = () => {
 
             <div className="flex items-center justify-between rounded-md border p-3">
               <div>
-                <div className="font-medium">Watermark</div>
+                <div className="font-medium">Водяной знак</div>
                 <div className="text-sm text-muted-foreground">
-                  Черновик / служебный штамп в header. Берётся в preview и попадёт в reproducibility metadata.
+                  Черновик / служебный штамп в шапке. Учитывается в превью и попадает в метаданные воспроизводимости.
                 </div>
               </div>
               <Switch
@@ -483,7 +483,7 @@ const BrandingSettingsPage = () => {
               />
             </div>
             <div>
-              <Label>Watermark text</Label>
+              <Label>Текст водяного знака</Label>
               <Input
                 value={form.watermark_text}
                 onChange={(e) => setForm((s) => ({ ...s, watermark_text: e.target.value }))}
@@ -493,7 +493,7 @@ const BrandingSettingsPage = () => {
 
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <Label>Metadata JSON</Label>
+                <Label>Метаданные (JSON)</Label>
                 <Textarea
                   rows={6}
                   value={form.metadata_json}
@@ -501,7 +501,7 @@ const BrandingSettingsPage = () => {
                 />
               </div>
               <div>
-                <Label>Signatories JSON</Label>
+                <Label>Подписанты (JSON)</Label>
                 <Textarea
                   rows={6}
                   value={form.signatories_json}
@@ -514,9 +514,9 @@ const BrandingSettingsPage = () => {
               <Button onClick={() => void handleSave()}>Сохранить профиль</Button>
               <Button
                 variant="outline"
-                onClick={() => void handlePreview().catch(() => toast.error("Не удалось собрать preview"))}
+                onClick={() => void handlePreview().catch(() => toast.error("Не удалось собрать превью"))}
               >
-                Тестовая генерация branded preview
+                Тестовая генерация превью с брендингом
               </Button>
             </div>
             {loading ? <div className="text-sm text-muted-foreground">Загрузка профиля…</div> : null}
@@ -526,34 +526,34 @@ const BrandingSettingsPage = () => {
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Letterhead preview</CardTitle>
+              <CardTitle>Превью бланка</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="rounded-md border bg-muted/30 p-3 text-sm">
-                <div className="font-medium">Header odd</div>
+                <div className="font-medium">Шапка, нечётная страница</div>
                 <div className="mt-2 whitespace-pre-wrap">{preview?.sections.header_odd ?? "Сначала выполните тестовую генерацию."}</div>
               </div>
               <div className="rounded-md border bg-muted/30 p-3 text-sm">
-                <div className="font-medium">Header even / first</div>
+                <div className="font-medium">Шапка, чётная / первая</div>
                 <div className="mt-2 whitespace-pre-wrap">{preview?.sections.header_even ?? preview?.sections.header_first ?? "—"}</div>
               </div>
               <div className="rounded-md border bg-muted/30 p-3 text-sm">
-                <div className="font-medium">Footer odd</div>
+                <div className="font-medium">Подвал, нечётная страница</div>
                 <div className="mt-2 whitespace-pre-wrap">{preview?.sections.footer_odd ?? "—"}</div>
               </div>
               <div className="rounded-md border bg-muted/30 p-3 text-sm">
-                <div className="font-medium">Resolved watermark</div>
+                <div className="font-medium">Итоговый водяной знак</div>
                 <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs">{JSON.stringify(preview?.watermark ?? {}, null, 2)}</pre>
               </div>
               <div className="rounded-md border bg-muted/30 p-3 text-sm">
-                <div className="font-medium">Resolution chain / preset source</div>
+                <div className="font-medium">Цепочка разрешения / источник пресета</div>
                 <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs">
                   {JSON.stringify(preview?.profile.resolution ?? profile?.resolution ?? {}, null, 2)}
                 </pre>
               </div>
               {preview?.unresolved_placeholders?.length ? (
                 <div className="text-sm text-amber-700">
-                  Незаполненные placeholders: {preview.unresolved_placeholders.join(", ")}
+                  Незаполненные плейсхолдеры: {preview.unresolved_placeholders.join(", ")}
                 </div>
               ) : (
                 <div className="text-sm text-green-700">Все placeholders разрешены.</div>

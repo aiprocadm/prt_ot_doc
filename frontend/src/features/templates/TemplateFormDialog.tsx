@@ -93,7 +93,7 @@ export const TemplateFormDialog = ({ trigger, initialData, onSubmitted }: Templa
               <label className="text-sm font-medium" htmlFor="template-type">
                 Тип шаблона
               </label>
-              <Input id="template-type" placeholder="order / instruction / protocol" {...form.register("template_type")} />
+              <Input id="template-type" placeholder="заказ / инструкция / протокол" {...form.register("template_type")} />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium" htmlFor="template-category">
