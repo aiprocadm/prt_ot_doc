@@ -44,20 +44,24 @@ const CompaniesPage = () => {
         <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Компании" }]} />
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">Компании</h1>
-          <CompanyFormDialog
-            trigger={
-              <Can
-                permission={PERMISSIONS.COMPANY_CREATE}
-                fallback={<Button disabled title="Недостаточно прав для создания компании">Новая компания</Button>}
-              >
-                <Button>Новая компания</Button>
-              </Can>
-            }
-            onSubmitted={(company) => {
-              setSelectedCompany(company);
-              list();
-            }}
-          />
+          <Can permission={PERMISSIONS.COMPANY_CREATE}>
+            {(allowed) => (
+              <CompanyFormDialog
+                trigger={
+                  <Button
+                    disabled={!allowed}
+                    title={!allowed ? "Недостаточно прав для создания компании" : undefined}
+                  >
+                    Новая компания
+                  </Button>
+                }
+                onSubmitted={(company) => {
+                  setSelectedCompany(company);
+                  list();
+                }}
+              />
+            )}
+          </Can>
         </div>
       </div>
       <Card>

@@ -31,20 +31,24 @@ const PersonsPage = () => {
         description="Карточка сотрудника с вкладками по обучению, СИЗ, рискам и медосмотрам."
         stats={[{ label: "Сотрудников", value: pagination.total }]}
         actions={
-          <PersonFormDialog
-            trigger={
-              <Can
-                permission={PERMISSIONS.PERSON_CREATE}
-                fallback={<Button disabled title="Недостаточно прав для добавления сотрудника">Добавить</Button>}
-              >
-                <Button>Добавить</Button>
-              </Can>
-            }
-            onSubmitted={(person) => {
-              setSelectedPerson(person);
-              list();
-            }}
-          />
+          <Can permission={PERMISSIONS.PERSON_CREATE}>
+            {(allowed) => (
+              <PersonFormDialog
+                trigger={
+                  <Button
+                    disabled={!allowed}
+                    title={!allowed ? "Недостаточно прав для добавления сотрудника" : undefined}
+                  >
+                    Добавить
+                  </Button>
+                }
+                onSubmitted={(person) => {
+                  setSelectedPerson(person);
+                  list();
+                }}
+              />
+            )}
+          </Can>
         }
       />
       <Card>
