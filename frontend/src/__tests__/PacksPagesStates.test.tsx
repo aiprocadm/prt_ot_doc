@@ -80,11 +80,11 @@ describe("Packs pages operational states", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/package presets отсутствуют/i)).toBeInTheDocument();
+    expect(await screen.findByText(/пресеты пакетов отсутствуют/i)).toBeInTheDocument();
   });
 
   it("shows error state on PackageProfilesPage when API fails", async () => {
-    getMock.mockRejectedValue({ status: 500, message: "profiles load failed" });
+    getMock.mockRejectedValue({ status: 400, message: "profiles load failed" });
 
     render(
       <MemoryRouter>

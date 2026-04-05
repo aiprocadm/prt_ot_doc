@@ -23,7 +23,7 @@ describe("package action states", () => {
 
   it("keeps profile form values and shows error when profile creation fails", async () => {
     getMock.mockResolvedValue({ data: [] });
-    postMock.mockRejectedValueOnce({ status: 500, message: "profile create failed" });
+    postMock.mockRejectedValueOnce({ status: 400, message: "profile create failed" });
 
     render(
       <MemoryRouter>
@@ -53,7 +53,7 @@ describe("package action states", () => {
       }
       throw new Error(`Unexpected GET ${url}`);
     });
-    postMock.mockRejectedValueOnce({ status: 500, message: "preset validate failed" });
+    postMock.mockRejectedValueOnce({ status: 400, message: "preset validate failed" });
 
     render(
       <MemoryRouter>

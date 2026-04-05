@@ -38,7 +38,7 @@ describe("PersonsPage", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: /иван иванов/i }));
 
-    expect(screen.getByRole("tab", { name: "Training" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "PPE" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Обучение" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "СИЗ" })).toBeInTheDocument();
   });
 });

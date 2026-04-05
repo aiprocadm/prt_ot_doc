@@ -55,7 +55,7 @@ describe("SearchPage states", () => {
   });
 
   it("shows api error state for failed search", async () => {
-    fetchSearchMock.mockRejectedValue({ status: 500, message: "Search backend unavailable" });
+    fetchSearchMock.mockRejectedValue({ status: 400, message: "Search backend unavailable" });
 
     render(
       <MemoryRouter initialEntries={["/search?q=risk&type=documents"]}>

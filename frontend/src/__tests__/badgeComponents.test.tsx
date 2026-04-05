@@ -22,7 +22,7 @@ describe("badge components", () => {
     expect(emptyContainer.firstChild).toBeNull();
 
     render(<StatusBadge status="error" />);
-    expect(screen.getByText("error")).toHaveClass("bg-destructive");
+    expect(screen.getByText("Ошибка")).toHaveClass("bg-destructive");
 
     render(<StatusBadge status="queued" />);
     expect(screen.getByText("queued")).toHaveClass("bg-secondary");

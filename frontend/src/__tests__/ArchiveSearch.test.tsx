@@ -47,7 +47,7 @@ describe("ArchiveSearch", () => {
     await waitFor(() => expect(fetchSearchMock).toHaveBeenCalled());
 
     const user = userEvent.setup();
-    await user.type(screen.getByLabelText("status"), "ready");
+    await user.type(screen.getByLabelText("Статус"), "ready");
 
     await waitFor(() => {
       expect(fetchSearchMock).toHaveBeenLastCalledWith(expect.objectContaining({ status: "ready" }));

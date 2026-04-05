@@ -33,7 +33,7 @@ describe("workflow action states", () => {
       }
       throw new Error(`Unexpected GET ${url}`);
     });
-    postMock.mockRejectedValueOnce({ status: 500, message: "create workflow failed" });
+    postMock.mockRejectedValueOnce({ status: 400, message: "create workflow failed" });
 
     render(
       <MemoryRouter>
@@ -76,7 +76,7 @@ describe("workflow action states", () => {
       }
       throw new Error(`Unexpected GET ${url}`);
     });
-    postMock.mockRejectedValueOnce({ status: 500, message: "complete failed" });
+    postMock.mockRejectedValueOnce({ status: 400, message: "complete failed" });
 
     render(
       <MemoryRouter>

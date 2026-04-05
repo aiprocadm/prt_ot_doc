@@ -68,7 +68,7 @@ describe("GeneratePackWizardPage", () => {
   it("retries preset loading without forcing a full page reload", async () => {
     const user = userEvent.setup();
     getMock
-      .mockRejectedValueOnce({ message: "preset load failed", status: 500, code: "preset_load_failed" })
+      .mockRejectedValueOnce({ message: "preset load failed", status: 400, code: "preset_load_failed" })
       .mockResolvedValueOnce({
         data: [{ id: "p-1", code: "P1", name: "Базовый", status: "active" }]
       });
