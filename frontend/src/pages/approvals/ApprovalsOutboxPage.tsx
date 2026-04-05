@@ -146,9 +146,9 @@ const ApprovalsOutboxPage = () => {
                     <TableCell><StatusBadge status={item.status} /></TableCell>
                     <TableCell>{item.attempts}</TableCell>
                     <TableCell>
-                      <div className="text-sm">created: {formatDateTime(item.created_at)}</div>
-                      <div className="text-xs text-muted-foreground">next: {formatDateTime(item.next_attempt_at)}</div>
-                      <div className="text-xs text-muted-foreground">sent: {formatDateTime(item.sent_at)}</div>
+                      <div className="text-sm">создано: {formatDateTime(item.created_at)}</div>
+                      <div className="text-xs text-muted-foreground">следующая попытка: {formatDateTime(item.next_attempt_at)}</div>
+                      <div className="text-xs text-muted-foreground">отправлено: {formatDateTime(item.sent_at)}</div>
                     </TableCell>
                     <TableCell className="text-right">
                       {RETRYABLE_OUTBOX_STATUSES.has(item.status) ? (
@@ -159,7 +159,7 @@ const ApprovalsOutboxPage = () => {
                             onClick={() => void retryDelivery(item.id)}
                             disabled={retryingId === item.id}
                           >
-                            <RotateCcw className="mr-2 h-4 w-4" /> Retry
+                            <RotateCcw className="mr-2 h-4 w-4" /> Повторить
                           </Button>
                         </Can>
                       ) : (
@@ -209,7 +209,7 @@ const ApprovalsOutboxPage = () => {
                             onClick={() => void requeueEvent(item.id)}
                             disabled={retryingId === item.id}
                           >
-                            <RotateCcw className="mr-2 h-4 w-4" /> Requeue
+                            <RotateCcw className="mr-2 h-4 w-4" /> В очередь
                           </Button>
                         </Can>
                       ) : (

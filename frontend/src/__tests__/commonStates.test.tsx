@@ -33,7 +33,7 @@ describe("common states", () => {
 
     expect(screen.getByRole("alert")).toBeInTheDocument();
     expect(screen.getByText("Validation failed")).toBeInTheDocument();
-    expect(screen.getByText(/Correlation ID: corr-123/)).toBeInTheDocument();
+    expect(screen.getByText(/ID корреляции: corr-123/)).toBeInTheDocument();
     expect(screen.getByText(/template_code:/)).toBeInTheDocument();
     expect(screen.getByText(/Required/)).toBeInTheDocument();
 

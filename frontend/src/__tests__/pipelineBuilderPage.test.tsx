@@ -30,7 +30,7 @@ describe("PipelineBuilderPage", () => {
         throw new Error(`Unexpected GET ${url}`);
       }
       if (shouldFail) {
-        return Promise.reject({ status: 500, message: "profiles load failed" });
+        return Promise.reject({ status: 400, message: "profiles load failed" });
       }
       return Promise.resolve({
         data: [
