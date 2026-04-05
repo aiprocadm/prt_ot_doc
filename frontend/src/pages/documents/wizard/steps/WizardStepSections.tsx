@@ -339,7 +339,7 @@ export const ExportStep = ({
   onOpenArtifact,
 }: Pick<SharedProps, "pipelineRun"> & { onOpenArtifact: () => Promise<void> }) => (
   <div className="space-y-3">
-    <p className="text-sm text-muted-foreground">Экспорт доступен после успешного pipeline. Ссылки берутся из artifacts и /v1/files/&lt;id&gt;/download.</p>
+    <p className="text-sm text-muted-foreground">Экспорт доступен после успешного pipeline. Ссылки берутся из artifacts и эндпоинтов `/api/v1/files/...`.</p>
     <Button variant="outline" disabled={!pipelineRun?.artifacts} onClick={() => void onOpenArtifact()}>
       Скачать первый артефакт (ZIP/PDF)
     </Button>

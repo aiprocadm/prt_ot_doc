@@ -70,7 +70,7 @@ export const retryPipelineRun = async (runId: string) => {
 };
 
 export const cancelPipelineRun = async (runId: string) => {
-  await apiClient.post(`/v1/pipelines/runs/${runId}:cancel`);
+  await apiClient.post(`/pipelines/runs/${runId}:cancel`);
   return getPipelineRun(runId);
 };
 
