@@ -41,7 +41,7 @@ const PackagePresetsPage = () => {
       setItems(presets.data);
       setProfiles(profileRows.data);
     } catch (nextError) {
-      setError((nextError as ApiError) ?? { message: "Не удалось загрузить package presets" });
+      setError((nextError as ApiError) ?? { message: "Не удалось загрузить пресеты пакетов" });
     } finally {
       setLoading(false);
     }
@@ -68,7 +68,7 @@ const PackagePresetsPage = () => {
       setName("");
       await load();
     } catch (nextError) {
-      setError((nextError as ApiError) ?? { message: "Не удалось создать package preset" });
+      setError((nextError as ApiError) ?? { message: "Не удалось создать пресет пакета" });
     }
   };
 
@@ -78,36 +78,36 @@ const PackagePresetsPage = () => {
       await apiClient.post(`/package-presets/${id}:validate`);
       await load();
     } catch (nextError) {
-      setError((nextError as ApiError) ?? { message: "Не удалось провалидировать package preset" });
+      setError((nextError as ApiError) ?? { message: "Не удалось проверить пресет пакета" });
     }
   };
 
   return (
     <div className="space-y-4">
-      <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Package presets" }]} />
+      <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Пресеты пакетов" }]} />
       <Card>
         <CardHeader>
-          <CardTitle>Package presets</CardTitle>
+          <CardTitle>Пресеты пакетов</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <ErrorState error={error ?? undefined} onRetry={() => void load()} />
-          {loading ? <LoadingScreen label="Загрузка package presets" /> : null}
+          {loading ? <LoadingScreen label="Загрузка пресетов пакетов" /> : null}
           {!loading ? (
             <div className="flex gap-2">
-              <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="code" />
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="name" />
-              <Button onClick={() => void createPreset()}>Create</Button>
+              <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Код" />
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Название" />
+              <Button onClick={() => void createPreset()}>Создать</Button>
             </div>
           ) : null}
           {!loading && !error && items.length === 0 ? (
-            <EmptyState title="Package presets отсутствуют" description="Создайте первый preset после настройки package profile." />
+            <EmptyState title="Пресеты пакетов отсутствуют" description="Создайте первый пресет после настройки профиля пакета." />
           ) : null}
           {!loading && items.length > 0 ? (
             <ul className="space-y-1 text-sm">
               {items.map((item) => (
                 <li key={item.id} className="flex items-center justify-between gap-2">
                   <span>{item.code} — {item.name} ({item.status})</span>
-                  <Button size="sm" variant="outline" onClick={() => void validatePreset(item.id)}>Validate</Button>
+                  <Button size="sm" variant="outline" onClick={() => void validatePreset(item.id)}>Проверить</Button>
                 </li>
               ))}
             </ul>

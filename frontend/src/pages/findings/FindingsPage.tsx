@@ -18,7 +18,7 @@ const FindingsPage = () => {
   const { data: items, loading, error, reload } = useAsyncResource<FindingDto[]>({
     loader: loadFindings,
     initialData: [],
-    errorMessage: "Не удалось загрузить findings"
+    errorMessage: "Не удалось загрузить замечания"
   });
 
   const registry = useLocalRegistry({
@@ -34,18 +34,18 @@ const FindingsPage = () => {
   return (
     <div className="space-y-4">
       <RegistryPageHeader
-        title="Findings"
-        description="Tenant-aware operational registry backed by backend `/findings`, with real severity/status/source projections, unified registry UX and pagination."
+        title="Замечания и нарушения"
+        description="Операционный реестр по API `/findings`: серьёзность, статус, источник и единый UX с поиском."
       />
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Открытые, подтверждённые и закрытые findings</CardTitle>
+          <CardTitle className="text-base">Открытые, подтверждённые и закрытые замечания</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
-          {loading ? <LoadingScreen label="Загрузка findings" /> : null}
+          {loading ? <LoadingScreen label="Загрузка замечаний" /> : null}
           {!loading && !error && registry.total === 0 ? (
-            <EmptyState title="Findings не найдены" description={registry.query ? "Измените строку поиска." : "В текущем tenant пока нет findings."} />
+            <EmptyState title="Замечаний не найдено" description={registry.query ? "Измените строку поиска." : "В текущем тенанте пока нет записей."} />
           ) : null}
           {!loading && !error && registry.total > 0 ? (
             <RegistryTable

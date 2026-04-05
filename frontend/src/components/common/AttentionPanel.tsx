@@ -76,7 +76,7 @@ export const AttentionPanel = ({ showOuterTitle = true }: AttentionPanelProps) =
     workspaceApi
       .getAttention(20)
       .then(setData)
-      .catch(() => setError("Не удалось загрузить attention center"))
+      .catch(() => setError("Не удалось загрузить центр внимания"))
       .finally(() => setLoading(false));
   }, []);
 

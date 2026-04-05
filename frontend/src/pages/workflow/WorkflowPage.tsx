@@ -148,7 +148,7 @@ const WorkflowPage = () => {
         code: newCode,
         name: "Document approval",
         entity_type: "document",
-        description: "JSON-driven workflow definition",
+        description: "Описание процесса на основе JSON-графа",
         graph: parsedGraph,
         variables_schema: { approved: "boolean", initiator_id: "string", escalation_role: "string" }
       });
@@ -166,14 +166,14 @@ const WorkflowPage = () => {
     try {
       const response = await apiClient.post("/workflow/definitions/validate", {
         code: newCode,
-        name: "Validation",
+        name: "Проверка",
         entity_type: "document",
         graph: parsedGraph,
         variables_schema: {}
       });
-      setValidation(`OK · узлы: ${(response.data.node_types ?? []).join(", ")}`);
+      setValidation(`Граф валиден · типы узлов: ${(response.data.node_types ?? []).join(", ")}`);
     } catch (nextError) {
-      setValidation((nextError as ApiError)?.message ?? "Не удалось провалидировать workflow graph");
+      setValidation((nextError as ApiError)?.message ?? "Не удалось проверить граф процесса");
     }
   };
 
@@ -183,7 +183,7 @@ const WorkflowPage = () => {
       await apiClient.post(`/workflow/versions/${versionId}/publish`);
       await load();
     } catch (nextError) {
-      setActionError(nextError, "Не удалось опубликовать workflow version");
+      setActionError(nextError, "Не удалось опубликовать версию процесса");
     }
   };
 
@@ -193,7 +193,7 @@ const WorkflowPage = () => {
       await apiClient.post(`/workflow/versions/${versionId}/archive`);
       await load();
     } catch (nextError) {
-      setActionError(nextError, "Не удалось архивировать workflow version");
+      setActionError(nextError, "Не удалось отправить версию в архив");
     }
   };
 
@@ -209,7 +209,7 @@ const WorkflowPage = () => {
       setSelectedInstance(response.data);
       await load();
     } catch (nextError) {
-      setActionError(nextError, "Не удалось запустить workflow instance");
+      setActionError(nextError, "Не удалось запустить экземпляр процесса");
     }
   };
 
@@ -219,7 +219,7 @@ const WorkflowPage = () => {
       const response = await apiClient.get<WorkflowInstance>(`/workflow/instances/${instanceId}`);
       setSelectedInstance(response.data);
     } catch (nextError) {
-      setActionError(nextError, "Не удалось загрузить workflow instance");
+      setActionError(nextError, "Не удалось загрузить экземпляр процесса");
     }
   };
 
@@ -229,7 +229,7 @@ const WorkflowPage = () => {
       await apiClient.post(`/workflow/tasks/${taskId}/complete`, { decision: "approve", payload: { approved: true } });
       await load();
     } catch (nextError) {
-      setActionError(nextError, "Не удалось завершить workflow task");
+      setActionError(nextError, "Не удалось завершить задачу процесса");
     }
   };
 
@@ -242,29 +242,29 @@ const WorkflowPage = () => {
       });
       await load();
     } catch (nextError) {
-      setActionError(nextError, `Не удалось выполнить действие ${mode} для workflow task`);
+      setActionError(nextError, `Не удалось выполнить действие «${mode}» для задачи процесса`);
     }
   };
 
   return (
     <div className="space-y-6">
-      <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Workflow" }]} />
+      <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Процессы (workflow)" }]} />
       <ErrorState error={error ?? undefined} onRetry={() => void load()} />
-      {loading ? <LoadingScreen label="Загрузка workflow данных" /> : null}
+      {loading ? <LoadingScreen label="Загрузка данных процессов" /> : null}
       {!loading && !error && !hasOperationalData ? (
-        <EmptyState title="Workflow данные отсутствуют" description="Определения, инстансы и задачи появятся после создания и запуска первого процесса." />
+        <EmptyState title="Нет данных по процессам" description="Определения, экземпляры и задачи появятся после создания и запуска первого процесса." />
       ) : null}
       <Card>
-        <CardHeader><CardTitle>Workflow / BPM engine v1</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Движок процессов (BPM) v1</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           <div className="grid gap-3 xl:grid-cols-[0.5fr,1fr]">
             <Input value={newCode} onChange={(event) => setNewCode(event.target.value)} placeholder="Код процесса" />
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={() => void validateGraph()}>Validate graph</Button>
+              <Button variant="outline" onClick={() => void validateGraph()}>Проверить граф</Button>
               <Can permission={PERMISSIONS.WORKFLOW_MANAGE}>
-                <Button onClick={() => void createProcess()}>Create draft</Button>
+                <Button onClick={() => void createProcess()}>Создать черновик</Button>
               </Can>
-              <Button variant="outline" onClick={() => void load()}>Refresh</Button>
+              <Button variant="outline" onClick={() => void load()}>Обновить</Button>
             </div>
           </div>
           <Textarea value={graphText} onChange={(event) => setGraphText(event.target.value)} rows={14} />
@@ -276,13 +276,13 @@ const WorkflowPage = () => {
         <Card>
           <CardHeader><CardTitle>Процессы и версии</CardTitle></CardHeader>
           <CardContent className="space-y-4">
-            {!loading && !error && definitions.length === 0 ? <EmptyState title="Workflow definitions отсутствуют" description="Создайте draft process, чтобы опубликовать первую workflow схему." /> : null}
+            {!loading && !error && definitions.length === 0 ? <EmptyState title="Нет описаний процессов" description="Создайте черновик процесса, чтобы опубликовать первую схему." /> : null}
             {definitions.map((definition) => (
               <div key={definition.id} className="rounded-lg border p-4 space-y-3">
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <div className="font-medium">{definition.name}</div>
-                    <div className="text-sm text-muted-foreground">{definition.code} · entity: {definition.entity_type}</div>
+                    <div className="text-sm text-muted-foreground">{definition.code} · сущность: {definition.entity_type}</div>
                   </div>
                   <Can permission={PERMISSIONS.WORKFLOW_MANAGE}>
                     <Button size="sm" onClick={() => void start(definition.code)}>Запустить</Button>
@@ -296,12 +296,12 @@ const WorkflowPage = () => {
                         <span className="text-xs uppercase text-muted-foreground">{version.status}</span>
                         {version.status !== "published" ? (
                           <Can permission={PERMISSIONS.WORKFLOW_MANAGE}>
-                            <Button size="sm" variant="outline" onClick={() => void publish(version.id)}>Publish</Button>
+                            <Button size="sm" variant="outline" onClick={() => void publish(version.id)}>Опубликовать</Button>
                           </Can>
                         ) : null}
                         {version.status !== "archived" ? (
                           <Can permission={PERMISSIONS.WORKFLOW_MANAGE}>
-                            <Button size="sm" variant="ghost" onClick={() => void archive(version.id)}>Archive</Button>
+                            <Button size="sm" variant="ghost" onClick={() => void archive(version.id)}>В архив</Button>
                           </Can>
                         ) : null}
                       </div>
@@ -329,18 +329,18 @@ const WorkflowPage = () => {
 
         <div className="space-y-6">
           <Card>
-            <CardHeader><CardTitle>Workflow instances</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Экземпляры процессов</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              {!loading && !error && instances.length === 0 ? <EmptyState title="Workflow instances отсутствуют" description="После запуска процесса здесь появятся активные и завершённые инстансы." /> : null}
+              {!loading && !error && instances.length === 0 ? <EmptyState title="Нет экземпляров процессов" description="После запуска здесь появятся активные и завершённые экземпляры." /> : null}
               {instances.map((instance) => (
                 <div key={instance.id} className="rounded border p-3">
                   <div className="flex items-center justify-between gap-2">
                     <div>
                       <div className="font-medium">{instance.entity_type} · {instance.entity_id}</div>
-                      <div className="text-xs text-muted-foreground">node: {instance.current_node_id ?? "—"} · tasks: {instance.open_tasks} · status: {instance.status}</div>
-                      <div className="text-xs text-muted-foreground">correlation: {instance.correlation_id ?? "—"}</div>
+                      <div className="text-xs text-muted-foreground">узел: {instance.current_node_id ?? "—"} · задач: {instance.open_tasks} · статус: {instance.status}</div>
+                      <div className="text-xs text-muted-foreground">корреляция: {instance.correlation_id ?? "—"}</div>
                     </div>
-                    <Button size="sm" variant="outline" onClick={() => void openInstance(instance.id)}>Open</Button>
+                    <Button size="sm" variant="outline" onClick={() => void openInstance(instance.id)}>Открыть</Button>
                   </div>
                 </div>
               ))}
@@ -348,28 +348,28 @@ const WorkflowPage = () => {
           </Card>
 
           <Card>
-            <CardHeader><CardTitle>Workflow tasks</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Задачи процесса</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               <div className="grid gap-2 md:grid-cols-2">
-                <Input placeholder="Reassign user id" value={reassignUserId} onChange={(event) => setReassignUserId(event.target.value)} />
-                <Input placeholder="Role code" value={reassignRole} onChange={(event) => setReassignRole(event.target.value)} />
+                <Input placeholder="ID пользователя для переназначения" value={reassignUserId} onChange={(event) => setReassignUserId(event.target.value)} />
+                <Input placeholder="Код роли" value={reassignRole} onChange={(event) => setReassignRole(event.target.value)} />
               </div>
-              {!loading && !error && tasks.length === 0 ? <EmptyState title="Workflow tasks отсутствуют" description="Когда процесс дойдёт до task nodes, здесь появятся активные поручения." /> : null}
+              {!loading && !error && tasks.length === 0 ? <EmptyState title="Нет задач процесса" description="Когда процесс дойдёт до узлов-задач, здесь появятся активные поручения." /> : null}
               {tasks.map((task) => (
                 <div key={task.id} className="rounded border p-3">
                   <div className="font-medium">{task.title}</div>
                   <div className="text-sm text-muted-foreground">{task.node_id} · {task.status}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">Assignee: {task.assignee_user_id ?? task.assignee_role_code ?? "unassigned"}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">SLA: {task.due_at ? new Date(task.due_at).toLocaleString() : "—"}</div>
-                  {task.task_payload ? <div className="mt-1 text-xs text-muted-foreground">Payload: {JSON.stringify(task.task_payload)}</div> : null}
+                  <div className="mt-1 text-xs text-muted-foreground">Исполнитель: {task.assignee_user_id ?? task.assignee_role_code ?? "не назначен"}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">Срок (SLA): {task.due_at ? new Date(task.due_at).toLocaleString() : "—"}</div>
+                  {task.task_payload ? <div className="mt-1 text-xs text-muted-foreground">Данные: {JSON.stringify(task.task_payload)}</div> : null}
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Can permission={PERMISSIONS.WORKFLOW_MANAGE}>
-                      <Button size="sm" onClick={() => void completeTask(task.id)}>Complete</Button>
-                      <Button size="sm" variant="outline" onClick={() => void moveTask(task.id, "reassign")}>Reassign</Button>
-                      <Button size="sm" variant="outline" onClick={() => void moveTask(task.id, "delegate")}>Delegate</Button>
-                      <Button size="sm" variant="outline" onClick={() => void moveTask(task.id, "escalate")}>Escalate</Button>
+                      <Button size="sm" onClick={() => void completeTask(task.id)}>Завершить</Button>
+                      <Button size="sm" variant="outline" onClick={() => void moveTask(task.id, "reassign")}>Переназначить</Button>
+                      <Button size="sm" variant="outline" onClick={() => void moveTask(task.id, "delegate")}>Делегировать</Button>
+                      <Button size="sm" variant="outline" onClick={() => void moveTask(task.id, "escalate")}>Эскалировать</Button>
                     </Can>
-                    <Button size="sm" variant="outline" onClick={() => void openInstance(task.instance_id)}>Timeline</Button>
+                    <Button size="sm" variant="outline" onClick={() => void openInstance(task.instance_id)}>Хронология</Button>
                   </div>
                 </div>
               ))}
@@ -377,19 +377,19 @@ const WorkflowPage = () => {
           </Card>
 
           <Card>
-            <CardHeader><CardTitle>Instance timeline</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Хронология экземпляра</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               {selectedInstance ? (
                 <>
-                  <div className="text-sm">Entity: {selectedInstance.entity_type} / {selectedInstance.entity_id}</div>
-                  <div className="text-sm">Status: {selectedInstance.status}</div>
-                  <div className="text-sm">Correlation: {selectedInstance.correlation_id ?? "—"}</div>
-                  <div className="rounded border bg-muted/30 p-3 text-xs">Context: {JSON.stringify(selectedInstance.context_json ?? {}, null, 2)}</div>
-                  {selectedInstance.current_node_id ? <div className="rounded border bg-muted/30 p-3 text-sm">Current node: <span className="font-medium">{selectedInstance.current_node_id}</span></div> : null}
+                  <div className="text-sm">Сущность: {selectedInstance.entity_type} / {selectedInstance.entity_id}</div>
+                  <div className="text-sm">Статус: {selectedInstance.status}</div>
+                  <div className="text-sm">Корреляция: {selectedInstance.correlation_id ?? "—"}</div>
+                  <div className="rounded border bg-muted/30 p-3 text-xs">Контекст: {JSON.stringify(selectedInstance.context_json ?? {}, null, 2)}</div>
+                  {selectedInstance.current_node_id ? <div className="rounded border bg-muted/30 p-3 text-sm">Текущий узел: <span className="font-medium">{selectedInstance.current_node_id}</span></div> : null}
                   {(selectedInstance.timeline ?? []).map((event) => (
                     <div key={event.id} className="rounded border-l-2 border-primary pl-3 py-2">
                       <div className="text-sm font-medium">{event.event_type}</div>
-                      <div className="text-xs text-muted-foreground">{event.node_id ?? "system"} · {new Date(event.created_at).toLocaleString()}</div>
+                      <div className="text-xs text-muted-foreground">{event.node_id ?? "система"} · {new Date(event.created_at).toLocaleString()}</div>
                       {Object.keys(event.payload ?? {}).length ? <div className="text-xs text-muted-foreground">{JSON.stringify(event.payload)}</div> : null}
                     </div>
                   ))}

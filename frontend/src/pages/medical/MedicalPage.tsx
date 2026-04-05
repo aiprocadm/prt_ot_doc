@@ -29,7 +29,7 @@ const MedicalPage = () => {
         stats={[
           { label: "Медосмотров", value: data.exams.length },
           { label: "Просрочено", value: data.exams.filter((item) => new Date(item.valid_until) < new Date()).length },
-          { label: "Medical tasks", value: data.tasks.length }
+          { label: "Задач по медосмотрам", value: data.tasks.length }
         ]}
       />
       <ErrorState error={error ?? undefined} onRetry={() => void reload()} />

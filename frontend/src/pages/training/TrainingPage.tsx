@@ -115,7 +115,7 @@ const TrainingPage = () => {
         </TabsList>
         {canManageTraining ? (
           <TabsContent value="teacher" className="space-y-4">
-            {teacherError ? <EmptyState title="Training API" description={teacherError} /> : null}
+            {teacherError ? <EmptyState title="Модуль обучения" description={teacherError} /> : null}
             <div className="grid gap-4 md:grid-cols-3">
               <StatCard title={t("training.groups")} value={teacher?.groups_total ?? 0} />
               <StatCard title={t("training.enrollments")} value={teacher?.enrollments_total ?? 0} />
@@ -200,7 +200,7 @@ const TrainingPage = () => {
               <CardContent className="text-sm">{learner.next_due_at}</CardContent>
             </Card>
           ) : null}
-          {learnerError ? <EmptyState title="Training API" description={learnerError} /> : null}
+          {learnerError ? <EmptyState title="Модуль обучения" description={learnerError} /> : null}
         </TabsContent>
         ) : null}
       </Tabs>

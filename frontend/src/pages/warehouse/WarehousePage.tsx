@@ -80,7 +80,7 @@ const WarehousePage = () => {
     <div className="space-y-4">
       <RegistryPageHeader
         title="Склад СИЗ"
-        description="Остатки каталога СИЗ и истекающие выдачи по текущему тенанту на основе реальных PPE API."
+        description="Остатки каталога СИЗ и истекающие выдачи по текущему тенанту (данные API СИЗ)."
         actions={<Badge variant="secondary">Истекающих выдач: {expiring.length}</Badge>}
       />
       <div className="grid gap-4 md:grid-cols-3">

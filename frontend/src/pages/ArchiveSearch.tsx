@@ -12,6 +12,12 @@ import { ErrorState } from "@/components/common/ErrorState";
 import { SavedViewsBar } from "@/components/common/SavedViewsBar";
 import type { ApiError } from "@/types/dto/common";
 
+const sortLabels: Record<string, string> = {
+  relevance: "релевантность",
+  updated_at: "дата обновления",
+  date: "дата"
+};
+
 const tabs: { label: string; value: SearchType | "all" }[] = [
   { label: "Все", value: "all" },
   { label: "Документы", value: "documents" },
@@ -114,14 +120,14 @@ const ArchiveSearch = () => {
           </Button>
         ))}
         <Button variant="outline" size="sm" onClick={() => patchParams({ sort: sort === "relevance" ? "updated_at" : "relevance" })}>
-          Сортировка: {sort}
+          Сортировка: {sortLabels[sort] ?? sort}
         </Button>
       </div>
       <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
-        <Input aria-label="site_id" value={siteId} onChange={(e) => patchParams({ site_id: e.target.value })} placeholder="site_id" />
-        <Input aria-label="project_id" value={projectId} onChange={(e) => patchParams({ project_id: e.target.value })} placeholder="project_id" />
-        <Input aria-label="contractor_id" value={contractorId} onChange={(e) => patchParams({ contractor_id: e.target.value })} placeholder="contractor_id" />
-        <Input aria-label="status" value={status} onChange={(e) => patchParams({ status: e.target.value })} placeholder="status" />
+        <Input aria-label="ID площадки" value={siteId} onChange={(e) => patchParams({ site_id: e.target.value })} placeholder="ID площадки (site_id)" />
+        <Input aria-label="ID проекта" value={projectId} onChange={(e) => patchParams({ project_id: e.target.value })} placeholder="ID проекта (project_id)" />
+        <Input aria-label="ID подрядчика" value={contractorId} onChange={(e) => patchParams({ contractor_id: e.target.value })} placeholder="ID подрядчика (contractor_id)" />
+        <Input aria-label="Статус" value={status} onChange={(e) => patchParams({ status: e.target.value })} placeholder="Статус" />
       </div>
       <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
         {Object.entries(facets.type_counts ?? {}).map(([k, v]) => <span key={`t-${k}`}>{k}: {v}</span>)}

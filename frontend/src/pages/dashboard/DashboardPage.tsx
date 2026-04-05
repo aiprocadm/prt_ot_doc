@@ -23,7 +23,7 @@ import { formatDate } from "@/utils/datetime";
 import { entityContextPath, taskInboxLink } from "@/utils/workspaceNavigation";
 
 const trainingStatusLabels: Record<string, string> = {
-  ok: "OK",
+  ok: "В норме",
   warning: "Нужны действия",
   critical: "Критично"
 };
@@ -307,7 +307,7 @@ export const DashboardPage = () => {
                   {taskInboxLoading ? (
                     <TableRow>
                       <TableCell colSpan={7}>
-                        <LoadingScreen label="Загрузка task inbox" />
+                        <LoadingScreen label="Загрузка входящих задач" />
                       </TableCell>
                     </TableRow>
                   ) : filteredTaskInbox.length ? filteredTaskInbox.map((task) => (
@@ -344,7 +344,7 @@ export const DashboardPage = () => {
                       <TableCell colSpan={7}>
                         <EmptyState
                           title="Под выбранные фильтры задач нет"
-                          description="Измените фильтры triage или дождитесь новых задач в workspace inbox."
+                          description="Измените фильтры приоритизации или дождитесь новых задач во входящих."
                         />
                       </TableCell>
                     </TableRow>
@@ -375,7 +375,7 @@ export const DashboardPage = () => {
                   {operationalLoading ? (
                     <TableRow>
                       <TableCell colSpan={5}>
-                        <LoadingScreen label="Загрузка document pipeline snapshot" />
+                        <LoadingScreen label="Загрузка сводки по документам и маршрутам" />
                       </TableCell>
                     </TableRow>
                   ) : operational?.documents.length ? operational.documents.map((doc) => (
@@ -395,7 +395,7 @@ export const DashboardPage = () => {
                       <TableCell colSpan={5}>
                         <EmptyState
                           title="Запусков нет"
-                          description="Последние document pipeline runs пока отсутствуют."
+                          description="Последние запуски конвейера документов пока отсутствуют."
                         />
                       </TableCell>
                     </TableRow>

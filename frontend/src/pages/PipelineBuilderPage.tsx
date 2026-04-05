@@ -46,7 +46,7 @@ const PipelineBuilderPage = () => {
   const [profilesLoading, setProfilesLoading] = useState(true);
   const [profilesError, setProfilesError] = useState<ApiError | null>(null);
   const [code, setCode] = useState("doc-default");
-  const [name, setName] = useState("Default pipeline");
+  const [name, setName] = useState("Профиль по умолчанию");
   const [graph, setGraph] = useState<{ nodes: GraphNode[]; edges: GraphEdge[] }>(defaultGraph);
   const [selectedNodeId, setSelectedNodeId] = useState(defaultGraph.nodes[0]?.id ?? "");
   const [configText, setConfigText] = useState(JSON.stringify(defaultGraph.nodes[0]?.config ?? {}, null, 2));
@@ -155,11 +155,11 @@ const PipelineBuilderPage = () => {
 
   return (
     <section className="space-y-4">
-      <h1 className="text-xl font-semibold">Low-code Process Builder</h1>
+      <h1 className="text-xl font-semibold">Конструктор процессов (low-code)</h1>
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2 rounded border p-3 text-sm">
-          <input className="w-full rounded border px-2 py-1" value={code} onChange={(e) => setCode(e.target.value)} placeholder="Code" />
-          <input className="w-full rounded border px-2 py-1" value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" />
+          <input className="w-full rounded border px-2 py-1" value={code} onChange={(e) => setCode(e.target.value)} placeholder="Код профиля" />
+          <input className="w-full rounded border px-2 py-1" value={name} onChange={(e) => setName(e.target.value)} placeholder="Название" />
           <div className="space-y-2 rounded border p-2">
             <div className="flex flex-wrap gap-2">
               <button className="rounded border px-2 py-1" onClick={addNode}>+ Нода</button>
@@ -167,7 +167,7 @@ const PipelineBuilderPage = () => {
             </div>
             <div className="grid gap-3 lg:grid-cols-[1.3fr_1fr]">
               <div className="space-y-2">
-                <div className="text-xs font-medium text-muted-foreground">Canvas (nodes + links)</div>
+                <div className="text-xs font-medium text-muted-foreground">Холст (узлы и связи)</div>
                 <div className="max-h-52 space-y-2 overflow-auto rounded border p-2">
                   {parsedGraph.nodes.map((node, nodeIdx) => (
                     <button
@@ -181,7 +181,7 @@ const PipelineBuilderPage = () => {
                     </button>
                   ))}
                 </div>
-                <div className="text-xs font-medium text-muted-foreground">Edges</div>
+                <div className="text-xs font-medium text-muted-foreground">Рёбра графа</div>
                 <div className="max-h-52 space-y-2 overflow-auto rounded border p-2">
                   {parsedGraph.edges.map((edge, idx) => (
                     <div key={`${edge.from}-${edge.to}-${idx}`} className="space-y-1 rounded border p-2">
@@ -193,14 +193,14 @@ const PipelineBuilderPage = () => {
                           {parsedGraph.nodes.map((node, nodeIdx) => <option key={`${idx}-to-${node.id}-${nodeIdx}`}>{node.id}</option>)}
                         </select>
                       </div>
-                      <input className="w-full rounded border px-1 py-0.5" value={edge.condition ?? ""} onChange={(e) => updateEdge(idx, { condition: e.target.value || undefined })} placeholder="condition (optional)" />
+                      <input className="w-full rounded border px-1 py-0.5" value={edge.condition ?? ""} onChange={(e) => updateEdge(idx, { condition: e.target.value || undefined })} placeholder="Условие (необязательно)" />
                       <button className="rounded border px-2 py-0.5" onClick={() => removeEdge(idx)}>Удалить ребро</button>
                     </div>
                   ))}
                 </div>
               </div>
               <div className="space-y-2 rounded border p-2">
-                <div className="text-xs font-medium text-muted-foreground">Node inspector</div>
+                <div className="text-xs font-medium text-muted-foreground">Свойства узла</div>
                 {selectedNode ? (
                   <>
                     <input className="w-full rounded border px-2 py-1" value={selectedNode.id} onChange={(e) => updateNode(selectedNode.id, { id: e.target.value })} />
@@ -226,7 +226,7 @@ const PipelineBuilderPage = () => {
               </div>
             </div>
             <details>
-              <summary className="cursor-pointer text-xs text-muted-foreground">JSON preview</summary>
+              <summary className="cursor-pointer text-xs text-muted-foreground">Предпросмотр JSON</summary>
               <pre className="mt-2 max-h-48 overflow-auto rounded border bg-muted/30 p-2 text-[11px]">{JSON.stringify(parsedGraph, null, 2)}</pre>
             </details>
           </div>
@@ -237,7 +237,7 @@ const PipelineBuilderPage = () => {
         <div className="rounded border p-3 text-sm">
           <h2 className="mb-2 font-medium">Профили</h2>
           <ErrorState error={profilesError ?? undefined} onRetry={() => void load()} />
-          {profilesLoading ? <LoadingScreen label="Загрузка pipeline profiles" /> : null}
+          {profilesLoading ? <LoadingScreen label="Загрузка профилей пайплайна" /> : null}
           {!profilesLoading && !profilesError && profiles.length === 0 ? (
             <EmptyState
               title="Профили пайплайна не найдены"
@@ -250,7 +250,7 @@ const PipelineBuilderPage = () => {
                 <div key={profile.id} className="rounded border p-2">
                   <div className="font-medium">{profile.code}</div>
                   <div className="text-xs text-muted-foreground">v{profile.profile_version} · {profile.name}</div>
-                  <div className="text-xs">nodes: {profile.graph?.nodes?.length ?? 0}, edges: {profile.graph?.edges?.length ?? 0}</div>
+                  <div className="text-xs">узлов: {profile.graph?.nodes?.length ?? 0}, рёбер: {profile.graph?.edges?.length ?? 0}</div>
                 </div>
               ))}
             </div>

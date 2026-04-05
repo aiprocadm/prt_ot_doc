@@ -48,8 +48,8 @@ type SharedProps = Pick<
 
 export const PresetStep = ({ preset, setPartial }: Pick<SharedProps, "preset" | "setPartial">) => (
   <div className="space-y-2">
-    <Label>Preset / project</Label>
-    <Input value={preset} onChange={(e) => setPartial({ preset: e.target.value })} placeholder="manual / outbound_mvp / ..." />
+    <Label>Пресет / проект</Label>
+    <Input value={preset} onChange={(e) => setPartial({ preset: e.target.value })} placeholder="manual, outbound_mvp, …" />
   </div>
 );
 
@@ -76,7 +76,7 @@ export const MappingStep = ({ sourceColumns, mapping, setPartial }: Pick<SharedP
         <div key={column} className="space-y-1">
           <Label>{column}</Label>
           <Input
-            placeholder="target_field"
+            placeholder="целевое_поле"
             value={mapping[column] ?? ""}
             onChange={(event) =>
               setPartial({
@@ -96,11 +96,11 @@ export const MappingStep = ({ sourceColumns, mapping, setPartial }: Pick<SharedP
 export const TemplateStep = ({ templateCode, templateVersion, setPartial }: Pick<SharedProps, "templateCode" | "templateVersion" | "setPartial">) => (
   <div className="grid gap-3 md:grid-cols-2">
     <div className="space-y-2">
-      <Label>Template code</Label>
+      <Label>Код шаблона</Label>
       <Input value={templateCode} onChange={(e) => setPartial({ templateCode: e.target.value })} placeholder="outbound_cover" />
     </div>
     <div className="space-y-2">
-      <Label>Version</Label>
+      <Label>Версия</Label>
       <Input type="number" min={1} value={templateVersion} onChange={(e) => setPartial({ templateVersion: Number(e.target.value) })} />
     </div>
   </div>
@@ -171,15 +171,15 @@ export const BrandingStep = ({
     </div>
     <div className="flex flex-wrap gap-2">
       <Button variant="outline" disabled={!canCallApi || !companyId} onClick={() => void onBuildPreview()}>
-        Собрать branded preview
+        Собрать превью с брендингом
       </Button>
       <Button asChild variant="ghost">
-        <Link to="/documents/branding">Открыть branding settings</Link>
+        <Link to="/documents/branding">Открыть настройки брендинга</Link>
       </Button>
     </div>
     <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
       <div className="rounded-lg border bg-muted/20 p-4 text-sm">
-        <div className="font-medium">Preview header/footer</div>
+        <div className="font-medium">Превью колонтитулов</div>
         <div className="mt-3 grid gap-3 md:grid-cols-2">
           {previewSectionCards.map((section) => (
             <div key={section.key} className="rounded-md border bg-background p-3">
@@ -191,18 +191,18 @@ export const BrandingStep = ({
       </div>
       <div className="space-y-3 rounded-lg border bg-muted/20 p-4 text-sm">
         <div>
-          <div className="font-medium">Reproducibility snapshot</div>
+          <div className="font-medium">Снимок воспроизводимости</div>
           <pre className="mt-2 overflow-x-auto rounded-md border bg-background p-3 text-xs">{JSON.stringify(brandingPreview?.profile.reproducibility ?? {}, null, 2)}</pre>
         </div>
         <div className="rounded-md border bg-background p-3">
-          <div className="font-medium">Resolution / preset source</div>
+          <div className="font-medium">Разрешение / источник пресета</div>
           <div className="mt-2">preset={(brandingPreview?.preset_code ?? headerPreset) || "auto"}</div>
           <div>scope={brandingPreview?.profile.scope ?? brandingProfileScope}</div>
           <div>source={brandingPreview?.profile.resolution?.effective_preset_source ?? "—"}</div>
           <div>scope_chain={(brandingPreview?.profile.resolution?.scope_chain ?? []).join(" > ") || "—"}</div>
         </div>
         <div>
-          <div className="font-medium">Recent preview history</div>
+          <div className="font-medium">Недавняя история превью</div>
           <div className="mt-2 space-y-2">
             {brandingPreviewHistory.length === 0 ? (
               <div className="text-muted-foreground">История появится после preview.</div>
@@ -236,7 +236,7 @@ export const ReplaceStep = ({
   <div className="space-y-3">
     <div className="grid gap-3 md:grid-cols-2">
       <div className="space-y-2">
-        <Label>DOCX для dry-run replace</Label>
+        <Label>DOCX для пробной замены</Label>
         <Input type="file" accept=".docx" onChange={(event) => setDocxFile(event.target.files?.[0] ?? null)} />
       </div>
       <div className="space-y-2">
@@ -268,11 +268,11 @@ export const RunStep = ({
   <div className="space-y-3">
     <div className="grid gap-3 md:grid-cols-2">
       <div className="space-y-2">
-        <Label>Company ID</Label>
+        <Label>ID организации</Label>
         <Input value={companyId} onChange={(e) => setPartial({ companyId: e.target.value })} placeholder="UUID компании" />
       </div>
       <div className="space-y-2">
-        <Label>Idempotency-Key</Label>
+        <Label>Ключ идемпотентности</Label>
         <Input value={idempotencyKey} onChange={(e) => setPartial({ idempotencyKey: e.target.value })} />
       </div>
     </div>
@@ -281,7 +281,7 @@ export const RunStep = ({
         Запустить batch по строкам
       </Button>
       <Button variant="outline" disabled={!canCallApi || !templateCode || !companyId} onClick={() => void onRunSinglePipeline()}>
-        Запустить single pipeline
+        Запустить одиночный пайплайн
       </Button>
     </div>
     {pipelineRun ? <WizardJobTimeline steps={pipelineRun.step_runs} /> : null}
@@ -300,9 +300,9 @@ export const BatchResultStep = ({
     <div className="flex items-center gap-2">
       <Label>Фильтр строк:</Label>
       <select className="h-9 rounded border bg-background px-2 text-sm" value={rowStatusFilter} onChange={(e) => setPartial({ rowStatusFilter: e.target.value as "all" | "success" | "failed" })}>
-        <option value="all">all</option>
-        <option value="success">success</option>
-        <option value="failed">failed</option>
+        <option value="all">все</option>
+        <option value="success">успех</option>
+        <option value="failed">ошибка</option>
       </select>
     </div>
     {batch ? (
@@ -310,8 +310,8 @@ export const BatchResultStep = ({
         <TableHeader>
           <TableRow>
             <TableHead>#</TableHead>
-            <TableHead>status</TableHead>
-            <TableHead>error</TableHead>
+            <TableHead>статус</TableHead>
+            <TableHead>ошибка</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>

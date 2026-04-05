@@ -58,7 +58,7 @@ const PackRunDetailsPage = () => {
   };
 
   if (loading) {
-    return <LoadingScreen label="Загрузка pack run" />;
+    return <LoadingScreen label="Загрузка запуска пакета" />;
   }
 
   return (
@@ -66,14 +66,14 @@ const PackRunDetailsPage = () => {
       <ErrorState error={error ?? undefined} onRetry={() => void load()} />
       <Card>
         <CardHeader>
-          <CardTitle>Pack run items</CardTitle>
+          <CardTitle>Строки запуска пакета</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
-          <Button variant="outline" onClick={() => void retryFailed()}>Retry failed</Button>
+          <Button variant="outline" onClick={() => void retryFailed()}>Повторить сбойные</Button>
           {items.length === 0 ? (
             <EmptyState
-              title="Элементы pack run отсутствуют"
-              description="Для этого запуска ещё нет строк или они недоступны в текущем tenant scope."
+              title="Строк запуска пакета нет"
+              description="Для этого запуска ещё нет строк или они недоступны в текущей области тенанта."
             />
           ) : (
             items.map((item) => (
@@ -84,12 +84,12 @@ const PackRunDetailsPage = () => {
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle>Timeline</CardTitle>
+          <CardTitle>Хронология</CardTitle>
         </CardHeader>
         <CardContent className="space-y-1 text-sm">
           {timeline.length === 0 ? (
             <EmptyState
-              title="Timeline пуст"
+              title="Хронология пуста"
               description="События выполнения появятся после старта или повторного запуска обработки."
             />
           ) : (

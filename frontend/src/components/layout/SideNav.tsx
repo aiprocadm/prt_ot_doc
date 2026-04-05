@@ -41,7 +41,7 @@ const navGroups = [
       { label: "Шаблоны", to: "/templates", icon: FileArchive, permission: PERMISSIONS.TEMPLATE_VIEW },
       { label: "Пакеты", to: "/packs", icon: Package, permission: PERMISSIONS.PACK_VIEW },
       { label: "Генерация", to: "/generation", icon: ClipboardCheck, permission: PERMISSIONS.DOCUMENT_CREATE },
-      { label: "Пайплайны / Jobs", to: "/pipelines/runs", icon: Archive, permission: PERMISSIONS.DOCUMENT_VIEW },
+      { label: "Пайплайны и задания", to: "/pipelines/runs", icon: Archive, permission: PERMISSIONS.DOCUMENT_VIEW },
       { label: "Архив", to: "/archive", icon: FileArchive, permission: PERMISSIONS.FILE_VIEW },
       { label: "Поиск", to: "/search", icon: Search, permission: PERMISSIONS.FILE_VIEW },
       { label: "Центр внимания", to: "/workspace/attention", icon: AlertTriangle, permission: PERMISSIONS.DASHBOARD_VIEW },
@@ -107,7 +107,7 @@ const navGroups = [
     items: [
       { label: "Тенанты и роли", to: "/admin", icon: Wrench, permission: PERMISSIONS.ADMIN_MANAGE_ROLES },
       { label: "Биллинг", to: "/admin/billing", icon: Briefcase, permission: PERMISSIONS.ADMIN_MANAGE_ROLES },
-      { label: "Outbox", to: "/admin/outbox", icon: Archive, permission: PERMISSIONS.ADMIN_MANAGE_ROLES },
+      { label: "Исходящая очередь", to: "/admin/outbox", icon: Archive, permission: PERMISSIONS.ADMIN_MANAGE_ROLES },
       { label: "Журнал аудита", to: "/audit", icon: History, permission: PERMISSIONS.AUDIT_VIEW },
       { label: "Настройки", to: "/settings", icon: Settings, permission: PERMISSIONS.SETTINGS_VIEW },
       { label: "Синхронизация (offline)", to: "/help/sync-conflicts", icon: History, permission: PERMISSIONS.SETTINGS_VIEW }

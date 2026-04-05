@@ -13,19 +13,19 @@ const SettingsPage = () => {
   const { data, loading, error, reload } = useAsyncResource({
     loader: useCallback(() => operationsApi.getSettingsSnapshot(), []),
     initialData: { tenancy: { tenant: { id: "", slug: "" } }, notifications: {}, apiTokens: [] },
-    errorMessage: "Не удалось загрузить настройки tenant"
+    errorMessage: "Не удалось загрузить настройки тенанта"
   });
 
   return (
     <div className="space-y-4">
       <RegistryPageHeader
-        title="Настройки tenant"
-        description="Раздел больше не является заглушкой: он подтягивает tenant context, notification settings и API tokens."
+        title="Настройки тенанта"
+        description="Контекст тенанта, параметры уведомлений и API-токены."
         actions={<Button asChild variant="outline"><Link to="/admin">Администрирование</Link></Button>}
         stats={[
-          { label: "Tenant", value: data.tenancy.tenant.slug || "—" },
-          { label: "API токены", value: data.apiTokens.length },
-          { label: "Correlation ID", value: data.tenancy.correlation_id || "—" }
+          { label: "Тенант", value: data.tenancy.tenant.slug || "—" },
+          { label: "API-токены", value: data.apiTokens.length },
+          { label: "ID корреляции", value: data.tenancy.correlation_id || "—" }
         ]}
       />
       <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
@@ -35,15 +35,15 @@ const SettingsPage = () => {
           <Card>
             <CardHeader><CardTitle className="text-base">Контур</CardTitle></CardHeader>
             <CardContent className="space-y-2 text-sm">
-              <p>Slug: <span className="font-medium">{data.tenancy.tenant.slug || "—"}</span></p>
-              <p>Code: <span className="font-medium">{data.tenancy.tenant.code || "—"}</span></p>
-              <p>Schema: <span className="font-medium">{data.tenancy.tenant.schema_name || "—"}</span></p>
+              <p>Слаг: <span className="font-medium">{data.tenancy.tenant.slug || "—"}</span></p>
+              <p>Код: <span className="font-medium">{data.tenancy.tenant.code || "—"}</span></p>
+              <p>Схема БД: <span className="font-medium">{data.tenancy.tenant.schema_name || "—"}</span></p>
             </CardContent>
           </Card>
           <Card>
-            <CardHeader><CardTitle className="text-base">Квоты и usage</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">Квоты и использование</CardTitle></CardHeader>
             <CardContent className="space-y-2 text-sm">
-              <p>Параллельные jobs: <span className="font-medium">{data.tenancy.quota?.max_parallel_jobs ?? "—"}</span></p>
+              <p>Параллельные задания: <span className="font-medium">{data.tenancy.quota?.max_parallel_jobs ?? "—"}</span></p>
               <p>Лимит генераций/месяц: <span className="font-medium">{data.tenancy.quota?.max_doc_generations_per_month ?? "—"}</span></p>
               <p>Текущие генерации: <span className="font-medium">{data.tenancy.usage?.doc_generations ?? "—"}</span></p>
             </CardContent>
@@ -53,7 +53,7 @@ const SettingsPage = () => {
             <CardContent className="space-y-2 text-sm">
               <p>Email: <span className="font-medium">{data.notifications.email_enabled ? "Включен" : "Выключен"}</span></p>
               <p>Telegram: <span className="font-medium">{data.notifications.telegram_enabled ? "Включен" : "Выключен"}</span></p>
-              <p>Reminder window: <span className="font-medium">{data.notifications.reminder_window_days ?? "—"}</span></p>
+              <p>Окно напоминаний (дней): <span className="font-medium">{data.notifications.reminder_window_days ?? "—"}</span></p>
             </CardContent>
           </Card>
         </div>

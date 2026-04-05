@@ -31,7 +31,7 @@ const PackageProfilesPage = () => {
       const response = await apiClient.get<Profile[]>("/package-profiles");
       setItems(response.data);
     } catch (nextError) {
-      setError((nextError as ApiError) ?? { message: "Не удалось загрузить package profiles" });
+      setError((nextError as ApiError) ?? { message: "Не удалось загрузить профили пакетов" });
     } finally {
       setLoading(false);
     }
@@ -59,7 +59,7 @@ const PackageProfilesPage = () => {
       setName("");
       await load();
     } catch (nextError) {
-      setError((nextError as ApiError) ?? { message: "Не удалось создать package profile" });
+      setError((nextError as ApiError) ?? { message: "Не удалось создать профиль пакета" });
     }
   };
 
@@ -68,20 +68,20 @@ const PackageProfilesPage = () => {
       <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Package profiles" }]} />
       <Card>
         <CardHeader>
-          <CardTitle>Package profiles</CardTitle>
+          <CardTitle>Профили пакетов</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <ErrorState error={error ?? undefined} onRetry={() => void load()} />
-          {loading ? <LoadingScreen label="Загрузка package profiles" /> : null}
+          {loading ? <LoadingScreen label="Загрузка профилей пакетов" /> : null}
           {!loading ? (
             <div className="flex gap-2">
-              <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="code" />
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="name" />
-              <Button onClick={() => void createProfile()}>Create</Button>
+              <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Код" />
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Название" />
+              <Button onClick={() => void createProfile()}>Создать</Button>
             </div>
           ) : null}
           {!loading && !error && items.length === 0 ? (
-            <EmptyState title="Package profiles отсутствуют" description="Создайте первый profile для работы с package presets." />
+            <EmptyState title="Профили пакетов отсутствуют" description="Создайте первый профиль для работы с пресетами пакетов." />
           ) : null}
           {!loading && items.length > 0 ? (
             <ul className="space-y-1 text-sm">

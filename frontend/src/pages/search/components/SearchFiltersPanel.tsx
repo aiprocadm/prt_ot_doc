@@ -19,7 +19,7 @@ export const SearchFiltersPanel = ({ facets, status, companyId, siteId, projectI
   <Card>
     <CardHeader className="flex flex-row items-center justify-between">
       <CardTitle className="flex items-center gap-2 text-base">
-        <Filter className="h-4 w-4" /> Faceted filters
+        <Filter className="h-4 w-4" /> Фасетные фильтры
       </CardTitle>
       <Button
         variant="ghost"
@@ -31,7 +31,7 @@ export const SearchFiltersPanel = ({ facets, status, companyId, siteId, projectI
     </CardHeader>
     <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
       <div className="space-y-2">
-        <label className="text-xs font-medium uppercase text-muted-foreground">Status</label>
+        <label className="text-xs font-medium uppercase text-muted-foreground">Статус</label>
         <select className="h-10 rounded-md border px-3" value={status} onChange={(event) => onPatch({ status: event.target.value || undefined })}>
           <option value="">Все</option>
           {Object.entries(facets.status_counts ?? {}).map(([key, value]) => (
@@ -42,13 +42,13 @@ export const SearchFiltersPanel = ({ facets, status, companyId, siteId, projectI
         </select>
       </div>
       <div className="space-y-2">
-        <label className="text-xs font-medium uppercase text-muted-foreground">Company scope</label>
-        <Input placeholder="company_id" value={companyId} onChange={(event) => onPatch({ company_id: event.target.value || undefined })} />
-        <div className="text-xs text-muted-foreground">Facet IDs: {Object.keys(facets.company_counts ?? {}).slice(0, 5).join(", ") || "—"}</div>
+        <label className="text-xs font-medium uppercase text-muted-foreground">Область: организация</label>
+        <Input placeholder="ID организации (company_id)" value={companyId} onChange={(event) => onPatch({ company_id: event.target.value || undefined })} />
+        <div className="text-xs text-muted-foreground">Идентификаторы фасетов: {Object.keys(facets.company_counts ?? {}).slice(0, 5).join(", ") || "—"}</div>
       </div>
       <div className="space-y-2">
-        <label className="text-xs font-medium uppercase text-muted-foreground">Site scope</label>
-        <Input placeholder="site_id" value={siteId} onChange={(event) => onPatch({ site_id: event.target.value || undefined })} />
+        <label className="text-xs font-medium uppercase text-muted-foreground">Область: площадка</label>
+        <Input placeholder="ID площадки (site_id)" value={siteId} onChange={(event) => onPatch({ site_id: event.target.value || undefined })} />
         <div className="flex flex-wrap gap-1 text-xs text-muted-foreground">
           {Object.entries(facets.site_counts ?? {})
             .slice(0, 5)
@@ -60,8 +60,8 @@ export const SearchFiltersPanel = ({ facets, status, companyId, siteId, projectI
         </div>
       </div>
       <div className="space-y-2">
-        <label className="text-xs font-medium uppercase text-muted-foreground">Project scope</label>
-        <Input placeholder="project_id" value={projectId} onChange={(event) => onPatch({ project_id: event.target.value || undefined })} />
+        <label className="text-xs font-medium uppercase text-muted-foreground">Область: проект</label>
+        <Input placeholder="ID проекта (project_id)" value={projectId} onChange={(event) => onPatch({ project_id: event.target.value || undefined })} />
         <div className="flex flex-wrap gap-1 text-xs text-muted-foreground">
           {Object.entries(facets.project_counts ?? {})
             .slice(0, 5)
@@ -73,8 +73,8 @@ export const SearchFiltersPanel = ({ facets, status, companyId, siteId, projectI
         </div>
       </div>
       <div className="space-y-2">
-        <label className="text-xs font-medium uppercase text-muted-foreground">Risk level</label>
-        <Input placeholder="risk_level" value={riskLevel} onChange={(event) => onPatch({ risk_level: event.target.value || undefined })} />
+        <label className="text-xs font-medium uppercase text-muted-foreground">Уровень риска</label>
+        <Input placeholder="Уровень риска (risk_level)" value={riskLevel} onChange={(event) => onPatch({ risk_level: event.target.value || undefined })} />
         <div className="flex flex-wrap gap-1 text-xs text-muted-foreground">
           {Object.entries(facets.risk_level_counts ?? {})
             .slice(0, 5)

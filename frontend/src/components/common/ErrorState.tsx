@@ -41,7 +41,7 @@ export const ErrorState = ({ error, onRetry }: { error?: ApiError | null; onRetr
         ) : null}
         {!isServerSide && error.code ? <p className="text-xs opacity-90">Код: {error.code}</p> : null}
         {!isServerSide && error.correlation_id ? (
-          <p className="text-xs opacity-90">Correlation ID: {error.correlation_id}</p>
+          <p className="text-xs opacity-90">ID корреляции: {error.correlation_id}</p>
         ) : null}
         {error.field_errors?.length ? (
           <ul className="list-disc space-y-1 pl-5 text-left text-xs">

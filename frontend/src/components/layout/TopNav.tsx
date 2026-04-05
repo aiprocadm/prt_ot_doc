@@ -92,7 +92,7 @@ export const TopNav = () => {
               {kpi.alerts}
             </Badge>
           </Link></Button>
-          <Button variant="ghost" size="icon" aria-label="Toggle theme" onClick={toggleTheme}>
+          <Button variant="ghost" size="icon" aria-label="Переключить тему оформления" onClick={toggleTheme}>
             {theme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
           </Button>
           <DropdownMenu>

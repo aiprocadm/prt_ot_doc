@@ -13,14 +13,14 @@ type CommandItem = {
 };
 
 const DEFAULT_COMMANDS: CommandItem[] = [
-  { id: "dashboard", title: "Рабочий стол", path: "/", keywords: "dashboard главная workspace" },
-  { id: "documents", title: "Документы", path: "/documents", keywords: "docs template pipeline" },
-  { id: "tasks", title: "Задачи", path: "/tasks", keywords: "task inbox deadline" },
-  { id: "risks", title: "Риски", path: "/risk", keywords: "risk hazard controls" },
-  { id: "training", title: "Обучение", path: "/training", keywords: "lms briefings attestations" },
-  { id: "inspections", title: "Проверки", path: "/inspections", keywords: "audit checklist" },
-  { id: "incidents", title: "Инциденты", path: "/incidents", keywords: "incident investigation" },
-  { id: "notifications", title: "Уведомления", path: "/notifications", keywords: "alerts center" },
+  { id: "dashboard", title: "Рабочий стол", path: "/", keywords: "дашборд главная обзор" },
+  { id: "documents", title: "Документы", path: "/documents", keywords: "документы шаблоны пайплайн" },
+  { id: "tasks", title: "Задачи", path: "/tasks", keywords: "задачи сроки инбокс" },
+  { id: "risks", title: "Риски", path: "/risk", keywords: "риски опасности меры" },
+  { id: "training", title: "Обучение", path: "/training", keywords: "обучение инструктажи курсы" },
+  { id: "inspections", title: "Проверки", path: "/inspections", keywords: "проверки аудит чеклисты" },
+  { id: "incidents", title: "Инциденты", path: "/incidents", keywords: "инциденты нс расследование" },
+  { id: "notifications", title: "Уведомления", path: "/notifications", keywords: "уведомления оповещения" },
 ];
 
 export const CommandBar = () => {
@@ -53,16 +53,16 @@ export const CommandBar = () => {
         type="button"
         onClick={() => setOpen(true)}
         className="hidden items-center gap-2 rounded-md border px-3 py-2 text-xs text-muted-foreground hover:bg-muted lg:inline-flex"
-        aria-label="Open command bar"
+        aria-label="Открыть палитру команд"
       >
         <Command className="h-3.5 w-3.5" />
-        Command bar
+        Команды
         <span className="rounded border px-1.5 py-0.5 text-[10px]">Ctrl+K</span>
       </button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Command bar</DialogTitle>
+            <DialogTitle>Палитра команд</DialogTitle>
             <DialogDescription>Поиск разделов и быстрый переход по платформе</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">

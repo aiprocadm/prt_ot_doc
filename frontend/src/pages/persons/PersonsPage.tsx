@@ -73,10 +73,10 @@ const PersonsPage = () => {
             </div>
             <Tabs defaultValue="training">
               <TabsList>
-                <TabsTrigger value="training">Training</TabsTrigger>
-                <TabsTrigger value="ppe">PPE</TabsTrigger>
-                <TabsTrigger value="risks">Risks</TabsTrigger>
-                <TabsTrigger value="medical">Medical</TabsTrigger>
+                <TabsTrigger value="training">Обучение</TabsTrigger>
+                <TabsTrigger value="ppe">СИЗ</TabsTrigger>
+                <TabsTrigger value="risks">Риски</TabsTrigger>
+                <TabsTrigger value="medical">Медосмотры</TabsTrigger>
               </TabsList>
               <TabsContent value="training">Назначения и удостоверения доступны в модуле обучения.</TabsContent>
               <TabsContent value="ppe">Нормы выдачи и история СИЗ отображаются в модуле СИЗ.</TabsContent>

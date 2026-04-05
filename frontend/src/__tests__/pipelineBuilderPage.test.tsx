@@ -105,7 +105,7 @@ describe("PipelineBuilderPage", () => {
           {
             id: "profile-2",
             code: "doc-default",
-            name: "Default pipeline",
+            name: "Профиль по умолчанию",
             profile_version: 1,
             graph: { nodes: [{ id: "render", type: "render_docx" }], edges: [{ from: "render", to: "pdf" }] },
           },
@@ -129,7 +129,7 @@ describe("PipelineBuilderPage", () => {
       "/pipelines/profiles",
       expect.objectContaining({
         code: "doc-default",
-        name: "Default pipeline",
+        name: "Профиль по умолчанию",
         is_active: true,
       })
     );
