@@ -43,7 +43,7 @@ const AdminPage = () => {
     <div className="space-y-4">
       <RegistryPageHeader
         title="Администрирование"
-        description="Страница превращена из навигационного хаба в operational console по tenant health, outbox, webhooks, tokens и audit trail."
+        description="Операционная консоль: здоровье тенанта, исходящая очередь, вебхуки, токены и журнал аудита."
         actions={
           <>
             <Button variant="outline" asChild><Link to="/audit">Журнал аудита</Link></Button>

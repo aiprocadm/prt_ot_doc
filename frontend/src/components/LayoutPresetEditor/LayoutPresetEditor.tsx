@@ -210,7 +210,7 @@ export const LayoutPresetEditor = () => {
           <input type="checkbox" checked={form.watermark_enabled} onChange={(e) => setForm((s) => ({ ...s, watermark_enabled: e.target.checked }))} />
           watermark enabled
         </label>
-        <Input value={form.watermark_text} onChange={(e) => setForm((s) => ({ ...s, watermark_text: e.target.value }))} placeholder="DRAFT" />
+        <Input value={form.watermark_text} onChange={(e) => setForm((s) => ({ ...s, watermark_text: e.target.value }))} placeholder="ЧЕРНОВИК" />
       </div>
 
       <TokenHelp />
