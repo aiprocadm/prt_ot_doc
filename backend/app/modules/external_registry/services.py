@@ -40,14 +40,15 @@ class ExternalRegistryDispatchService:
         job.response_payload = response.payload
         job.status = response.status
 
+        job_tid = str(job.tenant_id)
         if job.entity_type == "certificate":
             cert = await session.get(TrainingCertificate, job.entity_id)
-            if cert is not None:
+            if cert is not None and str(cert.tenant_id) == job_tid:
                 cert.external_registry_payload = response.payload
                 cert.external_registry_status = response.status
         if job.entity_type == "protocol":
             protocol = await session.get(TrainingProtocol, job.entity_id)
-            if protocol is not None:
+            if protocol is not None and str(protocol.tenant_id) == job_tid:
                 protocol.status = "issued" if response.status == "accepted" else protocol.status
         await session.flush()
         return job

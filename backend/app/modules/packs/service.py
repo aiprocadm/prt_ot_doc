@@ -215,7 +215,7 @@ class PackageService:
 
     async def add_item(self, tenant_id: str, preset: PackagePresetConfig, payload: PackagePresetItemCreate) -> PackagePresetItem:
         tv = await self.session.get(TemplateVersion, payload.template_version_id)
-        if tv is None or tv.tenant_id != tenant_id:
+        if tv is None or str(tv.tenant_id) != str(tenant_id):
             raise HTTPException(status.HTTP_404_NOT_FOUND, "template version not found")
         if tv.deleted_at is not None or tv.status in {TemplateVersionStatus.ARCHIVED, TemplateVersionStatus.DEPRECATED}:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "template version is invalid for package")
@@ -273,7 +273,7 @@ class PackRunService:
         rows: list[dict[str, Any]],
     ) -> PackRun:
         preset = await self.session.get(PackagePresetConfig, payload.package_preset_id)
-        if preset is None or preset.tenant_id != tenant_id or preset.deleted_at is not None:
+        if preset is None or str(preset.tenant_id) != str(tenant_id) or preset.deleted_at is not None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "package preset not found")
         if preset.status != PackageEntityStatus.ACTIVE and preset.status != "active":
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "package preset must be active")
@@ -352,7 +352,13 @@ async def ensure_template_version_deletable(session: AsyncSession, tenant_id: st
         raise HTTPException(status.HTTP_409_CONFLICT, "template version is used by package preset")
 
 
-async def load_source_rows(session: AsyncSession, source_file_id: str | None, inline_rows: list[dict[str, Any]]) -> tuple[str, list[str], list[dict[str, Any]]]:
+async def load_source_rows(
+    session: AsyncSession,
+    source_file_id: str | None,
+    inline_rows: list[dict[str, Any]],
+    *,
+    tenant_id: str | None = None,
+) -> tuple[str, list[str], list[dict[str, Any]]]:
     if inline_rows:
         cols = sorted({k.strip().lower() for row in inline_rows for k in row.keys()})
         normalized = [{k.strip().lower(): v for k, v in row.items()} for row in inline_rows]
@@ -361,6 +367,8 @@ async def load_source_rows(session: AsyncSession, source_file_id: str | None, in
         return "json", [], []
     file = await session.get(File, source_file_id)
     if file is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "source file not found")
+    if tenant_id is not None and str(file.tenant_id) != str(tenant_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "source file not found")
     meta = file.meta_json or {}
     raw = meta.get("inline_content")

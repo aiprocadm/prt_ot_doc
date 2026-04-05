@@ -56,7 +56,11 @@ class BriefingEntryService:
             raise ValueError("Both signatures are required")
         if entry.briefing_template_id:
             template = await session.get(BriefingTemplate, entry.briefing_template_id)
-            if template and template.validity_days:
+            if (
+                template
+                and str(template.tenant_id) == str(entry.tenant_id)
+                and template.validity_days
+            ):
                 entry.valid_until = entry.briefing_date + timedelta(days=template.validity_days)
         entry.status = "completed"
         await session.flush()

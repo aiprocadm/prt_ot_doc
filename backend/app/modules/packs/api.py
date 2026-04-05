@@ -262,7 +262,9 @@ async def upload_source_preview(preset_id: str, payload: MappingPreviewRequest, 
     preset = await service.get_preset(tenant_id=str(tenant.id), preset_id=preset_id)
     if preset is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "preset not found")
-    source_type, columns, rows = await load_source_rows(session, payload.source_file_id, payload.rows)
+    source_type, columns, rows = await load_source_rows(
+        session, payload.source_file_id, payload.rows, tenant_id=str(tenant.id)
+    )
     return SourcePreviewRead(source_file_id=payload.source_file_id, source_type=source_type, columns=columns, rows_count=len(rows), sample_rows=rows[:5])
 
 
@@ -272,7 +274,9 @@ async def preview_mapping(preset_id: str, payload: MappingPreviewRequest, sessio
     preset = await service.get_preset(tenant_id=str(tenant.id), preset_id=preset_id)
     if preset is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "preset not found")
-    source_type, columns, rows = await load_source_rows(session, payload.source_file_id, payload.rows)
+    source_type, columns, rows = await load_source_rows(
+        session, payload.source_file_id, payload.rows, tenant_id=str(tenant.id)
+    )
     validator = MappingValidationService()
     validator.validate(preset.mapping_json or {}, columns)
     mapped = [validator.apply(preset.mapping_json or {}, row) for row in rows[: payload.row_limit]]
@@ -292,7 +296,7 @@ async def create_pack_run(
     if not idempotency_key:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Idempotency-Key is required")
 
-    _, _, rows = await load_source_rows(session, payload.source_file_id, payload.rows)
+    _, _, rows = await load_source_rows(session, payload.source_file_id, payload.rows, tenant_id=str(tenant.id))
     run = await PackRunService(session).create_run(
         tenant_id=str(tenant.id),
         payload=payload,

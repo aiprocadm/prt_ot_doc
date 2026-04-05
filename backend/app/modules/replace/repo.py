@@ -30,6 +30,6 @@ async def list_replace_maps(session: AsyncSession, *, tenant_id: str) -> list[Re
 
 async def get_replace_run(session: AsyncSession, *, tenant_id: str, run_id: str) -> ReplaceRun | None:
     row = await session.get(ReplaceRun, run_id)
-    if row is None or row.tenant_id != tenant_id:
+    if row is None or str(row.tenant_id) != str(tenant_id):
         return None
     return row

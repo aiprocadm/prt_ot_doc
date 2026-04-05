@@ -83,15 +83,15 @@ rg "await session\.get\(|await self\.session\.get\(" backend/app/api backend/app
 | `training/services.py` | **B** | `submit_attempt`: `TrainingProgram` по PK только если `program.tenant_id == enrollment.tenant_id` перед расчётом `expires_at` |
 | `sign/service.py` | **B** | Усилено: `ApprovalInstance.tenant_id` при create signature request |
 | `replace/api.py` | **B** | Явные проверки tenant на картах и версиях документа |
-| `replace/repo.py` | **D** | Зависит от вызывающего контекста |
+| `replace/repo.py` | **B** | `get_replace_run`: сравнение `tenant_id` через `str()` |
 | `pwa_sync/services.py` | **B** | `apply_batch`: при `briefing_entry` сверка `entry.tenant_id` с `batch.tenant_id` → иначе `failed` + `tenant_scope_mismatch`; `get_status(..., tenant_id=)` для HTTP — фильтр в SQL |
 | `pdf/api.py` | **B** | `File`, `PdfConversionRun` |
 | `packs/api.py` | **B** | `PackRun`; validate preset — сверка `TemplateVersion.tenant_id` с preset (2026-04-05) |
-| `packs/service.py` | **D** | Проверять при изменении пакетных сценариев |
+| `packs/service.py` | **B** | `add_item` / preset: сравнение `tenant_id` через `str()`; `load_source_rows(..., tenant_id=)` — `File` только своей аренды (вызывается из `packs/api`) |
 | `headers/api.py` | **B** | Preset + `DocumentVersion` |
-| `external_registry/services.py` | **D** | Загрузка сущностей по `job.entity_id` в контексте job/tenant |
-| `briefings/services.py` | **C/D** | Шаблон по `entry` — FK из entry |
-| `approvals/service.py` | **D** | Сервис с `tenant_id` в конструкторе — проверить вызовы при рефакторинге |
+| `external_registry/services.py` | **B** | `dispatch`: обновление `TrainingCertificate` / `TrainingProtocol` только при `entity.tenant_id == job.tenant_id` |
+| `briefings/services.py` | **B** | `complete`: `BriefingTemplate` по PK — `validity_days` только если шаблон в той же аренде, что и entry |
+| `approvals/service.py` | **B** | `start` / `decide`: `str()` для route/instance; выборка `ApprovalInstanceStep` с фильтром `tenant_id` |
 
 ---
 
@@ -121,6 +121,10 @@ rg "await session\.get\(|await self\.session\.get\(" backend/app/api backend/app
 - `modules/training/services.py`: tenant при загрузке `TrainingProgram` для `expires_at` после попытки теста.
 - `services/pipeline_step_handlers.py`: фильтр `tenant_id` при выборе версии по номеру; защита `get(current_version_id)` от чужой аренды / чужого шаблона.
 - `services/package_pipeline.py`: сверка `TemplateVersion.tenant_id` с `DocumentPack.tenant_id` в `plan_documents`.
+- `modules/external_registry/services.py`, `modules/briefings/services.py`: tenant при `get` + обновлении полей.
+- `modules/approvals/service.py`: нормализация tenant для route/instance; `ApprovalInstanceStep` в `decide` с `tenant_id` в WHERE.
+- `modules/packs/service.py` + `api.py`: `load_source_rows` с опциональным `tenant_id` для защиты `File`; `str()` для preset/TV.
+- `modules/replace/repo.py`: `str()` при сравнении аренды в `get_replace_run`.
 
 Подробнее — [CHANGELOG.md](../../CHANGELOG.md).
 

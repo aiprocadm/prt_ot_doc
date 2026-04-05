@@ -239,3 +239,51 @@ async def test_registry_dispatch_updates_certificate_status(sessionmaker) -> Non
             )
         ).scalars().all()
         assert len(jobs) == 1
+
+
+@pytest.mark.anyio
+async def test_registry_dispatch_does_not_update_certificate_other_tenant(sessionmaker) -> None:
+    async with sessionmaker() as session:
+        tenant_a = await _tenant_id(session)
+        tenant_b = str(uuid.uuid4())
+        session.add(
+            Tenant(
+                id=tenant_b,
+                slug=f"reg-other-{tenant_b[:8]}",
+                name="Registry other",
+                contact_email="reg-other@example.com",
+            )
+        )
+        await session.flush()
+
+        program = TrainingProgram(
+            tenant_id=tenant_a,
+            code="OT-REG-X",
+            title="OT Reg X",
+            category="ot",
+            kind="program",
+            status="active",
+        )
+        session.add(program)
+        await session.flush()
+
+        certificate = TrainingCertificate(
+            tenant_id=tenant_a,
+            code="CERT-REG-X",
+            training_program_id=program.id,
+            issued_at=date.today(),
+            status="active",
+            external_registry_status="pending",
+            external_registry_payload=None,
+        )
+        session.add(certificate)
+        await session.flush()
+        cert_id = certificate.id
+
+        service = ExternalRegistryDispatchService()
+        job = await service.enqueue(session, tenant_b, "certificate", cert_id, "frdo")
+        await service.dispatch(session, job)
+        await session.refresh(certificate)
+
+        assert certificate.external_registry_status == "pending"
+        assert certificate.external_registry_payload is None

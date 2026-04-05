@@ -15,6 +15,10 @@
 - Approval signing v1: после валидного `ApprovalTask` проверяются `ApprovalProcess` и `ApprovalRoute` на совпадение с текущим тенантом перед решением по задаче.
 - Training: при успешной сдаче теста срок действия (`expires_at`) из `TrainingProgram.validity_months` выставляется только если программа в той же аренде, что и enrollment.
 - Pipeline: `validate_template_step_handler` ограничивает выбор `TemplateVersion` по `tenant_id` и отбрасывает `current_version_id`, указывающий на чужую аренду или другой шаблон; `PackGenerationPipeline.plan_documents` проверяет совпадение аренды версии с пакетом.
+- External registry dispatch: не обновлять сертификат/протокол, если `job.tenant_id` не совпадает с арендой сущности.
+- Briefings: `valid_until` из шаблона только при совпадении `BriefingTemplate.tenant_id` с `BriefingEntry.tenant_id`; тесты `test_registry_dispatch_does_not_update_certificate_other_tenant`, `test_briefing_complete_skips_validity_when_template_other_tenant`.
+- Approvals module service: сравнение аренды через `str()` для маршрута и инстанса; шаги инстанса в `decide` отфильтрованы по `tenant_id`.
+- Packs: `load_source_rows` принимает `tenant_id` и отклоняет чужой `File`; вызовы из `packs/api` передают текущий тенант; `replace/repo.get_replace_run` — согласованное сравнение `tenant_id`.
 
 ## 2026-03-29
 - Hardened tenant identity handling across document-core so `tenant.id` is again the canonical persistence identifier for `Template`, `TemplateVersion`, `DocumentPack`, `DocumentPackItem`, and `PipelineRun`, while `tenant.slug` remains routing-only and `tenant_schema` remains schema-only.

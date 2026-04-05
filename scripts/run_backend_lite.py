@@ -28,7 +28,11 @@ def _configure_env() -> None:
     os.environ["ENABLE_METRICS"] = "false"
     os.environ["S3_ENDPOINT"] = "http://localhost"
     os.environ["LIBREOFFICE_BIN"] = sys.executable
-    os.environ["DEMO_BOOTSTRAP"] = "0"
+    # README demo: tenant demo + admin@example.com — needs tenant row, demo data, and admin user.
+    os.environ.setdefault("DEMO_BOOTSTRAP", "1")
+    os.environ.setdefault("ADMIN_BOOTSTRAP", "1")
+    os.environ.setdefault("ADMIN_TENANT", "demo")
+    os.environ.setdefault("ADMIN_PASSWORD", "admin123")
 
 
 def _prepare_metadata() -> None:

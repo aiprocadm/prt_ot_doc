@@ -71,7 +71,7 @@ class ApprovalInstanceService:
 
     async def start(self, *, entity_type: str, entity_id: str, approval_route_id: str, started_by: str) -> ApprovalInstance:
         route = await self.session.get(ApprovalRoute, approval_route_id)
-        if route is None or route.tenant_id != self.tenant_id:
+        if route is None or str(route.tenant_id) != str(self.tenant_id):
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Approval route not found")
         steps = (
             await self.session.execute(
@@ -121,12 +121,13 @@ class ApprovalDecisionService:
 
     async def decide(self, *, instance_id: str, actor_user_id: str, decision: str, comment: str | None = None, target_user_id: str | None = None) -> ApprovalInstance:
         instance = await self.session.get(ApprovalInstance, instance_id)
-        if instance is None or instance.tenant_id != self.tenant_id:
+        if instance is None or str(instance.tenant_id) != str(self.tenant_id):
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Approval instance not found")
         step = (
             await self.session.execute(
                 select(ApprovalInstanceStep)
                 .where(
+                    ApprovalInstanceStep.tenant_id == self.tenant_id,
                     ApprovalInstanceStep.approval_instance_id == instance.id,
                     ApprovalInstanceStep.order_no == instance.current_step_no,
                     ApprovalInstanceStep.status == ApprovalInstanceStepStatus.PENDING,
@@ -166,7 +167,11 @@ class ApprovalDecisionService:
         next_step = (
             await self.session.execute(
                 select(ApprovalInstanceStep)
-                .where(ApprovalInstanceStep.approval_instance_id == instance.id, ApprovalInstanceStep.order_no > (instance.current_step_no or 0))
+                .where(
+                    ApprovalInstanceStep.tenant_id == self.tenant_id,
+                    ApprovalInstanceStep.approval_instance_id == instance.id,
+                    ApprovalInstanceStep.order_no > (instance.current_step_no or 0),
+                )
                 .order_by(ApprovalInstanceStep.order_no.asc())
             )
         ).scalars().first()

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 import threading
 import types
@@ -20,9 +21,11 @@ def prepare_runtime(settings: Settings) -> Settings:
         _prepare_sqlite_metadata()
         _run_coro_sync(_initialize_sqlite(settings.database_url))
 
-        # Dockerless SQLite startup should remain deterministic and skip heavy demo seeding.
+        # Dockerless SQLite: skip demo seeding by default, but honor DEMO_BOOTSTRAP=1 (README / run_backend_lite).
         if settings.app_run_mode == "dockerless":
-            settings.demo_bootstrap = False
+            env_on = os.environ.get("DEMO_BOOTSTRAP", "").strip().lower() in {"1", "true", "yes"}
+            if not env_on:
+                settings.demo_bootstrap = False
 
     return settings
 
