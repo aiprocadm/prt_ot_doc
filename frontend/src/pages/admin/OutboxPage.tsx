@@ -83,7 +83,7 @@ const OutboxPage = () => {
       <ErrorState
         error={
           error
-            ? ({ status: 500, code: "integrations_load_error", message: error } as ApiError)
+            ? ({ status: 400, code: "integrations_load_error", message: error } as ApiError)
             : undefined
         }
         onRetry={() => void load()}
