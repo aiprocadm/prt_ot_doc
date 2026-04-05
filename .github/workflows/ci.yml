@@ -34,6 +34,48 @@ jobs:
       - name: Ruff undefined names + staged mypy (tenant guard)
         run: bash scripts/ci/static_gates.sh
 
+  # Полный прогон миграций на PostgreSQL (asyncpg); ловит ошибки, которые SQLite/heads не видят.
+  alembic-postgres-upgrade:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ptd
+          POSTGRES_PASSWORD: ptd
+          POSTGRES_DB: ptd
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ptd -d ptd"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      APP_ENV: test
+      PYTHONPATH: ${{ github.workspace }}/backend
+      DATABASE_URL: postgresql+asyncpg://ptd:ptd@localhost:5432/ptd
+      REDIS_URL: memory://
+      REDIS_RESULT_URL: memory://
+      RATE_LIMIT_STORAGE_URI: memory://
+      SECRET_KEY: ci-alembic-not-for-production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install backend dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Alembic upgrade head on PostgreSQL
+        run: alembic -c backend/app/migrations/alembic.ini upgrade head
+
   backend-tests:
     runs-on: ubuntu-latest
     env:
