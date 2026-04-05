@@ -111,13 +111,13 @@ describe("run details operational states", () => {
     let shouldFail = true;
 
     apiClientMock.get.mockImplementation((url: string) => {
-      if (url === "/v1/pipelines/runs/run-1") {
+      if (url === "/pipelines/runs/run-1") {
         if (shouldFail) {
           return Promise.reject({ status: 500, message: "run load failed" });
         }
         return Promise.resolve({ data: pipelineRun });
       }
-      if (url === "/v1/files/entities/job/run-1/files") {
+      if (url === "/files/entities/job/run-1/files") {
         return Promise.resolve({ data: [] });
       }
       throw new Error(`Unexpected GET ${url}`);

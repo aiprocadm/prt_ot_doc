@@ -56,7 +56,7 @@ const PipelineBuilderPage = () => {
     setProfilesLoading(true);
     setProfilesError(null);
     try {
-      const response = await apiClient.get<PipelineProfile[]>("/v1/pipelines/profiles");
+      const response = await apiClient.get<PipelineProfile[]>("/pipelines/profiles");
       setProfiles(response.data);
     } catch (loadError) {
       setProfiles([]);
@@ -146,7 +146,7 @@ const PipelineBuilderPage = () => {
     try {
       setError(null);
       if (validationError) throw new Error(validationError);
-      await apiClient.post("/v1/pipelines/profiles", { code, name, graph: parsedGraph, is_active: true });
+      await apiClient.post("/pipelines/profiles", { code, name, graph: parsedGraph, is_active: true });
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка сохранения");

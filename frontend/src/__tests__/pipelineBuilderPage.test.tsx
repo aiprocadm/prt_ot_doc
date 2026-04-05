@@ -26,7 +26,7 @@ describe("PipelineBuilderPage", () => {
     let shouldFail = true;
 
     apiClientMock.get.mockImplementation((url: string) => {
-      if (url !== "/v1/pipelines/profiles") {
+      if (url !== "/pipelines/profiles") {
         throw new Error(`Unexpected GET ${url}`);
       }
       if (shouldFail) {
@@ -126,7 +126,7 @@ describe("PipelineBuilderPage", () => {
     });
 
     expect(apiClientMock.post).toHaveBeenCalledWith(
-      "/v1/pipelines/profiles",
+      "/pipelines/profiles",
       expect.objectContaining({
         code: "doc-default",
         name: "Default pipeline",

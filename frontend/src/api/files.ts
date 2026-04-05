@@ -41,7 +41,7 @@ export const getDownloadUrl = async (fileId: string, purpose = "ui_download") =>
 
 export const listEntityFiles = async (entityType: string, entityId: string) => {
   const { data } = await apiClient.get<Array<{ file_id: string; role: string; status: string; display_name: string; size: number }>>(
-    `/v1/files/entities/${entityType}/${entityId}/files`
+    `/files/entities/${entityType}/${entityId}/files`
   );
   return data;
 };
@@ -58,6 +58,6 @@ export const fetchFileDownloadLink = async (fileId: string) => {
 
 
 export const reindexFile = async (fileId: string) => {
-  const { data } = await apiClient.post<{ file_id: string; status: string }>(`/v1/files/${fileId}:reindex`);
+  const { data } = await apiClient.post<{ file_id: string; status: string }>(`/files/${fileId}:reindex`);
   return data;
 };
