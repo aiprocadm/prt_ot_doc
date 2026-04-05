@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
@@ -12,6 +12,19 @@ import { useCompaniesStore } from "@/stores/companies";
 import type { CompanyDto } from "@/types/dto/companies";
 import { companySchema, type CompanyFormValues } from "@/types/forms/companies";
 
+const emptyCompanyForm: CompanyFormValues = {
+  name: "",
+  inn: "",
+  kpp: "",
+  ogrn: "",
+  address: "",
+  email: "",
+  phone: "",
+  website: "",
+  status: "draft",
+  tags: []
+};
+
 interface CompanyFormDialogProps {
   trigger: ReactNode;
   initialData?: CompanyDto;
@@ -19,6 +32,7 @@ interface CompanyFormDialogProps {
 }
 
 export const CompanyFormDialog = ({ trigger, initialData, onSubmitted }: CompanyFormDialogProps) => {
+  const [open, setOpen] = useState(false);
   const form = useForm<CompanyFormValues>({
     resolver: zodResolver(companySchema),
     defaultValues: {
@@ -72,6 +86,10 @@ export const CompanyFormDialog = ({ trigger, initialData, onSubmitted }: Company
       const result = initialData ? await update(initialData.id, payload) : await create(payload);
       onSubmitted?.(result);
       toast.success(initialData ? "Компания обновлена" : "Компания создана");
+      setOpen(false);
+      if (!initialData) {
+        form.reset(emptyCompanyForm);
+      }
     } catch (err: unknown) {
       const msg =
         err && typeof err === "object" && "message" in err && typeof (err as { message: string }).message === "string"
@@ -83,7 +101,7 @@ export const CompanyFormDialog = ({ trigger, initialData, onSubmitted }: Company
   };
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent>
         <DialogHeader>

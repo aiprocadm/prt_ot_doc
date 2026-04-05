@@ -22,7 +22,7 @@ def resolve_billing_action(request: Request) -> str:
     if method == "POST" and (path.endswith("/templates") or path.endswith("/templates/")):
         return "templates.create"
     if method == "POST" and (path.endswith("/persons") or path.endswith("/persons/")):
-        return "users.create"
+        return "persons.create"
     if method == "POST" and (path.endswith("/contractors") or path.endswith("/contractors/")):
         return "contractors.create"
     return "request"

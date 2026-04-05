@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
@@ -12,6 +12,17 @@ import { usePersonsStore } from "@/stores/persons";
 import type { PersonDto } from "@/types/dto/persons";
 import { personSchema, type PersonFormValues } from "@/types/forms/persons";
 
+const emptyPersonForm: PersonFormValues = {
+  company_id: "",
+  first_name: "",
+  last_name: "",
+  middle_name: "",
+  position: "",
+  email: "",
+  phone: "",
+  status: "active"
+};
+
 interface PersonFormDialogProps {
   trigger: ReactNode;
   initialData?: PersonDto;
@@ -19,6 +30,7 @@ interface PersonFormDialogProps {
 }
 
 export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFormDialogProps) => {
+  const [open, setOpen] = useState(false);
   const { list: listCompanies, items: companies } = useCompaniesStore();
 
   const form = useForm<PersonFormValues>({
@@ -38,8 +50,8 @@ export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFo
   const { create, update } = usePersonsStore();
 
   useEffect(() => {
-    void listCompanies().catch(() => undefined);
-  }, [listCompanies]);
+    if (open) void listCompanies().catch(() => undefined);
+  }, [open, listCompanies]);
 
   useEffect(() => {
     if (initialData) {
@@ -61,6 +73,10 @@ export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFo
       const result = initialData ? await update(initialData.id, values) : await create(values);
       onSubmitted?.(result);
       toast.success(initialData ? "Сотрудник обновлён" : "Сотрудник добавлен");
+      setOpen(false);
+      if (!initialData) {
+        form.reset(emptyPersonForm);
+      }
     } catch (err: unknown) {
       const msg =
         err && typeof err === "object" && "message" in err && typeof (err as { message: string }).message === "string"
@@ -72,7 +88,7 @@ export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFo
   };
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent>
         <DialogHeader>

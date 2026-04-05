@@ -159,7 +159,8 @@ async def create_person_endpoint(
 ) -> PersonRead:
     TenantContextValidator.ensure_tenant_context(tenant)
 
-    await BillingService(session).assert_allowed(tenant, "users.create")
+    # Не использовать users.create: квота max_users считает записи User, а не Person — блокировало HR-сценарии.
+    await BillingService(session).assert_allowed(tenant, "persons.create")
     company = await _get_company(session, tenant, payload.company_id)
     position_id = None
     workplace_id = None
