@@ -243,9 +243,9 @@ const BrandingSettingsPage = () => {
       />
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Branding / letterhead settings</h1>
+          <h1 className="text-2xl font-bold">Брендинг и фирменные бланки</h1>
           <p className="text-sm text-muted-foreground">
-            Tenant-safe профиль организации/филиала, быстрый preview колонтитулов и паспорт воспроизводимости.
+            Профиль организации и филиала в границах тенанта, быстрый предпросмотр колонтитулов и паспорт воспроизводимости.
           </p>
         </div>
         <div className="grid w-full gap-4 lg:max-w-3xl lg:grid-cols-2">
@@ -288,7 +288,7 @@ const BrandingSettingsPage = () => {
       <Card>
         <CardContent className="grid gap-4 pt-6 md:grid-cols-4">
           <div>
-            <div className="text-sm text-muted-foreground">Текущий scope</div>
+            <div className="text-sm text-muted-foreground">Текущая область</div>
             <div className="font-medium">{profile?.scope ?? "—"}</div>
           </div>
           <div>
