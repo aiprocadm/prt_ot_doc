@@ -67,7 +67,9 @@ export const handleApiError = (error: ApiError, requestUrl?: string) => {
   }
 
   if (status === 422) {
-    toast.error("Проверьте введённые данные и повторите попытку.");
+    const fe = error.field_errors?.filter((f) => f.field && f.message) ?? [];
+    const detail = fe.length > 0 ? fe.map((f) => `${f.field}: ${f.message}`).join(". ") : null;
+    toast.error(detail ?? "Проверьте введённые данные и повторите попытку.");
     return;
   }
 

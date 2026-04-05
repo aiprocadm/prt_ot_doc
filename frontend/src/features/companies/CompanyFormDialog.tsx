@@ -3,6 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 
+import { buildCompanyWriteBody } from "@/api/companiesApi";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -11,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useCompaniesStore } from "@/stores/companies";
 import type { CompanyDto } from "@/types/dto/companies";
 import { companySchema, type CompanyFormValues } from "@/types/forms/companies";
+import { applyApiFieldErrorsToForm, isApiError } from "@/utils/apiFormErrors";
 
 const emptyCompanyForm: CompanyFormValues = {
   name: "",
@@ -30,6 +32,17 @@ interface CompanyFormDialogProps {
   initialData?: CompanyDto;
   onSubmitted?: (company: CompanyDto) => void;
 }
+
+const COMPANY_API_FIELD_MAP: Partial<Record<string, keyof CompanyFormValues>> = {
+  name: "name",
+  inn: "inn",
+  kpp: "kpp",
+  ogrn: "ogrn",
+  legal_address: "address",
+  address: "address",
+  email: "email",
+  phone_numbers: "phone"
+};
 
 export const CompanyFormDialog = ({ trigger, initialData, onSubmitted }: CompanyFormDialogProps) => {
   const [open, setOpen] = useState(false);
@@ -52,6 +65,7 @@ export const CompanyFormDialog = ({ trigger, initialData, onSubmitted }: Company
   const { create, update } = useCompaniesStore();
 
   useEffect(() => {
+    if (!open) return;
     if (initialData) {
       form.reset({
         name: initialData.name,
@@ -65,22 +79,13 @@ export const CompanyFormDialog = ({ trigger, initialData, onSubmitted }: Company
         status: initialData.status,
         tags: initialData.tags ?? []
       });
+    } else {
+      form.reset(emptyCompanyForm);
     }
-  }, [initialData, form]);
+  }, [open, initialData, form]);
 
   const onSubmit = async (values: CompanyFormValues) => {
-    const payload = {
-      name: values.name.trim(),
-      inn: values.inn.trim() || undefined,
-      kpp: values.kpp?.trim() || undefined,
-      ogrn: values.ogrn?.trim() || undefined,
-      address: values.address?.trim() || undefined,
-      email: values.email?.trim() || undefined,
-      phone_numbers: values.phone?.trim() ? [values.phone.trim()] : undefined,
-      website: values.website?.trim() || undefined,
-      status: values.status,
-      tags: values.tags
-    };
+    const payload = buildCompanyWriteBody(values);
 
     try {
       const result = initialData ? await update(initialData.id, payload) : await create(payload);
@@ -91,11 +96,9 @@ export const CompanyFormDialog = ({ trigger, initialData, onSubmitted }: Company
         form.reset(emptyCompanyForm);
       }
     } catch (err: unknown) {
-      const msg =
-        err && typeof err === "object" && "message" in err && typeof (err as { message: string }).message === "string"
-          ? (err as { message: string }).message
-          : "Не удалось сохранить компанию";
-      toast.error(msg);
+      if (isApiError(err)) {
+        applyApiFieldErrorsToForm(form.setError, err, COMPANY_API_FIELD_MAP as Record<string, keyof CompanyFormValues>);
+      }
       throw err;
     }
   };
@@ -147,7 +150,7 @@ export const CompanyFormDialog = ({ trigger, initialData, onSubmitted }: Company
             </div>
             <div className="space-y-2">
               <Label htmlFor="website">Сайт</Label>
-              <Input id="website" type="url" {...form.register("website")} placeholder="https://…" />
+              <Input id="website" type="text" {...form.register("website")} placeholder="https://… (не сохраняется в API)" />
               {form.formState.errors.website && <p className="text-xs text-destructive">{form.formState.errors.website.message}</p>}
             </div>
             <div className="space-y-2">

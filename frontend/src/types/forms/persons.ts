@@ -1,13 +1,27 @@
 import { z } from "zod";
 
+const optionalEmail = z
+  .string()
+  .transform((s) => s.trim())
+  .pipe(z.union([z.literal(""), z.string().email("Некорректный email")]));
+
 export const personSchema = z.object({
-  company_id: z.string().min(1, "Выберите компанию"),
-  first_name: z.string().min(1, "Укажите имя"),
-  last_name: z.string().min(1, "Укажите фамилию"),
-  middle_name: z.string().optional(),
-  position: z.string().optional(),
-  email: z.union([z.literal(""), z.string().email("Некорректный email")]).optional(),
-  phone: z.string().optional(),
+  company_id: z.string().trim().min(1, "Выберите компанию"),
+  first_name: z.string().trim().min(1, "Укажите имя"),
+  last_name: z.string().trim().min(1, "Укажите фамилию"),
+  middle_name: z
+    .string()
+    .optional()
+    .transform((s) => (s === undefined ? s : s.trim())),
+  position: z
+    .string()
+    .optional()
+    .transform((s) => (s === undefined ? s : s.trim())),
+  email: optionalEmail,
+  phone: z
+    .string()
+    .optional()
+    .transform((s) => (s === undefined ? s : s.trim())),
   status: z.enum(["active", "inactive", "dismissed"])
 });
 
