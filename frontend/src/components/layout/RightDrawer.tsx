@@ -1,15 +1,21 @@
 import { AlertTriangle, FileText, ListChecks, PlayCircle, Users } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { PERMISSIONS } from "@/permissions/permissions";
+import { PERMISSIONS, type Permission } from "@/permissions/permissions";
 import { useAbility } from "@/permissions/useAbility";
 
-const quickActions = [
-  { label: "Создать документ", icon: FileText, permission: PERMISSIONS.DOCUMENT_CREATE },
-  { label: "Запустить мастер", icon: PlayCircle, permission: PERMISSIONS.TEMPLATE_CREATE },
-  { label: "Назначить обучение", icon: ListChecks, permission: PERMISSIONS.TRAINING_ASSIGN },
-  { label: "Выдать СИЗ", icon: Users, permission: PERMISSIONS.PPE_ISSUE }
+const quickActions: Array<{
+  label: string;
+  icon: typeof FileText;
+  permission: Permission;
+  to: string;
+}> = [
+  { label: "Создать документ", icon: FileText, permission: PERMISSIONS.DOCUMENT_CREATE, to: "/documents/wizard" },
+  { label: "Запустить мастер", icon: PlayCircle, permission: PERMISSIONS.PACK_VIEW, to: "/packs" },
+  { label: "Назначить обучение", icon: ListChecks, permission: PERMISSIONS.TRAINING_ASSIGN, to: "/training" },
+  { label: "Выдать СИЗ", icon: Users, permission: PERMISSIONS.PPE_ISSUE, to: "/ppe" }
 ];
 
 const statusItems = [
@@ -29,9 +35,11 @@ export const RightDrawer = () => {
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Быстрые действия</h2>
           <div className="mt-3 space-y-2">
             {visibleActions.map((action) => (
-              <Button key={action.label} variant="outline" className="w-full justify-start gap-2">
-                <action.icon className="h-4 w-4" />
-                {action.label}
+              <Button key={action.label} variant="outline" className="w-full justify-start gap-2" asChild>
+                <Link to={action.to}>
+                  <action.icon className="h-4 w-4" />
+                  {action.label}
+                </Link>
               </Button>
             ))}
           </div>
