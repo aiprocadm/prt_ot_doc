@@ -18,16 +18,17 @@ Canonical observability reference for the modular monolith: health/readiness pro
 - Structured logging is bootstrapped from `backend/app/main.py` before the FastAPI app starts.
 
 ## Async/worker visibility
-- Celery worker bootstrap: `backend/app/worker.py`
+- Celery worker процесс: `app.services.celery_app:celery_app` (см. Docker / RUNBOOK). Файл `backend/app/worker.py` — только вызов `bootstrap("worker")`, не точка `-A` для Celery.
 - Async pipeline and outbox flows are covered by targeted tests and smoke commands listed in `README.md` and `ACCEPTANCE_TEST_MATRIX.md`.
 - Job transparency is expected through persisted run/task state rather than ephemeral in-memory progress only.
 
 ## Canonical operator commands
 ```bash
-uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
-celery -A backend.app.worker worker --loglevel=info
+export PYTHONPATH=backend
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+celery -A app.services.celery_app:celery_app worker --loglevel=info -Q default,pdf
 python scripts/repo_audit.py
-PYTHONPATH=backend python scripts/branded_document_smoke.py
+python scripts/branded_document_smoke.py
 ./scripts/smoke.sh
 ```
 

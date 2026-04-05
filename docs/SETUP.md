@@ -13,6 +13,8 @@ Default local login:
 - password: `admin123`
 
 ## Manual backend
+Интерпретатор **Python 3.12** совпадает с CI и Docker-образом (`Dockerfile`); другие минорные версии могут не собрать зависимости (например `asyncpg`).
+
 ```bash
 python -m venv .venv
 source .venv/bin/activate
@@ -28,8 +30,11 @@ npm --prefix frontend run dev
 ```
 
 ## Workers
+Требуется `PYTHONPATH=backend`. Целевой объект Celery: `app.services.celery_app:celery_app` (см. `docker-compose.yml`, `docs/RUNBOOK.md`). Модуль `backend.app.worker` выполняет только `bootstrap`, не является Celery-приложением.
+
 ```bash
-celery -A backend.app.worker worker --loglevel=info
+export PYTHONPATH=backend   # или $env:PYTHONPATH="backend" в PowerShell
+celery -A app.services.celery_app:celery_app worker --loglevel=info -Q default,pdf
 ```
 
 ## CLI

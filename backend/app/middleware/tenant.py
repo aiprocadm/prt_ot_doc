@@ -22,6 +22,12 @@ from app.modules.tenancy.context import TenantContext, reset_tenant_context, set
 logger = logging.getLogger(__name__)
 
 
+def _coerce_claim_list(value: object) -> list[str]:
+    if isinstance(value, (list, tuple)):
+        return [str(item) for item in value if item]
+    return []
+
+
 class TenantMiddleware(BaseHTTPMiddleware):
     """Populate tenant context from request headers and guard system routes."""
 
@@ -185,6 +191,19 @@ class TenantMiddleware(BaseHTTPMiddleware):
         request.state.tenant_quota = quota
 
         roles_raw = request.headers.get("x-roles", "")
+        jwt_roles: tuple[str, ...] = ()
+        if token_claims:
+            claim_roles = token_claims.get("roles")
+            if isinstance(claim_roles, (list, tuple)):
+                jwt_roles = tuple(str(role).lower() for role in claim_roles if role)
+            single_role = token_claims.get("role")
+            if isinstance(single_role, str) and single_role.strip():
+                merged = (*jwt_roles, single_role.lower())
+                jwt_roles = tuple(dict.fromkeys(merged))
+        header_roles = tuple(r.strip() for r in roles_raw.split(",") if r.strip())
+        # При наличии Bearer доверяем только claims; x-roles без токена — для legacy/внутренних шлюзов.
+        context_roles = jwt_roles if token_claims else header_roles
+
         attrs_raw = request.headers.get("x-attributes", "")
         attributes: dict[str, str] = {}
         for chunk in attrs_raw.split(","):
@@ -213,17 +232,17 @@ class TenantMiddleware(BaseHTTPMiddleware):
             max_generations_per_month=(quota.max_doc_generations_per_month if quota else None),
             correlation_id=correlation_id,
             actor_id=request.headers.get("x-actor-id"),
-            roles=tuple([r.strip() for r in roles_raw.split(",") if r.strip()]),
+            roles=context_roles,
             attributes=attributes or None,
         )
         request.state.claims = token_claims
         request.state.user_id = token_claims.get("sub") if token_claims else request.headers.get("x-actor-id")
-        request.state.roles = tuple(str(role).lower() for role in token_claims.get("roles", [])) if token_claims else tuple()
+        request.state.roles = jwt_roles
         request.state.scopes = {
-            "company_ids": list(token_claims.get("company_ids", [])) if token_claims else [],
-            "site_ids": list(token_claims.get("site_ids", [])) if token_claims else [],
-            "project_ids": list(token_claims.get("project_ids", [])) if token_claims else [],
-            "contractor_ids": list(token_claims.get("contractor_ids", [])) if token_claims else [],
+            "company_ids": _coerce_claim_list(token_claims.get("company_ids")) if token_claims else [],
+            "site_ids": _coerce_claim_list(token_claims.get("site_ids")) if token_claims else [],
+            "project_ids": _coerce_claim_list(token_claims.get("project_ids")) if token_claims else [],
+            "contractor_ids": _coerce_claim_list(token_claims.get("contractor_ids")) if token_claims else [],
         }
         request.state.tenant_context = ctx
         token = set_tenant_context(ctx)

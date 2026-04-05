@@ -50,8 +50,16 @@ npm --prefix frontend run dev
 ```
 
 ### Workers
+Из корня репозитория задайте `PYTHONPATH=backend` (как в Docker-образе и `pyproject.toml`). Приложение Celery экспортируется из `app.services.celery_app`, а не из `backend.app.worker` (там только bootstrap `run()`).
+
 ```bash
-celery -A backend.app.worker worker --loglevel=info
+# Windows PowerShell
+$env:PYTHONPATH="backend"
+celery -A app.services.celery_app:celery_app worker --loglevel=info -Q default,pdf
+
+# Unix
+export PYTHONPATH=backend
+celery -A app.services.celery_app:celery_app worker --loglevel=info -Q default,pdf
 ```
 
 ### CLI

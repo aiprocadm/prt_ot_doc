@@ -217,3 +217,85 @@ async def test_tenant_middleware_requires_header_for_non_docs_openapi_suffix_pat
         await middleware.dispatch(request, call_next)
     assert exc_info.value.status_code == 400
     assert exc_info.value.detail["code"] == "TENANT_REQUIRED"
+
+
+@pytest.mark.asyncio
+async def test_tenant_middleware_jwt_roles_ignore_spoofed_x_roles(monkeypatch: pytest.MonkeyPatch) -> None:
+    """При Bearer-токене роли в TenantContext берутся только из JWT, не из x-roles."""
+    middleware = TenantMiddleware(_dummy_app)
+    captured: dict[str, tuple[str, ...]] = {}
+
+    async def call_next(request: Request) -> Response:
+        tc = getattr(request.state, "tenant_context", None)
+        if tc is not None:
+            captured["ctx_roles"] = tc.roles
+            captured["state_roles"] = getattr(request.state, "roles", ())
+        return Response(content=b"ok")
+
+    def _fake_verify_token(token: str, *, expected_type: str):
+        assert token == "tok"
+        return {"sub": "user-1", "tenant": "acme", "roles": ["viewer"]}
+
+    monkeypatch.setattr("app.middleware.tenant.verify_token", _fake_verify_token)
+
+    def _fake_tenant_required(slug: str | None) -> SimpleNamespace:
+        return SimpleNamespace(slug="acme")
+
+    monkeypatch.setattr("app.middleware.tenant.tenant_required", _fake_tenant_required)
+
+    class _FakeResult:
+        def scalar_one_or_none(self):
+            return SimpleNamespace(
+                id="tenant-uuid",
+                slug="acme",
+                code="acme",
+                is_active=True,
+                schema_name="tenant_acme",
+                s3_prefix="tenants/acme",
+                settings={},
+            )
+
+    class _FakeSession:
+        def __init__(self) -> None:
+            self._calls = 0
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def execute(self, _query):
+            self._calls += 1
+            if self._calls == 1:
+                return _FakeResult()
+
+            class _EmptyResult:
+                def scalar_one_or_none(self):
+                    return None
+
+            return _EmptyResult()
+
+    monkeypatch.setattr("app.middleware.tenant.AsyncSessionLocal", lambda **kwargs: _FakeSession())
+
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/api/v1/documents",
+        "headers": [
+            (TENANT_HEADER.encode(), b"acme"),
+            (b"authorization", b"Bearer tok"),
+            (b"x-roles", b"admin,owner"),
+        ],
+        "query_string": b"",
+        "client": ("test", 0),
+        "server": ("test", 80),
+        "scheme": "http",
+        "root_path": "",
+    }
+    request = Request(scope)
+
+    response = await middleware.dispatch(request, call_next)
+    assert response.status_code == 200
+    assert captured["ctx_roles"] == ("viewer",)
+    assert captured["state_roles"] == ("viewer",)
