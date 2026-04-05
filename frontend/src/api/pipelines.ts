@@ -36,7 +36,7 @@ export type PipelineRun = {
 };
 
 export const listPipelineRuns = async (params?: Record<string, string>) => {
-  const response = await apiClient.get<Array<{ run_id: string; status: WizardPipelineStatus; profile_id?: string | null; created_by?: string | null; correlation_id?: string | null; step_runs?: PipelineStepRun[] }>>("/v1/pipelines/runs", { params });
+  const response = await apiClient.get<Array<{ run_id: string; status: WizardPipelineStatus; profile_id?: string | null; created_by?: string | null; correlation_id?: string | null; step_runs?: PipelineStepRun[] }>>("/pipelines/runs", { params });
   return response.data.map((item) => ({
     run_id: item.run_id,
     status: item.status,
@@ -48,7 +48,7 @@ export const listPipelineRuns = async (params?: Record<string, string>) => {
 };
 
 export const getPipelineRun = async (runId: string) => {
-  const response = await apiClient.get<PipelineRun>(`/v1/pipelines/runs/${runId}`);
+  const response = await apiClient.get<PipelineRun>(`/pipelines/runs/${runId}`);
   const d = response.data;
   return {
     run_id: d.run_id,
@@ -65,7 +65,7 @@ export const getPipelineRun = async (runId: string) => {
 };
 
 export const retryPipelineRun = async (runId: string) => {
-  await apiClient.post(`/v1/pipelines/runs/${runId}:retry`);
+  await apiClient.post(`/pipelines/runs/${runId}:retry`);
   return getPipelineRun(runId);
 };
 
@@ -76,10 +76,10 @@ export const cancelPipelineRun = async (runId: string) => {
 
 export const retryPipelineStepRun = async (runId: string, stepRunId: string) => {
   const stepId = stepRunId.includes(":") ? stepRunId.split(":").slice(1).join(":") : stepRunId;
-  await apiClient.post(`/v1/pipelines/runs/${runId}/steps/${stepId}:retry`);
+  await apiClient.post(`/pipelines/runs/${runId}/steps/${stepId}:retry`);
   return getPipelineRun(runId);
 };
 
 export const bulkActionPipelineRuns = async (runIds: string[], action: "retry" | "cancel") => {
-  await apiClient.post(`/v1/pipelines/runs:bulk?action=${action}`, runIds);
+  await apiClient.post(`/pipelines/runs:bulk?action=${action}`, runIds);
 };
