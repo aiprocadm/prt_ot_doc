@@ -31,10 +31,8 @@ export class SectionErrorBoundary extends Component<SectionErrorBoundaryProps, S
       return (
         this.props.fallback ?? (
           <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-50">
-            <p className="font-medium">Часть интерфейса временно недоступна</p>
-            <p className="mt-1 text-xs opacity-90">
-              Сбой отрисовки (не ответ API). Часто помогает кнопка ниже или переход на другой раздел и обратно.
-            </p>
+            <p className="font-medium">Не удалось показать этот фрагмент интерфейса</p>
+            <p className="mt-1 text-xs opacity-90">Нажмите «Повторить» или перейдите в другой раздел и вернитесь.</p>
             <button
               type="button"
               className="mt-3 text-sm font-semibold text-amber-900 underline underline-offset-4 hover:no-underline dark:text-amber-100"

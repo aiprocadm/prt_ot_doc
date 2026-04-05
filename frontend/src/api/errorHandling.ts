@@ -71,10 +71,8 @@ export const handleApiError = (error: ApiError, requestUrl?: string) => {
     return;
   }
 
+  // 5xx: не дублируем тост — на экранах с ErrorState сообщение уже в блоке; иначе шум.
   if (status >= 500) {
-    toast.error("Сервис временно недоступен. Попробуйте позже или нажмите «Повторить» в блоке ошибки.", {
-      id: "api-server-error",
-      duration: 5000
-    });
+    return;
   }
 };
