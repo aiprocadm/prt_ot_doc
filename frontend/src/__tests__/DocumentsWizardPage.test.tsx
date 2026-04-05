@@ -199,10 +199,10 @@ describe("DocumentsWizardPage", () => {
       </MemoryRouter>
     );
 
-    await user.click(screen.getByRole("button", { name: /собрать branded preview/i }));
+    await user.click(screen.getByRole("button", { name: /собрать превью с брендингом/i }));
 
     expect(await screen.findByText(/АО Тест \/ Main site/i)).toBeInTheDocument();
-    expect(screen.getByText(/reproducibility snapshot/i)).toBeInTheDocument();
+    expect(screen.getByText(/снимок воспроизводимости/i)).toBeInTheDocument();
     expect(screen.getByText(/site.branding.preferred_letterhead_preset/i)).toBeInTheDocument();
     expect(screen.getAllByText(/company_brand/i).length).toBeGreaterThan(0);
     expect(useDocumentsWizardStore.getState().brandingPreview?.wizard_defaults.site_id).toBe("site-1");
@@ -233,7 +233,7 @@ describe("DocumentsWizardPage", () => {
       </MemoryRouter>
     );
 
-    const previewButton = screen.getByRole("button", { name: /собрать branded preview/i });
+    const previewButton = screen.getByRole("button", { name: /собрать превью с брендингом/i });
     await user.click(previewButton);
     await screen.findByText(/АО Тест \/ Main site/i);
     await user.click(previewButton);
@@ -267,9 +267,9 @@ describe("DocumentsWizardPage", () => {
       </MemoryRouter>
     );
 
-    await user.click(screen.getByRole("button", { name: /собрать branded preview/i }));
+    await user.click(screen.getByRole("button", { name: /собрать превью с брендингом/i }));
 
-    expect(await screen.findByText(/история появится после preview/i)).toBeInTheDocument();
+    expect(await screen.findByText(/история появится после сборки превью/i)).toBeInTheDocument();
     expect(toast.error).toHaveBeenCalledWith("preview failed");
   });
 
@@ -298,7 +298,7 @@ describe("DocumentsWizardPage", () => {
       </MemoryRouter>
     );
 
-    await user.click(screen.getByRole("button", { name: /запустить single pipeline/i }));
+    await user.click(screen.getByRole("button", { name: /запустить одиночный пайплайн/i }));
 
     expect(toast.error).toHaveBeenCalledWith("single pipeline failed");
     expect(useDocumentsWizardStore.getState().pipelineRun).toBeNull();

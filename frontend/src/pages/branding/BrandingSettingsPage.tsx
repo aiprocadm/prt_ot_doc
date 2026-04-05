@@ -556,7 +556,7 @@ const BrandingSettingsPage = () => {
                   Незаполненные плейсхолдеры: {preview.unresolved_placeholders.join(", ")}
                 </div>
               ) : (
-                <div className="text-sm text-green-700">Все placeholders разрешены.</div>
+                <div className="text-sm text-green-700">Все плейсхолдеры разрешены.</div>
               )}
             </CardContent>
           </Card>

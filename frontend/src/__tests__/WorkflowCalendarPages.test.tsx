@@ -45,10 +45,10 @@ describe("Workflow and Calendar operational states", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/workflow данные отсутствуют/i)).toBeInTheDocument();
-    expect(screen.getByText(/workflow definitions отсутствуют/i)).toBeInTheDocument();
-    expect(screen.getByText(/workflow instances отсутствуют/i)).toBeInTheDocument();
-    expect(screen.getByText(/workflow tasks отсутствуют/i)).toBeInTheDocument();
+    expect(await screen.findByText(/нет данных по процессам/i)).toBeInTheDocument();
+    expect(screen.getByText(/нет описаний процессов/i)).toBeInTheDocument();
+    expect(screen.getByText(/нет экземпляров процессов/i)).toBeInTheDocument();
+    expect(screen.getByText(/нет задач процесса/i)).toBeInTheDocument();
   });
 
   it("shows workflow error state when initial load fails", async () => {

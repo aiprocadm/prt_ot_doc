@@ -205,7 +205,7 @@ export const BrandingStep = ({
           <div className="font-medium">Недавняя история превью</div>
           <div className="mt-2 space-y-2">
             {brandingPreviewHistory.length === 0 ? (
-              <div className="text-muted-foreground">История появится после preview.</div>
+              <div className="text-muted-foreground">История появится после сборки превью.</div>
             ) : (
               brandingPreviewHistory.map((item, index) => (
                 <div key={`${String(item.profile.reproducibility.generated_at ?? index)}`} className="rounded-md border bg-background p-2 text-xs">
