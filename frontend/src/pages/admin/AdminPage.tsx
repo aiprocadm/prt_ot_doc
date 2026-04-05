@@ -122,47 +122,47 @@ const AdminPage = () => {
             </CardContent>
           </Card>
           <Card>
-            <CardHeader><CardTitle className="text-base">Integration readiness</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">Готовность интеграций</CardTitle></CardHeader>
             <CardContent className="space-y-2 text-sm">
               {data.integrationReadiness ? (
                 <>
-                  <p>Configured: {data.integrationReadiness.summary.configured_total}</p>
-                  <p>Production-ready: {data.integrationReadiness.summary.production_ready_total}</p>
-                  <p>Stub/mock/disabled: {data.integrationReadiness.summary.non_production_total}</p>
-                  <p>Delivery failed: {data.integrationReadiness.webhooks.delivery_failed_total}</p>
+                  <p>Настроено: {data.integrationReadiness.summary.configured_total}</p>
+                  <p>Готово к продакшену: {data.integrationReadiness.summary.production_ready_total}</p>
+                  <p>Заглушки / отключено: {data.integrationReadiness.summary.non_production_total}</p>
+                  <p>Сбоев доставки: {data.integrationReadiness.webhooks.delivery_failed_total}</p>
                 </>
               ) : (
-                <p className="text-muted-foreground">Readiness snapshot временно недоступен</p>
+                <p className="text-muted-foreground">Снимок готовности временно недоступен</p>
               )}
             </CardContent>
           </Card>
           <Card>
-            <CardHeader><CardTitle className="text-base">Attention center</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">Центр внимания</CardTitle></CardHeader>
             <CardContent className="space-y-2 text-sm">
               {data.attention ? (
                 <>
-                  <p>Overdue tasks: {data.attention.summary.overdue_tasks}</p>
-                  <p>Due soon: {data.attention.summary.due_soon_tasks}</p>
-                  <p>Overdue deadlines: {data.attention.summary.overdue_deadlines}</p>
-                  <p>Readiness blockers: {data.attention.summary.readiness_blockers}</p>
+                  <p>Просроченных задач: {data.attention.summary.overdue_tasks}</p>
+                  <p>Скоро срок: {data.attention.summary.due_soon_tasks}</p>
+                  <p>Просроченных дедлайнов: {data.attention.summary.overdue_deadlines}</p>
+                  <p>Блокеров готовности: {data.attention.summary.readiness_blockers}</p>
                   {(data.attention.recommendations || []).slice(0, 2).map((item) => <p key={item}>{item}</p>)}
                 </>
               ) : (
-                <p className="text-muted-foreground">Attention snapshot временно недоступен</p>
+                <p className="text-muted-foreground">Снимок внимания временно недоступен</p>
               )}
             </CardContent>
           </Card>
           <Card>
-            <CardHeader><CardTitle className="text-base">Task inbox</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">Входящие задачи</CardTitle></CardHeader>
             <CardContent className="space-y-2 text-sm">
               {data.taskInbox ? (
                 <>
-                  <p>Total open: {data.taskInbox.total}</p>
-                  <p>Overdue: {data.taskInbox.overdue}</p>
-                  {data.taskInbox.items.slice(0, 3).map((item) => <p key={item.id}>{item.title} · {item.priority} · {item.overdue ? "overdue" : "open"}</p>)}
+                  <p>Всего открытых: {data.taskInbox.total}</p>
+                  <p>Просрочено: {data.taskInbox.overdue}</p>
+                  {data.taskInbox.items.slice(0, 3).map((item) => <p key={item.id}>{item.title} · {item.priority} · {item.overdue ? "просрочено" : "открыта"}</p>)}
                 </>
               ) : (
-                <p className="text-muted-foreground">Task inbox snapshot временно недоступен</p>
+                <p className="text-muted-foreground">Снимок входящих задач временно недоступен</p>
               )}
             </CardContent>
           </Card>
