@@ -13,7 +13,7 @@ from starlette.types import ASGIApp
 
 from app.api.deps.tracing import get_trace_id
 from app.core.config import Settings, get_settings
-from app.core.security import verify_token
+from app.core.security import roles_from_jwt_claims, verify_token
 from app.core.tenant import TENANT_HEADER, tenant_required
 from app.db.session import AsyncSessionLocal
 from app.models.models import Tenant, TenantQuota, TenantSettings
@@ -191,15 +191,7 @@ class TenantMiddleware(BaseHTTPMiddleware):
         request.state.tenant_quota = quota
 
         roles_raw = request.headers.get("x-roles", "")
-        jwt_roles: tuple[str, ...] = ()
-        if token_claims:
-            claim_roles = token_claims.get("roles")
-            if isinstance(claim_roles, (list, tuple)):
-                jwt_roles = tuple(str(role).lower() for role in claim_roles if role)
-            single_role = token_claims.get("role")
-            if isinstance(single_role, str) and single_role.strip():
-                merged = (*jwt_roles, single_role.lower())
-                jwt_roles = tuple(dict.fromkeys(merged))
+        jwt_roles: tuple[str, ...] = roles_from_jwt_claims(token_claims) if token_claims else ()
         header_roles = tuple(r.strip() for r in roles_raw.split(",") if r.strip())
         # При наличии Bearer доверяем только claims; x-roles без токена — для legacy/внутренних шлюзов.
         context_roles = jwt_roles if token_claims else header_roles

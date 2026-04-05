@@ -76,6 +76,9 @@ jobs:
       - name: Alembic upgrade head on PostgreSQL
         run: alembic -c backend/app/migrations/alembic.ini upgrade head
 
+      - name: Alembic upgrade head again (idempotency)
+        run: alembic -c backend/app/migrations/alembic.ini upgrade head
+
   backend-tests:
     runs-on: ubuntu-latest
     env:

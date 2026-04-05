@@ -30,6 +30,7 @@ __all__ = [
     "issue_refresh_token",
     "decode_token",
     "verify_token",
+    "roles_from_jwt_claims",
     "AccessContext",
     "AuthContext",
     "get_auth_ctx",
@@ -195,6 +196,23 @@ def verify_token(
     if expected_type is not None and payload.get("type") != expected_type:
         raise _auth_error("Incorrect token type")
     return payload
+
+
+def roles_from_jwt_claims(claims: Mapping[str, Any]) -> tuple[str, ...]:
+    """Нормализованные роли из JWT: список ``roles`` и при необходимости строка ``role``.
+
+    Одна точка правды для middleware и :meth:`AccessContext.to_auth_context` (только claims,
+    без ролей из БД пользователя).
+    """
+
+    roles: list[str] = []
+    claim_roles = claims.get("roles")
+    if isinstance(claim_roles, Iterable) and not isinstance(claim_roles, (str, bytes)):
+        roles.extend(str(role).lower() for role in claim_roles if role)
+    single_role = claims.get("role")
+    if isinstance(single_role, str) and single_role.strip():
+        roles.append(single_role.lower())
+    return tuple(dict.fromkeys(roles))
 
 
 @dataclass(frozen=True, slots=True)
@@ -363,14 +381,7 @@ class AccessContext:
                 tenant_identifier = str(candidate)
                 break
 
-        roles: list[str] = []
-        claim_roles = self.claims.get("roles")
-        if isinstance(claim_roles, Iterable) and not isinstance(claim_roles, (str, bytes)):
-            roles.extend(str(role).lower() for role in claim_roles if role)
-
-        single_role = self.claims.get("role")
-        if isinstance(single_role, str) and single_role:
-            roles.append(single_role.lower())
+        roles = list(roles_from_jwt_claims(self.claims))
 
         normalized_role = str(self.role).lower()
         roles.append(normalized_role)
