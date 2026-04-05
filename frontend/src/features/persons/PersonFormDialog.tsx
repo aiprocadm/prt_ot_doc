@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ import { useCompaniesStore } from "@/stores/companies";
 import { usePersonsStore } from "@/stores/persons";
 import type { PersonDto } from "@/types/dto/persons";
 import { personSchema, type PersonFormValues } from "@/types/forms/persons";
+import { applyApiFieldErrorsToForm, isApiError } from "@/utils/apiFormErrors";
 
 const emptyPersonForm: PersonFormValues = {
   company_id: "",
@@ -28,6 +30,16 @@ interface PersonFormDialogProps {
   initialData?: PersonDto;
   onSubmitted?: (person: PersonDto) => void;
 }
+
+const PERSON_API_FIELD_MAP: Record<string, keyof PersonFormValues> = {
+  company_id: "company_id",
+  first_name: "first_name",
+  last_name: "last_name",
+  middle_name: "middle_name",
+  email: "email",
+  phone: "phone",
+  employment_status: "status"
+};
 
 export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFormDialogProps) => {
   const [open, setOpen] = useState(false);
@@ -54,6 +66,7 @@ export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFo
   }, [open, listCompanies]);
 
   useEffect(() => {
+    if (!open) return;
     if (initialData) {
       form.reset({
         company_id: initialData.company_id ?? "",
@@ -65,8 +78,10 @@ export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFo
         phone: initialData.phone ?? "",
         status: initialData.status
       });
+    } else {
+      form.reset(emptyPersonForm);
     }
-  }, [initialData, form]);
+  }, [open, initialData, form]);
 
   const onSubmit = async (values: PersonFormValues) => {
     try {
@@ -78,11 +93,9 @@ export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFo
         form.reset(emptyPersonForm);
       }
     } catch (err: unknown) {
-      const msg =
-        err && typeof err === "object" && "message" in err && typeof (err as { message: string }).message === "string"
-          ? (err as { message: string }).message
-          : "Не удалось сохранить сотрудника";
-      toast.error(msg);
+      if (isApiError(err)) {
+        applyApiFieldErrorsToForm(form.setError, err, PERSON_API_FIELD_MAP);
+      }
       throw err;
     }
   };
@@ -119,7 +132,13 @@ export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFo
               <p className="text-xs text-destructive">{form.formState.errors.company_id.message}</p>
             )}
             {companies.length === 0 ? (
-              <p className="text-xs text-muted-foreground">Сначала создайте компанию в разделе «Компании».</p>
+              <p className="text-xs text-muted-foreground">
+                Сначала создайте компанию в разделе{" "}
+                <Link to="/companies" className="underline underline-offset-2">
+                  Компании
+                </Link>
+                .
+              </p>
             ) : null}
           </div>
           <div className="grid gap-4 md:grid-cols-2">

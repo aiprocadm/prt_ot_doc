@@ -33,7 +33,7 @@ interface CompanyFormDialogProps {
   onSubmitted?: (company: CompanyDto) => void;
 }
 
-const COMPANY_API_FIELD_MAP: Partial<Record<string, keyof CompanyFormValues>> = {
+const COMPANY_API_FIELD_MAP: Record<string, keyof CompanyFormValues> = {
   name: "name",
   inn: "inn",
   kpp: "kpp",
@@ -97,7 +97,7 @@ export const CompanyFormDialog = ({ trigger, initialData, onSubmitted }: Company
       }
     } catch (err: unknown) {
       if (isApiError(err)) {
-        applyApiFieldErrorsToForm(form.setError, err, COMPANY_API_FIELD_MAP as Record<string, keyof CompanyFormValues>);
+        applyApiFieldErrorsToForm(form.setError, err, COMPANY_API_FIELD_MAP);
       }
       throw err;
     }
