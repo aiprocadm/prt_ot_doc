@@ -154,7 +154,7 @@ export const CompanyFormDialog = ({ trigger, initialData, onSubmitted }: Company
               {form.formState.errors.website && <p className="text-xs text-destructive">{form.formState.errors.website.message}</p>}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">Электронная почта</Label>
               <Input id="email" type="email" {...form.register("email")} />
               {form.formState.errors.email && <p className="text-xs text-destructive">{form.formState.errors.email.message}</p>}
             </div>

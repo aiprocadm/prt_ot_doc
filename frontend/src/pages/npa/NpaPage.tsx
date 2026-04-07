@@ -82,7 +82,7 @@ const NpaPage = () => {
       {!loading && !error && items.length === 0 ? (
         <EmptyState
           title="НПА не найдены"
-          description="Добавьте или импортируйте нормативные акты, чтобы impact analysis и update tasks работали на реальных данных."
+          description="Добавьте или импортируйте нормативные акты, чтобы анализ влияния и задачи обновления работали на реальных данных."
         />
       ) : null}
       <div className="grid gap-6 xl:grid-cols-[1.2fr,0.8fr]">

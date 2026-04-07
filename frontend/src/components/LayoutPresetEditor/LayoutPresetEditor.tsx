@@ -172,27 +172,27 @@ export const LayoutPresetEditor = () => {
 
       <div className="grid gap-3 md:grid-cols-2">
         <div>
-          <Label>Header first</Label>
+          <Label>Шапка (первая)</Label>
           <Textarea value={form.header_first_xml} onChange={(e) => setForm((s) => ({ ...s, header_first_xml: e.target.value }))} rows={4} />
         </div>
         <div>
-          <Label>Footer first</Label>
+          <Label>Подвал (первая)</Label>
           <Textarea value={form.footer_first_xml} onChange={(e) => setForm((s) => ({ ...s, footer_first_xml: e.target.value }))} rows={4} />
         </div>
         <div>
-          <Label>Header odd/default</Label>
+          <Label>Шапка (нечётная/по умолчанию)</Label>
           <Textarea value={form.header_odd_xml} onChange={(e) => setForm((s) => ({ ...s, header_odd_xml: e.target.value }))} rows={5} />
         </div>
         <div>
-          <Label>Footer odd/default</Label>
+          <Label>Подвал (нечётная/по умолчанию)</Label>
           <Textarea value={form.footer_odd_xml} onChange={(e) => setForm((s) => ({ ...s, footer_odd_xml: e.target.value }))} rows={5} />
         </div>
         <div>
-          <Label>Header even</Label>
+          <Label>Шапка (чётная)</Label>
           <Textarea value={form.header_even_xml} onChange={(e) => setForm((s) => ({ ...s, header_even_xml: e.target.value }))} rows={4} />
         </div>
         <div>
-          <Label>Footer even</Label>
+          <Label>Подвал (чётная)</Label>
           <Textarea value={form.footer_even_xml} onChange={(e) => setForm((s) => ({ ...s, footer_even_xml: e.target.value }))} rows={4} />
         </div>
       </div>

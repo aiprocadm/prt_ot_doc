@@ -63,7 +63,7 @@ const TemplatesPage = () => {
           {!loading && !error && items.length === 0 ? (
             <EmptyState
               title="Шаблоны не найдены"
-              description="Загрузите первый шаблон, чтобы запустить document lifecycle без ручных обходных сценариев."
+              description="Загрузите первый шаблон, чтобы запустить жизненный цикл документов без ручных обходных сценариев."
             />
           ) : null}
           {items.length > 0 ? (

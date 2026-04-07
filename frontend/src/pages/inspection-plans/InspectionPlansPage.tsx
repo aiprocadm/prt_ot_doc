@@ -27,13 +27,13 @@ const InspectionPlansPage = () => {
 
   return (
     <div className="space-y-4">
-      <RegistryPageHeader title="Планы проверок" description="Реальный registry upcoming/active inspections с фильтрацией и постраничной навигацией." />
+      <RegistryPageHeader title="Планы проверок" description="Реестр предстоящих и активных проверок с фильтрацией и постраничной навигацией." />
       <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
       {loading ? <LoadingScreen label="Загрузка планов проверок" /> : null}
       {!loading && !error && (overduePlanned > 0 || openPlanTasks > 0) ? (
         <Card className="border-orange-200 bg-orange-50/40">
           <CardHeader>
-            <CardTitle className="text-base">Blockers и next actions</CardTitle>
+            <CardTitle className="text-base">Блокеры и дальнейшие действия</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             <p>Просроченных плановых проверок: {overduePlanned}. Открытых задач по планам: {openPlanTasks}.</p>
@@ -44,7 +44,7 @@ const InspectionPlansPage = () => {
           </CardContent>
         </Card>
       ) : null}
-      {!loading && !error && registry.total === 0 ? <EmptyState title="Планов нет" description="Создайте inspection records для отображения плана." /> : null}
+      {!loading && !error && registry.total === 0 ? <EmptyState title="Планов нет" description="Создайте записи проверок для отображения плана." /> : null}
       {!loading && !error && registry.total > 0 ? (
         <RegistryTable
           columns={[

@@ -45,7 +45,7 @@ const EdoPage = () => {
           {!loading && !error && items.length === 0 ? (
             <EmptyState
               title="ЭДО сообщения отсутствуют"
-              description="После отправки документов сюда попадут envelopes, статусы и внешние идентификаторы."
+              description="После отправки документов сюда попадут конверты, статусы и внешние идентификаторы."
             />
           ) : null}
           {!loading && !error && items.length > 0 ? (

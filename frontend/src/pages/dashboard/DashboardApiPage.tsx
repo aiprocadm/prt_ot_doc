@@ -45,7 +45,7 @@ export const DashboardApiPage = ({ title, endpoint }: DashboardApiPageProps) => 
       {!loading && !error && !hasPayload ? (
         <EmptyState
           title="Данные дашборда отсутствуют"
-          description="После появления операционных событий здесь будут рассчитаны KPI и индикаторы выполнения."
+          description="После появления операционных событий здесь будут рассчитаны ключевые показатели и индикаторы выполнения."
         />
       ) : null}
       {!loading && !error && hasPayload ? <JsonKpiGrid payload={payload} loading={loading} /> : null}

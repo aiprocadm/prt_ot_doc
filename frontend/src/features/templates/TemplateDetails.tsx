@@ -138,8 +138,8 @@ export const TemplateDetails = ({ template }: { template: TemplateDto }) => {
               ))}
             </select>
             <div className="flex gap-2">
-              <Button variant="outline" disabled={!versionId} onClick={handleLint}>Lint</Button>
-              <Button variant="outline" disabled={!versionId} onClick={handlePreview}>Preview</Button>
+              <Button variant="outline" disabled={!versionId} onClick={handleLint}>Проверить</Button>
+              <Button variant="outline" disabled={!versionId} onClick={handlePreview}>Предпросмотр</Button>
             </div>
             <Textarea rows={8} value={previewData} onChange={(e) => setPreviewData(e.target.value)} />
             {lintReport && <pre className="rounded border p-2 text-xs">{lintReport}</pre>}

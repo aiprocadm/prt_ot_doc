@@ -34,7 +34,7 @@ const CorrectiveActionsPage = () => {
     <div className="space-y-4">
       <RegistryPageHeader
         title="Корректирующие действия"
-        description="Операционный CAPA-реестр на основе backend `/corrective-actions` с реальными due/status/effectiveness полями, единым UX и пагинацией."
+        description="Операционный реестр CAPA на основе backend `/corrective-actions` с реальными полями сроков, статусов и эффективности, единым интерфейсом и пагинацией."
       />
       <Card>
         <CardHeader>
@@ -42,9 +42,9 @@ const CorrectiveActionsPage = () => {
         </CardHeader>
         <CardContent className="space-y-3">
           <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
-          {loading ? <LoadingScreen label="Загрузка CAPA" /> : null}
+          {loading ? <LoadingScreen label="Загрузка реестра CAPA" /> : null}
           {!loading && !error && registry.total === 0 ? (
-            <EmptyState title="Действия не найдены" description={registry.query ? "Попробуйте другой запрос." : "В текущем tenant пока нет корректирующих действий."} />
+            <EmptyState title="Действия не найдены" description={registry.query ? "Попробуйте другой запрос." : "В текущем тенанте пока нет корректирующих действий."} />
           ) : null}
           {!loading && !error && registry.total > 0 ? (
             <RegistryTable

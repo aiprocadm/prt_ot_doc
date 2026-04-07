@@ -64,7 +64,7 @@ const SearchPage = () => {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Search Center</h1>
+        <h1 className="text-2xl font-semibold">Центр поиска</h1>
         <div className="rounded-full border px-3 py-1 text-xs text-muted-foreground">Активных фильтров: {activeFilterCount}</div>
       </div>
       <div className="grid gap-4 xl:grid-cols-[1.4fr,0.8fr]">

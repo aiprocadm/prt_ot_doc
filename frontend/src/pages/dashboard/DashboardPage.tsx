@@ -412,9 +412,9 @@ export const DashboardPage = () => {
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
               <div className="rounded-md border bg-muted/30 p-4">
-                <div className="text-sm font-semibold">Inspection prep readiness</div>
+                <div className="text-sm font-semibold">Готовность к инспекционной подготовке</div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Пакетов: {operational?.readiness.packages_total ?? 0}, gaps: {operational?.readiness.open_gaps ?? 0}, критичных: {operational?.readiness.critical_gaps ?? 0}.
+                  Пакетов: {operational?.readiness.packages_total ?? 0}, пробелов: {operational?.readiness.open_gaps ?? 0}, критичных: {operational?.readiness.critical_gaps ?? 0}.
                 </p>
                 <div className="mt-3 flex gap-2">
                   <Button size="sm" asChild>
@@ -426,7 +426,7 @@ export const DashboardPage = () => {
                 </div>
               </div>
               <div className="rounded-md border bg-muted/30 p-4">
-                <div className="text-sm font-semibold">Readiness score: {operational?.readiness.readiness_score ?? 0}%</div>
+                <div className="text-sm font-semibold">Индекс готовности: {operational?.readiness.readiness_score ?? 0}%</div>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {(operational?.readiness.reasons ?? ["Нет данных о readiness."]).join(" ")}
                 </p>

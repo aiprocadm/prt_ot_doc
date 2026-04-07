@@ -34,7 +34,7 @@ const PrescriptionsPage = () => {
     <div className="space-y-4">
       <RegistryPageHeader
         title="Предписания"
-        description="Операционный реестр предписаний из backend `/prescriptions` с tenant-aware фильтрацией, поиском и постраничной навигацией."
+        description="Операционный реестр предписаний из backend `/prescriptions` с фильтрацией по тенанту, поиском и постраничной навигацией."
       />
       <Card>
         <CardHeader>

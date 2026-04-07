@@ -21,7 +21,7 @@ const FireTrainingPage = () => {
     <div className="space-y-4">
       <RegistryPageHeader
         title="Пожарная безопасность · инструктажи и учения"
-        description="Раздел связан с реальными журналами, шаблонами инструктажей и просроченными briefing entries."
+        description="Раздел связан с реальными журналами, шаблонами инструктажей и просроченными записями инструктажей."
         actions={<Button asChild variant="outline"><Link to="/briefings">Открыть инструктажи</Link></Button>}
         stats={[
           { label: "Шаблоны", value: data.templates.length },

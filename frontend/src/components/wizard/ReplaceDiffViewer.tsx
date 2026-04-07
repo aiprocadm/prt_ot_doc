@@ -12,16 +12,16 @@ export const ReplaceDiffViewer = ({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Diff preview replace</CardTitle>
+        <CardTitle className="text-base">Предпросмотр замен</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="text-sm text-muted-foreground">Совпадений: {summary?.matches ?? items.reduce((acc, item) => acc + item.match_count, 0)}</div>
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>from</TableHead>
-              <TableHead>to</TableHead>
-              <TableHead>hits</TableHead>
+              <TableHead>из</TableHead>
+              <TableHead>в</TableHead>
+              <TableHead>совпадений</TableHead>
               <TableHead>до</TableHead>
               <TableHead>после</TableHead>
             </TableRow>

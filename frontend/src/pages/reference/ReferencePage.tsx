@@ -29,7 +29,7 @@ const ReferencePage = () => {
     <div className="space-y-4">
       <RegistryPageHeader
         title="Справочники"
-        description="Вместо статических карточек страница теперь показывает фактическое наполнение tenant по НПА, СИЗ, обучению, шаблонам и инструктажам."
+        description="Вместо статических карточек страница теперь показывает фактическое наполнение тенанта по НПА, СИЗ, обучению, шаблонам и инструктажам."
         actions={<Button asChild variant="outline"><Link to="/templates">Шаблоны документов</Link></Button>}
       />
       <ErrorState error={error ?? undefined} onRetry={() => void reload()} />

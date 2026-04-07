@@ -172,7 +172,7 @@ export const PersonFormDialog = ({ trigger, initialData, onSubmitted }: PersonFo
               <Input id="position" {...form.register("position")} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">Электронная почта</Label>
               <Input id="email" type="email" {...form.register("email")} />
               {form.formState.errors.email && <p className="text-xs text-destructive">{form.formState.errors.email.message}</p>}
             </div>

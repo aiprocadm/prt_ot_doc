@@ -75,7 +75,7 @@ const ContractorsPage = () => {
     <div className="space-y-4">
       <RegistryPageHeader
         title="Контрагенты и подрядчики"
-        description="Страница переведена с витрины на реальные tenant-aware данные из `/companies`, `/sites` и `/contracts`."
+        description="Страница переведена с витрины на реальные данные по тенанту из `/companies`, `/sites` и `/contracts`."
         actions={<Button asChild><Link to="/companies">Открыть компании</Link></Button>}
         stats={[
           { label: "Контрагентов", value: items.length },
@@ -124,7 +124,7 @@ const ContractorsPage = () => {
         </div>
       ) : null}
       {loading ? <LoadingScreen label="Загрузка подрядчиков" /> : null}
-      {!loading && !error && registry.total === 0 ? <EmptyState title="Подрядчики не найдены" description="Измените поиск или добавьте компании в tenant." /> : null}
+      {!loading && !error && registry.total === 0 ? <EmptyState title="Подрядчики не найдены" description="Измените поиск или добавьте компании в тенанте." /> : null}
       {!loading && !error && registry.total > 0 ? (
         <RegistryTable
           columns={[

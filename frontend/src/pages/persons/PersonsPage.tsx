@@ -67,7 +67,7 @@ const PersonsPage = () => {
             <h2 className="text-xl font-semibold">{selectedPerson.full_name}</h2>
             <div className="grid gap-2 md:grid-cols-2">
               <Info label="Должность" value={selectedPerson.position} />
-              <Info label="Email" value={selectedPerson.email} />
+              <Info label="Электронная почта" value={selectedPerson.email} />
               <Info label="Телефон" value={selectedPerson.phone} />
               <Info label="Статус" value={selectedPerson.status} />
             </div>

@@ -120,22 +120,22 @@ export const TemplateFormDialog = ({ trigger, initialData, onSubmitted }: Templa
           <div className="grid gap-4 md:grid-cols-4">
             <div className="space-y-2">
               <label className="text-sm font-medium" htmlFor="template-scope-type">
-                Scope
+                Область
               </label>
               <select
                 id="template-scope-type"
                 className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                 {...form.register("scope.type")}
               >
-                <option value="tenant">Tenant</option>
+                <option value="tenant">Тенант</option>
                 <option value="organization">Организация</option>
                 <option value="site">Филиал / площадка</option>
-                <option value="global">Global / System</option>
+                <option value="global">Глобальная / системная</option>
               </select>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium" htmlFor="template-company-id">
-                Company ID
+                ID организации
               </label>
               <Input id="template-company-id" {...form.register("scope.company_id")} />
             </div>
