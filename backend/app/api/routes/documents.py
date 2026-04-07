@@ -333,6 +333,25 @@ def _build_document_ui_read(document: Document) -> DocumentUiRead:
     )
 
 
+def _documents_list_etag(
+    *,
+    tenant_id: str,
+    page: int,
+    page_size: int,
+    total: int,
+    items: list[DocumentUiRead],
+) -> str:
+    parts = [
+        f"tenant:{tenant_id}",
+        f"page:{page}",
+        f"page_size:{page_size}",
+        f"total:{total}",
+        "|".join(f"{item.id}:{item.updated_at.isoformat()}" for item in items),
+    ]
+    digest = hashlib.sha256("::".join(parts).encode("utf-8")).hexdigest()
+    return f'"{digest}"'
+
+
 def _document_read_query(tenant_id: str):
     return (
         select(Document)
@@ -350,6 +369,8 @@ def _document_read_query(tenant_id: str):
 
 @router.get("", response_model=DocumentUiListResponse)
 async def list_documents(
+    request: Request,
+    response: Response,
     tenant: Tenant = TenantDep,
     session: AsyncSession = SessionDep,
     access: AccessContext = ReadAccessDep,
@@ -359,7 +380,7 @@ async def list_documents(
     type_value: str | None = Query(default=None, alias="type"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1, le=200),
-) -> DocumentUiListResponse:
+) -> DocumentUiListResponse | Response:
     access.ensure_tenant_access(tenant.id, action="read documents")
 
     stmt = _document_read_query(str(tenant.id))
@@ -436,6 +457,17 @@ async def list_documents(
             site_company_id=document.company_id,
         )
         items.append(_build_document_ui_read(document))
+
+    etag = _documents_list_etag(
+        tenant_id=str(tenant.id),
+        page=page,
+        page_size=page_size,
+        total=total,
+        items=items,
+    )
+    response.headers["ETag"] = etag
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
 
     return DocumentUiListResponse(
         items=items,

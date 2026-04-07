@@ -412,3 +412,30 @@ async def test_document_batch_generation_csv(
         assert run.result_metadata.get("batch_id") == batch_id
         assert run.result_metadata.get("row_index") == item.row_index
         assert run.result_metadata.get("output_name") == item.output_name
+
+
+@pytest.mark.asyncio()
+async def test_documents_list_etag_returns_304_on_if_none_match(
+    async_client: AsyncClient,
+    sessionmaker,
+    data_factory: TestDataFactory,
+    make_auth_headers,
+) -> None:
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        company = await data_factory.create_company(tenant=tenant, session=session)
+        await data_factory.create_document(tenant=tenant, company=company, session=session)
+        await session.commit()
+
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    first = await async_client.get("/api/v1/documents", headers=headers)
+    assert first.status_code == 200
+    etag = first.headers.get("ETag")
+    assert etag
+
+    second = await async_client.get(
+        "/api/v1/documents",
+        headers={**headers, "If-None-Match": etag},
+    )
+    assert second.status_code == 304
+    assert second.headers.get("ETag") == etag
