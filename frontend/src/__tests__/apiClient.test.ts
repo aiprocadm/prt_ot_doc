@@ -136,6 +136,25 @@ describe("apiClient", () => {
     axiosMock.restore();
   });
 
+  it("does not call refresh endpoint when 401 arrives without access token", async () => {
+    tenantStorage.setTenant({ slug: "demo" });
+
+    const refreshUrl = `${appConfig.apiBaseUrl}/auth/refresh`;
+    const apiMock = new MockAdapter(apiClient);
+    const axiosMock = new MockAdapter(axios);
+
+    apiMock.onGet("/documents").replyOnce(401);
+    axiosMock.onPost(refreshUrl).reply(200, { access_token: "should-not-be-used" });
+
+    await expect(apiClient.get("/documents")).rejects.toMatchObject({
+      status: 401
+    });
+    expect(axiosMock.history.post).toHaveLength(0);
+
+    apiMock.restore();
+    axiosMock.restore();
+  });
+
 
 
   it("normalizes structured backend errors including contract metadata", async () => {

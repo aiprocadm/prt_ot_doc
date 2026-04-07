@@ -193,28 +193,30 @@ apiClient.interceptors.response.use(
         (typeof requestAuthHeader === "string" && requestAuthHeader.trim()) || tokenStorage.getAccessToken()
       );
       if (!hasAccessToken) {
-        // No token present: do not storm /auth/refresh, let error handler redirect to login.
+        // No token present: do not storm /auth/refresh, reject and let auth handler redirect.
+        return Promise.reject(error);
       } else {
-      originalRequest._retry = true;
+        originalRequest._retry = true;
 
-      if (isRefreshing) {
-        return new Promise((resolve, reject) => {
-          addSubscriber((token) => {
-            if (token && originalRequest.headers) {
-              originalRequest.headers.Authorization = `Bearer ${token}`;
-              resolve(apiClient(originalRequest));
-            } else {
-              reject(error);
-            }
+        if (isRefreshing) {
+          return new Promise((resolve, reject) => {
+            addSubscriber((token) => {
+              if (token && originalRequest.headers) {
+                originalRequest.headers.Authorization = `Bearer ${token}`;
+                resolve(apiClient(originalRequest));
+              } else {
+                reject(error);
+              }
+            });
           });
-        });
-      }
+        }
 
-      const newToken = await refreshToken();
-      if (newToken && originalRequest.headers) {
-        originalRequest.headers.Authorization = `Bearer ${newToken}`;
-        return apiClient(originalRequest);
-      }
+        const newToken = await refreshToken();
+        if (newToken && originalRequest.headers) {
+          originalRequest.headers.Authorization = `Bearer ${newToken}`;
+          return apiClient(originalRequest);
+        }
+        return Promise.reject(error);
       }
     }
 

@@ -9,6 +9,8 @@ import pytest
 from app.core import config
 from app.core.config import DEV_PRIVATE_KEY, DEV_PUBLIC_KEY, Settings, SettingsError
 
+_SAFE_STAGING_PRIVATE_KEY, _SAFE_STAGING_PUBLIC_KEY = config._generate_dev_keypair()
+
 
 @pytest.fixture(autouse=True)
 def _isolate_app_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
@@ -31,8 +33,8 @@ def _isolate_app_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 
 _STAGING_SAFE_BASE: dict[str, object] = {
     "app_env": "staging",
-    "jwt_private_key_pem": DEV_PRIVATE_KEY,
-    "jwt_public_key_pem": DEV_PUBLIC_KEY,
+    "jwt_private_key_pem": _SAFE_STAGING_PRIVATE_KEY,
+    "jwt_public_key_pem": _SAFE_STAGING_PUBLIC_KEY,
     "postgres_password": "staging-postgres-secret-not-default",
     "s3_access_key": "staging-access-not-prt-local",
     "s3_secret_key": "staging-secret-not-prt-local",
@@ -53,8 +55,8 @@ def test_staging_rejects_default_s3_credentials_when_other_secrets_ok() -> None:
         Settings(
             app_env="staging",
             secret_key="not-the-default-staging-secret-key-32chars!!",
-            jwt_private_key_pem=DEV_PRIVATE_KEY,
-            jwt_public_key_pem=DEV_PUBLIC_KEY,
+            jwt_private_key_pem=_SAFE_STAGING_PRIVATE_KEY,
+            jwt_public_key_pem=_SAFE_STAGING_PUBLIC_KEY,
             postgres_password="staging-postgres-secret-not-default",
             s3_access_key="prt_local_access",
             s3_secret_key="prt_local_secret",
@@ -68,4 +70,19 @@ def test_staging_requires_inbound_webhook_hmac_secret() -> None:
             **_STAGING_SAFE_BASE,
             secret_key="not-the-default-staging-secret-key-32chars!!",
             inbound_webhook_hmac_secret="",
+        )
+
+
+def test_staging_rejects_bundled_dev_jwt_keypair() -> None:
+    with pytest.raises(SettingsError, match="must not use bundled development JWT key pair"):
+        Settings(
+            app_env="staging",
+            secret_key="not-the-default-staging-secret-key-32chars!!",
+            jwt_private_key_pem=DEV_PRIVATE_KEY,
+            jwt_public_key_pem=DEV_PUBLIC_KEY,
+            postgres_password="staging-postgres-secret-not-default",
+            s3_access_key="staging-access-not-prt-local",
+            s3_secret_key="staging-secret-not-prt-local",
+            s3_backend="minio",
+            inbound_webhook_hmac_secret="staging-hmac-secret",
         )

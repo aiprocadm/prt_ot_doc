@@ -450,7 +450,14 @@ async def get_tenant_session(
             if ctx and ctx.correlation_id:
                 safe = ctx.correlation_id.replace("\"", "")
                 await session.execute(text(f"SET LOCAL application_name TO 'api:{safe}'"))
-        yield session
+        try:
+            yield session
+        finally:
+            if _SEARCH_PATH_SUPPORTED:
+                try:
+                    await session.execute(text(f'SET search_path TO "{_SHARED_SCHEMA}"'))
+                except Exception:
+                    pass
 
 
 def configure_engine(

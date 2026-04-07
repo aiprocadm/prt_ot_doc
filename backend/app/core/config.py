@@ -606,15 +606,23 @@ class Settings(BaseSettings):
         private_key = self.jwt_private_key_pem.strip()
         public_key = self.jwt_public_key_pem.strip()
 
-        if private_key and public_key:
+        if self.app_env in ("production", "staging"):
+            if not private_key or not public_key:
+                raise SettingsError(
+                    "PRIVATE_KEY_PEM and PUBLIC_KEY_PEM must be configured in staging/production"
+                )
+            if private_key == DEV_PRIVATE_KEY.strip() or public_key == DEV_PUBLIC_KEY.strip():
+                raise SettingsError(
+                    "Staging/production must not use bundled development JWT key pair"
+                )
             self.jwt_private_key_pem = private_key
             self.jwt_public_key_pem = public_key
             return self
 
-        if self.app_env == "production":
-            raise SettingsError(
-                "PRIVATE_KEY_PEM and PUBLIC_KEY_PEM must be configured in production"
-            )
+        if private_key and public_key:
+            self.jwt_private_key_pem = private_key
+            self.jwt_public_key_pem = public_key
+            return self
 
         logger.warning(
             (

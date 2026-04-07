@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 import pytest
 from sqlalchemy import select
 
@@ -110,6 +112,32 @@ async def test_get_tenant_session_hydrates_canonical_session_contract(sessionmak
         assert session.info["tenant_slug"] == tenant.slug
         assert session.info["tenant_schema"]
         assert session.info["tenant"] == tenant.slug
+
+
+@pytest.mark.anyio
+async def test_get_tenant_session_resets_search_path_on_exit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    executed: list[str] = []
+
+    class _FakeSession:
+        async def execute(self, stmt):
+            executed.append(str(stmt))
+            return None
+
+    @asynccontextmanager
+    async def _fake_session_local(**kwargs):
+        yield _FakeSession()
+
+    monkeypatch.setattr(db_session, "_SEARCH_PATH_SUPPORTED", True)
+    monkeypatch.setattr(db_session, "_SHARED_SCHEMA", "public")
+    monkeypatch.setattr(db_session, "AsyncSessionLocal", _fake_session_local)
+
+    async with db_session.get_tenant_session(tenant="tenant-a", schema_name="tenant_schema_a"):
+        pass
+
+    assert any('SET LOCAL search_path TO "tenant_schema_a", "public"' in sql for sql in executed)
+    assert any('SET search_path TO "public"' in sql for sql in executed)
 
 
 @pytest.mark.anyio
