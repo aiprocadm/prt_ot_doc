@@ -62,7 +62,15 @@ async def _get_company_or_404(
     )
     company = (await session.execute(stmt)).scalar_one_or_none()
     if company is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Company not found")
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail=api_problem_detail(
+                code="COMPANY_NOT_FOUND",
+                message="Company not found",
+                error_type="companies",
+                details={"company_id": company_id},
+            ),
+        )
     return company
 
 
@@ -187,7 +195,12 @@ async def create_company_endpoint(
     except IntegrityError as exc:
         await session.rollback()
         raise HTTPException(
-            status.HTTP_409_CONFLICT, "Company with this name already exists"
+            status.HTTP_409_CONFLICT,
+            detail=api_problem_detail(
+                code="COMPANY_CONFLICT",
+                message="Company with this name already exists",
+                error_type="companies",
+            ),
         ) from exc
     return CompanyRead.model_validate(company)
 
@@ -255,7 +268,14 @@ async def update_company_endpoint(
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, "Company with this name already exists") from exc
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=api_problem_detail(
+                code="COMPANY_CONFLICT",
+                message="Company with this name already exists",
+                error_type="companies",
+            ),
+        ) from exc
     await session.refresh(company)
     return CompanyRead.model_validate(company)
 

@@ -67,3 +67,51 @@ async def test_company_isolation_between_tenants(
     )
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_company_update_delete_denied_across_tenants(
+    async_client, make_auth_headers, sessionmaker, data_factory: TestDataFactory
+):
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(slug="acme", session=session)
+        company = await data_factory.create_company(
+            tenant=tenant, name="Foreign Co 2", session=session
+        )
+        await session.commit()
+
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+
+    update_response = await async_client.patch(
+        f"/api/v1/companies/{company.id}",
+        json={"name": "Should Not Update"},
+        headers=headers,
+    )
+    assert update_response.status_code == status.HTTP_404_NOT_FOUND
+
+    delete_response = await async_client.delete(
+        f"/api/v1/companies/{company.id}",
+        headers=headers,
+    )
+    assert delete_response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_company_error_payload_contains_correlation_headers(
+    async_client, make_auth_headers, sessionmaker, data_factory: TestDataFactory
+):
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(slug="acme", session=session)
+        company = await data_factory.create_company(
+            tenant=tenant, name="Foreign Co 3", session=session
+        )
+        await session.commit()
+
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    headers["X-Correlation-Id"] = "company-crud-corr-id"
+    response = await async_client.get(f"/api/v1/companies/{company.id}", headers=headers)
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    body = response.json()
+    assert body["correlation_id"] == "company-crud-corr-id"
+    assert response.headers["X-Correlation-Id"] == "company-crud-corr-id"
