@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { CheckCircle, ChevronRight, ClipboardList, Play, Settings2, Upload } from "lucide-react";
 import { toast } from "sonner";
@@ -42,6 +42,9 @@ const GeneratePackWizardPage = () => {
   const [presetsError, setPresetsError] = useState<ApiError | null>(null);
   const [selectedPresetId, setSelectedPresetId] = useState(presetIdParam);
   const [rowsJson, setRowsJson] = useState(DEFAULT_ROWS_JSON);
+  const rowsJsonRef = useRef(DEFAULT_ROWS_JSON);
+  const [rowsEditorKey, setRowsEditorKey] = useState(0);
+  const [rowsDirty, setRowsDirty] = useState(false);
   const [rowsError, setRowsError] = useState<string | null>(null);
   const [idempotencyKey, setIdempotencyKey] = useState(initialIdempotencyKey);
   const [dryRun, setDryRun] = useState(false);
@@ -93,10 +96,11 @@ const GeneratePackWizardPage = () => {
       step !== draftOrigin.step ||
       selectedPresetId !== draftOrigin.selectedPresetId ||
       rowsJson !== draftOrigin.rowsJson ||
+      rowsDirty ||
       idempotencyKey !== draftOrigin.idempotencyKey ||
       dryRun !== draftOrigin.dryRun
     );
-  }, [draftOrigin, dryRun, idempotencyKey, packRunId, rowsJson, selectedPresetId, step]);
+  }, [draftOrigin, dryRun, idempotencyKey, packRunId, rowsDirty, rowsJson, selectedPresetId, step]);
 
   useUnsavedChanges(hasUnsavedChanges);
 
@@ -106,12 +110,15 @@ const GeneratePackWizardPage = () => {
   }, [presetIdParam]);
 
   const validateRows = (): Array<Record<string, unknown>> | null => {
+    const source = rowsJsonRef.current;
     try {
-      const parsed = JSON.parse(rowsJson) as unknown;
+      const parsed = JSON.parse(source) as unknown;
       if (!Array.isArray(parsed)) {
         setRowsError("Данные должны быть массивом JSON");
         return null;
       }
+      setRowsJson(source);
+      setRowsDirty(false);
       setRowsError(null);
       return parsed as Array<Record<string, unknown>>;
     } catch {
@@ -233,10 +240,16 @@ const GeneratePackWizardPage = () => {
             <div className="space-y-2">
               <Label htmlFor="rows-json">Массив строк в формате JSON</Label>
               <textarea
+                key={rowsEditorKey}
                 id="rows-json"
                 className="min-h-48 w-full rounded-md border border-input bg-background p-3 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                value={rowsJson}
-                onChange={(e) => setRowsJson(e.target.value)}
+                defaultValue={rowsJson}
+                onChange={(e) => {
+                  rowsJsonRef.current = e.target.value;
+                  if (!rowsDirty) {
+                    setRowsDirty(true);
+                  }
+                }}
                 placeholder='[{"doc": "Инструкция", "employee": "Иванов И.И."}]'
               />
               {rowsError && <p className="text-sm text-destructive">{rowsError}</p>}
@@ -381,6 +394,9 @@ const GeneratePackWizardPage = () => {
                   setStep(presetIdParam ? 2 : 1);
                   setSelectedPresetId(presetIdParam);
                   setRowsJson(DEFAULT_ROWS_JSON);
+                  rowsJsonRef.current = DEFAULT_ROWS_JSON;
+                  setRowsEditorKey((current) => current + 1);
+                  setRowsDirty(false);
                   setRowsError(null);
                   setPackRunId(null);
                   setRunError(null);
