@@ -115,3 +115,26 @@ async def test_company_error_payload_contains_correlation_headers(
     body = response.json()
     assert body["correlation_id"] == "company-crud-corr-id"
     assert "company-crud-corr-id" in response.headers["X-Correlation-Id"]
+
+
+@pytest.mark.asyncio
+async def test_companies_list_etag_returns_304_on_if_none_match(
+    async_client, make_auth_headers, sessionmaker, data_factory: TestDataFactory
+):
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        await data_factory.create_company(tenant=tenant, name="ETag Co", session=session)
+        await session.commit()
+
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    first = await async_client.get("/api/v1/companies", headers=headers)
+    assert first.status_code == status.HTTP_200_OK
+    etag = first.headers.get("ETag")
+    assert etag
+
+    second = await async_client.get(
+        "/api/v1/companies",
+        headers={**headers, "If-None-Match": etag},
+    )
+    assert second.status_code == status.HTTP_304_NOT_MODIFIED
+    assert second.headers.get("ETag") == etag

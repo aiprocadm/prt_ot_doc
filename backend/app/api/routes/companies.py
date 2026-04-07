@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime, timezone
 from typing import Annotated
 
@@ -146,14 +147,38 @@ def _apply_company_updates(company: Company, payload: CompanyUpdate) -> None:
         company.branding_payload = data["branding_payload"]
 
 
+def _companies_etag(
+    *,
+    tenant_id: str,
+    companies: list[Company],
+    total: int,
+    limit: int,
+    offset: int,
+) -> str:
+    payload = [
+        f"tenant:{tenant_id}",
+        f"total:{total}",
+        f"limit:{limit}",
+        f"offset:{offset}",
+        "|".join(
+            f"{company.id}:{company.updated_at.isoformat() if company.updated_at else ''}"
+            for company in companies
+        ),
+    ]
+    digest = hashlib.sha256("::".join(payload).encode("utf-8")).hexdigest()
+    return f'"{digest}"'
+
+
 @router.get("", response_model=CompanyPage)
 async def list_companies_endpoint(
+    request: Request,
+    response: Response,
     tenant: TenantDep,
     session: SessionDep,
     access: ManagerAccess,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-) -> CompanyPage:
+) -> CompanyPage | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     companies, total = await list_companies(
@@ -164,6 +189,16 @@ async def list_companies_endpoint(
         claims=dict(access.claims),
         roles=access.to_auth_context().roles,
     )
+    etag = _companies_etag(
+        tenant_id=str(tenant.id),
+        companies=list(companies),
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+    response.headers["ETag"] = etag
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
     return CompanyPage(items=companies, total=total)
 
 
