@@ -1,5 +1,8 @@
 # FINAL DEFECT BURNDOWN BACKLOG
 
+## Security Remediation Status
+- Актуальный прогресс по security-блоку R1-R10 см. в `docs/security/SECURITY_REMEDIATION_PROGRESS_2026-04-07.md`.
+
 ## FB-000 (resolved)
 - severity: blocker
 - area: Migrations / release gate
