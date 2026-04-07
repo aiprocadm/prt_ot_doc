@@ -18,7 +18,17 @@ from app.models.document import (
     DocumentBatchRun,
     DocumentBatchStatus,
 )
-from app.models.models import Outbox, OutboxStatus, RoleEnum, Template, TemplateVersion, TemplateVersionStatus, Tenant
+from app.models.models import (
+    Outbox,
+    OutboxStatus,
+    PipelineRun,
+    PipelineRunStatus,
+    RoleEnum,
+    Template,
+    TemplateVersion,
+    TemplateVersionStatus,
+    Tenant,
+)
 
 DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
@@ -64,6 +74,16 @@ def _headers_tenant_b(*, user_id: str, tenant_b: Tenant) -> dict[str, str]:
         additional_claims={"tenant_id": str(tenant_b.id)},
     )
     return {"Authorization": f"Bearer {token}", "x-tenant": str(tenant_b.id)}
+
+
+def _headers_for_tenant(*, user_id: str, tenant: Tenant) -> dict[str, str]:
+    token = issue_access_token(
+        subject=user_id,
+        tenant=tenant.slug,
+        role=RoleEnum.ADMIN.value,
+        additional_claims={"tenant_id": str(tenant.id)},
+    )
+    return {"Authorization": f"Bearer {token}", "x-tenant": str(tenant.id)}
 
 
 @pytest.mark.anyio
@@ -280,6 +300,121 @@ async def test_documents_get_returns_404_for_other_tenant_document(
 
     response = await async_client.get(
         f"/api/v1/documents/{document_id}",
+        headers=_headers_tenant_b(user_id=user_b_id, tenant_b=tb),
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_tasks_status_returns_404_for_other_tenant_pipeline_run(
+    async_client,
+    sessionmaker,
+    data_factory,
+) -> None:
+    async with sessionmaker() as session:
+        ta = await data_factory.ensure_tenant(slug="task-mx-a", session=session)
+        tb = await data_factory.ensure_tenant(slug="task-mx-b", session=session)
+        user_b = await data_factory.create_user(tenant=tb, role=RoleEnum.ADMIN, session=session)
+        template = Template(
+            tenant_id=ta.id,
+            name="task-mx-template",
+            code="task-mx-template",
+            metadata_json={},
+        )
+        session.add(template)
+        await session.flush()
+        version = TemplateVersion(
+            tenant_id=ta.id,
+            template_id=template.id,
+            version=1,
+            checksum=b"task-mx-checksum",
+            status=TemplateVersionStatus.ACTIVE,
+            payload_key="task-mx/template.docx",
+        )
+        session.add(version)
+        await session.flush()
+        run = PipelineRun(
+            tenant_id=ta.id,
+            template_id=template.id,
+            template_version_id=version.id,
+            status=PipelineRunStatus.QUEUED,
+            context={},
+            result_metadata={},
+            idempotency_key="mx-task-status-idempotency-key",
+        )
+        session.add(run)
+        await session.commit()
+        run_id = run.id
+        user_b_id = user_b.id
+
+    await _ensure_global_tenant(slug=ta.slug, tenant_id=str(ta.id))
+    await _ensure_global_tenant(slug=tb.slug, tenant_id=str(tb.id))
+
+    response = await async_client.get(
+        f"/api/v1/tasks/{run_id}",
+        headers=_headers_tenant_b(user_id=user_b_id, tenant_b=tb),
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_workflow_instance_returns_404_for_other_tenant(
+    async_client,
+    sessionmaker,
+    data_factory,
+) -> None:
+    async with sessionmaker() as session:
+        ta = await data_factory.ensure_tenant(slug="wf-mx-a", session=session)
+        tb = await data_factory.ensure_tenant(slug="wf-mx-b", session=session)
+        user_a = await data_factory.create_user(tenant=ta, role=RoleEnum.ADMIN, session=session)
+        user_b = await data_factory.create_user(tenant=tb, role=RoleEnum.ADMIN, session=session)
+        await session.commit()
+        user_a_id = user_a.id
+        user_b_id = user_b.id
+
+    await _ensure_global_tenant(slug=ta.slug, tenant_id=str(ta.id))
+    await _ensure_global_tenant(slug=tb.slug, tenant_id=str(tb.id))
+
+    headers_a = _headers_for_tenant(user_id=user_a_id, tenant=ta)
+    create_definition = await async_client.post(
+        "/api/v1/workflow/definitions",
+        headers=headers_a,
+        json={
+            "code": "mx-cross-tenant-wf",
+            "name": "MX Cross Tenant",
+            "entity_type": "document",
+            "graph": {
+                "nodes": [
+                    {"id": "start", "type": "start", "name": "Start"},
+                    {"id": "end", "type": "end", "name": "End"},
+                ],
+                "transitions": [{"from": "start", "to": "end"}],
+            },
+            "variables_schema": {},
+        },
+    )
+    assert create_definition.status_code == 201
+    version_id = create_definition.json()["id"]
+    publish = await async_client.post(
+        f"/api/v1/workflow/versions/{version_id}/publish",
+        headers=headers_a,
+    )
+    assert publish.status_code == 200
+    start = await async_client.post(
+        "/api/v1/workflow/instances",
+        headers=headers_a,
+        json={
+            "definition_code": "mx-cross-tenant-wf",
+            "entity_type": "document",
+            "entity_id": "mx-doc-1",
+            "context": {},
+        },
+    )
+    assert start.status_code == 201
+    instance_id = start.json()["id"]
+
+    response = await async_client.get(
+        f"/api/v1/workflow/instances/{instance_id}",
         headers=_headers_tenant_b(user_id=user_b_id, tenant_b=tb),
     )
     assert response.status_code == 404
