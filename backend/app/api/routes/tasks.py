@@ -80,6 +80,9 @@ async def get_task_status(
         PipelineRun.tenant_id == tenant.id,
     )
     run = (await session.execute(stmt)).scalar_one_or_none()
+    if run is None:
+        # Do not leak Celery task existence across tenants.
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Task not found")
     metadata: dict[str, object] = {}
     document_id: str | None = None
     result_payload: dict[str, object] | None = None
