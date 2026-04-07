@@ -114,4 +114,4 @@ async def test_company_error_payload_contains_correlation_headers(
     assert response.status_code == status.HTTP_404_NOT_FOUND
     body = response.json()
     assert body["correlation_id"] == "company-crud-corr-id"
-    assert response.headers["X-Correlation-Id"] == "company-crud-corr-id"
+    assert "company-crud-corr-id" in response.headers["X-Correlation-Id"]

@@ -231,3 +231,55 @@ async def test_legacy_post_template_version_returns_404_for_other_tenant_templat
         headers=_headers_tenant_b(user_id=user_b_id, tenant_b=tb),
     )
     assert response.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_sites_get_returns_404_for_other_tenant_site(
+    async_client,
+    sessionmaker,
+    data_factory,
+) -> None:
+    async with sessionmaker() as session:
+        ta = await data_factory.ensure_tenant(slug="sites-mx-a", session=session)
+        tb = await data_factory.ensure_tenant(slug="sites-mx-b", session=session)
+        user_b = await data_factory.create_user(tenant=tb, role=RoleEnum.ADMIN, session=session)
+        company_a = await data_factory.create_company(tenant=ta, session=session)
+        site_a = await data_factory.create_site(tenant=ta, company=company_a, session=session)
+        await session.commit()
+        site_id = site_a.id
+        user_b_id = user_b.id
+
+    await _ensure_global_tenant(slug=ta.slug, tenant_id=str(ta.id))
+    await _ensure_global_tenant(slug=tb.slug, tenant_id=str(tb.id))
+
+    response = await async_client.get(
+        f"/api/v1/sites/{site_id}",
+        headers=_headers_tenant_b(user_id=user_b_id, tenant_b=tb),
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_documents_get_returns_404_for_other_tenant_document(
+    async_client,
+    sessionmaker,
+    data_factory,
+) -> None:
+    async with sessionmaker() as session:
+        ta = await data_factory.ensure_tenant(slug="docs-mx-a", session=session)
+        tb = await data_factory.ensure_tenant(slug="docs-mx-b", session=session)
+        user_b = await data_factory.create_user(tenant=tb, role=RoleEnum.ADMIN, session=session)
+        company_a = await data_factory.create_company(tenant=ta, session=session)
+        document_a, _ = await data_factory.create_document(tenant=ta, company=company_a, session=session)
+        await session.commit()
+        document_id = document_a.id
+        user_b_id = user_b.id
+
+    await _ensure_global_tenant(slug=ta.slug, tenant_id=str(ta.id))
+    await _ensure_global_tenant(slug=tb.slug, tenant_id=str(tb.id))
+
+    response = await async_client.get(
+        f"/api/v1/documents/{document_id}",
+        headers=_headers_tenant_b(user_id=user_b_id, tenant_b=tb),
+    )
+    assert response.status_code == 404
