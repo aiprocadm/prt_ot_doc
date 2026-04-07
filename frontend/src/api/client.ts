@@ -188,6 +188,13 @@ apiClient.interceptors.response.use(
     const originalRequest = error.config;
     const status = error.response?.status ?? 0;
     if (status === 401 && originalRequest && !originalRequest._retry) {
+      const requestAuthHeader = originalRequest.headers?.Authorization;
+      const hasAccessToken = Boolean(
+        (typeof requestAuthHeader === "string" && requestAuthHeader.trim()) || tokenStorage.getAccessToken()
+      );
+      if (!hasAccessToken) {
+        // No token present: do not storm /auth/refresh, let error handler redirect to login.
+      } else {
       originalRequest._retry = true;
 
       if (isRefreshing) {
@@ -207,6 +214,7 @@ apiClient.interceptors.response.use(
       if (newToken && originalRequest.headers) {
         originalRequest.headers.Authorization = `Bearer ${newToken}`;
         return apiClient(originalRequest);
+      }
       }
     }
 
