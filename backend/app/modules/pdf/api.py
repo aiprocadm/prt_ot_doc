@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
 from app.core.idempotency import compute_request_hash
+from app.core.security import AccessContext, rbac
 from app.models.file import File
 from app.modules.pdf.models import PdfConversionRun, PdfRunStatus
 from app.modules.pdf.schemas import ConvertPdfAccepted, ConvertPdfRequest, PdfRunRead
@@ -23,8 +24,10 @@ async def convert_file_to_pdf(
     response: Response,
     tenant=Depends(get_tenant_record),
     session: AsyncSession = Depends(get_session),
+    access: AccessContext = Depends(rbac()),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> ConvertPdfAccepted:
+    _ = access
     if payload.mode != "docx_to_pdf":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="unsupported_mode")
     if not idempotency_key:
@@ -32,7 +35,11 @@ async def convert_file_to_pdf(
 
     normalized_key = normalize_idempotency_key(idempotency_key)
     request_hash = compute_request_hash({"file_id": file_id, "payload": payload.model_dump(mode="json")})
-    idem = IdempotencyService(session, tenant_id=str(tenant.id), route_key="files.convert_pdf")
+    idem = IdempotencyService(
+        session=session,
+        tenant_id=str(tenant.id),
+        endpoint="files.convert_pdf",
+    )
     record, created = await idem.acquire(key=normalized_key, request_hash=request_hash)
     if not created:
         return await idem.respond_from_store(record, model=ConvertPdfAccepted, response=response)
@@ -78,7 +85,9 @@ async def get_pdf_run(
     pdf_run_id: str,
     tenant=Depends(get_tenant_record),
     session: AsyncSession = Depends(get_session),
+    access: AccessContext = Depends(rbac()),
 ) -> PdfRunRead:
+    _ = access
     run = await session.get(PdfConversionRun, pdf_run_id)
     if run is None or run.tenant_id != tenant.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="pdf_run_not_found")

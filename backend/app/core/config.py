@@ -655,6 +655,8 @@ class Settings(BaseSettings):
             missing.append("S3_SECRET_KEY")
         if self.s3_backend == "memory":
             missing.append("S3_BACKEND")
+        if not self.inbound_webhook_hmac_secret.strip():
+            missing.append("INBOUND_WEBHOOK_HMAC_SECRET")
 
         if missing:
             raise SettingsError(

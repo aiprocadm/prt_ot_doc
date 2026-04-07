@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.security import AccessContext, rbac
 from app.models.document import DocumentVersion
 from app.models.job_engine import DocumentJob, DocumentJobStatus, DocumentJobStep, JobStepStatus
 from app.models.models import Tenant
@@ -28,7 +29,13 @@ router = APIRouter()
 
 
 @router.post("/layout-presets", response_model=HeaderFooterPresetRead, status_code=status.HTTP_201_CREATED)
-async def create_layout_preset(payload: HeaderFooterPresetCreate, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> HeaderFooterPresetRead:
+async def create_layout_preset(
+    payload: HeaderFooterPresetCreate,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    access: AccessContext = Depends(rbac()),
+) -> HeaderFooterPresetRead:
+    _ = access
     record = HeaderFooterPreset(tenant_id=str(tenant.id), **payload.model_dump())
     session.add(record)
     await session.commit()
@@ -37,7 +44,13 @@ async def create_layout_preset(payload: HeaderFooterPresetCreate, session: Async
 
 
 @router.get("/layout-presets", response_model=LayoutPresetList)
-async def list_layout_presets(search: str | None = Query(default=None), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> LayoutPresetList:
+async def list_layout_presets(
+    search: str | None = Query(default=None),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    access: AccessContext = Depends(rbac()),
+) -> LayoutPresetList:
+    _ = access
     stmt = select(HeaderFooterPreset).where(HeaderFooterPreset.tenant_id == str(tenant.id), HeaderFooterPreset.deleted_at.is_(None)).order_by(HeaderFooterPreset.updated_at.desc())
     if search:
         stmt = stmt.where(HeaderFooterPreset.name.ilike(f"%{search}%"))
@@ -46,7 +59,13 @@ async def list_layout_presets(search: str | None = Query(default=None), session:
 
 
 @router.get("/layout-presets/{preset_id}", response_model=HeaderFooterPresetRead)
-async def get_layout_preset(preset_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> HeaderFooterPresetRead:
+async def get_layout_preset(
+    preset_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    access: AccessContext = Depends(rbac()),
+) -> HeaderFooterPresetRead:
+    _ = access
     row = await session.get(HeaderFooterPreset, preset_id)
     if row is None or row.tenant_id != str(tenant.id) or row.deleted_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Preset not found")
@@ -54,7 +73,14 @@ async def get_layout_preset(preset_id: str, session: AsyncSession = Depends(get_
 
 
 @router.patch("/layout-presets/{preset_id}", response_model=HeaderFooterPresetRead)
-async def patch_layout_preset(preset_id: str, payload: HeaderFooterPresetPatch, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> HeaderFooterPresetRead:
+async def patch_layout_preset(
+    preset_id: str,
+    payload: HeaderFooterPresetPatch,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    access: AccessContext = Depends(rbac()),
+) -> HeaderFooterPresetRead:
+    _ = access
     row = await session.get(HeaderFooterPreset, preset_id)
     if row is None or row.tenant_id != str(tenant.id) or row.deleted_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Preset not found")
@@ -66,7 +92,13 @@ async def patch_layout_preset(preset_id: str, payload: HeaderFooterPresetPatch, 
 
 
 @router.delete("/layout-presets/{preset_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
-async def delete_layout_preset(preset_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> None:
+async def delete_layout_preset(
+    preset_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    access: AccessContext = Depends(rbac()),
+) -> None:
+    _ = access
     row = await session.get(HeaderFooterPreset, preset_id)
     if row is None or row.tenant_id != str(tenant.id) or row.deleted_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Preset not found")
@@ -76,7 +108,15 @@ async def delete_layout_preset(preset_id: str, session: AsyncSession = Depends(g
 
 
 @router.post("/documents/{document_version_id}/apply-headers", response_model=ApplyHeadersAccepted)
-async def apply_headers(document_version_id: str, payload: ApplyHeadersRequest, idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> ApplyHeadersAccepted:
+async def apply_headers(
+    document_version_id: str,
+    payload: ApplyHeadersRequest,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    access: AccessContext = Depends(rbac()),
+) -> ApplyHeadersAccepted:
+    _ = access
     key = normalize_idempotency_key(idempotency_key)
     version = await session.get(DocumentVersion, document_version_id)
     if version is None or version.tenant_id != str(tenant.id):

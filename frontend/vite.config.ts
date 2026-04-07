@@ -70,16 +70,6 @@ export default defineConfig(({ mode }) => ({
             options: { cacheName: "app-shell" }
           },
           {
-            urlPattern: ({ url }) => url.pathname.startsWith("/api/") && !url.pathname.startsWith("/api/pwa/sync"),
-            handler: "NetworkFirst",
-            options: {
-              cacheName: "api-read-models",
-              networkTimeoutSeconds: 5,
-              expiration: { maxEntries: 80, maxAgeSeconds: 60 * 10 },
-              cacheableResponse: { statuses: [0, 200] }
-            }
-          },
-          {
             urlPattern: ({ request }) => ["style", "script", "worker"].includes(request.destination),
             handler: "StaleWhileRevalidate",
             options: { cacheName: "static-assets" }

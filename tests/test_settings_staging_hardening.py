@@ -60,3 +60,12 @@ def test_staging_rejects_default_s3_credentials_when_other_secrets_ok() -> None:
             s3_secret_key="prt_local_secret",
             s3_backend="minio",
         )
+
+
+def test_staging_requires_inbound_webhook_hmac_secret() -> None:
+    with pytest.raises(SettingsError, match="Staging configuration must override"):
+        Settings(
+            **_STAGING_SAFE_BASE,
+            secret_key="not-the-default-staging-secret-key-32chars!!",
+            inbound_webhook_hmac_secret="",
+        )
