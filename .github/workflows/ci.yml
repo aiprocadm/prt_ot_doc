@@ -31,6 +31,9 @@ jobs:
       - name: Runtime/build artifact guard
         run: python scripts/ci/check_runtime_artifacts.py
 
+      - name: Default secret guard
+        run: python scripts/ci/check_default_secrets.py
+
       - name: Ruff undefined names + staged mypy (tenant guard)
         run: bash scripts/ci/static_gates.sh
 
