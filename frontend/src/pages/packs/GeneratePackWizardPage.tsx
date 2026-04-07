@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { CheckCircle, ChevronRight, ClipboardList, Play, Settings2, Upload } from "lucide-react";
 import { toast } from "sonner";
@@ -46,6 +46,7 @@ const GeneratePackWizardPage = () => {
   const [rowsEditorKey, setRowsEditorKey] = useState(0);
   const [rowsDirty, setRowsDirty] = useState(false);
   const [rowsError, setRowsError] = useState<string | null>(null);
+  const [rowsCount, setRowsCount] = useState<number | null>(null);
   const [idempotencyKey, setIdempotencyKey] = useState(initialIdempotencyKey);
   const [dryRun, setDryRun] = useState(false);
   const [running, setRunning] = useState(false);
@@ -54,7 +55,6 @@ const GeneratePackWizardPage = () => {
   const [draftOrigin, setDraftOrigin] = useState(() => ({
     step: presetIdParam ? 2 : 1,
     selectedPresetId: presetIdParam,
-    rowsJson: DEFAULT_ROWS_JSON,
     idempotencyKey: initialIdempotencyKey,
     dryRun: false,
   }));
@@ -72,22 +72,6 @@ const GeneratePackWizardPage = () => {
     }
   };
 
-  const deferredRowsJson = useDeferredValue(rowsJson);
-
-  const rowsCount = useMemo(() => {
-    if (step < 4) {
-      // Avoid heavy JSON parsing on each keystroke while editing.
-      return null;
-    }
-    try {
-      const parsed = JSON.parse(deferredRowsJson) as unknown;
-      if (!Array.isArray(parsed)) return null;
-      return parsed.length;
-    } catch {
-      return null;
-    }
-  }, [deferredRowsJson, step]);
-
   const hasUnsavedChanges = useMemo(() => {
     if (packRunId) {
       return false;
@@ -95,12 +79,11 @@ const GeneratePackWizardPage = () => {
     return (
       step !== draftOrigin.step ||
       selectedPresetId !== draftOrigin.selectedPresetId ||
-      rowsJson !== draftOrigin.rowsJson ||
       rowsDirty ||
       idempotencyKey !== draftOrigin.idempotencyKey ||
       dryRun !== draftOrigin.dryRun
     );
-  }, [draftOrigin, dryRun, idempotencyKey, packRunId, rowsDirty, rowsJson, selectedPresetId, step]);
+  }, [draftOrigin, dryRun, idempotencyKey, packRunId, rowsDirty, selectedPresetId, step]);
 
   useUnsavedChanges(hasUnsavedChanges);
 
@@ -119,6 +102,7 @@ const GeneratePackWizardPage = () => {
       }
       setRowsJson(source);
       setRowsDirty(false);
+      setRowsCount(parsed.length);
       setRowsError(null);
       return parsed as Array<Record<string, unknown>>;
     } catch {
@@ -387,7 +371,6 @@ const GeneratePackWizardPage = () => {
                   setDraftOrigin({
                     step: nextStep,
                     selectedPresetId: presetIdParam,
-                    rowsJson: DEFAULT_ROWS_JSON,
                     idempotencyKey: nextIdempotencyKey,
                     dryRun: false,
                   });
@@ -397,6 +380,7 @@ const GeneratePackWizardPage = () => {
                   rowsJsonRef.current = DEFAULT_ROWS_JSON;
                   setRowsEditorKey((current) => current + 1);
                   setRowsDirty(false);
+                  setRowsCount(null);
                   setRowsError(null);
                   setPackRunId(null);
                   setRunError(null);
