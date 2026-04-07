@@ -92,7 +92,7 @@ export const CompanyDetails = ({ company }: { company: CompanyDto }) => {
           <TabsContent value="details" className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
               <InfoRow label="Адрес" value={company.address} />
-              <InfoRow label="Email" value={company.email} />
+              <InfoRow label="Электронная почта" value={company.email} />
               <InfoRow label="Телефон" value={company.phone} />
               <InfoRow label="Сайт" value={company.website} />
             </div>

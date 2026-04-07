@@ -35,7 +35,7 @@ const FindingsPage = () => {
     <div className="space-y-4">
       <RegistryPageHeader
         title="Замечания и нарушения"
-        description="Операционный реестр по API `/findings`: серьёзность, статус, источник и единый UX с поиском."
+        description="Операционный реестр по API `/findings`: серьёзность, статус, источник и единый интерфейс с поиском."
       />
       <Card>
         <CardHeader>

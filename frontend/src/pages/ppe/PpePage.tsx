@@ -102,7 +102,7 @@ const PpePage = () => {
           <ErrorState error={error ?? undefined} onRetry={load} />
           {loading ? <LoadingScreen label="Загрузка карточек СИЗ" /> : null}
           {!loading && !error && rows.length === 0 ? (
-            <EmptyState title="Нет данных по выдаче" description="В этом tenant пока не зарегистрированы выдачи СИЗ." />
+            <EmptyState title="Нет данных по выдаче" description="В этом тенанте пока не зарегистрированы выдачи СИЗ." />
           ) : null}
           {!loading && !error && rows.length > 0 ? (
             <Table>

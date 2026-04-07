@@ -25,7 +25,7 @@ const MedicalPage = () => {
     <div className="space-y-4">
       <RegistryPageHeader
         title="Медосмотры и допуски"
-        description="Реестр теперь использует реальный backend endpoint `/medical/exams` и связывает его с людьми и обязательствами."
+        description="Реестр теперь использует реальный эндпоинт `/medical/exams` и связывает его с людьми и обязательствами."
         stats={[
           { label: "Медосмотров", value: data.exams.length },
           { label: "Просрочено", value: data.exams.filter((item) => new Date(item.valid_until) < new Date()).length },

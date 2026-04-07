@@ -214,11 +214,11 @@ const NotificationsPage = () => {
         <CardHeader><CardTitle>Предпочтения и тихие часы</CardTitle></CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2">
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(settings?.email_enabled)} onChange={(e) => setSettings((prev) => (prev ? { ...prev, email_enabled: e.target.checked } : prev))} /> Электронная почта</label>
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(settings?.telegram_enabled)} onChange={(e) => setSettings((prev) => (prev ? { ...prev, telegram_enabled: e.target.checked } : prev))} /> Telegram</label>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(settings?.telegram_enabled)} onChange={(e) => setSettings((prev) => (prev ? { ...prev, telegram_enabled: e.target.checked } : prev))} /> Телеграм</label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(settings?.inapp_enabled)} onChange={(e) => setSettings((prev) => (prev ? { ...prev, inapp_enabled: e.target.checked } : prev))} /> В приложении</label>
           <Input placeholder="Режим дайджеста: off / daily / weekly" value={settings?.digest_mode ?? ""} onChange={(e) => setSettings((prev) => (prev ? { ...prev, digest_mode: e.target.value } : prev))} />
           <Input placeholder="Адрес электронной почты" value={settings?.email ?? ""} onChange={(e) => setSettings((prev) => (prev ? { ...prev, email: e.target.value } : prev))} />
-          <Input placeholder="ID чата Telegram" value={settings?.telegram_chat_id ?? ""} onChange={(e) => setSettings((prev) => (prev ? { ...prev, telegram_chat_id: e.target.value } : prev))} />
+          <Input placeholder="ID чата Телеграм" value={settings?.telegram_chat_id ?? ""} onChange={(e) => setSettings((prev) => (prev ? { ...prev, telegram_chat_id: e.target.value } : prev))} />
           <Input placeholder="Тихие часы: с (например 22:00)" value={settings?.quiet_hours?.from ?? ""} onChange={(e) => setSettings((prev) => (prev ? { ...prev, quiet_hours: { ...(prev.quiet_hours ?? {}), from: e.target.value } } : prev))} />
           <Input placeholder="Тихие часы: до (например 08:00)" value={settings?.quiet_hours?.to ?? ""} onChange={(e) => setSettings((prev) => (prev ? { ...prev, quiet_hours: { ...(prev.quiet_hours ?? {}), to: e.target.value } } : prev))} />
           <Input placeholder="Часовой пояс (Europe/Moscow)" value={settings?.quiet_hours?.tz ?? ""} onChange={(e) => setSettings((prev) => (prev ? { ...prev, quiet_hours: { ...(prev.quiet_hours ?? {}), tz: e.target.value } } : prev))} />

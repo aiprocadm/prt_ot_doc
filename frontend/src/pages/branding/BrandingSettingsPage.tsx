@@ -487,7 +487,7 @@ const BrandingSettingsPage = () => {
               <Input
                 value={form.watermark_text}
                 onChange={(e) => setForm((s) => ({ ...s, watermark_text: e.target.value }))}
-                placeholder="DRAFT / FOR-APPROVAL"
+                placeholder="ЧЕРНОВИК / НА СОГЛАСОВАНИЕ"
               />
             </div>
 

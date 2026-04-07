@@ -123,7 +123,7 @@ const CrmFinancePage = () => {
     <div className="space-y-4">
       <RegistryPageHeader
         title="CRM / Финансы"
-        description="Реальные tenant-scoped договоры, заказы, счета и статус биллинга вместо demo-таблицы."
+        description="Реальные договоры, заказы, счета и статус биллинга в рамках тенанта вместо демо-таблицы."
         actions={
           snapshot.billing?.plan?.name ? (
             <Badge variant="secondary">План: {snapshot.billing.plan.name}</Badge>
