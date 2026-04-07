@@ -418,3 +418,33 @@ async def test_workflow_instance_returns_404_for_other_tenant(
         headers=_headers_tenant_b(user_id=user_b_id, tenant_b=tb),
     )
     assert response.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_sites_list_etag_returns_304_on_if_none_match(
+    async_client,
+    sessionmaker,
+    data_factory,
+) -> None:
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(slug="sites-etag", session=session)
+        user = await data_factory.create_user(tenant=tenant, role=RoleEnum.ADMIN, session=session)
+        company = await data_factory.create_company(tenant=tenant, session=session)
+        await data_factory.create_site(tenant=tenant, company=company, session=session)
+        await session.commit()
+        user_id = user.id
+
+    await _ensure_global_tenant(slug=tenant.slug, tenant_id=str(tenant.id))
+    headers = _headers_for_tenant(user_id=user_id, tenant=tenant)
+
+    first = await async_client.get("/api/v1/sites", headers=headers)
+    assert first.status_code == 200
+    etag = first.headers.get("ETag")
+    assert etag
+
+    second = await async_client.get(
+        "/api/v1/sites",
+        headers={**headers, "If-None-Match": etag},
+    )
+    assert second.status_code == 304
+    assert second.headers.get("ETag") == etag

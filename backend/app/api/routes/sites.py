@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -104,15 +105,36 @@ async def _ensure_hazards(
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Hazards not found: {', '.join(missing)}")
 
 
+def _sites_etag(
+    *,
+    tenant_id: str,
+    items: list[Site],
+    total: int,
+    limit: int,
+    offset: int,
+) -> str:
+    parts = [
+        f"tenant:{tenant_id}",
+        f"total:{total}",
+        f"limit:{limit}",
+        f"offset:{offset}",
+        "|".join(f"{site.id}:{site.updated_at.isoformat() if site.updated_at else ''}" for site in items),
+    ]
+    digest = hashlib.sha256("::".join(parts).encode("utf-8")).hexdigest()
+    return f'"{digest}"'
+
+
 @router.get("/sites", response_model=SitePage)
 async def list_sites(
+    request: Request,
+    response: Response,
     tenant: TenantDep,
     session: SessionDep,
     _: ManagerAccess,
     company_id: str | None = Query(default=None, min_length=1, max_length=36),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-) -> SitePage:
+) -> SitePage | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     stmt = select(Site).where(Site.tenant_id == tenant.id, Site.deleted_at.is_(None))
@@ -122,6 +144,16 @@ async def list_sites(
     stmt = stmt.order_by(Site.created_at.desc()).offset(offset).limit(limit)
     items = list((await session.execute(stmt)).scalars().all())
     total = await session.scalar(total_stmt)
+    etag = _sites_etag(
+        tenant_id=str(tenant.id),
+        items=items,
+        total=int(total or 0),
+        limit=limit,
+        offset=offset,
+    )
+    response.headers["ETag"] = etag
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
     return SitePage(items=items, total=int(total or 0))
 
 
