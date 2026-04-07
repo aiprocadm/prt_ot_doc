@@ -10,6 +10,7 @@ import { useAuthStore } from "@/stores/auth";
 const listMock = vi.fn();
 const setFiltersMock = vi.fn();
 const patchTaskMock = vi.fn();
+const createTaskMock = vi.fn();
 
 const userWithTaskUpdate = {
   id: "task-manager",
@@ -41,6 +42,7 @@ vi.mock("@/stores/tasks", () => ({
     ],
     item: null,
     getById: vi.fn(),
+    createTask: createTaskMock,
     pagination: { page: 1, page_size: 10, total: 0 },
     setPage: vi.fn(),
     setPageSize: vi.fn(),

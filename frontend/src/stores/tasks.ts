@@ -9,6 +9,12 @@ import type { TaskDto, TaskFiltersDto } from "@/types/dto/tasks";
 interface TasksState extends PaginatedState<TaskDto, TaskFiltersDto> {
   list: (params?: Partial<TaskFiltersDto>) => Promise<void>;
   getById: (id: string) => Promise<TaskDto | null>;
+  createTask: (payload: {
+    title: string;
+    description?: string | null;
+    due_at?: string | null;
+    priority?: TaskDto["priority"];
+  }) => Promise<TaskDto | null>;
   setFilters: (filters: Partial<TaskFiltersDto>) => void;
   setPage: (page: number) => void;
   setPageSize: (size: number) => void;
@@ -80,6 +86,22 @@ export const useTasksStore = create<TasksState>()(
           state.item = data;
           const index = state.items.findIndex((task) => task.id === id);
           if (index >= 0) state.items[index] = data;
+        });
+        return data;
+      } catch (error) {
+        set((state) => {
+          state.error = error as ApiError;
+        });
+        return null;
+      }
+    },
+    createTask: async (payload) => {
+      try {
+        const { data } = await apiClient.post<TaskDto>("/tasks", payload);
+        get().updateTask(data);
+        set((state) => {
+          state.pagination.total += 1;
+          state.error = null;
         });
         return data;
       } catch (error) {

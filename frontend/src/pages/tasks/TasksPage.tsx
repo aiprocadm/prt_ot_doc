@@ -1,7 +1,8 @@
 import { addDays, endOfDay, isWithinInterval, startOfDay } from "date-fns";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
 
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -45,8 +46,14 @@ const TASK_PRIORITIES: TaskPriority[] = ["low", "medium", "high", "critical"];
 const isTaskPriority = (value: string): value is TaskPriority => TASK_PRIORITIES.includes(value as TaskPriority);
 
 const TasksPage = () => {
-  const { list, loading, error, filters, setFilters, items, item, getById, patchTask, pagination } = useTasksStore();
+  const { list, loading, error, filters, setFilters, items, item, getById, patchTask, createTask, pagination } = useTasksStore();
   const [searchParams] = useSearchParams();
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskDescription, setNewTaskDescription] = useState("");
+  const [newTaskPriority, setNewTaskPriority] = useState<TaskPriority>("medium");
+  const [newTaskDueAt, setNewTaskDueAt] = useState("");
   const focusedTaskId = searchParams.get("task_id") ?? undefined;
   const focusedEntityType = searchParams.get("entity_type") ?? undefined;
   const focusedEntityId = searchParams.get("entity_id") ?? undefined;
@@ -120,6 +127,38 @@ const TasksPage = () => {
     list({ priority });
   };
 
+  const resetCreateForm = () => {
+    setNewTaskTitle("");
+    setNewTaskDescription("");
+    setNewTaskPriority("medium");
+    setNewTaskDueAt("");
+  };
+
+  const handleCreateTask = async () => {
+    const title = newTaskTitle.trim();
+    if (!title) {
+      toast.error("Введите название задачи");
+      return;
+    }
+    setCreating(true);
+    const dueAtIso = newTaskDueAt ? new Date(newTaskDueAt).toISOString() : null;
+    const created = await createTask({
+      title,
+      description: newTaskDescription.trim() || null,
+      priority: newTaskPriority,
+      due_at: dueAtIso
+    });
+    setCreating(false);
+    if (!created) {
+      toast.error("Не удалось добавить задачу");
+      return;
+    }
+    toast.success("Задача добавлена");
+    resetCreateForm();
+    setShowCreateForm(false);
+    void list();
+  };
+
   return (
     <div className="space-y-6">
       <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Задачи" }]} />
@@ -128,6 +167,21 @@ const TasksPage = () => {
         description="Контроль сроков, статусов и исполнителей по обязательствам."
         actions={
           <>
+            <ActionButton
+              permission={PERMISSIONS.TASK_UPDATE}
+              onClick={() => {
+                if (showCreateForm) {
+                  setShowCreateForm(false);
+                  resetCreateForm();
+                  return;
+                }
+                setShowCreateForm(true);
+              }}
+              title={showCreateForm ? "Скрыть форму добавления задачи" : "Добавить задачу"}
+              disabledReason="Недостаточно прав для добавления задачи"
+            >
+              {showCreateForm ? "Скрыть форму" : "Добавить задачу"}
+            </ActionButton>
             <Button
               variant="outline"
               onClick={() => {
@@ -255,6 +309,71 @@ const TasksPage = () => {
               </select>
             </FilterField>
           </div>
+          {showCreateForm ? (
+            <div className="mb-4 rounded-md border p-4">
+              <div className="mb-3 text-sm font-semibold">Новая задача</div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <FilterField label="Название" htmlFor="new-task-title">
+                  <input
+                    id="new-task-title"
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                    value={newTaskTitle}
+                    onChange={(event) => setNewTaskTitle(event.target.value)}
+                    placeholder="Например: Проверить комплект документов"
+                  />
+                </FilterField>
+                <FilterField label="Срок (опционально)" htmlFor="new-task-due-at">
+                  <input
+                    id="new-task-due-at"
+                    type="datetime-local"
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                    value={newTaskDueAt}
+                    onChange={(event) => setNewTaskDueAt(event.target.value)}
+                  />
+                </FilterField>
+                <FilterField label="Приоритет" htmlFor="new-task-priority">
+                  <select
+                    id="new-task-priority"
+                    className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                    value={newTaskPriority}
+                    onChange={(event) =>
+                      setNewTaskPriority(isTaskPriority(event.target.value) ? event.target.value : "medium")
+                    }
+                  >
+                    {PRIORITY_OPTIONS.filter((option) => option.value).map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </FilterField>
+                <FilterField label="Описание" htmlFor="new-task-description">
+                  <input
+                    id="new-task-description"
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                    value={newTaskDescription}
+                    onChange={(event) => setNewTaskDescription(event.target.value)}
+                    placeholder="Короткое описание"
+                  />
+                </FilterField>
+              </div>
+              <div className="mt-3 flex gap-2">
+                <Button onClick={() => void handleCreateTask()} disabled={creating}>
+                  {creating ? "Добавление..." : "Сохранить задачу"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowCreateForm(false);
+                    resetCreateForm();
+                  }}
+                  disabled={creating}
+                >
+                  Отмена
+                </Button>
+              </div>
+            </div>
+          ) : null}
           <TaskTable />
           <ErrorState error={error ?? undefined} onRetry={() => void list()} />
           {loading && items.length === 0 ? <LoadingScreen label="Загрузка задач" /> : null}
