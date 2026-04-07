@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { CheckCircle, ChevronRight, ClipboardList, Play, Settings2, Upload } from "lucide-react";
 import { toast } from "sonner";
@@ -69,15 +69,21 @@ const GeneratePackWizardPage = () => {
     }
   };
 
+  const deferredRowsJson = useDeferredValue(rowsJson);
+
   const rowsCount = useMemo(() => {
+    if (step < 4) {
+      // Avoid heavy JSON parsing on each keystroke while editing.
+      return null;
+    }
     try {
-      const parsed = JSON.parse(rowsJson) as unknown;
+      const parsed = JSON.parse(deferredRowsJson) as unknown;
       if (!Array.isArray(parsed)) return null;
       return parsed.length;
     } catch {
       return null;
     }
-  }, [rowsJson]);
+  }, [deferredRowsJson, step]);
 
   const hasUnsavedChanges = useMemo(() => {
     if (packRunId) {

@@ -83,3 +83,15 @@
 - test to add: frontend RTL smoke per major page state.
 - migration needed: no
 - frontend/backend/both: frontend
+
+## FB-007 (resolved)
+- severity: blocker
+- area: Infra Docker / packaging
+- symptom: `infra/docker/Dockerfile.api` и `infra/docker/Dockerfile.worker` зависели от Poetry (`poetry install`), но репозиторий не содержит валидного Poetry-проекта и lock-файла.
+- expected behavior by spec: infra-образы должны собираться воспроизводимо в CI/CD без скрытых зависимостей от отсутствующих lock-артефактов.
+- actual behavior: сборка infra-образов блокировалась на шаге Poetry.
+- likely root cause: drift между историческими Dockerfile и текущей dependency-стратегией (`requirements.txt`).
+- proposed fix: переведены infra Dockerfile на `pip install -r requirements.txt`, добавлен `WORKDIR /srv/app`, убраны Poetry-specific env/steps.
+- test to add: CI job `docker build -f infra/docker/Dockerfile.api .` и `docker build -f infra/docker/Dockerfile.worker .`.
+- migration needed: no
+- frontend/backend/both: backend
