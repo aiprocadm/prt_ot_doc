@@ -8,9 +8,10 @@ Do not add new endpoints here.
 import hashlib
 import json
 import logging
+import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Annotated, Any, Collection, Mapping
+from typing import Annotated, Any, BinaryIO, Collection, Mapping
 from uuid import UUID
 
 from fastapi import (
@@ -220,11 +221,11 @@ async def _ingest_upload(
     limit: int,
     allowed_mimes: Collection[str],
     allowed_extensions: Collection[str],
-) -> tuple[bytes, str, str, str]:
+) -> tuple[tempfile.SpooledTemporaryFile[bytes], int, str, str, str]:
     total = 0
-    buffer = bytearray()
     hasher = hashlib.sha256()
     sample: bytes | None = None
+    payload_file = tempfile.SpooledTemporaryFile(max_size=4 * 1024 * 1024, mode="w+b")
 
     while True:
         chunk = await file.read(1024 * 1024)
@@ -247,16 +248,14 @@ async def _ingest_upload(
         if sample is None and chunk:
             sample = bytes(chunk[:DEFAULT_SNIFF_BYTES])
 
-        buffer.extend(chunk)
+        payload_file.write(chunk)
         hasher.update(chunk)
 
     await file.close()
-
-    payload = bytes(buffer)
     mime = guess_mime_type(
         filename=file.filename,
         provided=file.content_type,
-        sample=sample if sample is not None else payload[:DEFAULT_SNIFF_BYTES],
+        sample=sample if sample is not None else b"",
     )
     mime = _ensure_allowed_mime(mime, allowed_mimes)
 
@@ -291,8 +290,8 @@ async def _ingest_upload(
     extension = (
         detected_extension if normalized_detected_extension else effective_extension or "bin"
     )
-
-    return payload, mime, sha256_hash, extension
+    payload_file.seek(0)
+    return payload_file, total, mime, sha256_hash, extension
 
 
 def _response_from_record(
@@ -360,7 +359,7 @@ async def _persist_and_audit(
     tenant: Tenant,
     access: AccessContext,
     key: str,
-    payload: bytes,
+    payload_file: BinaryIO,
     mime: str,
     sha256_hash: str,
     size: int,
@@ -380,7 +379,7 @@ async def _persist_and_audit(
 
     if record is None:
         try:
-            s3.put_object(data=payload, mime=mime, key=key)
+            s3.put_object(data=payload_file, size=size, mime=mime, key=key)
         except s3.S3OperationError as exc:
             logger.warning(
                 "files.upload.storage_error",
@@ -523,14 +522,12 @@ async def upload_file(
     allowed_mimes = frozenset(settings.file_allowed_mime)
     allowed_extensions = frozenset(settings.file_allowed_extensions)
 
-    payload, mime, sha256_hash, extension = await _ingest_upload(
+    payload_file, size, mime, sha256_hash, extension = await _ingest_upload(
         file=file,
         limit=limit,
         allowed_mimes=allowed_mimes,
         allowed_extensions=allowed_extensions,
     )
-
-    size = len(payload)
     await assert_quota(session, tenant=tenant, kind="storage_bytes", delta=size)
     file_kind = kind or FileKind.DOCUMENT
     key = build_storage_key(
@@ -548,23 +545,26 @@ async def upload_file(
         metadata["pack_id"] = pack_id
     if company_id:
         metadata["company_id"] = company_id
-    return await _persist_and_audit(
-        request=request,
-        response=response,
-        session=session,
-        tenant=tenant,
-        access=access,
-        key=key,
-        payload=payload,
-        mime=mime,
-        sha256_hash=sha256_hash,
-        size=size,
-        file_kind=file_kind,
-        original_name=file.filename,
-        company_id=company_id,
-        pack_id=pack_id,
-        metadata=metadata,
-    )
+    try:
+        return await _persist_and_audit(
+            request=request,
+            response=response,
+            session=session,
+            tenant=tenant,
+            access=access,
+            key=key,
+            payload_file=payload_file,
+            mime=mime,
+            sha256_hash=sha256_hash,
+            size=size,
+            file_kind=file_kind,
+            original_name=file.filename,
+            company_id=company_id,
+            pack_id=pack_id,
+            metadata=metadata,
+        )
+    finally:
+        payload_file.close()
 
 
 @router.get("/{file_id}", response_model=FileUploadResponse)
@@ -679,7 +679,7 @@ async def upload_template(
                 ),
             ) from exc
 
-    payload, mime, sha256_hash, extension = await _ingest_upload(
+    payload_file, size, mime, sha256_hash, extension = await _ingest_upload(
         file=file,
         limit=limit,
         allowed_mimes=allowed_mimes,
@@ -707,25 +707,28 @@ async def upload_template(
         now=datetime.now(timezone.utc),
     )
 
-    await assert_quota(session, tenant=tenant, kind="storage_bytes", delta=len(payload))
+    await assert_quota(session, tenant=tenant, kind="storage_bytes", delta=size)
 
-    return await _persist_and_audit(
-        request=request,
-        response=response,
-        session=session,
-        tenant=tenant,
-        access=access,
-        key=key,
-        payload=payload,
-        mime=mime,
-        sha256_hash=sha256_hash,
-        size=len(payload),
-        file_kind=FileKind.TEMPLATE,
-        original_name=file.filename,
-        company_id=company_id,
-        pack_id=pack_id,
-        metadata=metadata,
-    )
+    try:
+        return await _persist_and_audit(
+            request=request,
+            response=response,
+            session=session,
+            tenant=tenant,
+            access=access,
+            key=key,
+            payload_file=payload_file,
+            mime=mime,
+            sha256_hash=sha256_hash,
+            size=size,
+            file_kind=FileKind.TEMPLATE,
+            original_name=file.filename,
+            company_id=company_id,
+            pack_id=pack_id,
+            metadata=metadata,
+        )
+    finally:
+        payload_file.close()
 
 
 @router.get("/{file_id}/download", response_model=FileDownloadResponse)

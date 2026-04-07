@@ -208,6 +208,37 @@ async def test_upload_file_happy_path(async_client, make_auth_headers, sessionma
 
 
 @pytest.mark.anyio
+async def test_upload_uses_streaming_payload_for_storage(
+    async_client,
+    make_auth_headers,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_put_object(*, data, mime: str, key: str, size: int | None = None):
+        captured["is_bytes"] = isinstance(data, (bytes, bytearray))
+        captured["has_read"] = hasattr(data, "read")
+        captured["mime"] = mime
+        captured["key"] = key
+        captured["size"] = size
+        return ""
+
+    monkeypatch.setattr("app.api.routes.files.s3.put_object", _fake_put_object)
+
+    payload = b"stream-me"
+    headers = {**dict(async_client.headers), **await make_auth_headers()}
+    response = await async_client.post(
+        "/api/v1/files/upload",
+        files={"file": ("stream.txt", payload, "text/plain")},
+        headers=headers,
+    )
+    assert response.status_code == 201
+    assert captured["is_bytes"] is False
+    assert captured["has_read"] is True
+    assert captured["size"] == len(payload)
+
+
+@pytest.mark.anyio
 @pytest.mark.usefixtures("aws")
 async def test_upload_file_rejects_oversized(async_client, make_auth_headers) -> None:
     limit = max_upload_bytes()

@@ -255,25 +255,35 @@ def ensure_bucket() -> None:
         raise S3OperationError.from_client_error("head_bucket", exc, bucket=bucket) from exc
 
 
-def put_object(*, data: bytes, mime: str, key: str) -> str:
+def put_object(*, data: bytes | BinaryIO, mime: str, key: str, size: int | None = None) -> str:
     """Upload object to S3 under provided key and return resulting ETag."""
 
-    if not isinstance(data, (bytes, bytearray)):
-        raise TypeError("data must be bytes-like")
+    payload_size = size if size is not None else (len(data) if isinstance(data, (bytes, bytearray)) else None)
 
     settings = get_settings()
     if _using_memory_backend():
         storage = MemoryStorageService.default()
-        storage.put(key, data, content_type=mime)
+        if isinstance(data, (bytes, bytearray)):
+            payload = bytes(data)
+        else:
+            payload = data.read()
+            if not isinstance(payload, (bytes, bytearray)):
+                raise TypeError("stream data must return bytes")
+        storage.put(key, payload, content_type=mime)
         logger.info(
             "files.memory.object.stored",
-            extra={"key": key, "content_type": mime, "size": len(data)},
+            extra={"key": key, "content_type": mime, "size": len(payload)},
         )
         return ""
     if _using_local_backend():
         storage = _get_local_storage()
         try:
-            storage.upload(key=key, data=BytesIO(data), content_type=mime)
+            stream: BinaryIO
+            if isinstance(data, (bytes, bytearray)):
+                stream = BytesIO(data)
+            else:
+                stream = data
+            storage.upload(key=key, data=stream, content_type=mime)
             _write_local_metadata(storage, key, mime=mime)
         except FileStorageError as exc:
             raise S3OperationError(
@@ -286,19 +296,28 @@ def put_object(*, data: bytes, mime: str, key: str) -> str:
             ) from exc
         logger.info(
             "files.local.object.stored",
-            extra={"key": key, "content_type": mime, "size": len(data)},
+            extra={"key": key, "content_type": mime, "size": payload_size},
         )
         return ""
 
     client = get_client()
 
     try:
-        response = client.put_object(
-            Bucket=settings.s3_bucket,
-            Key=key,
-            Body=data,
-            ContentType=mime,
-        )
+        if isinstance(data, (bytes, bytearray)):
+            response = client.put_object(
+                Bucket=settings.s3_bucket,
+                Key=key,
+                Body=data,
+                ContentType=mime,
+            )
+        else:
+            response = client.upload_fileobj(
+                Fileobj=data,
+                Bucket=settings.s3_bucket,
+                Key=key,
+                ExtraArgs={"ContentType": mime},
+            )
+            response = {}
     except ClientError as exc:
         raise S3OperationError.from_client_error(
             "put_object", exc, bucket=settings.s3_bucket, key=key
@@ -315,7 +334,7 @@ def put_object(*, data: bytes, mime: str, key: str) -> str:
             "key": key,
             "etag": etag,
             "content_type": mime,
-            "size": len(data),
+            "size": payload_size,
         },
     )
     return etag
