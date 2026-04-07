@@ -540,6 +540,31 @@ async def test_download_endpoint_returns_presigned_url(
 
 @pytest.mark.anyio
 @pytest.mark.usefixtures("aws")
+async def test_download_blocks_file_while_scan_pending(
+    async_client, make_auth_headers
+) -> None:
+    payload = b"pending-check"
+    headers = {**dict(async_client.headers), **await make_auth_headers()}
+
+    upload = await async_client.post(
+        "/api/v1/files/upload",
+        files={"file": ("pending.txt", payload, "text/plain")},
+        headers=headers,
+    )
+    assert upload.status_code == 201
+    body = upload.json()
+    assert body["scan_status"] == FileScanStatus.PENDING.value
+    assert body["quarantined"] is True
+
+    download = await async_client.get(f"/api/v1/files/{body['id']}/download", headers=headers)
+    assert download.status_code == 409
+    data = download.json()
+    assert data["code"] == "FILE_NOT_READY"
+    assert data["message"] == "File is not available for download until antivirus scan is clean"
+
+
+@pytest.mark.anyio
+@pytest.mark.usefixtures("aws")
 async def test_download_denies_cross_tenant(async_client, make_auth_headers, sessionmaker) -> None:
     payload = b"tenant-check"
     headers = {**dict(async_client.headers), **await make_auth_headers()}
