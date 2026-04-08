@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
 
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -16,16 +18,35 @@ import { usePersonsStore } from "@/stores/persons";
 import type { PersonDto } from "@/types/dto/persons";
 
 const PersonsPage = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { list, pagination, loading, error, items } = usePersonsStore();
   const [selectedPerson, setSelectedPerson] = useState<PersonDto | null>(null);
+  const focusedPersonId = searchParams.get("person_id") ?? undefined;
+
+  const PERSON_STATUS_LABELS: Record<string, string> = useMemo(
+    () => ({
+      active: "Активен",
+      inactive: "Неактивен",
+      dismissed: "Уволен"
+    }),
+    []
+  );
 
   useEffect(() => {
     list();
   }, [list]);
 
+  useEffect(() => {
+    if (!focusedPersonId) return;
+    const focused = items.find((person) => person.id === focusedPersonId);
+    if (focused) {
+      setSelectedPerson(focused);
+    }
+  }, [focusedPersonId, items]);
+
   return (
     <div className="space-y-6">
-      <Breadcrumb items={[{ label: "Главная", to: "/" }, { label: "Сотрудники" }]} />
+      <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Сотрудники" }]} />
       <RegistryPageHeader
         title="Сотрудники"
         description="Карточка сотрудника с вкладками по обучению, СИЗ, рискам и медосмотрам."
@@ -44,6 +65,10 @@ const PersonsPage = () => {
                 }
                 onSubmitted={(person) => {
                   setSelectedPerson(person);
+                  const next = new URLSearchParams(searchParams);
+                  next.set("person_id", person.id);
+                  setSearchParams(next, { replace: true });
+                  toast.success(`Сотрудник "${person.full_name}" добавлен и открыт в карточке`);
                   list();
                 }}
               />
@@ -65,11 +90,18 @@ const PersonsPage = () => {
         <Card>
           <CardContent className="space-y-4 py-6">
             <h2 className="text-xl font-semibold">{selectedPerson.full_name}</h2>
+            {focusedPersonId ? (
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="ghost" asChild>
+                  <Link to="/persons">Сбросить фокус</Link>
+                </Button>
+              </div>
+            ) : null}
             <div className="grid gap-2 md:grid-cols-2">
               <Info label="Должность" value={selectedPerson.position} />
               <Info label="Электронная почта" value={selectedPerson.email} />
               <Info label="Телефон" value={selectedPerson.phone} />
-              <Info label="Статус" value={selectedPerson.status} />
+              <Info label="Статус" value={PERSON_STATUS_LABELS[selectedPerson.status] ?? selectedPerson.status} />
             </div>
             <Tabs defaultValue="training">
               <TabsList>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { opsApi, type PpeIssueDto, type PpeItemDto } from "@/api/ops";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -15,11 +16,17 @@ import type { ApiError } from "@/types/dto/common";
 import { formatDate } from "@/utils/datetime";
 
 const PpePage = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [issues, setIssues] = useState<PpeIssueDto[]>([]);
   const [items, setItems] = useState<PpeItemDto[]>([]);
   const [persons, setPersons] = useState<PersonDto[]>([]);
+  const [statusFilter, setStatusFilter] = useState<"all" | "overdue" | "ready" | "draft">(
+    searchParams.get("status") === "overdue" || searchParams.get("status") === "ready" || searchParams.get("status") === "draft"
+      ? (searchParams.get("status") as "overdue" | "ready" | "draft")
+      : "all"
+  );
 
   const load = async () => {
     setLoading(true);
@@ -66,11 +73,34 @@ const PpePage = () => {
     });
   }, [issues, itemMap, personMap]);
 
+  const visibleRows = useMemo(() => {
+    if (statusFilter === "all") return rows;
+    return rows.filter((row) => row.status === statusFilter);
+  }, [rows, statusFilter]);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "СИЗ и склады" }]} />
         <div className="flex gap-2">
+          <select
+            className="h-10 rounded-md border px-3 text-sm"
+            value={statusFilter}
+            onChange={(event) => {
+              const next = event.target.value as "all" | "overdue" | "ready" | "draft";
+              setStatusFilter(next);
+              const params = new URLSearchParams(searchParams);
+              if (next === "all") params.delete("status");
+              else params.set("status", next);
+              setSearchParams(params, { replace: true });
+            }}
+            aria-label="Фильтр карточек СИЗ"
+          >
+            <option value="all">Все карточки</option>
+            <option value="overdue">Требуют замены</option>
+            <option value="ready">Актуальные</option>
+            <option value="draft">Без активных выдач</option>
+          </select>
           <Can
             permission={PERMISSIONS.PPE_ISSUE}
             fallback={<Button disabled title="Недостаточно прав для выдачи СИЗ">Быстрая выдача</Button>}
@@ -83,7 +113,7 @@ const PpePage = () => {
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader><CardTitle className="text-sm font-semibold">Карточки сотрудников</CardTitle></CardHeader>
-          <CardContent className="text-sm text-muted-foreground">{loading ? "Загрузка…" : `${rows.length} сотрудников с историей выдачи.`}</CardContent>
+          <CardContent className="text-sm text-muted-foreground">{loading ? "Загрузка…" : `${visibleRows.length} сотрудников по текущему фильтру.`}</CardContent>
         </Card>
         <Card>
           <CardHeader><CardTitle className="text-sm font-semibold">Активные выдачи</CardTitle></CardHeader>
@@ -101,10 +131,10 @@ const PpePage = () => {
         <CardContent className="space-y-3">
           <ErrorState error={error ?? undefined} onRetry={load} />
           {loading ? <LoadingScreen label="Загрузка карточек СИЗ" /> : null}
-          {!loading && !error && rows.length === 0 ? (
+          {!loading && !error && visibleRows.length === 0 ? (
             <EmptyState title="Нет данных по выдаче" description="В этом тенанте пока не зарегистрированы выдачи СИЗ." />
           ) : null}
-          {!loading && !error && rows.length > 0 ? (
+          {!loading && !error && visibleRows.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -112,16 +142,20 @@ const PpePage = () => {
                   <TableHead>Должность</TableHead>
                   <TableHead>Выдано</TableHead>
                   <TableHead>Ближайшая замена</TableHead>
+                  <TableHead>Статус карточки</TableHead>
                   <TableHead>Позиции</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map((row) => (
+                {visibleRows.map((row) => (
                   <TableRow key={row.personId}>
                     <TableCell className="font-medium">{row.employee}</TableCell>
                     <TableCell>{row.role}</TableCell>
                     <TableCell>{row.issued}</TableCell>
                     <TableCell>{formatDate(row.due) || "—"}</TableCell>
+                    <TableCell>
+                      {row.status === "overdue" ? "Требует замены" : row.status === "ready" ? "Актуально" : "Нет активных выдач"}
+                    </TableCell>
                     <TableCell>{row.items || "—"}</TableCell>
                   </TableRow>
                 ))}
