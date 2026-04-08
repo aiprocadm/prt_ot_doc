@@ -15,6 +15,7 @@ import { WizardStepper } from "@/components/wizard/WizardStepper";
 
 const DocumentsWizardPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const queryStep = searchParams.get("step");
   const {
     tenant,
     companies,
@@ -50,22 +51,21 @@ const DocumentsWizardPage = () => {
   const [batchErrors, setBatchErrors] = useState("");
 
   useEffect(() => {
-    const stepFromQuery = Number(searchParams.get("step") ?? step);
+    const stepFromQuery = Number(queryStep ?? step);
     if (Number.isFinite(stepFromQuery) && stepFromQuery >= 1 && stepFromQuery <= 10 && stepFromQuery !== step) {
       setPartial({ step: stepFromQuery });
     }
-  }, [searchParams, setPartial, step]);
+  }, [queryStep, setPartial, step]);
 
   useEffect(() => {
-    const current = Number(searchParams.get("step") ?? 0);
-    if (current !== step) {
+    if (queryStep !== String(step)) {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev);
         next.set("step", String(step));
         return next;
-      });
+      }, { replace: true });
     }
-  }, [searchParams, setSearchParams, step]);
+  }, [queryStep, setSearchParams, step]);
 
   const filteredBatchItems = useMemo(() => {
     if (!batch) return [];
