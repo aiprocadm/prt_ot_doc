@@ -13,16 +13,22 @@ export const usePolling = (
 ) => {
   const savedCallback = useRef(callback);
   const inFlight = useRef(false);
+  const onErrorRef = useRef<UsePollingOptions["onError"]>(undefined);
+
+  const options: UsePollingOptions =
+    typeof enabledOrOptions === "boolean" ? { enabled: enabledOrOptions } : enabledOrOptions;
+  const enabled = options.enabled ?? true;
+  const runImmediately = options.runImmediately ?? false;
 
   useEffect(() => {
     savedCallback.current = callback;
   }, [callback]);
 
   useEffect(() => {
-    const options: UsePollingOptions =
-      typeof enabledOrOptions === "boolean" ? { enabled: enabledOrOptions } : enabledOrOptions;
-    const enabled = options.enabled ?? true;
+    onErrorRef.current = options.onError;
+  }, [options.onError]);
 
+  useEffect(() => {
     if (!enabled) return undefined;
 
     const tick = async () => {
@@ -32,13 +38,13 @@ export const usePolling = (
       try {
         await savedCallback.current();
       } catch (error) {
-        options.onError?.(error);
+        onErrorRef.current?.(error);
       } finally {
         inFlight.current = false;
       }
     };
 
-    if (options.runImmediately) {
+    if (runImmediately) {
       void tick();
     }
     const intervalId = window.setInterval(() => {
@@ -48,5 +54,5 @@ export const usePolling = (
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [interval, enabledOrOptions]);
+  }, [enabled, interval, runImmediately]);
 };
