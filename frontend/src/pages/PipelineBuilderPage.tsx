@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { apiClient } from "@/api/client";
+import { pipelineBuilderApi } from "@/api/pipelines";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -56,8 +56,8 @@ const PipelineBuilderPage = () => {
     setProfilesLoading(true);
     setProfilesError(null);
     try {
-      const response = await apiClient.get<PipelineProfile[]>("/pipelines/profiles");
-      setProfiles(response.data);
+      const response = await pipelineBuilderApi.getProfiles<PipelineProfile>();
+      setProfiles(response);
     } catch (loadError) {
       setProfiles([]);
       setProfilesError(loadError as ApiError);
@@ -146,7 +146,7 @@ const PipelineBuilderPage = () => {
     try {
       setError(null);
       if (validationError) throw new Error(validationError);
-      await apiClient.post("/pipelines/profiles", { code, name, graph: parsedGraph, is_active: true });
+      await pipelineBuilderApi.createProfile({ code, name, graph: parsedGraph, is_active: true });
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка сохранения");
