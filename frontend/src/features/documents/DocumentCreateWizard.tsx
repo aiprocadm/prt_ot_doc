@@ -14,6 +14,15 @@ const createIdempotencyKey = () =>
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
+const normalizePipelineState = (status: string): "queued" | "running" | "done" | "error" => {
+  const normalized = String(status).toLowerCase();
+  if (normalized === "queued") return "queued";
+  if (normalized === "running" || normalized === "processing" || normalized === "pending") return "running";
+  if (normalized === "done" || normalized === "success" || normalized === "completed") return "done";
+  if (normalized === "error" || normalized === "failed" || normalized === "failure" || normalized === "canceled") return "error";
+  return "running";
+};
+
 export const DocumentCreateWizard = () => {
   const { items: companies, list: listCompanies } = useCompaniesStore();
   const { generateDocument, getGenerationStatus, list: listDocuments } = useDocumentsStore();
@@ -39,18 +48,18 @@ export const DocumentCreateWizard = () => {
     const timer = window.setInterval(async () => {
       try {
         const status = await getGenerationStatus(taskId);
-        const normalized = status.status === "done" || status.status === "error" ? status.status : "running";
+        const normalized = normalizePipelineState(status.status);
         setPipelineState(normalized);
         setRequestId(String(status.metadata?.request_id ?? ""));
         if (status.error) {
           setPipelineError(status.error);
         }
-        if (status.status === "done") {
+        if (normalized === "done") {
           listDocuments().catch(() => undefined);
           toast.success("Документ успешно поставлен в реестр.");
           window.clearInterval(timer);
         }
-        if (status.status === "error") {
+        if (normalized === "error") {
           toast.error("Генерация завершилась ошибкой. Можно повторить с тем же ключом.");
           window.clearInterval(timer);
         }
@@ -103,7 +112,7 @@ export const DocumentCreateWizard = () => {
           </Button>
           <Button
             type="button"
-            disabled={!canSubmit || pipelineState === "running"}
+            disabled={!canSubmit || pipelineState === "queued" || pipelineState === "running"}
             onClick={async () => {
               setPipelineState("queued");
               setPipelineError(null);
