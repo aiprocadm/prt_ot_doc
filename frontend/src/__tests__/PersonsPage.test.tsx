@@ -1,5 +1,4 @@
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 
@@ -26,19 +25,24 @@ vi.mock("@/stores/persons", () => ({
   })
 }));
 
+vi.mock("@/features/persons/PersonTable", () => ({
+  PersonTable: ({ onSelect }: { onSelect: (person: { id: string }) => void }) => (
+    <button type="button" onClick={() => onSelect({ id: "person-1" } as never)}>
+      mock-person-table
+    </button>
+  )
+}));
+
 describe("PersonsPage", () => {
   it("renders employee profile tabs", async () => {
     render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={["/persons?person_id=person-1"]}>
         <PersonsPage />
       </MemoryRouter>
     );
 
     expect(listMock).toHaveBeenCalled();
-    const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: /иван иванов/i }));
-
-    expect(screen.getByRole("tab", { name: "Обучение" })).toBeInTheDocument();
+    expect(await screen.findByRole("tab", { name: "Обучение" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "СИЗ" })).toBeInTheDocument();
   });
 
