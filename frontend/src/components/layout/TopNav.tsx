@@ -10,7 +10,7 @@ import { useTenantStore } from "@/stores/tenant";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuthStore } from "@/stores/auth";
 import { GlobalSearch } from "@/components/GlobalSearch";
-import { apiClient } from "@/api/client";
+import { getTopNavKpi } from "@/api/navigation";
 
 export const TopNav = () => {
   const { user, logout } = useAuthStore();
@@ -22,15 +22,9 @@ export const TopNav = () => {
     let mounted = true;
     const loadCounts = async () => {
       try {
-        const [taskResponse, notificationResponse] = await Promise.all([
-          apiClient.get<Array<unknown>>("/workflow/tasks", { params: { assignee: "me" } }),
-          apiClient.get<{ unread_count: number }>("/notifications", { params: { status: "unread", limit: 1 } })
-        ]);
+        const data = await getTopNavKpi();
         if (!mounted) return;
-        setKpi({
-          tasks: taskResponse.data.length,
-          alerts: notificationResponse.data.unread_count ?? 0
-        });
+        setKpi(data);
       } catch {
         if (mounted) setKpi({ tasks: 0, alerts: 0 });
       }

@@ -1,7 +1,7 @@
 import { RotateCcw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import { apiClient } from "@/api/client";
+import { integrationsApi } from "@/api/integrations";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -54,11 +54,11 @@ const ApprovalsOutboxPage = () => {
     setError(null);
     try {
       const [outboxResponse, eventsResponse] = await Promise.all([
-        apiClient.get<{ items: OutboxEntry[] }>("/admin/outbox"),
-        apiClient.get<{ items: OutboxEventEntry[] }>("/admin/outbox/events"),
+        integrationsApi.getOutbox<OutboxEntry>(),
+        integrationsApi.getOutboxEvents<OutboxEventEntry>(),
       ]);
-      setDeliveries((outboxResponse.data.items ?? []).filter((item) => isApprovalEvent(item.event_type)));
-      setEvents((eventsResponse.data.items ?? []).filter((item) => isApprovalEvent(item.event_type)));
+      setDeliveries((outboxResponse.items ?? []).filter((item) => isApprovalEvent(item.event_type)));
+      setEvents((eventsResponse.items ?? []).filter((item) => isApprovalEvent(item.event_type)));
     } catch (err) {
       setError((err as ApiError) ?? { message: "Не удалось загрузить исходящие согласования", status: 0 });
     } finally {
@@ -73,7 +73,7 @@ const ApprovalsOutboxPage = () => {
   const retryDelivery = async (id: string) => {
     setRetryingId(id);
     try {
-      await apiClient.post(`/admin/outbox/${id}/retry`);
+      await integrationsApi.retryOutboxDelivery(id);
       await load();
     } finally {
       setRetryingId(null);
@@ -83,7 +83,7 @@ const ApprovalsOutboxPage = () => {
   const requeueEvent = async (id: string) => {
     setRetryingId(id);
     try {
-      await apiClient.post(`/admin/outbox/events/${id}/requeue`);
+      await integrationsApi.retryOutboxEvent(id);
       await load();
     } finally {
       setRetryingId(null);

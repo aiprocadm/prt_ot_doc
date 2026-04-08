@@ -2,7 +2,17 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
-import { apiClient } from "@/api/client";
+import {
+  getLearnerDashboard,
+  getTeacherDashboard,
+  getTrainingAnalytics,
+  getTrainingProgramDetail,
+  getTrainingPrograms,
+  type LearnerDashboardDto,
+  type TeacherDashboardDto,
+  type TrainingAnalyticsDto,
+  type TrainingProgramDetailDto
+} from "@/api/training";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
@@ -11,28 +21,6 @@ import { Can } from "@/components/permissions/Can";
 import { PERMISSIONS } from "@/permissions/permissions";
 import { useAbility } from "@/permissions/useAbility";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-
-type TeacherDashboard = {
-  groups_total: number;
-  enrollments_total: number;
-  completed_total: number;
-  average_progress_percent: number;
-};
-
-type LearnerDashboard = {
-  assigned_total: number;
-  completed_total: number;
-  overdue_total: number;
-  next_due_at?: string | null;
-  items?: Array<{ id: string; completion_status: string; progress_percent: number; due_at?: string | null }>;
-};
-
-type TrainingAnalytics = {
-  completed_total: number;
-  retake_total: number;
-  average_attempt_score: number;
-  material_types: Record<string, number>;
-};
 
 const StatCard = ({ title, value }: { title: string; value: number | string }) => (
   <Card>
@@ -50,12 +38,12 @@ const TrainingPage = () => {
   const { can } = useAbility();
   const canManageTraining = can(PERMISSIONS.TRAINING_ASSIGN);
   const canViewLearnerTraining = can(PERMISSIONS.TRAINING_VIEW);
-  const [teacher, setTeacher] = useState<TeacherDashboard | null>(null);
-  const [learner, setLearner] = useState<LearnerDashboard | null>(null);
+  const [teacher, setTeacher] = useState<TeacherDashboardDto | null>(null);
+  const [learner, setLearner] = useState<LearnerDashboardDto | null>(null);
   const [teacherError, setTeacherError] = useState<string | null>(null);
   const [learnerError, setLearnerError] = useState<string | null>(null);
-  const [programDetail, setProgramDetail] = useState<{ modules: Array<{ module: { id: string; title: string }; lessons: Array<{ id: string; title: string }> }> } | null>(null);
-  const [analytics, setAnalytics] = useState<TrainingAnalytics | null>(null);
+  const [programDetail, setProgramDetail] = useState<TrainingProgramDetailDto | null>(null);
+  const [analytics, setAnalytics] = useState<TrainingAnalyticsDto | null>(null);
   const defaultTab = useMemo(() => (canManageTraining ? "teacher" : "learner"), [canManageTraining]);
   const [activeTab, setActiveTab] = useState<"teacher" | "learner">(defaultTab);
 
@@ -68,12 +56,12 @@ const TrainingPage = () => {
     setLearnerError(null);
 
     if (canManageTraining) {
-      void apiClient.get<TeacherDashboard>("/training/teacher/dashboard").then(({ data }) => setTeacher(data)).catch(() => setTeacherError("teacher"));
-      void apiClient.get<TrainingAnalytics>("/training/analytics/overview").then(({ data }) => setAnalytics(data)).catch(() => undefined);
-      void apiClient.get<{ items: Array<{ id: string }> }>("/training/programs").then(({ data }) => {
-        const firstProgram = data.items?.[0]?.id;
+      void getTeacherDashboard().then((data) => setTeacher(data)).catch(() => setTeacherError("teacher"));
+      void getTrainingAnalytics().then((data) => setAnalytics(data)).catch(() => undefined);
+      void getTrainingPrograms().then((data) => {
+        const firstProgram = data.items[0]?.id;
         if (firstProgram) {
-          return apiClient.get(`/training/programs/${firstProgram}/detail`).then(({ data: detail }) => setProgramDetail(detail));
+          return getTrainingProgramDetail(firstProgram).then((detail) => setProgramDetail(detail));
         }
         setProgramDetail(null);
         return undefined;
@@ -85,7 +73,7 @@ const TrainingPage = () => {
     }
 
     if (canViewLearnerTraining) {
-      void apiClient.get<LearnerDashboard>("/training/learner/dashboard", { params: { person_id: "me" } }).then(({ data }) => setLearner(data)).catch(() => setLearnerError("learner"));
+      void getLearnerDashboard().then((data) => setLearner(data)).catch(() => setLearnerError("learner"));
     } else {
       setLearner(null);
     }

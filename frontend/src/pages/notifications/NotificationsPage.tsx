@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { apiClient } from "@/api/client";
+import { notificationsApi } from "@/api/notifications";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -66,16 +66,14 @@ const NotificationsPage = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await apiClient.get<{ items: NotificationItem[]; unread_count: number }>("/notifications", {
-        params: {
-          ...(statusFilter !== "all" ? { status: statusFilter } : {}),
-          ...(channel !== "all" ? { channel } : {}),
-          ...(priority !== "all" ? { priority } : {}),
-          ...(type ? { type } : {})
-        }
+      const response = await notificationsApi.list<NotificationItem>({
+        ...(statusFilter !== "all" ? { status: statusFilter } : {}),
+        ...(channel !== "all" ? { channel } : {}),
+        ...(priority !== "all" ? { priority } : {}),
+        ...(type ? { type } : {})
       });
-      setItems(response.data.items);
-      setUnreadCount(response.data.unread_count);
+      setItems(response.items);
+      setUnreadCount(response.unread_count);
       setSelectedIds([]);
     } catch (err) {
       const apiError = (err as ApiError) ?? { status: 500, message: "Не удалось загрузить уведомления" };
@@ -87,8 +85,8 @@ const NotificationsPage = () => {
 
   const loadSettings = async () => {
     try {
-      const response = await apiClient.get<NotificationSettings>("/notifications/settings/me");
-      setSettings(response.data);
+      const response = await notificationsApi.getMySettings<NotificationSettings>();
+      setSettings(response);
     } catch {
       setSettings(null);
     }
@@ -96,8 +94,8 @@ const NotificationsPage = () => {
 
   const loadTemplates = async () => {
     try {
-      const response = await apiClient.get<NotificationTemplate[]>("/notifications/templates");
-      setTemplates(response.data);
+      const response = await notificationsApi.listTemplates<NotificationTemplate>();
+      setTemplates(response);
     } catch {
       setTemplates([]);
     }
@@ -123,7 +121,7 @@ const NotificationsPage = () => {
     if (!ids.length) return;
     setError(null);
     try {
-      await apiClient.post("/notifications/mark-read", { ids });
+      await notificationsApi.markRead(ids);
       await load();
     } catch (err) {
       const apiError = (err as ApiError) ?? { status: 500, message: "Не удалось отметить уведомления как прочитанные" };
@@ -135,7 +133,7 @@ const NotificationsPage = () => {
     if (!settings) return;
     setError(null);
     try {
-      await apiClient.put("/notifications/settings/me", settings);
+      await notificationsApi.saveMySettings(settings);
       await loadSettings();
     } catch (err) {
       const apiError = (err as ApiError) ?? { status: 500, message: "Не удалось сохранить настройки уведомлений" };

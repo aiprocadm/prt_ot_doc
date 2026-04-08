@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { apiClient } from "@/api/client";
+import { calendarApi } from "@/api/calendar";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -31,10 +31,8 @@ const CalendarPage = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await apiClient.get<CalendarEvent[]>("/notifications/calendar/events", {
-        params: nextSource === "all" ? undefined : { source: nextSource }
-      });
-      setEvents(response.data);
+      const response = await calendarApi.getEvents<CalendarEvent>(nextSource);
+      setEvents(response);
     } catch (nextError) {
       setError((nextError as ApiError) ?? { message: "Не удалось загрузить календарь мероприятий" });
     } finally {

@@ -2,7 +2,7 @@ import { RotateCcw } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { apiClient } from "@/api/client";
+import { integrationsApi } from "@/api/integrations";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -49,14 +49,14 @@ const formatDateTime = (value?: string | null) => (value ? new Date(value).toLoc
 const IntegrationsPage = () => {
   const loadIntegrations = useCallback(async () => {
     const [outboxResponse, eventResponse, readinessResponse] = await Promise.all([
-      apiClient.get<{ items: OutboxEntry[] }>("/admin/outbox"),
-      apiClient.get<{ items: OutboxEventEntry[] }>("/admin/outbox/events"),
-      apiClient.get<ReadinessResponse>("/integrations/readiness"),
+      integrationsApi.getOutbox<OutboxEntry>(),
+      integrationsApi.getOutboxEvents<OutboxEventEntry>(),
+      integrationsApi.getReadiness<ReadinessResponse>(),
     ]);
     return {
-      deliveries: outboxResponse.data.items ?? [],
-      events: eventResponse.data.items ?? [],
-      readiness: readinessResponse.data ?? null,
+      deliveries: outboxResponse.items ?? [],
+      events: eventResponse.items ?? [],
+      readiness: readinessResponse ?? null,
     };
   }, []);
 
@@ -93,7 +93,7 @@ const IntegrationsPage = () => {
   const retryDelivery = async (id: string) => {
     setRetryingId(id);
     try {
-      await apiClient.post(`/admin/outbox/${id}/retry`);
+      await integrationsApi.retryOutboxDelivery(id);
       await reload();
     } catch (error) {
       toast.error((error as ApiError)?.message ?? "Не удалось повторить доставку");
@@ -105,7 +105,7 @@ const IntegrationsPage = () => {
   const retryEvent = async (id: string) => {
     setRetryingId(id);
     try {
-      await apiClient.post(`/admin/outbox/events/${id}/requeue`);
+      await integrationsApi.retryOutboxEvent(id);
       await reload();
     } catch (error) {
       toast.error((error as ApiError)?.message ?? "Не удалось вернуть событие в очередь");

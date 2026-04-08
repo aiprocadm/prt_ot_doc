@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { apiClient } from "@/api/client";
+import { reportsApi } from "@/api/reports";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
@@ -43,9 +43,7 @@ const ReportsPage = () => {
     setLoading(true);
     setError(null);
     try {
-      const { data } = await apiClient.get<KpiPayload>("/reports/kpi", {
-        params: { date_from: dateFrom, date_to: dateTo }
-      });
+      const data = await reportsApi.getKpi<KpiPayload>({ date_from: dateFrom, date_to: dateTo });
       setKpi(data);
     } catch (err) {
       setError((err as ApiError) ?? { message: "Не удалось загрузить KPI" });
@@ -61,13 +59,7 @@ const ReportsPage = () => {
   const exportReport = async (format: "xlsx" | "pdf") => {
     setExporting(true);
     try {
-      const { data } = await apiClient.post<{ id: string; status: string }>("/exports", {
-        export_type: `reports:${format}`,
-        scope_json: { page: "reports", format },
-        filters_json: { date_from: dateFrom, date_to: dateTo, format, anonymized: false }
-      }, {
-        headers: { "Idempotency-Key": `reports:${format}:${dateFrom}:${dateTo}` }
-      });
+      const data = await reportsApi.queueExport(format, dateFrom, dateTo);
       setLastExportId(data.id);
       toast.success(`Экспорт поставлен в очередь: ${data.id.slice(0, 8)}`);
     } catch {

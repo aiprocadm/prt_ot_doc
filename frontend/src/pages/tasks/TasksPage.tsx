@@ -17,7 +17,8 @@ import { TaskTable } from "@/features/tasks/TaskTable";
 import { PERMISSIONS } from "@/permissions/permissions";
 import { useTasksStore } from "@/stores/tasks";
 import type { TaskPriority } from "@/types/dto/tasks";
-import { entityCardLink, entityContextPath } from "@/utils/workspaceNavigation";
+import { TaskFocusCard } from "@/widgets/tasks/TaskFocusCard";
+import { TaskCreateForm } from "@/widgets/tasks/TaskCreateForm";
 
 const TASK_TYPE_OPTIONS = [
   { value: "", label: "Все типы" },
@@ -78,16 +79,6 @@ const TasksPage = () => {
     if (!focusedTaskId) return null;
     return items.find((task) => task.id === focusedTaskId) ?? (item?.id === focusedTaskId ? item : null);
   }, [focusedTaskId, item, items]);
-
-  const focusedEntitySummaryLink = useMemo(
-    () => entityCardLink(focusedTask?.entity_type ?? focusedEntityType, focusedTask?.entity_id ?? focusedEntityId, "summary"),
-    [focusedEntityId, focusedEntityType, focusedTask?.entity_id, focusedTask?.entity_type]
-  );
-
-  const focusedEntityTimelineLink = useMemo(
-    () => entityCardLink(focusedTask?.entity_type ?? focusedEntityType, focusedTask?.entity_id ?? focusedEntityId, "timeline"),
-    [focusedEntityId, focusedEntityType, focusedTask?.entity_id, focusedTask?.entity_type]
-  );
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -207,62 +198,15 @@ const TasksPage = () => {
       <Card>
         <CardContent className="py-6">
           {focusedTaskId ? (
-            <div className="mb-4 rounded-md border bg-muted/20 p-4" data-testid="task-focus-card">
-              <div className="text-sm font-semibold">Фокус задачи из рабочего пространства</div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {focusedTask
-                  ? `${focusedTask.title} · ${focusedTask.status} · ${focusedTask.priority}`
-                  : `Задача ${focusedTaskId.slice(0, 8)} загружается...`}
-              </p>
-              <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                {focusedTask?.entity_type || focusedEntityType ? (
-                  <span className="rounded border px-2 py-1">
-                    entity_type: {focusedTask?.entity_type ?? focusedEntityType}
-                  </span>
-                ) : null}
-                {focusedTask?.entity_id || focusedEntityId ? (
-                  <span className="rounded border px-2 py-1">
-                    entity_id: {(focusedTask?.entity_id ?? focusedEntityId)?.slice(0, 12)}
-                  </span>
-                ) : null}
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <ActionButton
-                  size="sm"
-                  variant="outline"
-                  permission={PERMISSIONS.TASK_UPDATE}
-                  onClick={() => {
-                    if (!focusedTask || focusedTask.status === "done") return;
-                    void patchTask(focusedTask.id, { status: "done" });
-                  }}
-                  disabled={!focusedTask || focusedTask.status === "done"}
-                  title="Закрыть фокусную задачу"
-                  disabledReason="Недостаточно прав для изменения статуса задачи"
-                >
-                  Закрыть фокусную задачу
-                </ActionButton>
-                {focusedEntitySummaryLink ? (
-                  <Button size="sm" variant="outline" asChild>
-                    <Link to={focusedEntitySummaryLink}>Открыть summary сущности</Link>
-                  </Button>
-                ) : null}
-                {focusedEntityTimelineLink ? (
-                  <Button size="sm" variant="outline" asChild>
-                    <Link to={focusedEntityTimelineLink}>Открыть timeline сущности</Link>
-                  </Button>
-                ) : null}
-                {entityContextPath(focusedTask?.entity_type ?? focusedEntityType) ? (
-                  <Button size="sm" variant="outline" asChild>
-                    <Link to={entityContextPath(focusedTask?.entity_type ?? focusedEntityType) ?? "/tasks"}>
-                      Открыть контекст сущности
-                    </Link>
-                  </Button>
-                ) : null}
-                <Button size="sm" variant="ghost" asChild>
-                  <Link to="/tasks">Сбросить фокус</Link>
-                </Button>
-              </div>
-            </div>
+            <TaskFocusCard
+              focusedTaskId={focusedTaskId}
+              focusedTask={focusedTask}
+              focusedEntityType={focusedEntityType}
+              focusedEntityId={focusedEntityId}
+              onCloseTask={(taskId) => {
+                void patchTask(taskId, { status: "done" });
+              }}
+            />
           ) : null}
 
           <div className="mb-4 flex flex-wrap gap-4">
@@ -309,71 +253,25 @@ const TasksPage = () => {
               </select>
             </FilterField>
           </div>
-          {showCreateForm ? (
-            <div className="mb-4 rounded-md border p-4">
-              <div className="mb-3 text-sm font-semibold">Новая задача</div>
-              <div className="grid gap-3 md:grid-cols-2">
-                <FilterField label="Название" htmlFor="new-task-title">
-                  <input
-                    id="new-task-title"
-                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
-                    value={newTaskTitle}
-                    onChange={(event) => setNewTaskTitle(event.target.value)}
-                    placeholder="Например: Проверить комплект документов"
-                  />
-                </FilterField>
-                <FilterField label="Срок (опционально)" htmlFor="new-task-due-at">
-                  <input
-                    id="new-task-due-at"
-                    type="datetime-local"
-                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
-                    value={newTaskDueAt}
-                    onChange={(event) => setNewTaskDueAt(event.target.value)}
-                  />
-                </FilterField>
-                <FilterField label="Приоритет" htmlFor="new-task-priority">
-                  <select
-                    id="new-task-priority"
-                    className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground"
-                    value={newTaskPriority}
-                    onChange={(event) =>
-                      setNewTaskPriority(isTaskPriority(event.target.value) ? event.target.value : "medium")
-                    }
-                  >
-                    {PRIORITY_OPTIONS.filter((option) => option.value).map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </FilterField>
-                <FilterField label="Описание" htmlFor="new-task-description">
-                  <input
-                    id="new-task-description"
-                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
-                    value={newTaskDescription}
-                    onChange={(event) => setNewTaskDescription(event.target.value)}
-                    placeholder="Короткое описание"
-                  />
-                </FilterField>
-              </div>
-              <div className="mt-3 flex gap-2">
-                <Button onClick={() => void handleCreateTask()} disabled={creating}>
-                  {creating ? "Добавление..." : "Сохранить задачу"}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setShowCreateForm(false);
-                    resetCreateForm();
-                  }}
-                  disabled={creating}
-                >
-                  Отмена
-                </Button>
-              </div>
-            </div>
-          ) : null}
+          <TaskCreateForm
+            visible={showCreateForm}
+            title={newTaskTitle}
+            description={newTaskDescription}
+            dueAt={newTaskDueAt}
+            priority={newTaskPriority}
+            creating={creating}
+            priorityOptions={PRIORITY_OPTIONS}
+            isTaskPriority={isTaskPriority}
+            setTitle={setNewTaskTitle}
+            setDescription={setNewTaskDescription}
+            setDueAt={setNewTaskDueAt}
+            setPriority={setNewTaskPriority}
+            onSubmit={() => void handleCreateTask()}
+            onCancel={() => {
+              setShowCreateForm(false);
+              resetCreateForm();
+            }}
+          />
           <TaskTable />
           <ErrorState error={error ?? undefined} onRetry={() => void list()} />
           {loading && items.length === 0 ? <LoadingScreen label="Загрузка задач" /> : null}
