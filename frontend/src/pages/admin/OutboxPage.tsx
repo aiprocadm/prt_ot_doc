@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 
-import { apiClient } from "@/api/client";
+import { integrationsApi } from "@/api/integrations";
+import { webhooksApi } from "@/api/webhooks";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -29,13 +30,13 @@ const OutboxPage = () => {
     setError(null);
     try {
       const [outbox, eps, dels] = await Promise.all([
-        apiClient.get<{ items: OutboxItem[] }>("/admin/outbox/events"),
-        apiClient.get<Endpoint[]>("/webhooks/endpoints"),
-        apiClient.get<Delivery[]>("/webhooks/deliveries"),
+        integrationsApi.getOutboxEvents<OutboxItem>(),
+        webhooksApi.getEndpoints<Endpoint>(),
+        webhooksApi.getDeliveries<Delivery>(),
       ]);
-      setItems(outbox.data.items ?? []);
-      setEndpoints(eps.data ?? []);
-      setDeliveries(dels.data ?? []);
+      setItems(outbox.items ?? []);
+      setEndpoints(eps ?? []);
+      setDeliveries(dels ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось загрузить данные интеграций");
     } finally {
@@ -47,7 +48,7 @@ const OutboxPage = () => {
     e.preventDefault();
     setError(null);
     try {
-      await apiClient.post("/webhooks/endpoints", {
+      await webhooksApi.createEndpoint({
         url,
         secret,
         enabled: true,
@@ -66,7 +67,7 @@ const OutboxPage = () => {
   const runTest = async (id: string) => {
     setError(null);
     try {
-      await apiClient.post(`/webhooks/endpoints/${id}:test`);
+      await webhooksApi.testEndpoint(id);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось выполнить тест точки вебхука");
