@@ -24,6 +24,12 @@ export const createUploadSession = async (payload: {
   return data;
 };
 
+export const uploadToSignedUrl = async (signedPutUrl: string, file: File) => {
+  await apiClient.put(signedPutUrl, file, {
+    headers: { "Content-Type": file.type || "application/octet-stream" }
+  });
+};
+
 export const finalizeUpload = async (fileId: string) => {
   const { data } = await apiClient.post<{ file_id: string; status: string }>(`/files/complete-upload`, { file_id: fileId });
   return data;

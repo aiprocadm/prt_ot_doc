@@ -50,6 +50,23 @@ module.exports = {
   },
   overrides: [
     {
+      files: ["src/pages/**/*.{ts,tsx}", "src/features/**/*.{ts,tsx}", "src/widgets/**/*.{ts,tsx}"],
+      excludedFiles: ["src/pages/**/use*.ts", "src/pages/**/use*.tsx"],
+      rules: {
+        "no-restricted-imports": [
+          "error",
+          {
+            paths: [
+              {
+                name: "@/api/client",
+                message: "Do not import apiClient directly in pages/features/widgets. Use domain api modules from src/api."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       files: ["src/api/client.ts"],
       rules: {
         "no-restricted-imports": "off"

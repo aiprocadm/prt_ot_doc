@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { apiClient } from "@/api/client";
+import { templatesApi } from "@/api/templates";
 import { Badge } from "@/components/ui/badge";
 import { ActionButton } from "@/components/permissions/ActionButton";
 import { Button } from "@/components/ui/button";
@@ -37,12 +37,7 @@ export const TemplateDetails = ({ template }: { template: TemplateDto }) => {
   const handleUpload = async () => {
     if (!file) return;
     try {
-      const form = new FormData();
-      form.append("file", file);
-      form.append("document_type", template.template_type ?? "custom");
-      await apiClient.post(`/templates/${template.id}/versions:upload`, form, {
-        headers: { "Content-Type": "multipart/form-data", "Idempotency-Key": `${template.id}-${file.name}` }
-      });
+      await templatesApi.uploadVersion(template.id, file);
       toast.success("Версия загружена");
     } catch (error) {
       toast.error((error as Error)?.message ?? "Не удалось загрузить версию");
@@ -51,9 +46,7 @@ export const TemplateDetails = ({ template }: { template: TemplateDto }) => {
 
   const handleLint = async () => {
     try {
-      const { data } = await apiClient.post(`/templates/${template.id}/versions/${versionId}:lint`, {
-        required_fields: []
-      });
+      const data = await templatesApi.lintVersion(template.id, versionId);
       setLintReport(JSON.stringify(data, null, 2));
       toast.success("Lint завершён");
     } catch (error) {
@@ -64,10 +57,7 @@ export const TemplateDetails = ({ template }: { template: TemplateDto }) => {
   const handlePreview = async () => {
     try {
       const parsed = JSON.parse(previewData);
-      const { data } = await apiClient.post(`/templates/${template.id}/versions/${versionId}:preview`, {
-        data: parsed,
-        render_pdf: false
-      });
+      const data = await templatesApi.previewVersion(template.id, versionId, parsed);
       toast.success(`Preview готов: ${data.docx_url}`);
     } catch (error) {
       toast.error((error as Error)?.message ?? "Не удалось построить preview");
