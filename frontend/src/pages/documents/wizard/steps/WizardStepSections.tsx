@@ -1,4 +1,5 @@
 import type { ChangeEvent } from "react";
+import { memo } from "react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
@@ -221,7 +222,7 @@ export const BrandingStep = ({
   </div>
 );
 
-export const ReplaceStep = ({
+export const ReplaceStep = memo(({
   canCallApi,
   docxFile,
   replaceMapFile,
@@ -249,7 +250,7 @@ export const ReplaceStep = ({
     </Button>
     {replaceDryRunResult ? <ReplaceDiffViewer items={replaceDryRunResult.preview_samples} summary={replaceDryRunResult.summary} /> : null}
   </div>
-);
+));
 
 export const RunStep = ({
   canCallApi,
@@ -288,7 +289,7 @@ export const RunStep = ({
   </div>
 );
 
-export const BatchResultStep = ({
+export const BatchResultStep = memo(({
   rowStatusFilter,
   setPartial,
   batch,
@@ -332,7 +333,7 @@ export const BatchResultStep = ({
       Сформировать ошибки построчно
     </Button>
   </div>
-);
+));
 
 export const ExportStep = ({
   pipelineRun,
