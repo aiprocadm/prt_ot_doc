@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 
 import { notificationsApi } from "@/api/notifications";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -50,11 +51,39 @@ type NotificationTemplate = {
 };
 
 const NotificationsPage = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [items, setItems] = useState<NotificationItem[]>([]);
-  const [statusFilter, setStatusFilter] = useState<(typeof statuses)[number]>("unread");
-  const [channel, setChannel] = useState<(typeof channels)[number]>("all");
-  const [priority, setPriority] = useState<(typeof priorities)[number]>("all");
-  const [type, setType] = useState("");
+  const [statusFilter, setStatusFilter] = useState<(typeof statuses)[number]>(
+    (statuses.find((item) => item === searchParams.get("status")) ?? "unread") as (typeof statuses)[number]
+  );
+  const [channel, setChannel] = useState<(typeof channels)[number]>(
+    (channels.find((item) => item === searchParams.get("channel")) ?? "all") as (typeof channels)[number]
+  );
+  const [priority, setPriority] = useState<(typeof priorities)[number]>(
+    (priorities.find((item) => item === searchParams.get("priority")) ?? "all") as (typeof priorities)[number]
+  );
+  const [type, setType] = useState(searchParams.get("type") ?? "");
+  const patchQuery = useCallback((patch: { status?: string; channel?: string; priority?: string; type?: string }) => {
+    const next = new URLSearchParams(searchParams);
+    if ("status" in patch) {
+      if (patch.status && patch.status !== "all") next.set("status", patch.status);
+      else next.delete("status");
+    }
+    if ("channel" in patch) {
+      if (patch.channel && patch.channel !== "all") next.set("channel", patch.channel);
+      else next.delete("channel");
+    }
+    if ("priority" in patch) {
+      if (patch.priority && patch.priority !== "all") next.set("priority", patch.priority);
+      else next.delete("priority");
+    }
+    if ("type" in patch) {
+      if (patch.type) next.set("type", patch.type);
+      else next.delete("type");
+    }
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
   const [settings, setSettings] = useState<NotificationSettings | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -163,16 +192,48 @@ const NotificationsPage = () => {
             <EmptyState title="Уведомления отсутствуют" description="Новые события появятся здесь автоматически." />
           ) : null}
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-            <select className="h-10 rounded-md border px-3" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as (typeof statuses)[number])}>
+            <select
+              className="h-10 rounded-md border px-3"
+              value={statusFilter}
+              onChange={(event) => {
+                const next = event.target.value as (typeof statuses)[number];
+                setStatusFilter(next);
+                patchQuery({ status: next });
+              }}
+            >
               {statuses.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
-            <select className="h-10 rounded-md border px-3" value={channel} onChange={(event) => setChannel(event.target.value as (typeof channels)[number])}>
+            <select
+              className="h-10 rounded-md border px-3"
+              value={channel}
+              onChange={(event) => {
+                const next = event.target.value as (typeof channels)[number];
+                setChannel(next);
+                patchQuery({ channel: next });
+              }}
+            >
               {channels.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
-            <select className="h-10 rounded-md border px-3" value={priority} onChange={(event) => setPriority(event.target.value as (typeof priorities)[number])}>
+            <select
+              className="h-10 rounded-md border px-3"
+              value={priority}
+              onChange={(event) => {
+                const next = event.target.value as (typeof priorities)[number];
+                setPriority(next);
+                patchQuery({ priority: next });
+              }}
+            >
               {priorities.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
-            <Input placeholder="Тип уведомления" value={type} onChange={(event) => setType(event.target.value)} />
+            <Input
+              placeholder="Тип уведомления"
+              value={type}
+              onChange={(event) => {
+                const next = event.target.value;
+                setType(next);
+                patchQuery({ type: next });
+              }}
+            />
             <div className="rounded-md border px-3 py-2 text-sm text-muted-foreground">Типы: {groupedByType.join(", ") || "—"}</div>
           </div>
           {!loading ? items.map((item) => (

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { reportsApi } from "@/api/reports";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -29,12 +30,22 @@ const monthAgo = () => {
 };
 
 const ReportsPage = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const ability = useAbility();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [kpi, setKpi] = useState<KpiPayload | null>(null);
-  const [dateFrom, setDateFrom] = useState(monthAgo);
-  const [dateTo, setDateTo] = useState(today);
+  const [dateFrom, setDateFrom] = useState(searchParams.get("date_from") ?? monthAgo());
+  const [dateTo, setDateTo] = useState(searchParams.get("date_to") ?? today());
+  const patchQuery = useCallback((nextDateFrom: string, nextDateTo: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (nextDateFrom) next.set("date_from", nextDateFrom);
+    else next.delete("date_from");
+    if (nextDateTo) next.set("date_to", nextDateTo);
+    else next.delete("date_to");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
   const [exporting, setExporting] = useState(false);
   const [lastExportId, setLastExportId] = useState<string | null>(null);
   const canExportReports = ability.can(PERMISSIONS.DOCUMENT_EXPORT) || ability.can(PERMISSIONS.REPORTS_VIEW);
@@ -106,11 +117,31 @@ const ReportsPage = () => {
         <CardContent className="flex flex-wrap items-end gap-4 py-4">
           <div className="space-y-1.5">
             <Label htmlFor="rpt-from">С</Label>
-            <Input id="rpt-from" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-40" />
+            <Input
+              id="rpt-from"
+              type="date"
+              value={dateFrom}
+              onChange={(e) => {
+                const next = e.target.value;
+                setDateFrom(next);
+                patchQuery(next, dateTo);
+              }}
+              className="w-40"
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="rpt-to">По</Label>
-            <Input id="rpt-to" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-40" />
+            <Input
+              id="rpt-to"
+              type="date"
+              value={dateTo}
+              onChange={(e) => {
+                const next = e.target.value;
+                setDateTo(next);
+                patchQuery(dateFrom, next);
+              }}
+              className="w-40"
+            />
           </div>
           <Button onClick={() => void loadKpi()}>Применить</Button>
         </CardContent>

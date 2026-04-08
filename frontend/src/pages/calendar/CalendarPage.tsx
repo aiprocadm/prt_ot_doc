@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { calendarApi } from "@/api/calendar";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -21,11 +22,27 @@ type CalendarEvent = {
 };
 
 const CalendarPage = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [mode, setMode] = useState<"month" | "week" | "list">("list");
-  const [source, setSource] = useState("all");
+  const [mode, setMode] = useState<"month" | "week" | "list">(
+    searchParams.get("mode") === "month" || searchParams.get("mode") === "week" ? (searchParams.get("mode") as "month" | "week") : "list"
+  );
+  const [source, setSource] = useState(searchParams.get("source") ?? "all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
+
+  const patchQuery = useCallback((patch: { mode?: "month" | "week" | "list"; source?: string }) => {
+    const next = new URLSearchParams(searchParams);
+    if ("mode" in patch && patch.mode) {
+      if (patch.mode === "list") next.delete("mode");
+      else next.set("mode", patch.mode);
+    }
+    if ("source" in patch && patch.source) {
+      if (patch.source === "all") next.delete("source");
+      else next.set("source", patch.source);
+    }
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const load = useCallback(async (nextSource = source) => {
     setLoading(true);
@@ -64,14 +81,14 @@ const CalendarPage = () => {
         <CardHeader className="flex flex-row items-center justify-between gap-2">
           <CardTitle>Календарь мероприятий</CardTitle>
           <div className="flex flex-wrap gap-2">
-            <Button variant={mode === "month" ? "default" : "outline"} onClick={() => setMode("month")}>Месяц</Button>
-            <Button variant={mode === "week" ? "default" : "outline"} onClick={() => setMode("week")}>Неделя</Button>
-            <Button variant={mode === "list" ? "default" : "outline"} onClick={() => setMode("list")}>Список</Button>
-            <Button variant={source === "all" ? "default" : "outline"} onClick={() => setSource("all")}>Все</Button>
-            <Button variant={source === "training" ? "default" : "outline"} onClick={() => setSource("training")}>Обучение</Button>
-            <Button variant={source === "ppe" ? "default" : "outline"} onClick={() => setSource("ppe")}>СИЗ</Button>
-            <Button variant={source === "inspection" ? "default" : "outline"} onClick={() => setSource("inspection")}>Проверки</Button>
-            <Button variant={source === "task" ? "default" : "outline"} onClick={() => setSource("task")}>Задачи</Button>
+            <Button variant={mode === "month" ? "default" : "outline"} onClick={() => { setMode("month"); patchQuery({ mode: "month" }); }}>Месяц</Button>
+            <Button variant={mode === "week" ? "default" : "outline"} onClick={() => { setMode("week"); patchQuery({ mode: "week" }); }}>Неделя</Button>
+            <Button variant={mode === "list" ? "default" : "outline"} onClick={() => { setMode("list"); patchQuery({ mode: "list" }); }}>Список</Button>
+            <Button variant={source === "all" ? "default" : "outline"} onClick={() => { setSource("all"); patchQuery({ source: "all" }); }}>Все</Button>
+            <Button variant={source === "training" ? "default" : "outline"} onClick={() => { setSource("training"); patchQuery({ source: "training" }); }}>Обучение</Button>
+            <Button variant={source === "ppe" ? "default" : "outline"} onClick={() => { setSource("ppe"); patchQuery({ source: "ppe" }); }}>СИЗ</Button>
+            <Button variant={source === "inspection" ? "default" : "outline"} onClick={() => { setSource("inspection"); patchQuery({ source: "inspection" }); }}>Проверки</Button>
+            <Button variant={source === "task" ? "default" : "outline"} onClick={() => { setSource("task"); patchQuery({ source: "task" }); }}>Задачи</Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
