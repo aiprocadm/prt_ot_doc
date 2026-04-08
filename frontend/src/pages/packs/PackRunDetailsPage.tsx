@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 
-import { apiClient } from "@/api/client";
+import { packsApi } from "@/api/packs";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -29,11 +29,11 @@ const PackRunDetailsPage = () => {
     setError(null);
     try {
       const [itemResp, timelineResp] = await Promise.all([
-        apiClient.get<RunItem[]>(`/pack-runs/${id}/items`),
-        apiClient.get<Array<{ id: string; level: string; message: string }>>(`/pack-runs/${id}/timeline`)
+        packsApi.getRunItems<RunItem>(id),
+        packsApi.getRunTimeline<{ id: string; level: string; message: string }>(id)
       ]);
-      setItems(itemResp.data);
-      setTimeline(timelineResp.data);
+      setItems(itemResp);
+      setTimeline(timelineResp);
     } catch (loadError) {
       setItems([]);
       setTimeline([]);
@@ -50,7 +50,7 @@ const PackRunDetailsPage = () => {
   const retryFailed = async () => {
     try {
       setError(null);
-      await apiClient.post(`/pack-runs/${id}:retry-failed`);
+      await packsApi.retryFailedRunItems(id);
       await load();
     } catch (retryError) {
       setError(retryError as ApiError);
