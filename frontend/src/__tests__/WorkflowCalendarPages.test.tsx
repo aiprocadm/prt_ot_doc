@@ -31,6 +31,22 @@ describe("Workflow and Calendar operational states", () => {
     expect(await screen.findByText(/события календаря отсутствуют/i)).toBeInTheDocument();
   });
 
+  it("loads calendar with source from query params", async () => {
+    getMock.mockResolvedValue({ data: [] });
+
+    render(
+      <MemoryRouter initialEntries={["/calendar?source=training&mode=week"]}>
+        <CalendarPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(getMock).toHaveBeenCalledWith("/notifications/calendar/events", {
+        params: { source: "training" }
+      });
+    });
+  });
+
   it("shows workflow empty states when definitions, tasks and instances are empty", async () => {
     getMock.mockImplementation((url: string) => {
       if (["/workflow/definitions", "/workflow/tasks", "/workflow/instances"].includes(url)) {

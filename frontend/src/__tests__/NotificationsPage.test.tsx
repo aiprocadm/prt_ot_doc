@@ -119,4 +119,36 @@ describe("NotificationsPage", () => {
     });
     expect(screen.getByPlaceholderText("Режим дайджеста: off / daily / weekly")).toHaveValue("weekly");
   });
+
+  it("initializes filters from query params", async () => {
+    getMock.mockImplementation((url: string) => {
+      if (url === "/notifications/settings/me") {
+        return Promise.resolve({ data: { email_enabled: true, telegram_enabled: false, inapp_enabled: true } });
+      }
+      if (url === "/notifications/templates") {
+        return Promise.resolve({ data: [] });
+      }
+      return Promise.resolve({ data: { unread_count: 0, items: [] } });
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/notifications?status=failed&channel=email&priority=critical&type=ApprovalDeadline"]}>
+        <NotificationsPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(getMock).toHaveBeenCalledWith(
+        "/notifications",
+        expect.objectContaining({
+          params: {
+            status: "failed",
+            channel: "email",
+            priority: "critical",
+            type: "ApprovalDeadline"
+          }
+        })
+      );
+    });
+  });
 });
