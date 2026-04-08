@@ -64,6 +64,9 @@ export const DocumentCreateWizard = () => {
           window.clearInterval(timer);
         }
       } catch {
+        setPipelineState("error");
+        setPipelineError("Не удалось получить статус генерации. Попробуйте обновить страницу.");
+        toast.error("Не удалось обновить статус генерации.");
         window.clearInterval(timer);
       }
     }, 2500);
