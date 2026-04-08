@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { CheckCircle, ChevronRight, ClipboardList, Play, Settings2, Upload } from "lucide-react";
 import { toast } from "sonner";
 
-import { apiClient } from "@/api/client";
+import { packsApi } from "@/api/packs";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
@@ -63,7 +63,7 @@ const GeneratePackWizardPage = () => {
     setPresetsLoading(true);
     setPresetsError(null);
     try {
-      const { data } = await apiClient.get<Preset[]>("/package-presets");
+      const data = await packsApi.getPresets<Preset>();
       setPresets(data);
     } catch (err) {
       setPresetsError((err as ApiError) ?? { message: "Не удалось загрузить пресеты" });
@@ -117,17 +117,8 @@ const GeneratePackWizardPage = () => {
     setRunning(true);
     setRunError(null);
     try {
-      const response = await apiClient.post<{ pack_run_id: string }>(
-        "/pack-runs",
-        {
-          package_preset_id: selectedPresetId,
-          rows,
-          selected_rows: rows.map((_, index) => index + 1),
-          dry_run: dryRun
-        },
-        { headers: { "Idempotency-Key": idempotencyKey } }
-      );
-      setPackRunId(response.data.pack_run_id);
+      const response = await packsApi.createRun(selectedPresetId, rows, dryRun, idempotencyKey);
+      setPackRunId(response.pack_run_id);
       toast.success(dryRun ? "Dry-run запущен" : "Пакет поставлен в очередь");
       setStep(5);
     } catch (err) {

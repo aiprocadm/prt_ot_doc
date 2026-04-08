@@ -28,6 +28,24 @@ export const packsApi = {
   },
   retryFailedRunItems: async (id: string): Promise<void> => {
     await apiClient.post(`/pack-runs/${id}:retry-failed`);
+  },
+  createRun: async (
+    packagePresetId: string,
+    rows: Array<Record<string, unknown>>,
+    dryRun: boolean,
+    idempotencyKey: string
+  ): Promise<{ pack_run_id: string }> => {
+    const { data } = await apiClient.post<{ pack_run_id: string }>(
+      "/pack-runs",
+      {
+        package_preset_id: packagePresetId,
+        rows,
+        selected_rows: rows.map((_, index) => index + 1),
+        dry_run: dryRun
+      },
+      { headers: { "Idempotency-Key": idempotencyKey } }
+    );
+    return data;
   }
 };
 
