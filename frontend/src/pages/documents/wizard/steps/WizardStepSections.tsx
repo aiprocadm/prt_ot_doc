@@ -252,6 +252,8 @@ export const ReplaceStep = memo(({
   </div>
 ));
 
+ReplaceStep.displayName = "ReplaceStep";
+
 export const RunStep = ({
   canCallApi,
   sourceFile,
@@ -334,6 +336,8 @@ export const BatchResultStep = memo(({
     </Button>
   </div>
 ));
+
+BatchResultStep.displayName = "BatchResultStep";
 
 export const ExportStep = ({
   pipelineRun,
