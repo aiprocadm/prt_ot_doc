@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { toast } from "sonner";
 
 import { getDocumentBatch } from "@/api/documents";
@@ -16,9 +17,27 @@ type RuntimePollingParams = {
 };
 
 export const useDocumentsWizardRuntimePolling = ({ tenantSlug, taskId, pipelineRun, batch, onPipelineRun, onBatch }: RuntimePollingParams) => {
+  const lastRunSignatureRef = useRef<string>("");
+  const lastBatchSignatureRef = useRef<string>("");
+
   usePolling(
     async () => {
       const run = await getPipelineRun(taskId);
+      const nextSignature = JSON.stringify({
+        run_id: run.run_id,
+        status: run.status,
+        step_runs: run.step_runs.map((step) => ({
+          step_run_id: step.step_run_id,
+          step_code: step.step_code,
+          attempt: step.attempt,
+          status: step.status,
+          error_code: step.error_code,
+          started_at: step.started_at,
+          ended_at: step.ended_at
+        }))
+      });
+      if (nextSignature === lastRunSignatureRef.current) return;
+      lastRunSignatureRef.current = nextSignature;
       onPipelineRun(run);
     },
     3000,
@@ -32,6 +51,24 @@ export const useDocumentsWizardRuntimePolling = ({ tenantSlug, taskId, pipelineR
     async () => {
       if (!batch?.id) return;
       const updated = await getDocumentBatch(batch.id);
+      const nextSignature = JSON.stringify({
+        id: updated.id,
+        status: updated.status,
+        total: updated.total,
+        processed: updated.processed,
+        succeeded: updated.succeeded,
+        failed: updated.failed,
+        items: updated.items.map((item) => ({
+          id: item.id,
+          row_index: item.row_index,
+          status: item.status,
+          error: item.error,
+          document_id: item.document_id,
+          document_version_id: item.document_version_id
+        }))
+      });
+      if (nextSignature === lastBatchSignatureRef.current) return;
+      lastBatchSignatureRef.current = nextSignature;
       onBatch(updated);
     },
     3000,
