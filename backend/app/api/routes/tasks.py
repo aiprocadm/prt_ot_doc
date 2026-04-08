@@ -1,11 +1,12 @@
 """Task endpoints for pipeline status and obligations."""
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime, timezone
 from uuid import UUID
 
 from celery.result import AsyncResult
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -188,8 +189,29 @@ def _task_read(task: Task, now: datetime) -> TaskRead:
     )
 
 
+def _tasks_etag(
+    *,
+    tenant_id: str,
+    page: int,
+    page_size: int,
+    total: int,
+    items: list[TaskRead],
+) -> str:
+    payload = [
+        f"tenant:{tenant_id}",
+        f"page:{page}",
+        f"page_size:{page_size}",
+        f"total:{total}",
+        "|".join(f"{item.id}:{item.updated_at.isoformat()}" for item in items),
+    ]
+    digest = hashlib.sha256("::".join(payload).encode("utf-8")).hexdigest()
+    return f'"{digest}"'
+
+
 @router.get("", response_model=TaskListResponse)
 async def list_tasks(
+    request: Request,
+    response: Response,
     tenant: Tenant = TenantDep,
     session: AsyncSession = SessionDep,
     access: AccessContext = TaskReadAccess,
@@ -200,7 +222,7 @@ async def list_tasks(
     task_type: str | None = Query(default=None, alias="type"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
-) -> TaskListResponse:
+) -> TaskListResponse | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     stmt = select(Task).where(Task.tenant_id == tenant.id)
@@ -234,6 +256,16 @@ async def list_tasks(
     tasks = list((await session.execute(stmt)).scalars().all())
     total = await session.scalar(total_stmt)
     items = [_task_read(task, now) for task in tasks]
+    etag = _tasks_etag(
+        tenant_id=str(tenant.id),
+        page=page,
+        page_size=page_size,
+        total=int(total or 0),
+        items=items,
+    )
+    response.headers["ETag"] = etag
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
     return TaskListResponse(
         items=items,
         pagination=TaskPagination(page=page, page_size=page_size, total=int(total or 0)),
