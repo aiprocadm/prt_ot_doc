@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { Breadcrumb } from "@/components/ui/breadcrumb";
@@ -18,6 +18,7 @@ const clampStep = (value: number) => Math.min(Math.max(value, 1), wizardSteps.le
 const DocumentsWizardPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryStep = searchParams.get("step");
+  const didInitFromQueryRef = useRef(false);
   const {
     tenant,
     companies,
@@ -60,14 +61,16 @@ const DocumentsWizardPage = () => {
   }, [normalizedStep, setPartial, step]);
 
   useEffect(() => {
-    const stepFromQuery = Number(queryStep ?? step);
-    if (Number.isFinite(stepFromQuery)) {
-      const clamped = clampStep(stepFromQuery);
-      if (clamped !== normalizedStep) {
-        setPartial({ step: clamped });
-      }
+    if (didInitFromQueryRef.current) return;
+    didInitFromQueryRef.current = true;
+    if (queryStep === null) return;
+    const stepFromQuery = Number(queryStep ?? "");
+    if (!Number.isFinite(stepFromQuery)) return;
+    const clamped = clampStep(stepFromQuery);
+    if (clamped !== normalizedStep) {
+      setPartial({ step: clamped });
     }
-  }, [normalizedStep, queryStep, setPartial, step]);
+  }, [normalizedStep, queryStep, setPartial]);
 
   useEffect(() => {
     if (queryStep !== String(normalizedStep)) {
