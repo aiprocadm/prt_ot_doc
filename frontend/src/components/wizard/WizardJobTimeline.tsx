@@ -36,3 +36,5 @@ export const WizardJobTimeline = memo(({ steps }: { steps: PipelineStepRun[] }) 
     ))}
   </div>
 ));
+
+WizardJobTimeline.displayName = "WizardJobTimeline";

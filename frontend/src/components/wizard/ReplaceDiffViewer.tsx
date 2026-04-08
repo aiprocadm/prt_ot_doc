@@ -49,3 +49,5 @@ export const ReplaceDiffViewer = memo(({
     </Card>
   );
 });
+
+ReplaceDiffViewer.displayName = "ReplaceDiffViewer";

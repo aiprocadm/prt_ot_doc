@@ -40,3 +40,5 @@ export const WizardStepper = memo(({
     })}
   </div>
 ));
+
+WizardStepper.displayName = "WizardStepper";
