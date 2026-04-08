@@ -76,7 +76,22 @@ describe("IncidentsPage", () => {
     await waitFor(() => {
       expect(screen.getByText("Падение с высоты")).toBeInTheDocument();
     });
+    expect(screen.getByText("Травма")).toBeInTheDocument();
     expect(listMock).toHaveBeenCalledOnce();
+  });
+
+  it("initializes status filter from query params", async () => {
+    listMock.mockResolvedValue({ items: [mockIncident], total: 1 });
+
+    render(
+      <MemoryRouter initialEntries={["/incidents?status=closed"]}>
+        <IncidentsPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(listMock).toHaveBeenCalledWith({ limit: 100, status_filter: "closed" });
+    });
   });
 
   it("shows empty state when no incidents", async () => {

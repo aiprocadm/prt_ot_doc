@@ -28,7 +28,26 @@ const baseUser = {
 describe("PpePage", () => {
   beforeEach(() => {
     getPpeOverviewMock.mockReset();
-    getPpeOverviewMock.mockResolvedValue({ issues: [], items: [], persons: [] });
+    getPpeOverviewMock.mockResolvedValue({
+      items: [{ id: "item-1", name: "Каска", code: "helmet", category: "head" }],
+      issues: [
+        { id: "issue-1", person_id: "person-1", item_id: "item-1", quantity: 1, status: "issued", expires_at: "2020-01-01T00:00:00Z" }
+      ],
+      persons: [
+        {
+          id: "person-1",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-02",
+          first_name: "Иван",
+          last_name: "Иванов",
+          middle_name: null,
+          full_name: "Иван Иванов",
+          position: "Сварщик",
+          company_id: "company-1",
+          status: "active"
+        }
+      ]
+    });
   });
 
   it("показывает disabled quick issue action без write permission", async () => {
@@ -65,5 +84,23 @@ describe("PpePage", () => {
     );
 
     expect(await screen.findByRole("button", { name: /быстрая выдача/i })).toBeEnabled();
+  });
+
+  it("applies status filter from query params", async () => {
+    useAuthStore.setState({
+      user: { ...baseUser, permissions: [PERMISSIONS.PPE_VIEW, PERMISSIONS.PPE_ISSUE] },
+      loading: false,
+      error: null,
+      isAuthenticated: true,
+      initialized: true
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/ppe?status=overdue"]}>
+        <PpePage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Требует замены")).toBeInTheDocument();
   });
 });

@@ -41,4 +41,17 @@ describe("PersonsPage", () => {
     expect(screen.getByRole("tab", { name: "Обучение" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "СИЗ" })).toBeInTheDocument();
   });
+
+  it("restores focused person from query params", async () => {
+    render(
+      <MemoryRouter initialEntries={["/persons?person_id=person-1"]}>
+        <PersonsPage />
+      </MemoryRouter>
+    );
+
+    expect(listMock).toHaveBeenCalled();
+    expect(await screen.findByText("Иван Иванов")).toBeInTheDocument();
+    expect(screen.getByText("Активен")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /сбросить фокус/i })).toHaveAttribute("href", "/persons");
+  });
 });
