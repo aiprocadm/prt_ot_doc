@@ -72,6 +72,20 @@
 - Для реального логина задайте `E2E_USER_EMAIL` и `E2E_USER_PASSWORD` (опц. `E2E_TENANT`, по умолчанию `demo`).
 - Для prod-бандла: `E2E_PREVIEW=1`.
 
+**PowerShell (Windows):**
+- `cd frontend`
+- `$env:E2E_START_SERVER="1"`
+- `$env:E2E_TENANT="demo"`
+- `$env:E2E_USER_EMAIL="your-user@example.com"`
+- `$env:E2E_USER_PASSWORD="your-password"`
+- `npm run e2e:key-scenarios`
+- Автовариант через файл переменных:  
+  1) `cp e2e.env.example e2e.env`  
+  2) заполнить `e2e.env`  
+  3) `npm run e2e:key-scenarios:ps`
+
+Шаблон переменных: `frontend/e2e.env.example`.
+
 ## Contract / OpenAPI
 
 - `tests/contract/test_openapi_contract.py`, `test_auth_openapi_runtime_contract.py` — держать в синхроне с `docs/openapi.yaml` при изменении публичных маршрутов.
