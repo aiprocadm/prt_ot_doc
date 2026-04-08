@@ -33,6 +33,23 @@ const StatCard = ({ title, value }: { title: string; value: number | string }) =
   </Card>
 );
 
+const TRAINING_STATUS_LABELS: Record<string, string> = {
+  assigned: "Назначено",
+  in_progress: "В процессе",
+  completed: "Завершено",
+  overdue: "Просрочено",
+  cancelled: "Отменено"
+};
+
+const MATERIAL_TYPE_LABELS: Record<string, string> = {
+  document: "Документ",
+  video: "Видео",
+  quiz: "Тест",
+  presentation: "Презентация",
+  file: "Файл",
+  link: "Ссылка"
+};
+
 const TrainingPage = () => {
   const { t } = useTranslation();
   const { can } = useAbility();
@@ -56,7 +73,7 @@ const TrainingPage = () => {
     setLearnerError(null);
 
     if (canManageTraining) {
-      void getTeacherDashboard().then((data) => setTeacher(data)).catch(() => setTeacherError("teacher"));
+      void getTeacherDashboard().then((data) => setTeacher(data)).catch(() => setTeacherError("Не удалось загрузить данные преподавателя"));
       void getTrainingAnalytics().then((data) => setAnalytics(data)).catch(() => undefined);
       void getTrainingPrograms().then((data) => {
         const firstProgram = data.items[0]?.id;
@@ -73,7 +90,7 @@ const TrainingPage = () => {
     }
 
     if (canViewLearnerTraining) {
-      void getLearnerDashboard().then((data) => setLearner(data)).catch(() => setLearnerError("learner"));
+      void getLearnerDashboard().then((data) => setLearner(data)).catch(() => setLearnerError("Не удалось загрузить данные по обучению сотрудника"));
     } else {
       setLearner(null);
     }
@@ -139,7 +156,7 @@ const TrainingPage = () => {
                 <ul className="space-y-2 text-sm" aria-live="polite">
                   {Object.entries(analytics?.material_types ?? {}).map(([key, value]) => (
                     <li key={key} className="flex items-center justify-between rounded-md border p-3">
-                      <span>{key}</span>
+                      <span>{MATERIAL_TYPE_LABELS[key] ?? key}</span>
                       <span className="font-medium">{value}</span>
                     </li>
                   ))}
@@ -164,7 +181,7 @@ const TrainingPage = () => {
                 <ul className="space-y-2 text-sm" aria-live="polite">
                   {learner.items.slice(0, 5).map((item) => (
                     <li key={item.id} className="rounded-md border p-3">
-                      <div className="font-medium">{item.completion_status}</div>
+                      <div className="font-medium">{TRAINING_STATUS_LABELS[item.completion_status] ?? item.completion_status}</div>
                       <div className="text-muted-foreground">{item.progress_percent}% · {item.due_at ?? t("training.noSchedule")}</div>
                     </li>
                   ))}

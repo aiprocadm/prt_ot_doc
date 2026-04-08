@@ -22,11 +22,29 @@ import { useCompaniesStore } from "@/stores/companies";
 import { entityCardLink } from "@/utils/workspaceNavigation";
 
 const INSPECTION_TYPES = ["planned", "unplanned", "documentary", "on_site", "counter"];
+const INSPECTION_TYPE_LABELS: Record<string, string> = {
+  planned: "Плановая",
+  unplanned: "Внеплановая",
+  documentary: "Документарная",
+  on_site: "Выездная",
+  counter: "Встречная"
+};
+const INSPECTION_STATUS_LABELS: Record<string, string> = {
+  planned: "Запланирована",
+  in_progress: "В работе",
+  completed: "Завершена"
+};
+const INSPECTION_STATUS_OPTIONS = [
+  { value: "", label: "Все статусы" },
+  { value: "planned", label: "Запланирована" },
+  { value: "in_progress", label: "В работе" },
+  { value: "completed", label: "Завершена" }
+];
 
 const InspectionsPage = () => {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [items, setItems] = useState<Inspection[]>([]);
-  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<string>(searchParams.get("status") ?? "");
   const { items: companies, list: listCompanies } = useCompaniesStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
@@ -64,9 +82,9 @@ const InspectionsPage = () => {
   }, [statusFilter]);
 
   useEffect(() => {
-    void load("");
+    void load(statusFilter);
     listCompanies({ page_size: 100 }).catch(() => undefined);
-  }, [listCompanies, load]);
+  }, [listCompanies, load, statusFilter]);
 
   useEffect(() => {
     if (focusedEntityType !== "inspection" || !focusedEntityId) {
@@ -89,7 +107,7 @@ const InspectionsPage = () => {
     }
     setCreating(true);
     try {
-      await inspectionsApi.create({
+      const created = await inspectionsApi.create({
         company_id: form.company_id,
         site_id: form.site_id || undefined,
         inspection_type: form.inspection_type,
@@ -107,6 +125,11 @@ const InspectionsPage = () => {
         purpose: "",
         scheduled_at: new Date().toISOString().slice(0, 10)
       });
+      const next = new URLSearchParams(searchParams);
+      next.set("entity_type", "inspection");
+      next.set("entity_id", created.id);
+      next.set("view", "summary");
+      setSearchParams(next, { replace: true });
       void load();
     } catch (err) {
       toast.error((err as ApiError)?.message ?? "Ошибка при создании проверки");
@@ -125,15 +148,20 @@ const InspectionsPage = () => {
             onChange={(event) => {
               const next = event.target.value;
               setStatusFilter(next);
+              const params = new URLSearchParams(searchParams);
+              if (next) params.set("status", next);
+              else params.delete("status");
+              setSearchParams(params, { replace: true });
               void load(next);
             }}
             className="h-9 rounded-md border border-input bg-background px-2 text-sm"
             aria-label="Фильтр по статусу проверки"
           >
-            <option value="">Все статусы</option>
-            <option value="planned">planned</option>
-            <option value="in_progress">in_progress</option>
-            <option value="completed">completed</option>
+            {INSPECTION_STATUS_OPTIONS.map((option) => (
+              <option key={option.value || "all"} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
           <Button variant="outline" onClick={() => void load()}>Обновить</Button>
 
@@ -237,7 +265,7 @@ const InspectionsPage = () => {
             <div className="text-sm font-semibold">Фокус проверки из рабочего пространства</div>
             <p className="mt-1 text-xs text-muted-foreground">
               {focusedInspection
-                ? `${focusedInspection.inspection_type} · ${focusedInspection.status} · ${focusedInspection.authority}`
+                ? `${INSPECTION_TYPE_LABELS[focusedInspection.inspection_type] ?? focusedInspection.inspection_type} · ${INSPECTION_STATUS_LABELS[focusedInspection.status] ?? focusedInspection.status} · ${focusedInspection.authority}`
                 : `Проверка ${focusedEntityId.slice(0, 8)} загружается...`}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
@@ -299,12 +327,17 @@ const InspectionsPage = () => {
                 {items.map((inspection) => (
                   <TableRow key={inspection.id}>
                     <TableCell className="font-medium">{inspection.id}</TableCell>
-                    <TableCell>{inspection.inspection_type}</TableCell>
+                    <TableCell>{INSPECTION_TYPE_LABELS[inspection.inspection_type] ?? inspection.inspection_type}</TableCell>
                     <TableCell>{inspection.site_id ?? "—"}</TableCell>
                     <TableCell>{inspection.authority}</TableCell>
                     <TableCell>{inspection.scheduled_at ? formatDate(inspection.scheduled_at) : "—"}</TableCell>
                     <TableCell>
-                      <StatusBadge status={inspection.status} />
+                      <div className="flex items-center gap-2">
+                        <StatusBadge status={inspection.status} />
+                        <span className="text-xs text-muted-foreground">
+                          {INSPECTION_STATUS_LABELS[inspection.status] ?? inspection.status}
+                        </span>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

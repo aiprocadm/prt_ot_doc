@@ -125,5 +125,6 @@ describe("TrainingPage", () => {
 
     expect(screen.getAllByRole("tab")).toHaveLength(2);
     expect(screen.getByRole("link", { name: /назначить обучение/i })).toHaveAttribute("href", "/tasks?type=training_plan");
+    expect(screen.getByText("Видео")).toBeInTheDocument();
   });
 });

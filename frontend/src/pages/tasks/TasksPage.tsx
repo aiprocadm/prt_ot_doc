@@ -47,7 +47,24 @@ const isTaskPriority = (value: string): value is TaskPriority => TASK_PRIORITIES
 
 const TasksPage = () => {
   const { list, loading, error, filters, setFilters, items, item, getById, patchTask, createTask, pagination } = useTasksStore();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const updateFilterQuery = (patch: { type?: string; overdue?: boolean; priority?: string }) => {
+    const next = new URLSearchParams(searchParams);
+    if ("type" in patch) {
+      if (patch.type) next.set("type", patch.type);
+      else next.delete("type");
+    }
+    if ("overdue" in patch) {
+      if (patch.overdue === undefined) next.delete("overdue");
+      else next.set("overdue", String(patch.overdue));
+    }
+    if ("priority" in patch) {
+      if (patch.priority) next.set("priority", patch.priority);
+      else next.delete("priority");
+    }
+    setSearchParams(next, { replace: true });
+  };
+
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState("");
@@ -101,20 +118,24 @@ const TasksPage = () => {
   }, [items]);
 
   const handleTypeChange = (value: string) => {
-    setFilters({ type: value || undefined });
-    list({ type: value || undefined });
+    const type = value || undefined;
+    setFilters({ type });
+    list({ type });
+    updateFilterQuery({ type });
   };
 
   const handleDueFilterChange = (value: string) => {
     const overdue = value === "overdue" ? true : value === "upcoming" ? false : undefined;
     setFilters({ overdue });
     list({ overdue });
+    updateFilterQuery({ overdue });
   };
 
   const handlePriorityChange = (value: string) => {
     const priority = value && isTaskPriority(value) ? value : undefined;
     setFilters({ priority });
     list({ priority });
+    updateFilterQuery({ priority });
   };
 
   const resetCreateForm = () => {
@@ -146,6 +167,9 @@ const TasksPage = () => {
     toast.success("Задача добавлена");
     resetCreateForm();
     setShowCreateForm(false);
+    const next = new URLSearchParams(searchParams);
+    next.set("task_id", created.id);
+    setSearchParams(next, { replace: true });
     void list();
   };
 
@@ -177,6 +201,7 @@ const TasksPage = () => {
               onClick={() => {
                 setFilters({ type: undefined, overdue: undefined });
                 list({ type: undefined, overdue: undefined });
+                updateFilterQuery({ type: undefined, overdue: undefined, priority: undefined });
               }}
               disabled={loading}
             >

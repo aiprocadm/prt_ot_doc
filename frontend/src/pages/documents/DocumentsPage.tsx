@@ -91,9 +91,16 @@ const DocumentsPage = () => {
         title="Документы"
         description="Все корпоративные документы, шаблоны и версии с контролем статуса и компании."
         actions={
-          <span className="text-sm text-muted-foreground">
-            {loading ? "Обновление списка…" : "Данные актуальны"}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">
+              {loading ? "Обновление списка…" : "Данные актуальны"}
+            </span>
+            <PermissionGate permission={PERMISSIONS.DOCUMENT_CREATE}>
+              <Button asChild>
+                <Link to="/documents/wizard">Создать документ</Link>
+              </Button>
+            </PermissionGate>
+          </div>
         }
         stats={[
           { label: "Всего документов", value: safePagination.total },

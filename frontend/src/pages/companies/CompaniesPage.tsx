@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -64,6 +65,7 @@ const CompaniesPage = () => {
                 onSubmitted={(company) => {
                   setSelectedCompany(company);
                   list();
+                  toast.success(`Компания "${company.name}" создана и открыта в карточке`);
                 }}
               />
             )}
