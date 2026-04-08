@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { apiClient } from "@/api/client";
+import { dashboardApiClient } from "@/api/dashboardApi";
 import { JsonKpiGrid } from "@/components/analytics/JsonKpiGrid";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -22,7 +22,7 @@ export const DashboardApiPage = ({ title, endpoint }: DashboardApiPageProps) => 
     setLoading(true);
     setError(null);
     try {
-      const { data } = await apiClient.get<Record<string, unknown>>(endpoint);
+      const data = await dashboardApiClient.getByEndpoint(endpoint);
       setPayload(data);
     } catch (err) {
       setError((err as ApiError) ?? { message: "Не удалось загрузить данные" });
