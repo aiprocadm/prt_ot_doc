@@ -35,11 +35,15 @@ const manualChunks: NonNullable<UserConfig["build"]>["rollupOptions"] extends {
   return "vendor-misc";
 };
 
-export default defineConfig(({ mode }) => ({
-  plugins: [
-    react(),
-    tsconfigPaths(),
-    VitePWA({
+export default defineConfig(({ mode }) => {
+  const isTest = mode === "test";
+
+  return {
+    plugins: [
+      react(),
+      tsconfigPaths(),
+      !isTest &&
+        VitePWA({
       registerType: "autoUpdate",
       includeAssets: ["pwa-icon.svg", "mask-icon.svg", "apple-touch-icon.svg"],
       manifest: {
@@ -81,32 +85,34 @@ export default defineConfig(({ mode }) => ({
         navigateFallback: "index.html"
       }
     })
-  ],
-  server: {
-    host: true,
-    port: 5173,
-    proxy: {
-      "/api": {
-        target: process.env.VITE_API_PROXY_TARGET ?? "http://localhost:8000",
-        changeOrigin: true,
+    ].filter(Boolean),
+    server: {
+      host: true,
+      port: 5173,
+      proxy: {
+        "/api": {
+          target: process.env.VITE_API_PROXY_TARGET ?? "http://localhost:8000",
+          changeOrigin: true,
+        },
       },
     },
-  },
-  build: {
-    outDir: "dist",
-    sourcemap: mode === "development",
-    chunkSizeWarningLimit: 700,
-    rollupOptions: {
-      output: {
-        manualChunks,
+    build: {
+      outDir: "dist",
+      sourcemap: mode === "development",
+      chunkSizeWarningLimit: 700,
+      rollupOptions: {
+        output: {
+          manualChunks,
+        },
       },
     },
-  },
-  test: {
-    environment: "jsdom",
-    globals: true,
-    setupFiles: "./vitest.setup.ts",
-    css: true,
-    exclude: [...configDefaults.exclude, "**/e2e/**"],
-  },
-}));
+    test: {
+      environment: "jsdom",
+      globals: true,
+      setupFiles: "./vitest.setup.ts",
+      css: true,
+      api: false,
+      exclude: [...configDefaults.exclude, "**/e2e/**"],
+    },
+  };
+});
