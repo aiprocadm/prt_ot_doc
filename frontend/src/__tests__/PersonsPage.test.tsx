@@ -33,6 +33,10 @@ vi.mock("@/features/persons/PersonTable", () => ({
   )
 }));
 
+vi.mock("@/features/persons/PersonFormDialog", () => ({
+  PersonFormDialog: ({ trigger }: { trigger: React.ReactNode }) => <>{trigger}</>
+}));
+
 describe("PersonsPage", () => {
   it("renders employee profile tabs", async () => {
     render(
