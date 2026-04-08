@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
+import type { ReactNode } from "react";
 
 import PersonsPage from "@/pages/persons/PersonsPage";
 
@@ -34,7 +35,7 @@ vi.mock("@/features/persons/PersonTable", () => ({
 }));
 
 vi.mock("@/features/persons/PersonFormDialog", () => ({
-  PersonFormDialog: ({ trigger }: { trigger: React.ReactNode }) => <>{trigger}</>
+  PersonFormDialog: ({ trigger }: { trigger: ReactNode }) => <>{trigger}</>
 }));
 
 describe("PersonsPage", () => {
