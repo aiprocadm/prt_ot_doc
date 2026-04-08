@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { apiClient } from "@/api/client";
+import { packsApi } from "@/api/packs";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -35,11 +35,11 @@ const PackagePresetsPage = () => {
     setError(null);
     try {
       const [presets, profileRows] = await Promise.all([
-        apiClient.get<Preset[]>("/package-presets"),
-        apiClient.get<Profile[]>("/package-profiles")
+        packsApi.getPresets<Preset>(),
+        packsApi.getProfiles<Profile>()
       ]);
-      setItems(presets.data);
-      setProfiles(profileRows.data);
+      setItems(presets);
+      setProfiles(profileRows);
     } catch (nextError) {
       setError((nextError as ApiError) ?? { message: "Не удалось загрузить пресеты пакетов" });
     } finally {
@@ -55,7 +55,7 @@ const PackagePresetsPage = () => {
     if (!profiles.length || !code || !name) return;
     setError(null);
     try {
-      await apiClient.post("/package-presets", {
+      await packsApi.createPreset({
         code,
         name,
         package_profile_id: profiles[0].id,
@@ -75,7 +75,7 @@ const PackagePresetsPage = () => {
   const validatePreset = async (id: string) => {
     setError(null);
     try {
-      await apiClient.post(`/package-presets/${id}:validate`);
+      await packsApi.validatePreset(id);
       await load();
     } catch (nextError) {
       setError((nextError as ApiError) ?? { message: "Не удалось проверить пресет пакета" });

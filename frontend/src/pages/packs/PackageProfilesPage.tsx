@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { apiClient } from "@/api/client";
+import { packsApi } from "@/api/packs";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -28,8 +28,8 @@ const PackageProfilesPage = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await apiClient.get<Profile[]>("/package-profiles");
-      setItems(response.data);
+      const response = await packsApi.getProfiles<Profile>();
+      setItems(response);
     } catch (nextError) {
       setError((nextError as ApiError) ?? { message: "Не удалось загрузить профили пакетов" });
     } finally {
@@ -45,7 +45,7 @@ const PackageProfilesPage = () => {
     if (!code || !name) return;
     setError(null);
     try {
-      await apiClient.post("/package-profiles", {
+      await packsApi.createProfile({
         code,
         name,
         status: "active",

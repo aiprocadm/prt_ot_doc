@@ -83,3 +83,13 @@ export const retryPipelineStepRun = async (runId: string, stepRunId: string) => 
 export const bulkActionPipelineRuns = async (runIds: string[], action: "retry" | "cancel") => {
   await apiClient.post(`/pipelines/runs:bulk?action=${action}`, runIds);
 };
+
+export const pipelineBuilderApi = {
+  getProfiles: async <T>(): Promise<T[]> => {
+    const { data } = await apiClient.get<T[]>("/pipelines/profiles");
+    return data;
+  },
+  createProfile: async (payload: Record<string, unknown>): Promise<void> => {
+    await apiClient.post("/pipelines/profiles", payload);
+  }
+};

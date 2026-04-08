@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { apiClient } from "@/api/client";
+import { npaApi } from "@/api/npa";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -38,9 +38,9 @@ const NpaPage = () => {
       return;
     }
     setDetailLoading(true);
-    void apiClient
-      .get<NpaDetail>(`/npa/${selectedId}`)
-      .then((response) => setDetail(response.data))
+    void npaApi
+      .getDetail<NpaDetail>(selectedId)
+      .then((response) => setDetail(response))
       .catch(() => setDetail(null))
       .finally(() => setDetailLoading(false));
   }, [selectedId]);
@@ -52,8 +52,8 @@ const NpaPage = () => {
 
   const createUpdateTasks = async () => {
     if (!selectedId) return;
-    await apiClient.post(`/npa/${selectedId}/impact/tasks`);
-    await apiClient.get<NpaDetail>(`/npa/${selectedId}`).then((response) => setDetail(response.data));
+    await npaApi.createImpactTasks(selectedId);
+    await npaApi.getDetail<NpaDetail>(selectedId).then((response) => setDetail(response));
   };
 
   return (
