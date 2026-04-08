@@ -47,7 +47,7 @@ export const CompanyDetails = ({ company }: { company: CompanyDto }) => {
     return () => {
       cancelled = true;
     };
-  }, [company.id, personsRegistryRevision]);
+  }, [company.id, company.persons, personsRegistryRevision]);
 
   const handleGeneratePack = async (preset: PackPreset) => {
     await create({ company_id: company.id, preset, parameters: {} });

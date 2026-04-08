@@ -34,7 +34,7 @@ const CompaniesPage = () => {
     if (!selectedCompany || !storeCompanyDetail) return;
     if (selectedCompany.id !== storeCompanyDetail.id) return;
     setSelectedCompany(storeCompanyDetail);
-  }, [storeCompanyDetail, selectedCompany?.id]);
+  }, [selectedCompany, storeCompanyDetail]);
 
   const handleSelect = useCallback(
     async (company: CompanyDto) => {

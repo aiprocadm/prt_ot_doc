@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { inspectionsApi, type Inspection, type InspectionResult } from "@/api/inspections";
@@ -47,7 +47,7 @@ const InspectionsPage = () => {
     scheduled_at: new Date().toISOString().slice(0, 10)
   });
 
-  const load = async (status = statusFilter) => {
+  const load = useCallback(async (status = statusFilter) => {
     setLoading(true);
     setError(null);
     try {
@@ -61,12 +61,12 @@ const InspectionsPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [statusFilter]);
 
   useEffect(() => {
     void load("");
     listCompanies({ page_size: 100 }).catch(() => undefined);
-  }, [listCompanies]);
+  }, [listCompanies, load]);
 
   useEffect(() => {
     if (focusedEntityType !== "inspection" || !focusedEntityId) {

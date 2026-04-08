@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { reportsApi } from "@/api/reports";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -39,7 +39,7 @@ const ReportsPage = () => {
   const [lastExportId, setLastExportId] = useState<string | null>(null);
   const canExportReports = ability.can(PERMISSIONS.DOCUMENT_EXPORT) || ability.can(PERMISSIONS.REPORTS_VIEW);
 
-  const loadKpi = async () => {
+  const loadKpi = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -50,11 +50,11 @@ const ReportsPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [dateFrom, dateTo]);
 
   useEffect(() => {
     void loadKpi();
-  }, []);
+  }, [loadKpi]);
 
   const exportReport = async (format: "xlsx" | "pdf") => {
     setExporting(true);

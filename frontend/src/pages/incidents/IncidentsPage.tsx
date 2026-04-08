@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { incidentsApi, type Incident } from "@/api/incidents";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -43,7 +43,7 @@ const IncidentsPage = () => {
     severity: "medium"
   });
 
-  const load = async (status = statusFilter) => {
+  const load = useCallback(async (status = statusFilter) => {
     setLoading(true);
     setError(null);
     try {
@@ -57,12 +57,12 @@ const IncidentsPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [statusFilter]);
 
   useEffect(() => {
     void load("");
     listCompanies({ page_size: 100 }).catch(() => undefined);
-  }, [listCompanies]);
+  }, [listCompanies, load]);
 
   const handleCreate = async () => {
     if (!form.title || !form.company_id) {

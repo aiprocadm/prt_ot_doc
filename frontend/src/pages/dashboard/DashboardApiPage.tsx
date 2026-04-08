@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { dashboardApiClient } from "@/api/dashboardApi";
 import { JsonKpiGrid } from "@/components/analytics/JsonKpiGrid";
@@ -18,7 +18,7 @@ export const DashboardApiPage = ({ title, endpoint }: DashboardApiPageProps) => 
   const [error, setError] = useState<ApiError | null>(null);
   const [payload, setPayload] = useState<Record<string, unknown> | null>(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -29,11 +29,11 @@ export const DashboardApiPage = ({ title, endpoint }: DashboardApiPageProps) => 
     } finally {
       setLoading(false);
     }
-  };
+  }, [endpoint]);
 
   useEffect(() => {
     void load();
-  }, [endpoint]);
+  }, [load]);
 
   const hasPayload = Object.keys(payload ?? {}).length > 0;
 

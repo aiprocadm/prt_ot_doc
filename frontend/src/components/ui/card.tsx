@@ -13,6 +13,8 @@ const CardHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement
 CardHeader.displayName = "CardHeader";
 
 const CardTitle = ({ className, ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (
+  // This primitive is used as a semantic wrapper and can be empty at definition time.
+  // eslint-disable-next-line jsx-a11y/heading-has-content
   <h3 className={cn("text-lg font-semibold leading-none tracking-tight", className)} {...props} />
 );
 CardTitle.displayName = "CardTitle";

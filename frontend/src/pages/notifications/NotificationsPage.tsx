@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { notificationsApi } from "@/api/notifications";
@@ -62,7 +62,7 @@ const NotificationsPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -81,34 +81,34 @@ const NotificationsPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [channel, priority, statusFilter, type]);
 
-  const loadSettings = async () => {
+  const loadSettings = useCallback(async () => {
     try {
       const response = await notificationsApi.getMySettings<NotificationSettings>();
       setSettings(response);
     } catch {
       setSettings(null);
     }
-  };
+  }, []);
 
-  const loadTemplates = async () => {
+  const loadTemplates = useCallback(async () => {
     try {
       const response = await notificationsApi.listTemplates<NotificationTemplate>();
       setTemplates(response);
     } catch {
       setTemplates([]);
     }
-  };
+  }, []);
 
   useEffect(() => {
     void load();
-  }, [statusFilter, channel, priority, type]);
+  }, [load]);
 
   useEffect(() => {
     void loadSettings();
     void loadTemplates();
-  }, []);
+  }, [loadSettings, loadTemplates]);
 
   const selectedUnreadIds = useMemo(() => items.filter((item) => selectedIds.includes(item.id) && !item.is_read).map((item) => item.id), [items, selectedIds]);
   const groupedByType = useMemo(() => Array.from(new Set(items.map((item) => item.type))).sort(), [items]);

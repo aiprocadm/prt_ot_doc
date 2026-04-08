@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { crmFinanceApi, type CrmFinanceSnapshot } from "@/api/crmFinance";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -43,7 +43,7 @@ const CrmFinancePage = () => {
     [companies]
   );
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -54,12 +54,12 @@ const CrmFinancePage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     void load();
     listCompanies({ page_size: 100 }).catch(() => undefined);
-  }, [listCompanies]);
+  }, [listCompanies, load]);
 
   const rows = useMemo(() => {
     const invoiceByContract = new Map<string, typeof snapshot.invoices>();
@@ -104,7 +104,7 @@ const CrmFinancePage = () => {
         searchBlob
       };
     });
-  }, [companyMap, snapshot.contracts, snapshot.invoices, snapshot.orders]);
+  }, [companyMap, snapshot]);
 
   const filteredRows = useMemo(() => {
     const normalized = query.trim().toLowerCase();

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { calendarApi } from "@/api/calendar";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -27,7 +27,7 @@ const CalendarPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
 
-  const load = async (nextSource = source) => {
+  const load = useCallback(async (nextSource = source) => {
     setLoading(true);
     setError(null);
     try {
@@ -38,11 +38,11 @@ const CalendarPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [source]);
 
   useEffect(() => {
     void load(source);
-  }, [source]);
+  }, [load, source]);
 
   const grouped = useMemo(() => {
     if (mode === "list") return [{ label: "Список", items: events }];

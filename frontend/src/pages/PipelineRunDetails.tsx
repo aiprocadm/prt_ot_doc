@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 
 import { cancelPipelineRun, getPipelineRun, retryPipelineRun, retryPipelineStepRun, type PipelineRun } from "@/api/pipelines";
@@ -18,7 +18,7 @@ const PipelineRunDetails = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -30,11 +30,11 @@ const PipelineRunDetails = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
   useEffect(() => {
     void load();
-  }, [id]);
+  }, [load]);
 
   const sseRef = useRef<EventSource | null>(null);
 

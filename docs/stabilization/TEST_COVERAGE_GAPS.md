@@ -66,7 +66,11 @@
 4. Ограниченная роль: `E2E_LIMITED_USER_EMAIL` / `E2E_LIMITED_USER_PASSWORD` → экран «Доступ ограничен» на `/documents`.
 5. Logout через меню пользователя (`data-testid="user-menu-trigger"`).
 
-**Запуск:** `cd frontend && npm run e2e:install && E2E_START_SERVER=1 npm run e2e`. Для prod-бандла: `E2E_PREVIEW=1`.
+**Запуск:**
+- Базовый smoke: `cd frontend && npm run e2e:install && E2E_START_SERVER=1 npm run e2e`
+- Ключевые сценарии IA: `cd frontend && E2E_START_SERVER=1 npm run e2e:key-scenarios`
+- Для реального логина задайте `E2E_USER_EMAIL` и `E2E_USER_PASSWORD` (опц. `E2E_TENANT`, по умолчанию `demo`).
+- Для prod-бандла: `E2E_PREVIEW=1`.
 
 ## Contract / OpenAPI
 

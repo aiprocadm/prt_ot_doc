@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { apiClient } from "@/api/client";
@@ -72,18 +72,18 @@ export const LayoutPresetEditor = () => {
     [presets, selectedId]
   );
 
-  const loadPresets = async () => {
+  const loadPresets = useCallback(async () => {
     const items = await listLayoutPresets();
     setPresets(items);
     if (!selectedId && items[0]) {
       setSelectedId(items[0].id);
       setForm(mapPresetToForm(items[0]));
     }
-  };
+  }, [selectedId]);
 
   useEffect(() => {
     loadPresets().catch(() => toast.error("Не удалось загрузить список пресетов"));
-  }, []);
+  }, [loadPresets]);
 
   useEffect(() => {
     setForm(mapPresetToForm(selectedPreset));
