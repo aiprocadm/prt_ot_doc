@@ -351,7 +351,7 @@ async def test_tasks_status_returns_404_for_other_tenant_pipeline_run(
     await _ensure_global_tenant(slug=tb.slug, tenant_id=str(tb.id))
 
     response = await async_client.get(
-        f"/api/v1/tasks/{run_id}",
+        f"/api/v1/tasks/pipeline-runs/{run_id}",
         headers=_headers_tenant_b(user_id=user_b_id, tenant_b=tb),
     )
     assert response.status_code == 404

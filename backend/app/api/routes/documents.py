@@ -120,6 +120,39 @@ def _documents_bad_request(message: str) -> HTTPException:
     )
 
 
+def _documents_not_found(*, code: str, message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=api_problem_detail(code=code, message=message, error_type="documents"),
+    )
+
+
+def _documents_conflict(
+    message: str,
+    *,
+    code: str,
+    details: dict[str, Any] | None = None,
+) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=api_problem_detail(code=code, message=message, error_type="documents", details=details),
+    )
+
+
+def _documents_forbidden(*, code: str, message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=api_problem_detail(code=code, message=message, error_type="documents"),
+    )
+
+
+def _documents_payload_too_large(message: str, *, code: str = "DOCUMENT_PAYLOAD_TOO_LARGE") -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+        detail=api_problem_detail(code=code, message=message, error_type="documents"),
+    )
+
+
 def _dispatch_celery_task(task, *, args: list[str], kwargs: dict[str, str], task_id: str | None = None, headers: dict[str, str] | None = None) -> None:
     task.apply_async(args=args, kwargs=kwargs, task_id=task_id, headers=headers)
 
@@ -301,7 +334,14 @@ def _build_document_ui_read(document: Document) -> DocumentUiRead:
     current_file = document.file or (latest_version.file if latest_version else None)
     company = document.company
     if company is None:
-        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Document company is missing")
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=api_problem_detail(
+                code="INTERNAL_ERROR",
+                message="Document data is inconsistent (company is missing)",
+                error_type="server",
+            ),
+        )
     template_name = (document.template.name if document.template else None) or f"Document {document.id[:8]}"
     template_type = (document.template.domain if document.template else None) or (document.template.code if document.template else None) or "document"
     return DocumentUiRead(
@@ -487,7 +527,7 @@ async def get_document(
         await session.execute(_document_read_query(str(tenant.id)).where(Document.id == document_id))
     ).scalar_one_or_none()
     if document is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
+        raise _documents_not_found(code="DOCUMENT_NOT_FOUND", message="Document not found")
     access.ensure_abac(
         action="read document",
         company_id=document.company_id,
@@ -512,7 +552,7 @@ async def get_document_readiness_endpoint(
         await session.execute(_document_read_query(str(tenant.id)).where(Document.id == document_id))
     ).scalar_one_or_none()
     if document is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
+        raise _documents_not_found(code="DOCUMENT_NOT_FOUND", message="Document not found")
     access.ensure_abac(
         action="read document",
         company_id=document.company_id,
@@ -553,7 +593,7 @@ async def compare_document_versions_endpoint(
         await session.execute(_document_read_query(str(tenant.id)).where(Document.id == document_id))
     ).scalar_one_or_none()
     if document is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
+        raise _documents_not_found(code="DOCUMENT_NOT_FOUND", message="Document not found")
     access.ensure_abac(
         action="read document",
         company_id=document.company_id,
@@ -572,7 +612,7 @@ async def compare_document_versions_endpoint(
             right_version_id=right_version_id,
         )
     except ValueError:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Version not found") from None
+        raise _documents_not_found(code="DOCUMENT_VERSION_NOT_FOUND", message="Version not found") from None
 
     left_data = dict(left_v.data_json or {})
     right_data = dict(right_v.data_json or {})
@@ -609,7 +649,7 @@ async def get_document_dependency_map_endpoint(
         await session.execute(_document_read_query(str(tenant.id)).where(Document.id == document_id))
     ).scalar_one_or_none()
     if document is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
+        raise _documents_not_found(code="DOCUMENT_NOT_FOUND", message="Document not found")
     access.ensure_abac(
         action="read document",
         company_id=document.company_id,
@@ -662,7 +702,7 @@ async def download_document(
         await session.execute(_document_read_query(str(tenant.id)).where(Document.id == document_id))
     ).scalar_one_or_none()
     if document is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
+        raise _documents_not_found(code="DOCUMENT_NOT_FOUND", message="Document not found")
     access.ensure_abac(
         action="download document",
         company_id=document.company_id,
@@ -677,12 +717,12 @@ async def download_document(
     current_file = document.file or (latest_version.file if latest_version else None)
     storage_key = document.storage_key or (current_file.storage_key if current_file else None) or (latest_version.file_key if latest_version else None)
     if not storage_key:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document file not found")
+        raise _documents_not_found(code="DOCUMENT_FILE_NOT_FOUND", message="Document file not found")
 
     try:
         payload = storage.download(storage_key)
     except KeyError as exc:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document file not found") from exc
+        raise _documents_not_found(code="DOCUMENT_FILE_NOT_FOUND", message="Document file not found") from exc
 
     filename = (current_file.original_name if current_file and current_file.original_name else f"document-{document.id}.bin").replace('"', "")
     media_type = current_file.mime if current_file else "application/octet-stream"
@@ -709,10 +749,7 @@ def _ensure_payload_size(payload: dict[str, Any], *, limit: int, field: str) -> 
     serialized = _serialize_payload(payload)
     size = len(serialized.encode("utf-8"))
     if size > limit:
-        raise HTTPException(
-            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            f"{field} payload cannot exceed {limit} bytes",
-        )
+        raise _documents_payload_too_large(f"{field} payload cannot exceed {limit} bytes")
 
 
 def _parse_csv_payload(file: UploadFile) -> list[dict[str, Any]]:
@@ -808,12 +845,12 @@ async def _fetch_template(
     )
     row = (await session.execute(stmt)).first()
     if row is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Template not found")
+        raise _documents_not_found(code="DOCUMENT_TEMPLATE_NOT_FOUND", message="Template not found")
     template, version = row
     if template_id and template.id != template_id:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
+        raise _documents_conflict(
             "template_id does not match template_code selection",
+            code="DOCUMENT_TEMPLATE_ID_MISMATCH",
         )
     return template, version
 
@@ -821,7 +858,7 @@ async def _fetch_template(
 async def _ensure_company(session: AsyncSession, tenant: Tenant, company_id: str) -> Company:
     company = await session.get(Company, company_id)
     if company is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Company not found")
+        raise _documents_not_found(code="DOCUMENT_COMPANY_NOT_FOUND", message="Company not found")
     try:
         assert_tenant_row_matches_session(
             session,
@@ -831,9 +868,9 @@ async def _ensure_company(session: AsyncSession, tenant: Tenant, company_id: str
             expected_tenant_id=str(tenant.id),
         )
     except ValueError:
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN,
-            "Tenant mismatch for company resource",
+        raise _documents_forbidden(
+            code="DOCUMENT_COMPANY_TENANT_MISMATCH",
+            message="Tenant mismatch for company resource",
         ) from None
     return company
 
@@ -845,7 +882,7 @@ async def _ensure_person(
         return None
     person = await session.get(Person, person_id)
     if person is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Person not found")
+        raise _documents_not_found(code="DOCUMENT_PERSON_NOT_FOUND", message="Person not found")
     try:
         assert_tenant_row_matches_session(
             session,
@@ -855,9 +892,9 @@ async def _ensure_person(
             expected_tenant_id=str(company.tenant_id),
         )
     except ValueError:
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN,
-            "Tenant mismatch for person resource",
+        raise _documents_forbidden(
+            code="DOCUMENT_PERSON_TENANT_MISMATCH",
+            message="Tenant mismatch for person resource",
         ) from None
     if person.company_id != company.id:
         raise _documents_bad_request("person_id does not belong to the provided company")
@@ -888,22 +925,22 @@ async def _resolve_run(
     if existing is not None:
         metadata = existing.result_metadata or {}
         if existing.template_id != template.id:
-            raise HTTPException(status.HTTP_409_CONFLICT, "Idempotency key already used")
+            raise _documents_conflict("Idempotency key already used", code="DOCUMENT_IDEMPOTENCY_KEY_CONFLICT")
         if existing.template_version_id != template_version.id:
-            raise HTTPException(status.HTTP_409_CONFLICT, "Idempotency key already used")
+            raise _documents_conflict("Idempotency key already used", code="DOCUMENT_IDEMPOTENCY_KEY_CONFLICT")
         if metadata.get("company_id") != company.id:
-            raise HTTPException(status.HTTP_409_CONFLICT, "Idempotency key already used")
+            raise _documents_conflict("Idempotency key already used", code="DOCUMENT_IDEMPOTENCY_KEY_CONFLICT")
         expected_person = person.id if person else None
         if metadata.get("person_id") != expected_person:
-            raise HTTPException(status.HTTP_409_CONFLICT, "Idempotency key already used")
+            raise _documents_conflict("Idempotency key already used", code="DOCUMENT_IDEMPOTENCY_KEY_CONFLICT")
         if metadata.get("payload_hash") != payload_hash:
-            raise HTTPException(status.HTTP_409_CONFLICT, "Idempotency key already used")
+            raise _documents_conflict("Idempotency key already used", code="DOCUMENT_IDEMPOTENCY_KEY_CONFLICT")
         if existing.context != context:
-            raise HTTPException(status.HTTP_409_CONFLICT, "Idempotency key already used")
+            raise _documents_conflict("Idempotency key already used", code="DOCUMENT_IDEMPOTENCY_KEY_CONFLICT")
         if existing.status == PipelineRunStatus.ERROR:
-            raise HTTPException(
-                status.HTTP_409_CONFLICT,
+            raise _documents_conflict(
                 "Idempotency key refers to a failed generation task",
+                code="DOCUMENT_IDEMPOTENCY_KEY_FAILED_RUN",
             )
         return existing, False
 
@@ -973,7 +1010,11 @@ async def generate_document(
         enforce_mapping_constraints(payload_for_checks, field="data")
         _ensure_payload_size(payload_for_checks, limit=settings.document_payload_max_bytes, field="data")
     except PayloadConstraintError as exc:
-        raise HTTPException(exc.status_code, str(exc)) from exc
+        p_code = "DOCUMENT_PAYLOAD_TOO_LARGE" if exc.status_code == 413 else "DOCUMENT_PAYLOAD_CONSTRAINT"
+        raise HTTPException(
+            exc.status_code,
+            detail=api_problem_detail(code=p_code, message=str(exc), error_type="documents"),
+        ) from exc
 
     normalized_key = normalize_idempotency_key(idempotency_key)
     idem_state = getattr(request.state, "idempotency", {})
@@ -1016,11 +1057,11 @@ async def generate_document(
             if record.request_hash and record.request_hash != request_hash:
                 raise HTTPException(
                     status.HTTP_409_CONFLICT,
-                    {
-                        "code": "IDEMPOTENCY_MISMATCH",
-                        "type": "idempotency",
-                        "message": "Idempotency key cannot be reused with a different request payload",
-                    },
+                    detail=api_problem_detail(
+                        code="IDEMPOTENCY_MISMATCH",
+                        message="Idempotency key cannot be reused with a different request payload",
+                        error_type="idempotency",
+                    ),
                 )
             record.request_hash = request_hash
             if created_record:
@@ -1178,7 +1219,7 @@ async def generate_document(
                 await session.commit()
             raise HTTPException(
                 status.HTTP_500_INTERNAL_SERVER_ERROR,
-                _generate_internal_error_problem(),
+                detail=_generate_internal_error_problem(),
             ) from exc
 
     response.status_code = status.HTTP_202_ACCEPTED
@@ -1221,9 +1262,9 @@ async def generate_document_batch(
     if not rows:
         raise _documents_bad_request("Batch file is empty")
     if len(rows) > settings.document_batch_max_rows:
-        raise HTTPException(
-            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+        raise _documents_payload_too_large(
             f"Batch cannot exceed {settings.document_batch_max_rows} documents",
+            code="DOCUMENT_BATCH_TOO_MANY_ROWS",
         )
 
     template, template_version_row = await _fetch_template(
@@ -1266,7 +1307,11 @@ async def generate_document_batch(
                 field="data",
             )
         except PayloadConstraintError as exc:
-            raise HTTPException(exc.status_code, str(exc)) from exc
+            p_code = "DOCUMENT_PAYLOAD_TOO_LARGE" if exc.status_code == 413 else "DOCUMENT_PAYLOAD_CONSTRAINT"
+            raise HTTPException(
+                exc.status_code,
+                detail=api_problem_detail(code=p_code, message=str(exc), error_type="documents"),
+            ) from exc
         person_id = row.get("person_id") if isinstance(row, dict) else None
         person = await _ensure_person(session, person_id, company)
         output_name = _apply_naming_pattern(naming_pattern, row_payload, index)
@@ -1355,7 +1400,7 @@ async def get_document_batch(
         )
     ).scalar_one_or_none()
     if batch is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Batch not found")
+        raise _documents_not_found(code="DOCUMENT_BATCH_NOT_FOUND", message="Batch not found")
     items = batch.items
     return DocumentBatchRunRead(
         id=batch.id,
@@ -1392,7 +1437,10 @@ async def get_generation_task_status(
     )
     run = (await session.execute(stmt)).scalar_one_or_none()
     if run is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Task not found")
+        raise _documents_not_found(
+            code="DOCUMENT_GENERATION_TASK_NOT_FOUND",
+            message="Task not found",
+        )
 
     metadata = dict(run.result_metadata or {})
     outputs = dict(run.outputs or {})
@@ -1453,10 +1501,10 @@ async def update_document_status(
             user_agent=user_agent,
         )
     except DocumentNotFoundError as exc:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+        raise _documents_not_found(code="DOCUMENT_NOT_FOUND", message=str(exc)) from exc
     except InvalidStatusTransitionError as exc:
         await session.commit()
-        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+        raise _documents_conflict(str(exc), code="DOCUMENT_INVALID_STATUS_TRANSITION")
 
     await session.commit()
     await session.refresh(document)

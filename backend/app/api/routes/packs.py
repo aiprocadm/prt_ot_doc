@@ -90,6 +90,25 @@ def _pack_bad_request(message: str) -> HTTPException:
     )
 
 
+def _pack_not_found(*, code: str, message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=api_problem_detail(code=code, message=message, error_type="packs"),
+    )
+
+
+def _pack_conflict(
+    message: str,
+    *,
+    code: str = "PACK_CONFLICT",
+    details: dict[str, Any] | None = None,
+) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=api_problem_detail(code=code, message=message, error_type="packs", details=details),
+    )
+
+
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | None:
     return getattr(tenant, "id", None)
 
@@ -213,7 +232,7 @@ async def _get_company(
     )
     company = (await session.execute(stmt)).scalar_one_or_none()
     if company is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Company not found")
+        raise _pack_not_found(code="PACK_COMPANY_NOT_FOUND", message="Company not found")
     if access is not None and access.role in {"client_admin", "client_user"}:
         access.ensure_company_access(company.id, action="access company data")
     return company
@@ -232,7 +251,7 @@ async def _get_site(
     )
     site = (await session.execute(stmt)).scalar_one_or_none()
     if site is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Site not found")
+        raise _pack_not_found(code="PACK_SITE_NOT_FOUND", message="Site not found")
     if site.company_id != company.id:
         raise _pack_bad_request("Site does not belong to company")
     return site
@@ -262,7 +281,10 @@ async def _get_persons(
     rows = (await session.execute(stmt)).scalars().all()
     persons = list(rows)
     if len(persons) != len(unique_ids):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "One or more persons were not found")
+        raise _pack_not_found(
+            code="PACK_PERSONS_NOT_FOUND",
+            message="One or more persons were not found",
+        )
     indexed = {person.id: person for person in persons}
     ordered = []
     for pid in unique_ids:
@@ -357,7 +379,12 @@ async def _enforce_person_invariants(
     if violations:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            {"code": "requirements_not_met", "details": violations},
+            detail=api_problem_detail(
+                code="requirements_not_met",
+                message="Pack prerequisites are not satisfied for one or more persons",
+                error_type="packs",
+                details={"details": violations},
+            ),
         )
 
 
@@ -381,9 +408,9 @@ async def _get_pack(
     )
     pack = (await session.execute(stmt)).scalar_one_or_none()
     if pack is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Pack not found")
+        raise _pack_not_found(code="PACK_NOT_FOUND", message="Pack not found")
     if not pack.items:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Pack contains no items")
+        raise _pack_conflict("Pack contains no items", code="PACK_EMPTY")
     return pack
 
 
@@ -494,14 +521,14 @@ async def create_pack_from_scenario(
     _ = access
     definition = PACK_DEFINITIONS_BY_CODE.get(scenario_code)
     if definition is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Scenario is not supported")
+        raise _pack_not_found(code="PACK_SCENARIO_NOT_SUPPORTED", message="Scenario is not supported")
 
     try:
         pack = await ensure_pack_by_code(
             session, tenant_slug=tenant.slug, pack_code=scenario_code
         )
     except ValueError:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Scenario is not supported")
+        raise _pack_not_found(code="PACK_SCENARIO_NOT_SUPPORTED", message="Scenario is not supported")
 
     if payload.name:
         pack.name = payload.name
@@ -633,7 +660,7 @@ async def generate_pack_documents(
         await _get_pack(session, tenant, payload.pack_code)
 
         task_id = str(uuid.uuid4())
-        status_url = f"/api/v1/tasks/{task_id}"
+        status_url = f"/api/v1/tasks/pipeline-runs/{task_id}"
         correlation_id = get_trace_id()
         result = TaskAcceptedResponse(
             task_id=task_id,
@@ -684,7 +711,15 @@ async def generate_pack_documents(
                 detail={"detail": str(exc)},
             )
             await session.commit()
-        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(exc)) from exc
+        logger.exception("packs.generate.enqueue_failed", exc_info=exc)
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=api_problem_detail(
+                code="INTERNAL_ERROR",
+                message="Failed to queue pack generation task",
+                error_type="server",
+            ),
+        ) from exc
 
     response.status_code = status.HTTP_202_ACCEPTED
     return result
@@ -730,7 +765,11 @@ async def run_pack(
         if active_runs:
             raise HTTPException(
                 status.HTTP_429_TOO_MANY_REQUESTS,
-                "A generation task is already running for this tenant",
+                detail=api_problem_detail(
+                    code="TOO_MANY_REQUESTS",
+                    message="A generation task is already running for this tenant",
+                    error_type="packs",
+                ),
                 headers={"Retry-After": "30"},
             )
 
@@ -769,32 +808,29 @@ async def run_pack(
             for item in pack.items:
                 template = item.template
                 if template is None:
-                    raise HTTPException(
-                        status.HTTP_409_CONFLICT,
-                        "Pack item is missing a template",
-                    )
+                    raise _pack_conflict("Pack item is missing a template", code="PACK_ITEM_NO_TEMPLATE")
                 if item.template_version_id is None:
-                    raise HTTPException(
-                        status.HTTP_409_CONFLICT,
+                    raise _pack_conflict(
                         "Pack item requires template_version_id",
+                        code="PACK_ITEM_TEMPLATE_VERSION_REQUIRED",
                     )
                 version = item.template_version
                 if version is None:
                     version = await session.get(TemplateVersion, item.template_version_id)
                 if version is None:
-                    raise HTTPException(
-                        status.HTTP_409_CONFLICT,
+                    raise _pack_conflict(
                         "Pack item references missing template version",
+                        code="PACK_ITEM_TEMPLATE_VERSION_MISSING",
                     )
                 if str(version.tenant_id) != str(pack.tenant_id):
-                    raise HTTPException(
-                        status.HTTP_409_CONFLICT,
+                    raise _pack_conflict(
                         "Pack item template version tenant mismatch",
+                        code="PACK_ITEM_TEMPLATE_VERSION_TENANT_MISMATCH",
                     )
                 if version.template_id != template.id:
-                    raise HTTPException(
-                        status.HTTP_409_CONFLICT,
+                    raise _pack_conflict(
                         "Pack item template version mismatch",
+                        code="PACK_ITEM_TEMPLATE_VERSION_MISMATCH",
                     )
                 person_id = person.id if person is not None else None
                 run_key = build_idempotency_key(

@@ -639,7 +639,7 @@ async def replay_event(
 
     event = await session.get(Outbox, event_id)
     if event is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "event_not_found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=_OUTBOX_EVENT_NOT_FOUND)
     enforce_row_belongs_to_tenant(
         session,
         event,

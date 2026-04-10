@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.errors import api_problem_detail
 from app.models.models import (
     PackagePresetItem,
     PackRun,
@@ -43,6 +44,22 @@ from app.modules.packs.service import (
 )
 
 router = APIRouter(tags=["packs-v2"])
+
+_PACKS_V2_TYPE = "packs"
+
+
+def _not_found(code: str, message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=api_problem_detail(code=code, message=message, error_type=_PACKS_V2_TYPE),
+    )
+
+
+def _bad_request(code: str, message: str, *, field: str | None = None) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=api_problem_detail(code=code, message=message, error_type=_PACKS_V2_TYPE, field=field),
+    )
 
 
 def _profile_read(model) -> PackageProfileRead:
@@ -109,7 +126,7 @@ async def list_profiles(session: AsyncSession = Depends(get_session), tenant: Te
 async def get_profile(profile_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> PackageProfileRead:
     model = await PackageService(session).get_profile(tenant_id=str(tenant.id), profile_id=profile_id)
     if model is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "profile not found")
+        raise _not_found("PACKAGE_PROFILE_NOT_FOUND", "Profile not found")
     return _profile_read(model)
 
 
@@ -117,7 +134,7 @@ async def get_profile(profile_id: str, session: AsyncSession = Depends(get_sessi
 async def patch_profile(profile_id: str, payload: PackageProfilePatch, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> PackageProfileRead:
     model = await PackageService(session).get_profile(tenant_id=str(tenant.id), profile_id=profile_id)
     if model is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "profile not found")
+        raise _not_found("PACKAGE_PROFILE_NOT_FOUND", "Profile not found")
     for key, value in payload.model_dump(exclude_none=True).items():
         setattr(model, key, value)
     await session.commit()
@@ -128,7 +145,7 @@ async def patch_profile(profile_id: str, payload: PackageProfilePatch, session: 
 async def delete_profile(profile_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> Response:
     model = await PackageService(session).get_profile(tenant_id=str(tenant.id), profile_id=profile_id)
     if model is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "profile not found")
+        raise _not_found("PACKAGE_PROFILE_NOT_FOUND", "Profile not found")
     from datetime import datetime, timezone
 
     model.deleted_at = datetime.now(timezone.utc)
@@ -156,7 +173,7 @@ async def get_preset(preset_id: str, session: AsyncSession = Depends(get_session
     service = PackageService(session)
     model = await service.get_preset(tenant_id=str(tenant.id), preset_id=preset_id)
     if model is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "preset not found")
+        raise _not_found("PACKAGE_PRESET_NOT_FOUND", "Preset not found")
     return await _preset_read(session, model)
 
 
@@ -165,7 +182,7 @@ async def patch_preset(preset_id: str, payload: PackagePresetPatch, session: Asy
     service = PackageService(session)
     model = await service.get_preset(tenant_id=str(tenant.id), preset_id=preset_id)
     if model is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "preset not found")
+        raise _not_found("PACKAGE_PRESET_NOT_FOUND", "Preset not found")
     for key, value in payload.model_dump(exclude_none=True).items():
         setattr(model, key, value)
     await session.commit()
@@ -177,7 +194,7 @@ async def create_preset_item(preset_id: str, payload: PackagePresetItemCreate, s
     service = PackageService(session)
     preset = await service.get_preset(tenant_id=str(tenant.id), preset_id=preset_id)
     if preset is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "preset not found")
+        raise _not_found("PACKAGE_PRESET_NOT_FOUND", "Preset not found")
     item = await service.add_item(str(tenant.id), preset, payload)
     await session.commit()
     return _item_read(item)
@@ -194,7 +211,7 @@ async def patch_preset_item(
     service = PackageService(session)
     item = await service.get_item(str(tenant.id), preset_id, item_id)
     if item is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "preset item not found")
+        raise _not_found("PACKAGE_PRESET_ITEM_NOT_FOUND", "Preset item not found")
     data = payload.model_dump(exclude_unset=True)
     if "replace_mode" in data and data["replace_mode"] == "dry-run":
         data["replace_mode"] = "preview"
@@ -216,7 +233,7 @@ async def delete_preset_item(
     service = PackageService(session)
     item = await service.get_item(str(tenant.id), preset_id, item_id)
     if item is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "preset item not found")
+        raise _not_found("PACKAGE_PRESET_ITEM_NOT_FOUND", "Preset item not found")
     item.deleted_at = datetime.now(timezone.utc)
     await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -229,7 +246,7 @@ async def delete_preset(preset_id: str, session: AsyncSession = Depends(get_sess
     service = PackageService(session)
     preset = await service.get_preset(tenant_id=str(tenant.id), preset_id=preset_id)
     if preset is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "preset not found")
+        raise _not_found("PACKAGE_PRESET_NOT_FOUND", "Preset not found")
     preset.deleted_at = datetime.now(timezone.utc)
     await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -240,7 +257,7 @@ async def validate_preset(preset_id: str, session: AsyncSession = Depends(get_se
     service = PackageService(session)
     preset = await service.get_preset(tenant_id=str(tenant.id), preset_id=preset_id)
     if preset is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "preset not found")
+        raise _not_found("PACKAGE_PRESET_NOT_FOUND", "Preset not found")
     items = (
         await session.execute(select(PackagePresetItem).where(PackagePresetItem.package_preset_id == preset.id))
     ).scalars().all()
@@ -261,7 +278,7 @@ async def upload_source_preview(preset_id: str, payload: MappingPreviewRequest, 
     service = PackageService(session)
     preset = await service.get_preset(tenant_id=str(tenant.id), preset_id=preset_id)
     if preset is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "preset not found")
+        raise _not_found("PACKAGE_PRESET_NOT_FOUND", "Preset not found")
     source_type, columns, rows = await load_source_rows(
         session, payload.source_file_id, payload.rows, tenant_id=str(tenant.id)
     )
@@ -273,7 +290,7 @@ async def preview_mapping(preset_id: str, payload: MappingPreviewRequest, sessio
     service = PackageService(session)
     preset = await service.get_preset(tenant_id=str(tenant.id), preset_id=preset_id)
     if preset is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "preset not found")
+        raise _not_found("PACKAGE_PRESET_NOT_FOUND", "Preset not found")
     source_type, columns, rows = await load_source_rows(
         session, payload.source_file_id, payload.rows, tenant_id=str(tenant.id)
     )
@@ -292,9 +309,9 @@ async def create_pack_run(
     tenant: Tenant = Depends(get_tenant_record),
 ) -> PackRunAccepted:
     if not x_tenant:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "X-Tenant is required")
+        raise _bad_request("X_TENANT_REQUIRED", "X-Tenant header is required", field="X-Tenant")
     if not idempotency_key:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Idempotency-Key is required")
+        raise _bad_request("IDEMPOTENCY_KEY_REQUIRED", "Idempotency-Key header is required", field="Idempotency-Key")
 
     _, _, rows = await load_source_rows(session, payload.source_file_id, payload.rows, tenant_id=str(tenant.id))
     run = await PackRunService(session).create_run(
@@ -333,7 +350,7 @@ async def list_runs(session: AsyncSession = Depends(get_session), tenant: Tenant
 async def get_run(run_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> PackRunRead:
     row = await session.get(PackRun, run_id)
     if row is None or row.tenant_id != str(tenant.id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "pack run not found")
+        raise _not_found("PACK_RUN_NOT_FOUND", "Pack run not found")
     return PackRunRead(
         id=row.id,
         package_preset_id=row.package_preset_id,
@@ -368,7 +385,7 @@ async def get_timeline(run_id: str, session: AsyncSession = Depends(get_session)
 async def cancel_run(run_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> PackRunRead:
     row = await session.get(PackRun, run_id)
     if row is None or row.tenant_id != str(tenant.id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "pack run not found")
+        raise _not_found("PACK_RUN_NOT_FOUND", "Pack run not found")
     row.status = "canceled"
     await session.commit()
     return await get_run(run_id, session, tenant)
@@ -391,5 +408,5 @@ async def retry_failed(run_id: str, session: AsyncSession = Depends(get_session)
 async def download_run(run_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> DownloadRead:
     row = await session.get(PackRun, run_id)
     if row is None or row.tenant_id != str(tenant.id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "pack run not found")
+        raise _not_found("PACK_RUN_NOT_FOUND", "Pack run not found")
     return DownloadRead(url=f"/api/v1/pack-runs/{run_id}/download.zip")

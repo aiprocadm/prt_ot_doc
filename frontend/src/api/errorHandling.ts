@@ -9,6 +9,26 @@ const AUTH_PATHS = ["/auth/login", "/auth/refresh", "/auth/logout"];
 
 const BILLING_ALERT_STORAGE_KEY = "billing:alert";
 
+const MAX_TOAST_BODY_LEN = 280;
+
+/** Собирает текст тоста: обрезка длинного message и хвост correlation_id в DEV. */
+export const buildToastText = (primary: string, error: ApiError): string => {
+  const trimmed = primary.trim();
+  const body =
+    trimmed.length > MAX_TOAST_BODY_LEN ? `${trimmed.slice(0, MAX_TOAST_BODY_LEN)}…` : trimmed;
+  if (import.meta.env.DEV && error.correlation_id) {
+    const id = error.correlation_id;
+    const ref = id.length > 12 ? `${id.slice(0, 8)}…` : id;
+    return `${body} (ref: ${ref})`;
+  }
+  return body;
+};
+
+const toastErrorPreferMessage = (error: ApiError, fallback: string) => {
+  const raw = error.message?.trim();
+  toast.error(raw ? buildToastText(raw, error) : fallback);
+};
+
 const rememberBillingAlert = (code: string) => {
   sessionStorageSetItem(BILLING_ALERT_STORAGE_KEY, JSON.stringify({ code, ts: Date.now() }));
 };
@@ -51,25 +71,34 @@ export const handleApiError = (error: ApiError, requestUrl?: string) => {
     return;
   }
 
+  if (status === 400) {
+    toastErrorPreferMessage(error, "Некорректный запрос.");
+    return;
+  }
+
   if (status === 403) {
-    toast.error("Недостаточно прав для выполнения операции.");
+    toastErrorPreferMessage(error, "Недостаточно прав для выполнения операции.");
     return;
   }
 
   if (status === 404) {
-    toast.error("Запрошенный ресурс недоступен.");
+    toastErrorPreferMessage(error, "Запрошенный ресурс недоступен.");
     return;
   }
 
   if (status === 409) {
-    toast.error("Конфликт данных. Обновите страницу и попробуйте снова.");
+    toastErrorPreferMessage(error, "Конфликт данных. Обновите страницу и попробуйте снова.");
     return;
   }
 
   if (status === 422) {
     const fe = error.field_errors?.filter((f) => f.field && f.message) ?? [];
-    const detail = fe.length > 0 ? fe.map((f) => `${f.field}: ${f.message}`).join(". ") : null;
-    toast.error(detail ?? "Проверьте введённые данные и повторите попытку.");
+    if (fe.length > 0) {
+      const joined = fe.map((f) => `${f.field}: ${f.message}`).join(". ");
+      toast.error(buildToastText(joined, error));
+      return;
+    }
+    toastErrorPreferMessage(error, "Проверьте введённые данные и повторите попытку.");
     return;
   }
 

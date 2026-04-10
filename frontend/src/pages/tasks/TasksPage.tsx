@@ -46,7 +46,21 @@ const TASK_PRIORITIES: TaskPriority[] = ["low", "medium", "high", "critical"];
 const isTaskPriority = (value: string): value is TaskPriority => TASK_PRIORITIES.includes(value as TaskPriority);
 
 const TasksPage = () => {
-  const { list, loading, error, filters, setFilters, items, item, getById, patchTask, createTask, pagination } = useTasksStore();
+  const {
+    list,
+    loading,
+    error,
+    filters,
+    setFilters,
+    items,
+    item,
+    getById,
+    patchTask,
+    createTask,
+    pagination,
+    taskFocusLoadError,
+    clearTaskFocusState
+  } = useTasksStore();
   const [searchParams, setSearchParams] = useSearchParams();
   const updateFilterQuery = (patch: { type?: string; overdue?: boolean; priority?: string }) => {
     const next = new URLSearchParams(searchParams);
@@ -87,9 +101,12 @@ const TasksPage = () => {
   }, [list, searchParams, setFilters]);
 
   useEffect(() => {
-    if (!focusedTaskId) return;
+    if (!focusedTaskId) {
+      clearTaskFocusState();
+      return;
+    }
     void getById(focusedTaskId);
-  }, [focusedTaskId, getById]);
+  }, [focusedTaskId, getById, clearTaskFocusState]);
 
   const focusedTask = useMemo(() => {
     if (!focusedTaskId) return null;
@@ -225,6 +242,7 @@ const TasksPage = () => {
             <TaskFocusCard
               focusedTaskId={focusedTaskId}
               focusedTask={focusedTask}
+              focusLoadError={taskFocusLoadError}
               focusedEntityType={focusedEntityType}
               focusedEntityId={focusedEntityId}
               onCloseTask={(taskId) => {

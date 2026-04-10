@@ -61,29 +61,38 @@ def _task_unprocessable(message: str) -> HTTPException:
     )
 
 
+def _task_not_found(*, code: str = "TASK_NOT_FOUND", message: str = "Task not found") -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=api_problem_detail(code=code, message=message, error_type="tasks"),
+    )
+
+
 def _normalize_meta_value(value):
     if isinstance(value, (dict, list, str, int, float, bool)) or value is None:
         return value
     return str(value)
 
 
-@router.get("/{task_id}", response_model=TaskStatusResponse)
-async def get_task_status(
-    task_id: str,
+@router.get("/pipeline-runs/{run_id}", response_model=TaskStatusResponse)
+async def get_pipeline_run_status(
+    run_id: str,
     session: AsyncSession = SessionDep,
     tenant: Tenant = TenantDep,
-    access: AccessContext = TaskAccess,
+    _: AccessContext = TaskAccess,
 ) -> TaskStatusResponse:
+    """Статус фонового прогона (PipelineRun / Celery). Не путать с obligation Task."""
+
     TenantContextValidator.ensure_tenant_context(tenant)
 
     stmt = select(PipelineRun).where(
-        PipelineRun.id == task_id,
+        PipelineRun.id == run_id,
         PipelineRun.tenant_id == tenant.id,
     )
     run = (await session.execute(stmt)).scalar_one_or_none()
     if run is None:
         # Do not leak Celery task existence across tenants.
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Task not found")
+        raise _task_not_found(code="PIPELINE_RUN_NOT_FOUND")
     metadata: dict[str, object] = {}
     document_id: str | None = None
     result_payload: dict[str, object] | None = None
@@ -106,7 +115,7 @@ async def get_task_status(
     celery_state: str | None = None
     if celery_app is not None:
         try:
-            async_result = AsyncResult(task_id, app=celery_app)
+            async_result = AsyncResult(run_id, app=celery_app)
             celery_state = (async_result.state or "PENDING").upper()
             celery_ready = async_result.ready()
             celery_info = getattr(async_result, "result", None)
@@ -130,13 +139,13 @@ async def get_task_status(
     if result_payload is not None:
         task_tenant = result_payload.get("tenant") if isinstance(result_payload, dict) else None
         if task_tenant and task_tenant != tenant.slug:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Task not found")
+            raise _task_not_found(code="PIPELINE_RUN_NOT_FOUND")
 
     if status_value is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Task not found")
+        raise _task_not_found(code="PIPELINE_RUN_NOT_FOUND")
 
     return TaskStatusResponse(
-        task_id=task_id,
+        task_id=run_id,
         status=status_value,
         document_id=document_id,
         error=error_value,
@@ -314,6 +323,28 @@ async def create_task(
     return _task_read(task, datetime.now(timezone.utc))
 
 
+@router.get("/{task_id}", response_model=TaskRead)
+async def get_obligation_task(
+    task_id: str,
+    tenant: Tenant = TenantDep,
+    session: AsyncSession = SessionDep,
+    access: AccessContext = TaskReadAccess,
+) -> TaskRead:
+    """Задача обязательств (obligations). Статус пайплайна — `GET /tasks/pipeline-runs/{run_id}`."""
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+
+    stmt = select(Task).where(Task.id == task_id, Task.tenant_id == tenant.id)
+    task = (await session.execute(stmt)).scalar_one_or_none()
+    if task is None:
+        raise _task_not_found(code="OBLIGATION_TASK_NOT_FOUND")
+
+    if access.user.role.value == "worker" and task.assignee_id != access.user.id:
+        raise _task_not_found(code="OBLIGATION_TASK_NOT_FOUND")
+
+    return _task_read(task, datetime.now(timezone.utc))
+
+
 @router.patch("/{task_id}", response_model=TaskRead)
 async def update_task(
     request: Request,
@@ -328,7 +359,10 @@ async def update_task(
     stmt = select(Task).where(Task.id == task_id, Task.tenant_id == tenant.id)
     task = (await session.execute(stmt)).scalar_one_or_none()
     if task is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Task not found")
+        raise _task_not_found(code="OBLIGATION_TASK_NOT_FOUND")
+
+    if access.user.role.value == "worker" and task.assignee_id != access.user.id:
+        raise _task_not_found(code="OBLIGATION_TASK_NOT_FOUND")
 
     updates = payload.model_dump(exclude_unset=True)
     status_value = _normalize_task_status(updates.pop("status", None))

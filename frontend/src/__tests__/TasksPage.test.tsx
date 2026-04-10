@@ -29,6 +29,8 @@ vi.mock("@/stores/tasks", () => ({
     loading: false,
     filters: {},
     setFilters: setFiltersMock,
+    taskFocusLoadError: null,
+    clearTaskFocusState: vi.fn(),
     items: [
       {
         id: "task-focus-1",

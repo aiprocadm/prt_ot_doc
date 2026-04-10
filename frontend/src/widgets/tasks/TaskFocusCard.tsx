@@ -3,25 +3,36 @@ import { Link } from "react-router-dom";
 import { ActionButton } from "@/components/permissions/ActionButton";
 import { Button } from "@/components/ui/button";
 import { PERMISSIONS } from "@/permissions/permissions";
+import type { ApiError } from "@/types/dto/common";
 import type { TaskDto } from "@/types/dto/tasks";
 import { entityCardLink, entityContextPath } from "@/utils/workspaceNavigation";
 
 type Props = {
   focusedTaskId?: string;
   focusedTask: TaskDto | null;
+  focusLoadError?: ApiError | null;
   focusedEntityType?: string;
   focusedEntityId?: string;
   onCloseTask: (taskId: string) => void;
 };
 
+const isFocusTaskUnavailable = (err: ApiError | null | undefined) =>
+  Boolean(
+    err &&
+      (err.status === 404 || err.code === "OBLIGATION_TASK_NOT_FOUND")
+  );
+
 export const TaskFocusCard = ({
   focusedTaskId,
   focusedTask,
+  focusLoadError = null,
   focusedEntityType,
   focusedEntityId,
   onCloseTask
 }: Props) => {
   if (!focusedTaskId) return null;
+
+  const focusUnavailable = isFocusTaskUnavailable(focusLoadError);
 
   const summaryLink = entityCardLink(focusedTask?.entity_type ?? focusedEntityType, focusedTask?.entity_id ?? focusedEntityId, "summary");
   const timelineLink = entityCardLink(focusedTask?.entity_type ?? focusedEntityType, focusedTask?.entity_id ?? focusedEntityId, "timeline");
@@ -33,7 +44,9 @@ export const TaskFocusCard = ({
       <p className="mt-1 text-xs text-muted-foreground">
         {focusedTask
           ? `${focusedTask.title} · ${focusedTask.status} · ${focusedTask.priority}`
-          : `Задача ${focusedTaskId.slice(0, 8)} загружается...`}
+          : focusUnavailable
+            ? "Задача недоступна или не найдена в этом контуре."
+            : `Задача ${focusedTaskId.slice(0, 8)} загружается...`}
       </p>
       <div className="mt-2 flex flex-wrap gap-2 text-xs">
         {focusedTask?.entity_type || focusedEntityType ? (

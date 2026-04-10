@@ -14,6 +14,7 @@ from openpyxl import load_workbook
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.errors import api_problem_detail
 from app.core.idempotency import compute_request_hash
 from app.models.file import File
 from app.models.models import (
@@ -30,6 +31,12 @@ from app.models.models import (
     TemplateVersionStatus,
 )
 from app.modules.packs.schemas import PackagePresetItemCreate, PackRunCreate
+
+_PACKAGE_SOURCE_FILE_NOT_FOUND = api_problem_detail(
+    code="PACKAGE_SOURCE_FILE_NOT_FOUND",
+    message="Source file not found",
+    error_type="packs",
+)
 
 
 class NamingRuleEngine:
@@ -349,7 +356,14 @@ async def ensure_template_version_deletable(session: AsyncSession, tenant_id: st
         )
     ).scalar_one_or_none()
     if usage:
-        raise HTTPException(status.HTTP_409_CONFLICT, "template version is used by package preset")
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=api_problem_detail(
+                code="TEMPLATE_VERSION_USED_BY_PACKAGE_PRESET",
+                message="Template version is used by a package preset",
+                error_type="packs",
+            ),
+        )
 
 
 async def load_source_rows(
@@ -367,9 +381,9 @@ async def load_source_rows(
         return "json", [], []
     file = await session.get(File, source_file_id)
     if file is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "source file not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=_PACKAGE_SOURCE_FILE_NOT_FOUND)
     if tenant_id is not None and str(file.tenant_id) != str(tenant_id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "source file not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=_PACKAGE_SOURCE_FILE_NOT_FOUND)
     meta = file.meta_json or {}
     raw = meta.get("inline_content")
     raw_b64 = meta.get("inline_content_b64")
@@ -378,7 +392,14 @@ async def load_source_rows(
     elif raw:
         content = str(raw).encode("utf-8")
     else:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "source file has no inline content for preview")
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail=api_problem_detail(
+                code="PACKAGE_SOURCE_FILE_NO_INLINE_CONTENT",
+                message="Source file has no inline content for preview",
+                error_type="packs",
+            ),
+        )
     source_type = meta.get("source_type", "csv")
     columns, rows = SourceImportService().parse(source_type=source_type, content=content)
     return source_type, columns, rows

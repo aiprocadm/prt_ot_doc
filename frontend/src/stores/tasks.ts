@@ -7,6 +7,9 @@ import type { ApiError, PaginatedResponse } from "@/types/dto/common";
 import type { TaskDto, TaskFiltersDto } from "@/types/dto/tasks";
 
 interface TasksState extends PaginatedState<TaskDto, TaskFiltersDto> {
+  /** Ошибка загрузки фокусной задачи по `task_id` в query (не заливаем в `error` списка). */
+  taskFocusLoadError: ApiError | null;
+  clearTaskFocusState: () => void;
   list: (params?: Partial<TaskFiltersDto>) => Promise<void>;
   getById: (id: string) => Promise<TaskDto | null>;
   createTask: (payload: {
@@ -27,10 +30,17 @@ export const useTasksStore = create<TasksState>()(
   immer((set, get) => ({
     items: [],
     item: null,
+    taskFocusLoadError: null,
     filters: {},
     pagination: defaultPagination(),
     loading: false,
     error: null,
+    clearTaskFocusState: () => {
+      set((state) => {
+        state.item = null;
+        state.taskFocusLoadError = null;
+      });
+    },
     setFilters: (filters) => {
       set((state) => {
         state.filters = { ...state.filters, ...filters };
@@ -51,6 +61,7 @@ export const useTasksStore = create<TasksState>()(
       set(() => ({
         items: [],
         item: null,
+        taskFocusLoadError: null,
         filters: {},
         pagination: defaultPagination(),
         loading: false,
@@ -80,17 +91,21 @@ export const useTasksStore = create<TasksState>()(
       }
     },
     getById: async (id) => {
+      set((state) => {
+        state.taskFocusLoadError = null;
+      });
       try {
         const { data } = await apiClient.get<TaskDto>(`/tasks/${id}`);
         set((state) => {
           state.item = data;
+          state.taskFocusLoadError = null;
           const index = state.items.findIndex((task) => task.id === id);
           if (index >= 0) state.items[index] = data;
         });
         return data;
       } catch (error) {
         set((state) => {
-          state.error = error as ApiError;
+          state.taskFocusLoadError = error as ApiError;
         });
         return null;
       }

@@ -7,10 +7,8 @@ from io import BytesIO
 import pytest
 from httpx import AsyncClient
 from openpyxl import Workbook
-from sqlalchemy import select
 
 from app.models.file import File, FileKind, FileScanStatus
-from app.models.models import Tenant
 
 
 @pytest.mark.anyio
@@ -114,7 +112,9 @@ async def test_pack_run_unique_filenames_when_same_mapping(async_client: AsyncCl
 
 
 @pytest.mark.anyio
-async def test_preview_mapping_supports_xlsx_source(async_client: AsyncClient, sessionmaker, make_auth_headers) -> None:
+async def test_preview_mapping_supports_xlsx_source(
+    async_client: AsyncClient, sessionmaker, data_factory, make_auth_headers
+) -> None:
     headers = {**await make_auth_headers(), **dict(async_client.headers)}
 
     profile_payload = {
@@ -149,8 +149,7 @@ async def test_preview_mapping_supports_xlsx_source(async_client: AsyncClient, s
     wb.save(buf)
 
     async with sessionmaker() as session:
-        tenant = (await session.execute(select(Tenant).order_by(Tenant.created_at.asc()))).scalars().first()
-        assert tenant is not None
+        tenant = await data_factory.ensure_tenant(session=session)
         source_file = File(
             tenant_id=tenant.id,
             storage_key=f"inline/source-{uuid.uuid4().hex}.xlsx",
