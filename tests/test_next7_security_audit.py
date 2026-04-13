@@ -78,7 +78,7 @@ async def test_abac_company_scope_get_forbidden(
     resp = await async_client.get(f"/api/v1/companies/{denied.id}", headers=headers)
     assert resp.status_code == 403
     body = resp.json()
-    assert body["code"] == "forbidden"
+    assert body["code"] == "FORBIDDEN"
     assert body["detail"]["type"] == "policy"
 
 

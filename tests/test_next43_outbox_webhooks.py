@@ -3,7 +3,8 @@ from __future__ import annotations
 import hashlib
 import hmac
 
-from app.tasks import _compute_outbox_backoff, compute_inbound_dedup_key
+from app.services.inbound_dedup import compute_inbound_dedup_key
+from app.tasks import _compute_outbox_backoff
 
 
 def test_backoff_increases_and_caps() -> None:

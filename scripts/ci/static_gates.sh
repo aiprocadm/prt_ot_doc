@@ -7,8 +7,9 @@ cd "$ROOT"
 echo "== ruff F821 (backend/app) =="
 ruff check backend/app --select F821 --no-fix
 
-echo "== mypy staged (tenant_row_guard + tenant_row_http, follow_imports=skip) =="
+echo "== mypy staged (tenant_row_guard + tenant_row_http + tenant middleware, follow_imports=skip) =="
 mypy --config-file pyproject.toml \
   backend/app/db/tenant_row_guard.py \
   backend/app/api/tenant_row_http.py \
+  backend/app/middleware/tenant.py \
   --follow-imports=skip

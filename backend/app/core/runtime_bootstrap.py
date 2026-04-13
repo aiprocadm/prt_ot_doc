@@ -31,6 +31,11 @@ def prepare_runtime(settings: Settings) -> Settings:
 
 
 def _run_coro_sync(coro) -> None:
+    """Синхронный запуск async: только для prepare_runtime / SQLite init (не hot path).
+
+    Параллельный bridge для Celery см. :func:`app.tasks._core._run_coroutine` (daemon thread + ``asyncio.run``).
+    """
+
     try:
         asyncio.get_running_loop()
     except RuntimeError:

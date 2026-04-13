@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { apiClient } from "@/api/client";
@@ -59,6 +59,7 @@ const mapPresetToForm = (preset?: LayoutPresetDto | null): FormState => {
 };
 
 export const LayoutPresetEditor = () => {
+  const didPickDefaultSelectionRef = useRef(false);
   const [presets, setPresets] = useState<LayoutPresetDto[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -72,14 +73,27 @@ export const LayoutPresetEditor = () => {
     [presets, selectedId]
   );
 
-  const loadPresets = useCallback(async () => {
+  const loadPresets = useCallback(async (selectCode?: string) => {
     const items = await listLayoutPresets();
     setPresets(items);
-    if (!selectedId && items[0]) {
-      setSelectedId(items[0].id);
-      setForm(mapPresetToForm(items[0]));
+    if (selectCode) {
+      const match = items.find((p) => p.code === selectCode);
+      if (match) {
+        setSelectedId(match.id);
+      }
+      return;
     }
-  }, [selectedId]);
+    setSelectedId((prev) => {
+      if (prev !== "") {
+        return prev;
+      }
+      if (!didPickDefaultSelectionRef.current && items[0]) {
+        didPickDefaultSelectionRef.current = true;
+        return items[0].id;
+      }
+      return prev;
+    });
+  }, []);
 
   useEffect(() => {
     loadPresets().catch(() => toast.error("Не удалось загрузить список пресетов"));
@@ -115,11 +129,12 @@ export const LayoutPresetEditor = () => {
       if (selectedPreset) {
         await apiClient.patch(`/layout-presets/${selectedPreset.id}`, payload);
         toast.success("Пресет обновлён");
+        await loadPresets();
       } else {
         await apiClient.post("/layout-presets", payload);
         toast.success("Пресет создан");
+        await loadPresets(payload.code);
       }
-      await loadPresets();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Не удалось сохранить пресет");
     }

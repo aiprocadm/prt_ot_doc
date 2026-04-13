@@ -1,6 +1,6 @@
 # Runbook: стабилизация и инциденты
 
-**Обновлено:** 2026-04-04  
+**Обновлено:** 2026-04-14  
 
 ## Быстрая диагностика API
 
@@ -11,6 +11,10 @@
 2. **400 TENANT_REQUIRED**
    - Клиент не передаёт `X-Tenant` на `/api/v1/*`.
    - Исключение: пути из `TenantMiddleware._public_prefixes` и `/health`.
+
+2b. **403 TENANT_SCOPE_MISMATCH**
+   - JWT `tenant` не совпадает с резолвом `X-Tenant` (slug, `code` или UUID в заголовке).
+   - Регрессия: `tests/test_jwt_xtenant_uuid_scope_mismatch.py`, `tests/test_tenant_security.py`.
 
 3. **401 / массовый logout**
    - Refresh, clock skew, истечение JWT.

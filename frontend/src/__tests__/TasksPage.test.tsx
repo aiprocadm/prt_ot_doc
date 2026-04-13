@@ -27,6 +27,7 @@ vi.mock("@/stores/tasks", () => ({
   useTasksStore: () => ({
     list: listMock,
     loading: false,
+    error: null,
     filters: {},
     setFilters: setFiltersMock,
     taskFocusLoadError: null,

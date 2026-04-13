@@ -92,6 +92,7 @@ from app.services.file_storage import FileStorageService
 from app.services.idempotency import IdempotencyService, cleanup_idempotency_keys
 from app.services.notifications import send_notification
 from app.services.obligations import process_task_reminders
+from app.services.inbound_dedup import compute_inbound_dedup_key
 from app.services.outbox import OutboxProcessor, OutboxService
 from app.services.reminders import evaluate_due_date
 
@@ -208,10 +209,6 @@ RETRYABLE_EXCEPTIONS: tuple[type[BaseException], ...] = (
 )
 
 
-def compute_inbound_dedup_key(payload: dict[str, Any], raw_body: bytes) -> str:
-    return str(payload.get("event_id") or payload.get("message_id") or hashlib.sha256(raw_body).hexdigest())
-
-
 async def _generate_document_for_run(run_id: str, tenant_slug: str) -> tuple[str, str]:
     storage = FileStorageService.default()
     metrics = get_metrics()
@@ -219,6 +216,10 @@ async def _generate_document_for_run(run_id: str, tenant_slug: str) -> tuple[str
     metrics.increment_pipeline_inflight(pipeline=PipelineType.DOCUMENT)
     with tenant_context(tenant_slug):
         ensure_tenant_schema(tenant_slug)
+        logger.info(
+            "tasks.pipeline.document_generate.start",
+            extra={"tenant_slug": tenant_slug, "pipeline_run_id": run_id},
+        )
         async with session_scope(tenant=tenant_slug) as session:
             try:
                 run = await session.get(PipelineRun, run_id)

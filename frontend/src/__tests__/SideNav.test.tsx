@@ -2,9 +2,19 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { NavMenuProvider } from "@/components/layout/NavMenuProvider";
+import { SideNav } from "@/components/layout/SideNav";
 import { PERMISSIONS } from "@/permissions/permissions";
 import { useAuthStore } from "@/stores/auth";
-import { SideNav } from "@/components/layout/SideNav";
+
+const renderSideNav = () =>
+  render(
+    <MemoryRouter>
+      <NavMenuProvider>
+        <SideNav />
+      </NavMenuProvider>
+    </MemoryRouter>
+  );
 
 vi.mock("@/api/billing", () => ({
   getBillingSummary: vi.fn().mockResolvedValue({ features: {} })
@@ -31,11 +41,7 @@ describe("SideNav", () => {
   });
 
   it("hides generation link without document create permission", () => {
-    render(
-      <MemoryRouter>
-        <SideNav />
-      </MemoryRouter>
-    );
+    renderSideNav();
 
     expect(screen.queryByRole("link", { name: "Генерация" })).not.toBeInTheDocument();
   });
@@ -51,11 +57,7 @@ describe("SideNav", () => {
         : null
     }));
 
-    render(
-      <MemoryRouter>
-        <SideNav />
-      </MemoryRouter>
-    );
+    renderSideNav();
 
     expect(screen.getByRole("link", { name: "Генерация" })).toHaveAttribute("href", "/generation");
   });

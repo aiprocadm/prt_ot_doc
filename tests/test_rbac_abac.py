@@ -25,7 +25,7 @@ async def test_client_user_cannot_access_managed_resources(
     response = await async_client.get("/api/v1/companies", headers=headers)
     assert response.status_code == 403
     body = response.json()
-    assert body["code"] == "forbidden"
+    assert body["code"] == "FORBIDDEN"
     assert body["message"] == "Insufficient role"
 
 

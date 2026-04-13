@@ -25,6 +25,7 @@
 | Templates API (v1 router) | `app/api/v1/router.py` — `POST /templates/{id}/versions` (legacy multipart): после исправления 2026-04-05 проверка `_tenant_scope` + `deleted_at`, как у catalog/upload; preview повторно валидирует `Template` |
 | Pipelines HTTP | `app/modules/pipelines/api.py` — retry шага: `DocumentJobStep.tenant_id` должен совпадать с текущим тенантом |
 | Фоновые задачи | `app/tasks/` (`_core.py`), `app/celery/tasks/*`, `app/services/pipelines_orchestrator.py`, `app/modules/pipelines/orchestrator.py` |
+| HTTP: JWT tenant vs `X-Tenant` (slug или UUID) | `app/middleware/tenant.py` + `tests/test_jwt_xtenant_uuid_scope_mismatch.py`, `tests/test_tenant_security.py` |
 
 ## Инвентаризация (актуальный снимок)
 

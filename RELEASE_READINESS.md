@@ -31,6 +31,7 @@
 - verify migrations on target DB;
 - verify storage + LibreOffice + ClamAV + Celery workers;
 - run backend/frontend smoke for custom template upload and document generation;
+- confirm structured 403 on JWT vs `X-Tenant` mismatch (slug or UUID) via API tests (`tests/test_jwt_xtenant_uuid_scope_mismatch.py`, `tests/test_tenant_security.py`);
 - provision real owner/demo credentials outside git.
 
 ## Launch readiness verdict (2026-03-25)

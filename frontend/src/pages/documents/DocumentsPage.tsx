@@ -18,6 +18,7 @@ import { PermissionGate } from "@/components/permissions/PermissionGate";
 import { useAbility } from "@/permissions/useAbility";
 import { useDocumentsStore } from "@/stores/documents";
 import type { DocumentDto } from "@/types/dto/documents";
+import { ROUTES } from "@/router/routes";
 import { entityCardLink } from "@/utils/workspaceNavigation";
 
 const EMPTY_DOCUMENTS: DocumentDto[] = [];
@@ -86,7 +87,7 @@ const DocumentsPage = () => {
 
   return (
     <div className="space-y-6">
-      <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Документы" }]} />
+      <Breadcrumb items={[{ label: "Главная", to: ROUTES.DASHBOARD }, { label: "Документы" }]} />
       <RegistryPageHeader
         title="Документы"
         description="Все корпоративные документы, шаблоны и версии с контролем статуса и компании."
@@ -145,7 +146,7 @@ const DocumentsPage = () => {
             <ErrorState error={error ?? undefined} onRetry={() => void list()} />
             {loading && safeItems.length === 0 ? <LoadingScreen label="Загрузка документов" /> : null}
             {!loading && !error && safeItems.length === 0 ? <EmptyState title="Документы не найдены" description="Создайте первый документ или измените фильтры." /> : null}
-            <DocumentTable onSelect={setSelectedDocument} />
+            {!loading || safeItems.length > 0 ? <DocumentTable onSelect={setSelectedDocument} /> : null}
           </CardContent>
         </Card>
       </SectionErrorBoundary>

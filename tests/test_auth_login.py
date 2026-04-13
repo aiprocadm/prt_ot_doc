@@ -71,7 +71,7 @@ async def test_login_rejects_invalid_password(
     )
     assert response.status_code == 401
     body = response.json()
-    assert body["code"] == "http_401"
+    assert body["code"] == "UNAUTHORIZED"
     assert body["message"] == "Invalid email or password"
     assert body["trace_id"]
 
@@ -85,7 +85,7 @@ async def test_login_rejects_unknown_email(async_client: AsyncClient) -> None:
     )
     assert response.status_code == 401
     body = response.json()
-    assert body["code"] == "http_401"
+    assert body["code"] == "UNAUTHORIZED"
     assert body["message"] == "Invalid email or password"
     assert body["trace_id"]
 
@@ -253,7 +253,7 @@ async def test_company_creation_requires_admin_role(
     )
     assert blocked.status_code == 403
     blocked_body = blocked.json()
-    assert blocked_body["code"] == "forbidden"
+    assert blocked_body["code"] == "FORBIDDEN"
     assert blocked_body["message"] == "Insufficient role"
     assert blocked_body["trace_id"]
 

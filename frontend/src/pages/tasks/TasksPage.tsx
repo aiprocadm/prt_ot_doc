@@ -16,6 +16,7 @@ import { TaskTable } from "@/features/tasks/TaskTable";
 import { PERMISSIONS } from "@/permissions/permissions";
 import { useTasksStore } from "@/stores/tasks";
 import type { TaskPriority } from "@/types/dto/tasks";
+import { ROUTES } from "@/router/routes";
 import { TaskFocusCard } from "@/widgets/tasks/TaskFocusCard";
 import { TaskCreateForm } from "@/widgets/tasks/TaskCreateForm";
 
@@ -192,7 +193,7 @@ const TasksPage = () => {
 
   return (
     <div className="space-y-6">
-      <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Задачи" }]} />
+      <Breadcrumb items={[{ label: "Главная", to: ROUTES.DASHBOARD }, { label: "Задачи" }]} />
       <RegistryPageHeader
         title="Задачи и обязательства"
         description="Контроль сроков, статусов и исполнителей по обязательствам."
@@ -314,10 +315,10 @@ const TasksPage = () => {
               resetCreateForm();
             }}
           />
-          <TaskTable />
           <ErrorState error={error ?? undefined} onRetry={() => void list()} />
           {loading && items.length === 0 ? <LoadingScreen label="Загрузка задач" /> : null}
           {!loading && !error && items.length === 0 ? <EmptyState title="Задач нет" description="Измените фильтры или дождитесь появления новых обязательств." /> : null}
+          {!loading || items.length > 0 ? <TaskTable /> : null}
         </CardContent>
       </Card>
     </div>

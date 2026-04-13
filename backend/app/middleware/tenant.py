@@ -90,7 +90,7 @@ class TenantMiddleware(BaseHTTPMiddleware):
             },
         )
 
-    async def dispatch(self, request: Request, call_next):  # type: ignore[override]
+    async def dispatch(self, request: Request, call_next):
         path = request.url.path
         settings = get_settings()
         correlation_id = get_trace_id(request, settings.trace_header_name)

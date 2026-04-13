@@ -8,6 +8,7 @@ import { SectionErrorBoundary } from "@/components/common/SectionErrorBoundary";
 import { RightDrawer } from "@/components/layout/RightDrawer";
 import { SideNav } from "@/components/layout/SideNav";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { NavMenuProvider } from "@/components/layout/NavMenuProvider";
 import { TopNav } from "@/components/layout/TopNav";
 import { TenantGate } from "@/components/tenant/TenantGate";
 import { BILLING_ALERT_STORAGE_KEY } from "@/api/errorHandling";
@@ -50,6 +51,7 @@ export const MainLayout = () => {
   return (
     <SidebarContext.Provider value={contextValue}>
       <TenantGate>
+        <NavMenuProvider>
         <div className="min-h-screen bg-background text-foreground">
           <SectionErrorBoundary>
             <TopNav />
@@ -83,6 +85,7 @@ export const MainLayout = () => {
           </div>
           <Toaster richColors position="top-right" closeButton />
         </div>
+        </NavMenuProvider>
       </TenantGate>
     </SidebarContext.Provider>
   );

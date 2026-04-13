@@ -31,7 +31,8 @@ from app.services.webhook_retry_telemetry import (
     FailureCategory,
     classify_failure,
 )
-from app.tasks import compute_inbound_dedup_key, process_inbound_webhook
+from app.services.inbound_dedup import compute_inbound_dedup_key
+from app.tasks import process_inbound_webhook
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
