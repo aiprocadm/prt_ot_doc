@@ -5,6 +5,7 @@ import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Card, CardContent } from "@/components/ui/card";
+import { ROUTES } from "@/router/routes";
 import { PackTable } from "@/features/packs/PackTable";
 import { PackWizard } from "@/features/packs/PackWizard";
 import { usePacksStore } from "@/stores/packs";
@@ -18,7 +19,7 @@ const PacksPage = () => {
 
   return (
     <div className="space-y-6">
-      <Breadcrumb items={[{ label: "Главная", to: "/" }, { label: "Пакеты" }]} />
+      <Breadcrumb items={[{ label: "Главная", to: ROUTES.DASHBOARD }, { label: "Пакеты" }]} />
       <PackWizard />
       <Card>
         <CardContent className="py-6">

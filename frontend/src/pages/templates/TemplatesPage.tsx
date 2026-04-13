@@ -12,6 +12,7 @@ import { TemplateTable } from "@/features/templates/TemplateTable";
 import { AccessDeniedPage } from "@/pages/access/AccessDeniedPage";
 import { PERMISSIONS } from "@/permissions/permissions";
 import { useAbility } from "@/permissions/useAbility";
+import { ROUTES } from "@/router/routes";
 import { useTemplatesStore } from "@/stores/templates";
 import type { TemplateDto } from "@/types/dto/templates";
 
@@ -37,7 +38,7 @@ const TemplatesPage = () => {
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-2">
-        <Breadcrumb items={[{ label: "Главная", to: "/" }, { label: "Шаблоны" }]} />
+        <Breadcrumb items={[{ label: "Главная", to: ROUTES.DASHBOARD }, { label: "Шаблоны" }]} />
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">Шаблоны</h1>
           <div className="flex items-center gap-2">

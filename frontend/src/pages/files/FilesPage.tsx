@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { FileTable } from "@/features/files/FileTable";
 import { FileUploader } from "@/features/files/FileUploader";
 import { useFilesStore } from "@/stores/files";
+import { ROUTES } from "@/router/routes";
 
 const FilesPage = () => {
   const { list, items, loading, error } = useFilesStore();
@@ -18,7 +19,7 @@ const FilesPage = () => {
 
   return (
     <div className="space-y-6">
-      <Breadcrumb items={[{ label: "Главная", to: "/" }, { label: "Файлы" }]} />
+      <Breadcrumb items={[{ label: "Главная", to: ROUTES.DASHBOARD }, { label: "Файлы" }]} />
       <FileUploader />
       <Card>
         <CardContent className="py-6">

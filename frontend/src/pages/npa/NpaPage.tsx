@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { NpaTable } from "@/features/npa/NpaTable";
+import { ROUTES } from "@/router/routes";
 import { useNpaStore } from "@/stores/npa";
 import type { NpaStatus } from "@/types/dto/npa";
 
@@ -58,7 +59,7 @@ const NpaPage = () => {
 
   return (
     <div className="space-y-6">
-      <Breadcrumb items={[{ label: "Главная", to: "/" }, { label: "НПА" }]} />
+      <Breadcrumb items={[{ label: "Главная", to: ROUTES.DASHBOARD }, { label: "НПА" }]} />
       <ErrorState error={error ?? undefined} onRetry={() => void list()} />
       <Card>
         <CardContent className="flex flex-wrap items-end gap-4 py-6">

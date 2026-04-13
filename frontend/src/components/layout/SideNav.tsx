@@ -1,45 +1,10 @@
-import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { Building2 } from "lucide-react";
 
-import { PERMISSIONS } from "@/permissions/permissions";
-import { useAbility } from "@/permissions/useAbility";
-import { getBillingSummary } from "@/api/billing";
-import { CLIENT_PORTAL_NAV_GROUPS, MAIN_NAV_GROUPS } from "@/router/navigationConfig";
+import { useNavMenuData } from "@/hooks/useNavMenuData";
 
 export const SideNav = () => {
-  const { can } = useAbility();
-  const [featureFlags, setFeatureFlags] = useState<Record<string, boolean>>({});
-
-  const clientPortalOnlyMode =
-    can(PERMISSIONS.CLIENT_PORTAL_VIEW) &&
-    ![
-      PERMISSIONS.DASHBOARD_VIEW,
-      PERMISSIONS.COMPANY_VIEW,
-      PERMISSIONS.DOCUMENT_VIEW,
-      PERMISSIONS.PACK_VIEW,
-      PERMISSIONS.TASK_VIEW,
-      PERMISSIONS.REPORTS_VIEW,
-      PERMISSIONS.ADMIN_MANAGE_ROLES
-    ].some((permission) => can(permission));
-
-  useEffect(() => {
-    void getBillingSummary()
-      .then((summary) => setFeatureFlags(summary.features ?? {}))
-      .catch(() => undefined);
-  }, []);
-
-  const scopedGroups = clientPortalOnlyMode ? CLIENT_PORTAL_NAV_GROUPS : MAIN_NAV_GROUPS;
-
-  const visibleGroups = scopedGroups
-    .map((group) => ({
-      ...group,
-      items: group.items.filter((item) => {
-        if (item.to === "/edo" && featureFlags.edo === false) return false;
-        return can(item.permission);
-      })
-    }))
-    .filter((group) => group.items.length > 0);
+  const { visibleGroups, clientPortalOnlyMode } = useNavMenuData();
 
   return (
     <aside className="hidden h-[calc(100vh-4rem)] w-72 flex-shrink-0 border-r bg-background/95 px-4 py-6 lg:sticky lg:top-16 lg:block">
