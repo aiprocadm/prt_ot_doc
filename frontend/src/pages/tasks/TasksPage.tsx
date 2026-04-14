@@ -3,9 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
-import { EmptyState } from "@/components/common/EmptyState";
-import { ErrorState } from "@/components/common/ErrorState";
-import { LoadingScreen } from "@/components/common/LoadingScreen";
+import { ListStateGuard } from "@/components/common/ListStateGuard";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -315,10 +313,17 @@ const TasksPage = () => {
               resetCreateForm();
             }}
           />
-          <ErrorState error={error ?? undefined} onRetry={() => void list()} />
-          {loading && items.length === 0 ? <LoadingScreen label="Загрузка задач" /> : null}
-          {!loading && !error && items.length === 0 ? <EmptyState title="Задач нет" description="Измените фильтры или дождитесь появления новых обязательств." /> : null}
-          {!loading || items.length > 0 ? <TaskTable /> : null}
+          <ListStateGuard
+            error={error}
+            loading={loading}
+            itemsCount={items.length}
+            loadingLabel="Загрузка задач"
+            emptyTitle="Задач нет"
+            emptyDescription="Измените фильтры или дождитесь появления новых обязательств."
+            onRetry={() => void list()}
+          >
+            <TaskTable />
+          </ListStateGuard>
         </CardContent>
       </Card>
     </div>

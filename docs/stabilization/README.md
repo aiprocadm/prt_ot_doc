@@ -8,6 +8,7 @@
 | [REGRESSION_RISKS_AND_MITIGATIONS.md](./REGRESSION_RISKS_AND_MITIGATIONS.md) | Риски релизов |
 | [TEST_COVERAGE_GAPS.md](./TEST_COVERAGE_GAPS.md) | Пробелы тестов |
 | [REGRESSION_TEST_MATRIX.md](./REGRESSION_TEST_MATRIX.md) | Матрица сценариев |
+| [LIST_STATE_STANDARD.md](./LIST_STATE_STANDARD.md) | Стандарт Error/Loading/Empty/Table |
 | [RUNBOOK_STABILIZATION.md](./RUNBOOK_STABILIZATION.md) | Эксплуатация |
 | [CONFIGURATION_HARDENING.md](./CONFIGURATION_HARDENING.md) | Конфигурация и env |
 

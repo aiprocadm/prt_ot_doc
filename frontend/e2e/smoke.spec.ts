@@ -112,6 +112,53 @@ test.describe("smoke", () => {
     await expect(page.getByText("Загрузка документов")).toBeHidden({ timeout: 35_000 });
   });
 
+  test("navigation regression: command bar, top nav links and breadcrumb", async ({ page }) => {
+    test.skip(
+      !process.env.E2E_USER_EMAIL || !process.env.E2E_USER_PASSWORD,
+      "Set E2E_USER_EMAIL and E2E_USER_PASSWORD"
+    );
+    const tenant = process.env.E2E_TENANT ?? "demo";
+    await page.goto("/auth/login", { waitUntil: "domcontentloaded" });
+    await page.getByLabel("Tenant").fill(tenant);
+    await page.getByLabel("E-mail").fill(process.env.E2E_USER_EMAIL!);
+    await page.getByLabel("Пароль").fill(process.env.E2E_USER_PASSWORD!);
+    await page.getByRole("button", { name: "Войти" }).click();
+    await expect(page).not.toHaveURL(/\/auth\/login/, { timeout: 45_000 });
+
+    await page.getByRole("button", { name: "Открыть палитру команд" }).click();
+    await page.getByPlaceholder("Найти раздел по названию или группе").fill("Документы");
+    await page.getByRole("link", { name: "Документы" }).first().click();
+    await expect(page).toHaveURL(/\/documents/);
+
+    await page.getByRole("link", { name: "Единый реестр задач" }).click();
+    await expect(page).toHaveURL(/\/tasks/);
+    await page.getByRole("link", { name: "Уведомления" }).click();
+    await expect(page).toHaveURL(/\/notifications/);
+
+    await page.goto("/documents", { waitUntil: "domcontentloaded" });
+    await page.getByRole("link", { name: "Главная" }).click();
+    await expect(page).toHaveURL(/\/dashboard/);
+  });
+
+  test("navigation regression: mobile menu opens and routes", async ({ page }) => {
+    test.skip(
+      !process.env.E2E_USER_EMAIL || !process.env.E2E_USER_PASSWORD,
+      "Set E2E_USER_EMAIL and E2E_USER_PASSWORD"
+    );
+    const tenant = process.env.E2E_TENANT ?? "demo";
+    await page.goto("/auth/login", { waitUntil: "domcontentloaded" });
+    await page.getByLabel("Tenant").fill(tenant);
+    await page.getByLabel("E-mail").fill(process.env.E2E_USER_EMAIL!);
+    await page.getByLabel("Пароль").fill(process.env.E2E_USER_PASSWORD!);
+    await page.getByRole("button", { name: "Войти" }).click();
+    await expect(page).not.toHaveURL(/\/auth\/login/, { timeout: 45_000 });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole("button", { name: "Открыть меню разделов" }).click();
+    await page.getByRole("link", { name: "Документы" }).first().click();
+    await expect(page).toHaveURL(/\/documents/);
+  });
+
   test("logout returns to login", async ({ page }) => {
     test.skip(
       !process.env.E2E_USER_EMAIL || !process.env.E2E_USER_PASSWORD,

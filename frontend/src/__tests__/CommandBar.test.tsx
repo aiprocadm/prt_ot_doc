@@ -1,11 +1,11 @@
-import { render, screen, within } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CommandBar } from "@/components/layout/CommandBar";
 import { PERMISSIONS } from "@/permissions/permissions";
 import type { Permission } from "@/permissions/permissions";
+import { renderWithRouter } from "@/test-utils/renderWithRouter";
 
 function DummyNavIcon() {
   return null;
@@ -64,11 +64,7 @@ describe("CommandBar", () => {
 
   it("opens palette and lists commands with /dashboard for главная", async () => {
     const user = userEvent.setup();
-    render(
-      <MemoryRouter>
-        <CommandBar />
-      </MemoryRouter>
-    );
+    renderWithRouter(<CommandBar />);
 
     await user.click(screen.getByRole("button", { name: /открыть палитру команд/i }));
 
@@ -79,11 +75,7 @@ describe("CommandBar", () => {
 
   it("filters commands by query", async () => {
     const user = userEvent.setup();
-    render(
-      <MemoryRouter>
-        <CommandBar />
-      </MemoryRouter>
-    );
+    renderWithRouter(<CommandBar />);
 
     await user.click(screen.getByRole("button", { name: /открыть палитру команд/i }));
     const dialog = await screen.findByRole("dialog");
@@ -109,11 +101,7 @@ describe("CommandBar", () => {
     ];
 
     const user = userEvent.setup();
-    render(
-      <MemoryRouter>
-        <CommandBar />
-      </MemoryRouter>
-    );
+    renderWithRouter(<CommandBar />);
 
     await user.click(screen.getByRole("button", { name: /открыть палитру команд/i }));
     const dialog = await screen.findByRole("dialog");

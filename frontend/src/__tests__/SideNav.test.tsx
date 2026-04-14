@@ -1,23 +1,23 @@
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NavMenuProvider } from "@/components/layout/NavMenuProvider";
 import { SideNav } from "@/components/layout/SideNav";
 import { PERMISSIONS } from "@/permissions/permissions";
 import { useAuthStore } from "@/stores/auth";
+import { renderWithRouter } from "@/test-utils/renderWithRouter";
 
 const renderSideNav = () =>
-  render(
-    <MemoryRouter>
-      <NavMenuProvider>
-        <SideNav />
-      </NavMenuProvider>
-    </MemoryRouter>
+  renderWithRouter(
+    <NavMenuProvider>
+      <SideNav />
+    </NavMenuProvider>
   );
 
 vi.mock("@/api/billing", () => ({
-  getBillingSummary: vi.fn().mockResolvedValue({ features: {} })
+  getBillingSummary: vi.fn(
+    () => new Promise(() => undefined)
+  )
 }));
 
 describe("SideNav", () => {

@@ -1,8 +1,8 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { TopNav } from "@/components/layout/TopNav";
+import { renderWithRouter } from "@/test-utils/renderWithRouter";
 
 vi.mock("@/api/navigation", () => ({
   getTopNavKpi: vi.fn().mockResolvedValue({ tasks: 2, alerts: 1 })
@@ -44,11 +44,7 @@ vi.mock("@/components/layout/MobileNavDrawer", () => ({
 
 describe("TopNav", () => {
   it("renders tasks link to /tasks", async () => {
-    render(
-      <MemoryRouter>
-        <TopNav />
-      </MemoryRouter>
-    );
+    renderWithRouter(<TopNav />);
 
     await waitFor(() => {
       expect(screen.getByRole("link", { name: /единый реестр задач/i })).toHaveAttribute("href", "/tasks");

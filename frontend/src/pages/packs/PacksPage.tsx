@@ -1,8 +1,6 @@
 import { useEffect } from "react";
 
-import { EmptyState } from "@/components/common/EmptyState";
-import { ErrorState } from "@/components/common/ErrorState";
-import { LoadingScreen } from "@/components/common/LoadingScreen";
+import { ListStateGuard } from "@/components/common/ListStateGuard";
 import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Card, CardContent } from "@/components/ui/card";
@@ -32,12 +30,17 @@ const PacksPage = () => {
       <PackWizard />
       <Card>
         <CardContent className="py-6">
-          <ErrorState error={error ?? undefined} onRetry={() => void list()} />
-          {loading && items.length === 0 ? <LoadingScreen label="Загрузка пакетов" /> : null}
-          {!loading && !error && items.length === 0 ? (
-            <EmptyState title="Пакеты не найдены" description="Создайте первый пакет через мастер генерации." />
-          ) : null}
-          {!loading || items.length > 0 ? <PackTable /> : null}
+          <ListStateGuard
+            error={error}
+            loading={loading}
+            itemsCount={items.length}
+            loadingLabel="Загрузка пакетов"
+            emptyTitle="Пакеты не найдены"
+            emptyDescription="Создайте первый пакет через мастер генерации."
+            onRetry={() => void list()}
+          >
+            <PackTable />
+          </ListStateGuard>
         </CardContent>
       </Card>
     </div>

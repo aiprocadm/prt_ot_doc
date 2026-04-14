@@ -2,9 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { Breadcrumb } from "@/components/ui/breadcrumb";
-import { EmptyState } from "@/components/common/EmptyState";
-import { ErrorState } from "@/components/common/ErrorState";
-import { LoadingScreen } from "@/components/common/LoadingScreen";
+import { ListStateGuard } from "@/components/common/ListStateGuard";
 import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { SectionErrorBoundary } from "@/components/common/SectionErrorBoundary";
 import { Card, CardContent } from "@/components/ui/card";
@@ -143,10 +141,17 @@ const DocumentsPage = () => {
       <SectionErrorBoundary>
         <Card>
           <CardContent className="py-6">
-            <ErrorState error={error ?? undefined} onRetry={() => void list()} />
-            {loading && safeItems.length === 0 ? <LoadingScreen label="Загрузка документов" /> : null}
-            {!loading && !error && safeItems.length === 0 ? <EmptyState title="Документы не найдены" description="Создайте первый документ или измените фильтры." /> : null}
-            {!loading || safeItems.length > 0 ? <DocumentTable onSelect={setSelectedDocument} /> : null}
+            <ListStateGuard
+              error={error}
+              loading={loading}
+              itemsCount={safeItems.length}
+              loadingLabel="Загрузка документов"
+              emptyTitle="Документы не найдены"
+              emptyDescription="Создайте первый документ или измените фильтры."
+              onRetry={() => void list()}
+            >
+              <DocumentTable onSelect={setSelectedDocument} />
+            </ListStateGuard>
           </CardContent>
         </Card>
       </SectionErrorBoundary>

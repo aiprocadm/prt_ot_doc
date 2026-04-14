@@ -162,6 +162,9 @@ jobs:
       - name: Frontend CI checks
         run: npm --prefix frontend run ci
 
+      - name: Frontend critical coverage gate
+        run: npm --prefix frontend run test:coverage:critical
+
   smoke-compose:
     runs-on: ubuntu-latest
     steps:

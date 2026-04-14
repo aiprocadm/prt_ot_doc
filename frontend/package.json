@@ -8,6 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run --coverage",
+    "test:coverage:critical": "vitest run --coverage --config vitest.critical.config.ts",
     "test:watch": "vitest",
     "lint": "eslint . --max-warnings=0",
     "format": "prettier --check \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
