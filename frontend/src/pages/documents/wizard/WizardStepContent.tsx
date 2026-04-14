@@ -23,7 +23,15 @@ export const WizardStepContent = (props: WizardStepContentProps) => {
     return <SourceStep sourceColumns={props.sourceColumns} onSourceChange={actions.handleSourceFileChange} />;
   }
   if (props.step === 3) {
-    return <MappingStep sourceColumns={props.sourceColumns} mapping={props.mapping} setPartial={props.setPartial} />;
+    return (
+      <MappingStep
+        sourceColumns={props.sourceColumns}
+        mapping={props.mapping}
+        mappingValidation={props.mappingValidation}
+        setPartial={props.setPartial}
+        onValidate={actions.handleValidateMapping}
+      />
+    );
   }
   if (props.step === 4) {
     return <TemplateStep templateCode={props.templateCode} templateVersion={props.templateVersion} setPartial={props.setPartial} />;

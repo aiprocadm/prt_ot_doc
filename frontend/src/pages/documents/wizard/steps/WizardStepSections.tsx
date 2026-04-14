@@ -68,7 +68,13 @@ export const SourceStep = ({
   </div>
 );
 
-export const MappingStep = ({ sourceColumns, mapping, setPartial }: Pick<SharedProps, "sourceColumns" | "mapping" | "setPartial">) => (
+export const MappingStep = ({
+  sourceColumns,
+  mapping,
+  mappingValidation,
+  setPartial,
+  onValidate,
+}: Pick<SharedProps, "sourceColumns" | "mapping" | "mappingValidation" | "setPartial"> & { onValidate: () => Promise<void> }) => (
   <div className="space-y-3">
     <Label>Маппинг полей</Label>
     {sourceColumns.length === 0 ? <p className="text-sm text-muted-foreground">Сначала загрузите CSV, чтобы увидеть колонки.</p> : null}
@@ -91,6 +97,16 @@ export const MappingStep = ({ sourceColumns, mapping, setPartial }: Pick<SharedP
         </div>
       ))}
     </div>
+    <Button variant="outline" onClick={() => void onValidate()} disabled={sourceColumns.length === 0}>
+      Проверить сопоставление
+    </Button>
+    {mappingValidation ? (
+      <div className="rounded-md border bg-muted/20 p-3 text-xs">
+        <div>ok: {String(mappingValidation.ok)}</div>
+        <div>missing required: {mappingValidation.missing_required_fields.join(", ") || "none"}</div>
+        <div>unmapped source: {mappingValidation.unmapped_source_fields.join(", ") || "none"}</div>
+      </div>
+    ) : null}
   </div>
 );
 
@@ -261,10 +277,11 @@ export const RunStep = ({
   companyId,
   idempotencyKey,
   pipelineRun,
+  qualityReport,
   setPartial,
   onRunBatch,
   onRunSinglePipeline,
-}: Pick<SharedProps, "canCallApi" | "sourceFile" | "templateCode" | "companyId" | "idempotencyKey" | "pipelineRun" | "setPartial"> & {
+}: Pick<SharedProps, "canCallApi" | "sourceFile" | "templateCode" | "companyId" | "idempotencyKey" | "pipelineRun" | "qualityReport" | "setPartial"> & {
   onRunBatch: () => Promise<void>;
   onRunSinglePipeline: () => Promise<void>;
 }) => (
@@ -288,6 +305,13 @@ export const RunStep = ({
       </Button>
     </div>
     {pipelineRun ? <WizardJobTimeline steps={pipelineRun.step_runs} /> : null}
+    {qualityReport ? (
+      <div className="rounded-md border bg-muted/20 p-3 text-xs">
+        <div>quality status: {qualityReport.status}</div>
+        <div>critical: {qualityReport.summary.critical ?? 0}</div>
+        <div>warning: {qualityReport.summary.warning ?? 0}</div>
+      </div>
+    ) : null}
   </div>
 );
 

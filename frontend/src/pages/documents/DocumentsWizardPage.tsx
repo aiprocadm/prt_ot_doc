@@ -38,6 +38,8 @@ const DocumentsWizardPage = () => {
     siteId,
     headerPreset,
     replaceDryRun: replaceDryRunResult,
+    mappingValidation,
+    qualityReport,
     batch,
     pipelineRun,
     brandingPreview,
@@ -146,6 +148,8 @@ const DocumentsWizardPage = () => {
             rowStatusFilter={rowStatusFilter}
             filteredBatchItems={filteredBatchItems}
             replaceDryRunResult={replaceDryRunResult}
+            mappingValidation={mappingValidation}
+            qualityReport={qualityReport}
             batch={batch}
             pipelineRun={pipelineRun}
             brandingPreview={brandingPreview}

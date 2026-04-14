@@ -3,11 +3,13 @@ import { toast } from "sonner";
 
 import { fetchFileDownloadLink } from "@/api/files";
 import {
+  checkDocumentQuality,
   generateDocument,
   generateDocumentsBatch,
   getGenerationTaskStatus,
   getReplaceReport,
   replaceDryRun,
+  validateDocumentMapping,
 } from "@/api/documents";
 import { previewBranding } from "@/api/branding";
 import { getPipelineRun } from "@/api/pipelines";
@@ -128,14 +130,34 @@ export const useWizardStepActions = (deps: ActionDeps) => {
       };
       const task = await generateDocument(payload, deps.idempotencyKey);
       const status = await getGenerationTaskStatus(task.task_id);
+      const qualityReport = await checkDocumentQuality({
+        data: payload.data,
+        required_fields: [],
+      });
       deps.setPartial({ taskId: task.task_id });
       const run = await getPipelineRun(task.task_id);
-      deps.setPartial({ pipelineRun: run });
+      deps.setPartial({ pipelineRun: run, qualityReport });
       if (status.status === "failed" || status.status === "error") {
         toast.error(status.error ?? "Pipeline завершился с ошибкой");
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Не удалось запустить single pipeline");
+    }
+  };
+
+  const handleValidateMapping = async () => {
+    try {
+      const result = await validateDocumentMapping({
+        source_fields: Object.keys(deps.mapping),
+        mapping: deps.mapping,
+        required_template_fields: [],
+      });
+      deps.setPartial({ mappingValidation: result });
+      if (!result.ok) {
+        toast.warning("Маппинг содержит незаполненные обязательные поля");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось проверить маппинг");
     }
   };
 
@@ -158,6 +180,7 @@ export const useWizardStepActions = (deps: ActionDeps) => {
     handleBrandingPreview,
     handleReplaceMapFileChange,
     handleReplaceDryRun,
+    handleValidateMapping,
     handleRunBatch,
     handleRunSinglePipeline,
     handleOpenFirstArtifact,

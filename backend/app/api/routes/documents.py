@@ -76,6 +76,7 @@ from app.schemas.document import (
     DocumentVersionCompareRead,
     DocumentVersionDataDiffRead,
 )
+from app.schemas.document_quality import QualityReport
 from app.schemas.task import TaskAcceptedResponse, TaskStatusResponse
 from app.services.audit import AuditService
 from app.services.billing import BillingService
@@ -85,6 +86,7 @@ from app.services.document_insights import (
     load_document_versions_for_compare,
 )
 from app.services.document_readiness import compute_document_readiness
+from app.services.document_quality import build_quality_report
 from app.services.documents import (
     DocumentNotFoundError,
     DocumentWorkflowService,
@@ -258,6 +260,20 @@ class DocGenerateRequest(BaseModel):
         return self
 
 
+class DocumentQualityCheckRequest(BaseModel):
+    data: dict[str, Any] = Field(default_factory=dict)
+    required_fields: list[str] = Field(default_factory=list)
+    date_fields: list[str] = Field(default_factory=list)
+    numeric_fields: list[str] = Field(default_factory=list)
+    rendered_text: str | None = None
+
+
+class DocumentMappingValidateRequest(BaseModel):
+    source_fields: list[str] = Field(default_factory=list)
+    mapping: dict[str, str] = Field(default_factory=dict)
+    required_template_fields: list[str] = Field(default_factory=list)
+
+
 def _map_document_status(document: Document) -> str:
     if document.job and document.job.status in {DocumentJobStatus.QUEUED, DocumentJobStatus.PROCESSING}:
         return "generating"
@@ -417,6 +433,10 @@ async def list_documents(
     search: str | None = Query(default=None),
     status_value: str | None = Query(default=None, alias="status"),
     company_id: str | None = Query(default=None),
+    template_id: str | None = Query(default=None),
+    created_by: str | None = Query(default=None),
+    created_from: datetime | None = Query(default=None),
+    created_to: datetime | None = Query(default=None),
     type_value: str | None = Query(default=None, alias="type"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1, le=200),
@@ -426,6 +446,14 @@ async def list_documents(
     stmt = _document_read_query(str(tenant.id))
     if company_id:
         stmt = stmt.where(Document.company_id == company_id)
+    if template_id:
+        stmt = stmt.where(Document.template_id == template_id)
+    if created_by:
+        stmt = stmt.where(Document.created_by == created_by)
+    if created_from:
+        stmt = stmt.where(Document.created_at >= created_from)
+    if created_to:
+        stmt = stmt.where(Document.created_at <= created_to)
 
     scoped_company_ids = access.claims.get("company_ids")
     if isinstance(scoped_company_ids, list) and scoped_company_ids:
@@ -577,6 +605,40 @@ async def get_document_readiness_endpoint(
             for s in snap.pipeline_stages
         ],
     )
+
+
+@router.post("/quality:check", response_model=QualityReport)
+async def check_document_quality(payload: DocumentQualityCheckRequest) -> QualityReport:
+    report = build_quality_report(
+        data=payload.data,
+        required_fields=payload.required_fields,
+        date_fields=payload.date_fields,
+        numeric_fields=payload.numeric_fields,
+        rendered_text=payload.rendered_text,
+    )
+    return report
+
+
+@router.post("/mapping:validate")
+async def validate_document_mapping(payload: DocumentMappingValidateRequest) -> dict[str, Any]:
+    mapping_values = {str(value).strip() for value in payload.mapping.values() if str(value).strip()}
+    missing_required = sorted(
+        field for field in payload.required_template_fields if str(field).strip() and str(field).strip() not in mapping_values
+    )
+    unmapped_source = sorted(
+        source for source in payload.source_fields if str(source).strip() and not str(payload.mapping.get(source, "")).strip()
+    )
+    return {
+        "ok": len(missing_required) == 0,
+        "missing_required_fields": missing_required,
+        "unmapped_source_fields": unmapped_source,
+        "summary": {
+            "source_total": len(payload.source_fields),
+            "mapped_total": len(mapping_values),
+            "missing_required_total": len(missing_required),
+            "unmapped_source_total": len(unmapped_source),
+        },
+    }
 
 
 @router.get("/{document_id}/versions/compare", response_model=DocumentVersionCompareRead)

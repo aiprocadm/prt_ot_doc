@@ -4,6 +4,7 @@ import type {
   DocumentReadinessDto,
   DocumentVersionCompareDto
 } from "@/types/dto/documents";
+import type { QualityReport } from "@/types/dto/documentQuality";
 
 export type WizardPipelineStatus = "queued" | "running" | "success" | "failed" | "canceled" | "done" | "error";
 
@@ -72,6 +73,18 @@ export type ReplaceDryRunResponse = {
     pairs: Record<string, number>;
   };
   preview_samples: ReplaceDiffItem[];
+};
+
+export type MappingValidationResponse = {
+  ok: boolean;
+  missing_required_fields: string[];
+  unmapped_source_fields: string[];
+  summary: {
+    source_total: number;
+    mapped_total: number;
+    missing_required_total: number;
+    unmapped_source_total: number;
+  };
 };
 
 export type ReplaceReportResponse = {
@@ -161,5 +174,25 @@ export const replaceDryRun = async (payload: {
 
 export const getReplaceReport = async (reportId: string, params?: { offset?: number; limit?: number }) => {
   const response = await apiClient.get<ReplaceReportResponse>(`/replace/reports/${reportId}`, { params });
+  return response.data;
+};
+
+export const checkDocumentQuality = async (payload: {
+  data: Record<string, unknown>;
+  required_fields?: string[];
+  date_fields?: string[];
+  numeric_fields?: string[];
+  rendered_text?: string;
+}) => {
+  const response = await apiClient.post<QualityReport>("/documents/quality:check", payload);
+  return response.data;
+};
+
+export const validateDocumentMapping = async (payload: {
+  source_fields: string[];
+  mapping: Record<string, string>;
+  required_template_fields?: string[];
+}) => {
+  const response = await apiClient.post<MappingValidationResponse>("/documents/mapping:validate", payload);
   return response.data;
 };

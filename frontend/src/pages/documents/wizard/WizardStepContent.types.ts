@@ -1,7 +1,8 @@
-import type { DocumentBatchItem, DocumentBatchRun, ReplaceDryRunResponse } from "@/api/documents";
+import type { DocumentBatchItem, DocumentBatchRun, MappingValidationResponse, ReplaceDryRunResponse } from "@/api/documents";
 import type { BrandingPreviewDto, LayoutPresetDto, SiteDto } from "@/api/branding";
 import type { PipelineRun } from "@/api/pipelines";
 import type { DocumentsWizardState } from "@/stores/documentsWizard";
+import type { QualityReport } from "@/types/dto/documentQuality";
 
 export type RowStatusFilter = "all" | "success" | "failed";
 
@@ -20,6 +21,8 @@ export type WizardStepContentProps = {
   rowStatusFilter: RowStatusFilter;
   filteredBatchItems: DocumentBatchItem[];
   replaceDryRunResult: ReplaceDryRunResponse | null;
+  mappingValidation: MappingValidationResponse | null;
+  qualityReport: QualityReport | null;
   batch: DocumentBatchRun | null;
   pipelineRun: PipelineRun | null;
   brandingPreview: BrandingPreviewDto | null;

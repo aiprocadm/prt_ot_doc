@@ -2,8 +2,9 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 import type { BrandingPreviewDto } from "@/api/branding";
-import type { DocumentBatchRun, ReplaceDryRunResponse } from "@/api/documents";
+import type { DocumentBatchRun, MappingValidationResponse, ReplaceDryRunResponse } from "@/api/documents";
 import type { PipelineRun } from "@/api/pipelines";
+import type { QualityReport } from "@/types/dto/documentQuality";
 
 type RowStatusFilter = "all" | "success" | "failed";
 
@@ -29,6 +30,8 @@ export type DocumentsWizardState = {
   headerOptions: Record<string, string>;
   replaceMapFileName: string;
   replaceDryRun: ReplaceDryRunResponse | null;
+  mappingValidation: MappingValidationResponse | null;
+  qualityReport: QualityReport | null;
   batch: DocumentBatchRun | null;
   taskId: string;
   pipelineRun: PipelineRun | null;
@@ -60,6 +63,8 @@ const baseState = {
   headerOptions: {},
   replaceMapFileName: "",
   replaceDryRun: null,
+  mappingValidation: null,
+  qualityReport: null,
   batch: null,
   taskId: "",
   pipelineRun: null,
@@ -103,6 +108,8 @@ export const useDocumentsWizardStore = create<DocumentsWizardState>()(
         headerPreset: state.headerPreset,
         headerOptions: state.headerOptions,
         replaceMapFileName: state.replaceMapFileName,
+        mappingValidation: state.mappingValidation,
+        qualityReport: state.qualityReport,
         brandingPreview: state.brandingPreview,
         brandingPreviewHistory: state.brandingPreviewHistory,
         idempotencyKey: state.idempotencyKey,

@@ -7,8 +7,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.modules.pipelines.graph import PipelineGraph, PipelineProfileValidator
 
-STEP_CODES = {"render_docx", "apply_headers", "replace", "convert_pdf", "build_zip", "archive", "send_edo", "index_content"}
-KNOWN_SCHEMAS = {"RenderParamsV1", "HeadersParamsV1", "ReplaceParamsV1", "PdfParamsV1", "ZipParamsV1", "ArchiveParamsV1", "EdoParamsV1"}
+STEP_CODES = {"render_docx", "apply_headers", "replace", "quality_gate", "convert_pdf", "build_zip", "archive", "send_edo", "send_for_approval", "index_content"}
+KNOWN_SCHEMAS = {"RenderParamsV1", "HeadersParamsV1", "ReplaceParamsV1", "QualityGateParamsV1", "PdfParamsV1", "ZipParamsV1", "ArchiveParamsV1", "EdoParamsV1", "ApprovalParamsV1"}
 
 JobStatusLiteral = Literal["queued", "running", "success", "failed", "canceled"]
 

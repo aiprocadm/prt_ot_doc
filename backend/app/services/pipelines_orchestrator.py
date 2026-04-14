@@ -36,12 +36,13 @@ from app.services.pipeline_step_handlers import (
     artifact_step_handler,
     edo_step_handler,
     index_projection_step_handler,
+    quality_gate_step_handler,
     signature_step_handler,
     validate_template_step_handler,
 )
 
 DEFAULT_STEPS = list(DOCUMENT_CORE_PIPELINE_STEPS)
-INTERNAL_PROJECTION_STEPS = {"sign", "verify_signature", "index_file_content"}
+INTERNAL_PROJECTION_STEPS = {"send_for_approval", "sign", "verify_signature", "index_file_content"}
 RETRYABLE = {"convert_pdf": 2, "send_edo": 2}
 STEP_ALIASES = {
     "replace_apply": "replace",
@@ -686,6 +687,8 @@ class PipelineOrchestrator:
             )
         if step_key == "send_edo":
             return edo_step_handler
+        if step_key == "quality_gate":
+            return quality_gate_step_handler
         if step_key in {"sign", "verify_signature"}:
             return lambda *, job, step: signature_step_handler(job=job, step=step, step_key=step_key)
         if step_key == "index_file_content":

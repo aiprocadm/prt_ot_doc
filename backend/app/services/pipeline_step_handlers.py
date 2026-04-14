@@ -10,6 +10,7 @@ from sqlalchemy.exc import OperationalError, ProgrammingError
 from app.models.job_engine import DocumentArtifact, DocumentJob, DocumentJobStep
 from app.modules.files.models import FileEntityType, FileLinkRole
 from app.modules.files.service import FileService, build_artifact_name
+from app.services.document_quality import build_quality_report
 from app.services.integrations.factory import get_edo_integration
 from app.services.integrations.interfaces import IntegrationDisabledError
 
@@ -203,3 +204,25 @@ async def index_projection_step_handler(*, job: DocumentJob, step: DocumentJobSt
         "terms_indexed": len(tokens),
         "preview_terms": tokens[:10],
     }
+
+
+async def quality_gate_step_handler(*, job: DocumentJob, step: DocumentJobStep) -> dict[str, Any]:
+    payload = job.input_payload_json or {}
+    data = payload.get("inline_data") if isinstance(payload.get("inline_data"), dict) else payload.get("data")
+    if not isinstance(data, dict):
+        data = {}
+    config = step.input.get("config", {}) if isinstance(step.input, dict) else {}
+    required_fields = config.get("required_fields") if isinstance(config.get("required_fields"), list) else []
+    date_fields = config.get("date_fields") if isinstance(config.get("date_fields"), list) else []
+    numeric_fields = config.get("numeric_fields") if isinstance(config.get("numeric_fields"), list) else []
+    rendered_text = config.get("rendered_text") if isinstance(config.get("rendered_text"), str) else None
+    report = build_quality_report(
+        data=data,
+        required_fields=[str(x) for x in required_fields],
+        date_fields=[str(x) for x in date_fields],
+        numeric_fields=[str(x) for x in numeric_fields],
+        rendered_text=rendered_text,
+    )
+    if report.release_blocked:
+        raise ValueError("quality_gate_blocked_release")
+    return report.model_dump(mode="json")

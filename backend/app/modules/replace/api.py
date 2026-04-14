@@ -125,6 +125,8 @@ async def _launch(document_version_id: str, payload: ReplaceLaunchRequest, mode:
         rules=replace_map.rules or [],
         case_sensitive=payload.options.case_sensitive,
         whole_word=payload.options.whole_word,
+        regex_enabled=payload.options.regex_enabled,
+        scope=payload.options.scope,
         storage=storage,
         run_id=record.id,
     )
