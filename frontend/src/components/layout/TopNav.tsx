@@ -12,6 +12,7 @@ import { getTopNavKpi } from "@/api/navigation";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuthStore } from "@/stores/auth";
 import { useTenantStore } from "@/stores/tenant";
+import { trackUxMetric } from "@/utils/uxMetrics";
 
 export const TopNav = () => {
   const { user, logout } = useAuthStore();
@@ -76,23 +77,35 @@ export const TopNav = () => {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button asChild variant="ghost" size="icon" aria-label="Единый реестр задач" className="relative">
-            <Link to="/tasks">
+          <Button asChild variant="ghost" size="icon" aria-label="Единый реестр задач" className="relative h-11 w-11">
+            <Link
+              to="/tasks"
+              onClick={() => {
+                trackUxMetric("navigation_click", { source: "topnav", target: "tasks" });
+                trackUxMetric("time_to_first_action", { source: "topnav" });
+              }}
+            >
               <CheckCircle2 className="h-5 w-5" />
               <Badge className="absolute -right-1 -top-1 hidden h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-[10px] sm:flex">
                 {kpi.tasks}
               </Badge>
             </Link>
           </Button>
-          <Button asChild variant="ghost" size="icon" aria-label="Уведомления" className="relative">
-            <Link to="/notifications">
+          <Button asChild variant="ghost" size="icon" aria-label="Уведомления" className="relative h-11 w-11">
+            <Link
+              to="/notifications"
+              onClick={() => {
+                trackUxMetric("navigation_click", { source: "topnav", target: "notifications" });
+                trackUxMetric("time_to_first_action", { source: "topnav" });
+              }}
+            >
               <Bell className="h-5 w-5" />
               <Badge variant="destructive" className="absolute -right-1 -top-1 hidden h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-[10px] sm:flex">
                 {kpi.alerts}
               </Badge>
             </Link>
           </Button>
-          <Button variant="ghost" size="icon" aria-label="Переключить тему оформления" onClick={toggleTheme}>
+          <Button variant="ghost" size="icon" aria-label="Переключить тему оформления" onClick={toggleTheme} className="h-11 w-11">
             {theme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
           </Button>
           <DropdownMenu>

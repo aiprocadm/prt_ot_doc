@@ -2,9 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
-import { EmptyState } from "@/components/common/EmptyState";
-import { ErrorState } from "@/components/common/ErrorState";
-import { LoadingScreen } from "@/components/common/LoadingScreen";
+import { ListStateGuard } from "@/components/common/ListStateGuard";
 import { Can } from "@/components/permissions/Can";
 import { RegistryPageHeader } from "@/components/common/RegistryPageHeader";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
@@ -14,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PersonFormDialog } from "@/features/persons/PersonFormDialog";
 import { PersonTable } from "@/features/persons/PersonTable";
 import { PERMISSIONS } from "@/permissions/permissions";
+import { ROUTES } from "@/router/routes";
 import { usePersonsStore } from "@/stores/persons";
 import type { PersonDto } from "@/types/dto/persons";
 
@@ -46,7 +45,7 @@ const PersonsPage = () => {
 
   return (
     <div className="space-y-6">
-      <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Сотрудники" }]} />
+      <Breadcrumb items={[{ label: "Главная", to: ROUTES.DASHBOARD }, { label: "Сотрудники" }]} />
       <RegistryPageHeader
         title="Сотрудники"
         description="Карточка сотрудника с вкладками по обучению, СИЗ, рискам и медосмотрам."
@@ -78,12 +77,17 @@ const PersonsPage = () => {
       />
       <Card>
         <CardContent className="py-6">
-          <ErrorState error={error ?? undefined} onRetry={() => void list()} />
-          {loading ? <LoadingScreen label="Загрузка сотрудников" /> : null}
-          {!loading && !error && items.length === 0 ? (
-            <EmptyState title="Сотрудники не найдены" description="Добавьте первого сотрудника или измените фильтры поиска." />
-          ) : null}
-          {!loading && !error && items.length > 0 ? <PersonTable onSelect={setSelectedPerson} /> : null}
+          <ListStateGuard
+            error={error}
+            loading={loading}
+            itemsCount={items.length}
+            loadingLabel="Загрузка сотрудников"
+            emptyTitle="Сотрудники не найдены"
+            emptyDescription="Добавьте первого сотрудника или измените фильтры поиска."
+            onRetry={() => void list()}
+          >
+            <PersonTable onSelect={setSelectedPerson} />
+          </ListStateGuard>
         </CardContent>
       </Card>
       {selectedPerson && (

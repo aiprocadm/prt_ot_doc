@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NavMenuProvider } from "@/components/layout/NavMenuProvider";
@@ -15,9 +15,7 @@ const renderSideNav = () =>
   );
 
 vi.mock("@/api/billing", () => ({
-  getBillingSummary: vi.fn(
-    () => new Promise(() => undefined)
-  )
+  getBillingSummary: vi.fn().mockResolvedValue({ features: {} })
 }));
 
 describe("SideNav", () => {
@@ -40,13 +38,15 @@ describe("SideNav", () => {
     });
   });
 
-  it("hides generation link without document create permission", () => {
+  it("hides generation link without document create permission", async () => {
     renderSideNav();
 
-    expect(screen.queryByRole("link", { name: "Генерация" })).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByRole("link", { name: "Генерация" })).not.toBeInTheDocument();
+    });
   });
 
-  it("shows generation link with document create permission", () => {
+  it("shows generation link with document create permission", async () => {
     useAuthStore.setState((state) => ({
       ...state,
       user: state.user
@@ -59,6 +59,8 @@ describe("SideNav", () => {
 
     renderSideNav();
 
-    expect(screen.getByRole("link", { name: "Генерация" })).toHaveAttribute("href", "/generation");
+    await waitFor(() => {
+      expect(screen.getByRole("link", { name: "Генерация" })).toHaveAttribute("href", "/generation");
+    });
   });
 });

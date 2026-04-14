@@ -121,7 +121,7 @@ const GlobalSearchPanel = ({ inputRef, onNavigate }: SearchPanelProps) => {
                   }
                 >
                   <div className="font-medium">{item.q}</div>
-                  <div className="text-xs text-muted-foreground">{item.types.join(", ") || "all types"}</div>
+                  <div className="text-xs text-muted-foreground">{item.types.join(", ") || "все типы"}</div>
                 </button>
               ))}
             </div>
@@ -174,7 +174,7 @@ export const GlobalSearch = () => {
         type="button"
         variant="outline"
         size="icon"
-        className="shrink-0 lg:hidden"
+        className="h-11 w-11 shrink-0 lg:hidden"
         aria-label="Открыть глобальный поиск"
         onClick={() => setMobileOpen(true)}
       >

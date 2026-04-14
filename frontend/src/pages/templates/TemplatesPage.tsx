@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { EmptyState } from "@/components/common/EmptyState";
-import { ErrorState } from "@/components/common/ErrorState";
-import { LoadingScreen } from "@/components/common/LoadingScreen";
+import { ListStateGuard } from "@/components/common/ListStateGuard";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -59,19 +57,19 @@ const TemplatesPage = () => {
       </div>
       <Card>
         <CardContent className="py-6">
-          <ErrorState error={error ?? undefined} onRetry={() => void list()} />
-          {loading && items.length === 0 ? <LoadingScreen label="Загрузка шаблонов" /> : null}
-          {!loading && !error && items.length === 0 ? (
-            <EmptyState
-              title="Шаблоны не найдены"
-              description="Загрузите первый шаблон, чтобы запустить жизненный цикл документов без ручных обходных сценариев."
-            />
-          ) : null}
-          {items.length > 0 ? (
+          <ListStateGuard
+            error={error}
+            loading={loading}
+            itemsCount={items.length}
+            loadingLabel="Загрузка шаблонов"
+            emptyTitle="Шаблоны не найдены"
+            emptyDescription="Загрузите первый шаблон, чтобы запустить жизненный цикл документов без ручных обходных сценариев."
+            onRetry={() => void list()}
+          >
             <TemplateTable onSelect={(template) => {
               getById(template.id).then((loaded) => setSelectedTemplate(loaded ?? template));
             }} />
-          ) : null}
+          </ListStateGuard>
         </CardContent>
       </Card>
       {selectedTemplate && <TemplateDetails template={selectedTemplate} />}

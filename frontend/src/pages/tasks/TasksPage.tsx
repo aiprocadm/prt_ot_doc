@@ -213,7 +213,7 @@ const TasksPage = () => {
               {showCreateForm ? "Скрыть форму" : "Добавить задачу"}
             </ActionButton>
             <Button
-              variant="outline"
+              variant="ghost"
               onClick={() => {
                 setFilters({ type: undefined, overdue: undefined });
                 list({ type: undefined, overdue: undefined });
@@ -223,7 +223,7 @@ const TasksPage = () => {
             >
               Сбросить фильтры
             </Button>
-            <Button variant="default" onClick={() => list()} disabled={loading}>
+            <Button variant="outline" onClick={() => list()} disabled={loading}>
               Обновить
             </Button>
           </>

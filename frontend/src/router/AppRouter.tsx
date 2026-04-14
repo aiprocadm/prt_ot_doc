@@ -1,5 +1,5 @@
-import { Suspense, useEffect } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { Suspense, useEffect, useRef } from "react";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import { AuthLayout } from "@/layouts/AuthLayout";
 import { MainLayout } from "@/layouts/MainLayout";
@@ -11,10 +11,32 @@ import { ProtectedRoute } from "@/router/ProtectedRoute";
 import { getLandingRoute } from "@/router/landing";
 import { useAbility } from "@/permissions/useAbility";
 import { useAuthStore } from "@/stores/auth";
+import { trackUxMetric } from "@/utils/uxMetrics";
 
 const LandingRedirect = () => {
   const { can } = useAbility();
   return <Navigate to={getLandingRoute(can)} replace />;
+};
+
+const RouteMetricsTracker = () => {
+  const location = useLocation();
+  const previousPathRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const currentPath = `${location.pathname}${location.search}`;
+    trackUxMetric("route_view", { path: currentPath });
+    const previousPath = previousPathRef.current;
+    if (previousPath) {
+      trackUxMetric("nav_backtrack_rate", {
+        from: previousPath,
+        to: currentPath,
+        is_backtrack: currentPath === previousPath ? 1 : 0
+      });
+    }
+    previousPathRef.current = currentPath;
+  }, [location.pathname, location.search]);
+
+  return null;
 };
 
 const AppRouter = () => {
@@ -26,6 +48,7 @@ const AppRouter = () => {
 
   return (
     <BrowserRouter>
+      <RouteMetricsTracker />
       <AuthRedirectHandler />
       <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Загрузка...</div>}>
         <Routes>

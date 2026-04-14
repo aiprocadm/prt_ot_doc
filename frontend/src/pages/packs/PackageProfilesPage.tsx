@@ -65,7 +65,7 @@ const PackageProfilesPage = () => {
 
   return (
     <div className="space-y-4">
-      <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Package profiles" }]} />
+      <Breadcrumb items={[{ label: "Главная", to: "/dashboard" }, { label: "Профили пакетов" }]} />
       <Card>
         <CardHeader>
           <CardTitle>Профили пакетов</CardTitle>

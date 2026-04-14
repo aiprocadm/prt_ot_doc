@@ -17,3 +17,11 @@ export const getTopNavKpi = async (): Promise<TopNavKpi> => {
   };
 };
 
+export const sendUxMetric = async (name: string, payload?: Record<string, unknown>) => {
+  try {
+    await apiClient.post("/analytics/ux-events", { name, payload });
+  } catch {
+    // Optional endpoint: metric delivery is best-effort only.
+  }
+};
+

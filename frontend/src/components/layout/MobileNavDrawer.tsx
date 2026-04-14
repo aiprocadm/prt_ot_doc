@@ -6,9 +6,20 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useNavMenuData } from "@/hooks/useNavMenuData";
 
+const FREQUENT_PATHS = ["/dashboard", "/documents", "/tasks", "/packs", "/persons"];
+
 export const MobileNavDrawer = () => {
   const [open, setOpen] = useState(false);
   const { visibleGroups, clientPortalOnlyMode } = useNavMenuData();
+  const frequentItems = visibleGroups
+    .flatMap((group) => group.items)
+    .filter((item) => FREQUENT_PATHS.includes(item.to));
+  const otherGroups = visibleGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => !FREQUENT_PATHS.includes(item.to))
+    }))
+    .filter((group) => group.items.length > 0);
 
   return (
     <>
@@ -16,7 +27,7 @@ export const MobileNavDrawer = () => {
         type="button"
         variant="outline"
         size="icon"
-        className="shrink-0 lg:hidden"
+        className="h-11 w-11 shrink-0 lg:hidden"
         aria-label="Открыть меню разделов"
         onClick={() => setOpen(true)}
       >
@@ -35,9 +46,31 @@ export const MobileNavDrawer = () => {
           </DialogHeader>
           <nav className="flex-1 overflow-y-auto px-3 py-4 text-sm">
             <div className="space-y-6">
-              {visibleGroups.map((group) => (
+              {frequentItems.length ? (
+                <div className="space-y-2">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Часто</div>
+                  <div className="space-y-1">
+                    {frequentItems.map((item) => (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        onClick={() => setOpen(false)}
+                        className={({ isActive }) =>
+                          `flex min-h-11 items-center gap-3 rounded-md px-3 py-2 transition-colors ${
+                            isActive ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                          }`
+                        }
+                      >
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.label}</span>
+                      </NavLink>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {otherGroups.map((group) => (
                 <div key={group.title} className="space-y-2">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.title}</div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Остальное · {group.title}</div>
                   <div className="space-y-1">
                     {group.items.map((item) => (
                       <NavLink
@@ -45,7 +78,7 @@ export const MobileNavDrawer = () => {
                         to={item.to}
                         onClick={() => setOpen(false)}
                         className={({ isActive }) =>
-                          `flex items-center gap-3 rounded-md px-3 py-2 transition-colors ${
+                          `flex min-h-11 items-center gap-3 rounded-md px-3 py-2 transition-colors ${
                             isActive ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
                           }`
                         }

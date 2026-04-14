@@ -1,10 +1,7 @@
 import { screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { CommandBar } from "@/components/layout/CommandBar";
-import { MobileNavDrawer } from "@/components/layout/MobileNavDrawer";
-import { NavMenuProvider } from "@/components/layout/NavMenuProvider";
-import { SideNav } from "@/components/layout/SideNav";
+import { NavMenuProvider, useNavMenuData } from "@/components/layout/NavMenuProvider";
 import { PERMISSIONS } from "@/permissions/permissions";
 import { useAuthStore } from "@/stores/auth";
 import { renderWithRouter } from "@/test-utils/renderWithRouter";
@@ -15,8 +12,18 @@ vi.mock("@/api/billing", () => ({
   getBillingSummary: (...args: unknown[]) => getBillingSummaryMock(...args)
 }));
 
+const NavMenuConsumerProbe = () => {
+  const { visibleGroups, clientPortalOnlyMode } = useNavMenuData();
+  return (
+    <div>
+      <span data-testid="groups-count">{visibleGroups.length}</span>
+      <span data-testid="portal-only">{String(clientPortalOnlyMode)}</span>
+    </div>
+  );
+};
+
 describe("NavMenuProvider", () => {
-  it("calls billing summary once for all nav consumers", async () => {
+  it("calls billing summary once per provider mount and exposes nav data", async () => {
     getBillingSummaryMock.mockResolvedValue({ features: {} });
     useAuthStore.setState({
       user: {
@@ -37,17 +44,15 @@ describe("NavMenuProvider", () => {
 
     renderWithRouter(
       <NavMenuProvider>
-        <>
-          <SideNav />
-          <MobileNavDrawer />
-          <CommandBar />
-        </>
+        <NavMenuConsumerProbe />
       </NavMenuProvider>
     );
 
     await waitFor(() => {
       expect(getBillingSummaryMock).toHaveBeenCalledTimes(1);
     });
+    expect(screen.getByTestId("groups-count")).toHaveTextContent(/[1-9]\d*/);
+    expect(screen.getByTestId("portal-only")).toHaveTextContent("false");
   });
 
   it("keeps navigation usable when billing request fails", async () => {
@@ -71,12 +76,12 @@ describe("NavMenuProvider", () => {
 
     renderWithRouter(
       <NavMenuProvider>
-        <SideNav />
+        <NavMenuConsumerProbe />
       </NavMenuProvider>
     );
 
     await waitFor(() => {
-      expect(screen.getByRole("link", { name: "Документы" })).toHaveAttribute("href", "/documents");
+      expect(screen.getByTestId("groups-count")).toHaveTextContent(/[1-9]\d*/);
     });
   });
 });

@@ -12,6 +12,7 @@ type ListStateGuardProps = {
   loadingLabel: string;
   emptyTitle: string;
   emptyDescription: string;
+  emptyAction?: ReactNode;
   onRetry?: () => void;
   children: ReactNode;
 };
@@ -23,6 +24,7 @@ export const ListStateGuard = ({
   loadingLabel,
   emptyTitle,
   emptyDescription,
+  emptyAction,
   onRetry,
   children
 }: ListStateGuardProps) => (
@@ -30,7 +32,7 @@ export const ListStateGuard = ({
     <ErrorState error={error ?? undefined} onRetry={onRetry} />
     {loading && itemsCount === 0 ? <LoadingScreen label={loadingLabel} /> : null}
     {!loading && !error && itemsCount === 0 ? (
-      <EmptyState title={emptyTitle} description={emptyDescription} />
+      <EmptyState title={emptyTitle} description={emptyDescription} action={emptyAction} />
     ) : null}
     {!loading || itemsCount > 0 ? children : null}
   </>
