@@ -31,7 +31,9 @@ from app.models.models import (
     PipelineRun,
     PipelineRunStatus,
     RoleEnum,
+    Template,
     TemplateVersion,
+    TemplateVersionStatus,
     Tenant,
 )
 from app.tasks import celery_app
@@ -439,3 +441,92 @@ async def test_documents_list_etag_returns_304_on_if_none_match(
     )
     assert second.status_code == 304
     assert second.headers.get("ETag") == etag
+
+
+@pytest.mark.asyncio()
+async def test_template_resolve_prefers_site_scope(
+    async_client: AsyncClient,
+    sessionmaker,
+    data_factory: TestDataFactory,
+    make_auth_headers,
+) -> None:
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        company = await data_factory.create_company(tenant=tenant, session=session)
+        site = await data_factory.create_site(tenant=tenant, company=company, session=session)
+
+        tenant_template = Template(
+            tenant_id=tenant.id,
+            name="Tenant Order",
+            code="order-template",
+            metadata_json={"scope": {"level": "tenant"}, "case_types": ["employment"], "template_type": "order"},
+        )
+        company_template = Template(
+            tenant_id=tenant.id,
+            name="Company Order",
+            code="order-template-company",
+            metadata_json={"scope": {"level": "company", "company_id": company.id}, "case_types": ["employment"], "template_type": "order"},
+        )
+        site_template = Template(
+            tenant_id=tenant.id,
+            name="Site Order",
+            code="order-template-site",
+            metadata_json={"scope": {"level": "site", "company_id": company.id, "site_id": site.id}, "case_types": ["employment"], "template_type": "order"},
+        )
+        session.add_all([tenant_template, company_template, site_template])
+        await session.flush()
+
+        versions = [
+            TemplateVersion(
+                tenant_id=tenant.id,
+                template_id=tenant_template.id,
+                version=1,
+                checksum=b"tenant-v1",
+                sha256="tenant-v1",
+                status=TemplateVersionStatus.ACTIVE,
+                payload_key="templates/tenant-v1.docx",
+            ),
+            TemplateVersion(
+                tenant_id=tenant.id,
+                template_id=company_template.id,
+                version=2,
+                checksum=b"company-v2",
+                sha256="company-v2",
+                status=TemplateVersionStatus.ACTIVE,
+                payload_key="templates/company-v2.docx",
+            ),
+            TemplateVersion(
+                tenant_id=tenant.id,
+                template_id=site_template.id,
+                version=3,
+                checksum=b"site-v3",
+                sha256="site-v3",
+                status=TemplateVersionStatus.ACTIVE,
+                payload_key="templates/site-v3.docx",
+            ),
+        ]
+        session.add_all(versions)
+        await session.flush()
+        tenant_template.current_version_id = versions[0].id
+        company_template.current_version_id = versions[1].id
+        site_template.current_version_id = versions[2].id
+        await session.commit()
+
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    response = await async_client.post(
+        "/api/v1/documents/template:resolve",
+        json={
+            "case_type": "employment",
+            "document_type": "order",
+            "company_id": company.id,
+            "site_id": site.id,
+        },
+        headers=headers,
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["template_code"] == "order-template-site"
+    assert body["scope_level"] == "site"
+    assert body["template_version"] == 3
+    assert "site:exact" in body["resolution_chain"]
+    assert len(body["alternatives"]) >= 1

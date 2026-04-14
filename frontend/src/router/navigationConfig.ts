@@ -50,6 +50,7 @@ export const MAIN_NAV_GROUPS: NavGroup[] = [
       { label: "Шаблоны", to: "/templates", icon: FileArchive, permission: PERMISSIONS.TEMPLATE_VIEW },
       { label: "Пакеты", to: "/packs", icon: Package, permission: PERMISSIONS.PACK_VIEW },
       { label: "Генерация", to: "/generation", icon: ClipboardCheck, permission: PERMISSIONS.DOCUMENT_CREATE },
+      { label: "Быстрая генерация", to: "/documents/quick-generate", icon: ClipboardCheck, permission: PERMISSIONS.DOCUMENT_CREATE },
       { label: "Пайплайны и задания", to: "/pipelines/runs", icon: Archive, permission: PERMISSIONS.DOCUMENT_VIEW },
       { label: "Архив", to: "/archive", icon: FileArchive, permission: PERMISSIONS.FILE_VIEW },
       { label: "Поиск", to: "/search", icon: Search, permission: PERMISSIONS.FILE_VIEW },

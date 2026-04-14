@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { getDocumentBatch } from "@/api/documents";
@@ -19,6 +19,8 @@ type RuntimePollingParams = {
 export const useDocumentsWizardRuntimePolling = ({ tenantSlug, taskId, pipelineRun, batch, onPipelineRun, onBatch }: RuntimePollingParams) => {
   const lastRunSignatureRef = useRef<string>("");
   const lastBatchSignatureRef = useRef<string>("");
+  const [runPollingInterval, setRunPollingInterval] = useState(3000);
+  const [batchPollingInterval, setBatchPollingInterval] = useState(3000);
 
   usePolling(
     async () => {
@@ -36,11 +38,15 @@ export const useDocumentsWizardRuntimePolling = ({ tenantSlug, taskId, pipelineR
           ended_at: step.ended_at
         }))
       });
-      if (nextSignature === lastRunSignatureRef.current) return;
+      if (nextSignature === lastRunSignatureRef.current) {
+        setRunPollingInterval((prev) => Math.min(prev + 1000, 10000));
+        return;
+      }
       lastRunSignatureRef.current = nextSignature;
+      setRunPollingInterval(3000);
       onPipelineRun(run);
     },
-    3000,
+    runPollingInterval,
     {
       enabled: Boolean(taskId && tenantSlug && (!pipelineRun || ["queued", "running"].includes(pipelineRun.status))),
       onError: () => toast.error("Не удалось обновить timeline job.")
@@ -67,11 +73,15 @@ export const useDocumentsWizardRuntimePolling = ({ tenantSlug, taskId, pipelineR
           document_version_id: item.document_version_id
         }))
       });
-      if (nextSignature === lastBatchSignatureRef.current) return;
+      if (nextSignature === lastBatchSignatureRef.current) {
+        setBatchPollingInterval((prev) => Math.min(prev + 1000, 10000));
+        return;
+      }
       lastBatchSignatureRef.current = nextSignature;
+      setBatchPollingInterval(3000);
       onBatch(updated);
     },
-    3000,
+    batchPollingInterval,
     {
       enabled: Boolean(batch?.id && tenantSlug && ["queued", "running"].includes(batch.status)),
       onError: () => toast.error("Не удалось обновить batch статус.")

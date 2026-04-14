@@ -34,7 +34,38 @@ export type GenerateDocumentRequest = {
   template_code: string;
   template_version: number;
   company_id: string;
+  person_id?: string;
   data: Record<string, unknown>;
+};
+
+export type TemplateResolveRequest = {
+  case_type?: string;
+  document_type?: string;
+  category?: string;
+  company_id?: string;
+  site_id?: string;
+  person_id?: string;
+};
+
+export type TemplateResolveCandidate = {
+  template_id: string;
+  template_code: string;
+  template_name: string;
+  template_version: number;
+  scope_level: string;
+  scope_match: string;
+  score: number;
+  rationale: string[];
+};
+
+export type TemplateResolveResponse = {
+  template_id: string;
+  template_code: string;
+  template_name: string;
+  template_version: number;
+  scope_level: string;
+  resolution_chain: string[];
+  alternatives: TemplateResolveCandidate[];
 };
 
 export type GenerationAcceptedResponse = {
@@ -97,6 +128,11 @@ export const generateDocument = async (payload: GenerateDocumentRequest, idempot
   const response = await apiClient.post<GenerationAcceptedResponse>("/documents/generate", payload, {
     headers: { "Idempotency-Key": idempotencyKey }
   });
+  return response.data;
+};
+
+export const resolveTemplateForQuickGenerate = async (payload: TemplateResolveRequest) => {
+  const response = await apiClient.post<TemplateResolveResponse>("/documents/template:resolve", payload);
   return response.data;
 };
 

@@ -2,6 +2,7 @@ import { lazy } from "react";
 
 export const DocumentsPage = lazy(() => import("@/pages/documents/DocumentsPage"));
 export const DocumentsWizardPage = lazy(() => import("@/pages/documents/DocumentsWizardPage"));
+export const QuickGeneratePage = lazy(() => import("@/pages/documents/QuickGeneratePage"));
 export const BrandingSettingsPage = lazy(() => import("@/pages/branding/BrandingSettingsPage"));
 export const ApprovalsInboxPage = lazy(() => import("@/pages/approvals/ApprovalsInboxPage"));
 export const ApprovalsOutboxPage = lazy(() => import("@/pages/approvals/ApprovalsOutboxPage"));

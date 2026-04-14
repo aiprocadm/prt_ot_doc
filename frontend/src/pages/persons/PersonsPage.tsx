@@ -99,6 +99,11 @@ const PersonsPage = () => {
                 <Button size="sm" variant="ghost" asChild>
                   <Link to="/persons">Сбросить фокус</Link>
                 </Button>
+                <Button size="sm" variant="outline" asChild>
+                  <Link to={`/documents/quick-generate?person_id=${encodeURIComponent(selectedPerson.id)}&company_id=${encodeURIComponent(selectedPerson.company_id ?? "")}`}>
+                    Сформировать документы по случаю
+                  </Link>
+                </Button>
               </div>
             ) : null}
             <div className="grid gap-2 md:grid-cols-2">

@@ -95,9 +95,14 @@ const DocumentsPage = () => {
               {loading ? "Обновление списка…" : "Данные актуальны"}
             </span>
             <PermissionGate permission={PERMISSIONS.DOCUMENT_CREATE}>
-              <Button asChild>
-                <Link to="/documents/wizard">Создать документ</Link>
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button asChild variant="outline">
+                  <Link to="/documents/quick-generate">Быстрая генерация</Link>
+                </Button>
+                <Button asChild>
+                  <Link to="/documents/wizard">Создать документ</Link>
+                </Button>
+              </div>
             </PermissionGate>
           </div>
         }

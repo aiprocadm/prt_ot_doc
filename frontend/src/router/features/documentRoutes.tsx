@@ -16,6 +16,7 @@ import {
   PipelineBuilderPage,
   PipelineRunDetailsPage,
   PipelineRunsPage,
+  QuickGeneratePage,
   SignaturesPage,
 } from "@/router/pageRegistry";
 
@@ -40,5 +41,6 @@ export const documentReadRoutes = (): ReactElement[] => [
 
 export const documentCreateRoutes = (): ReactElement[] => [
   <Route key="/documents/wizard" path="/documents/wizard" element={<DocumentsWizardPage />} />,
+  <Route key="/documents/quick-generate" path="/documents/quick-generate" element={<QuickGeneratePage />} />,
   <Route key="/generation" path="/generation" element={<DocumentsWizardPage />} />,
 ];

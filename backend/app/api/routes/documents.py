@@ -274,6 +274,36 @@ class DocumentMappingValidateRequest(BaseModel):
     required_template_fields: list[str] = Field(default_factory=list)
 
 
+class TemplateResolveRequest(BaseModel):
+    case_type: str | None = Field(default=None, min_length=1, max_length=255)
+    document_type: str | None = Field(default=None, min_length=1, max_length=255)
+    category: str | None = Field(default=None, min_length=1, max_length=255)
+    company_id: str | None = Field(default=None, min_length=1)
+    site_id: str | None = Field(default=None, min_length=1)
+    person_id: str | None = Field(default=None, min_length=1)
+
+
+class TemplateResolveCandidateRead(BaseModel):
+    template_id: str
+    template_code: str
+    template_name: str
+    template_version: int
+    scope_level: str
+    scope_match: str
+    score: int
+    rationale: list[str] = Field(default_factory=list)
+
+
+class TemplateResolveResponse(BaseModel):
+    template_id: str
+    template_code: str
+    template_name: str
+    template_version: int
+    scope_level: str
+    resolution_chain: list[str] = Field(default_factory=list)
+    alternatives: list[TemplateResolveCandidateRead] = Field(default_factory=list)
+
+
 def _map_document_status(document: Document) -> str:
     if document.job and document.job.status in {DocumentJobStatus.QUEUED, DocumentJobStatus.PROCESSING}:
         return "generating"
@@ -878,6 +908,86 @@ def _extract_document_version_id(run: PipelineRun) -> str | None:
     return metadata.get("document_version_id") or outputs.get("document_version_id")
 
 
+def _normalize_scope_level(template: Template) -> str:
+    metadata = template.metadata_json if isinstance(template.metadata_json, dict) else {}
+    scope = metadata.get("scope") if isinstance(metadata.get("scope"), dict) else {}
+    raw = str(scope.get("level") or scope.get("type") or "tenant").strip().lower()
+    aliases = {
+        "organization": "company",
+        "legal_entity": "company",
+        "branch": "site",
+        "global": "system",
+    }
+    return aliases.get(raw, raw)
+
+
+def _scope_target_ids(template: Template) -> tuple[str | None, str | None]:
+    metadata = template.metadata_json if isinstance(template.metadata_json, dict) else {}
+    scope = metadata.get("scope") if isinstance(metadata.get("scope"), dict) else {}
+    company_id = scope.get("company_id")
+    site_id = scope.get("site_id")
+    return (str(company_id) if company_id else None, str(site_id) if site_id else None)
+
+
+def _string_set(values: list[Any] | None) -> set[str]:
+    if not values:
+        return set()
+    return {str(value).strip().lower() for value in values if str(value).strip()}
+
+
+def _template_matches_request(
+    *,
+    template: Template,
+    payload: TemplateResolveRequest,
+) -> bool:
+    metadata = template.metadata_json if isinstance(template.metadata_json, dict) else {}
+    candidates = _string_set(
+        [
+            template.code,
+            template.name,
+            template.domain,
+            metadata.get("category"),
+            metadata.get("template_type"),
+            *((metadata.get("tags") or []) if isinstance(metadata.get("tags"), list) else []),
+            *((metadata.get("case_types") or []) if isinstance(metadata.get("case_types"), list) else []),
+        ]
+    )
+    checks = [payload.case_type, payload.document_type, payload.category]
+    required = [str(item).strip().lower() for item in checks if item and str(item).strip()]
+    if not required:
+        return True
+    return all(item in candidates for item in required)
+
+
+def _scope_score(level: str) -> int:
+    return {
+        "site": 400,
+        "company": 300,
+        "tenant": 200,
+        "system": 100,
+    }.get(level, 0)
+
+
+def _scope_match_status(
+    *,
+    level: str,
+    payload: TemplateResolveRequest,
+    target_company_id: str | None,
+    target_site_id: str | None,
+) -> str:
+    if level == "site":
+        if payload.site_id and target_site_id and payload.site_id == target_site_id:
+            return "exact"
+        return "skip"
+    if level == "company":
+        if payload.company_id and target_company_id and payload.company_id == target_company_id:
+            return "exact"
+        return "skip"
+    if level in {"tenant", "system"}:
+        return "fallback"
+    return "skip"
+
+
 async def _fetch_template(
     session: AsyncSession,
     tenant: Tenant,
@@ -937,6 +1047,68 @@ async def _ensure_company(session: AsyncSession, tenant: Tenant, company_id: str
     return company
 
 
+async def _resolve_template_candidates(
+    *,
+    session: AsyncSession,
+    tenant: Tenant,
+    payload: TemplateResolveRequest,
+) -> list[TemplateResolveCandidateRead]:
+    tenant_scope = (str(tenant.id), tenant.slug)
+    stmt = (
+        select(Template, TemplateVersion)
+        .join(TemplateVersion, TemplateVersion.template_id == Template.id)
+        .where(
+            Template.tenant_id.in_(tenant_scope),
+            TemplateVersion.tenant_id.in_(tenant_scope),
+            Template.deleted_at.is_(None),
+            TemplateVersion.deleted_at.is_(None),
+            TemplateVersion.status == TemplateVersionStatus.ACTIVE,
+        )
+    )
+    rows = (await session.execute(stmt)).all()
+    candidates: list[TemplateResolveCandidateRead] = []
+    for template, version in rows:
+        if not _template_matches_request(template=template, payload=payload):
+            continue
+        level = _normalize_scope_level(template)
+        target_company_id, target_site_id = _scope_target_ids(template)
+        scope_match = _scope_match_status(
+            level=level,
+            payload=payload,
+            target_company_id=target_company_id,
+            target_site_id=target_site_id,
+        )
+        if scope_match == "skip":
+            continue
+        score = _scope_score(level) + int(version.version)
+        if template.current_version_id and template.current_version_id == version.id:
+            score += 50
+        rationale = [f"scope={level}", f"scope_match={scope_match}", f"version={version.version}"]
+        if payload.case_type:
+            rationale.append(f"case_type={payload.case_type}")
+        if payload.document_type:
+            rationale.append(f"document_type={payload.document_type}")
+        if payload.category:
+            rationale.append(f"category={payload.category}")
+        candidates.append(
+            TemplateResolveCandidateRead(
+                template_id=template.id,
+                template_code=template.code or template.name,
+                template_name=template.name,
+                template_version=int(version.version),
+                scope_level=level,
+                scope_match=scope_match,
+                score=score,
+                rationale=rationale,
+            )
+        )
+    return sorted(
+        candidates,
+        key=lambda item: (item.score, item.template_version, item.template_code),
+        reverse=True,
+    )
+
+
 async def _ensure_person(
     session: AsyncSession, person_id: str | None, company: Company
 ) -> Person | None:
@@ -961,6 +1133,39 @@ async def _ensure_person(
     if person.company_id != company.id:
         raise _documents_bad_request("person_id does not belong to the provided company")
     return person
+
+
+@router.post("/template:resolve", response_model=TemplateResolveResponse)
+async def resolve_template_for_quick_generation(
+    payload: TemplateResolveRequest,
+    tenant: Tenant = TenantDep,
+    session: AsyncSession = SessionDep,
+    access: AccessContext = AccessDep,
+) -> TemplateResolveResponse:
+    access.ensure_tenant_access(tenant.id, action="resolve document template")
+    if payload.company_id:
+        company = await _ensure_company(session, tenant, payload.company_id)
+        if access.role in {"client_admin", "client_user"}:
+            access.ensure_company_access(company.id, action="resolve document template")
+        if payload.person_id:
+            await _ensure_person(session, payload.person_id, company)
+    candidates = await _resolve_template_candidates(session=session, tenant=tenant, payload=payload)
+    if not candidates:
+        raise _documents_not_found(
+            code="DOCUMENT_TEMPLATE_NOT_FOUND",
+            message="No matching template found for the requested scope/case",
+        )
+    selected = candidates[0]
+    chain = [f"{candidate.scope_level}:{candidate.scope_match}" for candidate in candidates[:4]]
+    return TemplateResolveResponse(
+        template_id=selected.template_id,
+        template_code=selected.template_code,
+        template_name=selected.template_name,
+        template_version=selected.template_version,
+        scope_level=selected.scope_level,
+        resolution_chain=chain,
+        alternatives=candidates[1:3],
+    )
 
 
 async def _resolve_run(
