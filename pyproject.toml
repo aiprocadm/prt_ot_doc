@@ -54,3 +54,20 @@ warn_unused_ignores = true
 [[tool.mypy.overrides]]
 module = "tests.*"
 ignore_errors = true
+
+[tool.coverage.run]
+branch = true
+source = [
+    "backend/app",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
+precision = 2
+
+[tool.coverage.xml]
+output = "artifacts/coverage.xml"
+
+[tool.coverage.json]
+output = "artifacts/coverage.json"

@@ -113,15 +113,34 @@ jobs:
           DB_URL: sqlite:///./ci-alembic.db
         run: alembic -c backend/app/migrations/alembic.ini heads
 
-      - name: Backend test suite
-        run: pytest --junitxml=artifacts/backend-junit.xml
+      - name: Backend test suite with coverage
+        run: |
+          mkdir -p artifacts
+          pytest \
+            --junitxml=artifacts/backend-junit.xml \
+            --cov=backend/app \
+            --cov-branch \
+            --cov-report=xml:artifacts/coverage.xml \
+            --cov-report=json:artifacts/coverage.json \
+            --cov-report=term-missing:skip-covered
 
-      - name: Upload backend test artifact
+      - name: Export term-missing coverage report
+        if: always()
+        run: python -m coverage report -m > artifacts/coverage-term-missing.txt
+
+      - name: Enforce backend coverage baseline
+        run: python scripts/ci/check_backend_coverage_baseline.py --coverage-json artifacts/coverage.json --baseline docs/stabilization/backend_coverage_baseline.json
+
+      - name: Upload backend test artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: backend-test-report
-          path: artifacts/backend-junit.xml
+          path: |
+            artifacts/backend-junit.xml
+            artifacts/coverage.xml
+            artifacts/coverage.json
+            artifacts/coverage-term-missing.txt
 
   openapi-contract:
     runs-on: ubuntu-latest
