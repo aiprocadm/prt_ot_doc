@@ -69,6 +69,35 @@ def _safe_filename(filename: str | None, fallback: str = "artifact.bin") -> str:
     return candidate or fallback
 
 
+_DANGEROUS_TRAILING_EXTENSIONS = {
+    "bat",
+    "cmd",
+    "com",
+    "exe",
+    "hta",
+    "jar",
+    "js",
+    "jse",
+    "lnk",
+    "msi",
+    "ps1",
+    "scr",
+    "vbe",
+    "vbs",
+}
+
+
+def _reject_dangerous_double_extension(filename: str, *, allowed_extensions: set[str]) -> None:
+    suffixes = [part.lower() for part in Path(filename).suffixes if part]
+    if len(suffixes) < 2:
+        return
+    normalized = [part.lstrip(".") for part in suffixes]
+    if normalized[-1] not in _DANGEROUS_TRAILING_EXTENSIONS:
+        return
+    if normalized[-2] in allowed_extensions:
+        raise HTTPException(status_code=400, detail="dangerous_double_extension")
+
+
 def _mask_pii(text: str) -> str:
     masked = text
     for pattern, replacement in _PII_PATTERNS:
@@ -131,6 +160,10 @@ class FileService:
             raise HTTPException(status_code=413, detail="max_upload_size_exceeded")
         if content_type not in settings.file_allowed_mime:
             raise HTTPException(status_code=415, detail="unsupported_content_type")
+        _reject_dangerous_double_extension(
+            filename,
+            allowed_extensions={ext.lower().lstrip(".") for ext in settings.file_allowed_extensions},
+        )
         lower_name = filename.lower()
         if lower_name.endswith((".docm", ".xlsm")):
             raise HTTPException(status_code=400, detail="macro_enabled_documents_are_forbidden")
@@ -191,6 +224,10 @@ class FileService:
             raise HTTPException(status_code=413, detail="max_upload_size_exceeded")
         if content_type not in settings.file_allowed_mime:
             raise HTTPException(status_code=415, detail="unsupported_content_type")
+        _reject_dangerous_double_extension(
+            filename,
+            allowed_extensions={ext.lower().lstrip(".") for ext in settings.file_allowed_extensions},
+        )
 
         latest = (
             await self.session.execute(
