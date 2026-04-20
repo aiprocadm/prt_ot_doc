@@ -1,0 +1,37 @@
+# CODEOWNERS
+# Purpose: enforce owner review for high-risk security, data, and infrastructure surfaces.
+# Team aliases aligned with current org reviewer groups:
+# - @alexkarpov772/reviewers-auth
+# - @alexkarpov772/reviewers-rbac-abac
+# - @alexkarpov772/reviewers-files
+# - @alexkarpov772/reviewers-data-platform
+# - @alexkarpov772/reviewers-platform-infra
+
+# Auth routes + auth dependencies/middleware/session surfaces.
+/backend/app/api/routes/auth*                                  @alexkarpov772/reviewers-auth
+/backend/app/api/deps/**                                       @alexkarpov772/reviewers-auth
+/backend/app/api/dependencies.py                               @alexkarpov772/reviewers-auth
+/backend/app/middleware/**                                     @alexkarpov772/reviewers-auth
+/backend/app/db/session.py                                     @alexkarpov772/reviewers-auth
+/backend/app/services/auth.py                                  @alexkarpov772/reviewers-auth
+/backend/app/services/refresh_sessions.py                      @alexkarpov772/reviewers-auth
+/backend/app/core/security.py                                  @alexkarpov772/reviewers-auth
+/backend/app/core/security/**                                  @alexkarpov772/reviewers-auth
+/backend/app/core/inbound_webhook_auth.py                      @alexkarpov772/reviewers-auth
+
+# RBAC/ABAC policy engine and query filtering.
+/backend/app/modules/rbac_abac/**                              @alexkarpov772/reviewers-rbac-abac
+
+# Files domain + file APIs/services/storage.
+/backend/app/modules/files/**                                  @alexkarpov772/reviewers-files
+/backend/app/api/routes/files.py                               @alexkarpov772/reviewers-files
+/backend/app/domains/files/**                                  @alexkarpov772/reviewers-files
+
+# Schema/data-plane changes.
+/backend/app/migrations/**                                     @alexkarpov772/reviewers-data-platform
+
+# CI/CD and runtime perimeter configuration.
+/.github/workflows/**                                          @alexkarpov772/reviewers-platform-infra
+/proxy/**                                                      @alexkarpov772/reviewers-platform-infra
+/infra/**                                                      @alexkarpov772/reviewers-platform-infra
+/config/**                                                     @alexkarpov772/reviewers-platform-infra
