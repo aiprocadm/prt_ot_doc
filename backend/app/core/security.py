@@ -512,14 +512,18 @@ def rbac(required_roles: list[str] | None = None) -> Callable[..., Any]:
                     detail="Company assignment mismatch",
                 )
 
-        role_candidates: set[str] = {token_role} if token_role else set()
-        token_roles = payload.get("roles")
-        if isinstance(token_roles, Iterable) and not isinstance(token_roles, (str, bytes)):
-            role_candidates.update(str(role).lower() for role in token_roles if role)
-        role_candidates.add(user.role.value.lower())
-        role_candidates.update(
+        persisted_roles: set[str] = {user.role.value.lower()}
+        persisted_roles.update(
             str(role.role.value).lower() for role in getattr(user, "roles", []) if role
         )
+
+        role_candidates: set[str] = set(persisted_roles)
+        token_roles = payload.get("roles")
+        if isinstance(token_roles, Iterable) and not isinstance(token_roles, (str, bytes)):
+            declared_token_roles = {str(role).lower() for role in token_roles if role}
+            role_candidates.intersection_update(declared_token_roles | persisted_roles)
+        if token_role:
+            role_candidates.intersection_update({token_role} | persisted_roles)
 
         if normalized_roles and not role_candidates.intersection(normalized_roles):
             raise HTTPException(
@@ -537,7 +541,10 @@ def rbac(required_roles: list[str] | None = None) -> Callable[..., Any]:
             str(user.company_id) if getattr(user, "company_id", None) else None
         )
 
-        request.state.claims = dict(payload)
+        normalized_claims = dict(payload)
+        normalized_claims["role"] = user.role.value.lower()
+        normalized_claims["roles"] = sorted(role_candidates)
+        request.state.claims = normalized_claims
         request.state.current_user = user
         request.state.current_user_id = user.id
         request.state.current_user_company_id = session.info["current_user_company_id"]
