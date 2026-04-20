@@ -2,51 +2,102 @@
 
 _Last updated: 2026-04-19._
 
-This drill converts existing backup/restore tooling into a repeatable, evidence-backed stabilization check.
+This document defines a repeatable backup/restore drill with machine-readable evidence for stabilization sign-off.
 
-## Existing implementation evidence
+## Scope and goal
 
-- CLI operations exist in `backend/app/cli/main.py`:
-  - `backup` command (queued operation payload).
-  - `restore` command (queued operation payload).
-- CLI behavior is covered in `tests/test_cli_commands.py`.
-- Tenant restore runbook exists at `docs/runbooks/RESTORE_TENANT.md`.
+The drill validates that we can:
 
-## Drill objective
+1. Seed representative tenant data.
+2. Perform database + object-storage backup.
+3. Restore into a disposable environment.
+4. Verify DB counts/checksums + object metadata/content integrity.
+5. Execute an application smoke boot check against the restored DB.
 
-Validate that backup/restore workflow can be executed and audited without tenant-scope violations, with explicit artifacts captured for release readiness.
+## Prerequisites
 
-## Drill procedure (current executable steps)
+- Python 3.12+.
+- Backend dependencies installed:
 
-1. **Record baseline context**
-   - Capture git SHA and environment name used for the drill.
-2. **Trigger backup operation**
-   - Run: `python -m backend.app.cli.main backup --triggered-by stabilization-drill --json`
-   - Save stdout JSON artifact.
-3. **Trigger restore operation (test mode)**
-   - Run: `python -m backend.app.cli.main restore --mode test --json`
-   - Save stdout JSON artifact.
-4. **Run post-restore isolation checks**
-   - Run targeted suites:
-     - `pytest tests/integration/test_tenant_isolation.py`
-     - `pytest tests/integration/test_cross_tenant_resource_matrix.py`
-5. **Run smoke health checks**
-   - Use `scripts/smoke.sh` or `make smoke` path used by `.github/workflows/ci.yml` compose smoke job, depending on environment capabilities.
+```bash
+python -m pip install -r requirements.txt -r requirements-dev.txt
+```
 
-## Required evidence artifacts
+- Local shell environment that can run subprocess commands.
 
-- CLI JSON output for backup and restore command executions.
-- Test reports for post-restore tenant isolation checks.
-- Any smoke logs collected from the deployment target.
+> The current scripted drill uses disposable local SQLite + filesystem object storage to avoid production coupling. In CI this is still a non-prod environment.
 
-## Explicit current gaps
+## Command
 
-- `backend/app/cli/main.py` emits queued operation records; it does not itself perform infrastructure snapshot/restore.
-- `docs/runbooks/RESTORE_TENANT.md` is high-level and does not prescribe artifact naming or retention windows.
-- No dedicated CI workflow currently executes this drill end-to-end on a schedule.
+Run from repository root:
 
-## Acceptance criteria for this workstream
+```bash
+python scripts/restore_drill.py --output-dir artifacts/restore-drill
+```
 
-- Drill is reproducible from this document using only existing scripts/commands.
-- Every execution produces an evidence bundle (CLI outputs + test logs + smoke result).
-- Any failed tenant-isolation check blocks stabilization sign-off.
+Optional flags:
+
+- `--tenant-slug <slug>`: override the seeded representative tenant slug.
+- `--output-dir <path>`: move evidence output location (default is `artifacts/restore-drill`).
+
+## Evidence output
+
+The script writes:
+
+- `artifacts/restore-drill/<timestamp>.json` (immutable per run)
+- `artifacts/restore-drill/latest.json` (latest pointer)
+
+Top-level JSON keys:
+
+- `drill`: run metadata, duration, RTO/RPO assumptions.
+- `seed`: seeded counts and object manifest.
+- `backup`: backup artifact checksums.
+- `restore.state`: restored state snapshot.
+- `restore.verification`: boolean checks + mismatch list.
+- `smoke_boot`: CLI health check command/result.
+- `success`: aggregate pass/fail.
+
+## Evidence interpretation
+
+Treat drill run as **pass** only when all are true:
+
+- `success == true`
+- `restore.verification.counts_match == true`
+- `restore.verification.documents_checksum_match == true`
+- `restore.verification.object_content_and_metadata_match == true`
+- `smoke_boot.exit_code == 0`
+
+Treat run as **fail** if any condition above is false or if `object_mismatches` is non-empty.
+
+## CI/manual workflow
+
+Workflow file: `.github/workflows/restore-drill.yml`.
+
+- Trigger modes:
+  - Weekly schedule (non-prod): Mondays at 03:30 UTC.
+  - Manual trigger: `workflow_dispatch`.
+- Published artifact: `restore-drill-evidence` upload of `artifacts/restore-drill/`.
+
+## RTO/RPO assumptions (current)
+
+The current drill encodes assumptions in evidence JSON:
+
+- `assumed_rto_seconds = 900` (15 minutes)
+- `assumed_rpo_seconds = 300` (5 minutes)
+
+These are stabilization assumptions for drill scoring and must be revisited before production compliance sign-off.
+
+## Unresolved risks
+
+1. The drill currently validates a representative local backup/restore path, not provider-native snapshots (e.g., managed Postgres snapshots, S3 versioned restore).
+2. No chaos/fault injection is included (partial object loss, checksum corruption mid-restore, WAL gap simulation).
+3. Smoke verification is limited to CLI health boot and does not yet include full HTTP route smoke against a restored deployment.
+4. No automatic alerting/escalation integration yet (artifact is uploaded but not policy-gated in CI).
+
+## Cross-links to operational runbooks
+
+- Tenant restore operational sequence: `docs/runbooks/RESTORE_TENANT.md`
+- Storage incident recovery context: `docs/runbooks/STORAGE_ISSUES.md`
+- Broader operational guidance: `docs/OPERATIONS.md`
+
+Use this drill evidence as input for those runbooks when planning staging/prod restore rehearsals.
