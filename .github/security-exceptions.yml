@@ -1,0 +1,10 @@
+# Security exceptions are temporary risk acceptances.
+# Required fields for every record:
+# - id: finding identifier (CVE/GHSA/etc.)
+# - tool: scanner that emits the finding (trivy, gitleaks, bandit, ...)
+# - category: vulnerability | secret | sast | container
+# - owner: team or person accountable for remediation
+# - reason: business/technical reason the exception is needed
+# - expires_on: YYYY-MM-DD (CI rejects expired entries)
+# Optional fields: created_on, scope.paths, ticket
+exceptions: []
