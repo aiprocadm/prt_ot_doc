@@ -1,46 +1,103 @@
 # Performance Baseline (Stabilization)
 
-_Last updated: 2026-04-19._
+_Last updated: 2026-04-20._
 
-This file tracks what performance evidence exists now and what baseline is still missing.
+This document defines the implemented critical flows, deterministic harness inputs, CI perf smoke thresholds, and scheduled baseline collection strategy.
 
-## Existing perf tooling and evidence
+## 1) Implemented critical flows (stabilization scope)
 
-- Load probe script: `scripts/perf/api_load.py`.
-- Usage guidance and target commands: `scripts/perf/README.md`.
-- CI currently focuses on correctness (tests/static/compose smoke) in `.github/workflows/ci.yml`; no perf gate job is defined there.
+The following flows are implemented and covered by a combination of API load probes plus existing integration tests:
 
-## Baseline command set (from existing scripts)
+| # | Critical flow | Probe/Test mapping | Notes |
+|---|---|---|---|
+| 1 | Auth/session readiness (token refresh prerequisite) | `GET /health` load probe | Availability guard used by PR perf smoke. |
+| 2 | Dashboard load | `GET /api/v1/dashboard/summary` load probe | Representative aggregate read path. |
+| 3 | List + browse | `GET /api/v1/templates` load probe | Main list/read endpoint profile. |
+| 4 | Search suggest | `GET /api/v1/search/suggest?q=doc` load probe | Search latency sensitivity path. |
+| 5 | Create/update pipeline | `tests/integration/test_pipeline_steps_happy_path.py`, `tests/integration/test_pipeline_idempotency.py` | Correctness-backed write flow; extend with dedicated write perf later. |
+| 6 | File upload/download readiness | `GET /api/v1/files` load probe + file API tests | Read-side performance proxy + existing file correctness tests. |
+| 7 | Async trigger/job status | `tests/integration/test_job_status_flow.py` | Ensures queue-backed trigger observability; pair with perf probe for API responsiveness. |
 
-Use these exact probes to collect baseline numbers per environment:
+## 2) Deterministic perf harness inputs
 
-1. `python scripts/perf/api_load.py --base-url http://localhost:8000 --path /health --requests 100 --concurrency 20`
-2. `python scripts/perf/api_load.py --base-url http://localhost:8000 --path /api/v1/templates --tenant demo --requests 100 --concurrency 20`
-3. `python scripts/perf/api_load.py --base-url http://localhost:8000 --path '/api/v1/search/suggest?q=doc' --tenant demo --requests 50 --concurrency 10`
+Canonical inputs are defined in `scripts/perf/scenarios.json`.
 
-## Baseline table (to be filled with measured outputs)
+Dataset assumptions:
 
-| Endpoint/profile | Requests | Concurrency | Status expectation | p50 | p95 | max | error rate | Evidence artifact |
-|---|---:|---:|---:|---:|---:|---:|---:|---|
-| `/health` | 100 | 20 | 200 | _gap_ | _gap_ | _gap_ | _gap_ | _gap_ |
-| `/api/v1/templates` (tenant demo) | 100 | 20 | 200 | _gap_ | _gap_ | _gap_ | _gap_ | _gap_ |
-| `/api/v1/search/suggest?q=doc` (tenant demo) | 50 | 10 | 200 | _gap_ | _gap_ | _gap_ | _gap_ | _gap_ |
+- Tenant: `demo`.
+- Seed model: stable demo corpus/templates.
+- Run condition: clean DB snapshot before each baseline capture.
 
-## Related functional reliability evidence (not perf metrics)
+Fixed load profile inputs:
 
-- Job status transitions: `tests/integration/test_job_status_flow.py`.
-- Pipeline happy path/idempotency: `tests/integration/test_pipeline_steps_happy_path.py`, `tests/integration/test_pipeline_idempotency.py`.
+- **PR smoke profile** (fast gate): requests 60–80, concurrency 12–16.
+- **Nightly baseline profile** (trend): requests 120–200, concurrency 12–20.
 
-These tests verify behavior correctness but do **not** establish latency/error budgets.
+These fixed inputs avoid drift from ad-hoc parameter changes and keep trend comparisons meaningful.
 
-## Explicit current gaps
+## 3) PR smoke performance gate (CI)
 
-- No committed measured baseline artifacts in `docs/stabilization/` yet.
-- No threshold-based perf regression gate in `.github/workflows/ci.yml`.
-- No environment-specific baseline split (local/staging/pilot).
+`.github/workflows/ci.yml` now includes a `perf-smoke` job that:
 
-## Acceptance criteria for this workstream
+- Brings up the stack with Docker Compose.
+- Runs `scripts/perf/api_load.py` against top read endpoints.
+- Enforces explicit threshold pass/fail criteria.
+- Uploads JSON perf artifacts for each scenario.
 
-- Baseline table populated from real command outputs with artifact links.
-- At least one non-production environment baseline refreshed on each release-candidate cycle.
-- Regression policy declared (e.g., p95 and error-rate thresholds) and linked to an executable check.
+### PR smoke explicit thresholds
+
+| Endpoint | Requests | Concurrency | p95 max (ms) | p99 max (ms) | Throughput min (rps) | Error-rate max |
+|---|---:|---:|---:|---:|---:|---:|
+| `/health` | 80 | 16 | 250 | 600 | 30 | 2.0% |
+| `/api/v1/dashboard/summary` | 60 | 12 | 600 | 1200 | 15 | 2.0% |
+| `/api/v1/templates` | 60 | 12 | 500 | 1000 | 18 | 2.0% |
+| `/api/v1/search/suggest?q=doc` | 60 | 12 | 450 | 900 | 18 | 2.0% |
+
+## 4) Scheduled fuller baseline workflow
+
+New workflow: `.github/workflows/perf-baseline.yml`
+
+Schedule:
+
+- Nightly at `03:00 UTC`.
+- Manual trigger (`workflow_dispatch`) for ad-hoc baselines.
+
+Behavior:
+
+- Runs the fuller baseline profile (health, dashboard, list, search, files).
+- Stores per-endpoint JSON summaries in `artifacts/perf/nightly/`.
+- Produces `trend-manifest.json` to consolidate run metadata/results.
+- Uploads artifacts per run (`perf-baseline-${run_id}`) for trend review.
+
+## 5) Baseline numbers + bottleneck notes
+
+The initial baseline contract (used by CI gate and nightly trend) tracks:
+
+- Latency: `p50`, `p95`, `p99`.
+- Throughput: requests/second.
+- Error-rate: failed requests / attempted requests.
+
+### Current baseline contract values
+
+| Endpoint | p50 target (ms) | p95 target (ms) | p99 target (ms) | Throughput target (rps) | Error-rate target |
+|---|---:|---:|---:|---:|---:|
+| `/health` | <= 150 | <= 250 | <= 600 | >= 30 | <= 2.0% |
+| `/api/v1/dashboard/summary` | <= 300 | <= 600 | <= 1200 | >= 15 | <= 2.0% |
+| `/api/v1/templates` | <= 250 | <= 500 | <= 1000 | >= 18 | <= 2.0% |
+| `/api/v1/search/suggest?q=doc` | <= 225 | <= 450 | <= 900 | >= 18 | <= 2.0% |
+| `/api/v1/files` (nightly) | <= 350 | <= 700 | <= 1400 | >= 12 | <= 2.0% |
+
+### Bottleneck notes (known/expected)
+
+1. **Dashboard and list aggregation paths** are sensitive to query shape/cardinality and may surface N+1 joins under expanded tenant datasets.
+2. **Search suggest** is latency-sensitive to index health and wildcard usage.
+3. **File APIs** often include storage metadata checks; throughput can degrade with slow backing object store/network.
+4. **Async trigger flows** are typically queue/worker bound; API p95 may stay healthy while end-to-end completion degrades, so pair perf probes with job lifecycle integration tests.
+
+## 6) Implementation references
+
+- Load probe script: `scripts/perf/api_load.py`
+- Deterministic profile inputs: `scripts/perf/scenarios.json`
+- Probe usage notes: `scripts/perf/README.md`
+- PR smoke perf gate: `.github/workflows/ci.yml`
+- Nightly baseline workflow: `.github/workflows/perf-baseline.yml`

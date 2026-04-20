@@ -229,3 +229,105 @@ jobs:
       - name: Tear down
         if: always()
         run: docker compose down -v
+
+
+  perf-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install backend dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Prepare env
+        run: cp .env.example .env
+
+      - name: Enable Redis memory overcommit
+        run: sudo sysctl -w vm.overcommit_memory=1
+
+      - name: Build and up
+        run: docker compose up -d --build
+
+      - name: Perf smoke gate (deterministic profiles)
+        run: |
+          mkdir -p artifacts/perf
+          python scripts/perf/api_load.py \
+            --base-url http://localhost:8000 \
+            --path /health \
+            --requests 80 \
+            --concurrency 16 \
+            --expect-status 200 \
+            --max-error-rate 0.02 \
+            --min-throughput 30 \
+            --max-p95-ms 250 \
+            --max-p99-ms 600 \
+            --output-json artifacts/perf/health-smoke.json
+
+          python scripts/perf/api_load.py \
+            --base-url http://localhost:8000 \
+            --path /api/v1/dashboard/summary \
+            --tenant demo \
+            --requests 60 \
+            --concurrency 12 \
+            --expect-status 200 \
+            --max-error-rate 0.02 \
+            --min-throughput 15 \
+            --max-p95-ms 600 \
+            --max-p99-ms 1200 \
+            --output-json artifacts/perf/dashboard-smoke.json
+
+          python scripts/perf/api_load.py \
+            --base-url http://localhost:8000 \
+            --path /api/v1/templates \
+            --tenant demo \
+            --requests 60 \
+            --concurrency 12 \
+            --expect-status 200 \
+            --max-error-rate 0.02 \
+            --min-throughput 18 \
+            --max-p95-ms 500 \
+            --max-p99-ms 1000 \
+            --output-json artifacts/perf/templates-smoke.json
+
+          python scripts/perf/api_load.py \
+            --base-url http://localhost:8000 \
+            --path '/api/v1/search/suggest?q=doc' \
+            --tenant demo \
+            --requests 60 \
+            --concurrency 12 \
+            --expect-status 200 \
+            --max-error-rate 0.02 \
+            --min-throughput 18 \
+            --max-p95-ms 450 \
+            --max-p99-ms 900 \
+            --output-json artifacts/perf/search-smoke.json
+
+      - name: Upload perf smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-smoke-report
+          path: artifacts/perf/*.json
+
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --tail=200 > perf-smoke-logs.txt
+
+      - name: Upload perf logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-smoke-logs
+          path: perf-smoke-logs.txt
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
