@@ -1,33 +1,44 @@
 # Security Gates (Stabilization)
 
-_Last updated: 2026-04-19._
+_Last updated: 2026-04-20._
 
-This document maps currently implemented security-related checks to concrete workflows, scripts, and tests.
+This document defines the mandatory security gates in `.github/workflows/ci.yml`, including fail thresholds, scope exclusions, and exception handling.
 
-## Gate inventory (current state)
+## Security exception registry
 
-| Gate | Where implemented | Enforced today | Evidence path | Explicit gap |
+All temporary security exceptions are tracked in `.github/security-exceptions.yml` using this schema:
+
+```yaml
+exceptions:
+  - id: CVE-2026-0000            # finding identifier (CVE/GHSA/rule id)
+    tool: trivy                  # scanner name
+    category: vulnerability      # vulnerability | secret | sast | container
+    owner: team-platform         # accountable owner
+    reason: "Waiting for upstream fix"
+    expires_on: 2026-06-30       # ISO date, required
+    created_on: 2026-04-20       # optional
+    ticket: SEC-1234             # optional
+    scope:                       # optional
+      paths:
+        - backend/
+```
+
+CI enforces that every exception has `owner`, `reason`, and `expires_on`, and fails if any entry is expired (`expires_on < today`).
+
+## Gate inventory
+
+| Gate | CI job | Tooling | Fail condition | Scope exclusions |
 |---|---|---|---|---|
-| Scoped query guard | CI workflow step | Yes (blocking in CI job) | `.github/workflows/ci.yml`, `scripts/ci/check_scoped_queries.py` | No consolidated exception handling policy in one doc. |
-| Runtime/build artifact guard | CI workflow step | Yes (blocking in CI job) | `.github/workflows/ci.yml`, `scripts/ci/check_runtime_artifacts.py` | Gate intent/coverage by artifact class not documented centrally. |
-| Default secret guard | CI workflow step | Yes (blocking in CI job) | `.github/workflows/ci.yml`, `scripts/ci/check_default_secrets.py` | Secret scanning scope outside configured patterns is not tracked here. |
-| Static tenant guard checks | CI workflow step | Yes (blocking in CI job) | `.github/workflows/ci.yml`, `scripts/ci/static_gates.sh` | No dedicated report artifact for static gate findings trend. |
-| Tenant mismatch/ABAC runtime tests | test suite | Yes (inside backend pytest run) | `tests/test_rbac_abac.py`, `tests/test_tenant_security.py`, `tests/integration/test_abac_query_isolation.py` | Not isolated into a dedicated required test subset. |
-| Cross-tenant resource matrix checks | integration suite | Yes (inside backend pytest run) | `tests/integration/test_cross_tenant_resource_matrix.py`, `tests/integration/test_tenant_isolation.py` | Matrix expansion process for new endpoints is manual. |
+| Exception metadata validity | `security-exceptions` | `scripts/ci/check_security_exceptions.py` | Any missing required metadata or expired exception. | None. |
+| Dependency vulnerability scanning | `dependency-vulnerability-scan` | Trivy filesystem dependency scan (`vuln-type=library`) | Any `HIGH`/`CRITICAL` dependency finding after applying active Trivy exceptions. | Ignores `LOW`/`MEDIUM`; ignores unfixed findings (`ignore-unfixed=true`). |
+| Secret scanning | `secret-scan` | Gitleaks | Any detected secret pattern in current workspace scan. | Historic git history is excluded (`--no-git`) to avoid re-failing on already-rewritten history outside this branch scope. |
+| SAST/static analysis | `sast-static-analysis` | Bandit (`-lll -iii`) | Any `HIGH` severity + `HIGH` confidence Python finding. | `LOW`/`MEDIUM` severity and lower-confidence findings are non-blocking in this gate. |
+| Container image scanning | `container-image-scan` | Docker build + Trivy image scan | Any `HIGH`/`CRITICAL` image finding after applying active Trivy exceptions. | Ignores `LOW`/`MEDIUM`; ignores unfixed findings (`ignore-unfixed=true`). |
+| SBOM generation | `sbom-generation` | Anchore SBOM action (CycloneDX JSON) | Job fails if SBOM cannot be generated from the built API image. | Does not perform policy blocking on package severity itself; this job is evidence/artifact generation. |
 
-## Supporting security implementation evidence
+## Operational notes
 
-- Authorization model code: `backend/app/modules/rbac_abac/permission_codes.py`, `backend/app/modules/rbac_abac/rules.py`, `backend/app/modules/rbac_abac/engine.py`.
-- Tenant-sensitive file paths enforce row ownership in API and service layers: `backend/app/modules/files/api.py`, `backend/app/modules/files/service.py`, `backend/app/modules/files/storage.py`.
-
-## Explicit current gaps
-
-1. No single “security sign-off bundle” artifact is produced per CI run.
-2. Browser e2e workflow (`.github/workflows/e2e-smoke.yml`) is not a strict security gate and can skip credentialed checks when secrets are unset.
-3. Security gate ownership/escalation path is not encoded in repository docs.
-
-## Acceptance criteria for this workstream
-
-- Every required security gate is mapped to a blocking CI step or mandatory test subset.
-- Security gate failures are traceable to a single evidence bundle per run.
-- RBAC/ABAC and tenant-isolation verification remain mandatory for release candidate promotion.
+- High/Critical vulnerability blocking is intentionally centralized in Trivy dependency and container gates.
+- SAST blocking is intentionally limited to high-confidence/high-severity findings to reduce false-positive noise.
+- Exception records are temporary only and must include a concrete owner and remediation rationale.
+- SBOM is uploaded as a CI artifact (`sbom-cyclonedx`) for audit and downstream supply-chain tooling.
