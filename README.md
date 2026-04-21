@@ -68,6 +68,8 @@ celery -A app.services.celery_app:celery_app worker --loglevel=info -Q default,p
 ```
 
 ## Verification commands
+Canonical testing strategy, CI mapping, and merge gates: `docs/TESTING.md`.
+
 ```bash
 # backend
 pytest -q tests/test_entrypoints.py

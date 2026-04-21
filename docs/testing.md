@@ -2,6 +2,6 @@
 
 This file is kept only for backward-compatible links.
 
-Use the canonical testing guide instead:
+Use the canonical testing guide:
 
 - `docs/TESTING.md`

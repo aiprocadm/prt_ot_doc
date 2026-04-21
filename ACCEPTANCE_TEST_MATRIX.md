@@ -31,6 +31,24 @@
 | TZ Wave 5 — EDO adapter factory (stub vs HTTP) | `backend/app/services/integrations/factory.py`, `tests/services/test_edo_integration_factory.py` | `./scripts/pytest.sh tests/services/test_edo_integration_factory.py` |
 | TZ Wave 4 — workspace hub routes render | `frontend/src/pages/workspace/WorkspaceAttentionPage.tsx`, `WorkspaceDataQualityPage.tsx`, `SyncConflictHelpPage.tsx` | `npm --prefix frontend run build` |
 
+
+## CI / merge-gate mapping
+
+Связка с каноническим гайдом: `docs/TESTING.md`.
+
+- **Что запускается локально (pre-PR / RC):** `make final-acceptance` и целевые команды из сценариев этой матрицы.
+- **Что запускается в CI автоматически:**
+  - backend/integration slices → `backend-tests`,
+  - контрактные проверки → `openapi-contract`,
+  - frontend flows/quality → `frontend-tests`,
+  - compose smoke → `smoke-compose`,
+  - perf smoke → `perf-smoke`.
+- **Что блокирует merge:** любой fail в перечисленных CI jobs, а также security gates из CI workflow.
+
+Связанные документы:
+- `docs/stabilization/coverage.md` — coverage baseline и non-regression gate в `backend-tests`;
+- `docs/TESTING.md` — общая тестовая пирамида и обязательные pre-PR/RC проверки.
+
 ## 3. Acceptance bundle commands
 
 ```bash

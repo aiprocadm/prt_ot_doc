@@ -56,3 +56,16 @@ The script compares:
 - per-module/service aggregates by path patterns
 
 against the committed baseline and exits non-zero on regressions.
+
+
+## Cross-reference: testing and acceptance
+
+- Canonical testing strategy and CI map: `docs/TESTING.md`.
+- Acceptance scenario matrix: `ACCEPTANCE_TEST_MATRIX.md`.
+
+### Merge blocking behavior
+
+Coverage is a **hard merge gate** via CI job `backend-tests`:
+- if `pytest` coverage collection fails, job fails;
+- if `check_backend_coverage_baseline.py` detects regression against `docs/stabilization/backend_coverage_baseline.json`, job fails;
+- any failure in `backend-tests` blocks merge until fixed.
