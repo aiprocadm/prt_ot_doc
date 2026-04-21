@@ -460,6 +460,7 @@ class Settings(BaseSettings):
     enable_metrics: bool = Field(True, alias="ENABLE_METRICS")
     enable_openapi_docs: bool = Field(True, alias="ENABLE_OPENAPI_DOCS")
     enable_gzip: bool = Field(True, alias="ENABLE_GZIP")
+    enable_files_legacy_routes: bool = Field(True, alias="ENABLE_FILES_LEGACY_ROUTES")
     max_request_body_bytes: int = Field(1_048_576, alias="MAX_REQUEST_BODY_BYTES")
     request_timeout_seconds: float = Field(15.0, alias="REQUEST_TIMEOUT_SECONDS")
     trace_header_name: str = Field("X-Correlation-Id", alias="TRACE_HEADER_NAME")
@@ -679,6 +680,7 @@ class Settings(BaseSettings):
 
         if self.app_env == "production":
             self.enable_openapi_docs = False
+            self.enable_files_legacy_routes = False
         return self
 
     @property
