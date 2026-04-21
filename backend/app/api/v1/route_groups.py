@@ -5,6 +5,7 @@ from collections.abc import Iterable
 from fastapi import APIRouter, Depends
 
 from app.api.dependencies import require_tenant_slug
+from app.core.config import get_settings
 from app.api.routes import (
     admin_authz,
     admin_users,
@@ -117,7 +118,6 @@ COMPLIANCE_AND_ADMIN_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
 
 OPERATIONS_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
     (files_v1_router, {"prefix": "/files", "tags": ["files"]}),
-    (legacy_files_router, {"prefix": "/files", "tags": ["files-legacy"]}),
     (packs.router, {"prefix": "/packs", "tags": ["packs"]}),
     (client_portal.presets_router, {}),
     (client_portal.internal_router, {}),
@@ -138,6 +138,11 @@ OPERATIONS_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
     (pwa_sync.router, {}),
     (external_registry.router, {}),
     (reports.router, {"tags": ["reports"]}),
+)
+
+_LEGACY_FILES_ROUTER_REGISTRATION: RouterRegistration = (
+    legacy_files_router,
+    {"prefix": "/files-legacy", "tags": ["files-legacy"]},
 )
 
 DOCUMENT_CORE_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
@@ -184,8 +189,19 @@ def create_public_router() -> APIRouter:
 def create_tenant_router() -> APIRouter:
     router = APIRouter(dependencies=[Depends(require_tenant_slug)])
     for group_name in ROUTER_GROUP_ORDER[1:]:
-        _include_registrations(router, ROUTER_GROUPS[group_name])
+        registrations = ROUTER_GROUPS[group_name]
+        if group_name == "operations":
+            registrations = _operations_router_registrations()
+        _include_registrations(router, registrations)
     return router
+
+
+def _operations_router_registrations() -> tuple[RouterRegistration, ...]:
+    settings = get_settings()
+    registrations = list(OPERATIONS_ROUTER_REGISTRATIONS)
+    if settings.enable_files_legacy_routes:
+        registrations.append(_LEGACY_FILES_ROUTER_REGISTRATION)
+    return tuple(registrations)
 
 
 def _include_registrations(router: APIRouter, registrations: Iterable[RouterRegistration]) -> None:
@@ -196,12 +212,15 @@ def _include_registrations(router: APIRouter, registrations: Iterable[RouterRegi
 def describe_router_groups() -> dict[str, list[dict[str, object]]]:
     description: dict[str, list[dict[str, object]]] = {}
     for group_name in ROUTER_GROUP_ORDER:
+        registrations = ROUTER_GROUPS[group_name]
+        if group_name == "operations":
+            registrations = _operations_router_registrations()
         description[group_name] = [
             {
                 "prefix": kwargs.get("prefix", ""),
                 "tags": list(kwargs.get("tags", [])),
                 "routes": len(child.routes),
             }
-            for child, kwargs in ROUTER_GROUPS[group_name]
+            for child, kwargs in registrations
         ]
     return description

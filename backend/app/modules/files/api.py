@@ -56,6 +56,20 @@ from app.services.idempotency import IdempotencyService, normalize_idempotency_k
 router = APIRouter()
 
 # Canonical files API router for `/api/v1/files` endpoints.
+_FILE_UPLOAD_ROLES = ["admin", "employee"]
+_FILE_READ_ROLES = ["admin", "employee", "client_admin", "client_user"]
+
+
+def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
+    return str(getattr(tenant, "id", "")) or None
+
+
+WRITE_ACCESS_DEP = Depends(
+    abac(_tenant_resource_id, required_roles=_FILE_UPLOAD_ROLES, action="write files")
+)
+READ_ACCESS_DEP = Depends(
+    abac(_tenant_resource_id, required_roles=_FILE_READ_ROLES, action="read files")
+)
 
 # Route-level access guards aligned with legacy files API.
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)):
@@ -144,6 +158,9 @@ async def download_url(
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
     access: AccessContext = ReadAccessDep,
+    access: AccessContext = READ_ACCESS_DEP,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
 ) -> DownloadURLResponse:
     url = await service.issue_download_url(
         session=session,
@@ -301,6 +318,7 @@ async def reindex_file_content_v2(
 async def get_download_url_v2(
     file_id: str,
     request: Request,
+    access: AccessContext = READ_ACCESS_DEP,
     payload: DownloadUrlRequest | None = None,
     purpose: str | None = None,
     ttl: int = 600,
@@ -319,6 +337,7 @@ async def get_download_url_v2(
         actor_id=getattr(access.user, "id", None),
         actor_role=getattr(access, "role", None),
         actor_company_id=access.company_id,
+        access=access,
         ip=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent"),
         request_id=getattr(request.state, "trace_id", None),
@@ -332,6 +351,7 @@ async def get_download_url_v2(
 async def link_file_v2(
     file_id: str,
     payload: LinkFileRequest,
+    access: AccessContext = WRITE_ACCESS_DEP,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
     _: AccessContext = AccessDep,
@@ -357,6 +377,7 @@ async def link_file_v2(
 async def list_entity_files_v2(
     entity_type: str,
     entity_id: str,
+    access: AccessContext = READ_ACCESS_DEP,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
 ) -> list[EntityFileListItem]:
@@ -390,6 +411,7 @@ async def get_signed_url_v2(
     file_id: str,
     payload: SignedUrlRequest,
     request: Request,
+    access: AccessContext = READ_ACCESS_DEP,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
     access: AccessContext = ReadAccessDep,
@@ -403,6 +425,7 @@ async def get_signed_url_v2(
         actor_id=getattr(access.user, "id", None),
         actor_role=getattr(access, "role", None),
         actor_company_id=access.company_id,
+        access=access,
         ip=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent"),
         request_id=getattr(request.state, "trace_id", None),
@@ -417,6 +440,7 @@ async def get_signed_url_v2(
 async def delete_link_v2(
     file_id: str,
     link_id: str,
+    access: AccessContext = WRITE_ACCESS_DEP,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
     _: AccessContext = AccessDep,
@@ -431,6 +455,7 @@ async def delete_link_v2(
 @router.post("/abort-upload")
 async def abort_upload_v2(
     payload: CompleteUploadRequest,
+    access: AccessContext = WRITE_ACCESS_DEP,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
     _: AccessContext = AccessDep,
@@ -444,6 +469,7 @@ async def abort_upload_v2(
 @router.post("/upload-multipart", response_model=FinalizeUploadResponse)
 async def upload_multipart_v1(
     file: UploadFile = File(...),
+    access: AccessContext = WRITE_ACCESS_DEP,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
     _: AccessContext = AccessDep,
@@ -476,6 +502,7 @@ async def upload_multipart_v1(
 
 @router.get("", response_model=list[FileDto])
 async def list_files_v1(
+    access: AccessContext = READ_ACCESS_DEP,
     status: str | None = None,
     query: str | None = None,
     meta_document_version_id: str | None = Query(default=None, alias="meta.document_version_id"),
@@ -502,6 +529,7 @@ async def list_files_v1(
 async def create_new_version_v1(
     file_id: str,
     payload: NewFileVersionRequest,
+    access: AccessContext = WRITE_ACCESS_DEP,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
     _: AccessContext = AccessDep,
@@ -529,6 +557,7 @@ async def create_new_version_v1(
 @router.get("/{file_id}/versions", response_model=list[FileVersionDto])
 async def list_file_versions_v1(
     file_id: str,
+    access: AccessContext = READ_ACCESS_DEP,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
     access: AccessContext = ReadAccessDep,
@@ -573,5 +602,11 @@ async def delete_file_v1(
         user_agent=request.headers.get("user-agent"),
         request_id=getattr(request.state, "trace_id", None),
     )
+    access: AccessContext = WRITE_ACCESS_DEP,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> dict[str, str]:
+    svc = service.FileService(session=session, tenant_id=str(tenant.id))
+    await svc.delete_file(file_id=file_id, access=access)
     await session.commit()
     return {"status":"deleted"}
