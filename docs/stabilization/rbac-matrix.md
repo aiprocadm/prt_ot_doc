@@ -24,5 +24,30 @@ This matrix is derived from the current backend authorization code paths and the
 
 ## Notes for stabilization
 
-- There are two permission vocabularies in code (`app.core.rbac_abac.ROLE_PERMISSIONS` and `app.modules.rbac_abac.rules.ROLE_PERMISSIONS`). Stabilization tests intentionally target real route guards to lock expected runtime behavior.
+- Permission vocabulary source of truth: `backend/app/core/rbac_abac.py` (`RESOURCE_PERMISSIONS`, `ROLE_PERMISSIONS`, `ROLE_ALIASES`).
+- `backend/app/modules/rbac_abac/rules.py` is a compatibility re-export only and must not define its own role→permission map.
 - UI visibility is non-authoritative. Server-side `rbac()/abac()` + `require_permission()` checks are the enforcement boundary.
+
+## Permission codes from core
+
+Below is the factual permission vocabulary derived from `RESOURCE_PERMISSIONS` in `backend/app/core/rbac_abac.py`:
+
+- `admin`: `create`, `delete`, `list`, `read`, `update`
+- `briefings`: `create`, `delete`, `list`, `read`, `update`
+- `document_jobs`: `cancel_job`, `list`, `read`, `retry_job`, `run_pipeline`
+- `document_versions`: `create`, `delete`, `download`, `list`, `read`, `update`
+- `documents`: `approve`, `create`, `delete`, `download`, `export`, `list`, `read`, `run_pipeline`, `send_edo`, `sign`, `update`
+- `files`: `create`, `delete`, `download`, `list`, `read`, `sign`
+- `incidents`: `approve`, `create`, `delete`, `export`, `list`, `read`, `update`
+- `inspections`: `approve`, `create`, `delete`, `export`, `list`, `read`, `update`
+- `package_presets`: `create`, `delete`, `list`, `read`, `update`
+- `package_profiles`: `create`, `delete`, `list`, `read`, `update`
+- `ppe_issues`: `create`, `delete`, `list`, `read`, `update`
+- `ppe_norms`: `create`, `delete`, `list`, `read`, `update`
+- `reports`: `download`, `export`, `list`, `read`
+- `risk_maps`: `approve`, `create`, `delete`, `export`, `list`, `read`, `update`
+- `risk_methodologies`: `create`, `delete`, `list`, `read`, `update`
+- `template_versions`: `approve`, `create`, `delete`, `list`, `read`, `update`
+- `templates`: `approve`, `create`, `delete`, `list`, `read`, `update`
+- `trainings`: `approve`, `create`, `delete`, `list`, `read`, `update`
+- `warehouse_stock`: `create`, `delete`, `list`, `read`, `update`
