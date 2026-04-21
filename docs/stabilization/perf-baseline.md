@@ -1,6 +1,6 @@
 # Performance Baseline (Stabilization)
 
-_Last updated: 2026-04-20._
+_Last updated: 2026-04-20 (expanded scenarios + threshold policy)._
 
 This document defines the implemented critical flows, deterministic harness inputs, CI perf smoke thresholds, and scheduled baseline collection strategy.
 
@@ -15,8 +15,9 @@ The following flows are implemented and covered by a combination of API load pro
 | 3 | List + browse | `GET /api/v1/templates` load probe | Main list/read endpoint profile. |
 | 4 | Search suggest | `GET /api/v1/search/suggest?q=doc` load probe | Search latency sensitivity path. |
 | 5 | Create/update pipeline | `tests/integration/test_pipeline_steps_happy_path.py`, `tests/integration/test_pipeline_idempotency.py` | Correctness-backed write flow; extend with dedicated write perf later. |
-| 6 | File upload/download readiness | `GET /api/v1/files` load probe + file API tests | Read-side performance proxy + existing file correctness tests. |
-| 7 | Async trigger/job status | `tests/integration/test_job_status_flow.py` | Ensures queue-backed trigger observability; pair with perf probe for API responsiveness. |
+| 6 | Document generate + apply-headers | Multi-step flow probe (`POST /api/v1/documents/generate` + `POST /api/v1/headers/documents/{id}/apply-headers`) | Added to nightly profile with idempotency keys. |
+| 7 | Files upload-init/finalize/download-url | Multi-step flow probe (`POST /api/v1/files:upload-init` → `POST /api/v1/files/{id}:finalize` → `POST /api/v1/files/{id}:download-url`) | Covers hot file upload/read URL path beyond simple list/read probe. |
+| 8 | Jobs status transitions | Multi-step flow probe (`POST /api/v1/jobs` → `GET /api/v1/jobs/{id}` → `POST /api/v1/jobs/{id}:cancel` → `POST /api/v1/jobs/{id}:retry`) | Adds lifecycle responsiveness measurement for async jobs API. |
 
 ## 2) Deterministic perf harness inputs
 
@@ -64,12 +65,53 @@ Schedule:
 
 Behavior:
 
-- Runs the fuller baseline profile (health, dashboard, list, search, files).
+- Runs the fuller baseline profile directly from `scripts/perf/scenarios.json`, including new multi-step flow probes.
 - Stores per-endpoint JSON summaries in `artifacts/perf/nightly/`.
 - Produces `trend-manifest.json` to consolidate run metadata/results.
+- Produces `summary.md` and `summary.csv` with p50/p95/p99/error-rate/throughput for every scenario.
 - Uploads artifacts per run (`perf-baseline-${run_id}`) for trend review.
 
-## 5) Baseline numbers + bottleneck notes
+## 5) Before/After baseline coverage
+
+### Before (until 2026-04-19)
+
+- Read-heavy nightly profile only:
+  - `/health`
+  - `/api/v1/dashboard/summary`
+  - `/api/v1/templates`
+  - `/api/v1/search/suggest?q=doc`
+  - `/api/v1/files`
+- Artifact shape: per-scenario JSON + `trend-manifest.json`.
+
+### After (from 2026-04-20)
+
+- Nightly profile includes previous read probes **plus**:
+  - `document_generate_apply_headers` (flow probe, idempotency aware),
+  - `files_upload_flow` (upload-init/finalize/download-url),
+  - `jobs_status_transitions` (status lifecycle probe).
+- Artifact shape expanded with rollups:
+  - per-scenario JSON,
+  - `trend-manifest.json`,
+  - `summary.md` + `summary.csv` (p50/p95/p99/error-rate/throughput).
+
+## 6) Threshold policy
+
+Policy levels:
+
+1. **PR smoke (blocking gate):**
+   - Enforces explicit max p95/p99, min throughput, and max error-rate per endpoint.
+   - Any threshold violation fails CI immediately.
+2. **Nightly baseline (trend gate):**
+   - Always captures full profile artifacts.
+   - Regression policy:
+     - warning if p95 increases by >20% vs rolling 7-run median,
+     - action required if p95 increases by >35% or error-rate >2.0% for two consecutive nightly runs,
+     - action required if throughput drops by >25% vs rolling 7-run median.
+3. **Flow probes (write/async paths):**
+   - Threshold checks apply to whole-flow latency and status success.
+   - Idempotency keys are required on steps that mutate state.
+
+## 7) Baseline numbers + bottleneck notes
 
 The initial baseline contract (used by CI gate and nightly trend) tracks:
 
@@ -94,7 +136,7 @@ The initial baseline contract (used by CI gate and nightly trend) tracks:
 3. **File APIs** often include storage metadata checks; throughput can degrade with slow backing object store/network.
 4. **Async trigger flows** are typically queue/worker bound; API p95 may stay healthy while end-to-end completion degrades, so pair perf probes with job lifecycle integration tests.
 
-## 6) Implementation references
+## 8) Implementation references
 
 - Load probe script: `scripts/perf/api_load.py`
 - Deterministic profile inputs: `scripts/perf/scenarios.json`
