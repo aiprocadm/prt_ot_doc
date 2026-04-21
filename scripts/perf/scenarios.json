@@ -2,7 +2,7 @@
   "dataset_assumptions": {
     "tenant": "demo",
     "seed": "demo tenant bootstrapped with stable templates and search corpus",
-    "notes": "Use a clean DB snapshot before each baseline run to keep list/search cardinality stable."
+    "notes": "Use a clean DB snapshot before each baseline run to keep list/search cardinality stable. For flow probes seed demo template/company/person and a reusable document_version_id for apply-headers."
   },
   "profiles": {
     "pr_smoke": [
@@ -94,6 +94,149 @@
         "concurrency": 12,
         "expect_status": 200,
         "tenant": "demo"
+      },
+      {
+        "name": "document_generate_apply_headers",
+        "path": "/api/v1/documents/generate",
+        "method": "FLOW",
+        "requests": 60,
+        "concurrency": 6,
+        "expect_status": 202,
+        "tenant": "demo",
+        "flow_steps": [
+          {
+            "method": "POST",
+            "path": "/api/v1/documents/generate",
+            "headers": {
+              "Idempotency-Key": "{{idempotency_key}}"
+            },
+            "body": {
+              "template_code": "Greeting",
+              "template_version": 1,
+              "company_id": "demo-company",
+              "person_id": "demo-person",
+              "data": {
+                "name": "Perf {{run_uuid}}"
+              }
+            },
+            "expect_status": 202,
+            "capture": {
+              "document_job_id": "job_id",
+              "document_version_id": "document_version_id"
+            }
+          },
+          {
+            "method": "POST",
+            "path": "/api/v1/headers/documents/demo-document-version-id/apply-headers",
+            "headers": {
+              "Idempotency-Key": "{{idempotency_key}}"
+            },
+            "body": {
+              "preset_code": "default",
+              "data": {
+                "source": "perf-baseline"
+              }
+            },
+            "expect_status": 202
+          }
+        ]
+      },
+      {
+        "name": "files_upload_flow",
+        "path": "/api/v1/files:upload-init",
+        "method": "FLOW",
+        "requests": 80,
+        "concurrency": 8,
+        "expect_status": 200,
+        "tenant": "demo",
+        "flow_steps": [
+          {
+            "method": "POST",
+            "path": "/api/v1/files:upload-init",
+            "headers": {
+              "Idempotency-Key": "{{idempotency_key}}"
+            },
+            "body": {
+              "filename": "perf-{{run_uuid}}.txt",
+              "content_type": "text/plain",
+              "size_bytes": 128,
+              "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "expect_status": 200,
+            "capture": {
+              "file_id": "file_id",
+              "version_id": "version_id"
+            }
+          },
+          {
+            "method": "POST",
+            "path": "/api/v1/files/{{file_id}}:finalize",
+            "body": {
+              "file_id": "{{file_id}}",
+              "version_id": "{{version_id}}"
+            },
+            "expect_status": 200
+          },
+          {
+            "method": "POST",
+            "path": "/api/v1/files/{{file_id}}:download-url",
+            "body": {
+              "purpose": "download",
+              "ttl_seconds": 600
+            },
+            "expect_status": 200
+          }
+        ]
+      },
+      {
+        "name": "jobs_status_transitions",
+        "path": "/api/v1/jobs",
+        "method": "FLOW",
+        "requests": 60,
+        "concurrency": 6,
+        "expect_status": 200,
+        "tenant": "demo",
+        "flow_steps": [
+          {
+            "method": "POST",
+            "path": "/api/v1/jobs",
+            "headers": {
+              "Idempotency-Key": "{{idempotency_key}}"
+            },
+            "body": {
+              "template_code": "TMP",
+              "template_version": 1,
+              "input_ref": {
+                "type": "inline",
+                "payload": {
+                  "name": "Perf {{run_uuid}}"
+                }
+              }
+            },
+            "expect_status": 202,
+            "capture": {
+              "job_id": "job.id"
+            }
+          },
+          {
+            "method": "GET",
+            "path": "/api/v1/jobs/{{job_id}}",
+            "expect_status": 200
+          },
+          {
+            "method": "POST",
+            "path": "/api/v1/jobs/{{job_id}}:cancel",
+            "expect_status": 200
+          },
+          {
+            "method": "POST",
+            "path": "/api/v1/jobs/{{job_id}}:retry",
+            "body": {
+              "retry_failed_only": true
+            },
+            "expect_status": 200
+          }
+        ]
       }
     ]
   }

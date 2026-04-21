@@ -4,10 +4,11 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import statistics
 import time
+import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Any
 
 import httpx
 
@@ -43,12 +44,102 @@ def _percentile(sorted_values: list[float], percentile: float) -> float:
     return sorted_values[rank]
 
 
-async def _hit(client: httpx.AsyncClient, path: str, tenant: str | None) -> ProbeResult:
-    headers = {"X-Tenant": tenant} if tenant else {}
+def _render_template(value: Any, context: dict[str, Any]) -> Any:
+    if isinstance(value, str):
+        rendered = value
+        for key, raw in context.items():
+            rendered = rendered.replace(f"{{{{{key}}}}}", str(raw))
+        return rendered
+    if isinstance(value, list):
+        return [_render_template(item, context) for item in value]
+    if isinstance(value, dict):
+        return {k: _render_template(v, context) for k, v in value.items()}
+    return value
+
+
+def _extract_json_path(payload: Any, path: str) -> Any:
+    value = payload
+    for segment in path.split("."):
+        if isinstance(value, dict):
+            value = value.get(segment)
+        elif isinstance(value, list) and segment.isdigit():
+            idx = int(segment)
+            if idx < 0 or idx >= len(value):
+                return None
+            value = value[idx]
+        else:
+            return None
+    return value
+
+
+async def _hit(
+    client: httpx.AsyncClient,
+    *,
+    method: str,
+    path: str,
+    tenant: str | None,
+    headers: dict[str, str] | None = None,
+    json_body: dict[str, Any] | list[Any] | None = None,
+) -> ProbeResult:
+    resolved_headers = dict(headers or {})
+    if tenant:
+        resolved_headers.setdefault("X-Tenant", tenant)
     started = time.perf_counter()
-    response = await client.get(path, headers=headers)
+    response = await client.request(
+        method=method.upper(),
+        url=path,
+        headers=resolved_headers,
+        json=json_body,
+    )
     elapsed = (time.perf_counter() - started) * 1000
     return ProbeResult(status_code=response.status_code, latency_ms=elapsed)
+
+
+async def _hit_flow(
+    client: httpx.AsyncClient,
+    *,
+    tenant: str | None,
+    flow_steps: list[dict[str, Any]],
+    worker_idx: int,
+) -> ProbeResult:
+    started = time.perf_counter()
+    context: dict[str, Any] = {
+        "worker_idx": worker_idx,
+        "run_uuid": uuid.uuid4().hex,
+    }
+    status_code = 200
+
+    for step_idx, step in enumerate(flow_steps):
+        step_context = {
+            **context,
+            "step_idx": step_idx,
+            "idempotency_key": f"perf-{worker_idx}-{step_idx}-{context['run_uuid']}",
+        }
+        method = str(step.get("method", "GET")).upper()
+        path = _render_template(step["path"], step_context)
+        headers = _render_template(step.get("headers", {}), step_context)
+        body = _render_template(step.get("body"), step_context)
+        expected_status = int(step.get("expect_status", 200))
+
+        resolved_headers = dict(headers or {})
+        if tenant:
+            resolved_headers.setdefault("X-Tenant", tenant)
+
+        response = await client.request(method=method, url=path, headers=resolved_headers, json=body)
+        status_code = response.status_code
+        if response.status_code != expected_status:
+            break
+
+        capture = step.get("capture", {})
+        if capture:
+            payload = response.json()
+            for name, json_path in capture.items():
+                captured = _extract_json_path(payload, str(json_path))
+                if captured is not None:
+                    context[name] = captured
+
+    elapsed = (time.perf_counter() - started) * 1000
+    return ProbeResult(status_code=status_code, latency_ms=elapsed)
 
 
 def _check_thresholds(summary: ProbeSummary, args: argparse.Namespace) -> list[str]:
@@ -76,7 +167,11 @@ async def main_async() -> int:
     )
     parser.add_argument("--base-url", default="http://localhost:8000")
     parser.add_argument("--path", default="/health")
+    parser.add_argument("--method", default="GET")
     parser.add_argument("--tenant", default=None)
+    parser.add_argument("--headers-json", default=None)
+    parser.add_argument("--body-json", default=None)
+    parser.add_argument("--flow-json", default=None)
     parser.add_argument("--requests", type=int, default=50)
     parser.add_argument("--concurrency", type=int, default=10)
     parser.add_argument("--expect-status", type=int, default=200)
@@ -98,11 +193,40 @@ async def main_async() -> int:
 
     started = time.perf_counter()
     async with httpx.AsyncClient(base_url=args.base_url, limits=limits, timeout=timeout) as client:
+        headers_payload: dict[str, str] | None = None
+        body_payload: dict[str, Any] | list[Any] | None = None
+        flow_steps: list[dict[str, Any]] | None = None
+        if args.headers_json:
+            headers_payload = json.loads(args.headers_json)
+        if args.body_json:
+            body_payload = json.loads(args.body_json)
+        if args.flow_json:
+            flow_steps = json.loads(args.flow_json)
 
         async def worker() -> None:
             async with sem:
                 try:
-                    results.append(await _hit(client, args.path, args.tenant))
+                    if flow_steps:
+                        idx = len(results) + len(errors)
+                        results.append(
+                            await _hit_flow(
+                                client,
+                                tenant=args.tenant,
+                                flow_steps=flow_steps,
+                                worker_idx=idx,
+                            )
+                        )
+                    else:
+                        results.append(
+                            await _hit(
+                                client,
+                                method=args.method,
+                                path=args.path,
+                                tenant=args.tenant,
+                                headers=headers_payload,
+                                json_body=body_payload,
+                            )
+                        )
                 except Exception as exc:  # noqa: BLE001
                     errors.append(str(exc))
 

@@ -34,50 +34,46 @@ jobs:
       - name: Run nightly baseline profile
         run: |
           mkdir -p artifacts/perf/nightly
+          python - <<'PY'
+          import json
+          import subprocess
+          from pathlib import Path
 
-          python scripts/perf/api_load.py \
-            --base-url http://localhost:8000 \
-            --path /health \
-            --requests 200 \
-            --concurrency 20 \
-            --expect-status 200 \
-            --output-json artifacts/perf/nightly/health.json
-
-          python scripts/perf/api_load.py \
-            --base-url http://localhost:8000 \
-            --path /api/v1/dashboard/summary \
-            --tenant demo \
-            --requests 180 \
-            --concurrency 18 \
-            --expect-status 200 \
-            --output-json artifacts/perf/nightly/dashboard.json
-
-          python scripts/perf/api_load.py \
-            --base-url http://localhost:8000 \
-            --path /api/v1/templates \
-            --tenant demo \
-            --requests 180 \
-            --concurrency 18 \
-            --expect-status 200 \
-            --output-json artifacts/perf/nightly/templates.json
-
-          python scripts/perf/api_load.py \
-            --base-url http://localhost:8000 \
-            --path '/api/v1/search/suggest?q=doc' \
-            --tenant demo \
-            --requests 180 \
-            --concurrency 18 \
-            --expect-status 200 \
-            --output-json artifacts/perf/nightly/search.json
-
-          python scripts/perf/api_load.py \
-            --base-url http://localhost:8000 \
-            --path /api/v1/files \
-            --tenant demo \
-            --requests 120 \
-            --concurrency 12 \
-            --expect-status 200 \
-            --output-json artifacts/perf/nightly/files.json
+          scenarios = json.loads(Path("scripts/perf/scenarios.json").read_text())
+          profile = scenarios["profiles"]["nightly_baseline"]
+          for scenario in profile:
+              out = Path("artifacts/perf/nightly") / f"{scenario['name']}.json"
+              cmd = [
+                  "python",
+                  "scripts/perf/api_load.py",
+                  "--base-url",
+                  "http://localhost:8000",
+                  "--path",
+                  scenario["path"],
+                  "--requests",
+                  str(scenario["requests"]),
+                  "--concurrency",
+                  str(scenario["concurrency"]),
+                  "--expect-status",
+                  str(scenario.get("expect_status", 200)),
+                  "--output-json",
+                  str(out),
+              ]
+              if scenario.get("tenant"):
+                  cmd.extend(["--tenant", scenario["tenant"]])
+              if scenario.get("method") and scenario["method"] != "FLOW":
+                  cmd.extend(["--method", scenario["method"]])
+              if scenario.get("headers"):
+                  cmd.extend(["--headers-json", json.dumps(scenario["headers"])])
+              if scenario.get("body"):
+                  cmd.extend(["--body-json", json.dumps(scenario["body"])])
+              if scenario.get("flow_steps"):
+                  cmd.extend(["--flow-json", json.dumps(scenario["flow_steps"])])
+              print("::group::" + scenario["name"])
+              print(" ".join(cmd))
+              subprocess.run(cmd, check=True)
+              print("::endgroup::")
+          PY
 
       - name: Build trend manifest
         run: |
@@ -98,6 +94,31 @@ jobs:
             'results': results,
           }
           (root / 'trend-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
+          rows = []
+          for result in results:
+            rows.append(
+              {
+                "path": result["path"],
+                "p50_ms": round(float(result["p50_ms"]), 2),
+                "p95_ms": round(float(result["p95_ms"]), 2),
+                "p99_ms": round(float(result["p99_ms"]), 2),
+                "error_rate": round(float(result["error_rate"]), 6),
+                "throughput_rps": round(float(result["throughput_rps"]), 2),
+              }
+            )
+          headers = ["path", "p50_ms", "p95_ms", "p99_ms", "error_rate", "throughput_rps"]
+          markdown = [
+            "| path | p50_ms | p95_ms | p99_ms | error_rate | throughput_rps |",
+            "|---|---:|---:|---:|---:|---:|",
+          ]
+          csv = [",".join(headers)]
+          for row in rows:
+            markdown.append(
+              f"| {row['path']} | {row['p50_ms']} | {row['p95_ms']} | {row['p99_ms']} | {row['error_rate']} | {row['throughput_rps']} |"
+            )
+            csv.append(",".join(str(row[k]) for k in headers))
+          (root / "summary.md").write_text("\n".join(markdown) + "\n")
+          (root / "summary.csv").write_text("\n".join(csv) + "\n")
           PY
 
       - name: Upload perf baseline artifacts
