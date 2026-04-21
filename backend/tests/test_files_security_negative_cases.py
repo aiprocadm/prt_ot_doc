@@ -9,6 +9,7 @@ from fastapi import HTTPException, UploadFile
 from pydantic import ValidationError
 
 from app.api.routes import files as legacy_files_api
+from app.modules.files import api as files_api
 from app.modules.files.schemas import SignedUrlRequest
 from app.modules.files.service import FileService, _safe_filename
 
@@ -26,6 +27,14 @@ class _FakeSession:
 
     async def flush(self) -> None:
         return None
+
+    async def execute(self, *_args, **_kwargs):  # noqa: ANN001
+        class _Result:
+            @staticmethod
+            def scalar_one_or_none():
+                return None
+
+        return _Result()
 
 
 def test_ingest_upload_rejects_mime_extension_mismatch(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -128,3 +137,61 @@ def test_create_upload_session_rejects_dangerous_double_extension(monkeypatch: p
         assert exc.value.detail == "dangerous_double_extension"
 
     asyncio.run(_run())
+
+
+def test_get_signed_download_url_rejects_client_user_from_foreign_company() -> None:
+    record = SimpleNamespace(
+        id="file-1",
+        tenant_id="tenant-a",
+        status="clean",
+        object_key="tenants/tenant-a/files/a",
+        metadata_json={"company_id": "company-b"},
+        tags={},
+    )
+    svc = FileService(session=_FakeSession(record), tenant_id="tenant-a")
+
+    async def _run() -> None:
+        with pytest.raises(HTTPException) as exc:
+            await svc.get_signed_download_url(
+                file_id="file-1",
+                purpose="download",
+                actor_role="client_user",
+                actor_company_id="company-a",
+            )
+        assert exc.value.status_code == 403
+        assert exc.value.detail == "file_company_forbidden"
+
+    asyncio.run(_run())
+
+
+def test_get_signed_download_url_rejects_cross_tenant_even_for_client_role() -> None:
+    record = SimpleNamespace(
+        id="file-1",
+        tenant_id="tenant-b",
+        status="clean",
+        object_key="tenants/tenant-b/files/a",
+        metadata_json={"company_id": "company-a"},
+        tags={},
+    )
+    svc = FileService(session=_FakeSession(record), tenant_id="tenant-a")
+
+    async def _run() -> None:
+        with pytest.raises(HTTPException) as exc:
+            await svc.get_signed_download_url(
+                file_id="file-1",
+                purpose="download",
+                actor_role="client_user",
+                actor_company_id="company-a",
+            )
+        assert exc.value.status_code == 404
+        assert exc.value.detail == "file_not_found"
+
+    asyncio.run(_run())
+
+
+def test_route_guard_rejects_stale_role_downgrade() -> None:
+    stale_access = SimpleNamespace(role="client_user")
+    with pytest.raises(HTTPException) as exc:
+        files_api._enforce_access_role(stale_access, files_api._FILE_UPLOAD_ROLES)
+    assert exc.value.status_code == 403
+    assert exc.value.detail == "insufficient_role"
