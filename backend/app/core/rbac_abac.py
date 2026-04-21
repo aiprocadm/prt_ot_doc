@@ -141,6 +141,7 @@ RESOURCE_PERMISSIONS: dict[str, set[str]] = {
     "briefings": {"read", "list", "create", "update", "delete"},
     "incidents": {"read", "list", "create", "update", "delete", "approve", "export"},
     "inspections": {"read", "list", "create", "update", "delete", "approve", "export"},
+    "contractors": {"read", "list", "create", "update", "delete"},
     "reports": {"read", "list", "export", "download"},
     "admin": {"read", "list", "create", "update", "delete"},
 }
@@ -226,6 +227,10 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "incidents:list",
         "incidents:create",
         "incidents:update",
+        "contractors:read",
+        "contractors:list",
+        "contractors:create",
+        "contractors:update",
     },
     "hse_specialist": {
         "documents:read",
@@ -244,6 +249,8 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "inspections:list",
         "incidents:read",
         "incidents:list",
+        "contractors:read",
+        "contractors:list",
     },
     "fire_engineer": {
         "documents:read",
@@ -284,6 +291,8 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "documents:download",
         "reports:read",
         "reports:list",
+        "contractors:read",
+        "contractors:list",
     },
     "auditor_ro": {
         "documents:read",
@@ -304,7 +313,11 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "inspections:list",
         "incidents:read",
         "incidents:list",
+        "contractors:read",
+        "contractors:list",
     },
+    "client_admin": {"contractors:read", "contractors:list"},
+    "client_user": {"contractors:read", "contractors:list"},
 }
 
 SCOPED_RESOURCES = {
@@ -323,6 +336,7 @@ SCOPED_RESOURCES = {
     "briefings",
     "incidents",
     "inspections",
+    "contractors",
     "reports",
 }
 

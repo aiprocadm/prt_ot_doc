@@ -34,6 +34,44 @@ export type ContractDto = {
   expires_at?: string | null;
 };
 
+
+
+export type ContractorRegistryDto = {
+  id: string;
+  name: string;
+  status: string;
+  company_id?: string | null;
+  contact_person?: string | null;
+  contact_phone?: string | null;
+};
+
+export type ContractorEmployeeDto = {
+  id: string;
+  contractor_id: string;
+  full_name: string;
+  position?: string | null;
+  access_status: string;
+  training_status: string;
+  medical_status: string;
+};
+
+export type ContractorIncidentDto = {
+  id: string;
+  contractor_id: string;
+  employee_id?: string | null;
+  incident_type: string;
+  severity: string;
+  status: string;
+  occurred_at: string;
+};
+
+export type ContractorComplianceSummaryDto = {
+  contractor_id?: string | null;
+  employees_total: number;
+  admission: Record<string, number>;
+  training: Record<string, number>;
+  medical: Record<string, number>;
+};
 export type TrainingProgramDto = {
   id: string;
   title?: string;
@@ -193,15 +231,19 @@ export type RoleWorkspaceSummaryDto = {
 
 export const operationsApi = {
   getContractorSnapshot: async () => {
-    const [companiesResponse, sitesResponse, contractsResponse] = await Promise.all([
-      apiClient.get<{ items: CompanyDto[]; total: number }>("/companies", { params: { limit: 100, offset: 0 } }),
-      apiClient.get<{ items: SiteDto[]; total: number }>("/sites", { params: { limit: 100, offset: 0 } }),
-      apiClient.get<{ items: ContractDto[]; total: number }>("/contracts", { params: { limit: 100, offset: 0 } })
+    const [registryResponse, employeesResponse, incidentsResponse, summaryResponse] = await Promise.all([
+      apiClient.get<{ items: ContractorRegistryDto[]; total: number }>("/contractors/registry", { params: { limit: 100, offset: 0 } }),
+      apiClient.get<{ items: ContractorEmployeeDto[]; total: number }>("/contractors/employees"),
+      apiClient.get<{ items: ContractorIncidentDto[]; total: number }>("/contractors/incidents"),
+      apiClient.get<ContractorComplianceSummaryDto>("/contractors/compliance-summary")
     ]);
     return {
-      companies: companiesResponse.data.items ?? [],
-      sites: sitesResponse.data.items ?? [],
-      contracts: contractsResponse.data.items ?? []
+      companies: registryResponse.data.items ?? [],
+      sites: [],
+      contracts: [],
+      employees: employeesResponse.data.items ?? [],
+      incidents: incidentsResponse.data.items ?? [],
+      complianceSummary: summaryResponse.data
     };
   },
 

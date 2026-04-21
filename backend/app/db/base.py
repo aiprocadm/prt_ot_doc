@@ -43,3 +43,5 @@ from app.modules.pdf import models as pdf_models  # noqa: F401
 from app.modules.projections import models as projections_models  # noqa: F401
 from app.modules.search import models as search_models  # noqa: F401
 from app.modules.workflow import models as workflow_models  # noqa: F401
+
+from app.modules.contractors import models as contractors_models  # noqa: F401
