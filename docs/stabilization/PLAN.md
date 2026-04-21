@@ -1,43 +1,167 @@
 # Stabilization Plan Tracker (Canonical)
 
-_Last updated: 2026-04-19._
+_Last updated: 2026-04-20._
 
-This file is the canonical tracker for stabilization workstreams **A–G**. It is intentionally evidence-first: every status line must point to existing code, workflows, tests, or scripts in this repository.
+This version restructures the active business request into **blocks A/B/C** and ties each task to verifiable evidence in code, workflows, scripts, and documentation.
 
-## Global status legend
+## Status legend
 
-- **Green** — implemented and covered by code + automated checks.
-- **Yellow** — partially implemented; coverage or operations evidence is incomplete.
-- **Red** — no concrete implementation in repo yet.
+- `todo` — scoped but not started.
+- `in_progress` — implementation started and partially evidenced.
+- `done` — acceptance criteria met with executable evidence.
 
-## Workstream tracker
+## Block A — CI/CD stabilization gates
 
-| Workstream | Scope | Status | Current-state evidence | Explicit gaps / blockers | Acceptance criteria |
-|---|---|---|---|---|---|
-| **A** | CI/CD stabilization gates | Yellow | `.github/workflows/ci.yml` runs lint/static, backend tests, contract tests, frontend checks, and smoke compose; static guards are implemented via `scripts/ci/static_gates.sh`, `scripts/ci/check_scoped_queries.py`, `scripts/ci/check_runtime_artifacts.py`, `scripts/ci/check_default_secrets.py`. | No single stabilization gate document that maps each required control to a job and blocking policy in one place. | 1) `docs/stabilization/security-gates.md` maintained and mapped to exact CI jobs/scripts. 2) Every gate has pass/fail owner and evidence artifact path. |
-| **B** | Test coverage visibility (unit/integration/e2e) | Yellow | Integration suites exist in `tests/integration/*`; e2e/API suites exist in `tests/e2e/*`; frontend smoke exists in `frontend/e2e/smoke.spec.ts`; CI runs `pytest` and frontend coverage gate in `.github/workflows/ci.yml`. | Coverage status is spread across legacy stabilization docs; no single tracker keyed by critical path. | 1) `docs/stabilization/coverage.md` maps critical paths to concrete tests. 2) Gaps are explicit and linked to missing test files/markers. |
-| **C** | Backup/restore operational drill | Yellow | CLI entry points exist for backup/restore in `backend/app/cli/main.py`; restore runbook exists in `docs/runbooks/RESTORE_TENANT.md`; CLI behavior has baseline tests in `tests/test_cli_commands.py`. | No end-to-end restore drill checklist with required evidence artifacts (timestamps, validation commands, rollback window). | 1) `docs/stabilization/restore-drill.md` defines repeatable drill and evidence package. 2) Drill references executable commands/scripts only. |
-| **D** | Performance baseline and regression budget | Yellow | Load probe and run guidance exist in `scripts/perf/api_load.py` and `scripts/perf/README.md`; job/status and pipeline reliability tests exist (`tests/integration/test_job_status_flow.py`, `tests/integration/test_pipeline_steps_happy_path.py`). | No committed baseline dataset (p50/p95/error%) per endpoint/profile and no CI perf regression threshold. | 1) `docs/stabilization/perf-baseline.md` records measured baseline table + command lines. 2) Any target without measurement is marked as gap. |
-| **E** | Security controls and enforcement gates | Yellow | Tenant/RBAC-ABAC controls exist in `backend/app/modules/rbac_abac/*`, tenant checks in API modules such as `backend/app/modules/files/api.py`; security tests exist (`tests/test_rbac_abac.py`, `tests/test_tenant_security.py`, `tests/integration/test_abac_query_isolation.py`). | Security gating is distributed; no canonical “required before merge” list tied to workflows and test modules. | 1) `docs/stabilization/security-gates.md` defines required gates and evidence location. 2) `docs/stabilization/rbac-matrix.md` defines endpoint vs role/access evidence. |
-| **F** | E2E access and role-path reliability | Yellow | Browser e2e smoke scenarios are in `frontend/e2e/smoke.spec.ts`; scheduled/manual e2e workflow exists in `.github/workflows/e2e-smoke.yml`; backend e2e/pilot API checks exist in `tests/e2e/pilot_smoke/test_pilot_smoke_matrix.py`. | Current e2e requires optional secrets; absent credentials skip critical login/role tests, reducing signal quality. | 1) `docs/stabilization/e2e-access.md` defines required credential matrix and skip policy. 2) Required scenarios (login, limited-role denial, logout, protected-route redirect) mapped to tests. |
-| **G** | File pipeline hardening (upload, storage, AV, tenancy) | Yellow | File module has upload/init/finalize/download endpoints in `backend/app/modules/files/api.py`, service logic in `backend/app/modules/files/service.py`, key-safety in `backend/app/modules/files/storage.py`, AV scan stub in `backend/app/modules/files/av.py`; tests include `tests/test_files_upload.py`, `tests/test_file_storage.py`, `tests/services/test_file_storage_service.py`, `tests/test_files_core_next54.py`. | No single hardening checklist that ties threats to controls and specific tests; AV implementation is currently simulated/stubbed in module-level scanner. | 1) `docs/stabilization/file-hardening.md` maps threat → control → evidence test/path. 2) Known residual risks and compensating controls are explicit. |
+### A.1 Canonical security gate matrix
+- **status:** `in_progress`
+- **owner:** Platform / DevEx
+- **code artifacts:** `.github/workflows/ci.yml`, `.github/workflows/e2e-smoke.yml`, `scripts/ci/static_gates.sh`, `scripts/ci/check_scoped_queries.py`, `scripts/ci/check_runtime_artifacts.py`, `scripts/ci/check_default_secrets.py`, `docs/stabilization/security-gates.md`
+- **acceptance criteria:**
+  1. `docs/stabilization/security-gates.md` maps each mandatory gate to an exact CI job and owning team.
+  2. Every gate row includes a machine-verifiable evidence path (workflow job name + script/test path).
+  3. Merge policy for failed gates is explicit (`blocking` vs `advisory`) and consistent with CI config.
+- **evidence paths:**
+  - workflows: `.github/workflows/ci.yml`, `.github/workflows/e2e-smoke.yml`
+  - scripts: `scripts/ci/static_gates.sh`, `scripts/ci/check_scoped_queries.py`, `scripts/ci/check_runtime_artifacts.py`, `scripts/ci/check_default_secrets.py`
+  - docs: `docs/stabilization/security-gates.md`
+- **rollback note (high-risk):** if a new blocking gate causes false-positive merge freeze, temporarily downgrade the gate to advisory in workflow YAML and keep the check executable as non-blocking until the rule is corrected.
 
-## Assumptions (current)
+### A.2 Gate ownership and escalation SLA codification
+- **status:** `todo`
+- **owner:** Platform / Security
+- **code artifacts:** `docs/stabilization/security-gates.md`, `.github/CODEOWNERS` (if updated)
+- **acceptance criteria:**
+  1. Each blocking gate has a primary owner and fallback owner.
+  2. Escalation windows and incident handoff are documented and linked from the same table.
+- **evidence paths:**
+  - docs: `docs/stabilization/security-gates.md`
+  - workflows: `.github/workflows/ci.yml`
+- **rollback note (high-risk):** if ownership routing breaks approvals, revert CODEOWNERS-level change and retain owner mapping only in docs until routing is validated.
 
-1. Stabilization scope is repository-internal and verified by existing CI/e2e pipelines only (`.github/workflows/ci.yml`, `.github/workflows/e2e-smoke.yml`).
-2. Tenant isolation remains a non-negotiable invariant across API, jobs, and file operations (see `tests/integration/test_tenant_isolation.py`, `tests/integration/test_cross_tenant_resource_matrix.py`).
-3. “Done” requires executable evidence (tests, scripts, workflow jobs), not prose-only updates.
+## Block B — Test coverage visibility (unit/integration/e2e)
 
-## Cross-workstream blockers
+### B.1 Critical-path coverage matrix normalization
+- **status:** `in_progress`
+- **owner:** QA / Backend / Frontend
+- **code artifacts:** `docs/stabilization/coverage.md`, `tests/integration/*`, `tests/e2e/*`, `frontend/e2e/smoke.spec.ts`, `.github/workflows/ci.yml`
+- **acceptance criteria:**
+  1. `docs/stabilization/coverage.md` maps each critical business path to at least one automated test.
+  2. Gaps are explicit (`missing`, `partial`, `flaky`, `secrets-dependent`) and linked to exact test/workflow paths.
+  3. Coverage review cadence and owner are present in the document metadata.
+- **evidence paths:**
+  - tests: `tests/integration/test_tenant_isolation.py`, `tests/integration/test_cross_tenant_resource_matrix.py`, `tests/e2e/final_regression/test_final_regression_api.py`, `frontend/e2e/smoke.spec.ts`
+  - workflows: `.github/workflows/ci.yml`, `.github/workflows/e2e-smoke.yml`
+  - docs: `docs/stabilization/coverage.md`, `docs/TEST_BASELINE.md`
+- **rollback note (high-risk):** if new required suites create unstable CI, move flaky suites to non-blocking lane with quarantine label and preserve deterministic smoke/contract gates as blocking.
 
-- **Secrets-dependent e2e signal**: role/login scenarios in `frontend/e2e/smoke.spec.ts` are skipped when `E2E_*` vars are missing; scheduled workflow currently tolerates skipped tests.
-- **Restore drill evidence format not standardized**: runbook exists but drill artifact requirements are not codified (`docs/runbooks/RESTORE_TENANT.md`).
-- **Perf baseline not versioned as measured outputs**: probe tooling exists (`scripts/perf/api_load.py`) but baseline numbers are not yet tracked in repo.
+### B.2 Secrets-dependent e2e signal hardening
+- **status:** `todo`
+- **owner:** QA Automation
+- **code artifacts:** `.github/workflows/e2e-smoke.yml`, `frontend/e2e/smoke.spec.ts`, `docs/stabilization/e2e-access.md`
+- **acceptance criteria:**
+  1. Required credentials matrix is explicit (required vs optional) with skip policy.
+  2. A failed secrets preflight is surfaced as actionable diagnostics, not silent reduction of test signal.
+- **evidence paths:**
+  - workflows: `.github/workflows/e2e-smoke.yml`
+  - tests: `frontend/e2e/smoke.spec.ts`, `tests/e2e/access/test_access_enforcement_matrix.py`
+  - docs: `docs/stabilization/e2e-access.md`
+
+## Block C — Backup/restore operational drill
+
+### C.1 Repeatable restore drill with evidence bundle
+- **status:** `in_progress`
+- **owner:** SRE / Platform
+- **code artifacts:** `backend/app/cli/main.py`, `docs/runbooks/RESTORE_TENANT.md`, `docs/stabilization/restore-drill.md`, `scripts/restore_drill.py`, `tests/test_cli_commands.py`
+- **acceptance criteria:**
+  1. `docs/stabilization/restore-drill.md` defines a repeatable drill with pre-check, execution, post-check, and evidence bundle schema.
+  2. Runbook commands are executable from repository scripts/CLI without manual undocumented steps.
+  3. Validation includes tenant isolation and application health checks after restore.
+- **evidence paths:**
+  - scripts: `scripts/restore_drill.py`
+  - cli/modules: `backend/app/cli/main.py`
+  - tests: `tests/test_cli_commands.py`, `tests/test_health_ready.py`, `tests/integration/test_tenant_isolation.py`
+  - docs: `docs/runbooks/RESTORE_TENANT.md`, `docs/stabilization/restore-drill.md`
+- **rollback note (high-risk):** if restore flow corrupts tenant data or misses invariants, immediately stop automated apply phase, revert to last verified backup snapshot, and execute tenant-isolation + health validation before reopening traffic.
+
+### C.2 Rollback window and go/no-go criteria formalization
+- **status:** `todo`
+- **owner:** SRE / Incident Commander
+- **code artifacts:** `docs/stabilization/restore-drill.md`, `docs/runbooks/RESTORE_TENANT.md`
+- **acceptance criteria:**
+  1. Maximum tolerated restore window (RTO) and acceptable data loss window (RPO) are explicit.
+  2. Go/no-go decision points are attached to measurable checks (health, tenancy, smoke).
+- **evidence paths:**
+  - docs: `docs/stabilization/restore-drill.md`, `docs/runbooks/RESTORE_TENANT.md`
+  - tests/scripts: `scripts/restore_drill.py`, `tests/test_health_ready.py`
+
+## Timeline (A/B/C)
+
+```mermaid
+gantt
+    title Stabilization A/B/C Timeline
+    dateFormat  YYYY-MM-DD
+    axisFormat  %d.%m
+
+    section Block A (CI/CD gates)
+    A.1 Canonical gate matrix            :active, a1, 2026-04-20, 4d
+    A.2 Ownership + escalation SLA        :a2, after a1, 3d
+
+    section Block B (Coverage visibility)
+    B.1 Critical-path coverage matrix     :active, b1, 2026-04-20, 5d
+    B.2 Secrets-dependent e2e hardening   :b2, after b1, 4d
+
+    section Block C (Restore drill)
+    C.1 Repeatable restore drill bundle   :active, c1, 2026-04-20, 5d
+    C.2 RTO/RPO go-no-go formalization    :c2, after c1, 2d
+```
+
+## Architecture map (roles/contours bound to real modules)
+
+```mermaid
+flowchart LR
+    subgraph Delivery_Contour[Delivery contour]
+      GH[GitHub Actions\n.github/workflows/ci.yml\n.github/workflows/e2e-smoke.yml]
+      CIGuards[scripts/ci/*]
+    end
+
+    subgraph Quality_Contour[Quality contour]
+      PyTests[tests/integration/*\ntests/e2e/*]
+      FEPlaywright[frontend/e2e/smoke.spec.ts]
+      CoverageDoc[docs/stabilization/coverage.md]
+    end
+
+    subgraph Operations_Contour[Operations contour]
+      CLI[backend/app/cli/main.py]
+      RestoreScript[scripts/restore_drill.py]
+      RestoreRunbook[docs/runbooks/RESTORE_TENANT.md\ndocs/stabilization/restore-drill.md]
+    end
+
+    PlatformOwner[Platform/DevEx owner]
+    QAOwner[QA owner]
+    SREOwner[SRE owner]
+
+    PlatformOwner --> GH --> CIGuards
+    QAOwner --> PyTests --> CoverageDoc
+    QAOwner --> FEPlaywright
+    SREOwner --> CLI --> RestoreScript --> RestoreRunbook
+
+    CIGuards --> CoverageDoc
+    GH --> PyTests
+    GH --> FEPlaywright
+    GH --> RestoreScript
+```
+
+## Cross-block evidence index (verifiable paths)
+
+| Block | tests | workflows | scripts | docs |
+|---|---|---|---|---|
+| A | `tests/test_api_guardrails.py`, `tests/test_openapi_contract.py` | `.github/workflows/ci.yml`, `.github/workflows/e2e-smoke.yml` | `scripts/ci/static_gates.sh`, `scripts/ci/check_runtime_artifacts.py`, `scripts/ci/check_scoped_queries.py`, `scripts/ci/check_default_secrets.py` | `docs/stabilization/security-gates.md`, `docs/stabilization/README.md` |
+| B | `tests/integration/test_tenant_isolation.py`, `tests/integration/test_cross_tenant_resource_matrix.py`, `tests/e2e/access/test_access_enforcement_matrix.py`, `frontend/e2e/smoke.spec.ts` | `.github/workflows/ci.yml`, `.github/workflows/e2e-smoke.yml` | `scripts/pytest.sh`, `scripts/smoke.sh` | `docs/stabilization/coverage.md`, `docs/stabilization/e2e-access.md`, `docs/TEST_BASELINE.md` |
+| C | `tests/test_cli_commands.py`, `tests/test_health_ready.py`, `tests/integration/test_tenant_isolation.py` | `.github/workflows/ci.yml` | `scripts/restore_drill.py` | `docs/stabilization/restore-drill.md`, `docs/runbooks/RESTORE_TENANT.md`, `docs/stabilization/RUNBOOK_STABILIZATION.md` |
 
 ## Change-control rule for this tracker
 
-Any stabilization PR that changes status in workstreams A–G must also update:
-
-- this `PLAN.md` row status,
-- one domain file (`coverage.md`, `restore-drill.md`, `perf-baseline.md`, `security-gates.md`, `rbac-matrix.md`, `e2e-access.md`, or `file-hardening.md`),
-- and at least one evidence link to code/tests/workflow paths changed in that PR.
+Any PR that changes status in A/B/C must also update:
+1. this `PLAN.md` block item status,
+2. one corresponding domain document (`security-gates.md`, `coverage.md`, or `restore-drill.md`),
+3. and at least one executable evidence path (test/workflow/script).
