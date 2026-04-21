@@ -1,8 +1,73 @@
 # E2E access mapping (matrix → tests)
 
-This document maps `docs/stabilization/rbac-matrix.md` rows to concrete tests. Each row should have both a positive and a negative assertion path where practical.
+This document fixes the CI policy for frontend Playwright smoke and backend access matrix checks.
 
-## Mapping
+## Frontend smoke policy (mandatory vs optional)
+
+### Mandatory (always runs, no external creds)
+
+These tests are **blocking** and run in the `playwright-smoke-minimal` job:
+
+- `frontend/e2e/smoke.spec.ts` → `smoke > mandatory (no external creds) > login page renders`
+- `frontend/e2e/smoke.spec.ts` → `smoke > mandatory (no external creds) > protected route redirects to login when logged out`
+- `frontend/e2e/smoke.spec.ts` → `smoke > mandatory (no external creds) > unauthorized/denied route shows access denied page`
+
+Execution contract:
+
+- run with `E2E_START_SERVER=1`;
+- never skipped by missing credentials;
+- failure in this subset fails the workflow.
+
+### Extended credential matrix (separate stage)
+
+These tests run in `playwright-smoke-credential` after minimal smoke passes.
+
+Credential sources (`matrix.credential_source`):
+
+1. `bootstrap_local` (**required**) — local deterministic users are created in CI job.
+2. `repo_secrets` (**optional**) — same credential tests, but emails/passwords come from repository secrets (runs only when secrets are present).
+
+Extended subset (`--grep "credential-based flows"`):
+
+- `R11 login happy path`
+- `R11 documents list after login`
+- `R11b documents loading screen settles`
+- `navigation regression: command bar, top nav links and breadcrumb`
+- `navigation regression: mobile menu opens and routes`
+- `logout returns to login`
+- `R12 limited user denied on documents route`
+- `login wrong password shows inline error`
+
+## Deterministic bootstrap users in CI
+
+`playwright-smoke-credential` always starts local backend and provisions users inside the job:
+
+- owner-like user (`E2E_USER_*`) for happy path;
+- limited user (`E2E_LIMITED_USER_*`) with `student` role for deny path (`/documents` -> `Доступ ограничен`).
+
+Default deterministic credentials for `bootstrap_local`:
+
+- `E2E_USER_EMAIL=e2e.owner.demo@example.local`
+- `E2E_USER_PASSWORD=OwnerDemo123!`
+- `E2E_LIMITED_USER_EMAIL=e2e.student.demo@example.local`
+- `E2E_LIMITED_USER_PASSWORD=StudentDemo123!`
+- `E2E_TENANT=demo`
+
+When `repo_secrets` is selected, the same env keys are populated from repository secrets.
+
+## Fallback policy
+
+- **Always required:** minimal no-cred smoke (`mandatory (no external creds)`).
+- **Required extension:** `bootstrap_local` credential matrix row (deterministic users, no external secret dependency).
+- **Optional extension:** `repo_secrets` matrix row (runs only if all E2E secrets are configured).
+
+If secrets are absent, credential coverage is still preserved by `bootstrap_local`; only the `repo_secrets` row is skipped.
+
+---
+
+## Backend access mapping
+
+This section maps `docs/stabilization/rbac-matrix.md` rows to backend tests. Each row should have both a positive and a negative assertion path where practical.
 
 | matrix row | positive case(s) | negative case(s) |
 |---|---|---|
