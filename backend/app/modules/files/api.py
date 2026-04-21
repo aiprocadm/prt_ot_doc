@@ -71,6 +71,22 @@ READ_ACCESS_DEP = Depends(
     abac(_tenant_resource_id, required_roles=_FILE_READ_ROLES, action="read files")
 )
 
+# Route-level access guards aligned with legacy files API.
+def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)):
+    return getattr(tenant, "id", None)
+
+
+_FILE_UPLOAD_ROLES = ["admin", "employee"]
+_FILE_READ_ROLES = ["admin", "employee", "client_admin", "client_user"]
+
+AccessDep = Depends(abac(_tenant_resource_id, required_roles=_FILE_UPLOAD_ROLES, action="write files"))
+ReadAccessDep = Depends(abac(_tenant_resource_id, required_roles=_FILE_READ_ROLES, action="read files"))
+
+
+def _enforce_access_role(access: AccessContext, allowed_roles: list[str]) -> None:
+    if access.role not in set(allowed_roles):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="insufficient_role")
+
 
 @router.post(":upload-init", response_model=UploadInitResponse)
 async def upload_init(
@@ -79,7 +95,9 @@ async def upload_init(
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
-) -> UploadInitResponse:
+    access: AccessContext = AccessDep,
+ ) -> UploadInitResponse:
+    _enforce_access_role(access, _FILE_UPLOAD_ROLES)
     if not idempotency_key:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Idempotency-Key is required")
     request_hash = compute_request_hash(payload.model_dump(mode="json"))
@@ -94,7 +112,7 @@ async def upload_init(
     if not created:
         return await idem.respond_from_store(record, model=UploadInitResponse, response=response)
 
-    obj, version, url = await service.create_upload_session(session=session, tenant_id=str(tenant.id), payload=payload, user_id=None)
+    obj, version, url = await service.create_upload_session(session=session, tenant_id=str(tenant.id), payload=payload, user_id=getattr(access.user, "id", None))
     body = UploadInitResponse(file_id=obj.id, version_id=version.id, upload_url=url, s3_key=version.s3_key)
     await idem.store_success(record, status_code=status.HTTP_200_OK, body=body.model_dump())
     await session.commit()
@@ -108,7 +126,9 @@ async def upload_complete(
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
-) -> UploadCompleteResponse:
+    _: AccessContext = AccessDep,
+ ) -> UploadCompleteResponse:
+    _enforce_access_role(_, _FILE_UPLOAD_ROLES)
     if not idempotency_key:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Idempotency-Key is required")
     request_hash = compute_request_hash(payload.model_dump(mode="json"))
@@ -135,6 +155,9 @@ async def download_url(
     file_id: str,
     version_id: str,
     request: Request,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    access: AccessContext = ReadAccessDep,
     access: AccessContext = READ_ACCESS_DEP,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
@@ -144,7 +167,7 @@ async def download_url(
         tenant_id=str(tenant.id),
         file_id=file_id,
         version_id=version_id,
-        user_id=None,
+        user_id=getattr(access.user, "id", None),
         ip=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent"),
     )
@@ -158,7 +181,9 @@ async def create_upload_session_v2(
     payload: UploadSessionRequest,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
-) -> UploadSessionResponse:
+    _: AccessContext = AccessDep,
+ ) -> UploadSessionResponse:
+    _enforce_access_role(_, _FILE_UPLOAD_ROLES)
     await BillingService(session).assert_allowed(tenant, "files.upload", meta={"delta_bytes": int(payload.size_bytes)})
     svc = service.FileService(session=session, tenant_id=str(tenant.id))
     file_record, upload_url, expires_in = await svc.create_upload_session(
@@ -175,11 +200,22 @@ async def create_upload_session_v2(
 @router.post("/complete-upload-v2", response_model=FinalizeUploadResponse, operation_id="files_complete_upload_v2")
 async def complete_upload_v2(
     payload: CompleteUploadRequest,
+    request: Request,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
-) -> FinalizeUploadResponse:
+    access: AccessContext = AccessDep,
+ ) -> FinalizeUploadResponse:
+    _enforce_access_role(access, _FILE_UPLOAD_ROLES)
     svc = service.FileService(session=session, tenant_id=str(tenant.id))
-    file_record = await svc.finalize_upload(file_id=payload.file_id)
+    file_record = await svc.finalize_upload(
+        file_id=payload.file_id,
+        actor_id=getattr(access.user, "id", None),
+        actor_role=getattr(access, "role", None),
+        actor_company_id=access.company_id,
+        ip=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+        request_id=getattr(request.state, "trace_id", None),
+    )
     await BillingService(session).add_usage(tenant_id=str(tenant.id), s3_bytes_delta=int(file_record.size_bytes or 0))
     await session.commit()
     return FinalizeUploadResponse(file_id=file_record.id, status=file_record.status)
@@ -190,12 +226,23 @@ async def complete_upload_v2(
 async def finalize_upload_v2(
     file_id: str,
     payload: UploadCompleteRequest,
+    request: Request,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    access: AccessContext = AccessDep,
 ) -> FinalizeUploadResponse:
+    _enforce_access_role(access, _FILE_UPLOAD_ROLES)
     svc = service.FileService(session=session, tenant_id=str(tenant.id))
     resolved_file_id = payload.file_id or file_id
-    file_record = await svc.finalize_upload(file_id=resolved_file_id)
+    file_record = await svc.finalize_upload(
+        file_id=resolved_file_id,
+        actor_id=getattr(access.user, "id", None),
+        actor_role=getattr(access, "role", None),
+        actor_company_id=access.company_id,
+        ip=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+        request_id=getattr(request.state, "trace_id", None),
+    )
     await BillingService(session).add_usage(tenant_id=str(tenant.id), s3_bytes_delta=int(file_record.size_bytes or 0))
     await session.commit()
     return FinalizeUploadResponse(file_id=file_record.id, status=file_record.status)
@@ -206,7 +253,9 @@ async def get_file_v2(
     file_id: str,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
-) -> FileDto:
+    access: AccessContext = ReadAccessDep,
+ ) -> FileDto:
+    _enforce_access_role(access, _FILE_READ_ROLES)
     file_record = await session.get(FileRecord, file_id)
     if file_record is None:
         raise HTTPException(status_code=404, detail="file_not_found")
@@ -216,6 +265,11 @@ async def get_file_v2(
         tenant_id=str(tenant.id),
         mismatch_event="api.modules.files.get_record.tenant_scope_mismatch",
         detail="file_not_found",
+    )
+    service.FileService(session=session, tenant_id=str(tenant.id)).ensure_record_access(
+        record=file_record,
+        actor_role=getattr(access, "role", None),
+        actor_company_id=access.company_id,
     )
     link_rows = (await session.execute(select(FileLink).where(FileLink.tenant_id == str(tenant.id), FileLink.file_id == file_id))).scalars().all()
     content_index = (await session.execute(select(FileContentIndex).where(FileContentIndex.file_id == file_id))).scalar_one_or_none()
@@ -270,7 +324,9 @@ async def get_download_url_v2(
     ttl: int = 600,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
-) -> DownloadUrlResponse:
+    access: AccessContext = ReadAccessDep,
+ ) -> DownloadUrlResponse:
+    _enforce_access_role(access, _FILE_READ_ROLES)
     resolved_purpose = (payload.purpose if payload else purpose) or "download"
     resolved_ttl = payload.ttl_seconds if payload else ttl
     svc = service.FileService(session=session, tenant_id=str(tenant.id))
@@ -278,9 +334,13 @@ async def get_download_url_v2(
         file_id=file_id,
         purpose=resolved_purpose,
         ttl=resolved_ttl,
+        actor_id=getattr(access.user, "id", None),
+        actor_role=getattr(access, "role", None),
+        actor_company_id=access.company_id,
         access=access,
         ip=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent"),
+        request_id=getattr(request.state, "trace_id", None),
     )
     await session.commit()
     return DownloadUrlResponse(signed_get_url=url)
@@ -294,7 +354,9 @@ async def link_file_v2(
     access: AccessContext = WRITE_ACCESS_DEP,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
-) -> LinkFileResponse:
+    _: AccessContext = AccessDep,
+ ) -> LinkFileResponse:
+    _enforce_access_role(_, _FILE_UPLOAD_ROLES)
     svc = service.FileService(session=session, tenant_id=str(tenant.id))
     role = payload.role or payload.tag or "attachment"
     link = await svc.link_file(file_id=file_id, entity_type=payload.entity_type, entity_id=payload.entity_id, role=role)
@@ -352,15 +414,21 @@ async def get_signed_url_v2(
     access: AccessContext = READ_ACCESS_DEP,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
-) -> SignedUrlResponse:
+    access: AccessContext = ReadAccessDep,
+ ) -> SignedUrlResponse:
+    _enforce_access_role(access, _FILE_READ_ROLES)
     svc = service.FileService(session=session, tenant_id=str(tenant.id))
     url = await svc.get_signed_download_url(
         file_id=file_id,
         purpose=payload.action,
         ttl=payload.ttl_seconds,
+        actor_id=getattr(access.user, "id", None),
+        actor_role=getattr(access, "role", None),
+        actor_company_id=access.company_id,
         access=access,
         ip=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent"),
+        request_id=getattr(request.state, "trace_id", None),
     )
     await session.commit()
     return SignedUrlResponse(signed_url=url)
@@ -375,7 +443,9 @@ async def delete_link_v2(
     access: AccessContext = WRITE_ACCESS_DEP,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
-) -> dict[str, str]:
+    _: AccessContext = AccessDep,
+ ) -> dict[str, str]:
+    _enforce_access_role(_, _FILE_UPLOAD_ROLES)
     svc = service.FileService(session=session, tenant_id=str(tenant.id))
     await svc.unlink_file_by_id(file_id=file_id, link_id=link_id)
     await session.commit()
@@ -388,7 +458,9 @@ async def abort_upload_v2(
     access: AccessContext = WRITE_ACCESS_DEP,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
-) -> dict[str, str]:
+    _: AccessContext = AccessDep,
+ ) -> dict[str, str]:
+    _enforce_access_role(_, _FILE_UPLOAD_ROLES)
     svc = service.FileService(session=session, tenant_id=str(tenant.id))
     await svc.abort_upload(file_id=payload.file_id)
     await session.commit()
@@ -400,7 +472,9 @@ async def upload_multipart_v1(
     access: AccessContext = WRITE_ACCESS_DEP,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    _: AccessContext = AccessDep,
 ) -> FinalizeUploadResponse:
+    _enforce_access_role(_, _FILE_UPLOAD_ROLES)
     svc = service.FileService(session=session, tenant_id=str(tenant.id))
     filename = file.filename or "upload.bin"
     content_type = file.content_type or "application/octet-stream"
@@ -458,7 +532,9 @@ async def create_new_version_v1(
     access: AccessContext = WRITE_ACCESS_DEP,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
-) -> NewFileVersionResponse:
+    _: AccessContext = AccessDep,
+ ) -> NewFileVersionResponse:
+    _enforce_access_role(_, _FILE_UPLOAD_ROLES)
     await BillingService(session).assert_allowed(tenant, "files.upload", meta={"delta_bytes": int(payload.size_bytes)})
     svc = service.FileService(session=session, tenant_id=str(tenant.id))
     version, upload_url, expires_in = await svc.create_new_version_upload_session(
@@ -484,7 +560,9 @@ async def list_file_versions_v1(
     access: AccessContext = READ_ACCESS_DEP,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
+    access: AccessContext = ReadAccessDep,
 ) -> list[FileVersionDto]:
+    _enforce_access_role(access, _FILE_READ_ROLES)
     rows = (
         await session.execute(
             select(FileVersion)
@@ -508,6 +586,22 @@ async def list_file_versions_v1(
 @router.delete("/{file_id}")
 async def delete_file_v1(
     file_id: str,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+    access: AccessContext = AccessDep,
+ ) -> dict[str, str]:
+    _enforce_access_role(access, _FILE_UPLOAD_ROLES)
+    svc = service.FileService(session=session, tenant_id=str(tenant.id))
+    await svc.delete_file(
+        file_id=file_id,
+        actor_id=getattr(access.user, "id", None),
+        actor_role=getattr(access, "role", None),
+        actor_company_id=access.company_id,
+        ip=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+        request_id=getattr(request.state, "trace_id", None),
+    )
     access: AccessContext = WRITE_ACCESS_DEP,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),

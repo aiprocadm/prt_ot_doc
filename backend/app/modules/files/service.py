@@ -37,6 +37,7 @@ from app.modules.files.models import (
     TextIndexStatus,
 )
 from app.modules.search.models import SearchDocument
+from app.services.audit import AuditService
 from app.services.outbox import OutboxService
 from app.tasks import av_scan_file_job, index_file_content_job
 
@@ -50,6 +51,15 @@ _PII_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"(?:\+7|8)?[\s\-()]?\d{3}[\s\-()]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}"), "[masked_phone]"),
     (re.compile(r"\b\d{4}\s?\d{6}\b"), "[masked_passport]"),
 )
+
+
+def resolve_presign_ttl(requested_ttl: int | None = None) -> int:
+    settings = get_settings()
+    policy_ttl = int(getattr(settings, "presign_download_ttl_seconds", 600))
+    policy_ttl = max(60, min(policy_ttl, 900))
+    if requested_ttl is None:
+        return policy_ttl
+    return max(60, min(int(requested_ttl), policy_ttl))
 
 
 def _sha256_bytes(payload: bytes) -> str:
@@ -148,6 +158,64 @@ class FileService:
         self.tenant_id = tenant_id
 
     @staticmethod
+    def _is_client_role(role: str | None) -> bool:
+        return role in {"client_admin", "client_user"}
+
+    @staticmethod
+    def _extract_company_id(record: FileRecord) -> str | None:
+        metadata = record.metadata_json if isinstance(record.metadata_json, dict) else {}
+        tags = record.tags if isinstance(record.tags, dict) else {}
+        return str(metadata.get("company_id") or tags.get("company_id") or "").strip() or None
+
+    async def _audit_file_action(
+        self,
+        *,
+        action: str,
+        object_id: str,
+        user_id: str | None,
+        ip: str | None,
+        user_agent: str | None,
+        request_id: str | None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        await AuditService(self.session).log_event(
+            tenant_id=self.tenant_id,
+            action=action,
+            object_type="file",
+            object_id=object_id,
+            user_id=user_id,
+            ip=ip or "unknown",
+            request_id=request_id,
+            user_agent=user_agent,
+            details=details or {},
+        )
+
+    def _assert_company_scope(
+        self,
+        *,
+        record: FileRecord,
+        actor_role: str | None,
+        actor_company_id: str | None,
+    ) -> None:
+        if not self._is_client_role(actor_role):
+            return
+        record_company_id = self._extract_company_id(record)
+        if record_company_id is None:
+            return
+        if not actor_company_id or str(actor_company_id) != str(record_company_id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="file_company_forbidden")
+
+    def ensure_record_access(
+        self,
+        *,
+        record: FileRecord,
+        actor_role: str | None,
+        actor_company_id: str | None,
+    ) -> None:
+        self._assert_company_scope(record=record, actor_role=actor_role, actor_company_id=actor_company_id)
+
+    def _resolve_signed_url_ttl(self, requested_ttl: int | None = None) -> int:
+        return resolve_presign_ttl(requested_ttl)
     def _resolve_company_id(record: FileRecord) -> str | None:
         metadata = record.metadata_json if isinstance(record.metadata_json, dict) else {}
         tags = record.tags if isinstance(record.tags, dict) else {}
@@ -300,10 +368,21 @@ class FileService:
         upload_url = s3.generate_presigned_put_url(key, expires_in=ttl, content_type=content_type)
         return version, upload_url, ttl
 
-    async def finalize_upload(self, *, file_id: str) -> FileRecord:
+    async def finalize_upload(
+        self,
+        *,
+        file_id: str,
+        actor_id: str | None = None,
+        actor_role: str | None = None,
+        actor_company_id: str | None = None,
+        ip: str | None = None,
+        user_agent: str | None = None,
+        request_id: str | None = None,
+    ) -> FileRecord:
         record = await self.session.get(FileRecord, file_id)
         if record is None or record.tenant_id != self.tenant_id:
             raise HTTPException(status_code=404, detail="file_not_found")
+        self._assert_company_scope(record=record, actor_role=actor_role, actor_company_id=actor_company_id)
         metadata = s3.head_object(key=record.object_key)
         if metadata is None:
             raise HTTPException(status_code=409, detail="object_not_found")
@@ -331,6 +410,15 @@ class FileService:
             av_scan_file_job.delay(self.tenant_id, file_id)
         except Exception:
             await self.av_scan_file(file_id=file_id)
+        await self._audit_file_action(
+            action="file.finalize.success",
+            object_id=record.id,
+            user_id=actor_id,
+            ip=ip,
+            user_agent=user_agent,
+            request_id=request_id,
+            details={"status": record.status, "object_key": record.object_key},
+        )
         return record
 
     async def av_scan_file(self, *, file_id: str) -> FileRecord:
@@ -417,6 +505,11 @@ class FileService:
         purpose: str,
         ttl: int = 600,
         actor_id: str | None = None,
+        actor_role: str | None = None,
+        actor_company_id: str | None = None,
+        ip: str | None = None,
+        user_agent: str | None = None,
+        request_id: str | None = None,
         ip: str | None = None,
         user_agent: str | None = None,
         access: AccessContext | None = None,
@@ -425,17 +518,47 @@ class FileService:
         if record is None or record.tenant_id != self.tenant_id:
             raise HTTPException(status_code=404, detail="file_not_found")
         try:
+            self._assert_company_scope(record=record, actor_role=actor_role, actor_company_id=actor_company_id)
+        except HTTPException:
+            await self._audit_file_action(
+                action="file.download_url.denied",
+                object_id=file_id,
+                user_id=actor_id,
+                ip=ip,
+                user_agent=user_agent,
+                request_id=request_id,
+                details={"reason": "company_scope_mismatch", "purpose": purpose},
+            )
+            raise
             self._enforce_company_read_access(record=record, access=access)
         except HTTPException as exc:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden") from exc
         if record.status != FileStatus.clean.value:
+            await self._audit_file_action(
+                action="file.download_url.denied",
+                object_id=file_id,
+                user_id=actor_id,
+                ip=ip,
+                user_agent=user_agent,
+                request_id=request_id,
+                details={"reason": "file_not_clean", "purpose": purpose, "status": record.status},
+            )
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="file_not_clean")
         if "/" in (record.object_key or ""):
             try:
                 storage.assert_tenant_key(tenant_id=self.tenant_id, key=record.object_key)
             except PermissionError as exc:
+                await self._audit_file_action(
+                    action="file.download_url.denied",
+                    object_id=file_id,
+                    user_id=actor_id,
+                    ip=ip,
+                    user_agent=user_agent,
+                    request_id=request_id,
+                    details={"reason": "tenant_key_mismatch", "purpose": purpose},
+                )
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden") from exc
-        ttl = max(60, min(int(ttl), 900))
+        ttl = self._resolve_signed_url_ttl(ttl)
         url = storage.presign_get(key=record.object_key, expires_in=ttl)
         self.session.add(
             FileDownloadLog(
@@ -447,6 +570,15 @@ class FileService:
                 purpose=purpose,
                 action="presigned_url_issued",
             )
+        )
+        await self._audit_file_action(
+            action="file.download_url.issued",
+            object_id=file_id,
+            user_id=actor_id,
+            ip=ip,
+            user_agent=user_agent,
+            request_id=request_id,
+            details={"purpose": purpose, "ttl_seconds": ttl},
         )
         await self.session.flush()
         return url
@@ -551,6 +683,21 @@ class FileService:
         await self.link_file(file_id=record.id, entity_type=entity_type, entity_id=resolved_entity_id, role=role)
         return record
 
+    async def delete_file(
+        self,
+        *,
+        file_id: str,
+        actor_id: str | None = None,
+        actor_role: str | None = None,
+        actor_company_id: str | None = None,
+        ip: str | None = None,
+        user_agent: str | None = None,
+        request_id: str | None = None,
+    ) -> FileRecord:
+        record = await self.session.get(FileRecord, file_id)
+        if record is None or record.tenant_id != self.tenant_id:
+            raise HTTPException(status_code=404, detail="file_not_found")
+        self._assert_company_scope(record=record, actor_role=actor_role, actor_company_id=actor_company_id)
     async def delete_file(self, *, file_id: str, access: AccessContext | None = None) -> FileRecord:
         record = await self.session.get(FileRecord, file_id)
         if record is None or record.tenant_id != self.tenant_id:
@@ -561,6 +708,15 @@ class FileService:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden") from exc
         record.status = FileStatus.deleted.value
         record.deleted_at = datetime.now(timezone.utc)
+        await self._audit_file_action(
+            action="file.delete.success",
+            object_id=record.id,
+            user_id=actor_id,
+            ip=ip,
+            user_agent=user_agent,
+            request_id=request_id,
+            details={"object_key": record.object_key},
+        )
         await self.session.flush()
         return record
 
@@ -592,7 +748,7 @@ async def create_upload_session(*, session: AsyncSession, tenant_id: str, payloa
     )
     session.add(version)
     await session.flush()
-    url = storage.presign_put(key=version.s3_key, expires_in=600)
+    url = storage.presign_put(key=version.s3_key, expires_in=resolve_presign_ttl())
     return obj, version, url
 
 
@@ -795,7 +951,7 @@ async def issue_download_url(*, session: AsyncSession, tenant_id: str, file_id: 
         storage.assert_tenant_key(tenant_id=tenant_id, key=version.s3_key)
     except PermissionError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden") from exc
-    url = storage.presign_get(key=version.s3_key, expires_in=600)
+    url = storage.presign_get(key=version.s3_key, expires_in=resolve_presign_ttl())
     session.add(DownloadLog(tenant_id=tenant_id, user_id=user_id, file_id=file_id, version_id=version_id, ip=ip, user_agent=user_agent))
     await session.flush()
     return url
