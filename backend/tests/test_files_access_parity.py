@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from app.api.routes.files import _FILE_READ_ROLES, _FILE_UPLOAD_ROLES
+from app.modules.files.api import _FILE_READ_ROLES as _CANONICAL_FILE_READ_ROLES
+from app.modules.files.api import _FILE_UPLOAD_ROLES as _CANONICAL_FILE_UPLOAD_ROLES
 
 
 def test_files_access_roles_read_write_parity() -> None:
@@ -13,3 +15,8 @@ def test_files_access_roles_read_write_parity() -> None:
     # Client portal roles can read files but cannot upload them.
     assert "client_user" in read_roles
     assert "client_user" not in write_roles
+
+
+def test_canonical_files_roles_match_legacy_contract() -> None:
+    assert set(_FILE_READ_ROLES) == set(_CANONICAL_FILE_READ_ROLES)
+    assert set(_FILE_UPLOAD_ROLES) == set(_CANONICAL_FILE_UPLOAD_ROLES)

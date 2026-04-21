@@ -15,6 +15,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.security import AccessContext
 from app.domains.files import s3
 from app.modules.files import av, extractors, storage
 from app.modules.files.models import (
@@ -145,6 +146,34 @@ class FileService:
     def __init__(self, session: AsyncSession, tenant_id: str) -> None:
         self.session = session
         self.tenant_id = tenant_id
+
+    @staticmethod
+    def _resolve_company_id(record: FileRecord) -> str | None:
+        metadata = record.metadata_json if isinstance(record.metadata_json, dict) else {}
+        tags = record.tags if isinstance(record.tags, dict) else {}
+        candidate = metadata.get("company_id") or tags.get("company_id")
+        if candidate is None:
+            return None
+        normalized = str(candidate).strip()
+        return normalized or None
+
+    def _enforce_company_read_access(self, *, record: FileRecord, access: AccessContext | None) -> None:
+        if access is None:
+            return
+        if access.role not in {"client_admin", "client_user"}:
+            return
+        company_id = self._resolve_company_id(record)
+        if company_id:
+            access.ensure_company_access(company_id, action="read file")
+
+    def _enforce_company_write_access(self, *, record: FileRecord, access: AccessContext | None) -> None:
+        if access is None:
+            return
+        if access.role not in {"client_admin", "client_user"}:
+            return
+        company_id = self._resolve_company_id(record)
+        if company_id:
+            access.ensure_company_access(company_id, action="delete file")
 
     async def create_upload_session(
         self,
@@ -381,10 +410,24 @@ class FileService:
                 await index_file_record(self.session, tenant_id=self.tenant_id, file_id=record.id)
         return record
 
-    async def get_signed_download_url(self, *, file_id: str, purpose: str, ttl: int = 600, actor_id: str | None = None, ip: str | None = None, user_agent: str | None = None) -> str:
+    async def get_signed_download_url(
+        self,
+        *,
+        file_id: str,
+        purpose: str,
+        ttl: int = 600,
+        actor_id: str | None = None,
+        ip: str | None = None,
+        user_agent: str | None = None,
+        access: AccessContext | None = None,
+    ) -> str:
         record = await self.session.get(FileRecord, file_id)
         if record is None or record.tenant_id != self.tenant_id:
             raise HTTPException(status_code=404, detail="file_not_found")
+        try:
+            self._enforce_company_read_access(record=record, access=access)
+        except HTTPException as exc:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden") from exc
         if record.status != FileStatus.clean.value:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="file_not_clean")
         if "/" in (record.object_key or ""):
@@ -508,10 +551,14 @@ class FileService:
         await self.link_file(file_id=record.id, entity_type=entity_type, entity_id=resolved_entity_id, role=role)
         return record
 
-    async def delete_file(self, *, file_id: str) -> FileRecord:
+    async def delete_file(self, *, file_id: str, access: AccessContext | None = None) -> FileRecord:
         record = await self.session.get(FileRecord, file_id)
         if record is None or record.tenant_id != self.tenant_id:
             raise HTTPException(status_code=404, detail="file_not_found")
+        try:
+            self._enforce_company_write_access(record=record, access=access)
+        except HTTPException as exc:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden") from exc
         record.status = FileStatus.deleted.value
         record.deleted_at = datetime.now(timezone.utc)
         await self.session.flush()

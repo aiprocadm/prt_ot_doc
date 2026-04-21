@@ -28,6 +28,16 @@ class _FakeSession:
         return None
 
 
+class _AccessStub:
+    def __init__(self, *, role: str, company_id: str | None) -> None:
+        self.role = role
+        self.company_id = company_id
+
+    def ensure_company_access(self, company_id: str | None, *, action: str = "access company resource") -> None:
+        if self.company_id is None or company_id is None or str(company_id) != str(self.company_id):
+            raise HTTPException(status_code=403, detail=f"Company mismatch for {action}")
+
+
 def test_ingest_upload_rejects_mime_extension_mismatch(monkeypatch: pytest.MonkeyPatch) -> None:
     async_file = UploadFile(
         file=io.BytesIO(b"%PDF-1.4\n"),
@@ -93,6 +103,27 @@ def test_get_signed_download_url_rejects_non_clean_file() -> None:
     asyncio.run(_run())
 
 
+def test_get_signed_download_url_rejects_cross_company_client_access() -> None:
+    record = SimpleNamespace(
+        id="file-1",
+        tenant_id="tenant-a",
+        status="clean",
+        object_key="tenants/tenant-a/files/a",
+        metadata_json={"company_id": "company-a"},
+        tags={},
+    )
+    svc = FileService(session=_FakeSession(record), tenant_id="tenant-a")
+    access = _AccessStub(role="client_user", company_id="company-b")
+
+    async def _run() -> None:
+        with pytest.raises(HTTPException) as exc:
+            await svc.get_signed_download_url(file_id="file-1", purpose="download", access=access)
+        assert exc.value.status_code == 403
+        assert exc.value.detail == "forbidden"
+
+    asyncio.run(_run())
+
+
 def test_delete_file_rejects_cross_tenant_access() -> None:
     record = SimpleNamespace(id="file-1", tenant_id="tenant-b")
     svc = FileService(session=_FakeSession(record), tenant_id="tenant-a")
@@ -102,6 +133,25 @@ def test_delete_file_rejects_cross_tenant_access() -> None:
             await svc.delete_file(file_id="file-1")
         assert exc.value.status_code == 404
         assert exc.value.detail == "file_not_found"
+
+    asyncio.run(_run())
+
+
+def test_delete_file_rejects_cross_company_client_access() -> None:
+    record = SimpleNamespace(
+        id="file-1",
+        tenant_id="tenant-a",
+        metadata_json={"company_id": "company-a"},
+        tags={},
+    )
+    svc = FileService(session=_FakeSession(record), tenant_id="tenant-a")
+    access = _AccessStub(role="client_admin", company_id="company-b")
+
+    async def _run() -> None:
+        with pytest.raises(HTTPException) as exc:
+            await svc.delete_file(file_id="file-1", access=access)
+        assert exc.value.status_code == 403
+        assert exc.value.detail == "forbidden"
 
     asyncio.run(_run())
 
