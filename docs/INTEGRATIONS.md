@@ -2,6 +2,17 @@
 
 Этот документ описывает слой абстракций для интеграции с внешними системами (1С, оператор ЭДО/ЭП, ФРДО, ЕИСОТ) и порядок их включения.
 
+## Maturity matrix
+
+| Adapter | Maturity | Фактический режим | Production path |
+|---|---|---|---|
+| 1C | `pilot` | Контракт + in-memory pilot adapter, без реального внешнего обмена | Нет |
+| EDO | `production-ready` | HTTP-адаптер с env-контрактом (`HttpEDOIntegration`) | Да |
+| FRDO | `pilot` | Контракт + in-memory pilot adapter, без реального внешнего обмена | Нет |
+| EISOT | `pilot` | Контракт + in-memory pilot adapter, без реального внешнего обмена | Нет |
+
+Статусы `stub | pilot | production-ready` используются как декларация зрелости и должны соответствовать фактическому поведению адаптеров.
+
 ## Цели
 
 - Сформировать единый контракт для каждой интеграции.
@@ -36,12 +47,14 @@
 - `pull_notifications() -> list[IntegrationStatus]` — получение уведомлений из ЕИСОТ.
 - `health_check() -> bool` — проверка доступности сервиса.
 
-## Заглушечные реализации
+## Реализации по зрелости
 
-- `StubAccountingIntegration`, `StubEDOIntegration`, `StubFRDOIntegration`, `StubEISOTIntegration` — возвращают предсказуемые тестовые данные без внешних запросов.
+- `PilotAccountingIntegration`, `PilotFRDOIntegration`, `PilotEISOTIntegration` — **pilot**-контракт с in-memory поведением и минимальной валидацией входа (без production promises).
+- `StubEDOIntegration` — **stub** для локальной разработки, когда EDO feature flag включен, но URL оператора не задан.
+- `HttpEDOIntegration` — **production-ready** path для EDO (реальный HTTP клиент).
 - `Disabled*Integration` — поднимают `IntegrationDisabledError`, когда интеграция отключена feature-флагом.
 
-Реальные HTTP/SOAP/gRPC клиенты не добавляются в этом инкременте.
+Для pilot-адаптеров (1C/FRDO/EISOT) ошибки валидации нормализуются через `IntegrationContractError` + `IntegrationErrorContract`.
 
 ## Фабрики и DI
 
@@ -65,6 +78,10 @@ USE_EISOT_INTEGRATION=false
 ```
 
 - Значение `true`/`1` включает заглушечную реализацию (до появления реальных клиентов).
+- Для 1C/FRDO/EISOT значение `true`/`1` включает pilot adapter (in-memory, contract-only).
+- Для EDO значение `true`/`1` включает:
+  - production-ready HTTP adapter, если задан `EDO_INTEGRATION_BASE_URL`;
+  - stub adapter, если URL не задан.
 - Значение `false`/`0` возвращает `Disabled*Integration`, методы которой генерируют `IntegrationDisabledError`.
 
 После изменения переменных окружения нужно перезапустить приложение или вызвать `reset_settings_cache()` и `reset_integration_providers()` перед следующим использованием фабрик.

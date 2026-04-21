@@ -1,5 +1,14 @@
 # Production integration adapters
 
+## Maturity table (actual)
+
+| Adapter | Maturity | Notes |
+|---|---|---|
+| EDO | `production-ready` | Current production-capable path (`HttpEDOIntegration`) |
+| 1C | `pilot` | Contract-only pilot adapter, no external transport |
+| FRDO | `pilot` | Contract-only pilot adapter, no external transport |
+| EISOT | `pilot` | Contract-only pilot adapter, no external transport |
+
 ## EDO (HTTP)
 
 When `USE_EDO_INTEGRATION=true` and `EDO_INTEGRATION_BASE_URL` is set, the factory returns `HttpEDOIntegration` instead of the in-memory stub.
@@ -20,7 +29,13 @@ If `USE_EDO_INTEGRATION` is true but the base URL is empty, the **stub** adapter
 
 ## 1C / FRDO / EISOT
 
-Still delivered via stub/disabled implementations until dedicated HTTP adapters and env contracts are added. Extend `app/services/integrations/factory.py` using the same pattern as EDO.
+These are intentionally **pilot** adapters (contract-only + in-memory behavior) selected by:
+
+- `USE_1C_INTEGRATION=true` → `PilotAccountingIntegration`
+- `USE_FRDO_INTEGRATION=true` → `PilotFRDOIntegration`
+- `USE_EISOT_INTEGRATION=true` → `PilotEISOTIntegration`
+
+They provide explicit `feature_flag` metadata in responses and use normalized error contract (`IntegrationContractError` / `IntegrationErrorContract`) for validation failures.
 
 ## Cache note
 

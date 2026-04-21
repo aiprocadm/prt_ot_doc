@@ -13,15 +13,17 @@ from .interfaces import (
     BaseFRDOIntegration,
 )
 from .http_edo import HttpEDOIntegration
+from .pilot_adapters import (
+    PilotAccountingIntegration,
+    PilotEISOTIntegration,
+    PilotFRDOIntegration,
+)
 from .stubs import (
     DisabledAccountingIntegration,
     DisabledEDOIntegration,
     DisabledEISOTIntegration,
     DisabledFRDOIntegration,
-    StubAccountingIntegration,
     StubEDOIntegration,
-    StubEISOTIntegration,
-    StubFRDOIntegration,
 )
 
 
@@ -29,7 +31,7 @@ from .stubs import (
 def get_accounting_integration() -> BaseAccountingIntegration:
     settings = get_settings()
     if settings.use_1c_integration:
-        return StubAccountingIntegration()
+        return PilotAccountingIntegration()
     return DisabledAccountingIntegration()
 
 
@@ -54,7 +56,7 @@ def get_edo_integration() -> BaseEDOIntegration:
 def get_frdo_integration() -> BaseFRDOIntegration:
     settings = get_settings()
     if settings.use_frdo_integration:
-        return StubFRDOIntegration()
+        return PilotFRDOIntegration()
     return DisabledFRDOIntegration()
 
 
@@ -62,7 +64,7 @@ def get_frdo_integration() -> BaseFRDOIntegration:
 def get_eisot_integration() -> BaseEISOTIntegration:
     settings = get_settings()
     if settings.use_eisot_integration:
-        return StubEISOTIntegration()
+        return PilotEISOTIntegration()
     return DisabledEISOTIntegration()
 
 
