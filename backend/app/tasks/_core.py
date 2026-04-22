@@ -189,13 +189,18 @@ async def _resolve_task_tenant_scope(
     tenant_slug: str,
 ) -> tuple[str, tuple[str, ...]]:
     tenant_id = str(session.info.get("tenant_id") or "").strip()
+    tenant = (
+        await session.execute(select(Tenant.id).where(Tenant.slug == tenant_slug).limit(1))
+    ).scalar_one_or_none()
+    if tenant is None:
+        raise ValueError(f"Tenant not found for slug {tenant_slug}")
+    resolved_tenant_id = str(tenant)
+    if tenant_id and tenant_id != resolved_tenant_id:
+        raise ValueError(
+            f"Tenant scope mismatch for slug {tenant_slug}: session tenant_id={tenant_id}, resolved tenant_id={resolved_tenant_id}"
+        )
     if not tenant_id:
-        tenant = (
-            await session.execute(select(Tenant.id).where(Tenant.slug == tenant_slug).limit(1))
-        ).scalar_one_or_none()
-        if tenant is None:
-            raise ValueError(f"Tenant not found for slug {tenant_slug}")
-        tenant_id = str(tenant)
+        tenant_id = resolved_tenant_id
     tenant_scope = (tenant_id, tenant_slug) if tenant_id != tenant_slug else (tenant_id,)
     return tenant_id, tenant_scope
 
