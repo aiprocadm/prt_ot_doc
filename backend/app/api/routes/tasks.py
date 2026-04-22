@@ -108,7 +108,8 @@ async def get_pipeline_run_status(
             run.status.value if hasattr(run.status, "value") else str(run.status)
         )
         metadata.setdefault("pipeline_status", pipeline_status)
-        document_id = metadata.get("document_id") or outputs.get("document_id")
+        raw_document_id = metadata.get("document_id") or outputs.get("document_id")
+        document_id = raw_document_id if isinstance(raw_document_id, str) else None
         status_value = pipeline_status
         error_value = run.error
 
@@ -130,15 +131,19 @@ async def get_pipeline_run_status(
                 metadata["celery_info"] = normalized_info
             if celery_state == "SUCCESS" and isinstance(celery_info, dict):
                 result_payload = celery_info
-                status_value = result_payload.get("status") or celery_state
+                raw_status = result_payload.get("status")
+                if isinstance(raw_status, str) and raw_status:
+                    status_value = raw_status
+                else:
+                    status_value = celery_state
             elif status_value is None:
                 status_value = celery_state
             if celery_state == "FAILURE" and celery_info is not None:
                 error_value = str(celery_info)
 
     if result_payload is not None:
-        task_tenant = result_payload.get("tenant") if isinstance(result_payload, dict) else None
-        if task_tenant and task_tenant != tenant.slug:
+        task_tenant = result_payload.get("tenant")
+        if task_tenant is not None and (not isinstance(task_tenant, str) or task_tenant != tenant.slug):
             raise _task_not_found(code="PIPELINE_RUN_NOT_FOUND")
 
     if status_value is None:

@@ -70,3 +70,35 @@ python scripts/ci/check_backend_coverage_baseline.py \
 - Gap log: `GAP_REPORT.md`
 - Release verdict: `RELEASE_READINESS.md`
 - Accepted constraints: `KNOWN_LIMITATIONS.md`
+
+## Static typing staged gate (incremental expansion)
+
+- **Last expanded (UTC):** 2026-04-22
+- **Runner:** `scripts/ci/static_gates.sh`
+- **Mode:** `mypy --follow-imports=skip` (temporary while broad API typing debt is reduced)
+
+### Current staged scope
+
+1. Tenant-row guard baselines:
+   - `backend/app/db/tenant_row_guard.py`
+   - `backend/app/api/tenant_row_http.py`
+2. Middleware:
+   - `backend/app/middleware`
+3. Worker/task paths:
+   - `backend/app/tasks`
+   - `backend/app/celery/tasks`
+   - `backend/app/services/tasks.py`
+4. API slices + file/authz-sensitive modules:
+   - `backend/app/api/routes/tasks.py`
+   - `backend/app/api/routes/files.py`
+   - `backend/app/api/routes/admin_authz.py`
+
+### Error budget tracking
+
+| Date (UTC) | Scope command | Allowed mypy errors | Actual |
+|---|---|---:|---:|
+| 2026-04-22 | `scripts/ci/static_gates.sh` staged targets | 0 | 0 |
+
+> Notes:
+> - Keep introducing narrow, high-risk modules (tenant/authz/files/tasks) before widening to all `backend/app/api`.
+> - Do **not** add blanket `ignore_errors`; prefer targeted fixes and test coverage for exposed guard paths.

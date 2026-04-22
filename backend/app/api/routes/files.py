@@ -11,6 +11,7 @@ import logging
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Annotated, Any, BinaryIO, Collection, Mapping, cast
 from typing import IO, Annotated, Any, Collection, Mapping
 from uuid import UUID
 
@@ -553,7 +554,7 @@ async def upload_file(
             tenant=tenant,
             access=access,
             key=key,
-            payload_file=payload_file,
+            payload_file=cast(BinaryIO, payload_file),
             mime=mime,
             sha256_hash=sha256_hash,
             size=size,
@@ -717,7 +718,7 @@ async def upload_template(
             tenant=tenant,
             access=access,
             key=key,
-            payload_file=payload_file,
+            payload_file=cast(BinaryIO, payload_file),
             mime=mime,
             sha256_hash=sha256_hash,
             size=size,
