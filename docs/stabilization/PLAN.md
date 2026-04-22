@@ -2,14 +2,15 @@
 
 - **Updated on (UTC):** 2026-04-22
 - **Owner:** Stabilization Program (Platform + QA + SRE)
-- **Canonical status vocabulary:** `done` / `partial` / `missing`
-- **Blocker status source of truth:** `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`
+- **Canonical status vocabulary:** `done` / `partial` / `missing` / `blocked`
+- **Canonical blocker/status source:** `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`
 
-This tracker is aligned with `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` (canonical blocker status source), `ACCEPTANCE_TEST_MATRIX.md`, `docs/stabilization/coverage.md`, `GAP_REPORT.md`, `RELEASE_READINESS.md`, and `KNOWN_LIMITATIONS.md`.
+This plan tracks execution ownership and evidence paths.
+Release-critical status values are mirrored from `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` by Criterion ID.
 
 ## Block A — CI/CD stabilization gates
 
-### A.1 Canonical security gate matrix
+### A.1 Canonical security gate matrix (`RC-015`)
 - **status:** `partial`
 - **owner:** Platform / DevEx
 - **evidence:**
@@ -17,17 +18,18 @@ This tracker is aligned with `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` (ca
   - **script:** `scripts/ci/static_gates.sh`, `scripts/ci/check_scoped_queries.py`, `scripts/ci/check_runtime_artifacts.py`, `scripts/ci/check_default_secrets.py`
   - **doc:** `docs/stabilization/security-gates.md`
 
-### A.2 Gate ownership and escalation SLA codification
-- **status:** `missing`
+### A.2 Gate ownership and escalation SLA codification (`RC-005`)
+- **status:** `blocked`
 - **owner:** Platform / Security
+- **blocker detail:** ownership map approval/versioning is not yet finalized.
 - **evidence target:**
   - **workflow:** `.github/workflows/ci.yml`
   - **doc:** `docs/stabilization/security-gates.md`
-  - **ownership:** `.github/CODEOWNERS` (when introduced)
+  - **ownership:** `.github/CODEOWNERS`
 
 ## Block B — Test coverage visibility
 
-### B.1 Critical-path coverage matrix normalization
+### B.1 Critical-path coverage matrix normalization (`RC-016`)
 - **status:** `partial`
 - **owner:** QA / Backend / Frontend
 - **evidence:**
@@ -35,7 +37,7 @@ This tracker is aligned with `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` (ca
   - **workflow:** `.github/workflows/ci.yml`, `.github/workflows/e2e-smoke.yml`
   - **doc:** `docs/stabilization/coverage.md`, `ACCEPTANCE_TEST_MATRIX.md`
 
-### B.2 Secrets-dependent e2e signal hardening
+### B.2 Secrets-dependent e2e signal hardening (`RC-006`)
 - **status:** `missing`
 - **owner:** QA Automation
 - **evidence target:**
@@ -45,15 +47,16 @@ This tracker is aligned with `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` (ca
 
 ## Block C — Backup/restore operational drill
 
-### C.1 Repeatable restore drill with evidence bundle
+### C.1 Repeatable restore drill with evidence bundle (`RC-001`)
 - **status:** `partial`
 - **owner:** SRE / Platform
 - **evidence:**
   - **script:** `scripts/restore_drill.py`
-  - **test:** `tests/test_cli_commands.py`, `tests/test_health_ready.py`, `tests/integration/test_tenant_isolation.py`
+  - **workflow:** `.github/workflows/restore-drill.yml`
+  - **artifact:** `artifacts/restore-drill/latest-postgres-minio.json`
   - **doc:** `docs/runbooks/RESTORE_TENANT.md`, `docs/stabilization/restore-drill.md`
 
-### C.2 Rollback window and go/no-go criteria formalization
+### C.2 Rollback window and go/no-go criteria formalization (`RC-012`)
 - **status:** `missing`
 - **owner:** SRE / Incident Commander
 - **evidence target:**
@@ -61,18 +64,18 @@ This tracker is aligned with `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` (ca
   - **script:** `scripts/restore_drill.py`
   - **test:** `tests/test_health_ready.py`
 
-## Cross-block evidence index
+## Cross-links
 
-| Block | test evidence | workflow evidence | script evidence | doc evidence |
-|---|---|---|---|---|
-| A | `tests/test_api_guardrails.py`, `tests/test_openapi_contract.py` | `.github/workflows/ci.yml`, `.github/workflows/e2e-smoke.yml` | `scripts/ci/static_gates.sh`, `scripts/ci/check_runtime_artifacts.py`, `scripts/ci/check_scoped_queries.py`, `scripts/ci/check_default_secrets.py` | `docs/stabilization/security-gates.md` |
-| B | `tests/integration/test_tenant_isolation.py`, `tests/integration/test_cross_tenant_resource_matrix.py`, `tests/e2e/access/test_access_enforcement_matrix.py`, `frontend/e2e/smoke.spec.ts` | `.github/workflows/ci.yml`, `.github/workflows/e2e-smoke.yml` | `scripts/pytest.sh`, `scripts/smoke.sh` | `docs/stabilization/coverage.md`, `docs/stabilization/e2e-access.md`, `docs/TEST_BASELINE.md` |
-| C | `tests/test_cli_commands.py`, `tests/test_health_ready.py`, `tests/integration/test_tenant_isolation.py` | `.github/workflows/ci.yml` | `scripts/restore_drill.py` | `docs/stabilization/restore-drill.md`, `docs/runbooks/RESTORE_TENANT.md` |
+- Canonical criteria, unified statuses, blockers checklist: `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`
+- Release verdict: `RELEASE_READINESS.md`
+- Acceptance status map: `ACCEPTANCE_TEST_MATRIX.md`
+- Gap tracker: `GAP_REPORT.md`
+- Constraints/limitations: `KNOWN_LIMITATIONS.md`
 
 ## Change-control rule
 
-Any PR that changes a block status must update:
-1. `docs/stabilization/PLAN.md` status,
-2. one corresponding domain doc,
-3. one executable evidence path (test/workflow/script),
-4. one cross-link in `GAP_REPORT.md` or `RELEASE_READINESS.md`.
+Any PR that changes a release-critical status must update:
+1. `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` (first),
+2. this plan item by Criterion ID,
+3. one executable evidence path (test/workflow/script/artifact),
+4. one cross-linking verdict doc (`RELEASE_READINESS.md` or `GAP_REPORT.md`).
