@@ -6,6 +6,7 @@
 
 ## Аудит и соответствие
 - Матрица покрытия ТЗ: [audit/TZ_COVERAGE_MATRIX.md](audit/TZ_COVERAGE_MATRIX.md)
+- Проверка матрицы (machine-check): `python scripts/audit/check_tz_coverage_matrix.py`
 - Репозитарный аудит и canonical layout: [audit/REPOSITORY_AUDIT.md](audit/REPOSITORY_AUDIT.md)
 - Baseline verification (fail-first): [audit/BASELINE_VERIFICATION.md](audit/BASELINE_VERIFICATION.md)
 - Compliance (historical): [audit/TZ_COMPLIANCE.md](audit/TZ_COMPLIANCE.md)
