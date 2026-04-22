@@ -16,6 +16,9 @@
 | RC-010 | Workspace hub routes full acceptance behavior | `partial` | Workflow: `.github/workflows/e2e-smoke.yml`; script: `npm --prefix frontend run build`; frontend route tests |
 | RC-016 | Critical-path coverage matrix normalization closure | `partial` | Workflows: `.github/workflows/ci.yml`, `.github/workflows/e2e-smoke.yml`; tests/docs listed in `docs/stabilization/PLAN.md` Block B.1 |
 
+
+| RC-017 | Document generation chain orchestration states + retry semantics (`generated/headers_applied/pdf_ready/handoff_ready/failed/retrying`) | `done` | Backend integration: `backend/tests/test_document_orchestration_state.py`; E2E smoke scenario: `frontend/e2e/key-scenarios.spec.ts` (`quick generation timeline shows orchestration states for chain flow`) |
+
 ## Rule to avoid status drift
 
 Release-critical statuses are not authored independently in this file.

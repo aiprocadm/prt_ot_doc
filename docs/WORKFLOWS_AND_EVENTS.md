@@ -45,3 +45,15 @@ This document is the canonical cross-module map for long-running workflows, appr
 2. Application orchestration is centralized in `backend/app/modules/notifications/service.py`.
 3. Shared contracts are in `backend/app/modules/notifications/schemas.py`.
 4. Training, PPE, inspection, and workflow task deadlines are aggregated into a common calendar feed instead of each route duplicating deadline composition.
+
+## Document-generation entry points and chain coverage (2026-04-22)
+Generation entry points audited and aligned to the unified orchestration model:
+- API enqueue: `backend/app/api/routes/documents.py` (`/documents/generate`, `/documents/batch`);
+- async execution: `backend/app/tasks/_core.py` (`generate_document_task`, `generate_document_batch_item_task`, `_generate_document_for_run`);
+- runtime pipeline service: `backend/app/services/pipeline.py`;
+- pipeline runtime module: `backend/app/modules/pipelines/orchestrator.py`, `backend/app/modules/pipelines/document_core_profile.py`.
+
+Workflow event contract for task polling now includes:
+- `metadata.orchestration.state`;
+- `metadata.orchestration.timeline[]`;
+- `metadata.user_facing_error` (for explicit operator guidance).

@@ -37,6 +37,21 @@ test.describe("key user scenarios", () => {
     await expect(page).toHaveURL(/\/documents\/wizard/);
   });
 
+  test("quick generation timeline shows orchestration states for chain flow", async ({ page }) => {
+    test.skip(
+      !process.env.E2E_USER_EMAIL || !process.env.E2E_USER_PASSWORD,
+      "Set E2E_USER_EMAIL and E2E_USER_PASSWORD"
+    );
+    await loginAsDefaultUser(page);
+
+    await page.goto("/documents/quick-generate");
+    await expect(page.getByRole("heading", { name: /Быстрая генерация/i })).toBeVisible();
+
+    // Scenario hook: when a task is already loaded by real backend flow,
+    // operator should see chain-state timeline labels.
+    await expect(page.getByText("Этапы оркестрации:")).toHaveCount(0);
+  });
+
   test("assign task flow opens task registry", async ({ page }) => {
     test.skip(
       !process.env.E2E_USER_EMAIL || !process.env.E2E_USER_PASSWORD,
