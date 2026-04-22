@@ -95,6 +95,32 @@ def test_production_disables_legacy_files_compat_router(monkeypatch) -> None:  #
     assert "/files-legacy" not in prefixes
 
 
+def test_files_router_registration_switches_with_legacy_flag(monkeypatch) -> None:  # noqa: ANN001
+    from app.api.v1 import route_groups
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        route_groups,
+        "get_settings",
+        lambda: SimpleNamespace(enable_files_legacy_routes=False),
+    )
+    tenant_router_without_legacy = route_groups.create_tenant_router()
+    tenant_paths_without_legacy = {route.path for route in tenant_router_without_legacy.routes}
+    assert "/files/presign-upload" in tenant_paths_without_legacy
+    assert "/files-legacy/upload" not in tenant_paths_without_legacy
+
+    monkeypatch.setattr(
+        route_groups,
+        "get_settings",
+        lambda: SimpleNamespace(enable_files_legacy_routes=True),
+    )
+    tenant_router_with_legacy = route_groups.create_tenant_router()
+    tenant_paths_with_legacy = {route.path for route in tenant_router_with_legacy.routes}
+    assert "/files/presign-upload" in tenant_paths_with_legacy
+    assert "/files-legacy/upload" in tenant_paths_with_legacy
+    assert "/files-legacy/{file_id}/download" in tenant_paths_with_legacy
+
+
 def test_openapi_files_paths_are_unique_and_canonical() -> None:
     settings = Settings.model_validate(
         {

@@ -19,7 +19,13 @@
 
 - Keep legacy endpoints out of canonical `/files` include tree.
 - If compatibility is required during transition, legacy stays under explicit prefix `/files-legacy` only.
+- Legacy router is enabled only via `ENABLE_FILES_LEGACY_ROUTES=true`; with flag off, `/files-legacy/*` must not be registered.
 - No new feature work is allowed in the legacy router.
+
+### Compatibility boundary regression checks
+
+- `backend/tests/test_route_group_registry.py::test_files_router_registration_switches_with_legacy_flag`
+- `backend/tests/test_files_access_parity.py::test_legacy_upload_and_download_dependencies_match_canonical_tenant_and_abac_contract`
 
 ## Rollback note (critical incident)
 
@@ -28,5 +34,4 @@ If a critical incident requires immediate temporary rollback to old behavior:
 1. Set `ENABLE_FILES_LEGACY_ROUTES=true` in the deployment environment.
 2. Redeploy API pods/processes so settings are reloaded.
 3. Legacy endpoints become available under `/api/v1/files-legacy/*`.
-4. If you must mirror pre-hardening `/api/v1/files/*` compatibility in an emergency, temporarily change `backend/app/api/v1/route_groups.py` to mount `app.api.routes.files` under `/files` again and redeploy (time-boxed hotfix only).
-5. Open a follow-up task to remove rollback routing and restore single-perimeter policy.
+4. Open a follow-up task to disable legacy routing again and return to canonical-only perimeter (`ENABLE_FILES_LEGACY_ROUTES=false`).
