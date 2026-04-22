@@ -190,6 +190,18 @@ class FileService:
             details=details or {},
         )
 
+    def _enforce_client_company_scope(
+        self,
+        *,
+        record: FileRecord,
+        access: AccessContext | None = None,
+        actor_role: str | None = None,
+        actor_company_id: str | None = None,
+    ) -> None:
+        role = getattr(access, "role", None) if access is not None else actor_role
+        company_id = access.company_id if access is not None else actor_company_id
+        if not self._is_client_role(role):
+            return
     async def _enforce_company_scope(
         self,
         *,
@@ -203,6 +215,44 @@ class FileService:
         record_company_id = self._extract_company_id(record)
         if not record_company_id:
             return
+        if not company_id or str(company_id) != str(record_company_id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="file_company_forbidden")
+
+    async def _enforce_client_company_scope_with_audit(
+        self,
+        *,
+        record: FileRecord,
+        deny_action: str | None,
+        actor_id: str | None,
+        ip: str | None,
+        user_agent: str | None,
+        request_id: str | None,
+        details: dict[str, Any] | None = None,
+        access: AccessContext | None = None,
+        actor_role: str | None = None,
+        actor_company_id: str | None = None,
+    ) -> None:
+        try:
+            self._enforce_client_company_scope(
+                record=record,
+                access=access,
+                actor_role=actor_role,
+                actor_company_id=actor_company_id,
+            )
+        except HTTPException:
+            if deny_action:
+                await self._audit_file_action(
+                    action=deny_action,
+                    object_id=record.id,
+                    user_id=actor_id,
+                    ip=ip,
+                    user_agent=user_agent,
+                    request_id=request_id,
+                    details=details or {"reason": "company_scope_mismatch"},
+                )
+            raise
+
+    def ensure_record_access(
 
         deny_exc: HTTPException | None = None
         role = actor_role or (access.role if access is not None else None)
@@ -228,6 +278,7 @@ class FileService:
         actor_role: str | None,
         actor_company_id: str | None,
     ) -> None:
+        self._enforce_client_company_scope(record=record, actor_role=actor_role, actor_company_id=actor_company_id)
         await self._enforce_company_scope(
             record=record,
             action="read file",
@@ -377,6 +428,16 @@ class FileService:
         record = await self.session.get(FileRecord, file_id)
         if record is None or record.tenant_id != self.tenant_id:
             raise HTTPException(status_code=404, detail="file_not_found")
+        await self._enforce_client_company_scope_with_audit(
+            record=record,
+            deny_action="file.finalize.denied",
+            actor_id=actor_id,
+            ip=ip,
+            user_agent=user_agent,
+            request_id=request_id,
+            details={"reason": "company_scope_mismatch"},
+            actor_role=actor_role,
+            actor_company_id=actor_company_id,
         await self._enforce_company_scope(
             record=record,
             action="finalize file upload",
@@ -524,6 +585,17 @@ class FileService:
         record = await self.session.get(FileRecord, file_id)
         if record is None or record.tenant_id != self.tenant_id:
             raise HTTPException(status_code=404, detail="file_not_found")
+        await self._enforce_client_company_scope_with_audit(
+            record=record,
+            deny_action="file.download_url.denied",
+            actor_id=actor_id,
+            ip=ip,
+            user_agent=user_agent,
+            request_id=request_id,
+            details={"reason": "company_scope_mismatch", "purpose": purpose},
+            access=access,
+            actor_role=actor_role,
+            actor_company_id=actor_company_id,
         await self._enforce_company_scope(
             record=record,
             action="read file",
@@ -609,6 +681,17 @@ class FileService:
         record = await self.session.get(FileRecord, file_id)
         if record is None or record.tenant_id != self.tenant_id:
             raise HTTPException(status_code=404, detail="file_not_found")
+        await self._enforce_client_company_scope_with_audit(
+            record=record,
+            deny_action="file.link.denied",
+            actor_id=actor_id,
+            ip=ip,
+            user_agent=user_agent,
+            request_id=request_id,
+            details={"reason": "company_scope_mismatch", "role": role},
+            access=access,
+            actor_role=actor_role,
+            actor_company_id=actor_company_id,
         await self._enforce_company_scope(
             record=record,
             action="link file",
@@ -735,6 +818,17 @@ class FileService:
         record = await self.session.get(FileRecord, file_id)
         if record is None or record.tenant_id != self.tenant_id:
             raise HTTPException(status_code=404, detail="file_not_found")
+        await self._enforce_client_company_scope_with_audit(
+            record=record,
+            deny_action="file.delete.denied",
+            actor_id=actor_id,
+            ip=ip,
+            user_agent=user_agent,
+            request_id=request_id,
+            details={"reason": "company_scope_mismatch"},
+            access=access,
+            actor_role=actor_role,
+            actor_company_id=actor_company_id,
         await self._enforce_company_scope(
             record=record,
             action="delete file",

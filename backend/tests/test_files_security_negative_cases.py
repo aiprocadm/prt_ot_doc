@@ -128,7 +128,7 @@ def test_get_signed_download_url_rejects_cross_company_client_access() -> None:
         with pytest.raises(HTTPException) as exc:
             await svc.get_signed_download_url(file_id="file-1", purpose="download", access=access)
         assert exc.value.status_code == 403
-        assert exc.value.detail == "forbidden"
+        assert exc.value.detail == "file_company_forbidden"
 
     asyncio.run(_run())
 
@@ -160,7 +160,7 @@ def test_delete_file_rejects_cross_company_client_access() -> None:
         with pytest.raises(HTTPException) as exc:
             await svc.delete_file(file_id="file-1", access=access)
         assert exc.value.status_code == 403
-        assert exc.value.detail == "forbidden"
+        assert exc.value.detail == "file_company_forbidden"
 
     asyncio.run(_run())
 
@@ -245,3 +245,93 @@ def test_route_guard_rejects_stale_role_downgrade() -> None:
         files_api._enforce_access_role(stale_access, files_api._FILE_UPLOAD_ROLES)
     assert exc.value.status_code == 403
     assert exc.value.detail == "insufficient_role"
+
+
+@pytest.mark.parametrize("role", ["client_admin", "client_user"])
+def test_company_scope_helper_allows_and_denies_by_company(role: str) -> None:
+    record = SimpleNamespace(
+        id="file-1",
+        tenant_id="tenant-a",
+        metadata_json={"company_id": "company-a"},
+        tags={},
+    )
+    svc = FileService(session=_FakeSession(record), tenant_id="tenant-a")
+
+    svc._enforce_client_company_scope(record=record, actor_role=role, actor_company_id="company-a")
+
+    with pytest.raises(HTTPException) as exc:
+        svc._enforce_client_company_scope(record=record, actor_role=role, actor_company_id="company-b")
+    assert exc.value.status_code == 403
+    assert exc.value.detail == "file_company_forbidden"
+
+
+@pytest.mark.parametrize(
+    ("method_name", "action_name"),
+    [
+        ("get_signed_download_url", "file.download_url.denied"),
+        ("finalize_upload", "file.finalize.denied"),
+        ("delete_file", "file.delete.denied"),
+        ("link_file", "file.link.denied"),
+    ],
+)
+@pytest.mark.parametrize("role", ["client_admin", "client_user"])
+def test_company_scope_denials_are_audited_for_protected_file_actions(
+    method_name: str,
+    action_name: str,
+    role: str,
+) -> None:
+    record = SimpleNamespace(
+        id="file-1",
+        tenant_id="tenant-a",
+        status="clean",
+        object_key="tenants/tenant-a/files/a",
+        metadata_json={"company_id": "company-a"},
+        tags={},
+    )
+    svc = FileService(session=_FakeSession(record), tenant_id="tenant-a")
+    events: list[str] = []
+
+    async def _fake_audit_file_action(**kwargs):  # noqa: ANN003
+        events.append(str(kwargs.get("action")))
+
+    svc._audit_file_action = _fake_audit_file_action  # type: ignore[method-assign]
+
+    async def _run() -> None:
+        with pytest.raises(HTTPException) as exc:
+            if method_name == "get_signed_download_url":
+                await svc.get_signed_download_url(
+                    file_id="file-1",
+                    purpose="download",
+                    actor_id="user-1",
+                    actor_role=role,
+                    actor_company_id="company-b",
+                )
+            elif method_name == "finalize_upload":
+                await svc.finalize_upload(
+                    file_id="file-1",
+                    actor_id="user-1",
+                    actor_role=role,
+                    actor_company_id="company-b",
+                )
+            elif method_name == "delete_file":
+                await svc.delete_file(
+                    file_id="file-1",
+                    actor_id="user-1",
+                    actor_role=role,
+                    actor_company_id="company-b",
+                )
+            else:
+                await svc.link_file(
+                    file_id="file-1",
+                    entity_type="doc",
+                    entity_id="1",
+                    role="attachment",
+                    actor_id="user-1",
+                    actor_role=role,
+                    actor_company_id="company-b",
+                )
+        assert exc.value.status_code == 403
+        assert exc.value.detail == "file_company_forbidden"
+
+    asyncio.run(_run())
+    assert events == [action_name]
