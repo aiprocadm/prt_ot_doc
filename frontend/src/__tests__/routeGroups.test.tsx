@@ -25,6 +25,7 @@ describe("buildProtectedRouteGroups", () => {
 
     expect(paths).toEqual(expect.arrayContaining([
       "/dashboard",
+      "/workspace/attention",
       "/documents/wizard",
       "/findings",
       "/corrective-actions",
