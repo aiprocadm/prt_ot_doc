@@ -138,3 +138,20 @@ python scripts/ci/check_backend_coverage_baseline.py \
 - `docs/RUNBOOK_RC.md`
 - `docs/RELEASE_READINESS.md`
 - `docs/KNOWN_LIMITATIONS_RC.md`
+
+## 7. Files API compatibility boundary checks
+
+Для файлового API действует жесткая граница совместимости:
+
+- **Канонический слой поведения:** только `backend/app/modules/files/api.py` (маршрут `/api/v1/files/*`).
+- **Legacy-слой:** только `backend/app/api/routes/files.py`, публикуется под `/api/v1/files-legacy/*` и только при `ENABLE_FILES_LEGACY_ROUTES=true`.
+
+Обязательные регрессионные проверки:
+
+```bash
+# Проверка переключения legacy-router через feature-flag
+./scripts/pytest.sh tests/test_route_group_registry.py -k files_router_registration_switches_with_legacy_flag
+
+# Проверка parity по authz/tenant-контракту между canonical и legacy routes
+./scripts/pytest.sh tests/test_files_access_parity.py -k legacy_upload_and_download_dependencies_match_canonical_tenant_and_abac_contract
+```

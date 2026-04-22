@@ -10,8 +10,9 @@
 
 1. In `backend/app/api/v1/route_groups.py` only one `/files` router is registered.
 2. `/files` now points only to `app.modules.files.api`.
-3. Legacy endpoint module `backend/app/api/routes/files.py` is explicitly marked as deprecated for new development.
-4. Legacy model module `backend/app/models/file.py` is explicitly marked as deprecated for new file API work.
+3. Legacy endpoint module `backend/app/api/routes/files.py` is compatibility-only and must never own canonical behavior.
+4. Legacy router exposure is strictly controlled by `ENABLE_FILES_LEGACY_ROUTES` and mounted only as `/api/v1/files-legacy/*`.
+5. Legacy model module `backend/app/models/file.py` is explicitly marked as deprecated for new file API work.
 
 ## Canonical vs compatibility-only endpoint paths
 
@@ -53,6 +54,15 @@ All endpoints below are hosted on `/api/v1/files`.
 
 - ⏳ Legacy `POST /api/v1/files-legacy/upload` should be moved to upload-init/upload-complete flow for all clients.
 - ⏳ Legacy `GET /api/v1/files-legacy/{file_id}` should migrate to `GET /api/v1/files/records/{file_id}`.
+
+## Compatibility boundary enforcement tests
+
+- `backend/tests/test_route_group_registry.py::test_files_router_registration_switches_with_legacy_flag`
+  validates both config states:
+  - `ENABLE_FILES_LEGACY_ROUTES=false`: canonical `/files/*` available, `/files-legacy/*` absent.
+  - `ENABLE_FILES_LEGACY_ROUTES=true`: canonical `/files/*` available, legacy aliases exposed under `/files-legacy/*`.
+- `backend/tests/test_files_access_parity.py::test_legacy_upload_and_download_dependencies_match_canonical_tenant_and_abac_contract`
+  validates parity for tenant resolution and ABAC dependency surface between legacy aliases and canonical handlers.
 
 ## Follow-up implementation phases
 
