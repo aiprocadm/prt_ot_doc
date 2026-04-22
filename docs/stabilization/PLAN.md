@@ -3,8 +3,9 @@
 - **Updated on (UTC):** 2026-04-22
 - **Owner:** Stabilization Program (Platform + QA + SRE)
 - **Canonical status vocabulary:** `done` / `partial` / `missing`
+- **Blocker status source of truth:** `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`
 
-This tracker is aligned with `ACCEPTANCE_TEST_MATRIX.md`, `docs/stabilization/coverage.md`, `GAP_REPORT.md`, `RELEASE_READINESS.md`, and `KNOWN_LIMITATIONS.md`.
+This tracker is aligned with `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` (canonical blocker status source), `ACCEPTANCE_TEST_MATRIX.md`, `docs/stabilization/coverage.md`, `GAP_REPORT.md`, `RELEASE_READINESS.md`, and `KNOWN_LIMITATIONS.md`.
 
 ## Block A — CI/CD stabilization gates
 
