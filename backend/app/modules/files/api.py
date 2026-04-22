@@ -474,6 +474,7 @@ async def get_download_url_v2(
 async def link_file_v2(
     file_id: str,
     payload: LinkFileRequest,
+    request: Request,
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
     access: AccessContext = WRITE_ACCESS_DEP,
@@ -486,6 +487,13 @@ async def link_file_v2(
         entity_type=payload.entity_type,
         entity_id=payload.entity_id,
         role=role,
+        actor_id=getattr(access.user, "id", None),
+        actor_role=getattr(access, "role", None),
+        actor_company_id=access.company_id,
+        ip=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+        request_id=getattr(request.state, "trace_id", None),
+        access=access,
     )
     await session.commit()
     return LinkFileResponse(link_id=link.id)
@@ -776,6 +784,7 @@ async def delete_file_v1(
         actor_id=getattr(access.user, "id", None),
         actor_role=getattr(access, "role", None),
         actor_company_id=access.company_id,
+        access=access,
         ip=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent"),
         request_id=getattr(request.state, "trace_id", None),
