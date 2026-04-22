@@ -2,23 +2,26 @@
 
 - **Updated on (UTC):** 2026-04-22
 - **Owner:** Product Engineering + Platform
-- **Canonical status vocabulary:** `done` / `partial` / `missing`
+- **Canonical status vocabulary:** `done` / `partial` / `missing` / `blocked`
+- **Canonical blocker/status source:** `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`
 
-## Current limitations
+## Release-critical limitations subset
 
-| Limitation | Status | Test evidence | Workflow evidence | Script evidence | Doc evidence |
-|---|---|---|---|---|---|
-| Automatic inline chaining `generate -> apply_headers -> pdf` is not universal | `partial` | branded flow tests (partial) | `.github/workflows/ci.yml` | `scripts/branded_document_smoke.py` | generation pipeline docs/code paths |
-| Branding asset selection is still ID-based (no dedicated media picker workflow) | `partial` | branding API tests (partial functional scope) | `.github/workflows/ci.yml` | — | branding UI/API behavior, `GAP_REPORT.md` |
-| Branded smoke script validates canonical stub pipeline only (not full tenant persistent media scenario) | `partial` | smoke-level only | `.github/workflows/ci.yml` | `scripts/branded_document_smoke.py` | `GAP_REPORT.md` |
-| Legacy duplicate path pairs remain on disk for compatibility (`docs/ADR` vs `docs/adr`, `modules/approval` vs `modules/approvals`) | `partial` | `tests/test_repo_audit.py` | `.github/workflows/ci.yml` | `scripts/repo_audit.py` | repository audit outputs |
-| Frontend route-level chunking can still be improved as modules grow | `partial` | frontend build/test signal | `.github/workflows/ci.yml` | `npm --prefix frontend run build` | `frontend/vite.config.ts` |
-| Notifications escalation/provider orchestration is not feature-complete | `missing` | `tests/api/test_notifications_calendar_api.py`, `tests/test_workflow_api.py` (coverage does not close full orchestration scope) | `.github/workflows/ci.yml` | — | `GAP_REPORT.md` |
-| Training/risk areas are foundations and should not be treated as fully closed | `partial` | readiness checks (partial) | `.github/workflows/ci.yml` | `python scripts/pilot_readiness.py` | module docs and maturity notes in `GAP_REPORT.md` |
+| Criterion ID | Limitation tied to release readiness | Unified status | Evidence |
+|---|---|---|---|
+| RC-011 | Notifications escalation/provider orchestration is not feature-complete | `missing` | Tests: `tests/api/test_notifications_calendar_api.py`, `tests/test_workflow_api.py`; workflow: `.github/workflows/ci.yml`; tracker: `GAP_REPORT.md` |
+| RC-007 | Replace dry-run/reporting path is incomplete end-to-end | `partial` | Acceptance evidence in `ACCEPTANCE_TEST_MATRIX.md`; artifact stream: `artifacts/final_acceptance/*.log` |
+| RC-008 | PDF conversion acceptance reliability not fully closed | `partial` | Acceptance evidence in `ACCEPTANCE_TEST_MATRIX.md`; artifact stream: `artifacts/final_acceptance/*.log` |
+| RC-009 | Approval/sign/archive handoff acceptance is incomplete | `partial` | Acceptance evidence in `ACCEPTANCE_TEST_MATRIX.md`; workflows: `.github/workflows/ci.yml`, `.github/workflows/e2e-smoke.yml` |
+
+## Non-blocking limitations
+
+Other limitations may remain `partial` without blocking release if they are not mapped in the release-blocker checklist.
+See canonical mapping in `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`.
 
 ## Cross-links
 
-- Plan tracker: `docs/stabilization/PLAN.md`
-- Acceptance matrix: `ACCEPTANCE_TEST_MATRIX.md`
-- Gap report: `GAP_REPORT.md`
-- Release readiness verdict: `RELEASE_READINESS.md`
+- Release verdict: `RELEASE_READINESS.md`
+- Acceptance map: `ACCEPTANCE_TEST_MATRIX.md`
+- Gap tracker: `GAP_REPORT.md`
+- Stabilization tracker: `docs/stabilization/PLAN.md`
