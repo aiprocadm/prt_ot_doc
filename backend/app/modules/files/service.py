@@ -202,6 +202,12 @@ class FileService:
         company_id = access.company_id if access is not None else actor_company_id
         if not self._is_client_role(role):
             return
+        record_company_id = self._extract_company_id(record)
+        if not record_company_id:
+            return
+        if not company_id or str(company_id) != str(record_company_id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="file_company_forbidden")
+
     async def _enforce_company_scope(
         self,
         *,
@@ -215,8 +221,22 @@ class FileService:
         record_company_id = self._extract_company_id(record)
         if not record_company_id:
             return
-        if not company_id or str(company_id) != str(record_company_id):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="file_company_forbidden")
+        deny_exc: HTTPException | None = None
+        role = actor_role or (access.role if access is not None else None)
+        if self._is_client_role(role):
+            if not actor_company_id or str(actor_company_id) != str(record_company_id):
+                deny_exc = HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="file_company_forbidden")
+
+        if deny_exc is None and access is not None and self._is_client_role(access.role):
+            try:
+                access.ensure_company_access(record_company_id, action=action)
+            except HTTPException as exc:
+                deny_exc = exc
+
+        if deny_exc is not None:
+            if on_deny_audit:
+                await self._audit_file_action(**on_deny_audit)
+            raise deny_exc
 
     async def _enforce_client_company_scope_with_audit(
         self,
@@ -251,25 +271,6 @@ class FileService:
                     details=details or {"reason": "company_scope_mismatch"},
                 )
             raise
-
-    def ensure_record_access(
-
-        deny_exc: HTTPException | None = None
-        role = actor_role or (access.role if access is not None else None)
-        if self._is_client_role(role):
-            if not actor_company_id or str(actor_company_id) != str(record_company_id):
-                deny_exc = HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="file_company_forbidden")
-
-        if deny_exc is None and access is not None and self._is_client_role(access.role):
-            try:
-                access.ensure_company_access(record_company_id, action=action)
-            except HTTPException as exc:
-                deny_exc = exc
-
-        if deny_exc is not None:
-            if on_deny_audit:
-                await self._audit_file_action(**on_deny_audit)
-            raise deny_exc
 
     async def ensure_record_access(
         self,
@@ -438,6 +439,7 @@ class FileService:
             details={"reason": "company_scope_mismatch"},
             actor_role=actor_role,
             actor_company_id=actor_company_id,
+        )
         await self._enforce_company_scope(
             record=record,
             action="finalize file upload",
@@ -596,6 +598,7 @@ class FileService:
             access=access,
             actor_role=actor_role,
             actor_company_id=actor_company_id,
+        )
         await self._enforce_company_scope(
             record=record,
             action="read file",
@@ -692,6 +695,7 @@ class FileService:
             access=access,
             actor_role=actor_role,
             actor_company_id=actor_company_id,
+        )
         await self._enforce_company_scope(
             record=record,
             action="link file",
@@ -829,6 +833,7 @@ class FileService:
             access=access,
             actor_role=actor_role,
             actor_company_id=actor_company_id,
+        )
         await self._enforce_company_scope(
             record=record,
             action="delete file",

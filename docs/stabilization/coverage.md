@@ -6,6 +6,27 @@
 
 This document defines backend line + branch coverage policy used for CI non-regression gating.
 
+## Static analysis staged expansion (mypy)
+
+- **Gate script:** `scripts/ci/static_gates.sh`
+- **Mode:** `--follow-imports=skip` (temporary while staged scope is widened without muting real errors)
+- **Current staged scope (wave 1, 2026-04-22):**
+  - Tenant guard baseline: `backend/app/db/tenant_row_guard.py`, `backend/app/api/tenant_row_http.py`
+  - API slice for file/authz-sensitive path: `backend/app/api/routes/files.py`
+  - Middleware slice: `backend/app/middleware/{tenant.py,billing_guard.py,global_error_handler.py,observability.py}`
+  - Worker/task slice (legacy + celery): `backend/app/tasks/{__init__.py,_core.py}`, `backend/app/tasks_replace.py`, `backend/app/celery/tasks/{document_jobs_required.py,job_steps.py}`
+  - File/authz-sensitive domain: `backend/app/modules/files/service.py`, `backend/app/modules/rbac_abac/query_filters.py`
+
+### Static typing error budget
+
+| Date (UTC) | Scope size (files) | Error budget | Actual mypy errors | Status |
+|---|---:|---:|---:|---|
+| 2026-04-22 | 14 | 0 | 0 | `passing` |
+
+Notes:
+- `backend/app/tasks.py` is not present in this repository; staged checks cover the active task entrypoints in `backend/app/tasks/`, `backend/app/tasks_replace.py`, and celery task modules.
+- Budget policy for staged gates remains **zero new errors**; scope expansion happens by adding focused paths and fixing surfaced issues before merge.
+
 ## Coverage gate status
 
 | Coverage claim | Status | Test evidence | Workflow evidence | Script evidence | Doc evidence |
