@@ -27,6 +27,16 @@ class DummySession:
         return None
 
 
+class DummyAccess:
+    def __init__(self, *, role: str, company_id: str | None) -> None:
+        self.role = role
+        self.company_id = company_id
+
+    def ensure_company_access(self, company_id: str | None, *, action: str = "access") -> None:
+        if company_id is None or self.company_id is None or str(company_id) != str(self.company_id):
+            raise HTTPException(status_code=403, detail=f"forbidden:{action}")
+
+
 @pytest.mark.parametrize(
     ("chunks", "expected"),
     [([b"hello", b" ", b"world"], "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9")],
@@ -285,3 +295,173 @@ async def test_link_output_requires_clean() -> None:
         await svc.link_file(file_id="f9", entity_type="job", entity_id="j1", role="output")
 
     assert exc.value.status_code == 403
+
+
+def test_extract_company_id_from_metadata_or_tags() -> None:
+    record_from_meta = FileRecord(
+        id="fm",
+        tenant_id="t1",
+        bucket="main",
+        object_key="k",
+        content_type="text/plain",
+        size_bytes=1,
+        sha256="a" * 64,
+        status=FileStatus.clean.value,
+        av_result_json={},
+        metadata_json={"company_id": "c-meta"},
+        tags={"company_id": "c-tag"},
+    )
+    record_from_tags = FileRecord(
+        id="ft",
+        tenant_id="t1",
+        bucket="main",
+        object_key="k",
+        content_type="text/plain",
+        size_bytes=1,
+        sha256="b" * 64,
+        status=FileStatus.clean.value,
+        av_result_json={},
+        metadata_json={},
+        tags={"company_id": "c-tag"},
+    )
+    assert FileService._extract_company_id(record_from_meta) == "c-meta"
+    assert FileService._extract_company_id(record_from_tags) == "c-tag"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["client_admin", "client_user"])
+async def test_client_roles_company_scope_allow_and_deny_on_download(role: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    rec = FileRecord(
+        id="f10",
+        tenant_id="t1",
+        bucket="main",
+        object_key="tenants/t1/files/f10/a.txt",
+        content_type="text/plain",
+        size_bytes=1,
+        sha256="c" * 64,
+        status=FileStatus.clean.value,
+        av_result_json={},
+        metadata_json={"company_id": "cmp-1"},
+    )
+    session = DummySession(rec)
+    svc = FileService(session=session, tenant_id="t1")
+    audits: list[str] = []
+    monkeypatch.setattr("app.modules.files.storage.presign_get", lambda *, key, expires_in: "http://signed")
+
+    async def _audit_capture(self, **kwargs):  # type: ignore[no-untyped-def]
+        audits.append(kwargs["action"])
+
+    monkeypatch.setattr("app.modules.files.service.FileService._audit_file_action", _audit_capture)
+
+    url = await svc.get_signed_download_url(
+        file_id="f10",
+        purpose="api",
+        actor_role=role,
+        actor_company_id="cmp-1",
+        access=DummyAccess(role=role, company_id="cmp-1"),
+    )
+    assert url == "http://signed"
+
+    with pytest.raises(HTTPException) as exc:
+        await svc.get_signed_download_url(
+            file_id="f10",
+            purpose="api",
+            actor_role=role,
+            actor_company_id="cmp-2",
+            actor_id="u1",
+            access=DummyAccess(role=role, company_id="cmp-2"),
+        )
+    assert exc.value.status_code == 403
+    assert "file.download_url.denied" in audits
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["client_admin", "client_user"])
+async def test_client_roles_company_scope_allow_and_deny_on_delete(role: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    rec = FileRecord(
+        id="f11",
+        tenant_id="t1",
+        bucket="main",
+        object_key="k",
+        content_type="text/plain",
+        size_bytes=1,
+        sha256="d" * 64,
+        status=FileStatus.clean.value,
+        av_result_json={},
+        metadata_json={"company_id": "cmp-1"},
+    )
+    session = DummySession(rec)
+    svc = FileService(session=session, tenant_id="t1")
+    audits: list[str] = []
+
+    async def _audit_capture(self, **kwargs):  # type: ignore[no-untyped-def]
+        audits.append(kwargs["action"])
+
+    monkeypatch.setattr("app.modules.files.service.FileService._audit_file_action", _audit_capture)
+    deleted = await svc.delete_file(
+        file_id="f11",
+        actor_role=role,
+        actor_company_id="cmp-1",
+        access=DummyAccess(role=role, company_id="cmp-1"),
+    )
+    assert deleted.status == FileStatus.deleted.value
+
+    rec.status = FileStatus.clean.value
+    rec.deleted_at = None
+    with pytest.raises(HTTPException) as exc:
+        await svc.delete_file(
+            file_id="f11",
+            actor_id="u1",
+            actor_role=role,
+            actor_company_id="cmp-2",
+            access=DummyAccess(role=role, company_id="cmp-2"),
+        )
+    assert exc.value.status_code == 403
+    assert "file.delete.denied" in audits
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["client_admin", "client_user"])
+async def test_client_roles_company_scope_deny_on_finalize_and_link(role: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    rec = FileRecord(
+        id="f12",
+        tenant_id="t1",
+        bucket="main",
+        object_key="tenant/t1/uploads/a.txt",
+        content_type="text/plain",
+        size_bytes=1,
+        sha256="e" * 64,
+        status=FileStatus.uploaded.value,
+        av_result_json={},
+        metadata_json={"company_id": "cmp-1"},
+    )
+    session = DummySession(rec)
+    svc = FileService(session=session, tenant_id="t1")
+    audits: list[str] = []
+
+    async def _audit_capture(self, **kwargs):  # type: ignore[no-untyped-def]
+        audits.append(kwargs["action"])
+
+    monkeypatch.setattr("app.modules.files.service.FileService._audit_file_action", _audit_capture)
+
+    with pytest.raises(HTTPException):
+        await svc.finalize_upload(
+            file_id="f12",
+            actor_id="u1",
+            actor_role=role,
+            actor_company_id="cmp-2",
+        )
+    with pytest.raises(HTTPException):
+        await svc.link_file(
+            file_id="f12",
+            entity_type="job",
+            entity_id="j1",
+            role="artifact",
+            actor_id="u1",
+            actor_role=role,
+            actor_company_id="cmp-2",
+            access=DummyAccess(role=role, company_id="cmp-2"),
+        )
+
+    assert "file.finalize.denied" in audits
+    assert "file.link.denied" in audits
