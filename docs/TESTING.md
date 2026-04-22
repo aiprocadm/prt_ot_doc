@@ -74,6 +74,8 @@ PYTHONPATH=backend python scripts/contract/validate.py
 | `smoke-compose` | E2E smoke | docker compose + `make smoke` | Yes |
 | `perf-smoke` | Performance | deterministic perf profiles | Yes |
 
+Дополнительно есть отдельный workflow `.github/workflows/e2e-smoke.yml` для Playwright smoke-срезов (mandatory + credential flows). Для backend bootstrap в нём зафиксирован `actions/setup-python` с версией **3.12** (выровнено с `pyproject.toml` и основным CI).
+
 ## 4. Cross-links: acceptance and coverage gates
 
 ### Acceptance matrix

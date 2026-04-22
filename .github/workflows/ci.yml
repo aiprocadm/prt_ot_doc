@@ -53,6 +53,9 @@ jobs:
       - name: Default secret guard
         run: python scripts/ci/check_default_secrets.py
 
+      - name: Workflow Python version guard
+        run: python scripts/ci/check_workflow_python_version.py
+
       - name: TZ coverage matrix validator
         run: python scripts/audit/check_tz_coverage_matrix.py
 
