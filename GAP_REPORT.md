@@ -1,46 +1,36 @@
 # GAP_REPORT
 
-## Closed in this wave
-- Выровнены Pydantic-схемы с ORM по `docs/DOMAIN_MODEL.md`: `employment_status` у персон, расширенный `DocumentRead`, `module`/`scenario_type` в списке document packs; обновлён фрагмент `docs/openapi.yaml` (Person, Document, DocumentPack).
-- Revalidated canonical backend/frontend roots and active entrypoints.
-- Reconfirmed `frontend/package.json` as the only active frontend manifest.
-- Added explicit `header_details` support to the branding profile so organization requisites can be managed separately for header and footer layouts.
-- Fixed branch/site branding resolution so overridden `branch_label` is carried into previewed and generated headers.
-- Strengthened branding reproducibility with hashes for branding payload, header context, rendered sections, and preset content.
-- Persisted branded preview/history inside the document wizard store, so operators do not lose preview context while moving through steps.
-- Added a dedicated `scripts/branded_document_smoke.py` smoke command and `make branded-smoke` entrypoint for fast verification of the canonical letterhead pipeline.
-- Refreshed canonical repository docs to describe the real active paths and branded document flow.
-- Нормализован template catalog contract: `category`, `status`, `scope`.
-- Исправлена связка upload version -> `current_version_id`.
-- Снижен риск broken generation из-за рассинхрона `Template.code` vs `Template.name`.
-- Repo теперь документирует demo access, owner/admin access и user access issuance.
-- Устранены дубли template schema/router/frontend form contract, мешавшие reproducible template flow.
+- **Updated on:** 2026-04-22
+- **Owner:** Stabilization Program (Platform + QA + Product Engineering)
+- **Canonical status vocabulary:** `done` / `partial` / `missing`
 
-## Remaining gaps
-- Scope пока хранится в `metadata_json`, а не в отдельных indexed columns.
-- Branch-specific generation опирается на текущую модель `Site`; отдельной branch-сущности нет.
-- Полный automatic pipeline chain между всеми document entrypoints ещё не унифицирован.
-- Version diff / richer preview / archive action UX остаются следующей волной hardening.
-- Not every generation route automatically chains `generate -> apply_headers -> pdf`; some flows still require explicit `apply_headers` invocation or pipeline-profile configuration.
-- Branding asset management still uses file IDs rather than a dedicated upload/media picker workflow on the branding screen.
-- Preview history is persisted in frontend state, but not yet materialized as a server-side generation/audit projection.
-- Duplicate legacy path pairs still remain on disk (`docs/ADR` vs `docs/adr`, `modules/approval` vs `modules/approvals`) and are documented rather than physically merged in this wave to avoid risky breakage.
+## Done (closed in recent waves)
 
-## Additional gaps review — 2026-03-21
-### Closed
-- Fat-router notification logic was moved into a dedicated application module with reusable schemas/service boundaries.
-- Invalid notification enum filters no longer rely on raw enum casting behavior.
-- Malformed notification cursors and unsupported calendar sources now fail with the same structured 422 contract instead of producing generic failures or ambiguous empty feeds.
-- Training/LMS and risk-engine documentation now clearly state their true maturity and canonical code paths.
+| Gap area | Status | Evidence |
+|---|---|---|
+| Tenant/owner/demo bootstrap reproducibility | done | `scripts/bootstrap_tenant.py`, `scripts/bootstrap_demo_tenant.py`, `backend/app/services/dev_bootstrap.py`, `ACCEPTANCE_TEST_MATRIX.md` |
+| Template catalog contract normalization | done | `tests/test_template_catalog_scope.py`, `backend/app/api/v1/router.py`, `docs/TEMPLATE_UPLOAD_AND_RENDERING.md` |
+| Structured notifications validation hardening | done | `tests/api/test_notifications_calendar_api.py`, `tests/test_workflow_api.py` |
+| Branding header/footer detail split and branch label carry-through | done | `tests/api/test_branding_api.py`, branding modules, `KNOWN_LIMITATIONS.md` |
+| Branded wizard preview continuity | done | `frontend/src/stores/documentsWizard.ts`, `frontend/src/__tests__/DocumentsWizardPage.test.tsx` |
+| Repo audit reproducibility checks | done | `scripts/repo_audit.py`, `tests/test_repo_audit.py` |
 
-### Remaining
-- Notification preferences exist, but escalation policies and richer delivery providers are still foundation-level rather than fully orchestrated.
-- Calendar aggregation is centralized, but not every deadline-bearing module is yet projected into the common feed.
-## Closed / reduced in this wave
-- Template DTO and frontend contract mismatch reduced by exposing scope/type/current-version/version-history more explicitly.
-- Custom template catalog now carries canonical scope metadata for tenant / organization / branch(site) usage.
-- Repo now documents demo access, owner bootstrap, and user role issuance explicitly.
+## Partial (implemented but not fully closed)
 
-## Remaining gaps
-- Full automatic template override resolution at generation time is not yet fully centralized; operators still choose the final template/version explicitly.
-- Branch naming in product language maps to backend `Site`, which should remain documented in future changes.
+| Gap area | Status | Evidence |
+|---|---|---|
+| Automatic `generate -> apply_headers -> pdf` chain across all entrypoints | partial | `KNOWN_LIMITATIONS.md`, `scripts/branded_document_smoke.py` |
+| Template override resolution centralization at generation time | partial | `ACCEPTANCE_TEST_MATRIX.md`, `backend/app/api/routes/documents.py` |
+| Calendar/notification coverage breadth across all modules | partial | `tests/api/test_notifications_calendar_api.py`, `tests/test_workflow_api.py` |
+| Workspace hub routes maturity | partial | `frontend/src/pages/workspace/WorkspaceAttentionPage.tsx`, `WorkspaceDataQualityPage.tsx`, `SyncConflictHelpPage.tsx`, `npm --prefix frontend run build` |
+| Coverage traceability beyond backend gate baseline | partial | `docs/stabilization/coverage.md`, `docs/TESTING.md`, `ACCEPTANCE_TEST_MATRIX.md` |
+
+## Missing (explicit next-wave work)
+
+| Gap area | Status | Evidence target |
+|---|---|---|
+| Fully relational/indexed template scope model (away from metadata-only scope) | missing | schema/migration + API tests (future PR) |
+| Dedicated branch entity separate from current `Site` model | missing | backend model + migration + API contract tests |
+| Restore drill RTO/RPO formal go/no-go criteria | missing | `docs/stabilization/restore-drill.md`, `docs/runbooks/RESTORE_TENANT.md`, `scripts/restore_drill.py` |
+| Security gate ownership fallback + escalation SLA codification | missing | `docs/stabilization/security-gates.md`, `.github/CODEOWNERS` |
+| Secrets-dependent e2e diagnostics hardening | missing | `.github/workflows/e2e-smoke.yml`, `docs/stabilization/e2e-access.md` |

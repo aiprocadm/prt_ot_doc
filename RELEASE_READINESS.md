@@ -1,40 +1,29 @@
 # RELEASE_READINESS
 
-## Ready now
-- Canonical roots and active entrypoints are documented.
-- `frontend/package.json` is verified in the actual frontend root.
-- Tenant/company/site branding inheritance works through the backend branding module.
-- Header/footer requisites can be managed independently through `header_details` and `footer_details`.
-- Branch-specific branded names are reflected in generated header/footer context.
-- Wizard step 5 exposes branded preview, resolution chain, watermark diagnostics, and reproducibility snapshot.
-- Branded preview metadata is durable across wizard navigation through the persisted wizard store.
-- Backend tests and repo-local smoke checks cover the branding preview/apply-headers handoff.
-- Tenant bootstrap with owner user.
-- Dev admin bootstrap.
-- Demo tenant bootstrap.
-- Custom template catalog + version upload + lint + preview.
-- Company-aware document generation.
-- Metadata-backed scope visualization for tenant/company/site templates.
-- Canonical docs for next-wave continuation from repo.
-- Template API/UI contract is again parseable and coherent for custom upload/version/scope flows.
+- **Updated on:** 2026-04-22
+- **Owner:** Release Manager + Platform + QA + SRE
+- **Canonical status vocabulary:** `done` / `partial` / `missing`
 
-## Not fully closed
-- Full enterprise lifecycle automation for every document path.
-- Dedicated branch model separate from `Site`.
-- Fully relational template scope filtering/reporting.
-## Current status
-- Template upload, version history, lint and preview are implemented foundations.
-- Owner bootstrap and access issuance are reproducible from repo scripts/docs.
-- Document generation for organization-specific flows is available and can be combined with site/branch metadata and branding/header-footer stages.
+## Evidence-backed readiness summary
 
-## Before production cutover
-- verify migrations on target DB;
-- verify storage + LibreOffice + ClamAV + Celery workers;
-- run backend/frontend smoke for custom template upload and document generation;
-- confirm structured 403 on JWT vs `X-Tenant` mismatch (slug or UUID) via API tests (`tests/test_jwt_xtenant_uuid_scope_mismatch.py`, `tests/test_tenant_security.py`);
-- provision real owner/demo credentials outside git.
+| Readiness area | Status | Evidence |
+|---|---|---|
+| Bootstrap and access foundations | done | `scripts/bootstrap_tenant.py`, `scripts/bootstrap_demo_tenant.py`, `backend/app/services/dev_bootstrap.py`, `ACCEPTANCE_TEST_MATRIX.md` |
+| Template upload/lint/preview + generation baseline | done | `tests/test_template_catalog_scope.py`, `tests/test_documents_generate.py`, API routes under `/api/v1/templates/*` and `/api/v1/documents/generate` |
+| Backend coverage non-regression gate | done | `.github/workflows/ci.yml` (`backend-tests`), `scripts/ci/check_backend_coverage_baseline.py`, `docs/stabilization/backend_coverage_baseline.json` |
+| Tenant isolation + contract/idempotency slices | done | `tests/integration/test_tenant_isolation.py`, `tests/contract/test_openapi_contract.py`, `tests/test_idempotency.py` |
+| End-to-end operational cutover confidence | partial | `GAP_REPORT.md`, `KNOWN_LIMITATIONS.md`, restore/security/e2e hardening tasks in `docs/stabilization/PLAN.md` |
+| Full production runbook closure (RTO/RPO + escalation ownership + secrets e2e diagnostics) | missing | `docs/stabilization/restore-drill.md`, `docs/stabilization/security-gates.md`, `.github/workflows/e2e-smoke.yml` |
 
-## Launch readiness verdict (2026-03-25)
-- Status: NOT READY (no-go for production cutover now).
-- Why: there are still high/medium enterprise gaps outside the completed Wave A/B slices (action-level permission coverage, unified task projection breadth, data quality module, offline field scenarios, reliability runbooks and worker-level operational checks).
-- Ready-to-launch trigger: switch to READY only after production cutover checklist passes on target infra and remaining high-severity operational gaps are either closed or explicitly risk-accepted by owners.
+## Launch readiness verdict
+
+- **Verdict date:** 2026-04-22
+- **Verdict:** **NOT READY**
+- **Why (evidence-backed):** release-critical items remain open and are explicitly marked `missing`/`partial` in `GAP_REPORT.md` and `docs/stabilization/PLAN.md`, especially restore go/no-go formalization, security gate escalation ownership, and secrets-dependent e2e signal hardening.
+
+## Conditions to flip verdict to READY
+
+All must be true:
+1. Missing items in `docs/stabilization/PLAN.md` are closed to `done` with linked executable evidence.
+2. `GAP_REPORT.md` has no unresolved release-critical `missing` entries.
+3. Cutover checklist execution is evidenced by scripts/tests/workflows and recorded in release artifacts.
