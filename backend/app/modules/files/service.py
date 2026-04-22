@@ -510,8 +510,6 @@ class FileService:
         ip: str | None = None,
         user_agent: str | None = None,
         request_id: str | None = None,
-        ip: str | None = None,
-        user_agent: str | None = None,
         access: AccessContext | None = None,
     ) -> str:
         record = await self.session.get(FileRecord, file_id)
@@ -530,9 +528,7 @@ class FileService:
                 details={"reason": "company_scope_mismatch", "purpose": purpose},
             )
             raise
-            self._enforce_company_read_access(record=record, access=access)
-        except HTTPException as exc:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden") from exc
+        self._enforce_company_read_access(record=record, access=access)
         if record.status != FileStatus.clean.value:
             await self._audit_file_action(
                 action="file.download_url.denied",
