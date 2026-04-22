@@ -3,6 +3,7 @@
 - **Updated on (UTC):** 2026-04-22
 - **Owner:** QA + Platform + Backend + Frontend
 - **Canonical status vocabulary:** `done` / `partial` / `missing`
+- **Blocker status source of truth:** `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`
 
 ## Acceptance gate (exact workflow + artifacts)
 
@@ -10,7 +11,7 @@
 |---|---|---|---|---|
 | Final acceptance gate | `partial` | Not all matrix scenarios are closed to `done`; required release-wide `overall_status=pass` evidence bundle is not yet recorded as closure artifact. | `make final-acceptance` (executes `scripts/final_acceptance.sh`), plus CI/e2e companion workflows `.github/workflows/ci.yml` and `.github/workflows/e2e-smoke.yml`. | `artifacts/final_acceptance/summary.json`, `artifacts/final_acceptance/summary.md`, `artifacts/final_acceptance/*.log`. |
 
-Release decision is governed by the **single go/no-go checklist** in `RELEASE_READINESS.md`.
+Release decision is governed by the binary artifact-bound go/no-go in `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` and reflected in `RELEASE_READINESS.md`.
 
 ## Matrix (deduplicated canonical table)
 
@@ -62,5 +63,6 @@ python scripts/pilot_readiness.py
 
 - Gap analysis: `GAP_REPORT.md`
 - Release verdict: `RELEASE_READINESS.md`
+- Blocker status source: `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`
 - Accepted constraints: `KNOWN_LIMITATIONS.md`
 - Stabilization plan: `docs/stabilization/PLAN.md`

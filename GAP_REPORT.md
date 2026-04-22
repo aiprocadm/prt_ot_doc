@@ -3,6 +3,7 @@
 - **Updated on (UTC):** 2026-04-22
 - **Owner:** Stabilization Program (Platform + QA + Product Engineering)
 - **Canonical status vocabulary:** `done` / `partial` / `missing`
+- **Blocker status source of truth:** `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`
 
 ## `done` gaps (closed in recent waves)
 

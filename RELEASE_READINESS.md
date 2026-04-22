@@ -4,6 +4,12 @@
 - **Owner:** Release Manager + Platform + QA + SRE
 - **Canonical status vocabulary:** `done` / `partial` / `missing`
 
+
+## Canonical blocker status source
+
+- Source of truth for blocker statuses: `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`.
+- The binary Go/No-Go checklist in this document must stay synchronized with `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` and remains artifact-bound only.
+
 ## Evidence-backed readiness summary
 
 | Readiness claim | Status | Partial/missing reason | Exact command/workflow | Artifact path(s) | Evidence links |
@@ -24,7 +30,7 @@ All criteria are binary and must be **YES** to flip verdict to `READY`.
 | 2 | Perf nightly baseline completed and trend manifest published for release window. | **NO** | `.github/workflows/perf-baseline.yml` (`Run nightly baseline profile`). | `artifacts/perf/nightly/trend-manifest.json`, `artifacts/perf/nightly/summary.md` (or `perf-baseline-<run_id>` artifact). |
 | 3 | Coverage regression gate passed at or above committed baseline. | **YES** | `.github/workflows/ci.yml` (`backend-tests`) + `python scripts/ci/check_backend_coverage_baseline.py --coverage-json artifacts/coverage.json --baseline docs/stabilization/backend_coverage_baseline.json`. | `artifacts/coverage.json` and `backend-test-report` artifact. |
 | 4 | Final acceptance bundle passed with no required-check failures. | **NO** | `make final-acceptance` (or equivalent `./scripts/final_acceptance.sh`). | `artifacts/final_acceptance/summary.json` with `overall_status=pass`. |
-| 5 | Plan/gap trackers have no release-critical `missing` entries. | **NO** | Document review workflow in release review meeting (no substitute automation yet). | Updated `docs/stabilization/PLAN.md` + `GAP_REPORT.md` showing no release-critical `missing`. |
+| 5 | Plan/gap trackers have no release-critical `missing` entries. | **NO** | `python - <<'PY'` blocker parser against `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` (see blocker file criterion #7). | `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` |
 
 ## Launch readiness verdict
 
