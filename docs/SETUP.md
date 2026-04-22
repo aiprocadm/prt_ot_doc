@@ -13,7 +13,7 @@ Default local login:
 - password: `admin123`
 
 ## Manual backend
-Интерпретатор **Python 3.12** совпадает с CI и Docker-образом (`Dockerfile`); другие минорные версии могут не собрать зависимости (например `asyncpg`).
+Интерпретатор **Python 3.12** совпадает с CI (включая `ci.yml` и `e2e-smoke.yml`) и Docker-образом (`Dockerfile`); другие минорные версии могут не собрать зависимости (например `asyncpg`).
 
 ```bash
 python -m venv .venv
