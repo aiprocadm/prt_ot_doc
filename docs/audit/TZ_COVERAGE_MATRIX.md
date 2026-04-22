@@ -1,41 +1,67 @@
-# TZ_COVERAGE_MATRIX
+# TZ coverage matrix (aligned to `docs/spec/TZ_FULL_UNIFIED.md`)
 
-| TZ area | Status | Canonical implementation |
-|---|---|---|
-| Structural audit / frontend-backend roots | Done | `README.md`, `docs/PROJECT_STRUCTURE.md`, `docs/audit/REPOSITORY_AUDIT.md`, `docs/audit/REPOSITORY_AUDIT.json`, `scripts/repo_audit.py`, `tests/test_repo_audit.py` |
-| Canonical frontend root and `package.json` | Done | `frontend/package.json` |
-| Python entrypoint compatibility | Done | `backend/app/main.py`, `app/__init__.py` |
-| Branding profile inheritance | Done | `backend/app/modules/branding/service.py` |
-| Header/footer requisites split (`header_details` / `footer_details`) | Done | `backend/app/modules/branding/schemas.py`, `frontend/src/pages/branding/BrandingSettingsPage.tsx` |
-| Branch-branded header context (`branch_label` -> rendered headers) | Done | `backend/app/modules/branding/service.py`, `tests/api/test_branding_api.py` |
-| Letterhead first/odd/even header/footer support | Done | `backend/app/modules/headers/engine.py` |
-| Branding profile UI | Done | `frontend/src/pages/branding/BrandingSettingsPage.tsx` |
-| Wizard organization/site/layout selection | Done | `frontend/src/pages/documents/DocumentsWizardPage.tsx` |
-| Reproducibility metadata | Done | `backend/app/modules/branding/service.py` |
-| Persisted wizard branding preview/history | Done | `frontend/src/stores/documentsWizard.ts` |
-| Server-side branded generation history | Done | `backend/app/modules/branding/api.py`, `frontend/src/pages/branding/BrandingSettingsPage.tsx` |
-| Apply-headers payload handoff | Done | `backend/app/modules/branding/api.py` |
-| Branded document smoke command | Done | `scripts/branded_document_smoke.py`, `Makefile` |
-| Full automatic apply-headers in every generation route | Partial | dedicated endpoint/job exists, not universally auto-chained |
-| PDF / approval / archive continuation | Partial | foundation exists, depends on selected profile/orchestration |
+Source of truth: `docs/spec/TZ_FULL_UNIFIED.md`.
 
-| Notifications API boundary hardening | Done | `backend/app/api/routes/notifications.py`, `backend/app/modules/notifications/service.py`, `backend/app/modules/notifications/schemas.py`, `backend/tests/test_notifications_service.py` |
-| Notification enum validation / structured 422 behavior | Done | `backend/app/modules/notifications/service.py`, `backend/app/api/error_handlers.py` |
-| Training / LMS canonical doc | Done | `docs/TRAINING_AND_LMS.md` |
-| Risk engine canonical doc | Done | `docs/RISK_ENGINE.md` |
-| Acceptance scenarios canonical doc | Done | `docs/ACCEPTANCE_SCENARIOS.md` |
-| Custom template scope/type DTO alignment | Done | `backend/app/api/v1/router.py`, `backend/app/modules/templates/schemas.py`, `frontend/src/types/dto/templates.ts` |
-| Template upload/version/lint/preview canonical doc | Done | `docs/TEMPLATE_UPLOAD_AND_RENDERING.md` |
-| Demo access canonical doc | Done | `docs/DEMO_ACCESS.md` |
-| Owner bootstrap/access canonical doc | Done | `docs/OWNER_ADMIN_ACCESS.md` |
-| User role issuance and scope assignment doc | Done | `docs/USER_ACCESS_AND_ROLES.md` |
+Status vocabulary is intentionally strict and machine-checkable:
+- `done`
+- `partial`
+- `missing`
 
-## Waves 3–5 (TZ rollout) — incremental implementation
+| REQ-ID | requirement | backend | db | jobs | events | frontend | tests | status | priority | plan |
+|---|---|---|---|---|---|---|---|---|---|---|
+| TZ-0.1-MVP-01 | [MVP] Preserve full unified TZ in repo (`TZ_FULL_UNIFIED.md`) with anchors/TOC and version tags | docs/spec/TZ_FULL_UNIFIED.md | - | - | - | - | - | done | p0 | Keep as canonical source; update matrix when TZ changes |
+| TZ-0.2-MVP-01 | [MVP] Maintain TZ coverage matrix with required columns and evidence links | docs/audit/TZ_COVERAGE_MATRIX.md | - | - | - | - | scripts/audit/check_tz_coverage_matrix.py | done | p0 | Enforced by CI + local script |
+| TZ-0.3-MVP-01 | [MVP] README quick-start + links to TZ/spec docs + bootstrap login guidance | README.md | - | - | - | - | - | partial | p1 | Add explicit links and “test login without secrets” section if still implicit |
+| TZ-1.1-MVP-01 | [MVP] Baseline in clean Codespace: cs:reset, cs:dev, cs:test, collect-only, frontend test | Makefile, docs/LOCAL_TEST_RUNBOOK.md | - | - | - | - | - | partial | p1 | Keep command list synchronized with current CI/runtime |
+| TZ-1.2-MVP-01 | [MVP] Baseline verification report exists and is reproducible | docs/audit/BASELINE_VERIFICATION.md | - | - | - | - | - | done | p1 | Refresh report after major infra/test changes |
+| TZ-2.1-MVP-01 | [MVP] Multi-tenancy/X-Tenant required on business routes | backend/app/middleware/tenant.py, backend/app/api/tenant_row_http.py | backend/app/migrations/versions/20250315_platform_p0_document_snapshot_batch.py | - | - | frontend/src/stores/tenant.ts | tests/test_tenant_header_required.py, tests/test_auth_tenant_header_enforcement.py, backend/tests/test_tenant_core_mvp.py | done | p0 | Keep deny-by-default for missing tenant header |
+| TZ-2.1-MVP-02 | [MVP] schema-per-tenant search_path setup | backend/app/db/session.py | backend/app/migrations/versions | - | - | - | tests/test_middleware_tenant.py, backend/tests/test_tenancy_helpers.py | partial | p0 | Add explicit regression test for `search_path` switch per request |
+| TZ-2.1-MVP-03 | [MVP] File isolation via tenant S3/object prefix | backend/app/modules/files | backend/app/migrations/versions/20260327_next54_files_core_hardening.py | - | - | frontend/src/features/files | tests/test_files_security_negative_cases.py, scripts/smoke.sh | partial | p0 | Harden/verify strict `tenant/{tenant_id}/...` prefix format everywhere |
+| TZ-2.2-MVP-01 | [MVP] RBAC + ABAC policy engine, unified checks and scoped filters | backend/app/modules/rbac, backend/app/modules/abac, backend/app/services/policy | - | - | - | frontend/src/permissions | backend/tests/test_next16_policy_stack.py, backend/tests/test_next42_rbac_abac_audit.py | partial | p0 | Add explicit ABAC attribute matrix test for all required attributes |
+| TZ-2.2-MVP-02 | [MVP] Roles vocabulary complete and shared | backend/app/modules/rbac, backend/tests/unit/test_rbac_vocabulary_single_source.py | - | - | - | frontend/src/permissions/permissions.ts | backend/tests/unit/test_rbac_vocabulary_single_source.py | done | p0 | Keep single source of truth for roles/enums |
+| TZ-2.3-MVP-01 | [MVP] Immutable audit log with field-level diff and atomic write | backend/app/modules/audit | backend/app/migrations/versions | - | - | frontend/src/stores/audit.ts | backend/tests/test_audit_error_contract.py, backend/tests/test_next42_rbac_abac_audit.py | partial | p0 | Add hard DB-level immutability guard test for UPDATE/DELETE denial |
+| TZ-2.4-MVP-01 | [MVP] Idempotency keys + replay semantics (same hash replay / mismatch 409) | backend/app/modules/idempotency, backend/app/modules/documents | backend/app/migrations/versions/20250315_platform_p0_document_snapshot_batch.py | - | - | frontend/src/features/documents/DocumentCreateWizard.tsx | tests/test_services_idempotency_unit.py, tests/integration/test_pipeline_idempotency.py | partial | p0 | Add direct API-level same-key/different-hash 409 coverage |
+| TZ-2.5-MVP-01 | [MVP] Templates strict by (code, version), uniqueness, in-use delete=409 | backend/app/modules/templates | backend/app/migrations/versions | - | - | frontend/src/features/templates | backend/tests/test_templates_linter_and_usage.py | partial | p0 | Add dedicated contract tests for `(code, version)` uniqueness + delete guard 409 |
+| TZ-2.6-MVP-01 | [MVP] Outbox dispatcher retries/backoff/dead-letter + metrics + subscription routing | backend/app/modules/outbox, backend/app/modules/webhooks | backend/app/migrations/versions/20260222_next10_job_engine.py, backend/app/migrations/versions/20250325_outbox_outbound_traffic.py | backend/app/jobs | backend/app/modules/outbox | frontend/src/pages/admin/diagnostics | backend/tests/test_webhook_retry_semantics.py, backend/tests/test_outbox_failure_diagnostics.py, tests/test_next43_outbox_webhooks.py | partial | p0 | Add explicit poison-queue and Prometheus metric assertions |
+| TZ-2.7-MVP-01 | [MVP] Required domain events emitted (DocumentGenerated/Signed/Exported/RiskAssessed/PPEIssued/TrainingCompleted) | backend/app/services/domain_hooks.py, backend/app/modules/* | backend/app/migrations/versions/20260222_next10_job_engine.py | backend/app/jobs | backend/app/modules/outbox | - | backend/tests/test_incident_inspection_outbox_events.py, backend/tests/test_next66_workflow_notifications_npa.py | partial | p0 | Add event-completeness test for all six mandatory event types |
+| TZ-2.8-MVP-01 | [MVP] Document pipeline step model/status/log/retries/timings/errors | backend/app/modules/documents/pipeline, backend/app/modules/jobs | backend/app/migrations/versions/20260222_next10_job_engine.py, backend/app/migrations/versions/20260227_next23_pipeline_orchestration_v1.py | backend/app/jobs | - | frontend/src/features/documents | backend/tests/test_pipeline_step_handlers.py, backend/tests/test_next39_pipeline_orchestrator.py, tests/integration/test_pipeline_steps_happy_path.py | done | p0 | Maintain step-contract stability across handlers |
+| TZ-2.9-MVP-01 | [MVP] Replace engine dry-run/diff/apply/rollback with backup strategy | backend/app/modules/replace | backend/app/migrations/versions | backend/app/jobs | - | frontend/src/pages/documents/DocumentsWizardPage.tsx | backend/tests/replace/test_replace_engine.py, backend/tests/replace/test_replace_versioning.py | partial | p0 | Add explicit KPI smoke for dry-run→apply→rollback roundtrip |
+| TZ-2.10-MVP-01 | [MVP] PDF generation with embedded fonts + LO headless pool + explicit fallback policy | backend/app/modules/documents, backend/app/services/pdf | - | backend/app/jobs | - | - | tests/test_documents_generate.py | partial | p1 | Document feature-flag fallback and add font-embed assertion test |
+| TZ-3.1-MVP-01 | [MVP] Risks domain (PxS, hazards/measures, action plans, deterministic output, event) | backend/app/modules/risk | backend/app/migrations/versions/20250322_risk_cards_action_plans.py | backend/app/jobs | backend/app/modules/outbox | frontend/src/features/risk | backend/tests/test_risk_error_contract.py, backend/tests/test_next58_safety_core_services.py | partial | p1 | Add deterministic result fixture and explicit RiskAssessed outbox assertion |
+| TZ-3.2-MVP-01 | [MVP] PPE cards/norms/issue-return journal + PPEIssued event | backend/app/modules/ppe | backend/app/migrations/versions | backend/app/jobs | backend/app/modules/outbox | frontend/src/pages/ppe | backend/tests/test_ppe_access_parity.py, backend/tests/test_ppe_error_contract.py | partial | p1 | Add PPEIssued event assertion in module-level tests |
+| TZ-3.2-V11-01 | [v1.1] PPE warehouse (stock/batches/certs/inventory) skeleton | backend/app/modules/ppe | backend/app/migrations/versions | - | - | frontend/src/pages/ppe | - | missing | p2 | Add schema + APIs + minimal UI skeleton |
+| TZ-3.3-MVP-01 | [MVP] Training registry/courses/groups/tests/protocols/certs + TrainingCompleted event | backend/app/modules/training, backend/app/modules/briefings | backend/app/migrations/versions | backend/app/jobs | backend/app/modules/outbox | frontend/src/pages/training | backend/tests/test_training_access_parity.py, backend/tests/test_training_error_contract.py | partial | p1 | Add TrainingCompleted event test bound to completion workflow |
+| TZ-3.4-MVP-01 | [MVP] Incidents/investigation/CAPA deadlines + inspections checklist minimum + prep package skeleton | backend/app/modules/incidents, backend/app/modules/inspections, backend/app/modules/packs | backend/app/migrations/versions | backend/app/jobs | backend/app/modules/outbox | frontend/src/pages/incidents, frontend/src/pages/inspections | backend/tests/test_next60_incidents_inspections_capa_prep.py, backend/tests/test_incidents_access_parity.py | partial | p1 | Expand checklist and package integration tests |
+| TZ-3.4-V12-01 | [v1.2] Prescriptions skeleton | backend/app/modules/prescriptions | backend/app/migrations/versions | - | - | frontend/src/pages/prescriptions | backend/tests/test_prescriptions_access_parity.py | partial | p2 | Finalize CRUD/workflow semantics and acceptance docs |
+| TZ-3.5-MVP-01 | [MVP] Domain packages: object access / incident / inspection prep / training with integration scenarios | backend/app/modules/packs | backend/app/migrations/versions | backend/app/jobs | - | frontend/src/pages/packs | tests/test_package_pipeline.py, backend/tests/test_packs_access_parity.py | partial | p1 | Add 2 canonical E2E package scenarios with fixtures |
+| TZ-4.1-MVP-01 | [MVP] Feature-based frontend structure + shared layers | - | - | - | - | frontend/src/features, frontend/src/router, frontend/src/layouts | frontend/src/App.tsx, frontend/vitest.critical.config.ts | done | p1 | Keep page registry/route grouping feature-scoped |
+| TZ-4.2-MVP-01 | [MVP] Required screens (Login/Tenant, Dashboard, Documents flow, Risks, PPE, Training, Incidents, Admin, Client cabinet v1) | backend/app/api/v1/router.py | - | - | - | frontend/src/pages, frontend/src/router/pageRegistry.tsx | frontend/e2e/smoke.spec.ts, frontend/e2e/key-scenarios.spec.ts | partial | p1 | Maintain a checklist per required screen and route |
+| TZ-4.3-MVP-01 | [MVP] UX components: diff viewer, job timeline, search/filter, RBAC guards, minimal bulk actions | backend/app/modules/documents | - | - | - | frontend/src/features/documents, frontend/src/permissions, frontend/src/features/* | frontend/e2e/key-scenarios.spec.ts | partial | p1 | Add component-level tests for diff/timeline/guard/bulk flows |
+| TZ-4.4-MVP-01 | [MVP] Frontend smoke tests (render app, tenant guard flows, key routes no crash) | - | - | - | - | frontend/src/App.tsx, frontend/src/router/AppRouter.tsx | frontend/e2e/smoke.spec.ts, frontend/e2e/key-scenarios.spec.ts, frontend/vitest.critical.config.ts | done | p1 | Keep smoke suite in CI path and stable fixtures |
+| TZ-5.1-MVP-01 | [MVP] Canonical DevX commands `cs:reset`, `cs:dev`, `cs:test` | Makefile, docs/SETUP.md | - | - | - | - | - | done | p1 | Keep docs and Make targets synchronized |
+| TZ-5.2-MVP-01 | [MVP] Admin bootstrap via env without secrets | backend/app/core/config.py, scripts/run_backend_lite.py | - | - | - | - | docs/OWNER_ADMIN_ACCESS.md, scripts/smoke.sh | done | p1 | Keep defaults safe and docs explicit |
+| TZ-5.3-MVP-01 | [MVP] Test discovery in VS Code / optional `scripts/pytest.sh` | scripts/pytest.sh, docs/testing.md | - | - | - | - | - | done | p2 | Keep instructions aligned with current workspace settings |
+| TZ-6.1-MVP-01 | [MVP] Repo hygiene: single install/start path, unified env docs, truthful runbook | docs/SETUP.md, docs/runbook.md, docs/RUNBOOK.md | - | - | - | - | scripts/repo_audit.py, tests/test_repo_audit.py | partial | p1 | Continue deduping legacy docs and stale paths |
+| TZ-6.2-MVP-01 | [MVP] Required docs: `docs/repo-structure.md` and `docs/troubleshooting.md` | docs/repo-structure.md | - | - | - | - | - | missing | p1 | Add `docs/troubleshooting.md` and cross-link from setup/runbook |
+| TZ-6.3-MVP-01 | [MVP] CI linters/type checks should not block normal dev flow | .github/workflows/ci.yml, scripts/ci/static_gates.sh | - | - | - | - | - | done | p1 | Keep staged/static gates fast and actionable |
+| TZ-6.3-V11-01 | [v1.1] Coverage gate for core/domain/services >=85% or documented climb plan | .github/workflows/ci.yml | - | - | - | - | - | missing | p2 | Add scoped coverage job with baseline + improvement plan |
+| TZ-7-MVP-01 | [MVP] End-to-end acceptance in clean Codespace/UI + tests green + docs links | Makefile, docs/FINAL_ACCEPTANCE_REPORT.md, docs/ACCEPTANCE_CHECKLIST.md | - | - | backend/app/modules/outbox | frontend/e2e/smoke.spec.ts | scripts/smoke.sh, make cs:test | partial | p0 | Keep acceptance matrix executable and tied to CI artifacts |
+| TZ-B1-MVP-01 | [MVP] B1 tenant isolation + scoped access | backend/app/middleware/tenant.py, backend/app/db/tenant_row_guard.py | backend/app/migrations/versions | - | - | frontend/src/stores/tenant.ts | tests/test_tenant_security.py, backend/tests/test_tenant_core_mvp.py | done | p0 | Maintain tenant guard parity across modules |
+| TZ-B2-MVP-01 | [MVP] B2 RBAC/ABAC enforcement | backend/app/modules/rbac, backend/app/modules/abac | - | - | - | frontend/src/permissions | backend/tests/test_next16_policy_stack.py | partial | p0 | Expand negative ABAC scenarios and scope filters |
+| TZ-B3-MVP-01 | [MVP] B3 document pipeline orchestration | backend/app/modules/documents/pipeline | backend/app/migrations/versions/20260227_next23_pipeline_orchestration_v1.py | backend/app/jobs | - | frontend/src/features/documents | backend/tests/test_next39_pipeline_orchestrator.py, backend/tests/test_pipeline_step_handlers.py | done | p0 | Keep idempotent step executor contract |
+| TZ-B4-MVP-01 | [MVP] B4 idempotency keys + replay | backend/app/modules/idempotency | backend/app/migrations/versions/20250315_platform_p0_document_snapshot_batch.py | - | - | frontend/src/features/documents/DocumentCreateWizard.tsx | tests/test_services_idempotency_unit.py | partial | p0 | Close API-level mismatch/409 gap tests |
+| TZ-B5-MVP-01 | [MVP] B5 outbox/webhooks delivery guarantees | backend/app/modules/outbox, backend/app/modules/webhooks | backend/app/migrations/versions/20250325_outbox_outbound_traffic.py | backend/app/jobs | backend/app/modules/outbox | frontend/src/pages/admin/diagnostics | backend/tests/test_webhook_retry_semantics.py, tests/test_next43_outbox_webhooks.py | partial | p0 | Add poison-queue and dedupe guarantees to acceptance suite |
+| TZ-F1-MVP-01 | [MVP] F1 feature-based frontend architecture | - | - | - | - | frontend/src/features, frontend/src/router/features | frontend/src/App.tsx | done | p1 | Keep new pages routed through feature registry |
+| TZ-F2-MVP-01 | [MVP] F2 mandatory MVP screens | backend/app/api/v1/router.py | - | - | - | frontend/src/pages | frontend/e2e/smoke.spec.ts | partial | p1 | Close remaining page parity and route hardening gaps |
+| TZ-F3-MVP-01 | [MVP] F3 UX components (diff/timeline/filter/guards) | backend/app/modules/documents | - | - | - | frontend/src/features/documents, frontend/src/permissions | frontend/e2e/key-scenarios.spec.ts | partial | p1 | Add focused component tests and UX acceptance checklist |
+| TZ-F4-MVP-01 | [MVP] F4 frontend smoke tests | - | - | - | - | frontend/src/App.tsx, frontend/src/router/AppRouter.tsx | frontend/e2e/smoke.spec.ts, frontend/vitest.critical.config.ts | done | p1 | Keep smoke tests in PR path |
 
-| TZ area | Status | Canonical implementation |
-|---|---|---|
-| Cross-domain link: signed document → universal task | Done | `backend/app/services/domain_hooks.py`, `backend/app/services/documents.py`, `tests/services/test_domain_hooks_document_signed.py` |
-| EDO production HTTP adapter (config-gated) | Done | `backend/app/services/integrations/http_edo.py`, `backend/app/services/integrations/factory.py`, `backend/app/core/config.py`, `docs/integrations/PRODUCTION_ADAPTERS.md`, `tests/services/test_edo_integration_factory.py` |
-| Role-based workspace UX: attention + data quality hubs | Done | `frontend/src/pages/workspace/*`, `frontend/src/router/routeGroups.tsx`, `frontend/src/components/layout/SideNav.tsx` |
-| Offline / sync conflict operator guidance | Done | `frontend/src/pages/help/SyncConflictHelpPage.tsx`, route `/help/sync-conflicts` |
-| Acceptance traceability (Wave 3–5 slice) | Done | `ACCEPTANCE_TEST_MATRIX.md` (section below), this table |
+## Machine validation
+
+Run locally:
+
+```bash
+python scripts/audit/check_tz_coverage_matrix.py
+```
+
+CI also runs the same validator in `.github/workflows/ci.yml` (lint-and-static job).
