@@ -46,6 +46,11 @@ test.describe("smoke", () => {
       await expect(page).toHaveURL(/\/auth\/login/, { timeout: 30_000 });
     });
 
+    test("attention hub route redirects to login when logged out", async ({ page }) => {
+      await page.goto("/workspace/attention", { waitUntil: "domcontentloaded" });
+      await expect(page).toHaveURL(/\/auth\/login/, { timeout: 30_000 });
+    });
+
     test("unauthorized/denied route shows access denied page", async ({ page }) => {
       await page.goto("/no-access", { waitUntil: "domcontentloaded" });
       await expect(page.getByRole("heading", { name: "Доступ ограничен" })).toBeVisible();
@@ -153,6 +158,15 @@ test.describe("smoke", () => {
       await waitMainShellReady(page);
 
       await page.goto("/documents", { waitUntil: "domcontentloaded" });
+      await expect(page.getByRole("heading", { name: "Доступ ограничен" })).toBeVisible({ timeout: 30_000 });
+    });
+
+    test("limited user denied on attention hub when dashboard permission is missing", async ({ page }) => {
+      test.skip(!hasLimitedCreds, "Set E2E_LIMITED_USER_EMAIL and E2E_LIMITED_USER_PASSWORD");
+      await loginLimitedUser(page);
+      await waitMainShellReady(page);
+
+      await page.goto("/workspace/attention", { waitUntil: "domcontentloaded" });
       await expect(page.getByRole("heading", { name: "Доступ ограничен" })).toBeVisible({ timeout: 30_000 });
     });
   });
