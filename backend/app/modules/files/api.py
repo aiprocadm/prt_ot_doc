@@ -339,7 +339,7 @@ async def get_file_v2(
         mismatch_event="api.modules.files.get_record.tenant_scope_mismatch",
         detail="file_not_found",
     )
-    service.FileService(session=session, tenant_id=str(tenant.id)).ensure_record_access(
+    await service.FileService(session=session, tenant_id=str(tenant.id)).ensure_record_access(
         record=file_record,
         actor_role=getattr(access, "role", None),
         actor_company_id=access.company_id,
@@ -486,6 +486,10 @@ async def link_file_v2(
         entity_type=payload.entity_type,
         entity_id=payload.entity_id,
         role=role,
+        actor_id=getattr(access.user, "id", None),
+        actor_role=getattr(access, "role", None),
+        actor_company_id=access.company_id,
+        access=access,
     )
     await session.commit()
     return LinkFileResponse(link_id=link.id)
