@@ -1,8 +1,16 @@
 # Restore Drill (Stabilization)
 
-_Last updated: 2026-04-20._
+_Last updated: 2026-04-22._
 
 This document defines repeatable backup/restore drills with machine-readable evidence for stabilization sign-off.
+
+## Restore drill gate (exact workflow + artifacts)
+
+| Gate | Status | Partial/missing reason | Exact command/workflow | Artifact path(s) |
+|---|---|---|---|---|
+| Restore drill (sqlite + postgres-minio) | `partial` | Formal release go/no-go closure is still open in readiness tracking; evidence generation exists but checklist closure is still `NO` in `RELEASE_READINESS.md`. | Local commands: `python scripts/restore_drill.py --mode sqlite --output-dir artifacts/restore-drill` and `python scripts/restore_drill.py --mode postgres-minio --output-dir artifacts/restore-drill`; CI workflow: `.github/workflows/restore-drill.yml` (`restore-drill` job, scheduled Mondays 03:30 UTC + manual dispatch). | `artifacts/restore-drill/<mode>-<timestamp>.json`, `artifacts/restore-drill/latest-sqlite.json`, `artifacts/restore-drill/latest-postgres-minio.json`; uploaded artifact name: `restore-drill-evidence`. |
+
+Release decision is governed by the **single go/no-go checklist** in `RELEASE_READINESS.md`.
 
 ## Scope and goal
 

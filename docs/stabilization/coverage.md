@@ -8,11 +8,13 @@ This document defines backend line + branch coverage policy used for CI non-regr
 
 ## Coverage gate status
 
-| Coverage claim | Status | Test evidence | Workflow evidence | Script evidence | Doc evidence |
+| Coverage claim | Status | Partial/missing reason | Exact command/workflow | Artifact path(s) | Evidence links |
 |---|---|---|---|---|---|
-| Backend coverage baseline gate is enforced | `done` | `tests/` suite through pytest coverage collection | `.github/workflows/ci.yml` (`backend-tests`) | `scripts/ci/check_backend_coverage_baseline.py` | `docs/stabilization/backend_coverage_baseline.json` |
-| Critical-path traceability across unit/integration/e2e is complete | `partial` | `frontend/e2e/smoke.spec.ts`, `tests/e2e/final_regression/test_final_regression_api.py` | `.github/workflows/e2e-smoke.yml` | `scripts/pytest.sh` | `ACCEPTANCE_TEST_MATRIX.md`, `docs/TESTING.md` |
-| Secrets-dependent e2e reliability hardening is complete | `missing` | `tests/e2e/access/test_access_enforcement_matrix.py` (target) | `.github/workflows/e2e-smoke.yml` (target hardening) | — | `docs/stabilization/e2e-access.md` |
+| Coverage regression gate is enforced | `done` | — | `python scripts/ci/check_backend_coverage_baseline.py --coverage-json artifacts/coverage.json --baseline docs/stabilization/backend_coverage_baseline.json`; workflow: `.github/workflows/ci.yml` (`backend-tests`). | `artifacts/coverage.json`, `artifacts/coverage.xml`, `artifacts/coverage-term-missing.txt`; CI artifact: `backend-test-report`. | `.github/workflows/ci.yml`, `scripts/ci/check_backend_coverage_baseline.py`, `docs/stabilization/backend_coverage_baseline.json` |
+| Critical-path traceability across unit/integration/e2e is complete | `partial` | Cross-layer mapping exists but not all acceptance scenarios are fully `done` in matrix (notably performance and some workflow edges). | Supporting suites: `./scripts/pytest.sh tests/e2e/final_regression/test_final_regression_api.py` and frontend smoke in `.github/workflows/e2e-smoke.yml`. | CI artifacts split across backend + e2e runs; no single consolidated traceability artifact yet. | `ACCEPTANCE_TEST_MATRIX.md`, `docs/TESTING.md`, `.github/workflows/e2e-smoke.yml` |
+| Secrets-dependent e2e reliability hardening is complete | `missing` | Secrets-dependent branch in e2e smoke remains a target state and is not closed as release-ready evidence. | Target workflow: `.github/workflows/e2e-smoke.yml` (`playwright-smoke-credential` with `repo_secrets`). | Missing closed evidence bundle for required secret-backed runs in release artifacts. | `docs/stabilization/e2e-access.md`, `GAP_REPORT.md` |
+
+Release decision is governed by the **single go/no-go checklist** in `RELEASE_READINESS.md`.
 
 ## What is enforced in CI
 
