@@ -4,6 +4,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 
+import app.api.routes.tasks as task_routes
 from app.models.models import (
     PipelineRun,
     PipelineRunStatus,
@@ -152,6 +153,124 @@ async def test_pipeline_run_status_not_found(async_client: AsyncClient, make_aut
     assert response.status_code == 404
     body = response.json()
     assert body.get("code") == "PIPELINE_RUN_NOT_FOUND"
+
+
+@pytest.mark.anyio
+async def test_pipeline_run_status_rejects_cross_tenant_worker_payload(
+    async_client: AsyncClient,
+    sessionmaker,
+    make_auth_headers,
+    monkeypatch,
+) -> None:
+    async with sessionmaker() as session:
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
+        session.info["tenant"] = tenant.slug
+        template = Template(
+            tenant_id=tenant.id,
+            name="TASK-STATUS-TENANT",
+            description="",
+            metadata_json={},
+            storage_key="templates/task-status-tenant.docx",
+        )
+        session.add(template)
+        await session.flush()
+        version = TemplateVersion(
+            tenant_id=tenant.id,
+            template_id=template.id,
+            version=1,
+            checksum=b"checksum",
+            status=TemplateVersionStatus.ACTIVE,
+            payload_key="templates/task-status-tenant.docx",
+        )
+        session.add(version)
+        await session.flush()
+        run = PipelineRun(
+            tenant_id=tenant.id,
+            template_id=template.id,
+            template_version_id=version.id,
+            status=PipelineRunStatus.DONE,
+            context={},
+            idempotency_key="status-test-tenant-mismatch",
+        )
+        session.add(run)
+        await session.commit()
+        run_id = run.id
+
+    class _FakeAsyncResult:
+        state = "SUCCESS"
+        result = {"status": "SUCCESS", "tenant": "other-tenant"}
+
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def ready(self) -> bool:
+            return True
+
+    monkeypatch.setattr(task_routes, "AsyncResult", _FakeAsyncResult)
+
+    headers = await make_auth_headers()
+    response = await async_client.get(f"/api/v1/tasks/pipeline-runs/{run_id}", headers=headers)
+    assert response.status_code == 404
+    assert response.json().get("code") == "PIPELINE_RUN_NOT_FOUND"
+
+
+@pytest.mark.anyio
+async def test_pipeline_run_status_rejects_non_string_worker_tenant_marker(
+    async_client: AsyncClient,
+    sessionmaker,
+    make_auth_headers,
+    monkeypatch,
+) -> None:
+    async with sessionmaker() as session:
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
+        session.info["tenant"] = tenant.slug
+        template = Template(
+            tenant_id=tenant.id,
+            name="TASK-STATUS-TENANT-TYPE",
+            description="",
+            metadata_json={},
+            storage_key="templates/task-status-tenant-type.docx",
+        )
+        session.add(template)
+        await session.flush()
+        version = TemplateVersion(
+            tenant_id=tenant.id,
+            template_id=template.id,
+            version=1,
+            checksum=b"checksum",
+            status=TemplateVersionStatus.ACTIVE,
+            payload_key="templates/task-status-tenant-type.docx",
+        )
+        session.add(version)
+        await session.flush()
+        run = PipelineRun(
+            tenant_id=tenant.id,
+            template_id=template.id,
+            template_version_id=version.id,
+            status=PipelineRunStatus.DONE,
+            context={},
+            idempotency_key="status-test-tenant-type-mismatch",
+        )
+        session.add(run)
+        await session.commit()
+        run_id = run.id
+
+    class _FakeAsyncResult:
+        state = "SUCCESS"
+        result = {"status": "SUCCESS", "tenant": 404}
+
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def ready(self) -> bool:
+            return True
+
+    monkeypatch.setattr(task_routes, "AsyncResult", _FakeAsyncResult)
+
+    headers = await make_auth_headers()
+    response = await async_client.get(f"/api/v1/tasks/pipeline-runs/{run_id}", headers=headers)
+    assert response.status_code == 404
+    assert response.json().get("code") == "PIPELINE_RUN_NOT_FOUND"
 
 
 @pytest.mark.anyio
