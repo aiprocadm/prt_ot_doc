@@ -11,7 +11,7 @@ import logging
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Annotated, Any, BinaryIO, Collection, Mapping
+from typing import IO, Annotated, Any, Collection, Mapping
 from uuid import UUID
 
 from fastapi import (
@@ -359,7 +359,7 @@ async def _persist_and_audit(
     tenant: Tenant,
     access: AccessContext,
     key: str,
-    payload_file: BinaryIO,
+    payload_file: IO[bytes],
     mime: str,
     sha256_hash: str,
     size: int,
