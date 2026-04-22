@@ -32,6 +32,24 @@ const createIdempotencyKey = () =>
 const isTerminalStatus = (status: string | undefined) =>
   Boolean(status && ["success", "failed", "done", "error", "canceled"].includes(status));
 
+const ORCHESTRATION_LABELS: Record<string, string> = {
+  generated: "Документ сгенерирован",
+  headers_applied: "Колонтитулы применены",
+  pdf_ready: "PDF подготовлен",
+  handoff_ready: "Готов к передаче дальше",
+  retrying: "Повторная попытка",
+  failed: "Ошибка",
+};
+
+const STEP_ORDER = ["generated", "headers_applied", "pdf_ready", "handoff_ready", "retrying", "failed"];
+
+const getUserFacingError = (task: TaskStatusResponse | null) => {
+  const value = task?.metadata && typeof task.metadata === "object"
+    ? (task.metadata["user_facing_error"] as string | undefined)
+    : undefined;
+  return value ?? task?.error ?? null;
+};
+
 const QuickGeneratePage = () => {
   const { can } = useAbility();
   const [searchParams] = useSearchParams();
@@ -196,6 +214,14 @@ const QuickGeneratePage = () => {
     }
   );
 
+  const orchestration = task?.metadata && typeof task.metadata === "object"
+    ? ((task.metadata["orchestration"] as Record<string, unknown> | undefined) ?? undefined)
+    : undefined;
+  const orchestrationState = typeof orchestration?.state === "string" ? orchestration.state : null;
+  const timelineStates = Array.isArray(orchestration?.timeline)
+    ? (orchestration.timeline as Array<Record<string, unknown>>).map((item) => String(item.state ?? ""))
+    : [];
+
   if (!canCreate) {
     return <AccessDeniedPage />;
   }
@@ -309,9 +335,22 @@ const QuickGeneratePage = () => {
           {task ? (
             <div className="rounded-md border p-3 text-sm">
               <p className="font-medium">Статус запуска: {task.status}</p>
-              {task.error ? <p className="text-destructive">{task.error}</p> : null}
+              {getUserFacingError(task) ? <p className="text-destructive">{getUserFacingError(task)}</p> : null}
               {task.document_id ? <p>Документ: {task.document_id}</p> : null}
               {task.document_version_id ? <p>Версия: {task.document_version_id}</p> : null}
+              <div className="mt-3 grid gap-1">
+                <p className="text-xs text-muted-foreground">Этапы оркестрации:</p>
+                {STEP_ORDER.map((step) => {
+                  const isDone = timelineStates.includes(step);
+                  const isCurrent = orchestrationState === step;
+                  return (
+                    <div key={step} className="flex items-center gap-2 text-xs">
+                      <span>{isDone ? "✅" : isCurrent ? "🟡" : "⚪"}</span>
+                      <span className={step === "failed" && isDone ? "text-destructive" : ""}>{ORCHESTRATION_LABELS[step] ?? step}</span>
+                    </div>
+                  );
+                })}
+              </div>
               {(task.status === "failed" || task.status === "error") ? (
                 <div className="mt-3 flex flex-wrap gap-2">
                   {personId ? (

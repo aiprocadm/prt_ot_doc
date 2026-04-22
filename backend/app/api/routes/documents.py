@@ -87,6 +87,7 @@ from app.services.document_insights import (
 )
 from app.services.document_readiness import compute_document_readiness
 from app.services.document_quality import build_quality_report
+from app.services.document_orchestration import ORCHESTRATION_STATES
 from app.services.documents import (
     DocumentNotFoundError,
     DocumentWorkflowService,
@@ -1718,6 +1719,13 @@ async def get_generation_task_status(
         run.status.value if hasattr(run.status, "value") else str(run.status)
     )
     metadata.setdefault("pipeline_status", pipeline_status)
+    orchestration = dict(metadata.get("orchestration") or {})
+    state = orchestration.get("state")
+    if state not in ORCHESTRATION_STATES:
+        fallback = "failed" if pipeline_status in {"failed", "error"} else "generated"
+        orchestration.setdefault("state", fallback)
+        orchestration.setdefault("timeline", [])
+    metadata["orchestration"] = orchestration
 
     document_id = metadata.get("document_id") or outputs.get("document_id")
     document_version_id = metadata.get("document_version_id") or outputs.get(
@@ -1729,7 +1737,7 @@ async def get_generation_task_status(
         status=pipeline_status,
         document_id=document_id,
         document_version_id=document_version_id,
-        error=run.error,
+        error=str(metadata.get("user_facing_error") or run.error or "") or None,
         metadata=metadata or None,
     )
 

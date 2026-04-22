@@ -7,6 +7,16 @@ from __future__ import annotations
 
 from typing import Any
 
+
+DOCUMENT_ORCHESTRATION_STATES: tuple[str, ...] = (
+    "generated",
+    "headers_applied",
+    "pdf_ready",
+    "handoff_ready",
+    "failed",
+    "retrying",
+)
+
 # Ключи шагов job engine (совпадают с step_key в DocumentJobStep после алиасов).
 DOCUMENT_CORE_PIPELINE_STEPS: tuple[str, ...] = (
     "validate_template",

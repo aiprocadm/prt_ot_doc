@@ -25,3 +25,7 @@ See canonical mapping in `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`.
 - Acceptance map: `ACCEPTANCE_TEST_MATRIX.md`
 - Gap tracker: `GAP_REPORT.md`
 - Stabilization tracker: `docs/stabilization/PLAN.md`
+
+## Document chain limitations (updated 2026-04-22)
+- End-to-end chain state model is unified (`generated → headers_applied → pdf_ready → handoff_ready`), but legacy single-run flow still performs headers/pdf as logical orchestration milestones without a dedicated persisted artifact per milestone.
+- Quick-generate timeline currently visualizes orchestration states from task metadata only; historical runs created before 2026-04-22 may not include complete timeline arrays.

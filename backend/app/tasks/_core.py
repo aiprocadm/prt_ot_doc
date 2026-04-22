@@ -86,6 +86,7 @@ from app.modules.workflow.service import WorkflowService
 from app.repository import create_template
 from app.schemas.template import TemplateCreate, TemplateVersionMetadata
 from app.services.audit import AuditService
+from app.services.document_orchestration import normalize_user_facing_error, set_state
 from app.services.celery_app import celery_app
 from app.services.events import EventType
 from app.services.file_storage import FileStorageService
@@ -233,6 +234,7 @@ async def _generate_document_for_run(run_id: str, tenant_slug: str) -> tuple[str
                 _assert_pipeline_run_matches_session_tenant(session, run)
 
                 metadata = dict(run.result_metadata or {})
+                metadata["orchestration"] = set_state(metadata.get("orchestration"), state="generated")
                 existing_document_id = metadata.get("document_id")
                 existing_version_id = metadata.get("document_version_id")
                 if run.status == PipelineRunStatus.DONE and existing_document_id:
@@ -432,6 +434,9 @@ async def _generate_document_for_run(run_id: str, tenant_slug: str) -> tuple[str
                 metadata["document_id"] = document.id
                 metadata["document_version_id"] = version.id
                 metadata["docx_storage_key"] = storage_key
+                metadata["orchestration"] = set_state(metadata.get("orchestration"), state="headers_applied")
+                metadata["orchestration"] = set_state(metadata.get("orchestration"), state="pdf_ready")
+                metadata["orchestration"] = set_state(metadata.get("orchestration"), state="handoff_ready")
 
                 run.status = PipelineRunStatus.DONE
                 run.docx_storage_key = storage_key
@@ -818,6 +823,7 @@ def cleanup_idempotency_keys_task() -> int:
 
 
 @celery_app.task(
+    bind=True,
     name="app.tasks.generate_document",
     autoretry_for=RETRYABLE_EXCEPTIONS,
     retry_backoff=settings.celery.retry_backoff_seconds,
@@ -825,7 +831,7 @@ def cleanup_idempotency_keys_task() -> int:
     retry_jitter=True,
     retry_kwargs={"max_retries": settings.celery.task_max_retries},
 )
-def generate_document_task(run_id: str, *, tenant_slug: str) -> str:
+def generate_document_task(self, run_id: str, *, tenant_slug: str) -> str:
     """Render a document for the provided pipeline run and persist the result."""
 
     async def _run() -> str:
@@ -857,9 +863,18 @@ def generate_document_task(run_id: str, *, tenant_slug: str) -> str:
                     run = await session.get(PipelineRun, run_id)
                     if run:
                         _assert_pipeline_run_matches_session_tenant(session, run)
-                        run.status = PipelineRunStatus.ERROR
+                        retries = int(getattr(self.request, "retries", 0) or 0)
+                        max_retries = int(settings.celery.task_max_retries)
+                        is_retrying = retries < max_retries
+                        metadata = dict(run.result_metadata or {})
+                        next_state = "retrying" if is_retrying else "failed"
+                        details = {"attempt": retries + 1, "error": str(exception)[:255]}
+                        metadata["orchestration"] = set_state(metadata.get("orchestration"), state=next_state, details=details)
+                        metadata["user_facing_error"] = normalize_user_facing_error(str(exception))
+                        run.result_metadata = metadata
                         run.error = str(exception)[:255]
-                        run.finished_at = datetime.now(tz=timezone.utc)
+                        run.status = PipelineRunStatus.QUEUED if is_retrying else PipelineRunStatus.ERROR
+                        run.finished_at = None if is_retrying else datetime.now(tz=timezone.utc)
                         audit = AuditService(session)
                         await audit.log_event(
                             tenant_id=run.tenant_id,
@@ -872,7 +887,7 @@ def generate_document_task(run_id: str, *, tenant_slug: str) -> str:
                                 else None
                             ),
                             ip="system",
-                            details={"status": "error", "error": str(exception)[:255]},
+                            details={"status": next_state, "error": str(exception)[:255], "attempt": retries + 1},
                         )
 
         try:
