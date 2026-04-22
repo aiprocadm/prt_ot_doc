@@ -1,6 +1,6 @@
 # Stabilization Coverage Gates
 
-- **Updated on:** 2026-04-22
+- **Updated on (UTC):** 2026-04-22
 - **Owner:** QA Automation + Backend
 - **Canonical status vocabulary:** `done` / `partial` / `missing`
 
@@ -8,12 +8,11 @@ This document defines backend line + branch coverage policy used for CI non-regr
 
 ## Coverage gate status
 
-- **Backend coverage baseline gate:** `done`
-  - Evidence: `.github/workflows/ci.yml` (`backend-tests`), `scripts/ci/check_backend_coverage_baseline.py`, `docs/stabilization/backend_coverage_baseline.json`.
-- **Critical-path traceability across unit/integration/e2e:** `partial`
-  - Evidence: `ACCEPTANCE_TEST_MATRIX.md`, `docs/TESTING.md`, `.github/workflows/e2e-smoke.yml`.
-- **Secrets-dependent e2e reliability hardening:** `missing`
-  - Evidence target: `docs/stabilization/e2e-access.md`, `.github/workflows/e2e-smoke.yml`.
+| Coverage claim | Status | Test evidence | Workflow evidence | Script evidence | Doc evidence |
+|---|---|---|---|---|---|
+| Backend coverage baseline gate is enforced | `done` | `tests/` suite through pytest coverage collection | `.github/workflows/ci.yml` (`backend-tests`) | `scripts/ci/check_backend_coverage_baseline.py` | `docs/stabilization/backend_coverage_baseline.json` |
+| Critical-path traceability across unit/integration/e2e is complete | `partial` | `frontend/e2e/smoke.spec.ts`, `tests/e2e/final_regression/test_final_regression_api.py` | `.github/workflows/e2e-smoke.yml` | `scripts/pytest.sh` | `ACCEPTANCE_TEST_MATRIX.md`, `docs/TESTING.md` |
+| Secrets-dependent e2e reliability hardening is complete | `missing` | `tests/e2e/access/test_access_enforcement_matrix.py` (target) | `.github/workflows/e2e-smoke.yml` (target hardening) | — | `docs/stabilization/e2e-access.md` |
 
 ## What is enforced in CI
 
@@ -45,7 +44,8 @@ python scripts/ci/check_backend_coverage_baseline.py \
 
 ## Cross-links
 
-- Testing strategy: `docs/TESTING.md`
+- Plan tracker: `docs/stabilization/PLAN.md`
 - Acceptance scenarios: `ACCEPTANCE_TEST_MATRIX.md`
 - Gap log: `GAP_REPORT.md`
-- Release decision: `RELEASE_READINESS.md`
+- Release verdict: `RELEASE_READINESS.md`
+- Accepted constraints: `KNOWN_LIMITATIONS.md`
