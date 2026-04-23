@@ -25,6 +25,7 @@
 # Files domain + file APIs/services/storage.
 /backend/app/modules/files/**                                  @alexkarpov772/reviewers-files
 /backend/app/api/routes/files.py                               @alexkarpov772/reviewers-files
+/backend/app/api/v1/route_groups.py                            @alexkarpov772/reviewers-files
 /backend/app/domains/files/**                                  @alexkarpov772/reviewers-files
 
 # Schema/data-plane changes.

@@ -52,6 +52,7 @@ Protected ownership domains:
 - **Auth and session perimeter** — `backend/app/api/routes/auth*`, auth dependencies, middleware, and session handling paths.
 - **Authorization policy core** — `backend/app/modules/rbac_abac/**`.
 - **File processing/storage chain** — `backend/app/modules/files/**` plus file-facing API/domain paths.
+- **File routing perimeter** — `backend/app/api/v1/route_groups.py` (canonical `/files` vs legacy `/files-legacy` registration boundary).
 - **Data plane** — `backend/app/migrations/**`.
 - **Delivery/runtime perimeter** — `.github/workflows/**`, `proxy/**`, `infra/**`, `config/**`.
 

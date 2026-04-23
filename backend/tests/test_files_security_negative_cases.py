@@ -265,6 +265,18 @@ def test_route_guard_rejects_stale_privilege_claim_when_effective_role_is_downgr
     assert exc.value.detail == "insufficient_role"
 
 
+def test_write_route_guards_reject_stale_privilege_claims() -> None:
+    class _StalePrivilegeAccess:
+        role = "client_user"
+        claims = {"role": "admin", "roles": ["admin"]}
+
+    files_api._enforce_access_role(_StalePrivilegeAccess(), files_api._FILE_READ_ROLES)
+    with pytest.raises(HTTPException) as exc:
+        files_api._enforce_access_role(_StalePrivilegeAccess(), files_api._FILE_UPLOAD_ROLES)
+    assert exc.value.status_code == 403
+    assert exc.value.detail == "insufficient_role"
+
+
 @pytest.mark.parametrize("role", ["client_admin", "client_user"])
 def test_company_scope_helper_allows_and_denies_by_company(role: str) -> None:
     record = SimpleNamespace(
@@ -353,3 +365,37 @@ def test_company_scope_denials_are_audited_for_protected_file_actions(
 
     asyncio.run(_run())
     assert events == [action_name]
+
+
+def test_link_file_rejects_non_clean_guarded_role_and_emits_audit() -> None:
+    record = SimpleNamespace(
+        id="file-1",
+        tenant_id="tenant-a",
+        status="infected",
+        object_key="tenants/tenant-a/files/a",
+        metadata_json={"company_id": "company-a"},
+        tags={},
+    )
+    svc = FileService(session=_FakeSession(record), tenant_id="tenant-a")
+    events: list[tuple[str, dict[str, str]]] = []
+
+    async def _fake_audit_file_action(**kwargs):  # noqa: ANN003
+        events.append((str(kwargs.get("action")), kwargs.get("details") or {}))
+
+    svc._audit_file_action = _fake_audit_file_action  # type: ignore[method-assign]
+
+    async def _run() -> None:
+        with pytest.raises(HTTPException) as exc:
+            await svc.link_file(
+                file_id="file-1",
+                entity_type="doc",
+                entity_id="42",
+                role="signature",
+                actor_id="user-1",
+                actor_role="admin",
+            )
+        assert exc.value.status_code == 403
+        assert exc.value.detail == "file_not_clean"
+
+    asyncio.run(_run())
+    assert events == [("file.link.denied", {"reason": "file_not_clean", "role": "signature", "status": "infected"})]
