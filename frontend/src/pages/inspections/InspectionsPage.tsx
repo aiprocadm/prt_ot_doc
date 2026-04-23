@@ -6,6 +6,9 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { Can } from "@/components/permissions/Can";
+import { ConflictInboxCard } from "@/components/pwa/ConflictInboxCard";
+import { MobileFieldModeCard } from "@/components/pwa/MobileFieldModeCard";
+import { SyncStatusChips } from "@/components/pwa/SyncStatusChips";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
@@ -20,6 +23,7 @@ import { formatDate } from "@/utils/datetime";
 import { toast } from "sonner";
 import { useCompaniesStore } from "@/stores/companies";
 import { entityCardLink } from "@/utils/workspaceNavigation";
+import { emitSyncTelemetry, resolveSyncState } from "@/pwa/sync";
 
 const INSPECTION_TYPES = ["planned", "unplanned", "documentary", "on_site", "counter"];
 const INSPECTION_TYPE_LABELS: Record<string, string> = {
@@ -48,6 +52,8 @@ const InspectionsPage = () => {
   const { items: companies, list: listCompanies } = useCompaniesStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  const [online, setOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
+  const [hasConflict, setHasConflict] = useState(false);
   const [focusResults, setFocusResults] = useState<InspectionResult[]>([]);
   const focusedEntityType = searchParams.get("entity_type") ?? undefined;
   const focusedEntityId = searchParams.get("entity_id") ?? undefined;
@@ -97,6 +103,7 @@ const InspectionsPage = () => {
   const focusedInspection = focusedEntityType === "inspection" && focusedEntityId
     ? items.find((inspection) => inspection.id === focusedEntityId) ?? null
     : null;
+  const syncState = resolveSyncState({ online, loading, hasConflict, hasError: Boolean(error) });
   const focusSummaryLink = entityCardLink(focusedEntityType, focusedEntityId, "summary");
   const focusTimelineLink = entityCardLink(focusedEntityType, focusedEntityId, "timeline");
 
@@ -137,6 +144,24 @@ const InspectionsPage = () => {
       setCreating(false);
     }
   };
+
+  useEffect(() => {
+    const onOnline = () => setOnline(true);
+    const onOffline = () => setOnline(false);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    emitSyncTelemetry({ type: "sync_state_changed", state: syncState, screen: "inspections" });
+    if (error?.message) {
+      emitSyncTelemetry({ type: "sync_error", screen: "inspections", message: error.message });
+    }
+  }, [error?.message, syncState]);
 
   return (
     <div className="space-y-6">
@@ -256,6 +281,15 @@ const InspectionsPage = () => {
             </Dialog>
           </Can>
         </div>
+      </div>
+      <div className="grid gap-3 lg:grid-cols-3">
+        <Card>
+          <CardContent className="pt-4">
+            <SyncStatusChips state={syncState} />
+          </CardContent>
+        </Card>
+        <ConflictInboxCard onConflictStateChange={setHasConflict} />
+        <MobileFieldModeCard />
       </div>
 
       <ErrorState error={error ?? undefined} onRetry={() => void load()} />

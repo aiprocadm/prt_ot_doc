@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from collections.abc import Iterable
 from datetime import date, datetime, timezone
 from decimal import Decimal
@@ -28,6 +29,7 @@ from app.models.models import (
 from app.modules.pwa_sync.services import OfflineSyncService
 
 router = APIRouter(prefix="/pwa", tags=["pwa"])
+logger = logging.getLogger(__name__)
 
 PWA_ROUTE_PERMISSION_MAP: dict[str, tuple[str, ...]] = {
     "dashboard": ("dashboard.read",),
@@ -336,6 +338,20 @@ def _sanitize_client_payload(payload: dict[str, Any], blocked_fields: tuple[str,
     return sanitized
 
 
+def _sanitize_offline_entity_payload(payload: Any) -> Any:
+    blocked = {"tenant_id", "tenant_slug", "user_id", "company_id"}
+    if isinstance(payload, dict):
+        result: dict[str, Any] = {}
+        for key, value in payload.items():
+            if key in blocked:
+                continue
+            result[key] = _sanitize_offline_entity_payload(value)
+        return result
+    if isinstance(payload, list):
+        return [_sanitize_offline_entity_payload(value) for value in payload]
+    return payload
+
+
 def _ensure_owner_or_admin(*, access: AccessContext, owner_user_id: str) -> None:
     roles = set(access.to_auth_context().roles)
     current_user_id = str(access.user.id)
@@ -361,6 +377,7 @@ async def create_batch(
     incoming = dict(payload or {})
     _validate_payload_required_fields(incoming, ("device_id", "entity_type", "payload"))
     sanitized = _sanitize_client_payload(incoming, ("tenant_id", "user_id", "status", "error_payload"))
+    sanitized["payload"] = _sanitize_offline_entity_payload(sanitized.get("payload") or {})
     batch = OfflineSyncBatch(
         tenant_id=tenant.id,
         user_id=str(access.user.id),
@@ -369,7 +386,19 @@ async def create_batch(
     )
     session.add(batch)
     await session.flush()
-    return await OfflineSyncService().apply_batch(session, batch)
+    updated = await OfflineSyncService().apply_batch(session, batch)
+    logger.info(
+        "pwa.sync.batch_processed",
+        extra={
+            "tenant_id": str(tenant.id),
+            "user_id": str(access.user.id),
+            "batch_id": str(updated.id),
+            "entity_type": updated.entity_type,
+            "status": updated.status,
+            "conflict": updated.status == "failed",
+        },
+    )
+    return updated
 
 
 @router.get("/sync/status/{batch_id}")
@@ -405,7 +434,68 @@ async def commit_media(
     )
     session.add(media)
     await session.flush()
-    return await OfflineSyncService().commit_media(session, media)
+    updated = await OfflineSyncService().commit_media(session, media)
+    logger.info(
+        "pwa.sync.media_processed",
+        extra={
+            "tenant_id": str(tenant.id),
+            "user_id": str(access.user.id),
+            "media_id": str(updated.id),
+            "status": updated.upload_status,
+        },
+    )
+    return updated
+
+
+@router.post("/sync/conflicts/{batch_id}/resolve")
+async def resolve_conflict(
+    batch_id: str,
+    payload: dict[str, Any],
+    tenant: Tenant = Depends(get_tenant_record),
+    session: AsyncSession = Depends(get_session),
+    access: AccessContext = Depends(rbac()),
+):
+    strategy = str((payload or {}).get("strategy") or "").strip()
+    if strategy not in {"server_wins", "client_retry"}:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=api_problem_detail(
+                code="PWA_SYNC_CONFLICT_STRATEGY_INVALID",
+                message="strategy must be one of: server_wins, client_retry",
+                error_type="pwa",
+            ),
+        )
+    batch = await OfflineSyncService().get_status(session, batch_id, tenant_id=str(tenant.id))
+    if not batch:
+        raise HTTPException(404, "Batch not found")
+    _ensure_owner_or_admin(access=access, owner_user_id=str(batch.user_id))
+    payload_patch = (payload or {}).get("payload_patch")
+    if payload_patch is not None and not isinstance(payload_patch, dict):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=api_problem_detail(
+                code="PWA_SYNC_CONFLICT_PAYLOAD_PATCH_INVALID",
+                message="payload_patch must be an object",
+                error_type="pwa",
+            ),
+        )
+    resolved = await OfflineSyncService().resolve_conflict(
+        session,
+        batch=batch,
+        strategy=strategy,
+        payload_patch=_sanitize_offline_entity_payload(payload_patch or {}),
+    )
+    logger.info(
+        "pwa.sync.conflict_resolved",
+        extra={
+            "tenant_id": str(tenant.id),
+            "user_id": str(access.user.id),
+            "batch_id": str(resolved.id),
+            "strategy": strategy,
+            "new_status": resolved.status,
+        },
+    )
+    return resolved
 
 
 @router.get("/bootstrap", response_model=PwaBootstrapResponse)
