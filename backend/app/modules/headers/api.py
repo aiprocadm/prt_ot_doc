@@ -23,6 +23,7 @@ from app.modules.headers.schemas import (
     LayoutPresetList,
 )
 from app.services.celery_app import celery_app
+from app.services.billing import BillingService
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 
 router = APIRouter()
@@ -117,6 +118,7 @@ async def apply_headers(
     access: AccessContext = Depends(rbac()),
 ) -> ApplyHeadersAccepted:
     _ = access
+    await BillingService(session).assert_allowed(tenant, "documents.generate")
     key = normalize_idempotency_key(idempotency_key)
     version = await session.get(DocumentVersion, document_version_id)
     if version is None or version.tenant_id != str(tenant.id):

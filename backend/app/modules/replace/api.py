@@ -39,6 +39,7 @@ from app.modules.replace.schemas import (
 )
 from app.modules.replace.service import create_document_version_from_bytes, execute_replace
 from app.services.audit import AuditService, field_level_diff
+from app.services.billing import BillingService
 from app.services.file_storage import FileStorageService
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 
@@ -109,6 +110,8 @@ async def _launch(document_version_id: str, payload: ReplaceLaunchRequest, mode:
     record, created = await idem.acquire(key=idem_key, request_hash=req_hash, method=request.method.upper(), path=request.url.path)
     if not created:
         return await idem.respond_from_store(record, model=ReplaceLaunchResponse)
+    if mode == "apply":
+        await BillingService(session).assert_allowed(tenant, "documents.generate")
 
     version = await session.get(DocumentVersion, document_version_id)
     if version is None or version.tenant_id != str(tenant.id):

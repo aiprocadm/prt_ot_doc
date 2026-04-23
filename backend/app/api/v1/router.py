@@ -53,6 +53,7 @@ from app.models.document_core import (
     TemplateVersionStatus,
 )
 from app.models.tenanting import Tenant
+from app.modules.tenancy.helpers import tenant_s3_key
 from app.modules.templates import build_passport, lint_docx_template, render_preview_docx
 from app.modules.templates.repo import get_template_version_by_code
 from app.modules.templates.schemas import (
@@ -256,13 +257,24 @@ def _normalize_template_scope(
 
 
 def _extract_scope_from_template(template: Template) -> dict[str, Any]:
+    # Prefer normalized columns when available.
+    level = getattr(template, "scope_level", None) or "tenant"
+    company_id = getattr(template, "scope_company_id", None)
+    site_id = getattr(template, "scope_site_id", None)
+    if company_id or site_id or level:
+        return {
+            "type": level,
+            "tenant_id": template.tenant_id,
+            "company_id": company_id,
+            "site_id": site_id,
+        }
     metadata = dict(template.metadata_json or {})
     return dict(metadata.get("scope") or {"type": "tenant", "tenant_id": template.tenant_id})
 
 
 def _template_type(template: Template) -> str | None:
     metadata = dict(template.metadata_json or {})
-    return metadata.get("template_type") or template.domain
+    return getattr(template, "domain", None) or metadata.get("template_type")
 
 
 def _build_template_dto(template: Template, *, include_versions: bool = False) -> TemplateDTO:
@@ -592,6 +604,12 @@ async def create_template_catalog(
     access: EditorAccess,
     request: Request,
 ) -> TemplateDTO:
+    normalized_scope = _normalize_template_scope(
+        payload.scope.model_dump(mode="json"),
+        tenant=tenant,
+        company_id=payload.scope.company_id,
+        site_id=payload.scope.site_id,
+    )
     template = Template(
         tenant_id=str(tenant.id),
         code=payload.code,
@@ -599,9 +617,13 @@ async def create_template_catalog(
         description=payload.description,
         status=TemplateStatus(payload.status or TemplateStatus.DRAFT.value),
         domain=payload.template_type,
+        category=payload.category,
+        scope_level=str(normalized_scope.get("type") or "tenant"),
+        scope_company_id=normalized_scope.get("company_id"),
+        scope_site_id=normalized_scope.get("site_id"),
         metadata_json=_template_metadata_payload(
             category=payload.category,
-            scope=_normalize_template_scope(payload.scope.model_dump(mode="json"), tenant=tenant),
+            scope=normalized_scope,
             extra={"template_type": payload.template_type} if payload.template_type else None,
         ),
     )
@@ -655,14 +677,24 @@ async def patch_template(
     metadata = dict(template.metadata_json or {})
     if payload.category is not None:
         metadata["category"] = payload.category
+        template.category = payload.category
     template.metadata_json = metadata
     if payload.template_type is not None:
         template.domain = payload.template_type
         template.metadata_json = {**(template.metadata_json or {}), "template_type": payload.template_type}
     if payload.scope is not None:
+        normalized_scope = _normalize_template_scope(
+            payload.scope.model_dump(mode="json"),
+            tenant=tenant,
+            company_id=payload.scope.company_id,
+            site_id=payload.scope.site_id,
+        )
+        template.scope_level = str(normalized_scope.get("type") or "tenant")
+        template.scope_company_id = normalized_scope.get("company_id")
+        template.scope_site_id = normalized_scope.get("site_id")
         template.metadata_json = {
             **(template.metadata_json or {}),
-            "scope": _normalize_template_scope(payload.scope.model_dump(mode="json"), tenant=tenant),
+            "scope": normalized_scope,
         }
     await session.flush()
     await AuditService(session).log_event(
@@ -716,7 +748,10 @@ async def upload_template_version(
             return await idem_service.respond_from_store(idem_record, model=TemplateVersionDTO, response=response)
     sha = hashlib.sha256(payload_bytes).hexdigest()
     next_ver = int((await session.scalar(select(func.max(TemplateVersion.version)).where(TemplateVersion.template_id == template.id)) or 0) + 1)
-    key = f"{tenant.slug}/templates/{template.id}/v{next_ver}/{Path(file.filename or 'template.docx').name}"
+    key = tenant_s3_key(
+        tenant.slug,
+        f"templates/{template.id}/v{next_ver}/{Path(file.filename or 'template.docx').name}",
+    )
     storage = FileStorageService.default()
     storage.put(key, payload_bytes, content_type=DOCX_CONTENT_TYPE)
     parsed = lint_docx_template(payload_bytes)
@@ -811,7 +846,7 @@ async def preview_template_version(
         data=payload.data,
     )
     rendered = render_preview_docx(template_bytes=source, data=payload.data, passport=passport)
-    out_key = f"{tenant.slug}/templates/preview/{uuid.uuid4()}/preview.docx"
+    out_key = tenant_s3_key(tenant.slug, f"templates/preview/{uuid.uuid4()}/preview.docx")
     storage.put(out_key, rendered, content_type=DOCX_CONTENT_TYPE)
     preview = PreviewResponse(job_id=str(uuid.uuid4()), status="done", docx_url=out_key, pdf_url=None)
     if idem_service and idem_record:
@@ -954,7 +989,10 @@ async def create_template_version(
 
     last_ver_stmt = select(func.coalesce(func.max(TemplateVersion.version), 0)).where(TemplateVersion.template_id == template.id)
     next_ver = int(await session.scalar(last_ver_stmt) or 0) + 1
-    key = f"{tenant.slug}/templates/{template.code or template.name}/v{next_ver}/template.docx"
+    key = tenant_s3_key(
+        tenant.slug,
+        f"templates/{template.code or template.name}/v{next_ver}/template.docx",
+    )
     FileStorageService.default().put(key, payload, content_type=DOCX_CONTENT_TYPE)
 
     version = TemplateVersion(
@@ -1097,7 +1135,7 @@ async def render_preview(payload: RenderPreviewRequest, session: SessionDep, ten
     passport = build_passport(code=template.code, version=tv.version, tenant_id=str(tenant.id), generated_by="api_user", correlation_id=correlation_id, data=payload.data, options={"visible_passport": payload.visible_passport}, npa_binding_id=payload.npa_binding_id)
     rendered = render_preview_docx(template_bytes=source, data=payload.data, passport=passport, visible_passport=payload.visible_passport)
     rendered_sha = hashlib.sha256(rendered).hexdigest()
-    out_key = f"{tenant.slug}/documents/preview/{uuid.uuid4()}/rendered.docx"
+    out_key = tenant_s3_key(tenant.slug, f"documents/preview/{uuid.uuid4()}/rendered.docx")
     storage.put(out_key, rendered, content_type=DOCX_CONTENT_TYPE)
     return RenderPreviewResponse(file_id=out_key, sha256=rendered_sha, passport=passport, warnings=tv.placeholder_index.get("errors", []) if tv.placeholder_index else [], generated_at=datetime.now(timezone.utc))
 
@@ -1139,6 +1177,17 @@ async def delete_template_version(
     template = await session.get(Template, template_id)
     if template is not None and template.current_version_id == version.id:
         template.current_version_id = None
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="template_version.delete",
+        object_type="template_version",
+        object_id=version.id,
+        user_id=getattr(access, "user_id", None),
+        ip=request.client.host if request.client else "unknown",
+        request_id=get_trace_id(request),
+        user_agent=request.headers.get("user-agent"),
+        details={"template_id": template_id, "deleted_at": version.deleted_at.isoformat()},
+    )
     await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -1158,7 +1207,11 @@ async def delete_template(
     if await _template_in_use(session, tenant=tenant, template_id=template.id):
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            "Template is already used and cannot be deleted",
+            {
+                "code": "template_in_use",
+                "type": "conflict",
+                "message": "Template is already used and cannot be deleted",
+            },
         )
 
     has_versions = await session.scalar(select(func.count()).select_from(TemplateVersion).where(TemplateVersion.template_id == template.id, TemplateVersion.deleted_at.is_(None)))
@@ -1166,6 +1219,15 @@ async def delete_template(
         raise HTTPException(status.HTTP_409_CONFLICT, "Template has versions; archive it instead")
     template.deleted_at = datetime.now(timezone.utc)
     template.status = TemplateStatus.ARCHIVED
+    await AuditService(session).log_event(
+        tenant_id=str(tenant.id),
+        action="template.delete",
+        object_type="template",
+        object_id=template.id,
+        user_id=getattr(access, "user_id", None),
+        ip="api",
+        details={"archived": True, "deleted_at": template.deleted_at.isoformat()},
+    )
     await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

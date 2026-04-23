@@ -182,6 +182,7 @@ _DOCUMENT_READ_ROLES = [
     "clerk",
 ]
 _DOCUMENT_STATUS_ROLES = ["admin"]
+_DEFAULT_DOCUMENT_PIPELINE_PROFILE = "default_doc_pipeline"
 
 AccessDep = Depends(
     abac(
@@ -1263,12 +1264,23 @@ async def generate_document(
         template_code = payload.template.code
         template_version = payload.template.version
         options: dict[str, Any] = {}
-        if payload.pipeline and payload.pipeline.steps and payload.pipeline.steps.zip:
-            options["zip"] = bool(payload.pipeline.steps.zip.get("enabled"))
+        if payload.pipeline and payload.pipeline.steps:
+            if payload.pipeline.steps.zip:
+                options["zip"] = bool(payload.pipeline.steps.zip.get("enabled"))
+            if payload.pipeline.steps.apply_headers is not None:
+                options["apply_headers"] = dict(payload.pipeline.steps.apply_headers)
+            if payload.pipeline.steps.replace is not None:
+                options["replace"] = dict(payload.pipeline.steps.replace)
+            if payload.pipeline.steps.pdf is not None:
+                options["pdf"] = dict(payload.pipeline.steps.pdf)
         engine_payload = {
             "template_code": template_code,
             "template_version": template_version,
-            "pipeline_profile_id": (payload.pipeline.profile_code if payload.pipeline else None),
+            "pipeline_profile_id": (
+                payload.pipeline.profile_code
+                if payload.pipeline and payload.pipeline.profile_code
+                else _DEFAULT_DOCUMENT_PIPELINE_PROFILE
+            ),
             "input_source_id": payload.data.file_id if payload.data.type == "file" else None,
             "inline_data": payload.data.payload or {},
             "options": options,
@@ -1312,7 +1324,7 @@ async def generate_document(
                 engine_payload = {
                     "template_code": legacy_payload.template_code,
                     "template_version": legacy_payload.template_version,
-                    "pipeline_profile_id": legacy_payload.pipeline_profile_id,
+                    "pipeline_profile_id": legacy_payload.pipeline_profile_id or _DEFAULT_DOCUMENT_PIPELINE_PROFILE,
                     "input_source_id": legacy_payload.input_source_id,
                     "inline_data": legacy_payload.inline_data or {},
                     "options": legacy_payload.options or {},

@@ -1358,6 +1358,11 @@ class Template(TenantBaseModel):
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
     description: Mapped[str | None] = mapped_column(String(1024))
+    category: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    scope_level: Mapped[str] = mapped_column(String(32), nullable=False, default="tenant", index=True)
+    scope_company_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    scope_site_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    tags_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     storage_key: Mapped[str | None] = mapped_column(String(512), nullable=True, index=True)
     status: Mapped[TemplateStatus] = mapped_column(
@@ -1372,6 +1377,7 @@ class Template(TenantBaseModel):
         UniqueConstraint("tenant_id", "code", name="uq_templates_tenant_code"),
         Index("ix_template_status_updated", "tenant_id", "status", "updated_at"),
         Index("ix_template_updated", "tenant_id", "updated_at"),
+        Index("ix_template_scope_level_company_site", "tenant_id", "scope_level", "scope_company_id", "scope_site_id"),
     )
 
 
