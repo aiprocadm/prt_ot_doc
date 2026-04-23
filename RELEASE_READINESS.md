@@ -1,6 +1,6 @@
 # RELEASE_READINESS
 
-- **Updated on (UTC):** 2026-04-22
+- **Updated on (UTC):** 2026-04-23
 - **Owner:** Release Manager + Platform + QA + SRE
 - **Canonical status vocabulary:** `done` / `partial` / `missing` / `blocked`
 - **Canonical blocker/status source:** `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`
@@ -26,6 +26,7 @@
 ## Cross-links
 
 - Acceptance evidence map: `ACCEPTANCE_TEST_MATRIX.md`
+- Acceptance traceability map: `docs/stabilization/acceptance-traceability.md`
 - Limitations affecting release closure: `KNOWN_LIMITATIONS.md`
 - Gap tracker: `GAP_REPORT.md`
 - Stabilization execution tracker: `docs/stabilization/PLAN.md`

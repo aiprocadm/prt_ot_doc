@@ -28,6 +28,7 @@ Any status change must be applied first in `docs/stabilization/RELEASE_BLOCKERS_
 
 - Release verdict: `RELEASE_READINESS.md`
 - Canonical blockers/checklist/evidence map: `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`
+- Acceptance traceability map: `docs/stabilization/acceptance-traceability.md`
 - Gap tracker: `GAP_REPORT.md`
 - Known constraints: `KNOWN_LIMITATIONS.md`
 - Stabilization tracker: `docs/stabilization/PLAN.md`
