@@ -1,59 +1,35 @@
-# Release-Critical Acceptance Traceability
+# Acceptance Traceability (Release-Critical Stories)
 
 - **Updated on (UTC):** 2026-04-23
-- **Owner:** QA + Backend + Frontend + Platform
-- **Purpose:** canonical mapping of release-critical user paths to concrete tests, CI workflow jobs, and produced artifacts.
+- **Owner:** QA + Backend + Frontend + Platform + SRE
+- **Canonical status vocabulary:** `done` / `partial` / `missing` / `blocked`
+- **Status sync source:** `ACCEPTANCE_TEST_MATRIX.md` + `RELEASE_READINESS.md`
 
-## 1) Prioritized coverage focus (stabilization order)
+## Release-critical story map (minimum required coverage)
 
-Priority is aligned to release risk and user-facing impact:
+| Story ID | User story (role + target outcome) | Test(s) (exact path / identifier) | Workflow job | Artifact path | Current status | Gap comment |
+|---|---|---|---|---|---|---|
+| US-ATTN-001 | **As an unauthenticated or limited user**, I want workspace/attention routes to enforce redirect/deny rules so that protected tenant data is not exposed. | `frontend/e2e/smoke.spec.ts` → `attention hub route redirects to login when logged out`; `frontend/e2e/smoke.spec.ts` → `limited user denied on attention hub...` | `.github/workflows/e2e-smoke.yml` → `playwright-smoke-minimal`, `playwright-smoke-credential` | Playwright run logs; `e2e-backend-log-*` (failure-only) | `done` (sync: `ACCEPTANCE_TEST_MATRIX.md`, RC-010) | Matrix marks scenario as done; remaining gap is keeping this evidence rolled into final acceptance summary (`RC-004` still `partial`). |
+| US-DOC-ORCH-002 | **As an operations specialist**, I want generate→headers→pdf→handoff orchestration to progress deterministically (with retry states) so that document delivery is auditable and recoverable. | `backend/tests/test_document_orchestration_state.py`; `frontend/e2e/key-scenarios.spec.ts` → `quick generation timeline shows orchestration states for chain flow`; `tests/test_documents_generate.py`; `tests/pdf/test_api_idempotency.py`; `backend/tests/test_next57_approval_sign_edo_services.py` | `.github/workflows/ci.yml` → `backend-tests`; `.github/workflows/e2e-smoke.yml` → `playwright-smoke-credential` | `artifacts/backend-junit.xml`; `artifacts/coverage.json`; Playwright logs; `artifacts/final_acceptance/summary.json` | `done` for orchestration path (sync: `ACCEPTANCE_TEST_MATRIX.md`, RC-017), but bundle `partial` (sync: RC-004) | Orchestration scenario is covered, but release bundle remains `partial` until all mandatory acceptance scenarios converge to `overall_status=pass`. |
+| US-TENANT-FILES-003 | **As a tenant user**, I want cross-tenant file access denied by default so that files and signed URL flows remain isolated to my tenant and permission scope. | `tests/test_tenant_security.py`; `tests/integration/test_tenant_isolation.py`; `tests/integration/test_abac_query_isolation.py`; `tests/test_files_access_parity.py`; `tests/services/test_file_storage_service.py` | `.github/workflows/ci.yml` → `lint-and-static`, `backend-tests` | `artifacts/backend-junit.xml`; `artifacts/coverage.json` | `partial` (sync anchor: release bundle `RC-004` in matrix/readiness is `partial`) | Dedicated acceptance criterion for files-deny isolation is not yet normalized as a standalone RC row; evidence exists but closure is indirect via final acceptance aggregate. |
+| US-RES-PERF-004 | **As a release manager/SRE**, I want restore and performance readiness gates to be green with reproducible manifests so that launch risk is bounded by explicit RTO/RPO and perf baselines. | Restore: `scripts/restore_drill.py` (`--mode postgres-minio`), `docs/stabilization/restore-drill.md`; Perf: `scripts/perf/api_load.py`, `scripts/perf/scenarios.json`, `scripts/perf/README.md` | `.github/workflows/restore-drill.yml` → `restore-drill`; `.github/workflows/perf-baseline.yml` → `baseline` | `artifacts/restore-drill/latest-postgres-minio.json`; `artifacts/perf/nightly/trend-manifest.json`; `artifacts/perf/nightly/summary.md` | `partial` (sync: `RELEASE_READINESS.md`, RC-001 + RC-002) | Both gates are instrumented, but latest readiness verdict remains NOT READY until restore/perf acceptance checklists are formally closed. |
+| US-E2E-NO-CREDS-005 | **As a CI owner**, I want mandatory smoke to run without external credentials so that baseline acceptance is deterministic across environments. | `frontend/e2e/smoke.spec.ts` → tests tagged `mandatory (no external creds)`; workflow matrix identifier `credential_source=bootstrap_local` in `.github/workflows/e2e-smoke.yml` | `.github/workflows/e2e-smoke.yml` → `playwright-smoke-minimal`, `playwright-smoke-credential` (`bootstrap_local`) | Playwright run logs; `e2e-backend-log-bootstrap_local` (failure-only) | `partial` (sync anchor: `RELEASE_READINESS.md`, RC-006 is `missing`; credential-independent lane exists but diagnostics closure is pending) | Baseline lane exists and is executable, but release criterion for secrets/diagnostics hardening is still open (`RC-006`). |
 
-1. `auth/session`
-2. `rbac_abac`
-3. `files`
-4. `tenant isolation`
-5. `document orchestration`
-6. `landing/protected routes`
+## Status synchronization notes
 
-## 2) Traceability map: user path → tests → CI jobs → artifacts
+1. Story statuses above are intentionally **mirrored** from currently published release-facing docs (`ACCEPTANCE_TEST_MATRIX.md`, `RELEASE_READINESS.md`) and do not override canonical blocker tracking.
+2. If any release-critical status changes, update order remains:
+   1) `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`
+   2) `RELEASE_READINESS.md`
+   3) `ACCEPTANCE_TEST_MATRIX.md`
+   4) this traceability map.
 
-| Release-critical user path | Priority module(s) | Evidence tests (source of truth) | CI workflow jobs | Produced artifacts / logs |
-|---|---|---|---|---|
-| Login + session establishment + session failure UX | `auth/session` | `tests/test_auth_login.py`, `tests/test_auth_tenant_header_enforcement.py`, `frontend/e2e/smoke.spec.ts` (`login wrong password shows inline error`, `R11 login happy path`) | `.github/workflows/ci.yml` → `backend-tests`; `.github/workflows/e2e-smoke.yml` → `playwright-smoke-credential` | `backend-test-report` (`artifacts/backend-junit.xml`, coverage reports); Playwright logs |
-| Protected routes / landing behavior for logged-out users | `landing/protected routes` | `frontend/e2e/smoke.spec.ts` (`protected route redirects to login when logged out`, `attention hub route redirects to login when logged out`) | `.github/workflows/e2e-smoke.yml` → `playwright-smoke-minimal` | Playwright logs (mandatory no-creds subset) |
-| Access-denied behavior for limited user roles | `rbac_abac`, `landing/protected routes` | `tests/test_rbac_abac.py`, `tests/unit/test_policy_engine.py`, `frontend/e2e/smoke.spec.ts` (`R12 limited user denied on documents route`, `limited user denied on attention hub...`) | `.github/workflows/ci.yml` → `backend-tests`; `.github/workflows/e2e-smoke.yml` → `playwright-smoke-credential` | `backend-test-report`; Playwright logs |
-| Tenant boundary and scoped query isolation | `tenant isolation`, `rbac_abac` | `tests/test_tenant_security.py`, `tests/test_middleware_tenant.py`, `tests/integration/test_tenant_isolation.py`, `tests/integration/test_abac_query_isolation.py` | `.github/workflows/ci.yml` → `lint-and-static` (scoped-query guard), `backend-tests` | `backend-test-report`; static gate logs |
-| Files upload/download authorization and signed URL safety | `files`, `tenant isolation`, `rbac_abac` | `tests/test_files_access_parity.py`, `tests/test_files_upload.py`, `tests/test_files_bus_service.py`, `tests/services/test_file_storage_service.py` | `.github/workflows/ci.yml` → `backend-tests` | `backend-test-report` + coverage artifacts |
-| Replace dry-run/diff/apply/reporting path | `document orchestration`, `files` | `tests/test_replace_api.py`, `tests/test_replace_engine_advanced.py`, `tests/test_pipeline_profile_graph_and_api.py`, `tests/test_router_parsers.py` | `.github/workflows/ci.yml` → `backend-tests`, `openapi-contract` | `backend-test-report`; contract job logs |
-| PDF generation reliability path | `document orchestration`, `files` | `tests/test_documents_generate.py`, `tests/pdf/test_api_idempotency.py`, `tests/test_services_pdf_unit.py` | `.github/workflows/ci.yml` → `backend-tests` | `backend-test-report`; coverage artifacts |
-| Approval/sign/archive handoff path | `document orchestration`, `rbac_abac`, `tenant isolation` | `backend/tests/test_approval_signing_v1_error_contract.py`, `backend/tests/test_approval_orchestration_error_contract.py`, `backend/tests/test_next57_approval_sign_edo_services.py` | `.github/workflows/ci.yml` → `backend-tests`; `.github/workflows/e2e-smoke.yml` (cross-checking role-access shells) | `backend-test-report`; `e2e-backend-log-*` on failure |
-| Workspace routes (attention hub/task flow surface) | `landing/protected routes`, `rbac_abac`, `tenant isolation` | `frontend/e2e/smoke.spec.ts` (workspace attention redirects + limited-user denied), `backend/app/api/routes/workspace.py` route coverage in backend suite | `.github/workflows/e2e-smoke.yml` + `.github/workflows/ci.yml` (`backend-tests`) | Playwright logs; backend junit/coverage artifacts |
-
-## 3) Credential independence of smoke (must remain true)
-
-`e2e-smoke` is intentionally split into:
-
-- **Mandatory credential-independent smoke:** `playwright-smoke-minimal` with grep `mandatory (no external creds)`.
-- **Credential flow matrix:** `playwright-smoke-credential` with `credential_source=[bootstrap_local, repo_secrets]`.
-
-Release policy for stabilization: the smoke baseline **must remain executable via `bootstrap_local`** without required external secrets. `repo_secrets` path is additive and gated by secret availability.
-
-## 4) Artifacts expected for release evidence bundle
-
-Minimum expected evidence references:
-
-- `backend-test-report` artifact:
-  - `artifacts/backend-junit.xml`
-  - `artifacts/coverage.xml`
-  - `artifacts/coverage.json`
-  - `artifacts/coverage-term-missing.txt`
-- E2E logs from `.github/workflows/e2e-smoke.yml` runs.
-- `e2e-backend-log-bootstrap_local` / `e2e-backend-log-repo_secrets` artifacts on failure paths.
-
-## 5) Related source documents
+## Related sources
 
 - `ACCEPTANCE_TEST_MATRIX.md`
-- `docs/stabilization/coverage.md`
-- `docs/TESTING.md`
+- `RELEASE_READINESS.md`
+- `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`
 - `.github/workflows/ci.yml`
 - `.github/workflows/e2e-smoke.yml`
+- `.github/workflows/restore-drill.yml`
+- `.github/workflows/perf-baseline.yml`
