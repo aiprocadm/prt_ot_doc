@@ -12,7 +12,7 @@ import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Annotated, Any, BinaryIO, Collection, Mapping, cast
-from typing import IO, Annotated, Any, Collection, Mapping
+from typing import IO
 from uuid import UUID
 
 from fastapi import (
@@ -441,7 +441,11 @@ async def _persist_and_audit(
             )
 
     download_url: str | None = None
-    if settings.s3_backend == "minio" and not record.is_quarantined:
+    if (
+        settings.s3_backend == "minio"
+        and not record.is_quarantined
+        and record.scan_status == FileScanStatus.CLEAN
+    ):
         try:
             download_url = _build_presigned_download_url(
                 record,
@@ -594,7 +598,11 @@ async def get_file_details(
 
     settings = get_settings()
     download_url: str | None = None
-    if settings.s3_backend == "minio" and not record.is_quarantined:
+    if (
+        settings.s3_backend == "minio"
+        and not record.is_quarantined
+        and record.scan_status == FileScanStatus.CLEAN
+    ):
         try:
             metadata = s3.head_object(key=record.storage_key)
         except s3.S3OperationError as exc:

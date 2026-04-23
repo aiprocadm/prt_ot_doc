@@ -100,7 +100,14 @@ def test_get_signed_download_url_rejects_cross_tenant_access() -> None:
 
 
 def test_get_signed_download_url_rejects_non_clean_file() -> None:
-    record = SimpleNamespace(id="file-1", tenant_id="tenant-a", status="infected", object_key="tenants/tenant-a/files/a")
+    record = SimpleNamespace(
+        id="file-1",
+        tenant_id="tenant-a",
+        status="infected",
+        object_key="tenants/tenant-a/files/a",
+        metadata_json={},
+        tags={},
+    )
     svc = FileService(session=_FakeSession(record), tenant_id="tenant-a")
 
     async def _run() -> None:
@@ -243,6 +250,17 @@ def test_route_guard_rejects_stale_role_downgrade() -> None:
     stale_access = SimpleNamespace(role="client_user")
     with pytest.raises(HTTPException) as exc:
         files_api._enforce_access_role(stale_access, files_api._FILE_UPLOAD_ROLES)
+    assert exc.value.status_code == 403
+    assert exc.value.detail == "insufficient_role"
+
+
+def test_route_guard_rejects_stale_privilege_claim_when_effective_role_is_downgraded() -> None:
+    class _StalePrivilegeAccess:
+        role = "client_user"
+        claims = {"role": "admin", "roles": ["admin"]}
+
+    with pytest.raises(HTTPException) as exc:
+        files_api._enforce_access_role(_StalePrivilegeAccess(), files_api._FILE_UPLOAD_ROLES)
     assert exc.value.status_code == 403
     assert exc.value.detail == "insufficient_role"
 
