@@ -1,6 +1,6 @@
 # Stabilization Coverage Gates
 
-- **Updated on (UTC):** 2026-04-22
+- **Updated on (UTC):** 2026-04-23
 - **Owner:** QA Automation + Backend
 - **Canonical status vocabulary:** `done` / `partial` / `missing`
 
@@ -33,9 +33,23 @@ Notes:
 |---|---|---|---|---|---|
 | Coverage regression gate is enforced | `done` | — | `python scripts/ci/check_backend_coverage_baseline.py --coverage-json artifacts/coverage.json --baseline docs/stabilization/backend_coverage_baseline.json`; workflow: `.github/workflows/ci.yml` (`backend-tests`). | `artifacts/coverage.json`, `artifacts/coverage.xml`, `artifacts/coverage-term-missing.txt`; CI artifact: `backend-test-report`. | `.github/workflows/ci.yml`, `scripts/ci/check_backend_coverage_baseline.py`, `docs/stabilization/backend_coverage_baseline.json` |
 | Critical-path traceability across unit/integration/e2e is complete | `partial` | Cross-layer mapping exists but not all acceptance scenarios are fully `done` in matrix (notably performance and some workflow edges). | Supporting suites: `./scripts/pytest.sh tests/e2e/final_regression/test_final_regression_api.py` and frontend smoke in `.github/workflows/e2e-smoke.yml`. | CI artifacts split across backend + e2e runs; no single consolidated traceability artifact yet. | `ACCEPTANCE_TEST_MATRIX.md`, `docs/TESTING.md`, `.github/workflows/e2e-smoke.yml` |
-| Secrets-dependent e2e reliability hardening is complete | `missing` | Secrets-dependent branch in e2e smoke remains a target state and is not closed as release-ready evidence. | Target workflow: `.github/workflows/e2e-smoke.yml` (`playwright-smoke-credential` with `repo_secrets`). | Missing closed evidence bundle for required secret-backed runs in release artifacts. | `docs/stabilization/e2e-access.md`, `GAP_REPORT.md` |
+| E2E smoke remains credential-independent for mandatory baseline (`bootstrap_local`) | `done` | Mandatory smoke is isolated from external secrets and credential stage includes deterministic local bootstrap path. | Workflow: `.github/workflows/e2e-smoke.yml` (`playwright-smoke-minimal` + `playwright-smoke-credential` matrix `bootstrap_local, repo_secrets`). | Playwright logs; `e2e-backend-log-*` uploaded on failure for credential stage. | `.github/workflows/e2e-smoke.yml`, `frontend/e2e/smoke.spec.ts`, `docs/stabilization/acceptance-traceability.md` |
 
 Release decision is governed by the **single go/no-go checklist** in `RELEASE_READINESS.md`.
+
+
+## Prioritized stabilization coverage focus
+
+Current ordered focus for coverage expansion and regression protection:
+
+1. `auth/session`
+2. `rbac_abac`
+3. `files`
+4. `tenant isolation`
+5. `document orchestration`
+6. `landing/protected routes`
+
+Detailed user-path traceability (tests ↔ jobs ↔ artifacts) is maintained in `docs/stabilization/acceptance-traceability.md`.
 
 ## What is enforced in CI
 

@@ -1,6 +1,6 @@
 # Testing Guide (Canonical)
 
-_Last updated: 2026-04-20._
+_Last updated: 2026-04-23._
 
 Этот документ — **канонический источник** по тестовой стратегии, локальным проверкам, CI-маппингу и merge-гейтам.
 
@@ -157,3 +157,26 @@ python scripts/ci/check_backend_coverage_baseline.py \
 # Проверка parity по authz/tenant-контракту между canonical и legacy routes
 ./scripts/pytest.sh tests/test_files_access_parity.py -k legacy_upload_and_download_dependencies_match_canonical_tenant_and_abac_contract
 ```
+
+
+## 8. Release-critical traceability and priority order
+
+Для стабилизации релиз-критичного контура используем фиксированный приоритет покрытия:
+
+1. `auth/session`
+2. `rbac_abac`
+3. `files`
+4. `tenant isolation`
+5. `document orchestration`
+6. `landing/protected routes`
+
+Канонический mapping user paths → tests → workflow jobs → artifacts ведётся в `docs/stabilization/acceptance-traceability.md`.
+
+## 9. E2E smoke credential-independence policy
+
+`e2e-smoke` должен оставаться запускаемым без внешних секретов:
+
+- mandatory baseline: `playwright-smoke-minimal` (`mandatory (no external creds)`),
+- credential flows: `playwright-smoke-credential` c матрицей `bootstrap_local` + `repo_secrets`.
+
+Ветка `bootstrap_local` является обязательной release-базой и не требует внешних credential/secrets; `repo_secrets` — дополнительный канал при наличии секретов в репозитории.
