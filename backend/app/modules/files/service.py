@@ -713,6 +713,15 @@ class FileService:
             },
         )
         if role in guarded_roles and record.status != FileStatus.clean.value:
+            await self._audit_file_action(
+                action="file.link.denied",
+                object_id=file_id,
+                user_id=actor_id,
+                ip=ip,
+                user_agent=user_agent,
+                request_id=request_id,
+                details={"reason": "file_not_clean", "role": role, "status": record.status},
+            )
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="file_not_clean")
         link = FileLink(
             tenant_id=self.tenant_id,
