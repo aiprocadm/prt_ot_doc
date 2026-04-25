@@ -7,6 +7,20 @@ from app.modules.files.models import FileDownloadLog, FileLink, FileRecord, File
 from app.modules.files.service import FileService, compute_sha256_stream
 
 
+class _NullResult:
+    def scalar_one_or_none(self):
+        return None
+
+    def scalar_one(self):
+        return None
+
+    def scalars(self):
+        return self
+
+    def all(self):
+        return []
+
+
 class DummySession:
     def __init__(self, record: FileRecord | None = None) -> None:
         self.record = record
@@ -24,7 +38,7 @@ class DummySession:
         return None
 
     async def execute(self, stmt):
-        return None
+        return _NullResult()
 
 
 class DummyAccess:
@@ -240,6 +254,9 @@ class _ScalarResult:
         self._value = value
 
     def scalar_one(self):
+        return self._value
+
+    def scalar_one_or_none(self):
         return self._value
 
 

@@ -64,7 +64,7 @@ async def test_pack_archive_collects_files(async_client, make_auth_headers, sess
     for idx in range(2):
         payload = f"document-{idx}".encode()
         upload = await async_client.post(
-            "/api/v1/files/upload",
+            "/api/v1/files-legacy/upload",
             files={"file": (f"doc-{idx}.txt", payload, "text/plain")},
             data={"pack_id": "pack-zip"},
             headers=headers,

@@ -313,7 +313,7 @@ async def test_documents_generate_requires_idempotency_key(
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     payload = response.json()
-    assert payload["code"] == "http_400"
+    assert payload["code"] == "BAD_REQUEST"
     assert payload["message"] == "Idempotency-Key header is required"
 
 
@@ -337,5 +337,5 @@ async def test_packs_run_requires_idempotency_key(
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     payload = response.json()
-    assert payload["code"] == "http_400"
+    assert payload["code"] == "BAD_REQUEST"
     assert payload["message"] == "Idempotency-Key header is required"

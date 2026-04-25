@@ -62,10 +62,10 @@ async def test_stub_integrations_return_status(monkeypatch):
     frdo = get_frdo_integration()
     eisot = get_eisot_integration()
 
-    status_1c = await accounting.export_document({"demo": True})
+    status_1c = await accounting.export_document({"document_number": "DOC-001"})
     status_edo = await edo.send_document(content=b"data", filename="file.pdf")
-    status_frdo = await frdo.submit_record({"user": "demo"})
-    status_eisot = await eisot.publish_report({"report": True})
+    status_frdo = await frdo.submit_record({"person_snils": "123-456-789 01"})
+    status_eisot = await eisot.publish_report({"report_period": "2024-01"})
 
     assert settings.use_1c_integration is True
     assert status_1c.status in {"queued", "processed"}

@@ -26,6 +26,48 @@ os.environ.setdefault("S3_ENDPOINT", "http://localhost")
 # so provide a tiny fallback stub for tests when it's unavailable.
 sys.modules.setdefault("crypt", types.SimpleNamespace(crypt=lambda secret, salt: "mocked"))
 
+import typer.core as _typer_core
+try:
+    from click.core import UNSET as _CLICK_UNSET
+except ImportError:  # Click versions without UNSET symbol.
+    _CLICK_UNSET = object()
+
+# Typer 0.9.0 / Click 8.1.x compatibility fixes:
+#
+# 1. TyperArgument.make_metavar: Click 8.1 added a required `ctx` param but
+#    Typer 0.9.0 still overrides it with only (self). Patch it to accept ctx and
+#    call get_metavar with the correct (param, ctx) signature.
+def _patched_make_metavar(self, ctx=None, *args: object, **kwargs: object) -> str:
+    if self.metavar is not None:
+        return self.metavar
+    var = (self.name or "").upper()
+    if not self.required:
+        var = "[{}]".format(var)
+    type_var = self.type.get_metavar(param=self, ctx=ctx)
+    if type_var:
+        var += f":{type_var}"
+    if self.nargs != 1:
+        var += "..."
+    return var
+
+
+_typer_core.TyperArgument.make_metavar = _patched_make_metavar  # type: ignore[method-assign]
+
+# 2. TyperOption.__init__: Typer 0.9.0 passes flag_value=None to Click. In
+#    Click 8.1, the UNSET sentinel (not None) signals "not set", so None is
+#    treated as an explicit flag value and triggers is_flag=True for ALL options.
+#    Fix: replace flag_value=None with UNSET when the caller did not mean a flag.
+_orig_typer_option_init = _typer_core.TyperOption.__init__
+
+
+def _patched_typer_option_init(self, *, flag_value=None, is_flag=None, **kwargs):  # type: ignore[no-untyped-def]
+    if flag_value is None:
+        flag_value = _CLICK_UNSET
+    _orig_typer_option_init(self, flag_value=flag_value, is_flag=is_flag, **kwargs)
+
+
+_typer_core.TyperOption.__init__ = _patched_typer_option_init  # type: ignore[method-assign]
+
 import pytest
 import pytest_asyncio
 from fastapi import HTTPException, Request, status
@@ -39,6 +81,7 @@ from app.core.security import issue_access_token
 from app.core.tenant import TENANT_HEADER, tenant_required
 from app.db import Base, SharedBase
 from app.db.session import AsyncSessionLocal, configure_engine
+from app.domains.files import s3
 from app.models.models import Company, RoleEnum, Tenant, User
 from app.services.clamav import reset_quarantine_publisher
 from app.services.file_storage import FileStorageService
@@ -208,6 +251,14 @@ def data_factory(sessionmaker) -> TestDataFactory:
     """Provide a test data factory bound to the tenant-aware session maker."""
 
     return TestDataFactory(sessionmaker)
+
+
+@pytest.fixture()
+def aws() -> None:
+    moto = pytest.importorskip("moto", reason="moto is required for S3 integration tests")
+    with moto.mock_aws():
+        s3.ensure_bucket()
+        yield
 
 
 @pytest_asyncio.fixture()
