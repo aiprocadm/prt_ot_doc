@@ -15,7 +15,10 @@ interface TasksState extends PaginatedState<TaskDto, TaskFiltersDto> {
   createTask: (payload: {
     title: string;
     description?: string | null;
+    entity_type?: string | null;
+    entity_id?: string | null;
     due_at?: string | null;
+    assignee_id?: string | null;
     priority?: TaskDto["priority"];
   }) => Promise<TaskDto | null>;
   setFilters: (filters: Partial<TaskFiltersDto>) => void;
