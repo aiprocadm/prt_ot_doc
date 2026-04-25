@@ -64,10 +64,10 @@ export const SourceStep = ({
   onSourceChange: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
 }) => (
   <div className="space-y-2">
-    <Label>CSV/XLSX файл (до 10MB)</Label>
+    <Label>CSV/XLSX/DOC/DOCX файл (до 10MB)</Label>
     <Input
       type="file"
-      accept=".csv,.xlsx"
+      accept=".csv,.xlsx,.doc,.docx"
       className="file:mr-3 file:rounded-md file:border file:border-input file:bg-muted file:px-3 file:py-1 file:text-sm hover:file:bg-muted/80"
       onChange={(event) => void onSourceChange(event)}
     />
