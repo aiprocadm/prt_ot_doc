@@ -34,7 +34,7 @@ async def test_submit_attempt_marks_passed_and_computes_expiry(monkeypatch: pyte
         expires_at=None,
     )
     test = SimpleNamespace(passing_score=70, attempts_limit=2)
-    program = SimpleNamespace(validity_months=12)
+    program = SimpleNamespace(validity_months=12, tenant_id="tenant-1")
 
     execute_result = MagicMock()
     execute_result.scalar_one_or_none.return_value = test

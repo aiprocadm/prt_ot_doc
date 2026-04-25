@@ -379,12 +379,13 @@ async def _enforce_person_invariants(
     if violations:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            detail=api_problem_detail(
-                code="requirements_not_met",
-                message="Pack prerequisites are not satisfied for one or more persons",
-                error_type="packs",
-                details={"details": violations},
-            ),
+            detail={
+                "code": "requirements_not_met",
+                "error_code": "requirements_not_met",
+                "message": "Pack prerequisites are not satisfied for one or more persons",
+                "type": "packs",
+                "details": violations,
+            },
         )
 
 

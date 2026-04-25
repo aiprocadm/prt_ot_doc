@@ -67,8 +67,8 @@ async def execute_replace(
     rules: list[dict],
     case_sensitive: bool,
     whole_word: bool,
-    regex_enabled: bool,
-    scope: list[str] | None,
+    regex_enabled: bool = False,
+    scope: list[str] | None = None,
     storage: FileStorageService,
     run_id: str,
 ) -> ReplaceExecutionResult:

@@ -61,8 +61,9 @@ logger = logging.getLogger(__name__)
 
 
 def _file_problem(*, code: str, message: str, **ctx: Any) -> dict[str, Any]:
-    details = {k: v for k, v in ctx.items() if v is not None}
-    return api_problem_detail(code=code, message=message, details=details or None, error_type="files")
+    problem = api_problem_detail(code=code, message=message, error_type="files")
+    problem.update({k: v for k, v in ctx.items() if v is not None})
+    return problem
 
 
 _FILE_NOT_FOUND = _file_problem(code="FILE_NOT_FOUND", message="File not found")
@@ -204,16 +205,14 @@ def _storage_http_exception(error: s3.S3OperationError) -> HTTPException:
         storage_code = "storage_unavailable"
     storage_message = detail.get("message", "Object storage request failed")
     extra = {k: v for k, v in detail.items() if k not in {"code", "message"}}
-    nested = {"storage_code": storage_code, **extra}
-    return HTTPException(
-        status_code,
-        detail=api_problem_detail(
-            code=f"HTTP_{status_code}",
-            message=storage_message,
-            details=nested,
-            error_type="files",
-        ),
+    problem = api_problem_detail(
+        code=f"HTTP_{status_code}",
+        message=storage_message,
+        error_type="files",
     )
+    problem["storage_code"] = storage_code
+    problem.update(extra)
+    return HTTPException(status_code, detail=problem)
 
 
 async def _ingest_upload(

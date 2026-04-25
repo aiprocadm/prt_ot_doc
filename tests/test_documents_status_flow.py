@@ -172,7 +172,7 @@ async def test_document_status_transition_invalid_is_rejected(
 
     assert response.status_code == 409
     payload = response.json()
-    assert payload["code"] == "http_409"
+    assert payload["code"] == "DOCUMENT_INVALID_STATUS_TRANSITION"
     assert "Cannot transition document" in payload["message"]
 
     async with sessionmaker() as session:

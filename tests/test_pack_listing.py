@@ -19,7 +19,7 @@ async def test_list_packs_pagination(async_client: AsyncClient, sessionmaker, ma
         for index in range(3):
             session.add(
                 DocumentPack(
-                    tenant_id=tenant.slug,
+                    tenant_id=tenant.id,
                     code=f"EXTRA_{index}",
                     name=f"Extra Pack {index}",
                     description=f"Generated {index}",

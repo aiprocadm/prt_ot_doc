@@ -241,11 +241,12 @@ def _normalize_template_scope(
     site_id: str | None = None,
 ) -> dict[str, Any]:
     payload = dict(raw_scope or {})
-    scope_type = str(payload.get("type") or "tenant").strip().lower()
+    scope_type = str(payload.get("level") or payload.get("type") or "tenant").strip().lower()
     if scope_type == "branch":
         scope_type = "site"
     if scope_type not in {"global", "system", "tenant", "legal_entity", "organization", "site"}:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Unsupported template scope")
+    payload["level"] = scope_type
     payload["type"] = scope_type
     payload["tenant_id"] = str(payload.get("tenant_id") or tenant.slug)
     if scope_type in {"legal_entity", "organization"}:
@@ -292,6 +293,7 @@ def _build_template_dto(template: Template, *, include_versions: bool = False) -
             "code": template.code,
             "name": template.name,
             "description": template.description,
+            "category": template.category,
             "status": template.status.value if hasattr(template.status, "value") else str(template.status),
             "current_version_id": template.current_version_id,
             "updated_at": template.updated_at,
@@ -618,7 +620,7 @@ async def create_template_catalog(
         status=TemplateStatus(payload.status or TemplateStatus.DRAFT.value),
         domain=payload.template_type,
         category=payload.category,
-        scope_level=str(normalized_scope.get("type") or "tenant"),
+        scope_level=str(normalized_scope.get("level") or normalized_scope.get("type") or "tenant"),
         scope_company_id=normalized_scope.get("company_id"),
         scope_site_id=normalized_scope.get("site_id"),
         metadata_json=_template_metadata_payload(
@@ -641,7 +643,7 @@ async def create_template_catalog(
         changed_fields={"after": {"code": template.code, "name": template.name}},
     )
     await session.commit()
-    await session.refresh(template)
+    await session.refresh(template, ["versions"])
     return _build_template_dto(template, include_versions=True)
 
 
@@ -689,7 +691,9 @@ async def patch_template(
             company_id=payload.scope.company_id,
             site_id=payload.scope.site_id,
         )
-        template.scope_level = str(normalized_scope.get("type") or "tenant")
+        template.scope_level = str(
+            normalized_scope.get("level") or normalized_scope.get("type") or "tenant"
+        )
         template.scope_company_id = normalized_scope.get("company_id")
         template.scope_site_id = normalized_scope.get("site_id")
         template.metadata_json = {

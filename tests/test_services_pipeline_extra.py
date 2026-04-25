@@ -176,7 +176,7 @@ async def test_prepare_parameters_detects_tenant_mismatch() -> None:
     service = PipelineService(
         storage=FileStorageService(), pdf_converter=_UnusedPdfConverter(), metrics=None
     )
-    fake_session = SimpleNamespace(info={"tenant": "other"})
+    fake_session = SimpleNamespace(info={"tenant": "other", "tenant_id": "other-tenant-id"})
 
     template = Template(
         tenant_id="tenant-a",

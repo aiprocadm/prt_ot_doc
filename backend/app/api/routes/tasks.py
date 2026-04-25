@@ -310,6 +310,7 @@ async def create_task(
     )
     task.next_remind_at = await next_task_reminder(session, due_at=task.due_at)
     session.add(task)
+    await session.flush()
     audit = AuditService(session)
     ip = request.client.host if request.client else "unknown"
     await audit.log_event(
@@ -357,7 +358,7 @@ async def update_task(
     payload: TaskUpdate,
     tenant: Tenant = TenantDep,
     session: AsyncSession = SessionDep,
-    access: AccessContext = TaskWriteAccess,
+    access: AccessContext = TaskReadAccess,
 ) -> TaskRead:
     TenantContextValidator.ensure_tenant_context(tenant)
 
@@ -366,8 +367,15 @@ async def update_task(
     if task is None:
         raise _task_not_found(code="OBLIGATION_TASK_NOT_FOUND")
 
-    if access.user.role.value == "worker" and task.assignee_id != access.user.id:
-        raise _task_not_found(code="OBLIGATION_TASK_NOT_FOUND")
+    if access.user.role.value == "worker":
+        if task.assignee_id != access.user.id:
+            raise _task_not_found(code="OBLIGATION_TASK_NOT_FOUND")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=api_problem_detail(
+                code="FORBIDDEN", message="Workers cannot modify tasks", error_type="tasks"
+            ),
+        )
 
     updates = payload.model_dump(exclude_unset=True)
     status_value = _normalize_task_status(updates.pop("status", None))
