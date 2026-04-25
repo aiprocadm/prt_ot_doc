@@ -45,8 +45,11 @@ export const useRiskStore = create<RiskState>()(
         const byHazard = new Map<string, HazardDto>();
         for (const item of data.items ?? []) {
           if (!item.hazard || byHazard.has(item.hazard)) continue;
+          const nowIso = new Date().toISOString();
           byHazard.set(item.hazard, {
             id: item.hazard,
+            created_at: nowIso,
+            updated_at: nowIso,
             code: item.hazard,
             title: item.hazard,
             description: "",
@@ -76,8 +79,12 @@ export const useRiskStore = create<RiskState>()(
         const { data } = await apiClient.get<RiskRegistryResponse>("/risks", {
           params: companyId ? { company_id: companyId } : undefined,
         });
-        const mapped: RiskAssessmentDto[] = (data.items ?? []).map((item) => ({
+        const mapped: RiskAssessmentDto[] = (data.items ?? []).map((item) => {
+          const nowIso = new Date().toISOString();
+          return {
           id: item.id,
+          created_at: nowIso,
+          updated_at: nowIso,
           company_id: item.company_id,
           hazards: [
             {
@@ -89,7 +96,8 @@ export const useRiskStore = create<RiskState>()(
           ],
           total_score: Number(item.level ?? 0),
           status: "approved",
-        }));
+          };
+        });
         set((state) => {
           state.assessments = mapped;
         });

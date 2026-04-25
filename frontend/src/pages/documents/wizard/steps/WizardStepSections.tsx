@@ -65,7 +65,12 @@ export const SourceStep = ({
 }) => (
   <div className="space-y-2">
     <Label>CSV/XLSX файл (до 10MB)</Label>
-    <Input type="file" accept=".csv,.xlsx" onChange={(event) => void onSourceChange(event)} />
+    <Input
+      type="file"
+      accept=".csv,.xlsx"
+      className="file:mr-3 file:rounded-md file:border file:border-input file:bg-muted file:px-3 file:py-1 file:text-sm hover:file:bg-muted/80"
+      onChange={(event) => void onSourceChange(event)}
+    />
     <div className="text-xs text-muted-foreground">Колонки: {sourceColumns.join(", ") || "не определены"}</div>
   </div>
 );
