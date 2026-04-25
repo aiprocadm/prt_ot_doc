@@ -338,7 +338,7 @@ class WebhookDispatcher:
                     sign_payload = f"{timestamp_ms}.".encode("utf-8") + body
                     signature = hmac.new(destination.secret.encode("utf-8"), sign_payload, sha256).hexdigest()
                     merged_headers["X-Signature"] = f"v1={signature}"
-                response = await client.post(destination.url, content=body, headers={**merged_headers, "content-type": "application/json"}, timeout=max(destination.timeout_ms / 1000, 0.1))
+                response = await client.post(destination.url, content=body, headers={**merged_headers, "content-type": "application/json"}, timeout=max((destination.timeout_ms or 5000) / 1000, 0.1))
                 if response.status_code >= 300:
                     failures.append((destination.url, response.status_code))
                     logger.warning(

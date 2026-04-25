@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import socket
@@ -35,7 +36,7 @@ async def _ping_postgres(app: FastAPI) -> None:
 async def _ping_redis(app: FastAPI, settings: Settings) -> None:
     client = getattr(app.state, "redis_client", None)
     if client is not None:
-        await client.ping()
+        await asyncio.wait_for(client.ping(), timeout=5.0)
         return
 
     broker_url = settings.redis.broker_url
@@ -45,7 +46,7 @@ async def _ping_redis(app: FastAPI, settings: Settings) -> None:
 
     redis = redis_async.from_url(broker_url)
     try:
-        await redis.ping()
+        await asyncio.wait_for(redis.ping(), timeout=5.0)
     finally:
         await redis.close()
 

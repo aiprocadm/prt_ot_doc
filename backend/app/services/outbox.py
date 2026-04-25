@@ -256,7 +256,7 @@ class OutboxService:
             Outbox.tenant_id == tenant_id,
             Outbox.destination == destination,
             Outbox.idempotency_key == idempotency_key,
-        )
+        ).limit(1)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
