@@ -19,7 +19,17 @@ export const getTopNavKpi = async (): Promise<TopNavKpi> => {
 
 export const sendUxMetric = async (name: string, payload?: Record<string, unknown>) => {
   try {
-    await apiClient.post("/analytics/ux-events", { name, payload });
+    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/analytics/ux-events`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ name, payload })
+    });
+    if (!response.ok) {
+      return;
+    }
   } catch {
     // Optional endpoint: metric delivery is best-effort only.
   }
