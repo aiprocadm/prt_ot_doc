@@ -21,6 +21,8 @@ type SharedProps = Pick<
   | "preset"
   | "sourceColumns"
   | "mapping"
+  | "mappingValidation"
+  | "qualityReport"
   | "templateCode"
   | "templateVersion"
   | "companyId"

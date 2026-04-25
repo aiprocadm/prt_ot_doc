@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 
-import { type ContractorRegistryDto, operationsApi } from "@/api/operations";
+import { type ContractorComplianceSummaryDto, type ContractorRegistryDto, operationsApi } from "@/api/operations";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -10,6 +10,13 @@ import { RegistryTable } from "@/components/common/RegistryTable";
 import { Button } from "@/components/ui/button";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { useLocalRegistry } from "@/hooks/useLocalRegistry";
+
+const emptyComplianceSummary = (): ContractorComplianceSummaryDto => ({
+  employees_total: 0,
+  admission: {},
+  training: {},
+  medical: {}
+});
 
 const complianceRiskLabel = (companyId: string, incidents: Array<{ contractor_id: string; severity: string }>) => {
   const hasCritical = incidents.some((item) => item.contractor_id === companyId && ["critical", "high"].includes(item.severity));
@@ -21,7 +28,11 @@ const complianceRiskLabel = (companyId: string, incidents: Array<{ contractor_id
 
 const ContractorsPage = () => {
   const load = useCallback(() => operationsApi.getContractorSnapshot(), []);
-  const { data, loading, error, reload } = useAsyncResource({ loader: load, initialData: { companies: [], sites: [], contracts: [], employees: [], incidents: [], complianceSummary: null }, errorMessage: "Не удалось загрузить реестр подрядчиков" });
+  const { data, loading, error, reload } = useAsyncResource({
+    loader: load,
+    initialData: { companies: [], sites: [], contracts: [], employees: [], incidents: [], complianceSummary: emptyComplianceSummary() },
+    errorMessage: "Не удалось загрузить реестр подрядчиков"
+  });
   const items = useMemo(
     () =>
       data.companies.map((company: ContractorRegistryDto) => {
