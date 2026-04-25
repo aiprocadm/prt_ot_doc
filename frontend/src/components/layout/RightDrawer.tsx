@@ -19,9 +19,9 @@ const quickActions: Array<{
 ];
 
 const statusItems = [
-  { label: "Согласования сегодня", value: "18", tone: "default" },
-  { label: "Просрочки обучений", value: "7", tone: "destructive" },
-  { label: "Предписания к закрытию", value: "4", tone: "secondary" }
+  { label: "Согласования сегодня", value: "18", tone: "default", to: "/approvals/inbox" },
+  { label: "Просрочки обучений", value: "7", tone: "destructive", to: "/training" },
+  { label: "Предписания к закрытию", value: "4", tone: "secondary", to: "/prescriptions" }
 ];
 
 export const RightDrawer = () => {
@@ -49,10 +49,14 @@ export const RightDrawer = () => {
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Сводка дня</h2>
         <div className="mt-3 space-y-2 text-sm">
           {statusItems.map((item) => (
-            <div key={item.label} className="flex items-center justify-between rounded-md border bg-background px-3 py-2">
+            <Link
+              key={item.label}
+              to={item.to}
+              className="flex items-center justify-between rounded-md border bg-background px-3 py-2 transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
               <span>{item.label}</span>
               <Badge variant={item.tone as "default" | "secondary" | "destructive"}>{item.value}</Badge>
-            </div>
+            </Link>
           ))}
         </div>
       </div>
