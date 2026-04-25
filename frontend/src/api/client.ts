@@ -193,8 +193,14 @@ apiClient.interceptors.response.use(
         (typeof requestAuthHeader === "string" && requestAuthHeader.trim()) || tokenStorage.getAccessToken()
       );
       if (!hasAccessToken) {
-        // No token present: do not storm /auth/refresh, reject and let auth handler redirect.
-        return Promise.reject(error);
+        // No token present: do not storm /auth/refresh, but keep unified auth handling.
+        const apiError = normalizeApiError(error.response?.data, {
+          status,
+          message: error.message ?? "Unauthorized",
+          details: error.response?.data
+        });
+        handleApiError(apiError, originalRequest?.url);
+        return Promise.reject(apiError);
       } else {
         originalRequest._retry = true;
 
@@ -216,7 +222,13 @@ apiClient.interceptors.response.use(
           originalRequest.headers.Authorization = `Bearer ${newToken}`;
           return apiClient(originalRequest);
         }
-        return Promise.reject(error);
+        const apiError = normalizeApiError(error.response?.data, {
+          status,
+          message: error.message ?? "Unauthorized",
+          details: error.response?.data
+        });
+        handleApiError(apiError, originalRequest?.url);
+        return Promise.reject(apiError);
       }
     }
 
