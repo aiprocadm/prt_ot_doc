@@ -4,6 +4,19 @@ import { apiClient } from "@/api/client";
 import type { ApiError } from "@/types/dto/common";
 import type { CreateRiskAssessmentDto, HazardDto, RiskAssessmentDto } from "@/types/dto/risk";
 
+type RiskRegistryItem = {
+  id: string;
+  company_id: string;
+  hazard: string;
+  probability: number;
+  severity: number;
+  level: number;
+};
+
+type RiskRegistryResponse = {
+  items: RiskRegistryItem[];
+};
+
 interface RiskState {
   hazards: HazardDto[];
   assessments: RiskAssessmentDto[];
@@ -28,9 +41,21 @@ export const useRiskStore = create<RiskState>()(
         state.error = null;
       });
       try {
-        const { data } = await apiClient.get<HazardDto[]>("/risk/hazards");
+        const { data } = await apiClient.get<RiskRegistryResponse>("/risks");
+        const byHazard = new Map<string, HazardDto>();
+        for (const item of data.items ?? []) {
+          if (!item.hazard || byHazard.has(item.hazard)) continue;
+          byHazard.set(item.hazard, {
+            id: item.hazard,
+            code: item.hazard,
+            title: item.hazard,
+            description: "",
+            probability: Number(item.probability ?? 1),
+            severity: Number(item.severity ?? 1)
+          });
+        }
         set((state) => {
-          state.hazards = data;
+          state.hazards = Array.from(byHazard.values());
         });
       } catch (error) {
         set((state) => {
@@ -48,11 +73,25 @@ export const useRiskStore = create<RiskState>()(
         state.error = null;
       });
       try {
-        const { data } = await apiClient.get<RiskAssessmentDto[]>("/risk/assessments", {
-          params: companyId ? { company_id: companyId } : undefined
+        const { data } = await apiClient.get<RiskRegistryResponse>("/risks", {
+          params: companyId ? { company_id: companyId } : undefined,
         });
+        const mapped: RiskAssessmentDto[] = (data.items ?? []).map((item) => ({
+          id: item.id,
+          company_id: item.company_id,
+          hazards: [
+            {
+              hazard_id: item.hazard,
+              mitigations: "",
+              probability: Number(item.probability ?? 1),
+              severity: Number(item.severity ?? 1),
+            },
+          ],
+          total_score: Number(item.level ?? 0),
+          status: "approved",
+        }));
         set((state) => {
-          state.assessments = data;
+          state.assessments = mapped;
         });
       } catch (error) {
         set((state) => {
