@@ -17,7 +17,10 @@ const TYPE_LABELS: Record<string, string> = {
   training_plan: "Обучение",
   medical_requirement: "Медосмотры",
   inspection: "Инспекции",
-  attestation: "Аттестации"
+  attestation: "Аттестации",
+  person: "Сотрудник",
+  company: "Организация",
+  task: "Задача"
 };
 
 export const TaskTable = () => {
