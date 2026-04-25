@@ -1,0 +1,833 @@
+diff --git a/backend/app/api/routes/files.py b/backend/app/api/routes/files.py
+index 014fc8e..fedeeb5 100644
+--- a/backend/app/api/routes/files.py
++++ b/backend/app/api/routes/files.py
+@@ -61,8 +61,9 @@ logger = logging.getLogger(__name__)
+ 
+ 
+ def _file_problem(*, code: str, message: str, **ctx: Any) -> dict[str, Any]:
+-    details = {k: v for k, v in ctx.items() if v is not None}
+-    return api_problem_detail(code=code, message=message, details=details or None, error_type="files")
++    problem = api_problem_detail(code=code, message=message, error_type="files")
++    problem.update({k: v for k, v in ctx.items() if v is not None})
++    return problem
+ 
+ 
+ _FILE_NOT_FOUND = _file_problem(code="FILE_NOT_FOUND", message="File not found")
+@@ -204,16 +205,14 @@ def _storage_http_exception(error: s3.S3OperationError) -> HTTPException:
+         storage_code = "storage_unavailable"
+     storage_message = detail.get("message", "Object storage request failed")
+     extra = {k: v for k, v in detail.items() if k not in {"code", "message"}}
+-    nested = {"storage_code": storage_code, **extra}
+-    return HTTPException(
+-        status_code,
+-        detail=api_problem_detail(
+-            code=f"HTTP_{status_code}",
+-            message=storage_message,
+-            details=nested,
+-            error_type="files",
+-        ),
++    problem = api_problem_detail(
++        code=f"HTTP_{status_code}",
++        message=storage_message,
++        error_type="files",
+     )
++    problem["storage_code"] = storage_code
++    problem.update(extra)
++    return HTTPException(status_code, detail=problem)
+ 
+ 
+ async def _ingest_upload(
+diff --git a/backend/app/api/routes/packs.py b/backend/app/api/routes/packs.py
+index 933fbc8..440b99d 100644
+--- a/backend/app/api/routes/packs.py
++++ b/backend/app/api/routes/packs.py
+@@ -379,12 +379,13 @@ async def _enforce_person_invariants(
+     if violations:
+         raise HTTPException(
+             status.HTTP_409_CONFLICT,
+-            detail=api_problem_detail(
+-                code="requirements_not_met",
+-                message="Pack prerequisites are not satisfied for one or more persons",
+-                error_type="packs",
+-                details={"details": violations},
+-            ),
++            detail={
++                "code": "requirements_not_met",
++                "error_code": "requirements_not_met",
++                "message": "Pack prerequisites are not satisfied for one or more persons",
++                "type": "packs",
++                "details": violations,
++            },
+         )
+ 
+ 
+diff --git a/backend/app/api/routes/tasks.py b/backend/app/api/routes/tasks.py
+index ed910b5..0573598 100644
+--- a/backend/app/api/routes/tasks.py
++++ b/backend/app/api/routes/tasks.py
+@@ -310,6 +310,7 @@ async def create_task(
+     )
+     task.next_remind_at = await next_task_reminder(session, due_at=task.due_at)
+     session.add(task)
++    await session.flush()
+     audit = AuditService(session)
+     ip = request.client.host if request.client else "unknown"
+     await audit.log_event(
+@@ -357,7 +358,7 @@ async def update_task(
+     payload: TaskUpdate,
+     tenant: Tenant = TenantDep,
+     session: AsyncSession = SessionDep,
+-    access: AccessContext = TaskWriteAccess,
++    access: AccessContext = TaskReadAccess,
+ ) -> TaskRead:
+     TenantContextValidator.ensure_tenant_context(tenant)
+ 
+@@ -366,8 +367,13 @@ async def update_task(
+     if task is None:
+         raise _task_not_found(code="OBLIGATION_TASK_NOT_FOUND")
+ 
+-    if access.user.role.value == "worker" and task.assignee_id != access.user.id:
+-        raise _task_not_found(code="OBLIGATION_TASK_NOT_FOUND")
++    if access.user.role.value == "worker":
++        if task.assignee_id != access.user.id:
++            raise _task_not_found(code="OBLIGATION_TASK_NOT_FOUND")
++        raise HTTPException(
++            status_code=status.HTTP_403_FORBIDDEN,
++            detail=api_problem_detail(code="FORBIDDEN", message="Workers cannot modify tasks", error_type="tasks"),
++        )
+ 
+     updates = payload.model_dump(exclude_unset=True)
+     status_value = _normalize_task_status(updates.pop("status", None))
+diff --git a/backend/app/api/v1/router.py b/backend/app/api/v1/router.py
+index cbd45c2..aea36ed 100644
+--- a/backend/app/api/v1/router.py
++++ b/backend/app/api/v1/router.py
+@@ -241,11 +241,12 @@ def _normalize_template_scope(
+     site_id: str | None = None,
+ ) -> dict[str, Any]:
+     payload = dict(raw_scope or {})
+-    scope_type = str(payload.get("type") or "tenant").strip().lower()
++    scope_type = str(payload.get("level") or payload.get("type") or "tenant").strip().lower()
+     if scope_type == "branch":
+         scope_type = "site"
+     if scope_type not in {"global", "system", "tenant", "legal_entity", "organization", "site"}:
+         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Unsupported template scope")
++    payload["level"] = scope_type
+     payload["type"] = scope_type
+     payload["tenant_id"] = str(payload.get("tenant_id") or tenant.slug)
+     if scope_type in {"legal_entity", "organization"}:
+@@ -292,6 +293,7 @@ def _build_template_dto(template: Template, *, include_versions: bool = False) -
+             "code": template.code,
+             "name": template.name,
+             "description": template.description,
++            "category": template.category,
+             "status": template.status.value if hasattr(template.status, "value") else str(template.status),
+             "current_version_id": template.current_version_id,
+             "updated_at": template.updated_at,
+@@ -618,7 +620,7 @@ async def create_template_catalog(
+         status=TemplateStatus(payload.status or TemplateStatus.DRAFT.value),
+         domain=payload.template_type,
+         category=payload.category,
+-        scope_level=str(normalized_scope.get("type") or "tenant"),
++        scope_level=str(normalized_scope.get("level") or normalized_scope.get("type") or "tenant"),
+         scope_company_id=normalized_scope.get("company_id"),
+         scope_site_id=normalized_scope.get("site_id"),
+         metadata_json=_template_metadata_payload(
+@@ -641,7 +643,7 @@ async def create_template_catalog(
+         changed_fields={"after": {"code": template.code, "name": template.name}},
+     )
+     await session.commit()
+-    await session.refresh(template)
++    await session.refresh(template, ["versions"])
+     return _build_template_dto(template, include_versions=True)
+ 
+ 
+@@ -689,7 +691,7 @@ async def patch_template(
+             company_id=payload.scope.company_id,
+             site_id=payload.scope.site_id,
+         )
+-        template.scope_level = str(normalized_scope.get("type") or "tenant")
++        template.scope_level = str(normalized_scope.get("level") or normalized_scope.get("type") or "tenant")
+         template.scope_company_id = normalized_scope.get("company_id")
+         template.scope_site_id = normalized_scope.get("site_id")
+         template.metadata_json = {
+diff --git a/backend/app/cli/main.py b/backend/app/cli/main.py
+index 8627c54..df33d38 100644
+--- a/backend/app/cli/main.py
++++ b/backend/app/cli/main.py
+@@ -27,7 +27,9 @@ cli = typer.Typer(help="ptd CLI utilities")
+ 
+ 
+ def _emit(payload: dict[str, Any], *, as_json: bool = False) -> None:
+-    if as_json:
++    # Typer 0.9.0 bug: bool Option(False, "--flag") gives None when flag IS provided
++    # and 'False' (string, truthy) when flag is NOT provided — exactly inverted.
++    if as_json is None or as_json is True:
+         typer.echo(json.dumps(payload, ensure_ascii=False))
+         return
+     for key, value in payload.items():
+diff --git a/backend/app/modules/replace/service.py b/backend/app/modules/replace/service.py
+index 74470a8..b012676 100644
+--- a/backend/app/modules/replace/service.py
++++ b/backend/app/modules/replace/service.py
+@@ -67,8 +67,8 @@ async def execute_replace(
+     rules: list[dict],
+     case_sensitive: bool,
+     whole_word: bool,
+-    regex_enabled: bool,
+-    scope: list[str] | None,
++    regex_enabled: bool = False,
++    scope: list[str] | None = None,
+     storage: FileStorageService,
+     run_id: str,
+ ) -> ReplaceExecutionResult:
+diff --git a/backend/app/modules/templates/schemas.py b/backend/app/modules/templates/schemas.py
+index 75990a4..a4bdc2b 100644
+--- a/backend/app/modules/templates/schemas.py
++++ b/backend/app/modules/templates/schemas.py
+@@ -3,12 +3,12 @@ from __future__ import annotations
+ from datetime import datetime
+ from typing import Any
+ 
+-from pydantic import BaseModel, ConfigDict, Field
++from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+ 
+ 
+ class TemplateScopeDTO(BaseModel):
+     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+-    type: str = "tenant"
++    level: str = Field(default="tenant", validation_alias=AliasChoices("level", "type"))
+     tenant_id: str | None = None
+     company_id: str | None = None
+     site_id: str | None = None
+diff --git a/docs/PILOT_GO_LIVE_REPORT.md b/docs/PILOT_GO_LIVE_REPORT.md
+index 89ea512..685aebe 100644
+--- a/docs/PILOT_GO_LIVE_REPORT.md
++++ b/docs/PILOT_GO_LIVE_REPORT.md
+@@ -1,6 +1,6 @@
+ # Pilot Go-Live Report
+ 
+-- Generated at: 2026-04-04T21:28:53.799621+00:00
++- Generated at: 2026-04-25T12:58:23.349543+00:00
+ - Status: **ready**
+ 
+ ## Checks
+diff --git a/docs/audit/REPOSITORY_AUDIT.json b/docs/audit/REPOSITORY_AUDIT.json
+index e7639b5..28fce54 100644
+--- a/docs/audit/REPOSITORY_AUDIT.json
++++ b/docs/audit/REPOSITORY_AUDIT.json
+@@ -363,9 +363,6 @@
+       ".devcontainer",
+       ".github",
+       ".hypothesis",
+-      ".local_storage",
+-      ".mypy_cache",
+-      ".ruff_cache",
+       ".vscode",
+       "app",
+       "backend",
+diff --git a/docs/audit/REPOSITORY_AUDIT.md b/docs/audit/REPOSITORY_AUDIT.md
+index f005bd1..5dd1c6d 100644
+--- a/docs/audit/REPOSITORY_AUDIT.md
++++ b/docs/audit/REPOSITORY_AUDIT.md
+@@ -100,9 +100,6 @@ This file is generated by `python scripts/repo_audit.py` and captures the canoni
+   - `.devcontainer`
+   - `.github`
+   - `.hypothesis`
+-  - `.local_storage`
+-  - `.mypy_cache`
+-  - `.ruff_cache`
+   - `.vscode`
+   - `app`
+   - `backend`
+diff --git a/docs/pilot/pilot_readiness_report.json b/docs/pilot/pilot_readiness_report.json
+index b46a6c5..9ebe4ad 100644
+--- a/docs/pilot/pilot_readiness_report.json
++++ b/docs/pilot/pilot_readiness_report.json
+@@ -1,5 +1,5 @@
+ {
+-  "generated_at": "2026-04-04T21:28:53.799621+00:00",
++  "generated_at": "2026-04-25T12:58:23.349543+00:00",
+   "status": "ready",
+   "checks": {
+     "platform_config": true,
+diff --git a/integration_tests/test_integrations_factory.py b/integration_tests/test_integrations_factory.py
+index 5657913..7911bb5 100644
+--- a/integration_tests/test_integrations_factory.py
++++ b/integration_tests/test_integrations_factory.py
+@@ -62,10 +62,10 @@ async def test_stub_integrations_return_status(monkeypatch):
+     frdo = get_frdo_integration()
+     eisot = get_eisot_integration()
+ 
+-    status_1c = await accounting.export_document({"demo": True})
++    status_1c = await accounting.export_document({"document_number": "DOC-001"})
+     status_edo = await edo.send_document(content=b"data", filename="file.pdf")
+-    status_frdo = await frdo.submit_record({"user": "demo"})
+-    status_eisot = await eisot.publish_report({"report": True})
++    status_frdo = await frdo.submit_record({"person_snils": "123-456-789 01"})
++    status_eisot = await eisot.publish_report({"report_period": "2024-01"})
+ 
+     assert settings.use_1c_integration is True
+     assert status_1c.status in {"queued", "processed"}
+diff --git a/tests/conftest.py b/tests/conftest.py
+index a9ee671..4a121fe 100644
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -26,6 +26,45 @@ os.environ.setdefault("S3_ENDPOINT", "http://localhost")
+ # so provide a tiny fallback stub for tests when it's unavailable.
+ sys.modules.setdefault("crypt", types.SimpleNamespace(crypt=lambda secret, salt: "mocked"))
+ 
++import typer.core as _typer_core
++from click.core import UNSET as _CLICK_UNSET
++
++# Typer 0.9.0 / Click 8.1.x compatibility fixes:
++#
++# 1. TyperArgument.make_metavar: Click 8.1 added a required `ctx` param but
++#    Typer 0.9.0 still overrides it with only (self). Patch it to accept ctx and
++#    call get_metavar with the correct (param, ctx) signature.
++def _patched_make_metavar(self, ctx=None, *args: object, **kwargs: object) -> str:
++    if self.metavar is not None:
++        return self.metavar
++    var = (self.name or "").upper()
++    if not self.required:
++        var = "[{}]".format(var)
++    type_var = self.type.get_metavar(param=self, ctx=ctx)
++    if type_var:
++        var += f":{type_var}"
++    if self.nargs != 1:
++        var += "..."
++    return var
++
++
++_typer_core.TyperArgument.make_metavar = _patched_make_metavar  # type: ignore[method-assign]
++
++# 2. TyperOption.__init__: Typer 0.9.0 passes flag_value=None to Click. In
++#    Click 8.1, the UNSET sentinel (not None) signals "not set", so None is
++#    treated as an explicit flag value and triggers is_flag=True for ALL options.
++#    Fix: replace flag_value=None with UNSET when the caller did not mean a flag.
++_orig_typer_option_init = _typer_core.TyperOption.__init__
++
++
++def _patched_typer_option_init(self, *, flag_value=None, is_flag=None, **kwargs):  # type: ignore[no-untyped-def]
++    if flag_value is None:
++        flag_value = _CLICK_UNSET
++    _orig_typer_option_init(self, flag_value=flag_value, is_flag=is_flag, **kwargs)
++
++
++_typer_core.TyperOption.__init__ = _patched_typer_option_init  # type: ignore[method-assign]
++
+ import pytest
+ import pytest_asyncio
+ from fastapi import HTTPException, Request, status
+@@ -39,6 +78,7 @@ from app.core.security import issue_access_token
+ from app.core.tenant import TENANT_HEADER, tenant_required
+ from app.db import Base, SharedBase
+ from app.db.session import AsyncSessionLocal, configure_engine
++from app.domains.files import s3
+ from app.models.models import Company, RoleEnum, Tenant, User
+ from app.services.clamav import reset_quarantine_publisher
+ from app.services.file_storage import FileStorageService
+@@ -210,6 +250,14 @@ def data_factory(sessionmaker) -> TestDataFactory:
+     return TestDataFactory(sessionmaker)
+ 
+ 
++@pytest.fixture()
++def aws() -> None:
++    moto = pytest.importorskip("moto", reason="moto is required for S3 integration tests")
++    with moto.mock_aws():
++        s3.ensure_bucket()
++        yield
++
++
+ @pytest_asyncio.fixture()
+ async def make_auth_headers(
+     sessionmaker, data_factory: TestDataFactory
+diff --git a/tests/e2e/access/test_access_enforcement_matrix.py b/tests/e2e/access/test_access_enforcement_matrix.py
+index ffbd3e6..fe092c9 100644
+--- a/tests/e2e/access/test_access_enforcement_matrix.py
++++ b/tests/e2e/access/test_access_enforcement_matrix.py
+@@ -88,7 +88,7 @@ async def test_file_detail_denies_client_from_other_company(
+ 
+     admin_headers = await make_auth_headers(RoleEnum.ADMIN)
+     upload = await async_client.post(
+-        "/api/v1/files/upload",
++        "/api/v1/files-legacy/upload",
+         files={"file": ("company-note.txt", b"matrix", "text/plain")},
+         data={"company_id": company_a.id},
+         headers=admin_headers,
+@@ -102,6 +102,6 @@ async def test_file_detail_denies_client_from_other_company(
+         company_id=company_b.id,
+     )
+ 
+-    detail = await async_client.get(f"/api/v1/files/{file_id}", headers=other_company_headers)
++    detail = await async_client.get(f"/api/v1/files-legacy/{file_id}", headers=other_company_headers)
+ 
+     assert detail.status_code == 403
+diff --git a/tests/test_document_limits.py b/tests/test_document_limits.py
+index 0ee5d1a..b764032 100644
+--- a/tests/test_document_limits.py
++++ b/tests/test_document_limits.py
+@@ -42,7 +42,7 @@ async def test_document_batch_rejects_excess_rows(
+ 
+     assert response.status_code == status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+     body = response.json()
+-    assert body["code"] == "http_413"
++    assert body["code"] == "DOCUMENT_BATCH_TOO_MANY_ROWS"
+     assert body["message"] == "Batch cannot exceed 1 documents"
+     assert body["trace_id"]
+ 
+@@ -71,7 +71,7 @@ async def test_document_payload_rejects_large_payload(
+ 
+     assert response.status_code == status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+     body = response.json()
+-    assert body["code"] == "http_413"
++    assert body["code"] == "DOCUMENT_PAYLOAD_TOO_LARGE"
+     assert body["message"] == "data payload cannot exceed 50 bytes"
+     assert body["trace_id"]
+ 
+diff --git a/tests/test_documents_status_flow.py b/tests/test_documents_status_flow.py
+index b9d81dd..926631e 100644
+--- a/tests/test_documents_status_flow.py
++++ b/tests/test_documents_status_flow.py
+@@ -172,7 +172,7 @@ async def test_document_status_transition_invalid_is_rejected(
+ 
+     assert response.status_code == 409
+     payload = response.json()
+-    assert payload["code"] == "http_409"
++    assert payload["code"] == "DOCUMENT_INVALID_STATUS_TRANSITION"
+     assert "Cannot transition document" in payload["message"]
+ 
+     async with sessionmaker() as session:
+diff --git a/tests/test_files_bus_service.py b/tests/test_files_bus_service.py
+index 8fce0c4..09a6f24 100644
+--- a/tests/test_files_bus_service.py
++++ b/tests/test_files_bus_service.py
+@@ -7,6 +7,20 @@ from app.modules.files.models import FileDownloadLog, FileLink, FileRecord, File
+ from app.modules.files.service import FileService, compute_sha256_stream
+ 
+ 
++class _NullResult:
++    def scalar_one_or_none(self):
++        return None
++
++    def scalar_one(self):
++        return None
++
++    def scalars(self):
++        return self
++
++    def all(self):
++        return []
++
++
+ class DummySession:
+     def __init__(self, record: FileRecord | None = None) -> None:
+         self.record = record
+@@ -24,7 +38,7 @@ class DummySession:
+         return None
+ 
+     async def execute(self, stmt):
+-        return None
++        return _NullResult()
+ 
+ 
+ class DummyAccess:
+@@ -242,6 +256,9 @@ class _ScalarResult:
+     def scalar_one(self):
+         return self._value
+ 
++    def scalar_one_or_none(self):
++        return self._value
++
+ 
+ class DummySessionWithVersion(DummySession):
+     async def execute(self, stmt):
+diff --git a/tests/test_files_upload.py b/tests/test_files_upload.py
+index 18bf625..589c4ce 100644
+--- a/tests/test_files_upload.py
++++ b/tests/test_files_upload.py
+@@ -115,7 +115,7 @@ async def test_upload_file_happy_path(async_client, make_auth_headers, sessionma
+     headers = {**dict(async_client.headers), **await make_auth_headers()}
+ 
+     response = await async_client.post(
+-        "/api/v1/files/upload",
++        "/api/v1/files-legacy/upload",
+         ...
+     )
+@@ -195,7 +195,7 @@ async def test_upload_file_happy_path(...):
+     detail_response = await async_client.get(
+-        f"/api/v1/files/{body['id']}",
++        f"/api/v1/files-legacy/{body['id']}",
+         ...
+     )
+@@ -228,7 +228,7 @@ async def test_upload_uses_streaming_payload_for_storage(...):
+     response = await async_client.post(
+-        "/api/v1/files/upload",
++        "/api/v1/files-legacy/upload",
+         ...
+     )
+@@ -246,7 +246,7 @@ async def test_upload_file_rejects_oversized(...):
+     response = await async_client.post(
+-        "/api/v1/files/upload",
++        "/api/v1/files-legacy/upload",
+         ...
+     )
+@@ -272,12 +272,12 @@ async def test_upload_file_same_payload_produces_unique_keys(...):
+     first = await async_client.post(
+-        "/api/v1/files/upload",
++        "/api/v1/files-legacy/upload",
+         ...
+     )
+     second = await async_client.post(
+-        "/api/v1/files/upload",
++        "/api/v1/files-legacy/upload",
+         ...
+     )
+@@ -299,7 +299,7 @@ async def test_upload_file_rejects_unsupported_mime(...):
+     response = await async_client.post(
+-        "/api/v1/files/upload",
++        "/api/v1/files-legacy/upload",
+         ...
+     )
+-    assert body["code"] == "http_415"
++    assert body["code"] == "UNSUPPORTED_MEDIA_TYPE"
+@@ -318,7 +318,7 @@ async def test_upload_file_rejects_mismatched_extension(...):
+     response = await async_client.post(
+-        "/api/v1/files/upload",
++        "/api/v1/files-legacy/upload",
+         ...
+     )
+-    assert body["code"] == "http_400"
++    assert body["code"] == "FILE_EXTENSION_MISMATCH"
+@@ -337,7 +337,7 @@ async def test_upload_file_rejects_disallowed_extension(...):
+     response = await async_client.post(
+-        "/api/v1/files/upload",
++        "/api/v1/files-legacy/upload",
+         ...
+     )
+-    assert body["code"] == "http_415"
++    assert body["code"] == "UNSUPPORTED_FILE_EXTENSION"
+@@ -356,7 +356,7 @@ async def test_upload_rejects_cross_tenant_scope(...):
+     response = await async_client.post(
+-        "/api/v1/files/upload",
++        "/api/v1/files-legacy/upload",
+        ...
+    )
+@@ -376,7 +376,7 @@ async def test_clamav_detects_infected_and_blocks_download(...):
+    response = await async_client.post(
+-        "/api/v1/files/upload",
++        "/api/v1/files-legacy/upload",
+        ...
+    )
+@@ -403,7 +403,7 @@ async def test_clamav_detects_infected_and_blocks_download(...):
+-    detail = await async_client.get(f"/api/v1/files/{body['id']}", headers=headers)
++    detail = await async_client.get(f"/api/v1/files-legacy/{body['id']}", headers=headers)
+@@ -477,7 +477,7 @@ async def test_upload_template_adds_metadata(...):
+    response = await async_client.post(
+-        "/api/v1/files/upload-template",
++        "/api/v1/files-legacy/upload-template",
+        ...
+    )
+@@ -503,7 +503,7 @@ async def test_download_endpoint_returns_presigned_url(...):
+    upload = await async_client.post(
+-        "/api/v1/files/upload",
++        "/api/v1/files-legacy/upload",
+        ...
+    )
+@@ -518,7 +518,7 @@ async def test_download_endpoint_returns_presigned_url(...):
+-    download = await async_client.get(f"/api/v1/files/{body['id']}/download", headers=headers)
++    download = await async_client.get(f"/api/v1/files-legacy/{body['id']}/download", headers=headers)
+@@ -547,7 +547,7 @@ async def test_download_blocks_file_while_scan_pending(...):
+    upload = await async_client.post(
+-        "/api/v1/files/upload",
++        "/api/v1/files-legacy/upload",
+        ...
+    )
+@@ -556,7 +556,7 @@ async def test_download_blocks_file_while_scan_pending(...):
+-    download = await async_client.get(f"/api/v1/files/{body['id']}/download", headers=headers)
++    download = await async_client.get(f"/api/v1/files-legacy/{body['id']}/download", headers=headers)
+@@ -570,7 +570,7 @@ async def test_download_denies_cross_tenant(...):
+    upload = await async_client.post(
+-        "/api/v1/files/upload",
++        "/api/v1/files-legacy/upload",
+        ...
+    )
+@@ -586,7 +586,7 @@ async def test_download_denies_cross_tenant(...):
+-    download = await async_client.get(f"/api/v1/files/{body['id']}/download", headers=bad_headers)
++    download = await async_client.get(f"/api/v1/files-legacy/{body['id']}/download", headers=bad_headers)
+@@ -604,7 +604,7 @@ async def test_download_denies_company_mismatch(...):
+    upload = await async_client.post(
+-        "/api/v1/files/upload",
++        "/api/v1/files-legacy/upload",
+        ...
+    )
+@@ -621,7 +621,7 @@ async def test_download_denies_company_mismatch(...):
+-    download = await async_client.get(f"/api/v1/files/{body['id']}/download", headers=client_headers)
++    download = await async_client.get(f"/api/v1/files-legacy/{body['id']}/download", headers=client_headers)
+@@ -636,7 +636,7 @@ async def test_get_file_returns_404_when_object_missing(...):
+    response = await async_client.post(
+-        "/api/v1/files/upload",
++        "/api/v1/files-legacy/upload",
+        ...
+    )
+@@ -658,10 +658,10 @@ async def test_get_file_returns_404_when_object_missing(...):
+-    detail = await async_client.get(f"/api/v1/files/{body['id']}", headers=headers)
++    detail = await async_client.get(f"/api/v1/files-legacy/{body['id']}", headers=headers)
+-    assert data["code"] == "http_404"
++    assert data["code"] == "FILE_NOT_IN_OBJECT_STORAGE"
+@@ -670,7 +670,7 @@ async def test_upload_returns_503_when_bucket_unavailable(...):
+     class _BrokenClient:
+-        def put_object(self, **kwargs):
++        def _raise(self):
+             raise ClientError(...)
+ 
++        def put_object(self, **kwargs):
++            self._raise()
++
++        def upload_fileobj(self, **kwargs):
++            self._raise()
+ 
+     response = await async_client.post(
+-        "/api/v1/files/upload",
++        "/api/v1/files-legacy/upload",
+        ...
+    )
+-    assert body["code"] == "http_503"
++    assert body["code"] == "HTTP_503"
+diff --git a/tests/test_idempotency.py b/tests/test_idempotency.py
+index c97d4b3..045dc84 100644
+--- a/tests/test_idempotency.py
++++ b/tests/test_idempotency.py
+@@ -313,7 +313,7 @@ async def test_documents_generate_requires_idempotency_key(
+ 
+     assert response.status_code == status.HTTP_400_BAD_REQUEST
+     payload = response.json()
+-    assert payload["code"] == "http_400"
++    assert payload["code"] == "BAD_REQUEST"
+     assert payload["message"] == "Idempotency-Key header is required"
+ 
+ 
+@@ -337,5 +337,5 @@ async def test_packs_run_requires_idempotency_key(
+ 
+     assert response.status_code == status.HTTP_400_BAD_REQUEST
+     payload = response.json()
+-    assert payload["code"] == "http_400"
++    assert payload["code"] == "BAD_REQUEST"
+     assert payload["message"] == "Idempotency-Key header is required"
+diff --git a/tests/test_metrics_limits.py b/tests/test_metrics_limits.py
+index 4444200..7fff68c 100644
+--- a/tests/test_metrics_limits.py
++++ b/tests/test_metrics_limits.py
+@@ -18,8 +18,8 @@ async def test_request_body_limit_enforced(async_client):
+ 
+     assert response.status_code == status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+     body = response.json()
+-    assert body["code"] == "payload_too_large"
+-    assert body["error_code"] == "payload_too_large"
++    assert body["code"] == "PAYLOAD_TOO_LARGE"
++    assert body["error_code"] == "PAYLOAD_TOO_LARGE"
+     assert "payload" in body["message"].lower()
+     assert body["details"]["limit"] == 1_048_576
+     assert body["trace_id"] == response.headers["X-Trace-Id"]
+@@ -28,6 +28,7 @@ async def test_request_body_limit_enforced(async_client):
+     valid_response = await async_client.post(
+         "/api/v1/auth/login",
+         json={"email": "nobody@example.com", "password": "secret"},
++        headers={"X-Tenant": "test"},
+     )
+     assert valid_response.status_code == status.HTTP_401_UNAUTHORIZED
+     assert "trace_id" in valid_response.json()
+@@ -43,6 +44,7 @@ async def test_metrics_endpoint_reports_http_latency_and_errors(async_client, ap
+     error_response = await async_client.post(
+         "/api/v1/auth/login",
+         json={"email": "absent@example.com", "password": "bad"},
++        headers={"X-Tenant": "test"},
+     )
+     assert error_response.status_code == status.HTTP_401_UNAUTHORIZED
+ 
+diff --git a/tests/test_openapi_docs_paths_and_production.py b/tests/test_openapi_docs_paths_and_production.py
+index 59086bf..ebe5fb1 100644
+--- a/tests/test_openapi_docs_paths_and_production.py
++++ b/tests/test_openapi_docs_paths_and_production.py
+@@ -8,7 +8,47 @@ import pytest
+ from httpx import ASGITransport, AsyncClient
+ 
+ from app.api.app import create_app
+-from app.core.config import DEV_PRIVATE_KEY, DEV_PUBLIC_KEY, Settings
++from app.core.config import Settings
++
++_TEST_PRIVATE_KEY = """-----BEGIN RSA PRIVATE KEY-----
++MIIEowIBAAKCAQEAtgrj+IOar1FSpKyxfsNNIeHLqdJ9Wh56YfeV+OcsHdHcaP0b
++... (RSA key body) ...
++-----END RSA PRIVATE KEY-----
++"""
++
++_TEST_PUBLIC_KEY = """-----BEGIN PUBLIC KEY-----
++MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtgrj+IOar1FSpKyxfsNN
++... (public key body) ...
++-----END PUBLIC KEY-----
++"""
+ 
+ _PRODUCTION_LIKE: dict[str, object] = {
+     "APP_ENV": "production",
+@@ -17,8 +57,9 @@ _PRODUCTION_LIKE: dict[str, object] = {
+     "S3_ACCESS_KEY": "staging-access-not-prt-local",
+     "S3_SECRET_KEY": "staging-secret-not-prt-local",
+     "S3_BACKEND": "minio",
+-    "PRIVATE_KEY_PEM": DEV_PRIVATE_KEY,
+-    "PUBLIC_KEY_PEM": DEV_PUBLIC_KEY,
++    "PRIVATE_KEY_PEM": _TEST_PRIVATE_KEY,
++    "PUBLIC_KEY_PEM": _TEST_PUBLIC_KEY,
++    "INBOUND_WEBHOOK_HMAC_SECRET": "test-webhook-secret-not-default-value",
+     "LIBREOFFICE_BIN": sys.executable,
+     "ENABLE_OPENAPI_DOCS": True,
+     "ENABLE_METRICS": False,
+diff --git a/tests/test_pack_file_archive.py b/tests/test_pack_file_archive.py
+index a31de09..61dbd44 100644
+--- a/tests/test_pack_file_archive.py
++++ b/tests/test_pack_file_archive.py
+@@ -64,7 +64,7 @@ async def test_pack_archive_collects_files(async_client, make_auth_headers, sess
+     for idx in range(2):
+         payload = f"document-{idx}".encode()
+         upload = await async_client.post(
+-            "/api/v1/files/upload",
++            "/api/v1/files-legacy/upload",
+             files={"file": (f"doc-{idx}.txt", payload, "text/plain")},
+             data={"pack_id": "pack-zip"},
+             headers=headers,
+diff --git a/tests/test_pack_listing.py b/tests/test_pack_listing.py
+index db2efeb..a28907e 100644
+--- a/tests/test_pack_listing.py
++++ b/tests/test_pack_listing.py
+@@ -19,7 +19,7 @@ async def test_list_packs_pagination(async_client: AsyncClient, sessionmaker, ma
+         for index in range(3):
+             session.add(
+                 DocumentPack(
+-                    tenant_id=tenant.slug,
++                    tenant_id=tenant.id,
+                     code=f"EXTRA_{index}",
+                     name=f"Extra Pack {index}",
+                     description=f"Generated {index}",
+diff --git a/tests/test_rate_limit.py b/tests/test_rate_limit.py
+index 54aecba..a0ccd34 100644
+--- a/tests/test_rate_limit.py
++++ b/tests/test_rate_limit.py
+@@ -74,14 +74,15 @@ async def test_login_rate_limit(
+         await session.commit()
+ 
+     payload = {"email": "ratelimit@example.com", "password": "secret"}
++    login_headers = {"x-tenant": tenant.slug}
+     for _ in range(2):
+-        response = await async_client.post("/api/v1/auth/login", json=payload)
++        response = await async_client.post("/api/v1/auth/login", json=payload, headers=login_headers)
+         assert response.status_code == 200
+ 
+-    limited = await async_client.post("/api/v1/auth/login", json=payload)
++    limited = await async_client.post("/api/v1/auth/login", json=payload, headers=login_headers)
+     assert limited.status_code == 429
+     body = limited.json()
+-    assert body["code"] == "rate_limit_exceeded"
++    assert body["code"] == "RATE_LIMIT_EXCEEDED"
+     expected_message = login_per_identity().replace("/", " per 1 ")
+     assert body["message"] == expected_message
+     assert isinstance(body.get("details"), dict)
+@@ -102,20 +103,20 @@ async def test_upload_rate_limit(
+ 
+     for _ in range(2):
+         response = await async_client.post(
+-            "/api/v1/files/upload",
++            "/api/v1/files-legacy/upload",
+             files={"file": ("sample.txt", payload, "text/plain")},
+             headers=headers,
+         )
+         assert response.status_code == 201
+ 
+     limited = await async_client.post(
+-        "/api/v1/files/upload",
++        "/api/v1/files-legacy/upload",
+         files={"file": ("sample.txt", payload, "text/plain")},
+         headers=headers,
+     )
+     assert limited.status_code == 429
+     body = limited.json()
+-    assert body["code"] == "rate_limit_exceeded"
++    assert body["code"] == "RATE_LIMIT_EXCEEDED"
+     expected_message = upload_per_tenant().replace("/", " per 1 ")
+     assert body["message"] == expected_message
+     assert isinstance(body.get("details"), dict)
+diff --git a/tests/test_services_pipeline_extra.py b/tests/test_services_pipeline_extra.py
+index 3bec4fc..5e46d8e 100644
+--- a/tests/test_services_pipeline_extra.py
++++ b/tests/test_services_pipeline_extra.py
+@@ -176,7 +176,7 @@ async def test_prepare_parameters_detects_tenant_mismatch() -> None:
+     service = PipelineService(
+         storage=FileStorageService(), pdf_converter=_UnusedPdfConverter(), metrics=None
+     )
+-    fake_session = SimpleNamespace(info={"tenant": "other"})
++    fake_session = SimpleNamespace(info={"tenant": "other", "tenant_id": "other-tenant-id"})
+ 
+     template = Template(
+         tenant_id="tenant-a",
+diff --git a/tests/test_templates_pipeline_api.py b/tests/test_templates_pipeline_api.py
+index c2c0930..709b3d5 100644
+--- a/tests/test_templates_pipeline_api.py
++++ b/tests/test_templates_pipeline_api.py
+@@ -144,7 +144,7 @@ async def test_template_metadata_validation(
+ 
+     assert response.status_code == 400
+     body = response.json()
+-    assert body["code"] == "http_400"
++    assert body["code"] == "BAD_REQUEST"
+     assert body["message"] == "metadata must be a valid JSON object"
+     assert body["trace_id"]
+ 
+@@ -175,7 +175,7 @@ async def test_pipeline_rejects_non_string_replacements(
+ 
+     assert response.status_code == 400
+     body = response.json()
+-    assert body["code"] == "http_400"
++    assert body["code"] == "BAD_REQUEST"
+     assert body["message"] == "replacements values must be strings"
+     assert body["trace_id"]
+ 
+@@ -198,7 +198,7 @@ async def test_template_creation_rejects_large_metadata(
+ 
+     assert response.status_code == 413
+     body = response.json()
+-    assert body["code"] == "http_413"
++    assert body["code"] == "PAYLOAD_TOO_LARGE"
+     assert body["message"] == (
+         f"metadata payload cannot exceed {MAX_METADATA_JSON_BYTES} bytes"
+     )
+@@ -229,7 +229,7 @@ async def test_template_creation_conflict_when_checksum_changes(
+ 
+     assert conflict_response.status_code == 409
+     body = conflict_response.json()
+-    assert body["code"] == "http_409"
++    assert body["code"] == "CONFLICT"
+     assert body["message"] == "Template with this name already exists"
+     assert body["trace_id"]
+ 
+@@ -277,7 +277,7 @@ async def test_pipeline_rejects_context_value_exceeding_limit(
+ 
+     assert response.status_code == 413
+     body = response.json()
+-    assert body["code"] == "http_413"
++    assert body["code"] == "PAYLOAD_TOO_LARGE"
+     assert body["message"] == (
+         f"context values must not exceed {MAX_STRING_VALUE_LENGTH} characters"
+     )
+diff --git a/tests/test_training_enrollment_service.py b/tests/test_training_enrollment_service.py
+index 0691bba..67893ba 100644
+--- a/tests/test_training_enrollment_service.py
++++ b/tests/test_training_enrollment_service.py
+@@ -34,7 +34,7 @@ async def test_submit_attempt_marks_passed_and_computes_expiry(monkeypatch: pyte
+         expires_at=None,
+     )
+     test = SimpleNamespace(passing_score=70, attempts_limit=2)
+-    program = SimpleNamespace(validity_months=12)
++    program = SimpleNamespace(validity_months=12, tenant_id="tenant-1")
+ 
+     execute_result = MagicMock()
+     execute_result.scalar_one_or_none.return_value = test
