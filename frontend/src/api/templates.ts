@@ -1,24 +1,22 @@
 import { apiClient } from "@/api/client";
 
-/** ASCII-only for HTTP headers: имя файла (в т.ч. кириллица) в заголовки попадать не может. */
-const headerSafeFileToken = (name: string) => {
-  try {
-    return btoa(unescape(encodeURIComponent(name)))
-      .replace(/\+/g, "-")
-      .replace(/\//g, "_")
-      .replace(/=+$/, "");
-  } catch {
-    return "file";
-  }
+/** Backend: `normalize_idempotency_key` — макс. 128 символов. Ключ в ASCII, имя файла учитывается в SHA-256. */
+const idempotencyKeyForTemplateUpload = async (templateId: string, file: File) => {
+  const material = new TextEncoder().encode(
+    `${templateId}\0${file.size}\0${file.lastModified}\0${file.name}`
+  );
+  const digest = await crypto.subtle.digest("SHA-256", material);
+  const hex = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+  return `tplu-${hex}`;
 };
 
 export const templatesApi = {
   uploadVersion: async (templateId: string, file: File): Promise<void> => {
     const form = new FormData();
     form.append("file", file);
-    const idem = `${templateId}-${file.size}-${file.lastModified}-${headerSafeFileToken(file.name)}`;
+    const idempotencyKey = await idempotencyKeyForTemplateUpload(templateId, file);
     await apiClient.post(`/templates/${templateId}/versions:upload`, form, {
-      headers: { "Idempotency-Key": idem.slice(0, 200) }
+      headers: { "Idempotency-Key": idempotencyKey }
     });
   },
   lintVersion: async (templateId: string, versionId: string): Promise<Record<string, unknown>> => {
