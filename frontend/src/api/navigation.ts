@@ -32,6 +32,17 @@ export const sendUxMetric = async (name: string, payload?: Record<string, unknow
   if (token) headers.Authorization = `Bearer ${token}`;
 
   try {
+    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/analytics/ux-events`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ name, payload })
+    });
+    if (!response.ok) {
+      return;
+    }
     await fetch(`${appConfig.apiBaseUrl}/analytics/ux-events`, {
       method: "POST",
       credentials: "include",
