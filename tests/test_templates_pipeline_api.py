@@ -144,7 +144,7 @@ async def test_template_metadata_validation(
 
     assert response.status_code == 400
     body = response.json()
-    assert body["code"] == "http_400"
+    assert body["code"] == "BAD_REQUEST"
     assert body["message"] == "metadata must be a valid JSON object"
     assert body["trace_id"]
 
@@ -175,7 +175,7 @@ async def test_pipeline_rejects_non_string_replacements(
 
     assert response.status_code == 400
     body = response.json()
-    assert body["code"] == "http_400"
+    assert body["code"] == "BAD_REQUEST"
     assert body["message"] == "replacements values must be strings"
     assert body["trace_id"]
 
@@ -198,7 +198,7 @@ async def test_template_creation_rejects_large_metadata(
 
     assert response.status_code == 413
     body = response.json()
-    assert body["code"] == "http_413"
+    assert body["code"] == "PAYLOAD_TOO_LARGE"
     assert body["message"] == (
         f"metadata payload cannot exceed {MAX_METADATA_JSON_BYTES} bytes"
     )
@@ -229,7 +229,7 @@ async def test_template_creation_conflict_when_checksum_changes(
 
     assert conflict_response.status_code == 409
     body = conflict_response.json()
-    assert body["code"] == "http_409"
+    assert body["code"] == "CONFLICT"
     assert body["message"] == "Template with this name already exists"
     assert body["trace_id"]
 
@@ -277,7 +277,7 @@ async def test_pipeline_rejects_context_value_exceeding_limit(
 
     assert response.status_code == 413
     body = response.json()
-    assert body["code"] == "http_413"
+    assert body["code"] == "PAYLOAD_TOO_LARGE"
     assert body["message"] == (
         f"context values must not exceed {MAX_STRING_VALUE_LENGTH} characters"
     )

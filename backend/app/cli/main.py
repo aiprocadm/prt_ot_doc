@@ -27,7 +27,9 @@ cli = typer.Typer(help="ptd CLI utilities")
 
 
 def _emit(payload: dict[str, Any], *, as_json: bool = False) -> None:
-    if as_json:
+    # Typer 0.9.0 bug: bool Option(False, "--flag") gives None when flag IS provided
+    # and 'False' (string, truthy) when flag is NOT provided — exactly inverted.
+    if as_json is None or as_json is True:
         typer.echo(json.dumps(payload, ensure_ascii=False))
         return
     for key, value in payload.items():

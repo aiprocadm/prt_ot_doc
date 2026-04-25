@@ -74,14 +74,15 @@ async def test_login_rate_limit(
         await session.commit()
 
     payload = {"email": "ratelimit@example.com", "password": "secret"}
+    login_headers = {"x-tenant": tenant.slug}
     for _ in range(2):
-        response = await async_client.post("/api/v1/auth/login", json=payload)
+        response = await async_client.post("/api/v1/auth/login", json=payload, headers=login_headers)
         assert response.status_code == 200
 
-    limited = await async_client.post("/api/v1/auth/login", json=payload)
+    limited = await async_client.post("/api/v1/auth/login", json=payload, headers=login_headers)
     assert limited.status_code == 429
     body = limited.json()
-    assert body["code"] == "rate_limit_exceeded"
+    assert body["code"] == "RATE_LIMIT_EXCEEDED"
     expected_message = login_per_identity().replace("/", " per 1 ")
     assert body["message"] == expected_message
     assert isinstance(body.get("details"), dict)
@@ -102,20 +103,20 @@ async def test_upload_rate_limit(
 
     for _ in range(2):
         response = await async_client.post(
-            "/api/v1/files/upload",
+            "/api/v1/files-legacy/upload",
             files={"file": ("sample.txt", payload, "text/plain")},
             headers=headers,
         )
         assert response.status_code == 201
 
     limited = await async_client.post(
-        "/api/v1/files/upload",
+        "/api/v1/files-legacy/upload",
         files={"file": ("sample.txt", payload, "text/plain")},
         headers=headers,
     )
     assert limited.status_code == 429
     body = limited.json()
-    assert body["code"] == "rate_limit_exceeded"
+    assert body["code"] == "RATE_LIMIT_EXCEEDED"
     expected_message = upload_per_tenant().replace("/", " per 1 ")
     assert body["message"] == expected_message
     assert isinstance(body.get("details"), dict)

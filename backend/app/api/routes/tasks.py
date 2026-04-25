@@ -43,7 +43,7 @@ TaskAccess = Depends(
 )
 
 _TASK_READ_ROLES = ["admin", "owner", "line_manager", "hr", "worker"]
-_TASK_WRITE_ROLES = ["admin", "owner", "line_manager", "hr", "worker"]
+_TASK_WRITE_ROLES = ["admin", "owner", "line_manager", "hr"]
 
 
 TaskReadAccess = Depends(
@@ -358,7 +358,7 @@ async def update_task(
     payload: TaskUpdate,
     tenant: Tenant = TenantDep,
     session: AsyncSession = SessionDep,
-    access: AccessContext = TaskWriteAccess,
+    access: AccessContext = TaskReadAccess,
 ) -> TaskRead:
     TenantContextValidator.ensure_tenant_context(tenant)
 
@@ -367,8 +367,13 @@ async def update_task(
     if task is None:
         raise _task_not_found(code="OBLIGATION_TASK_NOT_FOUND")
 
-    if access.user.role.value == "worker" and task.assignee_id != access.user.id:
-        raise _task_not_found(code="OBLIGATION_TASK_NOT_FOUND")
+    if access.user.role.value == "worker":
+        if task.assignee_id != access.user.id:
+            raise _task_not_found(code="OBLIGATION_TASK_NOT_FOUND")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=api_problem_detail(code="FORBIDDEN", message="Workers cannot modify tasks", error_type="tasks"),
+        )
 
     updates = payload.model_dump(exclude_unset=True)
     status_value = _normalize_task_status(updates.pop("status", None))

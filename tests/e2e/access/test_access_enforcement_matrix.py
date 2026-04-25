@@ -88,7 +88,7 @@ async def test_file_detail_denies_client_from_other_company(
 
     admin_headers = await make_auth_headers(RoleEnum.ADMIN)
     upload = await async_client.post(
-        "/api/v1/files/upload",
+        "/api/v1/files-legacy/upload",
         files={"file": ("company-note.txt", b"matrix", "text/plain")},
         data={"company_id": company_a.id},
         headers=admin_headers,
@@ -102,6 +102,6 @@ async def test_file_detail_denies_client_from_other_company(
         company_id=company_b.id,
     )
 
-    detail = await async_client.get(f"/api/v1/files/{file_id}", headers=other_company_headers)
+    detail = await async_client.get(f"/api/v1/files-legacy/{file_id}", headers=other_company_headers)
 
     assert detail.status_code == 403
