@@ -1,4 +1,7 @@
 import { apiClient } from "@/api/client";
+import { tokenStorage } from "@/api/tokenStorage";
+import { tenantStorage } from "@/api/tenantStorage";
+import { appConfig } from "@/config/env";
 
 export type TopNavKpi = {
   tasks: number;
@@ -18,8 +21,23 @@ export const getTopNavKpi = async (): Promise<TopNavKpi> => {
 };
 
 export const sendUxMetric = async (name: string, payload?: Record<string, unknown>) => {
+  const tenant = tenantStorage.getTenant();
+  if (!tenant?.slug) return;
+
+  const token = tokenStorage.getAccessToken();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "X-Tenant": tenant.slug
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
   try {
-    await apiClient.post("/analytics/ux-events", { name, payload });
+    await fetch(`${appConfig.apiBaseUrl}/analytics/ux-events`, {
+      method: "POST",
+      credentials: "include",
+      headers,
+      body: JSON.stringify({ name, payload })
+    });
   } catch {
     // Optional endpoint: metric delivery is best-effort only.
   }
