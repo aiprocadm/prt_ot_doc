@@ -8,7 +8,47 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.api.app import create_app
-from app.core.config import DEV_PRIVATE_KEY, DEV_PUBLIC_KEY, Settings
+from app.core.config import Settings
+
+_TEST_PRIVATE_KEY = """-----BEGIN RSA PRIVATE KEY-----
+MIIEowIBAAKCAQEAtgrj+IOar1FSpKyxfsNNIeHLqdJ9Wh56YfeV+OcsHdHcaP0b
+9KuUL6o0e1RQ47Z3dIB6LCWv+ciBj//BUCCdQJcM12/p5466Xr8Bee/YihOGIgLX
+OZV4ykgkCMSm6zoShRvo/+qy/VF+b+Qi39Jmk/sgnPemehK69I5+i9Q2UUHFaI1s
+Xph/2vJq1UCDK3jQvwiY74OP6nW12fX/ScHaRQ5HGjo52idwvHUgaWDabo17d7nB
+2h5Mrc1N2QskfoLnDu/PKF/dmGl/RDDezdiTwCQz5hdBWRw9IhqaHoJKEsFyJH3b
+byJkWvK+lmcK80oysO9CafgRzUwRctP83MkKvwIDAQABAoIBADdBaf4SUD7707Z5
+VqzV8fchVtTWt8bFbodTA9oXrSvl+d2CSlyDQgkPxDtVFfJwfaTGpI7G57nNMwp2
+6oH8TE8BKlwwM5LeH1LH7lZJR3Rtxa6IJzTq2k2oBQwGSNYoe9ucY6ZeYnMCq/qh
+iDZg4lLzjGwovYbbLZUytVWTFeOmrE0UVvlKkNv9XJSZ+42ptT32nQzM1dnVHsnr
+OwysO2tq/I2hadbvlAB5UJXr2viAICj8egYO7bYCQjpMXUxzzH4gwNEnATg6ZwxV
+uCKolZr6KgtxVb65DFJKC+LZ9eWxwQ0BLumrbFrRquArP3w52H9KbBqy+/K7Kkht
+KkHpBiUCgYEA5YHYoY51CwZGv2KXdShfrdflbigsRmLLOLAtWtgCmUkIuAA1NiPt
+mR16//qVTIoT5NENsQiRQ0Syx15Zv0m8LezWhAwq1e6zCtyxH/C7y9BWAlr0AGAi
+CJyhKFMcZdwUVMcmxVFfuPmzRv0GYQvSreap+QJVXLtcmmQey5dKEeUCgYEAyw5r
+Lg1OH0aZOIoevCFPx7JlGiV5V/Kb8fhBqhoAXuP2yRn7PaGn16IZpiJO1yvg2UEH
+l1OiFLDyN00LeMue+jn2Jf2CkX7F7SPKdTpXHrgd+CBWh1I3AUdHhdH9L0cH74wK
+FbMscoIE28S4KMGEklVKeW/8jTExc5nUpHFyb9MCgYEAk26aLw5IedCKWh+HlCdf
+b1mldOIxrvV//uaN/DGPWdDk3O6lQCZMV3Pss8vRZN2+cdsppHQQfNoAzrn5hTxk
+ukvOcf0u90bjlTK4RgBrYz5uQg0TebpHoqibjj/1mimKlftpGJBxoW4mkI+yLV1e
+9X+b6O5qz6s8jaGLdtW1K1ECgYAMT0p2Fz5mLPx67fyhAQ/6FjmE1UK+7yk/CQLK
+Eht1pTI/zMBrYxJuwxf09116M+HEqemQ5fQMdxGoApawcv+nQb5HXU/+DAZpsuLC
+KpA/f3/pm+RC/dvxyuVuGmXT6OV1QzMVT7BhHLq4q/tSFTE5QcxrAjv4P0Q1Mt0u
+PuZmGwKBgDkPDlOgZpp2vzHC1sGVgqnSGtieej+3Y/OGJtZdzg44c5YxlAeF15D0
+El1hUA2v97l0+pvR+YCAU2nJQEktCbxYxcrFr3IOhAHGxLSsw8j6xbnmc/eRGXU0
+Hv2uxRHtzy0j2K2XaT9xbeG+m5JTe5wK8u8Cbm/PexJtcHIOXC1o
+-----END RSA PRIVATE KEY-----
+"""
+
+_TEST_PUBLIC_KEY = """-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtgrj+IOar1FSpKyxfsNN
+IeHLqdJ9Wh56YfeV+OcsHdHcaP0b9KuUL6o0e1RQ47Z3dIB6LCWv+ciBj//BUCCd
+QJcM12/p5466Xr8Bee/YihOGIgLXOZV4ykgkCMSm6zoShRvo/+qy/VF+b+Qi39Jm
+k/sgnPemehK69I5+i9Q2UUHFaI1sXph/2vJq1UCDK3jQvwiY74OP6nW12fX/ScHa
+RQ5HGjo52idwvHUgaWDabo17d7nB2h5Mrc1N2QskfoLnDu/PKF/dmGl/RDDezdiT
+wCQz5hdBWRw9IhqaHoJKEsFyJH3bbyJkWvK+lmcK80oysO9CafgRzUwRctP83MkK
+vwIDAQAB
+-----END PUBLIC KEY-----
+"""
 
 _PRODUCTION_LIKE: dict[str, object] = {
     "APP_ENV": "production",
@@ -17,8 +57,9 @@ _PRODUCTION_LIKE: dict[str, object] = {
     "S3_ACCESS_KEY": "staging-access-not-prt-local",
     "S3_SECRET_KEY": "staging-secret-not-prt-local",
     "S3_BACKEND": "minio",
-    "PRIVATE_KEY_PEM": DEV_PRIVATE_KEY,
-    "PUBLIC_KEY_PEM": DEV_PUBLIC_KEY,
+    "PRIVATE_KEY_PEM": _TEST_PRIVATE_KEY,
+    "PUBLIC_KEY_PEM": _TEST_PUBLIC_KEY,
+    "INBOUND_WEBHOOK_HMAC_SECRET": "test-webhook-secret-not-default-value",
     "LIBREOFFICE_BIN": sys.executable,
     "ENABLE_OPENAPI_DOCS": True,
     "ENABLE_METRICS": False,

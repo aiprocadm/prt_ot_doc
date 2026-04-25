@@ -3,12 +3,12 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
 class TemplateScopeDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
-    type: str = "tenant"
+    level: str = Field(default="tenant", validation_alias=AliasChoices("level", "type"))
     tenant_id: str | None = None
     company_id: str | None = None
     site_id: str | None = None

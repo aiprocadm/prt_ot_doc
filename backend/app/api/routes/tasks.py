@@ -43,7 +43,7 @@ TaskAccess = Depends(
 )
 
 _TASK_READ_ROLES = ["admin", "owner", "line_manager", "hr", "worker"]
-_TASK_WRITE_ROLES = ["admin", "owner", "line_manager", "hr"]
+_TASK_WRITE_ROLES = ["admin", "owner", "line_manager", "hr", "worker"]
 
 
 TaskReadAccess = Depends(
@@ -310,6 +310,7 @@ async def create_task(
     )
     task.next_remind_at = await next_task_reminder(session, due_at=task.due_at)
     session.add(task)
+    await session.flush()
     audit = AuditService(session)
     ip = request.client.host if request.client else "unknown"
     await audit.log_event(

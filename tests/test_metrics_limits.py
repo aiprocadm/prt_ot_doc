@@ -18,8 +18,8 @@ async def test_request_body_limit_enforced(async_client):
 
     assert response.status_code == status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
     body = response.json()
-    assert body["code"] == "payload_too_large"
-    assert body["error_code"] == "payload_too_large"
+    assert body["code"] == "PAYLOAD_TOO_LARGE"
+    assert body["error_code"] == "PAYLOAD_TOO_LARGE"
     assert "payload" in body["message"].lower()
     assert body["details"]["limit"] == 1_048_576
     assert body["trace_id"] == response.headers["X-Trace-Id"]
@@ -28,6 +28,7 @@ async def test_request_body_limit_enforced(async_client):
     valid_response = await async_client.post(
         "/api/v1/auth/login",
         json={"email": "nobody@example.com", "password": "secret"},
+        headers={"X-Tenant": "test"},
     )
     assert valid_response.status_code == status.HTTP_401_UNAUTHORIZED
     assert "trace_id" in valid_response.json()
@@ -43,6 +44,7 @@ async def test_metrics_endpoint_reports_http_latency_and_errors(async_client, ap
     error_response = await async_client.post(
         "/api/v1/auth/login",
         json={"email": "absent@example.com", "password": "bad"},
+        headers={"X-Tenant": "test"},
     )
     assert error_response.status_code == status.HTTP_401_UNAUTHORIZED
 
