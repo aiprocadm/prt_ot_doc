@@ -27,6 +27,7 @@ os.environ.setdefault("S3_ENDPOINT", "http://localhost")
 sys.modules.setdefault("crypt", types.SimpleNamespace(crypt=lambda secret, salt: "mocked"))
 
 import typer.core as _typer_core
+from click.core import UNSET as _CLICK_UNSET
 try:
     from click.core import UNSET as _CLICK_UNSET
 except ImportError:  # Click versions without UNSET symbol.
