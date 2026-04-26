@@ -39,7 +39,7 @@ export type ApprovalRouteCreatePayload = {
 export const approvalsApi = {
   listMyTasks: async (status = "open") => {
     const { data } = await apiClient.get<{ items: ApprovalTask[] }>("/v1/approvals/tasks", {
-      params: { mine: true, status },
+      params: { mine: 1, status },
     });
     return data.items;
   },

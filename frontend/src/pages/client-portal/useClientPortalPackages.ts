@@ -5,6 +5,7 @@ import type { ApiError } from "@/types/dto/common";
 
 export type PortalRun = {
   id: string;
+  package_id?: string | null;
   status: string;
   client_company_id?: string | null;
   started_at?: string | null;
@@ -52,6 +53,10 @@ export const useClientPortalPackages = () => {
   const [error, setError] = useState<ApiError | null>(null);
 
   const selectRun = useCallback(async (runId: string) => {
+    if (!runId) {
+      setSelected(null);
+      return null;
+    }
     try {
       const detail = await apiClient.get<PortalDetail>(`/client-portal/packages/${runId}`);
       setSelected(detail.data);
@@ -59,6 +64,12 @@ export const useClientPortalPackages = () => {
       return detail.data;
     } catch (err) {
       const nextError = (err as ApiError) ?? { status: 500, message: "Не удалось загрузить пакет" };
+      if (nextError.status === 404) {
+        // Список может содержать служебный `id` read-model; не блокируем весь dashboard.
+        setSelected(null);
+        setError(null);
+        return null;
+      }
       setError({ status: nextError.status ?? 500, message: nextError.message ?? "Не удалось загрузить пакет" });
       return null;
     }
@@ -71,7 +82,7 @@ export const useClientPortalPackages = () => {
       const { data } = await apiClient.get<PortalRun[]>("/client-portal/packages");
       setItems(data);
       if (data[0]) {
-        await selectRun(data[0].id);
+        await selectRun(data[0].package_id ?? data[0].id);
       } else {
         setSelected(null);
       }

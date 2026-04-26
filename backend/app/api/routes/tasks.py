@@ -373,6 +373,9 @@ async def update_task(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=api_problem_detail(code="FORBIDDEN", message="Workers cannot modify tasks", error_type="tasks"),
+            detail=api_problem_detail(
+                code="FORBIDDEN", message="Workers cannot modify tasks", error_type="tasks"
+            ),
         )
 
     updates = payload.model_dump(exclude_unset=True)

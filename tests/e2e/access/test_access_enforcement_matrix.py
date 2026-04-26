@@ -103,5 +103,8 @@ async def test_file_detail_denies_client_from_other_company(
     )
 
     detail = await async_client.get(f"/api/v1/files-legacy/{file_id}", headers=other_company_headers)
+    detail = await async_client.get(
+        f"/api/v1/files-legacy/{file_id}", headers=other_company_headers
+    )
 
     assert detail.status_code == 403

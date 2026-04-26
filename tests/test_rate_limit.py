@@ -77,6 +77,9 @@ async def test_login_rate_limit(
     login_headers = {"x-tenant": tenant.slug}
     for _ in range(2):
         response = await async_client.post("/api/v1/auth/login", json=payload, headers=login_headers)
+        response = await async_client.post(
+            "/api/v1/auth/login", json=payload, headers=login_headers
+        )
         assert response.status_code == 200
 
     limited = await async_client.post("/api/v1/auth/login", json=payload, headers=login_headers)

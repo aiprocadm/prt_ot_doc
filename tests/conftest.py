@@ -28,6 +28,10 @@ sys.modules.setdefault("crypt", types.SimpleNamespace(crypt=lambda secret, salt:
 
 import typer.core as _typer_core
 from click.core import UNSET as _CLICK_UNSET
+try:
+    from click.core import UNSET as _CLICK_UNSET
+except ImportError:  # Click versions without UNSET symbol.
+    _CLICK_UNSET = object()
 
 # Typer 0.9.0 / Click 8.1.x compatibility fixes:
 #

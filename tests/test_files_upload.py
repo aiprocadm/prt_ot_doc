@@ -519,6 +519,9 @@ async def test_download_endpoint_returns_presigned_url(
     await process_scan_request(message, scanner=_CleanScanner(), session_factory=sessionmaker)
 
     download = await async_client.get(f"/api/v1/files-legacy/{body['id']}/download", headers=headers)
+    download = await async_client.get(
+        f"/api/v1/files-legacy/{body['id']}/download", headers=headers
+    )
     assert download.status_code == 200
     data = download.json()
     assert data["id"] == body["id"]
@@ -557,6 +560,9 @@ async def test_download_blocks_file_while_scan_pending(
     assert body["quarantined"] is True
 
     download = await async_client.get(f"/api/v1/files-legacy/{body['id']}/download", headers=headers)
+    download = await async_client.get(
+        f"/api/v1/files-legacy/{body['id']}/download", headers=headers
+    )
     assert download.status_code == 409
     data = download.json()
     assert data["code"] == "FILE_NOT_READY"
@@ -587,6 +593,9 @@ async def test_download_denies_cross_tenant(async_client, make_auth_headers, ses
 
     bad_headers = {**headers, "x-tenant": "acme"}
     download = await async_client.get(f"/api/v1/files-legacy/{body['id']}/download", headers=bad_headers)
+    download = await async_client.get(
+        f"/api/v1/files-legacy/{body['id']}/download", headers=bad_headers
+    )
     assert download.status_code == 403
 
 
@@ -622,6 +631,9 @@ async def test_download_denies_company_mismatch(
 
     client_headers = {**dict(async_client.headers), **await make_auth_headers(RoleEnum.CLIENT_USER, company_id=company_b.id)}
     download = await async_client.get(f"/api/v1/files-legacy/{body['id']}/download", headers=client_headers)
+    download = await async_client.get(
+        f"/api/v1/files-legacy/{body['id']}/download", headers=client_headers
+    )
     assert download.status_code == 403
 
 
