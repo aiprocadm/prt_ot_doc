@@ -1,3 +1,6 @@
+param(
+    [switch]$PreflightOnly
+)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
@@ -15,8 +18,82 @@ function Invoke-Checked {
     }
 }
 
+function Get-SemVerParts {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$VersionText
+    )
+    $trimmed = $VersionText.Trim()
+    if ($trimmed.StartsWith("v")) {
+        $trimmed = $trimmed.Substring(1)
+    }
+    $parts = $trimmed.Split(".")
+    if ($parts.Count -lt 2) {
+        throw "Cannot parse version: $VersionText"
+    }
+    $major = [int]$parts[0]
+    $minor = [int]$parts[1]
+    $patch = 0
+    if ($parts.Count -ge 3) {
+        $patchToken = ($parts[2] -split "[^0-9]")[0]
+        if ($patchToken) {
+            $patch = [int]$patchToken
+        }
+    }
+    return @($major, $minor, $patch)
+}
+
+function Test-MinVersion {
+    param(
+        [Parameter(Mandatory = $true)]
+        [int[]]$Actual,
+        [Parameter(Mandatory = $true)]
+        [int[]]$Minimum
+    )
+    for ($i = 0; $i -lt 3; $i++) {
+        if ($Actual[$i] -gt $Minimum[$i]) { return $true }
+        if ($Actual[$i] -lt $Minimum[$i]) { return $false }
+    }
+    return $true
+}
+
 $RootDir = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $RootDir
+
+# Preflight checks for consistent startup diagnostics.
+if (-not (Get-Command py -ErrorAction SilentlyContinue)) {
+    throw "Python launcher 'py' not found. Install Python 3.12+ with launcher enabled."
+}
+if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+    throw "Node.js not found. Install Node.js LTS (>=18.18)."
+}
+if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+    throw "npm not found. Reinstall Node.js LTS so npm is available in PATH."
+}
+
+$pythonVersionRaw = py -3 --version
+$pythonVersionText = ($pythonVersionRaw -replace "Python\s+", "").Trim()
+$pythonVersion = Get-SemVerParts -VersionText $pythonVersionText
+if (-not (Test-MinVersion -Actual $pythonVersion -Minimum @(3, 12, 0))) {
+    throw "Python $pythonVersionText is unsupported. Use Python 3.12+."
+}
+
+$nodeVersionRaw = node --version
+$nodeVersion = Get-SemVerParts -VersionText $nodeVersionRaw
+if (-not (Test-MinVersion -Actual $nodeVersion -Minimum @(18, 18, 0))) {
+    throw "Node.js $nodeVersionRaw is unsupported. Use Node.js 18.18+."
+}
+
+$npmVersionRaw = npm --version
+$npmVersion = Get-SemVerParts -VersionText $npmVersionRaw
+if (-not (Test-MinVersion -Actual $npmVersion -Minimum @(9, 0, 0))) {
+    throw "npm $npmVersionRaw is unsupported. Use npm 9+."
+}
+
+Write-Host "Preflight OK: Python $pythonVersionText, Node $nodeVersionRaw, npm $npmVersionRaw"
+if ($PreflightOnly) {
+    return
+}
 
 if (-not (Test-Path ".env")) {
     Copy-Item ".env.example" ".env"

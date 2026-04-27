@@ -33,6 +33,11 @@ Windows (PowerShell):
 ./scripts/dev_lite.ps1
 ```
 
+Preflight only (versions + PATH diagnostics, no start):
+```powershell
+./scripts/dev_lite.ps1 -PreflightOnly
+```
+
 This is the recommended local start path in this workspace. It prepares dockerless env defaults, initializes the SQLite schema, starts backend on `http://localhost:8000`, and starts frontend on `http://localhost:5173`.
 
 Default local login:
