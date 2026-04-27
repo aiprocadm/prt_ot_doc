@@ -1,5 +1,6 @@
 import type { CompanyDto, CompanyStatus, UpdateCompanyDto } from "@/types/dto/companies";
 import type { CompanyFormValues } from "@/types/forms/companies";
+import type { DocumentDto } from "@/types/dto/documents";
 
 /** Только поля, которые принимает бэкенд (CompanyCreate / CompanyUpdate). Без status, tags, website — в модели API их нет. */
 export function buildCompanyWriteBody(values: CompanyFormValues): UpdateCompanyDto {
@@ -53,6 +54,7 @@ export function normalizeCompanyRead(raw: unknown): CompanyDto {
     phone: phoneFirst,
     website: typeof r.website === "string" ? r.website : undefined,
     status: asStatus(r.status),
-    tags: Array.isArray(r.tags) ? (r.tags as string[]) : undefined
+    tags: Array.isArray(r.tags) ? (r.tags as string[]) : undefined,
+    documents: Array.isArray(r.documents) ? (r.documents as DocumentDto[]) : undefined
   };
 }

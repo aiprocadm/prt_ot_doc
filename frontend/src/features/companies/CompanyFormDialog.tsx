@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 
 import { buildCompanyWriteBody } from "@/api/companiesApi";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -41,7 +42,8 @@ const COMPANY_API_FIELD_MAP: Record<string, keyof CompanyFormValues> = {
   legal_address: "address",
   address: "address",
   email: "email",
-  phone_numbers: "phone"
+  phone_numbers: "phone",
+  tags: "tags"
 };
 
 export const CompanyFormDialog = ({ trigger, initialData, onSubmitted }: CompanyFormDialogProps) => {
@@ -166,6 +168,44 @@ export const CompanyFormDialog = ({ trigger, initialData, onSubmitted }: Company
           <div className="space-y-2">
             <Label htmlFor="address">Адрес</Label>
             <Textarea id="address" {...form.register("address")} rows={3} />
+          </div>
+          <div className="space-y-2">
+            <Label>Теги</Label>
+            <div className="flex flex-wrap gap-1 rounded-md border px-3 py-2 min-h-10">
+              {(form.watch("tags") ?? []).map((tag, i) => (
+                <Badge key={i} variant="secondary" className="flex items-center gap-1">
+                  {tag}
+                  <button
+                    type="button"
+                    className="ml-1 text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      const tags = form.getValues("tags") ?? [];
+                      form.setValue("tags", tags.filter((_, j) => j !== i));
+                    }}
+                    aria-label={`Удалить тег ${tag}`}
+                  >
+                    ×
+                  </button>
+                </Badge>
+              ))}
+              <input
+                className="flex-1 min-w-24 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                placeholder="Тег + Enter"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === ",") {
+                    e.preventDefault();
+                    const value = e.currentTarget.value.trim().replace(/,$/, "");
+                    if (value) {
+                      const tags = form.getValues("tags") ?? [];
+                      if (!tags.includes(value)) {
+                        form.setValue("tags", [...tags, value]);
+                      }
+                      e.currentTarget.value = "";
+                    }
+                  }
+                }}
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button type="submit" disabled={form.formState.isSubmitting}>
