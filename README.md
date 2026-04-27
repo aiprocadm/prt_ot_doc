@@ -53,6 +53,8 @@ Auto-free busy dev ports (`8000`, `5173`) before start:
 python scripts/dev_lite.py --auto-kill-ports
 ```
 
+Note for WSL: dependencies must be installed inside the selected Linux distro as well (`python`, `node`, `npm` in WSL PATH).
+
 This is the recommended local start path in this workspace. It prepares dockerless env defaults, initializes the SQLite schema, starts backend on `http://localhost:8000`, and starts frontend on `http://localhost:5173`.
 
 Default local login:
