@@ -1,4 +1,4 @@
-.PHONY: install install-pip lint format test contract run clean up down migrate tenant-migrate tenant-init seed smoke branded-smoke logs dev env frontend-install lint-frontend format-frontend test-frontend dev-lite test-lite dev-nodocker test-nodocker check-docker demo cs\:dev cs\:test cs\:reset final-acceptance tenant-bootstrap tenant-demo-bootstrap pilot-smoke pilot-readiness codex-audit
+.PHONY: install install-pip lint format test contract run clean up down migrate tenant-migrate tenant-init seed smoke branded-smoke logs dev env frontend-install lint-frontend format-frontend test-frontend dev-lite dev-lite-win test-lite dev-nodocker test-nodocker check-docker demo cs\:dev cs\:test cs\:reset final-acceptance tenant-bootstrap tenant-demo-bootstrap pilot-smoke pilot-readiness codex-audit
 
 LINT_PATHS=backend/app tests scripts
 VENV_BIN=.venv/bin
@@ -89,6 +89,9 @@ dev: env check-docker
 
 dev-lite:
 	@./scripts/dev_lite.sh
+
+dev-lite-win:
+	powershell -ExecutionPolicy Bypass -File ./scripts/dev_lite.ps1
 
 dev-nodocker: dev-lite
 
