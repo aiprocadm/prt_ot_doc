@@ -23,4 +23,6 @@
 
 ## Tenant smoke profile
 
-Smoke scripts use tenant header from `TENANT_HEADER_NAME` and `DEFAULT_TENANT_SLUG` (default `demo`).
+Smoke-скрипты передают tenant через фиксированный заголовок `X-Tenant` (не конфигурируется).
+Имя арендатора по умолчанию задаётся переменной `DEFAULT_TENANT_SLUG` (дефолт: `"public"`).
+Для dev-окружения обычно используют `DEFAULT_TENANT_SLUG=demo` в `.env`.

@@ -32,11 +32,40 @@
 | Техполя TenantBaseModel + `deleted_at` | — | — | |
 | `email` | varchar(320) | NO | Индекс `ix_user_email` вместе с `tenant_id` (уникальность). |
 | `full_name` | varchar(255) | NO | — |
-| `role` | enum(`admin`,`employee`,`client_admin`,`client_user`) | NO | Роль доступа. |
+| `role` | enum — см. ниже | NO | Роль доступа. Полный список — `RoleEnum` в `backend/app/models/models.py`. |
 | `hashed_password` | varchar(255) | NO | Хэш. |
 | `is_active` | bool | NO, default `true` | — |
 | `last_login_at` | timestamptz | YES | Последний логин. |
 | `company_id` | UUID FK→company | YES | Работодатель (SET NULL). |
+
+**Роли (`RoleEnum`):**
+
+| Значение | Описание |
+| --- | --- |
+| `owner` | Владелец арендатора |
+| `admin` | Администратор |
+| `ot_pb_lead` | Руководитель ОТиПБ |
+| `ot_head` | Начальник отдела ОТ |
+| `ot_specialist` | Специалист ОТ |
+| `pb_engineer` | Инженер ПБ |
+| `ecologist` | Эколог |
+| `hr` | HR |
+| `lawyer` | Юрист |
+| `accountant` | Бухгалтер |
+| `line_manager` | Линейный руководитель |
+| `manager` | Менеджер |
+| `executor` | Исполнитель |
+| `worker` | Рабочий / сотрудник |
+| `employee` | Сотрудник (синоним `worker`) |
+| `clerk` | Делопроизводитель |
+| `teacher` | Преподаватель |
+| `student` | Обучающийся |
+| `contractor_inspector` | Проверяющий-подрядчик |
+| `inspector_contractor` | Псевдоним `contractor_inspector` |
+| `auditor_ro` | Аудитор (только чтение) |
+| `client_admin` | Администратор клиентского портала |
+| `client_user` | Пользователь клиентского портала |
+| `client` | Внешний клиент |
 
 **Связи:** `User` → `Company` (многие-к-одному), создаёт `Document`, `DocumentGenerationJob`.
 

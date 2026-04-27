@@ -2,6 +2,7 @@ import type { FieldPath, FieldValues, UseFormSetError } from "react-hook-form";
 
 import type { ApiError } from "@/types/dto/common";
 
+/** Проверяет, является ли пойманная ошибка нормализованным `ApiError` (содержит `message: string`). */
 export function isApiError(err: unknown): err is ApiError {
   return typeof err === "object" && err !== null && typeof (err as ApiError).message === "string";
 }
