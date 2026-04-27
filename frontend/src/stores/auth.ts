@@ -5,8 +5,14 @@ import { tokenStorage } from "@/api/tokenStorage";
 import { tenantStorage } from "@/api/tenantStorage";
 import { resetTenantStores } from "@/stores/reset";
 import { useTenantStore } from "@/stores/tenant";
+import { isApiError } from "@/utils/apiFormErrors";
 import type { ApiError } from "@/types/dto/common";
 import type { LoginRequestDto, LoginResponseDto, PermissionsResponseDto, UserDto } from "@/types/dto/auth";
+
+const normalizeError = (error: unknown): ApiError =>
+  isApiError(error)
+    ? error
+    : { status: 0, message: String((error as Error)?.message ?? "Unknown error"), field_errors: [] };
 
 type LoginActionPayload = LoginRequestDto & {
   tenant: string;
@@ -61,7 +67,7 @@ const loadProfileWithPermissions = async (): Promise<{ profile: UserDto | null; 
     const { data: profileResponse } = await apiClient.get<UserDto>("/auth/me");
     profile = await hydratePermissions(profileResponse);
   } catch (error) {
-    profileError = (error as ApiError) ?? null;
+    profileError = normalizeError(error);
   }
   return { profile, profileError };
 };
@@ -90,7 +96,7 @@ export const useAuthStore = createWithEqualityFn<AuthState>()(
         set((state) => {
           state.isAuthenticated = false;
           state.user = null;
-          state.error = (error as ApiError) ?? null;
+          state.error = normalizeError(error);
           state.initialized = true;
         });
       }
@@ -117,7 +123,7 @@ export const useAuthStore = createWithEqualityFn<AuthState>()(
         });
       } catch (error) {
         set((state) => {
-          state.error = error as ApiError;
+          state.error = normalizeError(error);
           state.isAuthenticated = false;
           state.initialized = true;
         });
@@ -145,7 +151,7 @@ export const useAuthStore = createWithEqualityFn<AuthState>()(
           });
         } catch (error) {
           set((state) => {
-            state.error = (error as ApiError) ?? null;
+            state.error = normalizeError(error);
           });
         }
       }

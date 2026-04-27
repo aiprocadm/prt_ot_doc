@@ -86,7 +86,13 @@ const normalizeApiError = (payload: unknown, fallback: { status: number; message
 };
 
 const notifySubscribers = (token: string | null) => {
-  subscribers.splice(0, subscribers.length).forEach((cb) => cb(token));
+  subscribers.splice(0, subscribers.length).forEach((cb) => {
+    try {
+      cb(token);
+    } catch {
+      // Продолжаем уведомлять остальных подписчиков даже при ошибке
+    }
+  });
 };
 
 const addSubscriber = (callback: (token: string | null) => void) => {
@@ -132,13 +138,15 @@ const refreshToken = async (): Promise<string | null> => {
     } catch {
       tokenStorage.clear();
       return null;
-    } finally {
-      isRefreshing = false;
     }
   })();
 
+  // isRefreshing и refreshPromise сбрасываются ПОСЛЕ notifySubscribers,
+  // чтобы новые 401-запросы не запустили параллельный refresh в микро-окне
+  // между завершением IIFE и уведомлением ожидающих подписчиков.
   refreshPromise.finally(() => {
     notifySubscribers(tokenStorage.getAccessToken());
+    isRefreshing = false;
     refreshPromise = null;
   });
 
