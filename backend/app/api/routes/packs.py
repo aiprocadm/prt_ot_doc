@@ -655,7 +655,7 @@ async def generate_pack_documents(
 
     try:
         company = await _get_company(session, tenant, payload.company_id, access=access)
-        site = await _get_site(session, tenant, company, payload.site_id)
+        await _get_site(session, tenant, company, payload.site_id)  # validate: raises 404 if invalid
         persons = await _get_persons(session, tenant, company, payload.person_ids)
         await _enforce_person_invariants(session, tenant, persons)
         await _get_pack(session, tenant, payload.pack_code)

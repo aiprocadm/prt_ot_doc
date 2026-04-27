@@ -171,6 +171,7 @@ class BillingService:
                 raw_limit = ctx.limits.get("generations_per_month")
         if raw_limit in (None, 0):
             return
+        assert raw_limit is not None  # guarded above; satisfies type checker
         limit = int(raw_limit)
         if usage_field == "s3_bytes_used":
             used = int(Decimal(getattr(usage, usage_field) or 0)) + int(meta.get("delta_bytes") or 0)

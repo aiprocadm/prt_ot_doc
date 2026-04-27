@@ -676,7 +676,7 @@ class PipelineService:
             )
 
             pdf_fallback = False
-            pdf_error: str | None = None
+            pdf_error = None  # str | None
             pdf_duration = 0.0
             export_started = datetime.now(tz=timezone.utc)
             with tempfile.TemporaryDirectory() as td:

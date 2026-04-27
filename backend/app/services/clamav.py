@@ -109,7 +109,7 @@ class ClamAVClient:
         connection = self._connection()
         try:
             if hasattr(stream, "seek"):
-                stream.seek(0)  # type: ignore[arg-type]
+                stream.seek(0)
         except Exception:  # pragma: no cover - defensive best effort
             pass
 
