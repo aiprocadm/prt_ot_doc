@@ -24,9 +24,13 @@ describe("real-data operational pages", () => {
 
   it("renders contractors registry from companies/sites/contracts snapshot", async () => {
     operationsApiMock.getContractorSnapshot.mockResolvedValue({
-      companies: [{ id: "c-1", name: "ООО Альфа", activity_type: "Монтаж", hazardous_factors: ["noise"] }],
+      companies: [{ id: "ctr-1", name: "ООО Альфа Подряд", status: "active", company_id: "c-1" }],
+      hostCompanies: [{ id: "c-1", name: "ООО Альфа", activity_type: "Монтаж", hazardous_factors: ["noise"] }],
       sites: [{ id: "s-1", company_id: "c-1", name: "Площадка 1" }],
-      contracts: [{ id: "ctr-1", company_id: "c-1", status: "active" }]
+      contracts: [{ id: "ctr-1", company_id: "c-1", status: "active" }],
+      employees: [],
+      incidents: [],
+      complianceSummary: { employees_total: 0, admission: {}, training: {}, medical: {} }
     });
 
     render(
@@ -35,9 +39,9 @@ describe("real-data operational pages", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("ООО Альфа")).toBeInTheDocument();
-    expect(screen.getByText("Монтаж")).toBeInTheDocument();
-    expect(screen.getByText("Средний")).toBeInTheDocument();
+    expect(await screen.findByText("ООО Альфа Подряд")).toBeInTheDocument();
+    expect(screen.getAllByText("ООО Альфа").length).toBeGreaterThan(0);
+    expect(screen.getByText("Низкий")).toBeInTheDocument();
   });
 
   it("renders tenant settings snapshot instead of placeholder copy", async () => {

@@ -6,6 +6,41 @@ on:
   pull_request:
 
 jobs:
+  startup-cross-platform:
+    name: Startup Preflight (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Cross-platform launcher preflight
+        if: runner.os != 'Windows'
+        run: python ./scripts/dev_lite.py --preflight-only --auto-kill-ports
+
+      - name: Cross-platform launcher preflight (Windows)
+        if: runner.os == 'Windows'
+        run: py -3 .\scripts\dev_lite.py --preflight-only --auto-kill-ports
+
+      - name: Unix shell wrapper preflight
+        if: runner.os != 'Windows'
+        run: bash ./scripts/dev_lite.sh --preflight-only
+
+      - name: PowerShell wrapper preflight (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: .\scripts\dev_lite.ps1 -PreflightOnly -AutoKillPorts
+
   security-exceptions:
     runs-on: ubuntu-latest
     steps:

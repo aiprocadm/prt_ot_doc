@@ -231,14 +231,18 @@ export type RoleWorkspaceSummaryDto = {
 
 export const operationsApi = {
   getContractorSnapshot: async () => {
-    const [registryResponse, employeesResponse, incidentsResponse, summaryResponse] = await Promise.all([
+    const [registryResponse, employeesResponse, incidentsResponse, summaryResponse, companiesResponse] = await Promise.all([
       apiClient.get<{ items: ContractorRegistryDto[]; total: number }>("/contractors/registry", { params: { limit: 100, offset: 0 } }),
       apiClient.get<{ items: ContractorEmployeeDto[]; total: number }>("/contractors/employees"),
       apiClient.get<{ items: ContractorIncidentDto[]; total: number }>("/contractors/incidents"),
-      apiClient.get<ContractorComplianceSummaryDto>("/contractors/compliance-summary")
+      apiClient.get<ContractorComplianceSummaryDto>("/contractors/compliance-summary"),
+      apiClient
+        .get<{ items: CompanyDto[]; total?: number }>("/companies", { params: { limit: 200, offset: 0 } })
+        .catch(() => ({ data: { items: [] as CompanyDto[] } }))
     ]);
     return {
       companies: registryResponse.data.items ?? [],
+      hostCompanies: companiesResponse.data.items ?? [],
       sites: [],
       contracts: [],
       employees: employeesResponse.data.items ?? [],

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 import types
 from pathlib import Path
@@ -42,9 +43,34 @@ def _prepare_metadata() -> None:
     prepare_runtime(bootstrap("api"))
 
 
+def _run_migrations() -> None:
+    # Full Alembic chain contains PostgreSQL-specific constructs (e.g. JSONB).
+    # Dockerless sqlite mode is bootstrapped via metadata create_all in prepare_runtime.
+    if os.environ.get("DATABASE_URL", "").startswith("sqlite+aiosqlite://"):
+        return
+
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(BACKEND_DIR)
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "alembic",
+            "-c",
+            "backend/app/migrations/alembic.ini",
+            "upgrade",
+            "heads",
+        ],
+        cwd=ROOT_DIR,
+        env=env,
+        check=True,
+    )
+
+
 def main() -> None:
     _configure_env()
     _prepare_metadata()
+    _run_migrations()
 
     from app.api.app import create_app
     from app.core.config import bootstrap

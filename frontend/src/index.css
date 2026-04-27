@@ -62,10 +62,16 @@ body {
 @layer base {
   /* Нативные select: согласовать с палитрой и не оставлять «чисто чёрный» от браузера */
   select {
-    @apply text-foreground;
+    @apply bg-background text-foreground;
   }
   select option {
     @apply bg-popover text-popover-foreground;
+  }
+  select option:checked {
+    @apply bg-accent text-accent-foreground;
+  }
+  select option:hover {
+    @apply bg-accent text-accent-foreground;
   }
 }
 

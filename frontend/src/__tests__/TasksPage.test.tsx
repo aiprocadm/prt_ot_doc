@@ -104,6 +104,8 @@ describe("TasksPage", () => {
   });
 
   it("applies filters for type and due date", async () => {
+    listMock.mockReset();
+    setFiltersMock.mockReset();
     render(
       <MemoryRouter>
         <TasksPage />
@@ -115,12 +117,28 @@ describe("TasksPage", () => {
     const user = userEvent.setup();
     await user.selectOptions(screen.getByLabelText("Тип"), "training_plan");
 
-    expect(setFiltersMock).toHaveBeenCalledWith({ type: "training_plan" });
-    expect(listMock).toHaveBeenCalledWith({ type: "training_plan" });
+    expect(setFiltersMock).toHaveBeenCalledWith({
+      type: "training_plan",
+      overdue: undefined,
+      priority: undefined
+    });
+    expect(listMock).toHaveBeenCalledWith({
+      type: "training_plan",
+      overdue: undefined,
+      priority: undefined
+    });
 
     await user.selectOptions(screen.getByLabelText("Срок"), "overdue");
-    expect(setFiltersMock).toHaveBeenCalledWith({ overdue: true });
-    expect(listMock).toHaveBeenCalledWith({ overdue: true });
+    expect(setFiltersMock).toHaveBeenCalledWith({
+      type: "training_plan",
+      overdue: true,
+      priority: undefined
+    });
+    expect(listMock).toHaveBeenCalledWith({
+      type: "training_plan",
+      overdue: true,
+      priority: undefined
+    });
   });
 
   it("shows focus card for task context from workspace link", () => {
