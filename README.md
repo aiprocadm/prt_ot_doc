@@ -48,6 +48,11 @@ Preflight only (versions + PATH diagnostics, no start):
 python scripts/dev_lite.py --preflight-only
 ```
 
+Auto-free busy dev ports (`8000`, `5173`) before start:
+```bash
+python scripts/dev_lite.py --auto-kill-ports
+```
+
 This is the recommended local start path in this workspace. It prepares dockerless env defaults, initializes the SQLite schema, starts backend on `http://localhost:8000`, and starts frontend on `http://localhost:5173`.
 
 Default local login:
