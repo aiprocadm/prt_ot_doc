@@ -34,6 +34,9 @@ const ContractorsPage = () => {
     initialData: { companies: [], hostCompanies: [], sites: [], contracts: [], employees: [], incidents: [], complianceSummary: emptyComplianceSummary() },
     errorMessage: "Не удалось загрузить реестр подрядчиков"
   });
+  const contractorCompanies = useMemo(() => data.companies ?? [], [data.companies]);
+  const employees = useMemo(() => data.employees ?? [], [data.employees]);
+  const incidents = useMemo(() => data.incidents ?? [], [data.incidents]);
   const selectedCompanyId = searchParams.get("company_id") ?? "";
   const hostCompanyById = useMemo(() => new Map((data.hostCompanies ?? []).map((company) => [company.id, company.name])), [data.hostCompanies]);
   const items = useMemo(() => {

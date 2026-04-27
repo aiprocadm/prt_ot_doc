@@ -31,7 +31,7 @@ def _normalize_scopes(scopes: Sequence[str] | str | None) -> str:
     if isinstance(scopes, str):
         tokens = scopes.replace(",", " ").split()
     else:
-        tokens: list[str] = []
+        tokens = []  # list[str]
         for scope in scopes:
             tokens.extend(str(scope).replace(",", " ").split())
     unique = []

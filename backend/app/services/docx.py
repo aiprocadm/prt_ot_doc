@@ -30,7 +30,7 @@ def _iter_section_paragraphs(section: object) -> Iterable[Paragraph]:
     yield from _iter_paragraphs(getattr(section, "footer", None))
 
 
-def _iter_document_paragraphs(document: Document) -> Iterable[Paragraph]:
+def _iter_document_paragraphs(document: Any) -> Iterable[Paragraph]:
     yield from _iter_paragraphs(document)
     if hasattr(document, "sections"):
         for section in document.sections:

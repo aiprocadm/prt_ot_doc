@@ -173,12 +173,10 @@ def field_level_diff(
         or isinstance(normalized_after.get(key), list)
     }
     for key in sorted(collection_keys):
-        before_list = (
-            normalized_before.get(key) if isinstance(normalized_before.get(key), list) else []
-        )
-        after_list = (
-            normalized_after.get(key) if isinstance(normalized_after.get(key), list) else []
-        )
+        _before_raw = normalized_before.get(key)
+        before_list: list[Any] = _before_raw if isinstance(_before_raw, list) else []
+        _after_raw = normalized_after.get(key)
+        after_list: list[Any] = _after_raw if isinstance(_after_raw, list) else []
         diff = _list_collection_diff(before_list, after_list)
         if diff["added"] or diff["removed"] or diff["updated"]:
             collections[key] = diff

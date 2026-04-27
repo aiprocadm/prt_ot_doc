@@ -200,6 +200,8 @@ class BootstrapTenantService:
                 continue
             if dry_run:
                 continue
+            if profile is None:
+                continue  # defensive: profile missing and not created (e.g. add() not flushed yet)
             self.session.add(PackagePreset(tenant_id=tenant_id, profile_id=profile.id, name=preset_name, payload={"profile": code, "checklist": []}))
             created_any = True
         summary.mark(entity="package_presets", created=created_any or dry_run)

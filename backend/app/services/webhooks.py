@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from hashlib import sha256
 from time import time
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlparse
 
 import httpx
@@ -48,8 +48,8 @@ class WebhookDispatcher:
     """Dispatch webhook events to configured endpoints."""
 
     settings: Settings
-    client: httpx.AsyncClient | None = None
     metrics: Metrics
+    client: httpx.AsyncClient | None = None
 
     def __init__(
         self,
@@ -175,7 +175,7 @@ class WebhookDispatcher:
             )
         ).scalars().all()
         if global_subs:
-            destinations: list[WebhookDestination] = []
+            destinations = []  # list[WebhookDestination]
             for sub in global_subs:
                 if not self._validate_url(sub.url):
                     logger.warning("webhook.invalid_url", extra={"event_type": event_type, "url": sub.url})
@@ -328,31 +328,35 @@ class WebhookDispatcher:
             request_headers["Idempotency-Key"] = str(idempotency_key)
 
         failures: list[tuple[str, int]] = []
-        async with httpx.AsyncClient(
-            timeout=self.settings.webhook_timeout_seconds
-        ) if self.client is None else _null_async_context(self.client) as client:
-            for destination in destinations:
-                merged_headers = {**request_headers, **destination.headers}
+        _client_ctx: httpx.AsyncClient | _null_async_context = (
+            httpx.AsyncClient(timeout=self.settings.webhook_timeout_seconds)
+            if self.client is None
+            else _null_async_context(self.client)
+        )
+        async with _client_ctx as _acm_client:
+            client = cast(httpx.AsyncClient, _acm_client)
+            for dest in destinations:
+                merged_headers = {**request_headers, **dest.headers}
                 body = json.dumps(envelope, separators=(",", ":")).encode("utf-8")
-                if destination.secret:
+                if dest.secret:
                     sign_payload = f"{timestamp_ms}.".encode("utf-8") + body
-                    signature = hmac.new(destination.secret.encode("utf-8"), sign_payload, sha256).hexdigest()
+                    signature = hmac.new(dest.secret.encode("utf-8"), sign_payload, sha256).hexdigest()
                     merged_headers["X-Signature"] = f"v1={signature}"
-                response = await client.post(destination.url, content=body, headers={**merged_headers, "content-type": "application/json"}, timeout=max((destination.timeout_ms or 5000) / 1000, 0.1))
+                response = await client.post(dest.url, content=body, headers={**merged_headers, "content-type": "application/json"}, timeout=max((dest.timeout_ms or 5000) / 1000, 0.1))
                 if response.status_code >= 300:
-                    failures.append((destination.url, response.status_code))
+                    failures.append((dest.url, response.status_code))
                     logger.warning(
                         "webhook.failed",
                         extra={
                             "event_type": event_type,
                             "tenant_id": tenant_id,
                             "status": response.status_code,
-                            "url": destination.url,
+                            "url": dest.url,
                         },
                     )
                     continue
                 self.metrics.record_outbox_routed(
-                    event_type=event_type, destination=destination.url
+                    event_type=event_type, destination=dest.url
                 )
 
         if failures:

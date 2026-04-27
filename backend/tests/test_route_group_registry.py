@@ -81,8 +81,9 @@ def test_files_modern_and_legacy_routers_registered_under_operations_group() -> 
 
 
 def test_production_disables_legacy_files_compat_router(monkeypatch) -> None:  # noqa: ANN001
-    from app.api.v1 import route_groups
     from types import SimpleNamespace
+
+    from app.api.v1 import route_groups
 
     monkeypatch.setattr(
         route_groups,
@@ -96,8 +97,9 @@ def test_production_disables_legacy_files_compat_router(monkeypatch) -> None:  #
 
 
 def test_files_router_registration_switches_with_legacy_flag(monkeypatch) -> None:  # noqa: ANN001
-    from app.api.v1 import route_groups
     from types import SimpleNamespace
+
+    from app.api.v1 import route_groups
 
     monkeypatch.setattr(
         route_groups,

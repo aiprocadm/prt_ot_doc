@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import io
 import asyncio
+import io
 from types import SimpleNamespace
 
 import pytest
