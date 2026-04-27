@@ -1,4 +1,4 @@
-.PHONY: install install-pip lint format test contract run clean up down migrate tenant-migrate tenant-init seed smoke branded-smoke logs dev env frontend-install lint-frontend format-frontend test-frontend dev-lite dev-lite-win test-lite dev-nodocker test-nodocker check-docker demo cs\:dev cs\:test cs\:reset final-acceptance tenant-bootstrap tenant-demo-bootstrap pilot-smoke pilot-readiness codex-audit
+.PHONY: install install-pip lint format test contract run clean up down migrate tenant-migrate tenant-init seed smoke branded-smoke logs dev env frontend-install lint-frontend format-frontend test-frontend dev-lite dev-lite-force dev-lite-win dev-lite-win-force test-lite dev-nodocker test-nodocker check-docker demo cs\:dev cs\:test cs\:reset final-acceptance tenant-bootstrap tenant-demo-bootstrap pilot-smoke pilot-readiness codex-audit
 
 LINT_PATHS=backend/app tests scripts
 VENV_BIN=.venv/bin
@@ -90,8 +90,14 @@ dev: env check-docker
 dev-lite:
 	python ./scripts/dev_lite.py
 
+dev-lite-force:
+	python ./scripts/dev_lite.py --auto-kill-ports
+
 dev-lite-win:
 	powershell -ExecutionPolicy Bypass -File ./scripts/dev_lite.ps1
+
+dev-lite-win-force:
+	powershell -ExecutionPolicy Bypass -File ./scripts/dev_lite.ps1 -AutoKillPorts
 
 dev-nodocker: dev-lite
 
