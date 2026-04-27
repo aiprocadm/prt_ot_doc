@@ -1,7 +1,7 @@
 # AI / Engineering implementation report
 
 - **Date (UTC):** 2026-04-28 (обновлено)  
-- **Scope:** documentation inventory, P0 test harness fix, testing doc repair; full-platform audit is **not** completed in a single pass (see «Ограничения»). Последняя волна: **P0: синтаксис `navigation.ts` + lint `ContractorsPage`**, хаб **`docs/README` (релиз/блокеры)**; ранее — процедура вердикта, **P1 Vitest**, `docs/spec/README`, **P1 lint**.
+- **Scope:** documentation inventory, P0 test harness fix, testing doc repair; full-platform audit is **not** completed in a single pass (see «Ограничения»). Последняя волна: **смоук: pytest entrypoints + typecheck/lint**; ранее — §22 (`npm run ci` + pytest 9), §21, **P1 Vitest**, **P1 lint**.
 - **Шаблон работы агента:** `docs/AI_AGENT_WORKFLOW.md` (обновляй этот файл по итогам волны; не создавай параллельных «мега-отчётов» в корне).
 
 ## Кандидаты на удаление / архивация (актуальный список)
@@ -428,3 +428,64 @@
 
 ### Следующий шаг
 - `npm run ci` при смене фронта; полный `pytest` по релизу.
+
+---
+
+## 22. Волна 2026-04-28: верификация (бриф без новой фичи)
+
+### Изучено
+- `README.md` (точка входа, ТЗ, `docs/TESTING`), `AI_IMPLEMENTATION_REPORT.md` (§1–21).
+- Точечная сверка: `frontend/src/api/navigation.ts`, `docs/README.md` (релиз/блокеры).
+
+### Проблемы
+- **Новых** дефектов в этой сессии не выявлено; §21 по `navigation`/`ContractorsPage` — в согласованном виде.
+
+### Изменения в коде / доках
+- **Нет** (только этот отчёт и Scope).
+
+### Мусор
+- Не удалялся.
+
+### Проверки
+| Команда | Результат |
+|---------|-----------|
+| `py -m pytest -q tests/test_entrypoints.py tests/test_tenant_header_required.py tests/test_idempotency.py tests/test_template_delete.py` (`PYTHONPATH=backend`) | **9 passed**, exit 0 |
+| `npm --prefix frontend run ci` | **OK** (lint, typecheck, vitest 82 files / 221 tests, build; **без** unhandled / exit 0) |
+
+### Риски
+- Полный `pytest` / миграции не гонялись в этой волне.
+
+### Следующий шаг
+- Релизное окно: полный `pytest` и чеклист `docs/TESTING.md` / `docs/TEST_BASELINE.md`.
+
+---
+
+## 23. Волна 2026-04-28: бриф — смоук без изменений кода
+
+### Изучено
+- `README.md` (Verification commands, Canonical documentation), `AI_IMPLEMENTATION_REPORT.md` (§1–22).
+
+### Проблемы
+- Новых расхождений док/код и **дефектов** в рамках быстрой ревизии **не** выявлено. `navigation.ts` — валидный `try/catch` для `sendUxMetric`.
+
+### Изменения
+- **Нет** (только `AI_IMPLEMENTATION_REPORT.md`).
+
+### Мусор
+- Не удалялся.
+
+### Проверки
+| Команда | Результат |
+|---------|-----------|
+| `py -m pytest -q tests/test_entrypoints.py` (`PYTHONPATH=backend`) | **2 passed** |
+| `npm --prefix frontend run typecheck` | **OK** |
+| `npm --prefix frontend run lint` | **OK** |
+
+### Не гонялось
+- `npm run test` / `build`, полный `pytest`, миграции (см. §22 для полного `ci`).
+
+### Риски
+- Нет.
+
+### Следующий шаг
+- При смене кода/релизе: **`npm run ci`**, полный `pytest` по `docs/TESTING.md`.
