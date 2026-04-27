@@ -5,6 +5,8 @@
 - **Canonical status vocabulary:** `done` / `partial` / `missing` / `blocked`
 - **Single source of truth for release-critical statuses and evidence links.**
 
+**Authoring order:** update this file first, then sync [`RELEASE_READINESS.md`](../../RELEASE_READINESS.md) (verdict + RC summary). See **“How to update the release verdict”** in `RELEASE_READINESS.md`.
+
 Cross-links:
 - `RELEASE_READINESS.md`
 - `ACCEPTANCE_TEST_MATRIX.md`

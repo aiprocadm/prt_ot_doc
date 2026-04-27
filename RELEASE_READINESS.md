@@ -1,5 +1,14 @@
 # RELEASE_READINESS
 
+Документ фиксирует **готовность проекта к релизу** (вердикт, RC-критерии, перекрёстные ссылки). Канонический статус блокеров — [`docs/stabilization/RELEASE_BLOCKERS_STATUS.md`](docs/stabilization/RELEASE_BLOCKERS_STATUS.md).
+
+## How to update the release verdict (procedure)
+
+1. **Edit the single source of truth first:** [`docs/stabilization/RELEASE_BLOCKERS_STATUS.md`](docs/stabilization/RELEASE_BLOCKERS_STATUS.md) — RC/RB rows, checklist checkboxes, **Updated on (UTC)**, evidence links.
+2. **Sync this file:** `RELEASE_READINESS.md` — align the RC table (`Unified status`), **Launch readiness verdict** (date, `NOT READY` / `READY`, rationale), and **Updated on (UTC)** so it reflects the canonical file.
+3. **Root `README.md`:** links to `RELEASE_READINESS.md` and `RELEASE_BLOCKERS_STATUS.md` stay valid; **no README edit** is required for a verdict-only change.
+4. **CI:** frontend merge gate already runs `npm --prefix frontend run ci` in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (`frontend-tests` job). For changes under `frontend/**`, run the same locally before release windows when possible.
+
 - **Updated on (UTC):** 2026-04-23
 - **Owner:** Release Manager + Platform + QA + SRE
 - **Canonical status vocabulary:** `done` / `partial` / `missing` / `blocked`

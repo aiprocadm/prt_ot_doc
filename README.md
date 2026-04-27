@@ -157,6 +157,7 @@ B2B multi-tenant SaaS платформа для ОТ / ПБ / ПромБез / �
 - [docs/spec/TZ_FULL_UNIFIED.md](docs/spec/TZ_FULL_UNIFIED.md) — единое полное ТЗ (объём продукта, P0/P1, теги [MVP], критерии приёмки)
 - [docs/spec/PLATFORM_VNEXT_UPGRADE_SPEC.md](docs/spec/PLATFORM_VNEXT_UPGRADE_SPEC.md) — продуктовый upgrade-spec / vNext (дорожная карта, критерии, ограничения на доработки, в т.ч. разд. 36)
 - [docs/spec/README.md](docs/spec/README.md) — хаб ТЗ в `docs/spec` (приоритет `TZ_FULL` vs vNext, схема файлов, навигация)
+- [RELEASE_READINESS.md](RELEASE_READINESS.md) — **готовность к релизу** (вердикт, RC-критерии; каноника блокеров: [`docs/stabilization/RELEASE_BLOCKERS_STATUS.md`](docs/stabilization/RELEASE_BLOCKERS_STATUS.md); **порядок обновления вердикта** — раздел *How to update the release verdict* в `RELEASE_READINESS.md`, ссылки в README при смене вердикта не требуют правок)
 - `docs/AI_AGENT_WORKFLOW.md` — компактный цикл для AI/агентов (сначала README, ТЗ, отчёт `AI_IMPLEMENTATION_REPORT.md`, кандидаты на чистку доков)
 - `docs/ARCHITECTURE.md`
 - `docs/PROJECT_STRUCTURE.md`
@@ -181,7 +182,6 @@ B2B multi-tenant SaaS платформа для ОТ / ПБ / ПромБез / �
 - `docs/audit/TZ_COVERAGE_MATRIX.md`
 - `ACCEPTANCE_TEST_MATRIX.md`
 - `GAP_REPORT.md`
-- `RELEASE_READINESS.md`
 - `KNOWN_LIMITATIONS.md`
 - `CHANGELOG.md`
 - `CHANGED_MODULES_AND_DECISIONS.md`
