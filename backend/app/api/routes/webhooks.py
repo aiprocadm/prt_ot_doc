@@ -179,7 +179,8 @@ async def update_webhook(webhook_id: str, payload: WebhookEndpointIn, tenant: Te
     )
     row.name = payload.name
     row.url = payload.url
-    row.secret = payload.secret
+    # Сохраняем существующий секрет, если новый не передан
+    row.secret = payload.secret or row.secret
     row.is_enabled = payload.enabled
     row.subscribed_events = payload.subscribed_events
     row.timeout_ms = payload.timeout_ms

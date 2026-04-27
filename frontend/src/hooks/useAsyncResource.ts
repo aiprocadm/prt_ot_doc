@@ -28,8 +28,11 @@ export const useAsyncResource = <TData>({
   const [error, setError] = useState<ApiError | null>(null);
   const errorRef = useRef<ApiError | null>(null);
   errorRef.current = error;
+  const inFlight = useRef(false);
 
   const reload = useCallback(async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setLoading(true);
     setError(null);
     try {
@@ -41,6 +44,7 @@ export const useAsyncResource = <TData>({
       setError(normalized);
       throw normalized;
     } finally {
+      inFlight.current = false;
       setLoading(false);
     }
   }, [errorMessage, loader]);

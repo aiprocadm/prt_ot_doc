@@ -9,6 +9,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
@@ -540,7 +541,7 @@ async def edo_webhook_status(payload: dict[str, Any], session: AsyncSession = De
     session.add(dedup)
     try:
         await session.flush()
-    except Exception:
+    except IntegrityError:
         await session.rollback()
         return {"status": "duplicate"}
 

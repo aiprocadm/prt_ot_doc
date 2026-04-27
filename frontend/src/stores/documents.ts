@@ -5,6 +5,7 @@ import { defaultPagination } from "@/stores/helpers";
 import type { PaginatedState } from "@/stores/types";
 import type { ApiError, PaginatedResponse } from "@/types/dto/common";
 import type { DocumentDto, DocumentFiltersDto } from "@/types/dto/documents";
+import { normalizeError } from "@/utils/apiFormErrors";
 
 type LegacyDocumentsResponse = {
   items?: unknown;
@@ -150,7 +151,7 @@ export const useDocumentsStore = create<DocumentsState>()(
         });
       } catch (error) {
         set((state) => {
-          state.error = error as ApiError;
+          state.error = normalizeError(error);
         });
       } finally {
         set((state) => {
@@ -167,7 +168,7 @@ export const useDocumentsStore = create<DocumentsState>()(
         return data;
       } catch (error) {
         set((state) => {
-          state.error = error as ApiError;
+          state.error = normalizeError(error);
         });
         return null;
       }
@@ -188,7 +189,7 @@ export const useDocumentsStore = create<DocumentsState>()(
         return data;
       } catch (error) {
         set((state) => {
-          state.error = error as ApiError;
+          state.error = normalizeError(error);
         });
         return null;
       }

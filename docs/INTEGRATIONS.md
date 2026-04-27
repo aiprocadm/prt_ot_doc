@@ -24,28 +24,40 @@
 Все интерфейсы расположены в `backend/app/services/integrations/interfaces.py` и используют тип `IntegrationStatus` для нормализованного статуса операции.
 
 ### 1С (`BaseAccountingIntegration`)
-- `export_document(payload: dict) -> IntegrationStatus` — отправить документ в 1С.
-- `fetch_document(external_id: str) -> dict | None` — получить сохранённый документ из 1С.
-- `sync_status(external_id: str) -> IntegrationStatus` — обновить статус обработки.
-- `health_check() -> bool` — проверка доступности канала.
+
+Все методы — `async`.
+
+- `async export_document(payload: dict[str, Any]) -> IntegrationStatus` — отправить документ в 1С.
+- `async fetch_document(external_id: str) -> dict[str, Any] | None` — получить сохранённый документ из 1С.
+- `async sync_status(external_id: str) -> IntegrationStatus` — обновить статус обработки.
+- `async health_check() -> bool` — проверка доступности канала.
 
 ### Оператор ЭДО/ЭП (`BaseEDOIntegration`)
-- `send_document(content: bytes, filename: str, metadata: dict | None) -> IntegrationStatus` — отправка документа в ЭДО/ЭП.
-- `download_document(external_id: str) -> bytes` — загрузка переданного документа.
-- `get_document_status(external_id: str) -> IntegrationStatus` — проверка доставки/подписи.
-- `health_check() -> bool` — проверка доступности оператора.
+
+Все методы — `async`. Аргументы `send_document` передаются только как keyword-аргументы.
+
+- `async send_document(*, content: bytes, filename: str, metadata: dict[str, Any] | None = None) -> IntegrationStatus` — отправка документа в ЭДО/ЭП.
+- `async download_document(external_id: str) -> bytes` — загрузка переданного документа.
+- `async get_document_status(external_id: str) -> IntegrationStatus` — проверка доставки/подписи.
+- `async health_check() -> bool` — проверка доступности оператора.
 
 ### ФРДО (`BaseFRDOIntegration`)
-- `submit_record(payload: dict) -> IntegrationStatus` — отправка записи об образовании.
-- `fetch_record(external_id: str) -> dict | None` — получение сохранённой записи.
-- `get_record_status(external_id: str) -> IntegrationStatus` — проверка статуса регистрации.
-- `health_check() -> bool` — проверка доступности сервиса.
+
+Все методы — `async`.
+
+- `async submit_record(payload: dict[str, Any]) -> IntegrationStatus` — отправка записи об образовании.
+- `async fetch_record(external_id: str) -> dict[str, Any] | None` — получение сохранённой записи.
+- `async get_record_status(external_id: str) -> IntegrationStatus` — проверка статуса регистрации.
+- `async health_check() -> bool` — проверка доступности сервиса.
 
 ### ЕИСОТ (`BaseEISOTIntegration`)
-- `publish_report(payload: dict) -> IntegrationStatus` — публикация отчёта по охране труда.
-- `get_publication_status(external_id: str) -> IntegrationStatus` — проверка обработки отчёта.
-- `pull_notifications() -> list[IntegrationStatus]` — получение уведомлений из ЕИСОТ.
-- `health_check() -> bool` — проверка доступности сервиса.
+
+Все методы — `async`.
+
+- `async publish_report(payload: dict[str, Any]) -> IntegrationStatus` — публикация отчёта по охране труда.
+- `async get_publication_status(external_id: str) -> IntegrationStatus` — проверка обработки отчёта.
+- `async pull_notifications() -> list[IntegrationStatus]` — получение уведомлений из ЕИСОТ.
+- `async health_check() -> bool` — проверка доступности сервиса.
 
 ## Реализации по зрелости
 

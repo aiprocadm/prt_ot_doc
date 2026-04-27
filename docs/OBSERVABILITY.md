@@ -12,8 +12,20 @@ Canonical observability reference for the modular monolith: health/readiness pro
 - **Health/readiness routes:** `backend/app/api/routes/health.py`
 
 ## Runtime signals
-- `/health` and related readiness probes expose service liveness and dependency checks.
-- `/metrics` is registered only when metrics are enabled in settings.
+
+### Health / Readiness endpoints
+
+| Path | Alias | Behaviour |
+|---|---|---|
+| `GET /healthz` | alias → `/health` | Процессный liveness: возвращает `{"status":"ok"}` с HTTP 200, если процесс жив. |
+| `GET /health` | каноническое имя | То же, что `/healthz`. |
+| `GET /readyz` | alias → `/ready` | Dependency readiness: проверяет Postgres, Redis, MinIO (обязательные), ClamAV, LibreOffice (опциональные). HTTP 200 если все обязательные OK, иначе HTTP 503 с деталями по каждому компоненту. |
+| `GET /ready` | каноническое имя | То же, что `/readyz`. |
+
+`/healthz` и `/readyz` — предпочтительные пути для Kubernetes-пробников и внешних систем мониторинга.
+`/ready` возвращает JSON с полями: `status`, `postgres`, `redis`, `minio`, `clamav`, `libreoffice`, `dependencies`, `correlation_id`.
+
+- `/metrics` is registered only when `ENABLE_METRICS=true` in settings (default: `true`).
 - Request-level observability is layered via middleware rather than individual routers.
 - Structured logging is bootstrapped from `backend/app/main.py` before the FastAPI app starts.
 
