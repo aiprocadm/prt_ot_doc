@@ -207,7 +207,10 @@ async def get_session(tenant: Tenant = Depends(get_tenant_record)) -> AsyncItera
             try:
                 setattr(session, "info", info)
             except AttributeError:
-                pass
+                logger.warning(
+                    "session.info_not_settable",
+                    extra={"tenant": tenant.slug},
+                )
         info["tenant"] = tenant.slug
         info["tenant_slug"] = tenant.slug
         info["tenant_schema"] = tenant.schema_name

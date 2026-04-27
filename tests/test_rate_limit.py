@@ -76,6 +76,7 @@ async def test_login_rate_limit(
     payload = {"email": "ratelimit@example.com", "password": "secret"}
     login_headers = {"x-tenant": tenant.slug}
     for _ in range(2):
+        response = await async_client.post("/api/v1/auth/login", json=payload, headers=login_headers)
         response = await async_client.post(
             "/api/v1/auth/login", json=payload, headers=login_headers
         )

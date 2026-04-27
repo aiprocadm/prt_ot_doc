@@ -10,6 +10,8 @@ type Props = {
   description: string;
   dueAt: string;
   priority: TaskPriority;
+  linkType: "" | "employee" | "company" | "task";
+  linkEntityId: string;
   creating: boolean;
   priorityOptions: Option[];
   isTaskPriority: (value: string) => value is TaskPriority;
@@ -17,6 +19,8 @@ type Props = {
   setDescription: (value: string) => void;
   setDueAt: (value: string) => void;
   setPriority: (value: TaskPriority) => void;
+  setLinkType: (value: "" | "employee" | "company" | "task") => void;
+  setLinkEntityId: (value: string) => void;
   onSubmit: () => void;
   onCancel: () => void;
 };
@@ -27,6 +31,8 @@ export const TaskCreateForm = ({
   description,
   dueAt,
   priority,
+  linkType,
+  linkEntityId,
   creating,
   priorityOptions,
   isTaskPriority,
@@ -34,6 +40,8 @@ export const TaskCreateForm = ({
   setDescription,
   setDueAt,
   setPriority,
+  setLinkType,
+  setLinkEntityId,
   onSubmit,
   onCancel
 }: Props) => {
@@ -82,6 +90,45 @@ export const TaskCreateForm = ({
             value={description}
             onChange={(event) => setDescription(event.target.value)}
             placeholder="Короткое описание"
+          />
+        </FilterField>
+        <FilterField label="Привязка" htmlFor="new-task-link-type">
+          <select
+            id="new-task-link-type"
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+            value={linkType}
+            onChange={(event) =>
+              setLinkType(
+                event.target.value === "employee" ||
+                  event.target.value === "company" ||
+                  event.target.value === "task"
+                  ? event.target.value
+                  : ""
+              )
+            }
+          >
+            <option value="">Без привязки</option>
+            <option value="employee">К сотруднику</option>
+            <option value="company">К организации</option>
+            <option value="task">К другой задаче</option>
+          </select>
+        </FilterField>
+        <FilterField label="ID для привязки" htmlFor="new-task-link-id">
+          <input
+            id="new-task-link-id"
+            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
+            value={linkEntityId}
+            onChange={(event) => setLinkEntityId(event.target.value)}
+            placeholder={
+              linkType === "employee"
+                ? "ID сотрудника (person)"
+                : linkType === "company"
+                  ? "ID организации (company)"
+                  : linkType === "task"
+                    ? "ID задачи"
+                    : "Выберите тип привязки"
+            }
+            disabled={!linkType}
           />
         </FilterField>
       </div>

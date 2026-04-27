@@ -518,6 +518,7 @@ async def test_download_endpoint_returns_presigned_url(
 
     await process_scan_request(message, scanner=_CleanScanner(), session_factory=sessionmaker)
 
+    download = await async_client.get(f"/api/v1/files-legacy/{body['id']}/download", headers=headers)
     download = await async_client.get(
         f"/api/v1/files-legacy/{body['id']}/download", headers=headers
     )
@@ -558,6 +559,7 @@ async def test_download_blocks_file_while_scan_pending(
     assert body["scan_status"] == FileScanStatus.PENDING.value
     assert body["quarantined"] is True
 
+    download = await async_client.get(f"/api/v1/files-legacy/{body['id']}/download", headers=headers)
     download = await async_client.get(
         f"/api/v1/files-legacy/{body['id']}/download", headers=headers
     )
@@ -590,6 +592,7 @@ async def test_download_denies_cross_tenant(async_client, make_auth_headers, ses
     await process_scan_request(message, scanner=_CleanScanner(), session_factory=sessionmaker)
 
     bad_headers = {**headers, "x-tenant": "acme"}
+    download = await async_client.get(f"/api/v1/files-legacy/{body['id']}/download", headers=bad_headers)
     download = await async_client.get(
         f"/api/v1/files-legacy/{body['id']}/download", headers=bad_headers
     )
@@ -627,6 +630,7 @@ async def test_download_denies_company_mismatch(
     await process_scan_request(message, scanner=_CleanScanner(), session_factory=sessionmaker)
 
     client_headers = {**dict(async_client.headers), **await make_auth_headers(RoleEnum.CLIENT_USER, company_id=company_b.id)}
+    download = await async_client.get(f"/api/v1/files-legacy/{body['id']}/download", headers=client_headers)
     download = await async_client.get(
         f"/api/v1/files-legacy/{body['id']}/download", headers=client_headers
     )

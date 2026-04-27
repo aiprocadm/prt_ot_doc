@@ -54,7 +54,9 @@ export const useWizardStepActions = (deps: ActionDeps) => {
     if (file.name.endsWith(".csv")) {
       const columns = await parseCsvColumns(file);
       deps.setPartial({ sourceColumns: columns });
+      return;
     }
+    deps.setPartial({ sourceColumns: [] });
   };
 
   const handleBrandingPreview = async () => {

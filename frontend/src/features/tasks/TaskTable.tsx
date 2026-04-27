@@ -6,7 +6,6 @@ import { Link } from "react-router-dom";
 import { RegistryTable } from "@/components/common/RegistryTable";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { ActionButton } from "@/components/permissions/ActionButton";
-import { usePolling } from "@/hooks/usePolling";
 import { PERMISSIONS } from "@/permissions/permissions";
 import { useTasksStore } from "@/stores/tasks";
 import type { TaskDto } from "@/types/dto/tasks";
@@ -17,7 +16,10 @@ const TYPE_LABELS: Record<string, string> = {
   training_plan: "Обучение",
   medical_requirement: "Медосмотры",
   inspection: "Инспекции",
-  attestation: "Аттестации"
+  attestation: "Аттестации",
+  person: "Сотрудник",
+  company: "Организация",
+  task: "Задача"
 };
 
 export const TaskTable = () => {

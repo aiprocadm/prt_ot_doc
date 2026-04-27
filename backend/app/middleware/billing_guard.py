@@ -37,13 +37,6 @@ class BillingGuardMiddleware(BaseHTTPMiddleware):
         if not tenant_slug:
             return await call_next(request)
 
-        action = None
-        if request.method == "POST" and (path.endswith("/documents/generate") or path.endswith("/documents:generate")):
-            action = "documents.generate"
-        elif request.method == "POST" and (path.endswith("/edo/send") or path.endswith("/edo:send") or ("/edo" in path and ":send" in path)):
-            action = "edo.send"
-        elif request.method == "POST" and (path.endswith("/files:upload-session") or path.endswith(":upload-session")):
-            action = "files.upload"
         action = resolve_billing_action(request)
 
         async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as session:

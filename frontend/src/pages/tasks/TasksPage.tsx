@@ -84,9 +84,14 @@ const TasksPage = () => {
   const [newTaskDescription, setNewTaskDescription] = useState("");
   const [newTaskPriority, setNewTaskPriority] = useState<TaskPriority>("medium");
   const [newTaskDueAt, setNewTaskDueAt] = useState("");
+  const [newTaskLinkType, setNewTaskLinkType] = useState<"" | "employee" | "company" | "task">("");
+  const [newTaskLinkEntityId, setNewTaskLinkEntityId] = useState("");
   const focusedTaskId = searchParams.get("task_id") ?? undefined;
   const focusedEntityType = searchParams.get("entity_type") ?? undefined;
   const focusedEntityId = searchParams.get("entity_id") ?? undefined;
+  const typeQuery = searchParams.get("type");
+  const overdueQuery = searchParams.get("overdue");
+  const priorityQuery = searchParams.get("priority");
 
   const queryString = searchParams.toString();
 
@@ -101,6 +106,15 @@ const TasksPage = () => {
     setFilters({ type, overdue, priority });
     list({ type, overdue, priority });
   }, [list, queryString, setFilters]);
+    const type = typeQuery ?? undefined;
+    const overdueParam = overdueQuery;
+    const overdue =
+      overdueParam === "true" ? true : overdueParam === "false" ? false : undefined;
+    const priorityParam = priorityQuery;
+    const priority = priorityParam && isTaskPriority(priorityParam) ? priorityParam : undefined;
+    setFilters({ type, overdue, priority });
+    list({ type, overdue, priority });
+  }, [list, overdueQuery, priorityQuery, setFilters, typeQuery]);
 
   useEffect(() => {
     if (!focusedTaskId) {
@@ -138,16 +152,19 @@ const TasksPage = () => {
 
   const handleTypeChange = (value: string) => {
     const type = value || undefined;
+    setFilters({ type });
     updateFilterQuery({ type });
   };
 
   const handleDueFilterChange = (value: string) => {
     const overdue = value === "overdue" ? true : value === "upcoming" ? false : undefined;
+    setFilters({ overdue });
     updateFilterQuery({ overdue });
   };
 
   const handlePriorityChange = (value: string) => {
     const priority = value && isTaskPriority(value) ? value : undefined;
+    setFilters({ priority });
     updateFilterQuery({ priority });
   };
 
@@ -156,6 +173,8 @@ const TasksPage = () => {
     setNewTaskDescription("");
     setNewTaskPriority("medium");
     setNewTaskDueAt("");
+    setNewTaskLinkType("");
+    setNewTaskLinkEntityId("");
   };
 
   const handleCreateTask = async () => {
@@ -166,11 +185,28 @@ const TasksPage = () => {
     }
     setCreating(true);
     const dueAtIso = newTaskDueAt ? new Date(newTaskDueAt).toISOString() : null;
+    const entityId = newTaskLinkEntityId.trim() || null;
+    const entityType =
+      newTaskLinkType === "employee"
+        ? "person"
+        : newTaskLinkType === "company"
+          ? "company"
+          : newTaskLinkType === "task"
+            ? "task"
+            : null;
+    if (newTaskLinkType && !entityId) {
+      setCreating(false);
+      toast.error("Укажите ID для выбранной привязки");
+      return;
+    }
     const created = await createTask({
       title,
       description: newTaskDescription.trim() || null,
       priority: newTaskPriority,
-      due_at: dueAtIso
+      due_at: dueAtIso,
+      entity_type: entityType,
+      entity_id: entityId,
+      assignee_id: newTaskLinkType === "employee" ? entityId : null
     });
     setCreating(false);
     if (!created) {
@@ -212,6 +248,7 @@ const TasksPage = () => {
             <Button
               variant="ghost"
               onClick={() => {
+                setFilters({ type: undefined, overdue: undefined });
                 updateFilterQuery({ type: undefined, overdue: undefined, priority: undefined });
               }}
               disabled={loading}
@@ -295,6 +332,8 @@ const TasksPage = () => {
             description={newTaskDescription}
             dueAt={newTaskDueAt}
             priority={newTaskPriority}
+            linkType={newTaskLinkType}
+            linkEntityId={newTaskLinkEntityId}
             creating={creating}
             priorityOptions={PRIORITY_OPTIONS}
             isTaskPriority={isTaskPriority}
@@ -302,6 +341,8 @@ const TasksPage = () => {
             setDescription={setNewTaskDescription}
             setDueAt={setNewTaskDueAt}
             setPriority={setNewTaskPriority}
+            setLinkType={setNewTaskLinkType}
+            setLinkEntityId={setNewTaskLinkEntityId}
             onSubmit={() => void handleCreateTask()}
             onCancel={() => {
               setShowCreateForm(false);

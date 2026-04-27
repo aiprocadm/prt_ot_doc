@@ -691,6 +691,7 @@ async def patch_template(
             company_id=payload.scope.company_id,
             site_id=payload.scope.site_id,
         )
+        template.scope_level = str(normalized_scope.get("level") or normalized_scope.get("type") or "tenant")
         template.scope_level = str(
             normalized_scope.get("level") or normalized_scope.get("type") or "tenant"
         )
