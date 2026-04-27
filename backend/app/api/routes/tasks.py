@@ -11,8 +11,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
-from app.core.security import AccessContext, abac
 from app.core.errors import api_problem_detail
+from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.models import PipelineRun, Tenant
 from app.models.obligations import Task, TaskPriority, TaskStatus
@@ -372,7 +372,6 @@ async def update_task(
             raise _task_not_found(code="OBLIGATION_TASK_NOT_FOUND")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=api_problem_detail(code="FORBIDDEN", message="Workers cannot modify tasks", error_type="tasks"),
             detail=api_problem_detail(
                 code="FORBIDDEN", message="Workers cannot modify tasks", error_type="tasks"
             ),

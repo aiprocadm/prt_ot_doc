@@ -12,9 +12,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.core.errors import api_problem_detail
 from app.core.rbac_abac import actor_from_claims, policy_forbidden
 from app.core.security import AccessContext, abac
-from app.core.errors import api_problem_detail
 from app.core.tenant_validation import TenantContextValidator
 from app.models.models import Company, Tenant
 from app.repository import create_company, list_companies

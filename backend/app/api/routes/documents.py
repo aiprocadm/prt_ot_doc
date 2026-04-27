@@ -27,7 +27,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_file_storage_service, get_session, get_tenant_record
-from app.db.tenant_row_guard import assert_tenant_row_matches_session
 from app.core.audit_decorator import audit_operation
 from app.core.config import get_settings
 from app.core.errors import api_problem_detail
@@ -36,6 +35,7 @@ from app.core.payload_constraints import PayloadConstraintError, enforce_mapping
 from app.core.rate_limit import generate_per_tenant, ip_tenant_key, limiter
 from app.core.security import AccessContext, abac, rbac
 from app.core.tracing import get_trace_id
+from app.db.tenant_row_guard import assert_tenant_row_matches_session
 from app.models.document import (
     Document,
     DocumentBatchItem,
@@ -85,9 +85,9 @@ from app.services.document_insights import (
     diff_version_data_json,
     load_document_versions_for_compare,
 )
-from app.services.document_readiness import compute_document_readiness
-from app.services.document_quality import build_quality_report
 from app.services.document_orchestration import ORCHESTRATION_STATES
+from app.services.document_quality import build_quality_report
+from app.services.document_readiness import compute_document_readiness
 from app.services.documents import (
     DocumentNotFoundError,
     DocumentWorkflowService,
@@ -1464,7 +1464,7 @@ async def generate_document(
         )
         await session.commit()
         raise
-    except Exception as exc:
+    except Exception:
         logger.exception(
             "documents.generate.unexpected_failure",
             extra={"correlation_id": correlation_id},

@@ -11,8 +11,7 @@ from app.api.routes.files import download_file as legacy_download_file
 from app.api.routes.files import upload_file as legacy_upload_file
 from app.modules.files.api import _FILE_READ_ROLES as _CANONICAL_FILE_READ_ROLES
 from app.modules.files.api import _FILE_UPLOAD_ROLES as _CANONICAL_FILE_UPLOAD_ROLES
-from app.modules.files.api import create_upload_session_v2
-from app.modules.files.api import get_download_url_v2
+from app.modules.files.api import create_upload_session_v2, get_download_url_v2
 
 
 def _depends_call_by_parameter(endpoint: Callable[..., object], parameter_name: str) -> object:

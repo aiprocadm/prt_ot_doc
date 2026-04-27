@@ -169,7 +169,7 @@ DEFAULT_ALLOWED_FILE_EXTENSIONS: Final[list[str]] = [
 
 
 def _parse_file_allowed_mime(value: object) -> list[str]:
-    items = split_csv(value, default=DEFAULT_ALLOWED_FILE_MIME)
+    items = split_csv(value, default=DEFAULT_ALLOWED_FILE_MIME)  # type: ignore[arg-type]
     normalized: list[str] = []
     for item in items:
         candidate = str(item).strip().lower()
@@ -181,7 +181,7 @@ def _parse_file_allowed_mime(value: object) -> list[str]:
 
 
 def _parse_file_allowed_extensions(value: object) -> list[str]:
-    items = split_csv(value, default=DEFAULT_ALLOWED_FILE_EXTENSIONS)
+    items = split_csv(value, default=DEFAULT_ALLOWED_FILE_EXTENSIONS)  # type: ignore[arg-type]
     normalized: list[str] = []
     for item in items:
         candidate = str(item).strip().lower().lstrip(".")
@@ -227,7 +227,7 @@ def _decode_complex_value_with_fallback(
 
 # NOTE: patching pydantic-settings is brittle across upgrades; prefer a custom
 # SettingsSource when bumping pydantic-settings major versions.
-settings_sources.PydanticBaseSettingsSource.decode_complex_value = (
+settings_sources.PydanticBaseSettingsSource.decode_complex_value = (  # type: ignore[method-assign]
     _decode_complex_value_with_fallback
 )
 
@@ -398,7 +398,7 @@ class Settings(BaseSettings):
     log_json: bool = Field(True, alias="LOG_JSON")
 
     @classmethod
-    def model_validate(cls, obj: object, **kwargs) -> "Settings":  # type: ignore[override]
+    def model_validate(cls, obj: object, **kwargs) -> "Settings":  # noqa: PYI034
         if isinstance(obj, dict):
             data = dict(obj)
             data.setdefault("APP_ENV", cls.model_fields["app_env"].default)
@@ -480,7 +480,7 @@ class Settings(BaseSettings):
             "worker_queues": ["default"],
         }
 
-        default = defaults.get(info.field_name, [])
+        default = defaults.get(info.field_name or "", [])
         return split_csv(value, default=default)
 
     @field_validator("libreoffice_bin")
@@ -543,7 +543,7 @@ class Settings(BaseSettings):
     @classmethod
     def _validate_positive_sizes(cls, value: int, info: ValidationInfo) -> int:
         if value <= 0:
-            raise ValueError(f"{info.field_name.upper()} must be greater than zero")
+            raise ValueError(f"{(info.field_name or '').upper()} must be greater than zero")
         return value
 
     @field_validator(
@@ -556,7 +556,7 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             value = float(value)
         if value <= 0:
-            raise ValueError(f"{info.field_name.upper()} must be greater than zero")
+            raise ValueError(f"{(info.field_name or '').upper()} must be greater than zero")
         return float(value)
 
     @field_validator("pdf_worker_queue")
@@ -640,7 +640,10 @@ class Settings(BaseSettings):
         base = (self.edo_integration_base_url or "").strip()
         if not base:
             return self
-        from app.core.integration_url_validation import UnsafeIntegrationURLError, assert_safe_http_base_url
+        from app.core.integration_url_validation import (
+            UnsafeIntegrationURLError,
+            assert_safe_http_base_url,
+        )
 
         try:
             assert_safe_http_base_url(base, app_env=self.app_env)
@@ -819,7 +822,7 @@ class Settings(BaseSettings):
 
 @lru_cache
 def _load_settings() -> Settings:
-    return Settings()
+    return Settings()  # type: ignore[call-arg]  # pydantic-settings loads fields from env vars
 
 
 def get_settings(*, force_reload: bool = False) -> Settings:
@@ -886,7 +889,7 @@ def split_csv(
         raw_items = value
     else:
         try:
-            raw_items = list(value)  # type: ignore[arg-type]
+            raw_items = list(value)  # type: ignore[call-overload]
         except TypeError as exc:  # pragma: no cover - defensive programming
             raise TypeError("Expected string or sequence of strings") from exc
 

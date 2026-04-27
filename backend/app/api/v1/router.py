@@ -53,7 +53,6 @@ from app.models.document_core import (
     TemplateVersionStatus,
 )
 from app.models.tenanting import Tenant
-from app.modules.tenancy.helpers import tenant_s3_key
 from app.modules.templates import build_passport, lint_docx_template, render_preview_docx
 from app.modules.templates.repo import get_template_version_by_code
 from app.modules.templates.schemas import (
@@ -68,6 +67,7 @@ from app.modules.templates.schemas import (
     TemplatePatchRequest,
     TemplateVersionDTO,
 )
+from app.modules.tenancy.helpers import tenant_s3_key
 from app.repository import (
     create_template as create_template_record,
 )

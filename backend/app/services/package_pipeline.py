@@ -203,7 +203,7 @@ class PackGenerationPipeline:
             project=str(naming["project"]),
             client=str(naming["client"]),
             topic=str(naming["topic"]),
-            version=int(naming["version"]),
+            version=int(str(naming.get("version") or 0)),
             reference_date=naming["reference_date"],
             flags=naming.get("flags", ()),
             documents=documents,

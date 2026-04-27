@@ -241,7 +241,7 @@ async def approval_process_detail(process_id: str, session: AsyncSession = Depen
     if not p or p.tenant_id != str(tenant.id):
         raise _approval_signing_not_found("process")
     logs = (await session.execute(select(ApprovalDecisionLog).where(ApprovalDecisionLog.tenant_id == str(tenant.id), ApprovalDecisionLog.process_id == process_id).order_by(ApprovalDecisionLog.created_at.asc()))).scalars().all()
-    return {"id": p.id, "status": p.status.value, "route_id": p.route_id, "current_step": p.current_step, "logs": [{"decision": l.decision, "comment": l.comment, "step_no": l.step_no} for l in logs]}
+    return {"id": p.id, "status": p.status.value, "route_id": p.route_id, "current_step": p.current_step, "logs": [{"decision": log.decision, "comment": log.comment, "step_no": log.step_no} for log in logs]}
 
 
 @router.get("/approvals/process-tasks")

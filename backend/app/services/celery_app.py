@@ -120,7 +120,7 @@ _TASK_CONTEXT_TOKENS: dict[
 
 
 @signals.task_prerun.connect
-def _on_task_prerun(  # type: ignore[misc]
+def _on_task_prerun(
     sender=None,
     task_id: Optional[str] = None,
     task=None,
@@ -159,7 +159,7 @@ def _on_task_prerun(  # type: ignore[misc]
 
 
 @signals.task_postrun.connect
-def _on_task_postrun(  # type: ignore[misc]
+def _on_task_postrun(
     sender=None,
     task_id: Optional[str] = None,
     **kwargs,

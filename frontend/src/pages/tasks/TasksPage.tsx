@@ -89,10 +89,6 @@ const TasksPage = () => {
   const focusedTaskId = searchParams.get("task_id") ?? undefined;
   const focusedEntityType = searchParams.get("entity_type") ?? undefined;
   const focusedEntityId = searchParams.get("entity_id") ?? undefined;
-  const typeQuery = searchParams.get("type");
-  const overdueQuery = searchParams.get("overdue");
-  const priorityQuery = searchParams.get("priority");
-
   const queryString = searchParams.toString();
 
   useEffect(() => {
@@ -106,15 +102,6 @@ const TasksPage = () => {
     setFilters({ type, overdue, priority });
     list({ type, overdue, priority });
   }, [list, queryString, setFilters]);
-    const type = typeQuery ?? undefined;
-    const overdueParam = overdueQuery;
-    const overdue =
-      overdueParam === "true" ? true : overdueParam === "false" ? false : undefined;
-    const priorityParam = priorityQuery;
-    const priority = priorityParam && isTaskPriority(priorityParam) ? priorityParam : undefined;
-    setFilters({ type, overdue, priority });
-    list({ type, overdue, priority });
-  }, [list, overdueQuery, priorityQuery, setFilters, typeQuery]);
 
   useEffect(() => {
     if (!focusedTaskId) {

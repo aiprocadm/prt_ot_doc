@@ -9,10 +9,9 @@ from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
 from app.core.audit_decorator import audit_operation
+from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, rbac
-from app.core.errors import api_problem_detail
 from app.core.tenant_validation import TenantContextValidator
-from app.core.errors import api_problem_detail
 from app.models.models import RoleEnum, Tenant, User, UserAttribute, UserRole
 from app.schemas.admin_user import (
     UserAttributesRequest,

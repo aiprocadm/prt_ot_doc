@@ -333,13 +333,13 @@ async def get_job(
         ],
         logs=[
             JobLogRead(
-                timestamp=l.created_at,
-                level=l.level,
-                message=l.message,
-                step_name=l.step_code,
-                meta_json=l.meta_json,
+                timestamp=log.created_at,
+                level=log.level,
+                message=log.message,
+                step_name=log.step_code,
+                meta_json=log.meta_json,
             )
-            for l in logs
+            for log in logs
         ],
         result=(
             {

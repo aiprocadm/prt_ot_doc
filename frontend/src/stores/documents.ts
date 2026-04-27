@@ -3,7 +3,7 @@ import { immer } from "zustand/middleware/immer";
 import { apiClient } from "@/api/client";
 import { defaultPagination } from "@/stores/helpers";
 import type { PaginatedState } from "@/stores/types";
-import type { ApiError, PaginatedResponse } from "@/types/dto/common";
+import type { PaginatedResponse } from "@/types/dto/common";
 import type { DocumentDto, DocumentFiltersDto } from "@/types/dto/documents";
 import { normalizeError } from "@/utils/apiFormErrors";
 
