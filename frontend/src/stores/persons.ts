@@ -5,7 +5,6 @@ import { apiClient } from "@/api/client";
 import { buildPersonCreateBody, buildPersonPatchBody, normalizePersonRead } from "@/api/personsApi";
 import { defaultPagination } from "@/stores/helpers";
 import type { PaginatedState } from "@/stores/types";
-import type { ApiError } from "@/types/dto/common";
 import type { PersonDto, PersonStatus } from "@/types/dto/persons";
 import type { PersonFormValues } from "@/types/forms/persons";
 import { normalizeError } from "@/utils/apiFormErrors";

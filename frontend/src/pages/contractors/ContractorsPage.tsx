@@ -34,21 +34,19 @@ const ContractorsPage = () => {
     initialData: { companies: [], hostCompanies: [], sites: [], contracts: [], employees: [], incidents: [], complianceSummary: emptyComplianceSummary() },
     errorMessage: "Не удалось загрузить реестр подрядчиков"
   });
-  const contractorCompanies = data.companies ?? [];
-  const employees = data.employees ?? [];
-  const incidents = data.incidents ?? [];
   const selectedCompanyId = searchParams.get("company_id") ?? "";
   const hostCompanyById = useMemo(() => new Map((data.hostCompanies ?? []).map((company) => [company.id, company.name])), [data.hostCompanies]);
-  const items = useMemo(
-    () =>
-      contractorCompanies.map((company: ContractorRegistryDto) => {
-        const employeeCount = employees.filter((employee) => employee.contractor_id === company.id).length;
-        const incidentCount = incidents.filter((incident) => incident.contractor_id === company.id).length;
-        const hostCompanyName = company.company_id ? (hostCompanyById.get(company.company_id) ?? company.company_id) : "Не привязан";
-        return { ...company, employeeCount, incidentCount, risk: complianceRiskLabel(company.id, incidents), hostCompanyName };
-      }),
-    [contractorCompanies, employees, incidents, hostCompanyById]
-  );
+  const items = useMemo(() => {
+    const contractorCompanies = data.companies ?? [];
+    const employees = data.employees ?? [];
+    const incidents = data.incidents ?? [];
+    return contractorCompanies.map((company: ContractorRegistryDto) => {
+      const employeeCount = employees.filter((employee) => employee.contractor_id === company.id).length;
+      const incidentCount = incidents.filter((incident) => incident.contractor_id === company.id).length;
+      const hostCompanyName = company.company_id ? (hostCompanyById.get(company.company_id) ?? company.company_id) : "Не привязан";
+      return { ...company, employeeCount, incidentCount, risk: complianceRiskLabel(company.id, incidents), hostCompanyName };
+    });
+  }, [data.companies, data.employees, data.incidents, hostCompanyById]);
   const filteredItems = useMemo(
     () => (selectedCompanyId ? items.filter((item) => item.company_id === selectedCompanyId) : items),
     [items, selectedCompanyId]
@@ -69,8 +67,8 @@ const ContractorsPage = () => {
         stats={[
           { label: "Контрагентов", value: items.length },
           { label: "Привязано к компаниям", value: items.filter((item) => Boolean(item.company_id)).length },
-          { label: "Сотрудников", value: employees.length },
-          { label: "Инцидентов", value: incidents.length }
+          { label: "Сотрудников", value: (data.employees ?? []).length },
+          { label: "Инцидентов", value: (data.incidents ?? []).length }
         ]}
       />
       <div className="flex items-center gap-2">
