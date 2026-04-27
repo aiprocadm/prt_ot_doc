@@ -114,7 +114,10 @@ class RequestContextFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:  # noqa: D401
         record.trace_id = get_trace_id()
         record.request_id = get_trace_id()
-        record.tenant_id = get_current_tenant().slug
+        try:
+            record.tenant_id = get_current_tenant().slug
+        except Exception:  # noqa: BLE001
+            record.tenant_id = None
         record.user_id = get_current_user_id()
         record.celery_task_id = get_task_id()
         return True

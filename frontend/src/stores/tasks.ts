@@ -5,6 +5,7 @@ import { defaultPagination } from "@/stores/helpers";
 import type { PaginatedState } from "@/stores/types";
 import type { ApiError, PaginatedResponse } from "@/types/dto/common";
 import type { TaskDto, TaskFiltersDto } from "@/types/dto/tasks";
+import { normalizeError } from "@/utils/apiFormErrors";
 
 interface TasksState extends PaginatedState<TaskDto, TaskFiltersDto> {
   /** Ошибка загрузки фокусной задачи по `task_id` в query (не заливаем в `error` списка). */
@@ -85,7 +86,7 @@ export const useTasksStore = create<TasksState>()(
         });
       } catch (error) {
         set((state) => {
-          state.error = error as ApiError;
+          state.error = normalizeError(error);
         });
       } finally {
         set((state) => {
@@ -108,7 +109,7 @@ export const useTasksStore = create<TasksState>()(
         return data;
       } catch (error) {
         set((state) => {
-          state.taskFocusLoadError = error as ApiError;
+          state.taskFocusLoadError = normalizeError(error);
         });
         return null;
       }
@@ -124,7 +125,7 @@ export const useTasksStore = create<TasksState>()(
         return data;
       } catch (error) {
         set((state) => {
-          state.error = error as ApiError;
+          state.error = normalizeError(error);
         });
         return null;
       }
@@ -136,7 +137,7 @@ export const useTasksStore = create<TasksState>()(
         return data;
       } catch (error) {
         set((state) => {
-          state.error = error as ApiError;
+          state.error = normalizeError(error);
         });
         return null;
       }

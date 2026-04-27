@@ -5,14 +5,10 @@ import { tokenStorage } from "@/api/tokenStorage";
 import { tenantStorage } from "@/api/tenantStorage";
 import { resetTenantStores } from "@/stores/reset";
 import { useTenantStore } from "@/stores/tenant";
-import { isApiError } from "@/utils/apiFormErrors";
+import { normalizeError } from "@/utils/apiFormErrors";
 import type { ApiError } from "@/types/dto/common";
 import type { LoginRequestDto, LoginResponseDto, PermissionsResponseDto, UserDto } from "@/types/dto/auth";
 
-const normalizeError = (error: unknown): ApiError =>
-  isApiError(error)
-    ? error
-    : { status: 0, message: String((error as Error)?.message ?? "Unknown error"), field_errors: [] };
 
 type LoginActionPayload = LoginRequestDto & {
   tenant: string;

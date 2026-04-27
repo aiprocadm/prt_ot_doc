@@ -8,6 +8,7 @@ import type { PaginatedState } from "@/stores/types";
 import type { ApiError } from "@/types/dto/common";
 import type { PersonDto, PersonStatus } from "@/types/dto/persons";
 import type { PersonFormValues } from "@/types/forms/persons";
+import { normalizeError } from "@/utils/apiFormErrors";
 
 type PersonListResponse = { items: unknown[]; total: number };
 
@@ -91,7 +92,7 @@ export const usePersonsStore = create<PersonsState>()(
         });
       } catch (error) {
         set((state) => {
-          state.error = error as ApiError;
+          state.error = normalizeError(error);
         });
       } finally {
         set((state) => {
@@ -109,7 +110,7 @@ export const usePersonsStore = create<PersonsState>()(
         return normalized;
       } catch (error) {
         set((state) => {
-          state.error = error as ApiError;
+          state.error = normalizeError(error);
         });
         return null;
       }
@@ -139,13 +140,20 @@ export const usePersonsStore = create<PersonsState>()(
       return normalized;
     },
     remove: async (id) => {
-      await apiClient.delete(`/persons/${id}`);
-      set((state) => {
-        state.items = state.items.filter((person) => person.id !== id);
-        state.pagination.total = Math.max(0, state.pagination.total - 1);
-        if (state.item?.id === id) state.item = null;
-        state.personsRegistryRevision += 1;
-      });
+      try {
+        await apiClient.delete(`/persons/${id}`);
+        set((state) => {
+          state.items = state.items.filter((person) => person.id !== id);
+          state.pagination.total = Math.max(0, state.pagination.total - 1);
+          if (state.item?.id === id) state.item = null;
+          state.personsRegistryRevision += 1;
+        });
+      } catch (error) {
+        set((state) => {
+          state.error = normalizeError(error);
+        });
+        throw error;
+      }
     }
   }))
 );
