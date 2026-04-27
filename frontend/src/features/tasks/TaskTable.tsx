@@ -1,6 +1,6 @@
 import { type ColumnDef } from "@tanstack/react-table";
 import { CheckCheck } from "lucide-react";
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
 
 import { RegistryTable } from "@/components/common/RegistryTable";
@@ -22,10 +22,6 @@ const TYPE_LABELS: Record<string, string> = {
 
 export const TaskTable = () => {
   const { items, pagination, list, setPage, setPageSize, loading, patchTask } = useTasksStore();
-
-  useEffect(() => {
-    list();
-  }, [list]);
 
   usePolling(() => list(), 8000, true);
 

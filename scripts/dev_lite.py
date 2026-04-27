@@ -79,6 +79,12 @@ def command_output(cmd: list[str]) -> str:
     return proc.stdout.strip() or proc.stderr.strip()
 
 
+def resolve_npm_executable() -> str:
+    if os.name == "nt":
+        return shutil.which("npm.cmd") or shutil.which("npm") or "npm.cmd"
+    return shutil.which("npm") or "npm"
+
+
 def get_venv_python() -> Path:
     if os.name == "nt":
         return VENV_DIR / "Scripts" / "python.exe"
@@ -160,6 +166,7 @@ def ensure_python_deps(venv_python: Path) -> None:
 
 
 def ensure_frontend_deps() -> None:
+    npm_exec = resolve_npm_executable()
     vite_bin = FRONTEND_DIR / "node_modules" / ".bin" / ("vite.cmd" if os.name == "nt" else "vite")
     need_install = (
         not (FRONTEND_DIR / "node_modules").exists()
@@ -171,11 +178,11 @@ def ensure_frontend_deps() -> None:
         print("Frontend dependencies are up to date (frontend/node_modules).")
         return
     try:
-        run_checked(["npm", "ci"], cwd=FRONTEND_DIR)
+        run_checked([npm_exec, "ci"], cwd=FRONTEND_DIR)
     except subprocess.CalledProcessError:
         print("WARNING: npm ci failed; cleaning node_modules and retrying once.")
         shutil.rmtree(FRONTEND_DIR / "node_modules", ignore_errors=True)
-        run_checked(["npm", "ci"], cwd=FRONTEND_DIR)
+        run_checked([npm_exec, "ci"], cwd=FRONTEND_DIR)
     NPM_STAMP.touch()
 
 
@@ -202,7 +209,7 @@ def preflight() -> None:
     node_version_text = command_output([node, "--version"])
     assert_min_version(parse_semver(node_version_text), (18, 18, 0), "Node.js")
 
-    npm = shutil.which("npm")
+    npm = resolve_npm_executable()
     if not npm:
         raise RuntimeError("npm not found in PATH. Reinstall Node.js LTS.")
     npm_version_text = command_output([npm, "--version"])
@@ -233,6 +240,7 @@ def build_runtime_env(venv_python: Path) -> dict[str, str]:
 
 
 def main() -> int:
+    npm_exec = resolve_npm_executable()
     os.chdir(ROOT_DIR)
     args = parse_args()
     preflight()
@@ -297,7 +305,7 @@ def main() -> int:
         else:
             print("WARNING: Backend health check timed out (continuing; inspect backend logs).")
         frontend = subprocess.Popen(
-            ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"],
+            [npm_exec, "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"],
             cwd=FRONTEND_DIR,
             env=os.environ.copy(),
         )

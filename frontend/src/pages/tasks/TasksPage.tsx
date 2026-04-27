@@ -88,16 +88,19 @@ const TasksPage = () => {
   const focusedEntityType = searchParams.get("entity_type") ?? undefined;
   const focusedEntityId = searchParams.get("entity_id") ?? undefined;
 
+  const queryString = searchParams.toString();
+
   useEffect(() => {
-    const type = searchParams.get("type") ?? undefined;
-    const overdueParam = searchParams.get("overdue");
+    const params = new URLSearchParams(queryString);
+    const type = params.get("type") ?? undefined;
+    const overdueParam = params.get("overdue");
     const overdue =
       overdueParam === "true" ? true : overdueParam === "false" ? false : undefined;
-    const priorityParam = searchParams.get("priority");
+    const priorityParam = params.get("priority");
     const priority = priorityParam && isTaskPriority(priorityParam) ? priorityParam : undefined;
     setFilters({ type, overdue, priority });
     list({ type, overdue, priority });
-  }, [list, searchParams, setFilters]);
+  }, [list, queryString, setFilters]);
 
   useEffect(() => {
     if (!focusedTaskId) {
@@ -135,22 +138,16 @@ const TasksPage = () => {
 
   const handleTypeChange = (value: string) => {
     const type = value || undefined;
-    setFilters({ type });
-    list({ type });
     updateFilterQuery({ type });
   };
 
   const handleDueFilterChange = (value: string) => {
     const overdue = value === "overdue" ? true : value === "upcoming" ? false : undefined;
-    setFilters({ overdue });
-    list({ overdue });
     updateFilterQuery({ overdue });
   };
 
   const handlePriorityChange = (value: string) => {
     const priority = value && isTaskPriority(value) ? value : undefined;
-    setFilters({ priority });
-    list({ priority });
     updateFilterQuery({ priority });
   };
 
@@ -215,8 +212,6 @@ const TasksPage = () => {
             <Button
               variant="ghost"
               onClick={() => {
-                setFilters({ type: undefined, overdue: undefined });
-                list({ type: undefined, overdue: undefined });
                 updateFilterQuery({ type: undefined, overdue: undefined, priority: undefined });
               }}
               disabled={loading}
