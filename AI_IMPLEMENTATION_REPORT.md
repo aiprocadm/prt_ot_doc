@@ -1,7 +1,16 @@
 # AI / Engineering implementation report
 
-- **Date (UTC):** 2026-04-27  
-- **Scope:** documentation inventory, P0 test harness fix, testing doc repair; full-platform audit is **not** completed in a single pass (see «Ограничения»).
+- **Date (UTC):** 2026-04-28 (обновлено)  
+- **Scope:** documentation inventory, P0 test harness fix, testing doc repair; full-platform audit is **not** completed in a single pass (see «Ограничения»). Последняя волна: **проверка по README (pytest + frontend) + фиксация Vitest unhandled**; ранее — хаб `docs/spec/README.md`, ссылки на ТЗ, **P1 frontend lint**.
+- **Шаблон работы агента:** `docs/AI_AGENT_WORKFLOW.md` (обновляй этот файл по итогам волны; не создавай параллельных «мега-отчётов» в корне).
+
+## Кандидаты на удаление / архивация (актуальный список)
+
+| Документ / путь | Причина | Действие |
+|-----------------|---------|----------|
+| *(код тестов, не док)* Vitest full suite | 7 unhandled rejections при 221 passed; возможный **exit 1** | P2: tenant-mock / `act` в страничных тестах (см. §17) |
+
+*Примеры причин: дублирует; устарел; противоречит ТЗ; не используется; черновик; мешает навигации. Решение — после проверки владельцем репо.*
 
 ---
 
@@ -129,3 +138,165 @@
 
 ### Ограничение
 - Полный аудит по §4.2–4.3 брифа и `npm run ci` (lint+test+build) **не** выполнялись целиком в этой волне; при подготовке релиза прогнать `docs/TEST_BASELINE.md` / CI-эквивалент.
+
+---
+
+## 12. Волна 2026-04-28: компактный промт для агентов
+
+### Что сделано
+- Добавлен **`docs/AI_AGENT_WORKFLOW.md`** — единый компактный промт (README-first, приоритеты источников, P0–P3, кандидаты на чистку документации, обновление только этого отчёта).
+- Ссылки: **`README.md`** (секция Canonical documentation), **`AGENTS.md`**, **`docs/README.md`**, **`.cursor/rules/ai-agent-workflow.mdc`**.
+- В **этом** файле: таблица **«Кандидаты на удаление»** (пока пустая, для заполнения в следующих волнах). Ранее отмечено: возможное дублирование `docs/audit/ARCHITECTURE.md` — **не** подтверждено/не удалялось.
+
+### Проверки
+- Линтер/тесты не требовались (изменения только в документации и правилах Cursor).
+
+### Что нельзя было подтвердить
+- Список «мусорных» документов без чтения всего `docs/**` в этой волне не строился — таблица выше для следующих итераций.
+
+---
+
+## 13. 2026-04-28: уточнение `docs/AI_AGENT_WORKFLOW.md`
+
+- Файл **объединён** с новым брифом: обязательный порядок (README → ТЗ по ссылкам → `AI_IMPLEMENTATION_REPORT` → код), приоритеты production-grade, чек-лист «перед правками», правила/запреты, мусор, формат **краткого** ответа (9 пунктов), условия обновления README.
+- Обновлены: **`docs/AI_AGENT_WORKFLOW.md`**, **`.cursor/rules/ai-agent-workflow.mdc`**, эта запись; код не менялся; автоматические проверки **не** запускались.
+
+---
+
+## 14. Волна 2026-04-28: P1 — `npm run lint` (frontend)
+
+### Изучено
+- `README.md`, `docs/AI_AGENT_WORKFLOW.md`, `docs/README.md`, этот отчёт (волны 1–13).
+- Уточнение: `docs/ARCHITECTURE.md` (обзор платформы) и `docs/audit/ARCHITECTURE.md` (discovery map) — **разные файлы**, не дубликат содержимого; удаление не требуется.
+
+### Найденные проблемы
+- `npm --prefix frontend run lint` **падал** (`--max-warnings=0`): запрет `fetch` в `navigation.ts` (no-restricted-globals), неиспользуемый тип `ApiError` в трёх store, предупреждения `react-hooks/exhaustive-deps` в `ContractorsPage.tsx`.
+
+### Что сделано
+- **`sendUxMetric`:** один вызов `apiClient.post("/analytics/ux-events", …)` вместо двойного `fetch` (исправлена логически ошибочная цепочка: первый POST без `Authorization`/`X-Tenant`, второй с ними; теперь тот же контракт, что и у остального API, перехват ошибок сохранён — endpoint на бэкенде по-прежнему может отсутствовать).
+- Удалены неиспользуемые импорты `ApiError`: `stores/documents.ts`, `stores/files.ts`, `stores/persons.ts`.
+- **ContractorsPage:** вычисление строк таблицы перенесено внутрь `useMemo` с зависимостями `data.companies` / `data.employees` / `data.incidents` / `hostCompanyById`.
+
+### Файлы
+- `frontend/src/api/navigation.ts`
+- `frontend/src/stores/documents.ts`, `frontend/src/stores/files.ts`, `frontend/src/stores/persons.ts`
+- `frontend/src/pages/contractors/ContractorsPage.tsx`
+- `AI_IMPLEMENTATION_REPORT.md` (эта секция)
+
+### Проверки
+| Команда | Результат |
+|---------|-----------|
+| `py -m pytest -q tests/test_entrypoints.py tests/test_tenant_header_required.py tests/test_idempotency.py tests/test_template_delete.py` (`PYTHONPATH=backend`) | **9 passed** |
+| `npm --prefix frontend run typecheck` | **OK** |
+| `npm --prefix frontend run lint` | **OK** |
+| `npm --prefix frontend run build` | **OK** |
+| `py -m ruff check backend/app tests scripts` | **много существующих замечаний** в репо; **не** исправлялись в этой волне (бэкенд не трогали) |
+
+### Риски
+- Если позже появится реальный `POST /api/v1/analytics/ux-events`, пейлоад `{ name, payload }` остаётся согласован с прежним намерением; при отсутствии маршрута поведение как раньше — тихий сбой в `catch`.
+
+---
+
+## 15. Волна 2026-04-28: ссылки на ТЗ в `README.md`
+
+### Изучено
+- `README.md` (секция Canonical documentation, точка входа).
+- `AI_IMPLEMENTATION_REPORT.md` (контекст волны 1–14).
+- Приоритет ТЗ: `AGENTS.md`, `docs/spec/README.md` (без полного чтения всех `docs/**`).
+
+### Проблема
+- В корневом `README` не было **прямых** ссылок на главные файлы ТЗ `TZ_FULL_UNIFIED` и `PLATFORM_VNEXT_UPGRADE_SPEC` (навигация для агентов и разработчиков).
+
+### Сделано
+- В **Canonical documentation** добавлены две markdown-ссылки в начало списка: `docs/spec/TZ_FULL_UNIFIED.md`, `docs/spec/PLATFORM_VNEXT_UPGRADE_SPEC.md` (краткие пояснения назначения).
+
+### Файлы
+- `README.md`
+- `AI_IMPLEMENTATION_REPORT.md` (эта секция)
+
+### Мусор
+- Не обнаружен; удалений нет.
+
+### Проверки
+| Команда | Результат |
+|---------|-----------|
+| `npm --prefix frontend run typecheck` | **OK** |
+| `npm --prefix frontend run lint` | **OK** |
+| `npm --prefix frontend run build` | **OK** |
+| `py -m pytest -q tests/test_entrypoints.py` (`PYTHONPATH=backend`) | **2 passed** (smoke, код не менялся) |
+
+### Риски
+- Нет (только навигация в доке).
+
+### Следующий шаг
+- Выполнено в §16: строка на [docs/spec/README.md](docs/spec/README.md) в корневом `README.md`.
+
+---
+
+## 16. Волна 2026-04-28: хаб `docs/spec/README.md` в корневом `README.md`
+
+### Изучено
+- `README.md` (Canonical documentation).
+- `AI_IMPLEMENTATION_REPORT.md` (§15 — опция хаба).
+
+### Сделано
+- Одна строка-ссылка на [docs/spec/README.md](docs/spec/README.md) с пояснением (хаб ТЗ, приоритет `TZ_FULL` vs vNext, схема файлов) — сразу после ссылок на `TZ_FULL_UNIFIED` и `PLATFORM_VNEXT_UPGRADE_SPEC`.
+
+### Файлы
+- `README.md`
+- `AI_IMPLEMENTATION_REPORT.md` (эта секция, обновлён Scope и §15)
+
+### Мусор
+- Нет.
+
+### Проверки
+| Команда | Результат |
+|---------|-----------|
+| `npm --prefix frontend run typecheck` | **OK** |
+| `npm --prefix frontend run lint` | **OK** |
+| `npm --prefix frontend run build` | **OK** |
+| `py -m pytest -q tests/test_entrypoints.py` (`PYTHONPATH=backend`) | **2 passed** |
+
+### Риски
+- Нет.
+
+### Следующий шаг
+- При смене структуры `docs/spec/` — синхронизировать формулировку строки в корневом `README`.
+
+---
+
+## 17. Волна 2026-04-28: аудит по брифу (README → отчёт → проверки)
+
+### Изучено
+- `README.md` (Verification commands, Canonical documentation: `TZ_FULL`, vNext, `docs/spec/README`, `docs/TESTING`, `AI_AGENT_WORKFLOW`, архитектура).
+- `AI_IMPLEMENTATION_REPORT.md` (§1–16).
+- `docs/spec/README.md` не читался целиком; приоритет ТЗ — как в `AGENTS.md` / хабе.
+
+### Найденные проблемы (без правок кода в этой волне)
+- **`vitest run` (полный suite):** 221 тест passed, но **7 unhandled errors/rejections** (Vitest завершает с **exit code 1**). По сэмплу в логе: отклонённый запрос с `message: «Выберите контур перед выполнением запроса.»` (например контекст `InspectionsPage.test.tsx`); иной шум — jsdom/`location.assign` в stderr. **Инкрементальное исправление** — выставлять tenant в тестах страниц / догонять `act()` у Radix; отдельная задача (P2), не блокер typecheck/lint/build.
+- Попытка `try/catch` вокруг `location.assign` в `authRedirect` **не** убрала 7 unhandled (корневая причина — promise-отклонения apiClient), поэтому **откатана**, дифф к продукту не вносился.
+
+### Что изменено
+- Только **`AI_IMPLEMENTATION_REPORT.md`** (эта секция + Scope). Код приложения **не** менялся.
+
+### Файлы
+- `AI_IMPLEMENTATION_REPORT.md`
+
+### Мусор
+- Не удалялся. **Кандидат на доработку (не удаление):** стабилизировать полный Vitest (см. выше).
+
+### Проверки
+| Команда | Результат |
+|---------|-----------|
+| `py -m pytest -q tests/test_entrypoints.py tests/api/test_branding_api.py tests/headers/test_engine.py` (`PYTHONPATH=backend`) | **6 passed** |
+| `npm --prefix frontend run typecheck` | **OK** |
+| `npm --prefix frontend run lint` | **OK** |
+| `npm --prefix frontend run build` | **OK** |
+| `npx vitest run` (полный) | **221 passed**, **7** unhandled → **exit 1** (см. «Проблемы») |
+| `alembic ...` / миграции | не запускались (не трогались) |
+
+### Риски
+- CI, где `npm run test` = полный Vitest, может **падать** на exit 1 из-за unhandled; уточнить политику в `docs/TESTING.md` / pipeline.
+
+### Следующий шаг
+- Точечно: в тестах страниц с `apiClient` и обязательным `X-Tenant` — `tenantStorage.setTenant` (или мок) в `beforeEach`; либо настроить Vitest `onUnhandledRejection` после анализа всех 7 кейсов. Полный `pytest` / `ruff` — по `docs/TEST_BASELINE.md` при релизном окне.
