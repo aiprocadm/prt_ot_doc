@@ -1,14 +1,14 @@
 # AI / Engineering implementation report
 
 - **Date (UTC):** 2026-04-28 (обновлено)  
-- **Scope:** documentation inventory, P0 test harness fix, testing doc repair; full-platform audit is **not** completed in a single pass (see «Ограничения»). Последняя волна: **проверка по README (pytest + frontend) + фиксация Vitest unhandled**; ранее — хаб `docs/spec/README.md`, ссылки на ТЗ, **P1 frontend lint**.
+- **Scope:** documentation inventory, P0 test harness fix, testing doc repair; full-platform audit is **not** completed in a single pass (see «Ограничения»). Последняя волна: **P1 Vitest: устранены 7 unhandled (ConflictInboxCard)**; ранее — аудит с фиксацией проблемы, хаб `docs/spec/README`, **P1 frontend lint**.
 - **Шаблон работы агента:** `docs/AI_AGENT_WORKFLOW.md` (обновляй этот файл по итогам волны; не создавай параллельных «мега-отчётов» в корне).
 
 ## Кандидаты на удаление / архивация (актуальный список)
 
 | Документ / путь | Причина | Действие |
 |-----------------|---------|----------|
-| *(код тестов, не док)* Vitest full suite | 7 unhandled rejections при 221 passed; возможный **exit 1** | P2: tenant-mock / `act` в страничных тестах (см. §17) |
+| *(было)* Vitest | 7 unhandled из `ConflictInboxCard` без `catch` | **Снято в §18** |
 
 *Примеры причин: дублирует; устарел; противоречит ТЗ; не используется; черновик; мешает навигации. Решение — после проверки владельцем репо.*
 
@@ -300,3 +300,33 @@
 
 ### Следующий шаг
 - Точечно: в тестах страниц с `apiClient` и обязательным `X-Tenant` — `tenantStorage.setTenant` (или мок) в `beforeEach`; либо настроить Vitest `onUnhandledRejection` после анализа всех 7 кейсов. Полный `pytest` / `ruff` — по `docs/TEST_BASELINE.md` при релизном окне.
+
+---
+
+## 18. Волна 2026-04-28: Vitest unhandled — `ConflictInboxCard`
+
+### Изучено
+- `README.md`, `AI_IMPLEMENTATION_REPORT.md` (§17), компонент `frontend/src/components/pwa/ConflictInboxCard.tsx`, вызовы `pwaSyncApi.getBootstrap()` → `apiClient` (тенант обязателен для `/v1/...`).
+
+### Проблема
+- **`ConflictInboxCard`:** `load()` оборачивал `getBootstrap()` в `try/finally` **без** `catch`. При отклонении (нет `X-Tenant`, сеть, 5xx) promise становился **unhandled**; Vitest считал это 7 глобальными ошибками на полном прогоне (страницы с карточкой) и выходил с **exit 1** при 221 passed.
+
+### Решение
+- В `catch` сбрасывать список конфликтов и `onConflictStateChange(false)` — карточка PWA best-effort, поведение согласовано с отсутствием бутстрапа.
+
+### Файлы
+- `frontend/src/components/pwa/ConflictInboxCard.tsx`
+- `AI_IMPLEMENTATION_REPORT.md` (эта секция, Scope, таблица кандидатов)
+
+### Проверки
+| Команда | Результат |
+|---------|-----------|
+| `npx vitest run` | **221 passed**, **0** unhandled, **exit 0** |
+| `npm run lint` / `npm run typecheck` (frontend) | **OK** |
+| `py -m pytest -q tests/test_entrypoints.py` (`PYTHONPATH=backend`) | **2 passed** |
+
+### Риски
+- При ошибке бутстрапа карточка показывает «Конфликтов нет» — ожидаемо для degradеd mode.
+
+### Следующий шаг
+- При необходимости — тонкий UI hint «не удалось загрузить» вместо пустого списка; полный `pytest` / `ruff` по релизному чеклисту.
