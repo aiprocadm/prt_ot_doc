@@ -18,7 +18,7 @@ import type { PersonDto } from "@/types/dto/persons";
 
 const PersonsPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { list, pagination, loading, error, items } = usePersonsStore();
+  const { list, getById, item, pagination, loading, error, items } = usePersonsStore();
   const [selectedPerson, setSelectedPerson] = useState<PersonDto | null>(null);
   const focusedPersonId = searchParams.get("person_id") ?? undefined;
 
@@ -40,8 +40,20 @@ const PersonsPage = () => {
     const focused = items.find((person) => person.id === focusedPersonId);
     if (focused) {
       setSelectedPerson(focused);
+      return;
     }
-  }, [focusedPersonId, items]);
+    void getById(focusedPersonId).then((loaded) => {
+      if (loaded) {
+        setSelectedPerson(loaded);
+      }
+    });
+  }, [focusedPersonId, getById, items]);
+
+  useEffect(() => {
+    if (focusedPersonId && item?.id === focusedPersonId) {
+      setSelectedPerson(item);
+    }
+  }, [focusedPersonId, item]);
 
   return (
     <div className="space-y-6">
@@ -86,7 +98,14 @@ const PersonsPage = () => {
             emptyDescription="Добавьте первого сотрудника или измените фильтры поиска."
             onRetry={() => void list()}
           >
-            <PersonTable onSelect={setSelectedPerson} />
+            <PersonTable
+              onSelect={(person) => {
+                setSelectedPerson(person);
+                const next = new URLSearchParams(searchParams);
+                next.set("person_id", person.id);
+                setSearchParams(next, { replace: true });
+              }}
+            />
           </ListStateGuard>
         </CardContent>
       </Card>
