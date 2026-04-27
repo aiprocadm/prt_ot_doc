@@ -37,3 +37,4 @@ pytest -q tests/test_tenant_header_required.py tests/test_idempotency.py tests/t
 - Критерии must-pass: `docs/TEST_BASELINE.md`
 - E2E политика: `docs/stabilization/e2e-access.md`
 - Соответствие ТЗ (сводно): `docs/audit/TZ_COMPLIANCE.md`, `docs/audit/TZ_COVERAGE_MATRIX.md`
+
