@@ -1,7 +1,10 @@
 # Runtime dependencies for API/worker images (see requirements-dev.txt for tests and linters).
 aiosqlite==0.20.0
 alembic==1.13.3
-asyncpg==0.29.0
+# asyncpg 0.29 has no wheel for Python 3.13 on Windows (build requires MSVC).
+# Keep deterministic pins per Python major/minor to avoid flaky local setup.
+asyncpg==0.29.0; python_version < "3.13"
+asyncpg==0.31.0; python_version >= "3.13"
 boto3==1.35.36
 celery==5.4.0
 click==8.1.8
@@ -23,5 +26,6 @@ python-multipart==0.0.12
 redis==5.0.3
 slowapi==0.1.9
 sqlalchemy==2.0.36
+greenlet==3.4.0
 typer==0.9.0
 uvicorn[standard]==0.30.5

@@ -28,6 +28,33 @@ This wave re-audited the repository and confirmed the following canonical paths:
 make dev-lite
 ```
 
+Cross-platform direct launcher (Windows/macOS/Linux):
+```bash
+python scripts/dev_lite.py
+```
+
+Windows PowerShell wrapper:
+```powershell
+./scripts/dev_lite.ps1
+```
+
+Unix shell wrapper:
+```bash
+./scripts/dev_lite.sh
+```
+
+Preflight only (versions + PATH diagnostics, no start):
+```bash
+python scripts/dev_lite.py --preflight-only
+```
+
+Auto-free busy dev ports (`8000`, `5173`) before start:
+```bash
+python scripts/dev_lite.py --auto-kill-ports
+```
+
+Note for WSL: dependencies must be installed inside the selected Linux distro as well (`python`, `node`, `npm` in WSL PATH).
+
 This is the recommended local start path in this workspace. It prepares dockerless env defaults, initializes the SQLite schema, starts backend on `http://localhost:8000`, and starts frontend on `http://localhost:5173`.
 
 Default local login:
@@ -42,6 +69,8 @@ source .venv/bin/activate
 pip install -r requirements.txt -r requirements-dev.txt
 python scripts/run_backend_lite.py
 ```
+
+Windows note: dependency pins in `requirements.txt` are split by Python version for `asyncpg`, so Python 3.12 and 3.13 install paths remain deterministic.
 
 ### Manual frontend start
 ```bash
