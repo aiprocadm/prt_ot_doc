@@ -93,7 +93,19 @@ const TasksPage = () => {
   const overdueQuery = searchParams.get("overdue");
   const priorityQuery = searchParams.get("priority");
 
+  const queryString = searchParams.toString();
+
   useEffect(() => {
+    const params = new URLSearchParams(queryString);
+    const type = params.get("type") ?? undefined;
+    const overdueParam = params.get("overdue");
+    const overdue =
+      overdueParam === "true" ? true : overdueParam === "false" ? false : undefined;
+    const priorityParam = params.get("priority");
+    const priority = priorityParam && isTaskPriority(priorityParam) ? priorityParam : undefined;
+    setFilters({ type, overdue, priority });
+    list({ type, overdue, priority });
+  }, [list, queryString, setFilters]);
     const type = typeQuery ?? undefined;
     const overdueParam = overdueQuery;
     const overdue =

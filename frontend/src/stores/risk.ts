@@ -29,6 +29,11 @@ interface RiskState {
   reset: () => void;
 }
 
+const isEndpointUnavailable = (error: unknown): boolean => {
+  const status = (error as ApiError | undefined)?.status;
+  return status === 404 || status === 405;
+};
+
 export const useRiskStore = create<RiskState>()(
   immer((set) => ({
     hazards: [],
@@ -61,6 +66,13 @@ export const useRiskStore = create<RiskState>()(
           state.hazards = Array.from(byHazard.values());
         });
       } catch (error) {
+        if (isEndpointUnavailable(error)) {
+          set((state) => {
+            state.hazards = [];
+            state.error = null;
+          });
+          return;
+        }
         set((state) => {
           state.error = error as ApiError;
         });
@@ -102,6 +114,13 @@ export const useRiskStore = create<RiskState>()(
           state.assessments = mapped;
         });
       } catch (error) {
+        if (isEndpointUnavailable(error)) {
+          set((state) => {
+            state.assessments = [];
+            state.error = null;
+          });
+          return;
+        }
         set((state) => {
           state.error = error as ApiError;
         });

@@ -25,6 +25,8 @@ const TYPE_LABELS: Record<string, string> = {
 export const TaskTable = () => {
   const { items, pagination, list, setPage, setPageSize, loading, patchTask } = useTasksStore();
 
+  usePolling(() => list(), 8000, true);
+
   const columns = useMemo<ColumnDef<TaskDto>[]>(
     () => [
       {

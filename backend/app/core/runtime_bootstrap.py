@@ -60,6 +60,9 @@ def _run_coro_sync(coro) -> None:
 def _prepare_sqlite_metadata() -> None:
     from app.db import Base, SharedBase
     from app.models.models import Tenant
+    # Register module models used outside app.models.models so sqlite create_all
+    # includes contractor registry tables in dockerless mode.
+    from app.modules.contractors import models as _contractors_models  # noqa: F401
 
     SharedBase.metadata.schema = None
     for table in SharedBase.metadata.tables.values():

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import logging
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
@@ -21,6 +23,7 @@ from app.modules.projections.models import (
 
 router = APIRouter(prefix="/client-portal", tags=["client-portal-v1"])
 internal_router = APIRouter(prefix="/portal-requests", tags=["portal-requests"])
+logger = logging.getLogger(__name__)
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | None:
@@ -57,6 +60,24 @@ class RequestMessageCreate(BaseModel):
     author_role: str = "client"
 
 
+async def _safe_list_items(
+    service: ClientPortalService,
+    *,
+    client_company_id: str | None = None,
+    item_type: str | None = None,
+) -> list[dict]:
+    try:
+        return await service.list_items(client_company_id=client_company_id, item_type=item_type)
+    except (OperationalError, ProgrammingError):
+        # Dockerless SQLite may miss projection tables; keep dashboard stable instead of 500.
+        logger.warning(
+            "client_portal.read_model_unavailable",
+            extra={"client_company_id": client_company_id, "item_type": item_type},
+            exc_info=True,
+        )
+        return []
+
+
 @router.get("/dashboard")
 async def dashboard(
     client_company_id: str | None = Query(default=None),
@@ -65,7 +86,10 @@ async def dashboard(
     *,
     access: PortalAccess,
 ):
-    items = await ClientPortalService(session, str(tenant.id)).list_items(client_company_id=client_company_id)
+    items = await _safe_list_items(
+        ClientPortalService(session, str(tenant.id)),
+        client_company_id=client_company_id,
+    )
     return {"items": items[:20]}
 
 
@@ -77,7 +101,11 @@ async def packages(
     *,
     access: PortalAccess,
 ):
-    return await ClientPortalService(session, str(tenant.id)).list_items(client_company_id=client_company_id, item_type="package")
+    return await _safe_list_items(
+        ClientPortalService(session, str(tenant.id)),
+        client_company_id=client_company_id,
+        item_type="package",
+    )
 
 
 @router.get("/packages/{package_id}")
@@ -108,7 +136,11 @@ async def documents(
     *,
     access: PortalAccess,
 ):
-    return await ClientPortalService(session, str(tenant.id)).list_items(client_company_id=client_company_id, item_type="document_bundle")
+    return await _safe_list_items(
+        ClientPortalService(session, str(tenant.id)),
+        client_company_id=client_company_id,
+        item_type="document_bundle",
+    )
 
 
 @router.get("/history")
@@ -119,7 +151,10 @@ async def history(
     *,
     access: PortalAccess,
 ):
-    return await ClientPortalService(session, str(tenant.id)).list_items(client_company_id=client_company_id)
+    return await _safe_list_items(
+        ClientPortalService(session, str(tenant.id)),
+        client_company_id=client_company_id,
+    )
 
 
 @router.post("/uploads", status_code=status.HTTP_201_CREATED)
