@@ -1,5 +1,6 @@
 param(
-    [switch]$PreflightOnly
+    [switch]$PreflightOnly,
+    [switch]$AutoKillPorts
 )
 
 Set-StrictMode -Version Latest
@@ -11,6 +12,9 @@ Set-Location $RootDir
 $ArgsList = @(".\scripts\dev_lite.py")
 if ($PreflightOnly) {
     $ArgsList += "--preflight-only"
+}
+if ($AutoKillPorts) {
+    $ArgsList += "--auto-kill-ports"
 }
 
 if (Get-Command py -ErrorAction SilentlyContinue) {

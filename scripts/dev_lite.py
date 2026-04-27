@@ -41,6 +41,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Cross-platform dockerless dev launcher.")
     parser.add_argument("--preflight-only", action="store_true", help="Validate environment only.")
     parser.add_argument("--keep-db", action="store_true", help="Do not reset sqlite dev.db.")
+    parser.add_argument(
+        "--auto-kill-ports",
+        action="store_true",
+        help="Automatically terminate processes listening on required dev ports (8000, 5173).",
+    )
     return parser.parse_args()
 
 
@@ -84,6 +89,31 @@ def is_port_busy(port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.settimeout(0.2)
         return sock.connect_ex(("127.0.0.1", port)) == 0
+
+
+def free_port(port: int) -> bool:
+    if os.name == "nt":
+        cmd = [
+            "powershell",
+            "-NoProfile",
+            "-Command",
+            (
+                f"$conn=Get-NetTCPConnection -LocalPort {port} -State Listen -ErrorAction SilentlyContinue; "
+                "if ($conn) { "
+                "$conn | Select-Object -ExpandProperty OwningProcess -Unique | "
+                "ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }; "
+                "Write-Output 'killed' } else { Write-Output 'free' }"
+            ),
+        ]
+    else:
+        # lsof is common on macOS/Linux; pkill by PID list is best-effort.
+        cmd = ["bash", "-lc", f"pids=$(lsof -tiTCP:{port} -sTCP:LISTEN 2>/dev/null || true); [ -n \"$pids\" ] && kill -TERM $pids || true"]
+    subprocess.run(cmd, check=False, capture_output=True, text=True)
+    for _ in range(10):
+        if not is_port_busy(port):
+            return True
+        time.sleep(0.3)
+    return not is_port_busy(port)
 
 
 def update_env_file() -> None:
@@ -214,10 +244,16 @@ def main() -> int:
     ensure_python_deps(venv_python)
     ensure_frontend_deps()
 
-    if is_port_busy(8000):
-        raise RuntimeError("Backend port 8000 is already in use. Stop existing process and retry.")
-    if is_port_busy(5173):
-        raise RuntimeError("Frontend port 5173 is already in use. Stop existing process and retry.")
+    for port, label in ((8000, "Backend"), (5173, "Frontend")):
+        if is_port_busy(port):
+            if args.auto_kill_ports:
+                print(f"{label} port {port} is busy; attempting to stop occupying process...")
+                if not free_port(port):
+                    raise RuntimeError(f"{label} port {port} is still busy after auto-kill attempt.")
+            else:
+                raise RuntimeError(
+                    f"{label} port {port} is already in use. Stop existing process or rerun with --auto-kill-ports."
+                )
 
     if not args.keep_db:
         db_file = ROOT_DIR / "dev.db"
