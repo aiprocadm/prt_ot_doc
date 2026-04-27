@@ -1,7 +1,7 @@
 # AI / Engineering implementation report
 
 - **Date (UTC):** 2026-04-28 (обновлено)  
-- **Scope:** documentation inventory, P0 test harness fix, testing doc repair; full-platform audit is **not** completed in a single pass (see «Ограничения»). Последняя волна: **P1 Vitest: устранены 7 unhandled (ConflictInboxCard)**; ранее — аудит с фиксацией проблемы, хаб `docs/spec/README`, **P1 frontend lint**.
+- **Scope:** documentation inventory, P0 test harness fix, testing doc repair; full-platform audit is **not** completed in a single pass (see «Ограничения»). Последняя волна: **процедура обновления вердикта релиза (`RELEASE_READINESS` + `RELEASE_BLOCKERS_STATUS`, CI)**; ранее — ссылка на готовность в README, **P1 Vitest**, хаб `docs/spec/README`, **P1 frontend lint**.
 - **Шаблон работы агента:** `docs/AI_AGENT_WORKFLOW.md` (обновляй этот файл по итогам волны; не создавай параллельных «мега-отчётов» в корне).
 
 ## Кандидаты на удаление / архивация (актуальный список)
@@ -330,3 +330,62 @@
 
 ### Следующий шаг
 - При необходимости — тонкий UI hint «не удалось загрузить» вместо пустого списка; полный `pytest` / `ruff` по релизному чеклисту.
+
+---
+
+## 19. Волна 2026-04-28: готовность к релизу — ссылка в `README.md`
+
+### Изучено
+- `README.md` (Canonical documentation), `RELEASE_READINESS.md` (уже существует в корне), `AI_IMPLEMENTATION_REPORT.md`.
+
+### Сделано
+- Файл **не создавался**: каноническая **готовность к релизу** — корневой [`RELEASE_READINESS.md`](RELEASE_READINESS.md) (вердикт, RC-001…006, ссылки на `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` и др.).
+- В **README** добавлена **явная** markdown-строка сразу после хаба `docs/spec/README` (описание + ссылка на `RELEASE_BLOCKERS_STATUS`); дублирующий пункт `RELEASE_READINESS` внизу списка убран.
+- В **`RELEASE_READINESS.md`** — краткое вступление о назначении (готовность проекта, ссылка на канонические блокеры).
+
+### Файлы
+- `README.md`
+- `RELEASE_READINESS.md`
+- `AI_IMPLEMENTATION_REPORT.md` (эта секция, Scope)
+
+### Проверки
+| Команда | Результат |
+|---------|-----------|
+| `npm --prefix frontend run typecheck` | **OK** |
+| `npm --prefix frontend run lint` | **OK** |
+| `npm run test` / `build` | не гонялись (только доки); при релизном PR — `npm run ci` |
+
+### Риски
+- Нет.
+
+### Следующий шаг
+- Выполнено в §20: зафиксирован порядок правок и отсылка к CI `npm run ci`.
+
+---
+
+## 20. Волна 2026-04-28: процедура смены вердикта релиза
+
+### Изучено
+- `README.md` (блок про `RELEASE_READINESS`), `RELEASE_READINESS.md`, `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`, [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (job `frontend-tests`).
+
+### Сделано
+- В **`RELEASE_READINESS.md`** добавлен раздел **How to update the release verdict**: сначала `RELEASE_BLOCKERS_STATUS`, затем синхронизация `RELEASE_READINESS`; README не трогать при смене вердикта; напоминание про **`npm --prefix frontend run ci`** в CI.
+- В **`docs/stabilization/RELEASE_BLOCKERS_STATUS.md`** — строка **Authoring order** со ссылкой на корневой `RELEASE_READINESS.md` и на раздел процедуры.
+- В **`README.md`** — уточнена строка про готовность: где читать порядок обновления (без смены путей).
+
+### Файлы
+- `RELEASE_READINESS.md`
+- `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`
+- `README.md`
+- `AI_IMPLEMENTATION_REPORT.md` (эта секция, Scope)
+
+### Проверки
+| Команда | Результат |
+|---------|-----------|
+| `npm --prefix frontend run ci` | **OK** (lint + typecheck + vitest 221 + build, exit 0) |
+
+### Риски
+- Нет (только дока).
+
+### Следующий шаг
+- При реальном **READY** — обновить вердикт и даты в двух файлах по процедуре из `RELEASE_READINESS.md`.
