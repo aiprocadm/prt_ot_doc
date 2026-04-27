@@ -54,3 +54,6 @@ artifacts/
 
 # Nested copy of the repo (e.g. after unzipping an archive inside the clone)
 /prt_ot_doc-main/
+
+# Вложенная копия/ветки worktree агентов (gitlink без .gitmodules) — не часть продукта
+/Создание платформы по ОТ/
