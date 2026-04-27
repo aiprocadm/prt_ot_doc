@@ -11,7 +11,6 @@ from contextlib import asynccontextmanager
 import pytest
 from sqlalchemy import select
 
-import app.tasks as task_module
 import app.tasks._core as task_core
 from app.models.document import (
     DocumentBatchItem,

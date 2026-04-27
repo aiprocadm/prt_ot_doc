@@ -89,6 +89,7 @@ const TasksPage = () => {
   const focusedTaskId = searchParams.get("task_id") ?? undefined;
   const focusedEntityType = searchParams.get("entity_type") ?? undefined;
   const focusedEntityId = searchParams.get("entity_id") ?? undefined;
+
   const queryString = searchParams.toString();
 
   useEffect(() => {

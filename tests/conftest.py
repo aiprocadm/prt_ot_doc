@@ -21,16 +21,28 @@ os.environ.setdefault("REDIS_RESULT_URL", "cache+memory://")
 os.environ.setdefault("RATE_LIMIT_STORAGE_URI", "memory://")
 os.environ.setdefault("S3_ENDPOINT", "http://localhost")
 
+# bootstrap() rejects empty strings; a bare ``SECRET_KEY=`` in the user env would
+# override Pydantic defaults and break test app creation — normalize for pytest.
+def _ensure_nonblank(name: str, value: str) -> None:
+    if not str(os.environ.get(name, "")).strip():
+        os.environ[name] = value
+
+
+_ensure_nonblank("SECRET_KEY", "test-secret-key-not-for-production")
+_ensure_nonblank("S3_ACCESS_KEY", "prt_local_access")
+_ensure_nonblank("S3_SECRET_KEY", "prt_local_secret")
+_ensure_nonblank("S3_BUCKET", "documents")
+
 # Some CI/python environments don't provide the stdlib `crypt` module
 # (e.g. Windows, slim containers). Passlib imports it during auth setup,
 # so provide a tiny fallback stub for tests when it's unavailable.
 sys.modules.setdefault("crypt", types.SimpleNamespace(crypt=lambda secret, salt: "mocked"))
 
 import typer.core as _typer_core
-from click.core import UNSET as _CLICK_UNSET
+
 try:
     from click.core import UNSET as _CLICK_UNSET
-except ImportError:  # Click versions without UNSET symbol.
+except ImportError:  # Click versions without UNSET symbol (e.g. older click).
     _CLICK_UNSET = object()
 
 # Typer 0.9.0 / Click 8.1.x compatibility fixes:

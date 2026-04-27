@@ -1,5 +1,10 @@
 # ARCHITECTURE
 
+## Product specification (vNext)
+
+- Продуктовый **upgrade-spec** (разделы 0–37, критерии приёмки, ограничения для доработок): [`docs/spec/PLATFORM_VNEXT_UPGRADE_SPEC.md`](./spec/PLATFORM_VNEXT_UPGRADE_SPEC.md).
+- Сжатые правила и путь к файлу в репозитории: `backend/app/core/product_spec.py`.
+
 ## Platform shape
 - **Style:** modular monolith.
 - **Backend:** FastAPI + SQLAlchemy 2.x + Alembic + Celery.

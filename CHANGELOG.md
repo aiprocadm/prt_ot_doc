@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 2026-04-28
+- **Agent workflow:** `docs/AI_AGENT_WORKFLOW.md` — объединён с расширенным брифом (обязательный порядок README→ТЗ/ссылки→`AI_IMPLEMENTATION_REPORT`→код, мусор, проверки, формат краткого ответа, условия обновления README). Обновлён `.cursor/rules/ai-agent-workflow.mdc`. В `AI_IMPLEMENTATION_REPORT.md` — кандидаты на архивацию, §12–13.
+- **Repo hygiene:** из индекса удалены случайные gitlink-записи `Создание платформы по ОТ/{admiring-hellman-bd8c51,youthful-poitras-cc7163}` (без `.gitmodules`); в `.gitignore` добавлена вложенная папка-дубликат проекта, в духе политики «no nested copy» из README.
+
+## 2026-04-27
+- **Docs:** `docs/TESTING.md` — восстановлен полноценный гайд (без самоссылки); выравнено с `docs/TEST_BASELINE.md` / CI.
+- **Frontend:** `frontend/src/features/tasks/TaskTable.tsx` — добавлен импорт `usePolling` из `@/hooks/usePolling` (устранён падение `tsc --noEmit`).
+- **Docs:** `docs/README.md` — ссылка на `AI_IMPLEMENTATION_REPORT.md` для передачи контекста между волнами/агентами.
+- **Tests:** `tests/conftest.py` — исправлен импорт `click.core.UNSET` (только внутри `try/except`, иначе pytest не стартовал на Click без символа `UNSET`). Добавлена нормализация пустого `SECRET_KEY` / обязательных S3-полей для `bootstrap("api")` в тестовой среде.
+- **Docs:** `docs/TESTING.md` — восстановлен канонический гайд (было самоссылка); `docs/testing.md` — краткий указатель на `TESTING.md`. Добавлен `AI_IMPLEMENTATION_REPORT.md` с итогом волны.
+
 ## 2026-04-05
 - Закрыт пробел изоляции аренды на `POST /api/v1/templates/{template_id}/versions` (legacy multipart): без проверки `template.tenant_id` можно было привязать версию к чужому шаблону при валидном JWT другой аренды на SQLite/единой схеме. Добавлена та же семантика «не найдено», что у catalog/upload (`_tenant_scope` + `deleted_at`).
 - В `preview_template_version` после повторного `session.get(Template)` добавлена явная проверка аренды и soft-delete, чтобы не обращаться к полям при несогласованных данных.

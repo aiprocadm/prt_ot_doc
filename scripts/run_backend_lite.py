@@ -34,6 +34,15 @@ def _configure_env() -> None:
     os.environ.setdefault("ADMIN_BOOTSTRAP", "1")
     os.environ.setdefault("ADMIN_TENANT", "demo")
     os.environ.setdefault("ADMIN_PASSWORD", "admin123")
+    # Пустые строки в .env перекрывают дефолты Settings — для dockerless задаём dev-значения.
+    if not (os.environ.get("SECRET_KEY") or "").strip():
+        os.environ["SECRET_KEY"] = "dev-local-secret-not-for-production"
+    if not (os.environ.get("S3_ACCESS_KEY") or "").strip():
+        os.environ["S3_ACCESS_KEY"] = "prt_local_access"
+    if not (os.environ.get("S3_SECRET_KEY") or "").strip():
+        os.environ["S3_SECRET_KEY"] = "prt_local_secret"
+    if not (os.environ.get("S3_BUCKET") or "").strip():
+        os.environ["S3_BUCKET"] = "ptd"
 
 
 def _prepare_metadata() -> None:

@@ -10,8 +10,8 @@ import app.db.session as db_session
 from app.core.config import Settings
 from app.models.finance import Department
 from app.models.models import Company, Person, Position, Site, Tenant, TrainingCourse
-from app.services.dev_bootstrap import bootstrap_admin_user
 from app.services.demo_bootstrap import bootstrap_demo_tenant
+from app.services.dev_bootstrap import bootstrap_admin_user
 from app.services.tenants.bootstrap.service import BootstrapTenantService
 
 

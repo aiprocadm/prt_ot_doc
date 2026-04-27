@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 MATRIX_PATH = Path("docs/audit/TZ_COVERAGE_MATRIX.md")
 REQUIRED_COLUMNS = [

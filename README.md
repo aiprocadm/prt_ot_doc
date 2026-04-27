@@ -154,6 +154,10 @@ B2B multi-tenant SaaS платформа для ОТ / ПБ / ПромБез / �
 6. Continue via header/footer, replace, PDF, approvals, signatures, archive.
 
 ## Canonical documentation
+- [docs/spec/TZ_FULL_UNIFIED.md](docs/spec/TZ_FULL_UNIFIED.md) — единое полное ТЗ (объём продукта, P0/P1, теги [MVP], критерии приёмки)
+- [docs/spec/PLATFORM_VNEXT_UPGRADE_SPEC.md](docs/spec/PLATFORM_VNEXT_UPGRADE_SPEC.md) — продуктовый upgrade-spec / vNext (дорожная карта, критерии, ограничения на доработки, в т.ч. разд. 36)
+- [docs/spec/README.md](docs/spec/README.md) — хаб ТЗ в `docs/spec` (приоритет `TZ_FULL` vs vNext, схема файлов, навигация)
+- `docs/AI_AGENT_WORKFLOW.md` — компактный цикл для AI/агентов (сначала README, ТЗ, отчёт `AI_IMPLEMENTATION_REPORT.md`, кандидаты на чистку доков)
 - `docs/ARCHITECTURE.md`
 - `docs/PROJECT_STRUCTURE.md`
 - `docs/SETUP.md`

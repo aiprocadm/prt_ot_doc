@@ -19,6 +19,10 @@ export const ConflictInboxCard = ({ onConflictStateChange }: { onConflictStateCh
       conflicts.forEach((item) =>
         emitSyncTelemetry({ type: "sync_conflict_detected", conflictCode: item.conflict_code, entityType: item.entity_type })
       );
+    } catch {
+      // No tenant, offline, or server error — card is best-effort; avoid unhandled rejections in tests/embedded.
+      setItems([]);
+      onConflictStateChange?.(false);
     } finally {
       setLoading(false);
     }
