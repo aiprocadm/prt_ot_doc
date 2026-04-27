@@ -1,5 +1,7 @@
 # Документация
 
+- Отчёт волны инженерного аудита/AI (итог, проверки, риски): [../AI_IMPLEMENTATION_REPORT.md](../AI_IMPLEMENTATION_REPORT.md)
+
 ## Главный документ (source of truth)
 - **Единое полное ТЗ:** [spec/TZ_FULL_UNIFIED.md](spec/TZ_FULL_UNIFIED.md)
 - **Главный repo README:** [../README.md](../README.md)

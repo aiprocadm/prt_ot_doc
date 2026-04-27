@@ -99,3 +99,12 @@
 3. Закрывать/обновлять **RC-*** по `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` при release-окне.  
 4. При работе «по ТЗ» — ориентир `docs/spec/TZ_FULL_UNIFIED.md` + `AGENTS.md` (как в репо).  
 5. (Опционально) Устранить циклические/дублирующие `docs/audit/ARCHITECTURE.md` — замечено дублирование имён в листинге; не исследовалось.
+
+---
+
+## 10. Повторный запрос полного брифа (2026-04-27)
+
+- Повторно просмотрены: `docs/README.md`, этот файл, `tests/conftest.py`, `docs/TESTING.md`.
+- **Полноформатный аудит** по разделам 4.2–4.3 исходного брифа (все направления backend/frontend/DB/security) **не выполнялся** — ограничение как в §6.
+- **Повторная проверка:** `pytest` на `test_tenant_header_required`, `test_idempotency`, `test_template_delete` — **7 passed**, exit code 0.
+- В `docs/README.md` добавлена ссылка на `AI_IMPLEMENTATION_REPORT.md` для навигации агентов/разработчиков.
