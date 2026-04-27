@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2026-04-27
+- **Tests:** `tests/conftest.py` — исправлен импорт `click.core.UNSET` (только внутри `try/except`, иначе pytest не стартовал на Click без символа `UNSET`). Добавлена нормализация пустого `SECRET_KEY` / обязательных S3-полей для `bootstrap("api")` в тестовой среде.
+- **Docs:** `docs/TESTING.md` — восстановлен канонический гайд (было самоссылка); `docs/testing.md` — краткий указатель на `TESTING.md`. Добавлен `AI_IMPLEMENTATION_REPORT.md` с итогом волны.
+
 ## 2026-04-05
 - Закрыт пробел изоляции аренды на `POST /api/v1/templates/{template_id}/versions` (legacy multipart): без проверки `template.tenant_id` можно было привязать версию к чужому шаблону при валидном JWT другой аренды на SQLite/единой схеме. Добавлена та же семантика «не найдено», что у catalog/upload (`_tenant_scope` + `deleted_at`).
 - В `preview_template_version` после повторного `session.get(Template)` добавлена явная проверка аренды и soft-delete, чтобы не обращаться к полям при несогласованных данных.

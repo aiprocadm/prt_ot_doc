@@ -1,7 +1,3 @@
-# Legacy testing doc pointer
+# Совместимость (lowercase)
 
-This file is kept only for backward-compatible links.
-
-Use the canonical testing guide:
-
-- `docs/TESTING.md`
+Каноническое руководство: **[TESTING.md](TESTING.md)** (этот файл оставлен для старых ссылок на `docs/testing.md`).
