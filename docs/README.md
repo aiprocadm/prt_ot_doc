@@ -7,6 +7,10 @@
 - **Единое полное ТЗ:** [spec/TZ_FULL_UNIFIED.md](spec/TZ_FULL_UNIFIED.md)
 - **Главный repo README:** [../README.md](../README.md)
 
+## Релиз и готовность
+- Вердикт готовности, RC-критерии, порядок обновления: [../RELEASE_READINESS.md](../RELEASE_READINESS.md)
+- Канонический статус блокеров (SoT): [stabilization/RELEASE_BLOCKERS_STATUS.md](stabilization/RELEASE_BLOCKERS_STATUS.md)
+
 ## Аудит и соответствие
 - Матрица покрытия ТЗ: [audit/TZ_COVERAGE_MATRIX.md](audit/TZ_COVERAGE_MATRIX.md)
 - Проверка матрицы (machine-check): `python scripts/audit/check_tz_coverage_matrix.py`

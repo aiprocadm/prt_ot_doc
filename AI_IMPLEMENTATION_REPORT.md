@@ -1,7 +1,7 @@
 # AI / Engineering implementation report
 
 - **Date (UTC):** 2026-04-28 (обновлено)  
-- **Scope:** documentation inventory, P0 test harness fix, testing doc repair; full-platform audit is **not** completed in a single pass (see «Ограничения»). Последняя волна: **процедура обновления вердикта релиза (`RELEASE_READINESS` + `RELEASE_BLOCKERS_STATUS`, CI)**; ранее — ссылка на готовность в README, **P1 Vitest**, хаб `docs/spec/README`, **P1 frontend lint**.
+- **Scope:** documentation inventory, P0 test harness fix, testing doc repair; full-platform audit is **not** completed in a single pass (see «Ограничения»). Последняя волна: **P0: синтаксис `navigation.ts` + lint `ContractorsPage`**, хаб **`docs/README` (релиз/блокеры)**; ранее — процедура вердикта, **P1 Vitest**, `docs/spec/README`, **P1 lint**.
 - **Шаблон работы агента:** `docs/AI_AGENT_WORKFLOW.md` (обновляй этот файл по итогам волны; не создавай параллельных «мега-отчётов» в корне).
 
 ## Кандидаты на удаление / архивация (актуальный список)
@@ -389,3 +389,42 @@
 
 ### Следующий шаг
 - При реальном **READY** — обновить вердикт и даты в двух файлах по процедуре из `RELEASE_READINESS.md`.
+
+---
+
+## 21. Волна 2026-04-28: `docs/README.md` + P0 `navigation.ts` + `ContractorsPage`
+
+### Изучено
+- `README.md` (корневой), `docs/README.md` (хаб), `AI_IMPLEMENTATION_REPORT.md` (§20).
+
+### Проблемы
+- В **хабе** `docs/README.md` не было **прямых** ссылок на `RELEASE_READINESS` и `RELEASE_BLOCKERS_STATUS`.
+- **P0:** `frontend/src/api/navigation.ts` — повреждённый `try/catch` (два `catch`, дублирующий `post` в `catch` → `TS1005: 'try' expected`), `sendUxMetric` **не компилировался** при `tsc`.
+- `ContractorsPage.tsx` — остались **неиспользуемые** `useMemo` (`contractorCompanies`, `employees`, `incidents`) после рефактора (§14); ESLint `no-unused-vars` в красной зоне.
+
+### Сделано
+- `docs/README.md` — секция **«Релиз и готовность»** с ссылками.
+- `navigation.ts` — один `try`/`catch`, best-effort `post` в `try`.
+- `ContractorsPage.tsx` — удалены три мёртвых `useMemo`.
+
+### Файлы
+- `docs/README.md`
+- `frontend/src/api/navigation.ts`
+- `frontend/src/pages/contractors/ContractorsPage.tsx`
+- `AI_IMPLEMENTATION_REPORT.md` (эта секция, Scope)
+
+### Мусор
+- Не удалялся (только мёртвый код в `ContractorsPage`).
+
+### Проверки
+| Команда | Результат |
+|---------|-----------|
+| `py -m pytest -q tests/test_entrypoints.py` (`PYTHONPATH=backend`) | **2 passed** |
+| `npm --prefix frontend run typecheck` | **OK** |
+| `npm --prefix frontend run lint` | **OK** |
+
+### Риски
+- `sendUxMetric` снова компилируется; поведение — как после волны §14 (тихий сбой, если нет эндпоинта).
+
+### Следующий шаг
+- `npm run ci` при смене фронта; полный `pytest` по релизу.
