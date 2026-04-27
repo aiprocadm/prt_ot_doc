@@ -1,0 +1,9 @@
+# Подсказка для агентов (Cursor / AI)
+
+## «По ТЗ» / «продолжай по ТЗ» без имени файла
+
+1. **Основной объём и приёмка** — `docs/spec/TZ_FULL_UNIFIED.md` (теги [MVP], P0/P1).
+2. **Инженерные и product/UX ограничения при доработке** — разд. 36 в `docs/spec/PLATFORM_VNEXT_UPGRADE_SPEC.md` или константы в `backend/app/core/product_spec.py`.
+3. **Полный продуктовый upgrade-spec (дорожная карта, паритет с конкурентами)** — `docs/spec/PLATFORM_VNEXT_UPGRADE_SPEC.md` — использовать только если задача явно про vNext/продукт или вам сказали опираться на этот файл целиком.
+
+Правило по умолчанию подробно: `docs/spec/README.md` (секция в начале). Схема файлов: `docs/spec/TZ_OVERVIEW.md`.
