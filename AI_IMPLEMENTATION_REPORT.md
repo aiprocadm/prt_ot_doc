@@ -108,3 +108,24 @@
 - **Полноформатный аудит** по разделам 4.2–4.3 исходного брифа (все направления backend/frontend/DB/security) **не выполнялся** — ограничение как в §6.
 - **Повторная проверка:** `pytest` на `test_tenant_header_required`, `test_idempotency`, `test_template_delete` — **7 passed**, exit code 0.
 - В `docs/README.md` добавлена ссылка на `AI_IMPLEMENTATION_REPORT.md` для навигации агентов/разработчиков.
+
+---
+
+## 11. Волна 2026-04-27 (третий полный бриф): typecheck + entrypoints
+
+### Изучено (дополнительно)
+- Повторное чтение `README.md`, `docs/TESTING.md`, `AGENTS.md`, `docs/spec/README.md`; прогон по рекомендациям README.
+
+### Исправление P1 (frontend)
+- **Проблема:** `npm --prefix frontend run typecheck` падал: в `TaskTable.tsx` вызывался `usePolling` без импорта (`TS2304`).
+- **Решение:** `import { usePolling } from "@/hooks/usePolling"` (тот же хук, что в мастере документов).
+- **Файл:** `frontend/src/features/tasks/TaskTable.tsx`.
+
+### Проверки
+| Команда | Результат |
+|---------|-----------|
+| `pytest tests/test_entrypoints.py` (PYTHONPATH=backend) | **2 passed** |
+| `npm --prefix frontend run typecheck` | **exit 0** (после импорта) |
+
+### Ограничение
+- Полный аудит по §4.2–4.3 брифа и `npm run ci` (lint+test+build) **не** выполнялись целиком в этой волне; при подготовке релиза прогнать `docs/TEST_BASELINE.md` / CI-эквивалент.

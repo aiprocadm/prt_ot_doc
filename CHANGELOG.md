@@ -1,6 +1,7 @@
 # CHANGELOG
 
 ## 2026-04-27
+- **Frontend:** `frontend/src/features/tasks/TaskTable.tsx` — добавлен импорт `usePolling` из `@/hooks/usePolling` (устранён падение `tsc --noEmit`).
 - **Docs:** `docs/README.md` — ссылка на `AI_IMPLEMENTATION_REPORT.md` для передачи контекста между волнами/агентами.
 - **Tests:** `tests/conftest.py` — исправлен импорт `click.core.UNSET` (только внутри `try/except`, иначе pytest не стартовал на Click без символа `UNSET`). Добавлена нормализация пустого `SECRET_KEY` / обязательных S3-полей для `bootstrap("api")` в тестовой среде.
 - **Docs:** `docs/TESTING.md` — восстановлен канонический гайд (было самоссылка); `docs/testing.md` — краткий указатель на `TESTING.md`. Добавлен `AI_IMPLEMENTATION_REPORT.md` с итогом волны.
