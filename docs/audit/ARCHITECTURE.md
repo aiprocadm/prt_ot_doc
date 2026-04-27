@@ -1,5 +1,9 @@
 # Architecture Map (Discovery)
 
+## 0) Product / upgrade spec (vNext)
+
+- Полный документ: `docs/spec/PLATFORM_VNEXT_UPGRADE_SPEC.md` (код: `backend/app/core/product_spec.py` → `PLATFORM_VNEXT_UPGRADE_SPEC_PATH`).
+
 ## 1) Repository structure
 - `backend/` — FastAPI app factory + v1 API routers + domain services + SQLAlchemy models + Alembic migrations + Celery tasks/worker.
 - `frontend/` — React/Vite SPA with tenant gate, role-aware route guards, and API client interceptors.

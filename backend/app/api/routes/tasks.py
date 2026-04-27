@@ -372,7 +372,6 @@ async def update_task(
             raise _task_not_found(code="OBLIGATION_TASK_NOT_FOUND")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=api_problem_detail(code="FORBIDDEN", message="Workers cannot modify tasks", error_type="tasks"),
             detail=api_problem_detail(
                 code="FORBIDDEN", message="Workers cannot modify tasks", error_type="tasks"
             ),
