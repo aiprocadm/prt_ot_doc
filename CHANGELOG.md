@@ -1,6 +1,7 @@
 # CHANGELOG
 
 ## 2026-04-28
+- **Agent workflow:** `docs/AI_AGENT_WORKFLOW.md` — объединён с расширенным брифом (обязательный порядок README→ТЗ/ссылки→`AI_IMPLEMENTATION_REPORT`→код, мусор, проверки, формат краткого ответа, условия обновления README). Обновлён `.cursor/rules/ai-agent-workflow.mdc`. В `AI_IMPLEMENTATION_REPORT.md` — кандидаты на архивацию, §12–13.
 - **Repo hygiene:** из индекса удалены случайные gitlink-записи `Создание платформы по ОТ/{admiring-hellman-bd8c51,youthful-poitras-cc7163}` (без `.gitmodules`); в `.gitignore` добавлена вложенная папка-дубликат проекта, в духе политики «no nested copy» из README.
 
 ## 2026-04-27

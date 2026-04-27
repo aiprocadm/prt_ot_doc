@@ -20,8 +20,8 @@ from app.models.file import File as StoredFile
 from app.models.file import FileKind, FileScanStatus
 from app.models.models import AuditLog, RoleEnum
 from app.services.clamav import (
-    ClamAVScanRequest,
         ClamAVScanOutcome,
+        ClamAVScanRequest,
         ClamAVVerdict,
         MemoryQuarantinePublisher,
         get_quarantine_publisher,

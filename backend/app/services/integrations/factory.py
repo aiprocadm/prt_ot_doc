@@ -6,13 +6,13 @@ from functools import lru_cache
 
 from app.core.config import get_settings
 
+from .http_edo import HttpEDOIntegration
 from .interfaces import (
     BaseAccountingIntegration,
     BaseEDOIntegration,
     BaseEISOTIntegration,
     BaseFRDOIntegration,
 )
-from .http_edo import HttpEDOIntegration
 from .pilot_adapters import (
     PilotAccountingIntegration,
     PilotEISOTIntegration,

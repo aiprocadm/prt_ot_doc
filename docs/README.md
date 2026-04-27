@@ -1,5 +1,6 @@
 # Документация
 
+- **Промт для агентов (README-first, кратко, кандидаты на чистку):** [AI_AGENT_WORKFLOW.md](AI_AGENT_WORKFLOW.md)
 - Отчёт волны инженерного аудита/AI (итог, проверки, риски): [../AI_IMPLEMENTATION_REPORT.md](../AI_IMPLEMENTATION_REPORT.md)
 
 ## Главный документ (source of truth)

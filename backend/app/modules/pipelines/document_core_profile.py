@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 DOCUMENT_ORCHESTRATION_STATES: tuple[str, ...] = (
     "generated",
     "headers_applied",

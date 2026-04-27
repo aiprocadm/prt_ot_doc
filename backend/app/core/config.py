@@ -640,7 +640,10 @@ class Settings(BaseSettings):
         base = (self.edo_integration_base_url or "").strip()
         if not base:
             return self
-        from app.core.integration_url_validation import UnsafeIntegrationURLError, assert_safe_http_base_url
+        from app.core.integration_url_validation import (
+            UnsafeIntegrationURLError,
+            assert_safe_http_base_url,
+        )
 
         try:
             assert_safe_http_base_url(base, app_env=self.app_env)

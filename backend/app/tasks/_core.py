@@ -25,7 +25,9 @@ from app.core.metrics import PipelineStage, PipelineType, StageResult, get_metri
 from app.core.payload_constraints import normalize_output_basename
 from app.core.tenant import tenant_context
 from app.db import AsyncSessionLocal, ensure_tenant_schema, session_scope
-from app.db.tenant_row_guard import assert_tenant_row_matches_session as _assert_tenant_row_matches_session
+from app.db.tenant_row_guard import (
+    assert_tenant_row_matches_session as _assert_tenant_row_matches_session,
+)
 from app.domains.files import s3
 from app.domains.files.utils import build_dated_prefix
 from app.domains.templating.renderer import render_docx
@@ -86,14 +88,13 @@ from app.modules.workflow.service import WorkflowService
 from app.repository import create_template
 from app.schemas.template import TemplateCreate, TemplateVersionMetadata
 from app.services.audit import AuditService
-from app.services.document_orchestration import normalize_user_facing_error, set_state
 from app.services.celery_app import celery_app
+from app.services.document_orchestration import normalize_user_facing_error, set_state
 from app.services.events import EventType
 from app.services.file_storage import FileStorageService
 from app.services.idempotency import IdempotencyService, cleanup_idempotency_keys
 from app.services.notifications import send_notification
 from app.services.obligations import process_task_reminders
-from app.services.inbound_dedup import compute_inbound_dedup_key
 from app.services.outbox import OutboxProcessor, OutboxService
 from app.services.reminders import evaluate_due_date
 

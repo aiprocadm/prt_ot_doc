@@ -10,7 +10,14 @@ from sqlalchemy import select
 from app.core.security import issue_access_token
 from app.db.session import AsyncSessionLocal
 from app.middleware.tenant import TenantMiddleware
-from app.models.models import Outbox, OutboxStatus, RoleEnum, Tenant, WebhookDelivery, WebhookEndpoint
+from app.models.models import (
+    Outbox,
+    OutboxStatus,
+    RoleEnum,
+    Tenant,
+    WebhookDelivery,
+    WebhookEndpoint,
+)
 from app.services.outbox import OutboxProcessor
 
 

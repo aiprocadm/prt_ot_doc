@@ -5,7 +5,6 @@ from collections.abc import Iterable
 from fastapi import APIRouter, Depends
 
 from app.api.dependencies import require_tenant_slug
-from app.core.config import get_settings
 from app.api.routes import (
     admin_authz,
     admin_users,
@@ -21,8 +20,8 @@ from app.api.routes import (
     client_portal,
     companies,
     compliance,
-    contracts,
     contractors,
+    contracts,
     dashboard,
     departments,
     documents,
@@ -60,6 +59,7 @@ from app.api.routes import (
     workspace,
 )
 from app.api.routes.files import router as legacy_files_router
+from app.core.config import get_settings
 from app.modules.analytics.api import router as analytics_router
 from app.modules.branding.api import router as branding_router
 from app.modules.client_portal.api import internal_router as portal_requests_router

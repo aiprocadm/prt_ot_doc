@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-
 from kombu import Queue
 
 from app.domains.files.utils import build_storage_key

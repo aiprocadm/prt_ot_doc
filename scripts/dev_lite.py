@@ -13,7 +13,6 @@ import time
 import urllib.request
 from pathlib import Path
 
-
 ROOT_DIR = Path(__file__).resolve().parents[1]
 VENV_DIR = ROOT_DIR / ".venv"
 FRONTEND_DIR = ROOT_DIR / "frontend"

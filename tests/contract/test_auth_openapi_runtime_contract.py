@@ -9,7 +9,6 @@ import yaml
 from app.api.app import create_app
 from app.core.config import Settings
 
-
 SPEC_PATH = Path("docs/openapi.yaml")
 AUTH_PATHS: dict[str, tuple[str, ...]] = {
     "/api/v1/auth/login": ("post",),

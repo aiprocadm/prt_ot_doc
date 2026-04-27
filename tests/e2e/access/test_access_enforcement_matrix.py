@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import select
 
 from app.core.security import verify_token
 from app.models.models import RoleEnum, User

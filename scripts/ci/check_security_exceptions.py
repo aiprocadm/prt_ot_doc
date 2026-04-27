@@ -10,7 +10,6 @@ from pathlib import Path
 
 import yaml
 
-
 REQUIRED_FIELDS = ("id", "tool", "category", "owner", "reason", "expires_on")
 
 
