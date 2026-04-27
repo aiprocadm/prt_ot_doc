@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { type ContractorComplianceSummaryDto, type ContractorRegistryDto, operationsApi } from "@/api/operations";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -27,25 +27,37 @@ const complianceRiskLabel = (companyId: string, incidents: Array<{ contractor_id
 };
 
 const ContractorsPage = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const load = useCallback(() => operationsApi.getContractorSnapshot(), []);
   const { data, loading, error, reload } = useAsyncResource({
     loader: load,
-    initialData: { companies: [], sites: [], contracts: [], employees: [], incidents: [], complianceSummary: emptyComplianceSummary() },
+    initialData: { companies: [], hostCompanies: [], sites: [], contracts: [], employees: [], incidents: [], complianceSummary: emptyComplianceSummary() },
     errorMessage: "Не удалось загрузить реестр подрядчиков"
   });
+  const contractorCompanies = data.companies ?? [];
+  const employees = data.employees ?? [];
+  const incidents = data.incidents ?? [];
+  const selectedCompanyId = searchParams.get("company_id") ?? "";
+  const hostCompanyById = useMemo(() => new Map((data.hostCompanies ?? []).map((company) => [company.id, company.name])), [data.hostCompanies]);
   const items = useMemo(
     () =>
-      data.companies.map((company: ContractorRegistryDto) => {
-        const employeeCount = data.employees.filter((employee) => employee.contractor_id === company.id).length;
-        const incidentCount = data.incidents.filter((incident) => incident.contractor_id === company.id).length;
-        return { ...company, employeeCount, incidentCount, risk: complianceRiskLabel(company.id, data.incidents) };
+      contractorCompanies.map((company: ContractorRegistryDto) => {
+        const employeeCount = employees.filter((employee) => employee.contractor_id === company.id).length;
+        const incidentCount = incidents.filter((incident) => incident.contractor_id === company.id).length;
+        const hostCompanyName = company.company_id ? (hostCompanyById.get(company.company_id) ?? company.company_id) : "Не привязан";
+        return { ...company, employeeCount, incidentCount, risk: complianceRiskLabel(company.id, incidents), hostCompanyName };
       }),
-    [data.companies, data.employees, data.incidents]
+    [contractorCompanies, employees, incidents, hostCompanyById]
+  );
+  const filteredItems = useMemo(
+    () => (selectedCompanyId ? items.filter((item) => item.company_id === selectedCompanyId) : items),
+    [items, selectedCompanyId]
   );
 
   const registry = useLocalRegistry({
-    items,
-    match: (item, query) => [item.name, item.status, item.contact_person, item.risk].filter(Boolean).join(" ").toLowerCase().includes(query)
+    items: filteredItems,
+    match: (item, query) =>
+      [item.name, item.status, item.contact_person, item.risk, item.hostCompanyName].filter(Boolean).join(" ").toLowerCase().includes(query)
   });
 
   return (
@@ -56,17 +68,43 @@ const ContractorsPage = () => {
         actions={<Button asChild><Link to="/companies">Открыть компании</Link></Button>}
         stats={[
           { label: "Контрагентов", value: items.length },
-          { label: "Сотрудников", value: data.employees.length },
-          { label: "Инцидентов", value: data.incidents.length }
+          { label: "Привязано к компаниям", value: items.filter((item) => Boolean(item.company_id)).length },
+          { label: "Сотрудников", value: employees.length },
+          { label: "Инцидентов", value: incidents.length }
         ]}
       />
+      <div className="flex items-center gap-2">
+        <label htmlFor="contractors-company-filter" className="text-sm text-muted-foreground">Компания:</label>
+        <select
+          id="contractors-company-filter"
+          className="h-10 min-w-64 rounded-md border px-3"
+          value={selectedCompanyId}
+          onChange={(event) => {
+            const next = new URLSearchParams(searchParams);
+            if (event.target.value) next.set("company_id", event.target.value);
+            else next.delete("company_id");
+            setSearchParams(next, { replace: true });
+          }}
+        >
+          <option value="">Все компании</option>
+          {(data.hostCompanies ?? []).map((company) => (
+            <option key={company.id} value={company.id}>{company.name}</option>
+          ))}
+        </select>
+      </div>
       <ErrorState error={error ?? undefined} onRetry={() => void reload()} />
       {loading ? <LoadingScreen label="Загрузка подрядчиков" /> : null}
-      {!loading && !error && registry.total === 0 ? <EmptyState title="Подрядчики не найдены" description="Измените поиск или добавьте компании в тенанте." /> : null}
+      {!loading && !error && registry.total === 0 ? (
+        <EmptyState
+          title="Подрядчики не найдены"
+          description={selectedCompanyId ? "Для выбранной компании подрядчики не найдены." : "Измените поиск или добавьте компании в тенанте."}
+        />
+      ) : null}
       {!loading && !error && registry.total > 0 ? (
         <RegistryTable
           columns={[
             { accessorKey: "name", header: "Контрагент" },
+            { accessorKey: "hostCompanyName", header: "Компания-заказчик" },
             { accessorKey: "status", header: "Статус", cell: ({ row }) => row.original.status || "—" },
             { accessorKey: "risk", header: "Риск" },
             { accessorKey: "employeeCount", header: "Сотрудники", cell: ({ row }) => `${row.original.employeeCount} чел.` },
