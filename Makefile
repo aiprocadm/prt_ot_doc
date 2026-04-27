@@ -88,7 +88,7 @@ dev: env check-docker
 	docker compose up --build
 
 dev-lite:
-	@./scripts/dev_lite.sh
+	python ./scripts/dev_lite.py
 
 dev-lite-win:
 	powershell -ExecutionPolicy Bypass -File ./scripts/dev_lite.ps1

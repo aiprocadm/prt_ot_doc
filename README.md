@@ -28,14 +28,24 @@ This wave re-audited the repository and confirmed the following canonical paths:
 make dev-lite
 ```
 
-Windows (PowerShell):
+Cross-platform direct launcher (Windows/macOS/Linux):
+```bash
+python scripts/dev_lite.py
+```
+
+Windows PowerShell wrapper:
 ```powershell
 ./scripts/dev_lite.ps1
 ```
 
+Unix shell wrapper:
+```bash
+./scripts/dev_lite.sh
+```
+
 Preflight only (versions + PATH diagnostics, no start):
-```powershell
-./scripts/dev_lite.ps1 -PreflightOnly
+```bash
+python scripts/dev_lite.py --preflight-only
 ```
 
 This is the recommended local start path in this workspace. It prepares dockerless env defaults, initializes the SQLite schema, starts backend on `http://localhost:8000`, and starts frontend on `http://localhost:5173`.
