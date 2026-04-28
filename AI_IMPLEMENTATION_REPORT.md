@@ -1,7 +1,7 @@
 # AI / Engineering implementation report
 
 - **Date (UTC):** 2026-04-28 (обновлено)  
-- **Scope:** documentation inventory, P0 test harness fix, testing doc repair; full-platform audit is **not** completed in a single pass (see «Ограничения»). Последняя волна: **§24 — security audit, webhook "dev-secret" fix, archive bare-except fix**; ранее — §23 смоук, §22 (`npm run ci` + pytest 9), §21, **P1 Vitest**, **P1 lint**.
+- **Scope:** documentation inventory, P0 test harness fix, testing doc repair; full-platform audit is **not** completed in a single pass (see «Ограничения»). Последняя волна: **§25 — интеграционные тесты идемпотентности (replay + 409)**; ранее — §24 security audit, webhook "dev-secret" fix, archive bare-except fix; §23 смоук, §22 (`npm run ci` + pytest 9), §21, **P1 Vitest**, **P1 lint**.
 - **Шаблон работы агента:** `docs/AI_AGENT_WORKFLOW.md` (обновляй этот файл по итогам волны; не создавай параллельных «мега-отчётов» в корне).
 
 ## Кандидаты на удаление / архивация (актуальный список)
@@ -585,3 +585,53 @@
 - Закрыть release blockers: RB-001 (restore drill), RB-004 (security gate matrix), RB-005 (e2e secrets diagnostics) — главные оставшиеся RC без кода.
 - При работе с webhook-роутами: рассмотреть требование x_signature когда секрет настроен (сейчас — optional).
 - Полный `pytest` (все 190 тест-файлов) в CI-среде по `docs/TEST_BASELINE.md`.
+
+---
+
+## 25. Волна 2026-04-28: интеграционные тесты идемпотентности (replay + 409)
+
+### Изучено
+- `README.md` (Verification commands, Canonical documentation), `AI_IMPLEMENTATION_REPORT.md` (§1–24).
+- `tests/test_idempotency.py` — существующие тесты идемпотентности.
+- `backend/app/services/idempotency.py` — `IdempotencyService.acquire()` (логика replay и 409).
+- `backend/app/core/idempotency.py` — `compute_request_hash`, `idempotency_dependency` middleware.
+- `backend/app/api/routes/documents.py` (строки 1299–1370) — обработка ключа в `generate_document`.
+- `backend/app/api/routes/packs.py` (строки 738–782) — обработка ключа в `run_pack`.
+- `backend/app/api/error_handlers.py` — фактический формат 409-ответа (`code="IDEMPOTENCY_MISMATCH"`, `type="idempotency"`).
+
+### Найденные проблемы
+- Отсутствовали явные интеграционные тесты для двух контрактов:
+  1. same key + same hash → **replay** (202, тело идентично, Celery-задача не запускается повторно)
+  2. same key + different hash → **409 IDEMPOTENCY_MISMATCH**
+
+### Что добавлено
+
+| Тест | Файл | Описание |
+|------|------|----------|
+| `test_document_generate_replay_same_key_same_hash` | `tests/test_idempotency.py` | Full-flow: два POST с одинаковыми payload/ключом → оба 202, одинаковое тело, Celery вызван 1 раз |
+| `test_document_generate_conflict_same_key_different_hash` | `tests/test_idempotency.py` | Full-flow: первый POST → 202; второй POST с тем же ключом, но разным `data` → 409 `IDEMPOTENCY_MISMATCH` |
+| `test_packs_run_conflict_same_key_different_hash` | `tests/test_idempotency.py` | Seeded-подход: в БД помещается запись с заведомо другим `request_hash`; POST с тем же ключом → 409 (без сложной настройки pack-фикстур) |
+
+**Детали формата ошибки (задокументировано по фактическому ответу):**  
+409-ответ имеет `code = "IDEMPOTENCY_MISMATCH"` (из detail overrides в `_handle_http_exception`), `type = "idempotency"`, а не generic `code = "CONFLICT"`.
+
+### Файлы
+- `tests/test_idempotency.py` (добавлены 3 теста в конец файла)
+- `AI_IMPLEMENTATION_REPORT.md` (эта секция, Scope)
+
+### Мусор
+- Не удалялся.
+
+### Проверки
+| Команда | Результат |
+|---------|-----------|
+| `py -m pytest -v tests/test_idempotency.py` (`PYTHONPATH=backend`) | **7 passed** (4 старых + 3 новых), exit 0 |
+| `py -m pytest -v tests/test_entrypoints.py tests/test_tenant_header_required.py tests/test_template_delete.py` (`PYTHONPATH=backend`) | **5 passed**, exit 0 |
+
+### Риски
+- Replay-тест и conflict-тест для `documents/generate` используют legacy path (без `inline_data`/`input_source_id`). Engine path (`DocGeneratePipelineRequest`) пока не покрыт отдельными тестами — при необходимости добавить аналогично.
+- Seeded-тест для `packs/run` проверяет только что 409 поднимается при несоответствии хеша; полный flow (первый POST → 202 → второй POST → 409) можно добавить по образцу `documents/generate` теста, если потребуется максимальная детализация.
+
+### Следующий шаг
+- При релизном окне: полный `pytest` / `npm run ci` по `docs/TESTING.md`.
+- Добавить conflict-тест для engine path (`DocGeneratePipelineRequest`) если он будет широко использоваться.
