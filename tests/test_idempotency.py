@@ -339,3 +339,222 @@ async def test_packs_run_requires_idempotency_key(
     payload = response.json()
     assert payload["code"] == "BAD_REQUEST"
     assert payload["message"] == "Idempotency-Key header is required"
+
+
+# ---------------------------------------------------------------------------
+# Explicit same-key/same-hash => replay contract
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_document_generate_replay_same_key_same_hash(
+    async_client: AsyncClient,
+    sessionmaker,
+    make_auth_headers,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same Idempotency-Key + identical payload → 202 replay, task dispatched once."""
+    async with sessionmaker() as session:
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
+        session.info["tenant"] = tenant.slug
+
+        template = Template(
+            tenant_id=tenant.id,
+            name="REPLAY_SAME_HASH_DOC",
+            description="",
+            metadata_json={},
+            storage_key="templates/replay_same_hash.docx",
+        )
+        session.add(template)
+        await session.flush()
+
+        version = TemplateVersion(
+            tenant_id=tenant.id,
+            template_id=template.id,
+            version=1,
+            checksum=b"checksum_replay_same",
+            status=TemplateVersionStatus.ACTIVE,
+            payload_key="templates/replay_same_hash.docx",
+        )
+        session.add(version)
+
+        company = Company(tenant_id=tenant.id, name="Replay Same Corp")
+        session.add(company)
+        await session.flush()
+
+        person = Person(
+            tenant_id=tenant.id,
+            company_id=company.id,
+            first_name="Replay",
+            last_name="SameUser",
+        )
+        session.add(person)
+        await session.commit()
+
+        company_id = str(company.id)
+        person_id = str(person.id)
+
+    task_calls: list[object] = []
+
+    def _fake_apply(*args: object, **kwargs: object) -> object:
+        task_calls.append(kwargs)
+
+        class _R:
+            id = kwargs.get("task_id", str(uuid.uuid4()))
+
+        return _R()
+
+    monkeypatch.setattr("app.tasks._core.generate_document_task.apply_async", _fake_apply)
+
+    headers = {**await make_auth_headers(), "Idempotency-Key": "replay-same-hash-key-001"}
+    payload = {
+        "template_code": "REPLAY_SAME_HASH_DOC",
+        "template_version": 1,
+        "company_id": company_id,
+        "person_id": person_id,
+        "data": {"employee": "ReplaySame"},
+    }
+
+    first = await async_client.post("/api/v1/documents/generate", json=payload, headers=headers)
+    assert first.status_code == 202, first.text
+
+    second = await async_client.post("/api/v1/documents/generate", json=payload, headers=headers)
+    assert second.status_code == 202, second.text
+    assert second.json() == first.json(), "replay must return the cached response body"
+    assert len(task_calls) == 1, "Celery task must not be dispatched a second time on replay"
+
+
+# ---------------------------------------------------------------------------
+# Explicit same-key/different-hash => 409 contract
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_document_generate_conflict_same_key_different_hash(
+    async_client: AsyncClient,
+    sessionmaker,
+    make_auth_headers,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same Idempotency-Key + different payload → 409 IDEMPOTENCY_MISMATCH."""
+    async with sessionmaker() as session:
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
+        session.info["tenant"] = tenant.slug
+
+        template = Template(
+            tenant_id=tenant.id,
+            name="CONFLICT_DIFF_HASH_DOC",
+            description="",
+            metadata_json={},
+            storage_key="templates/conflict_diff_hash.docx",
+        )
+        session.add(template)
+        await session.flush()
+
+        version = TemplateVersion(
+            tenant_id=tenant.id,
+            template_id=template.id,
+            version=1,
+            checksum=b"checksum_conflict_diff",
+            status=TemplateVersionStatus.ACTIVE,
+            payload_key="templates/conflict_diff_hash.docx",
+        )
+        session.add(version)
+
+        company = Company(tenant_id=tenant.id, name="Conflict Diff Corp")
+        session.add(company)
+        await session.flush()
+
+        person = Person(
+            tenant_id=tenant.id,
+            company_id=company.id,
+            first_name="Conflict",
+            last_name="DiffUser",
+        )
+        session.add(person)
+        await session.commit()
+
+        company_id = str(company.id)
+        person_id = str(person.id)
+
+    monkeypatch.setattr(
+        "app.tasks._core.generate_document_task.apply_async",
+        lambda *a, **kw: type("R", (), {"id": kw.get("task_id", "fake-id")})(),
+    )
+
+    headers = {**await make_auth_headers(), "Idempotency-Key": "conflict-diff-hash-key-002"}
+    base = {
+        "template_code": "CONFLICT_DIFF_HASH_DOC",
+        "template_version": 1,
+        "company_id": company_id,
+        "person_id": person_id,
+    }
+
+    first = await async_client.post(
+        "/api/v1/documents/generate",
+        json={**base, "data": {"employee": "Alice"}},
+        headers=headers,
+    )
+    assert first.status_code == 202, first.text
+
+    second = await async_client.post(
+        "/api/v1/documents/generate",
+        json={**base, "data": {"employee": "Bob"}},
+        headers=headers,
+    )
+    assert second.status_code == 409, second.text
+    body = second.json()
+    assert body.get("code") == "IDEMPOTENCY_MISMATCH", f"unexpected code: {body}"
+    assert body.get("type") == "idempotency", f"unexpected type: {body}"
+
+
+@pytest.mark.anyio
+async def test_packs_run_conflict_same_key_different_hash(
+    async_client: AsyncClient,
+    sessionmaker,
+    make_auth_headers,
+) -> None:
+    """Same Idempotency-Key + different payload → 409 IDEMPOTENCY_MISMATCH for packs/run.
+
+    Uses a pre-seeded IdempotencyKey record so the test does not require full pack
+    fixture setup.  The seeded request_hash is an arbitrary string that will never
+    match the real SHA-256 fingerprint computed from the request body, which reliably
+    triggers the conflict branch in IdempotencyService.acquire().
+    """
+    async with sessionmaker() as session:
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
+        session.info["tenant"] = tenant.slug
+
+        seeded = IdempotencyKey(
+            tenant_id=str(tenant.id),
+            endpoint="packs.run",
+            key="packs-conflict-diff-hash-003",
+            status=IdempotencyStatus.SUCCEEDED,
+            request_hash="seeded_fake_hash_that_never_matches_real_sha256_fingerprint",
+            method="POST",
+            path="/api/v1/packs/run",
+            last_seen_at=datetime.now(tz=timezone.utc),
+        )
+        session.add(seeded)
+        await session.commit()
+
+    headers = {
+        **await make_auth_headers(),
+        "Idempotency-Key": "packs-conflict-diff-hash-003",
+    }
+
+    response = await async_client.post(
+        "/api/v1/packs/run",
+        json={
+            "pack_code": "ANY_CODE",
+            "company_id": str(uuid.uuid4()),
+            "site_id": None,
+            "person_ids": [],
+            "context": {},
+        },
+        headers=headers,
+    )
+    assert response.status_code == 409, response.text
+    body = response.json()
+    assert body.get("code") == "IDEMPOTENCY_MISMATCH", f"unexpected code: {body}"
+    assert body.get("type") == "idempotency", f"unexpected type: {body}"
