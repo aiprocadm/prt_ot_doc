@@ -90,7 +90,7 @@ def migrate_file(filepath: Path) -> bool:
             tree = ast.parse(content)
             modifier = RouteModifier()
             modifier.visit(tree)
-        except:
+        except SyntaxError:
             # If can't parse, skip
             return False
         

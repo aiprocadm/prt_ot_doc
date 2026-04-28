@@ -666,11 +666,12 @@ async def edo_webhook(
     x_signature: str | None = Header(default=None, alias="X-Signature"),
 ):
     cid = _correlation_id(request, response)
-    secret = str((tenant.settings or {}).get("edo_webhook_secret", "dev-secret"))
     raw = await request.body()
-    expected = hmac.new(secret.encode("utf-8"), raw, hashlib.sha256).hexdigest()
-    if x_signature and not hmac.compare_digest(expected, x_signature):
-        raise _edo_unauthorized("Invalid webhook signature")
+    configured_secret = (tenant.settings or {}).get("edo_webhook_secret")
+    if configured_secret:
+        expected = hmac.new(str(configured_secret).encode("utf-8"), raw, hashlib.sha256).hexdigest()
+        if x_signature and not hmac.compare_digest(expected, x_signature):
+            raise _edo_unauthorized("Invalid webhook signature")
 
     payload_hash = hashlib.sha256(raw).hexdigest()
     dedup_key = str(payload.event_id or payload_hash)
