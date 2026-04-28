@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import sys; print\\(f'Python: {sys.version}'\\)\")",
+      "Bash(pip list *)",
+      "PowerShell($python = \\(Get-Command python.exe -ErrorAction SilentlyContinue\\); if \\($python\\) { & $python --version } else { \"Python not found in PATH\" })",
+      "PowerShell($env:PYTHONPATH = \"backend\"; & 'C:\\\\Users\\\\karka\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python313\\\\python.exe' -m pytest -q --tb=line -v 2>&1 | Tee-Object -FilePath \"pytest-full-run.log\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(gh pr create --title 'fix: resolve pytest collection SyntaxError in test_openapi_docs_paths_and_production.py' --body ' *)",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "PowerShell(& 'C:\\\\Users\\\\karka\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python313\\\\python.exe' -m pip install --upgrade -q typer==0.12.3)",
+      "Bash(cd /d \"D:\\\\Кодинг\\\\Создание платформы по ОТ\\\\Создание платформы по ОТ\\\\brave-dewdney-bd2652\")",
+      "Bash(python -m pytest tests/test_cli_commands.py -xvs)",
+      "Bash(python -m pytest tests/test_cli_commands.py::test_health_release_readiness_json -v)"
+    ]
+  }
+}
