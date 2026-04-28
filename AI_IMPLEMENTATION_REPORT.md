@@ -1,7 +1,7 @@
 # AI / Engineering implementation report
 
 - **Date (UTC):** 2026-04-28 (обновлено)  
-- **Scope:** documentation inventory, P0 test harness fix, testing doc repair; full-platform audit is **not** completed in a single pass (see «Ограничения»). Последняя волна: **смоук: pytest entrypoints + typecheck/lint**; ранее — §22 (`npm run ci` + pytest 9), §21, **P1 Vitest**, **P1 lint**.
+- **Scope:** documentation inventory, P0 test harness fix, testing doc repair; full-platform audit is **not** completed in a single pass (see «Ограничения»). Последняя волна: **§24 — security audit, webhook "dev-secret" fix, archive bare-except fix**; ранее — §23 смоук, §22 (`npm run ci` + pytest 9), §21, **P1 Vitest**, **P1 lint**.
 - **Шаблон работы агента:** `docs/AI_AGENT_WORKFLOW.md` (обновляй этот файл по итогам волны; не создавай параллельных «мега-отчётов» в корне).
 
 ## Кандидаты на удаление / архивация (актуальный список)
@@ -489,3 +489,63 @@
 
 ### Следующий шаг
 - При смене кода/релизе: **`npm run ci`**, полный `pytest` по `docs/TESTING.md`.
+
+---
+
+## 24. Волна 2026-04-28: security audit — webhook "dev-secret" + bare except
+
+### Изучено
+- `README.md` (Verification commands, Canonical documentation), `AI_IMPLEMENTATION_REPORT.md` (§1–23).
+- `RELEASE_READINESS.md`, `GAP_REPORT.md`, `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` — актуальные блокеры релиза.
+- `KNOWN_LIMITATIONS.md` — известные ограничения.
+- Полный аудит кода через Explore-агент: 190 тест-файлов, 60+ API-роутов, CI-воркфлоу (14 jobs), deps, docs.
+
+### Найденные проблемы
+
+| Приоритет | Проблема | Файл | Статус |
+|-----------|---------|------|--------|
+| HIGH | Hardcoded `"dev-secret"` в webhook-signature validation: атакующий, зная дефолт, может подделать HMAC-подпись для любого тенанта без `edo_webhook_secret` | `backend/app/api/routes/edo_workflow.py:669`, `backend/app/api/routes/approval_signing_v1.py:445` | **Исправлено** |
+| MEDIUM | `bare except:` в архивном скрипте (перехватывает `SystemExit`, `KeyboardInterrupt`) | `scripts/archive/migrate_routes_v3.py:93` | **Исправлено** |
+| INFO | `"change-me"` fallback в `file_storage.py:384` — миtigated: `config.py:655-667` проверяет на старте в production/staging | `backend/app/services/file_storage.py:384` | Не менялся (см. риски) |
+
+### Что исправлено
+
+**`edo_workflow.py` и `approval_signing_v1.py`:**  
+- Убран дефолт `"dev-secret"`.
+- Логика: если `edo_webhook_secret` сконфигурирован в `tenant.settings` — валидируем подпись; если нет — пропускаем (best-effort, как было, но без известного ключа для форжинга).
+- Поведение для тенантов с настроенным секретом не изменилось.
+
+**`scripts/archive/migrate_routes_v3.py`:**  
+- `except:` → `except SyntaxError:` (ast.parse may only raise SyntaxError on bad code).
+
+### Файлы
+- `backend/app/api/routes/edo_workflow.py`
+- `backend/app/api/routes/approval_signing_v1.py`
+- `scripts/archive/migrate_routes_v3.py`
+- `AI_IMPLEMENTATION_REPORT.md` (эта секция, Scope)
+
+### Мусор
+- Не удалялся.
+
+### Проверки
+| Команда | Результат |
+|---------|-----------|
+| `py -m ruff check backend/app/api/routes/edo_workflow.py approval_signing_v1.py scripts/archive/migrate_routes_v3.py` | **All checks passed** |
+| `py -m pytest -v tests/test_entrypoints.py tests/test_tenant_header_required.py tests/test_idempotency.py tests/test_template_delete.py` (`PYTHONPATH=backend`) | **9 passed** |
+| `py -m pytest tests/headers/test_engine.py` (`PYTHONPATH=backend`) | **1 passed** |
+| `npm --prefix frontend run lint` | **OK** |
+| `npm --prefix frontend run typecheck` | **OK** |
+| `npm --prefix frontend run test` | **221 passed / 82 files, exit 0** |
+| `npm --prefix frontend run build` | **OK** |
+
+### Замечание о bash/segfault
+- `pytest tests/headers/test_engine.py` из git-bash на Windows даёт exit 139 (SIGSEGV); через PowerShell — 1 passed, exit 0. Это особенность окружения, не дефект кода.
+
+### Риски
+- `file_storage.py`: `"change-me"` fallback не убирался — в production заблокирован config.py, в dev — ожидаемо. Если нужна строгость в dev-режиме, можно добавить отдельный валидатор, но это не блокер.
+- Исправление webhook: тенанты без `edo_webhook_secret` по-прежнему принимают webhooks без подписи — это design choice (не regression). Для production рекомендуется обязательная настройка `edo_webhook_secret` в `tenant.settings`.
+
+### Следующий шаг
+- Закрыть release blockers: RB-001 (restore drill), RB-004 (security gate matrix), RB-005 (e2e secrets diagnostics) — главные оставшиеся RC без кода.
+- При работе с webhook-роутами: рассмотреть требование x_signature когда секрет настроен (сейчас — optional).
+- Полный `pytest` (все 190 тест-файлов) в CI-среде по `docs/TEST_BASELINE.md`.

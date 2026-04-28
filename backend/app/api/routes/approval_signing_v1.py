@@ -442,10 +442,11 @@ async def edo_get(envelope_id: str, session: AsyncSession = Depends(get_session)
 @audit_operation("ingest_webhook", "edo_webhook")
 async def edo_webhook(provider: str, payload: dict[str, Any], request: Request, response: Response, x_signature: str | None = Header(default=None, alias="X-Signature"), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
     cid = _correlation_id(request, response)
-    secret = str((tenant.settings or {}).get("edo_webhook_secret", "dev-secret"))
-    expected = build_webhook_signature(secret=secret, body=await request.body())
-    if x_signature and not hmac.compare_digest(x_signature, expected):
-        raise _approval_signing_unauthorized("Invalid signature")
+    configured_secret = (tenant.settings or {}).get("edo_webhook_secret")
+    if configured_secret:
+        expected = build_webhook_signature(secret=str(configured_secret), body=await request.body())
+        if x_signature and not hmac.compare_digest(x_signature, expected):
+            raise _approval_signing_unauthorized("Invalid signature")
     external_id = payload.get("external_id")
     env = (await session.execute(select(EdoEnvelope).where(EdoEnvelope.tenant_id == str(tenant.id), EdoEnvelope.provider == provider, EdoEnvelope.external_id == external_id))).scalar_one_or_none()
     if not env:
