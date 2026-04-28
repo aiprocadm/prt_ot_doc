@@ -390,6 +390,42 @@
 ### Следующий шаг
 - При реальном **READY** — обновить вердикт и даты в двух файлах по процедуре из `RELEASE_READINESS.md`.
 
+## 21. Волна 2026-04-27: фикс синтаксической регрессии `sendUxMetric`
+
+### Изучено
+- `README.md` (порядок проверок и канонические команды).
+- `docs/spec/README.md` (приоритеты ТЗ).
+- `AI_IMPLEMENTATION_REPORT.md` (§1–20).
+- `frontend/src/api/navigation.ts` (реализация top-nav метрик).
+
+### Проблема
+- `npm --prefix frontend run typecheck` падал с `TS1005: 'try' expected` из-за повреждённого блока `try/catch` в `sendUxMetric` (дублированный `catch` и повторный `apiClient.post`).
+
+### Решение
+- Удалён ошибочный дублирующий `catch`/повторный POST; оставлен один `try/catch` с best-effort семантикой (ошибки метрик глушатся и не всплывают вызывающему коду).
+
+### Файлы
+- `frontend/src/api/navigation.ts`
+- `AI_IMPLEMENTATION_REPORT.md`
+
+### Проверки
+| Команда | Результат |
+|---------|-----------|
+| `npm --prefix frontend run typecheck` | **OK** |
+| `npm --prefix frontend run lint` | **OK** |
+| `npm --prefix frontend run build` | **OK** |
+| `pytest -q tests/test_entrypoints.py tests/api/test_branding_api.py tests/headers/test_engine.py` | **не запущен в этой среде**: отсутствует `pytest_asyncio` (`ModuleNotFoundError`) |
+
+### Риски
+- Нет функциональных рисков: восстановлена прежняя best-effort логика отправки UX-метрик.
+
+### Следующий шаг
+- В test-окружении с полными dev-зависимостями (`pytest-asyncio`) прогнать backend smoke suite и baseline из `docs/TEST_BASELINE.md`.
+
+### Дополнение по ходу проверок
+- Во время `npm --prefix frontend run lint` выявлены существующие ошибки `@typescript-eslint/no-unused-vars` в `frontend/src/pages/contractors/ContractorsPage.tsx` (`contractorCompanies`, `employees`, `incidents`).
+- Удалены неиспользуемые `useMemo`-переменные; функционал не менялся (эти массивы и так вычислялись повторно внутри `items`-мемоизации).
+- После правки `lint/typecheck/build` проходят.
 ---
 
 ## 21. Волна 2026-04-28: `docs/README.md` + P0 `navigation.ts` + `ContractorsPage`
