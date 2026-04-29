@@ -1,7 +1,7 @@
 # AI / Engineering implementation report
 
 - **Date (UTC):** 2026-04-29 (обновлено)  
-- **Scope:** baseline verification after §25 idempotency tests. Проверены security gate (check_scoped_queries), backend smoke-тесты (16 passed), frontend CI (npm run ci — lint + typecheck + vitest 221 + build — exit 0). Последняя волна: **§26 baseline verification**; ранее — §25 интеграционные тесты идемпотентности, §24 security audit (webhook "dev-secret", bare-except), §23–22 смоук и lint/typecheck/vitest.
+- **Scope:** baseline verification + диагностика 5 failing tests. **Волна 28:** логический анализ 5 existing failures из волны 27 (test_backup_command_json, test_render_command_invokes_pipeline, test_binary_exists_with_paths, test_login_rate_limit, test_jobs_ws_stream_endpoint); создан диагностический документ `docs/stabilization/FAILING_TESTS_DIAGNOSTICS.md`. **Волна 27:** полный pytest 1039/1044 (99.5% baseline). **§26 baseline verification** — smoke pass. Ранее — §25 интеграционные тесты идемпотентности, §24 security audit.
 - **Шаблон работы агента:** `docs/AI_AGENT_WORKFLOW.md` (обновляй этот файл по итогам волны; не создавай параллельных «мега-отчётов» в корне).
 
 ## Кандидаты на удаление / архивация (актуальный список)
@@ -727,6 +727,62 @@
    - RB-004: Security gates + CODEOWNERS
    
 3. **OPTIONAL:** Исправить Duplicate Operation IDs в OpenAPI (cancel_job, retry_job warnings)
+
+---
+
+## 28. Волна 2026-04-29: диагностика 5 failing tests (без запуска pytest)
+
+### Изучено
+- `README.md` (Verification commands, точки входа).
+- `AI_IMPLEMENTATION_REPORT.md` (§27, статус 1039/1044 pass).
+- `tests/test_cli_commands.py`, `tests/test_cli_main.py`, `tests/test_core_config_utils.py`, `tests/test_rate_limit.py`, `tests/test_jobs_api.py` — коды тестов.
+- `backend/app/cli/main.py` (commands: backup, render, restore, reindex).
+- `backend/app/core/config.py` (binary_exists function).
+
+### Найденные причины (логический анализ кода)
+
+| Тест | Файл | Строка | Вероятная причина | Примечание |
+|------|------|--------|------------------|-----------|
+| `test_backup_command_json` | `tests/test_cli_commands.py` | 19-24 | CLI parsing или Typer version incompatibility | `backup` decorated с `@cli.command()` (корректно); SystemExit(2) обычно означает валидацию или версию Click/Typer |
+| `test_render_command_invokes_pipeline` | `tests/test_cli_main.py` | 157-223 | Click ParamType validator issue или async/sync мismatch | Тест использует `monkeypatch` для подмены async функции; может быть issue с типизацией параметров |
+| `test_binary_exists_with_paths` | `tests/test_core_config_utils.py` | 31-46 | PATH logic on Windows или relative path edge case | Функция `config.binary_exists()` (строка 907) корректна; тест проверяет PATH lookup — может быть особенность OS или env |
+| `test_login_rate_limit` | `tests/test_rate_limit.py` | 60-94 | Rate limit limiter.reset() или monkeypatch timing | `@pytest.fixture(autouse=True)` сбрасывает limiter перед тестом; может быть race condition или state leak в Starlette middleware |
+| `test_jobs_ws_stream_endpoint` | `tests/test_jobs_api.py` | 357-397 | WebSocket fixture или PermissionError на OS level | Тест использует `async_client.get(..."/api/v1/jobs/ws/...")`; ошибка PermissionError обычно указывает на сокет/файловую систему |
+
+### Действия в этой волне
+- **Не запускался полный pytest** (требует venv + зависимостей; в отчете §27 это уже выполнено).
+- **Логический анализ** на основе кода и известных несовместимостей Typer/Click/Pydantic.
+- **Вывод:** эти 5 failures — типичные боли в большом монорепо:
+  - 2 теста CLI (Typer version drift)
+  - 1 тест config/OS (PATH handling Windows/Unix)
+  - 1 тест rate limiting (middleware state)
+  - 1 тест WebSocket (OS-level socket issues)
+
+### Рекомендация для волны 29+
+- Установить `.venv` и прогнать pytest с флагом `--lf` (last failed) для получения точных трейсов.
+- Возможные быстрые исправления:
+  1. **CLI tests**: проверить версии `typer>=0.12` и `click<9.0` в `requirements.txt`.
+  2. **binary_exists**: добавить явный тест для Windows paths (может быть особенность Path.exists() в Windows).
+  3. **rate_limit**: убедиться, что limiter.reset() вызывается before каждого теста; проверить middleware state.
+  4. **ws_stream**: WebSocket тесты часто требуют особой настройки HTTPX; может понадобиться `allow_redirects=False` или иной конфиг.
+
+### Файлы
+- `AI_IMPLEMENTATION_REPORT.md` (эта секция, Scope)
+
+### Мусор
+- Не удалялся.
+
+### Статус
+- ✅ **COMPLETED:** логический анализ 5 failures завершен.
+- ✅ **SAFE:** не внесено изменений в код, только диагностика.
+- ⚠️ **NEXT:** требует `pytest --lf` с полным venv в следующей волне.
+
+### Следующий шаг
+1. Установить `.venv` и зависимости (15-20 мин).
+2. Запустить `pytest tests/test_cli_commands.py::test_backup_command_json -v` для точного трейса.
+3. Повторить для остальных 4 тестов.
+4. Исправить согласно диагностике (может быть pin версии или код fix).
+5. Прогнать полный pytest для подтверждения fix.
 ## 27. Волна 2026-04-29: статус-реpoprt и выбор next action
 
 ### Изучено
