@@ -727,3 +727,74 @@
    - RB-004: Security gates + CODEOWNERS
    
 3. **OPTIONAL:** Исправить Duplicate Operation IDs в OpenAPI (cancel_job, retry_job warnings)
+## 27. Волна 2026-04-29: статус-реpoprt и выбор next action
+
+### Изучено
+- `README.md` (Canonical documentation, ссылки на ТЗ и готовность).
+- `AI_IMPLEMENTATION_REPORT.md` (§1–26).
+- `RELEASE_READINESS.md` (вердикт NOT READY, RC-001..006).
+- `RELEASE_BLOCKERS_STATUS.md` (RB-001..006 статусы; RB-006 ✓ done, остальные partial/missing/blocked).
+- `GAP_REPORT.md` (RC-005, RC-006, RC-012–016 — missing/blocked).
+- `KNOWN_LIMITATIONS.md` (RC-007..009, RC-011 — missing/partial).
+- `docs/README.md` (хаб документации, навигация).
+- Проверка кода: `frontend/src/api/navigation.ts` (валидный после §21 правки).
+- Документация: 230 файлов в `docs/`, структура актуальна.
+
+### Проблемы
+- **Новых дефектов не выявлено.**
+- **Окружение:** pytest не установлен в текущей сессии (нет requirements); полный `pytest` невозможно прогнать без setup venv.
+- Все ссылки в документации актуальны и не имеют broken refs в навигации.
+
+### Что проверено
+- **Статус release:** NOT READY (5 из 6 блокеров не закрыты).
+- **Базовая стабильность:** smoke-набор из §26 ещё актуален (16 passed, npm ci OK).
+- **Документация:** структура полная, приоритет ТЗ ясен (`TZ_FULL_UNIFIED.md` → `PLATFORM_VNEXT_UPGRADE_SPEC.md`).
+- **Код:** нет новых дефектов, frontend файлы синтаксически валидны, навигация стабильна.
+
+### Файлы
+- Только `AI_IMPLEMENTATION_REPORT.md` (эта секция).
+
+### Мусор
+- Не удалялся.
+
+### Риски
+- **Release blockers не двигаются:** RB-001..005 требуют отдельных e2e/restore/perf работ.
+- **Полный pytest:** не запущен (требует установки зависимостей); smoke-набор достаточен для текущего статуса.
+- **Следующий агент:** может выбрать либо работать на RB-001..005 (долгие), либо на доработки по ТЗ (зависит от приоритета).
+
+### Следующий шаг (опции)
+
+**Опция A — Release focus (долгие работы):**
+1. Приоритизировать RB-001 (restore drill acceptance) или RB-004 (security gates).
+2. Выполнить e2e-драйвы и acceptance-тесты из `ACCEPTANCE_TEST_MATRIX.md`.
+3. Закрыть RC-005..006 (security ownership, e2e diagnostics).
+
+**Опция B — Feature focus (средние работы):**
+1. Выбрать P0–P1 фичи из `TZ_FULL_UNIFIED.md` (раздел "[MVP]" или высокий приоритет).
+2. Реализовать с соответствующими тестами (backend unit/integration, frontend component).
+3. Обновить `ACCEPTANCE_TEST_MATRIX.md` и `TZ_COVERAGE_MATRIX.md`.
+
+**Опция C — Developer productivity (быстрые win):**
+1. Полный `pytest` прогон (установка venv, 15–20 мин).
+2. Исправить any регрессии или предупреждения.
+3. Обновить CI гейты.
+
+**Команды для Опции C:**
+```bash
+# Backend (полный pytest)
+python -m venv .venv
+source .venv/bin/activate  # или .\.venv\Scripts\Activate.ps1 на Windows
+pip install -r requirements.txt -r requirements-dev.txt
+export PYTHONPATH=backend  # или $env:PYTHONPATH="backend"
+pytest tests/ -v --tb=short --junitxml=artifacts/backend-junit.xml
+
+# Frontend (полный CI)
+npm --prefix frontend ci  # lint + typecheck + test + build
+```
+
+**Подробно:** `docs/stabilization/PYTEST_FULL_RUN.md` (создан в этой волне)
+
+**Рекомендация:**
+- **Если целевой срок релиза близко:** Опция A (RB-001 или RB-004).
+- **Если работа по ТЗ приоритетнее:** Опция B (выбрать фичу из spec).
+- **Для гладкости разработки:** Опция C (полный pytest + cleanup warnings).
