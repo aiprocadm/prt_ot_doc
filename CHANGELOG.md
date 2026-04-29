@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 2026-04-29
+- **Status report:** `AI_IMPLEMENTATION_REPORT.md` §27 — baseline verification ✅, release NOT READY (RB-001..005 pending, RB-006 ✓ done). Три опции для next action: Release focus (RB-001/004), Feature focus (TZ_FULL P0–P1), или Developer productivity (full pytest + cleanup warnings). Репо стабилен, dokumentacija актуальна, нет новых дефектов.
+- **Documentation:** `docs/stabilization/PYTEST_FULL_RUN.md` — пошаговая инструкция для полного `pytest` прогона на 287+ тестов (Developer productivity опция). Включает troubleshooting, expected results, и связанные команды.
+- **CHANGELOG:** обновлена запись за 2026-04-29 с новым документом и инструкциями для Опции C.
+
 ## 2026-04-28
 - **Agent workflow:** `docs/AI_AGENT_WORKFLOW.md` — объединён с расширенным брифом (обязательный порядок README→ТЗ/ссылки→`AI_IMPLEMENTATION_REPORT`→код, мусор, проверки, формат краткого ответа, условия обновления README). Обновлён `.cursor/rules/ai-agent-workflow.mdc`. В `AI_IMPLEMENTATION_REPORT.md` — кандидаты на архивацию, §12–13.
 - **Repo hygiene:** из индекса удалены случайные gitlink-записи `Создание платформы по ОТ/{admiring-hellman-bd8c51,youthful-poitras-cc7163}` (без `.gitmodules`); в `.gitignore` добавлена вложенная папка-дубликат проекта, в духе политики «no nested copy» из README.
