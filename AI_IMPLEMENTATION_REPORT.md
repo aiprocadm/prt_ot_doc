@@ -670,3 +670,20 @@
 - **При релизном окне:** полный `pytest --junitxml=artifacts/backend-junit.xml` + smoke-проверки по `docs/TEST_BASELINE.md`.
 - **Опционально:** приоритизировать RB-001 (restore drill) или RB-004 (security gates) если они критичны для релиза.
 - **Для продуктивной работы:** baseline проверка пройдена, репо стабильно, можно приступать к доработкам по ТЗ или releasе.
+
+---
+
+## 27. Волна 2026-04-29 (вторая): полный pytest (1044 тестов)
+
+### Изучено
+- `README.md`, `AI_IMPLEMENTATION_REPORT.md` (§1–26).
+- `docs/TEST_BASELINE.md` — must-pass: full pytest должен быть запущен.
+- `RELEASE_READINESS.md` (вердикт: NOT READY, RB-001..005 open).
+
+### Что делается (в процессе)
+- Запущен полный `pytest --junitxml=artifacts/backend-junit.xml -v` (все 1044 тестов из tests/, integration_tests/, backend/tests/).
+- Ожидается: ~30-60 минут выполнения.
+
+### Статус
+- 🔄 **In progress:** полный pytest собрал 1044 теста, execution phase.
+- ⏳ Результаты будут в финальном разделе этой волны после завершения.
