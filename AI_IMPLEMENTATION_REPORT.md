@@ -725,6 +725,21 @@
 2. Исправить any регрессии или предупреждения.
 3. Обновить CI гейты.
 
+**Команды для Опции C:**
+```bash
+# Backend (полный pytest)
+python -m venv .venv
+source .venv/bin/activate  # или .\.venv\Scripts\Activate.ps1 на Windows
+pip install -r requirements.txt -r requirements-dev.txt
+export PYTHONPATH=backend  # или $env:PYTHONPATH="backend"
+pytest tests/ -v --tb=short --junitxml=artifacts/backend-junit.xml
+
+# Frontend (полный CI)
+npm --prefix frontend ci  # lint + typecheck + test + build
+```
+
+**Подробно:** `docs/stabilization/PYTEST_FULL_RUN.md` (создан в этой волне)
+
 **Рекомендация:**
 - **Если целевой срок релиза близко:** Опция A (RB-001 или RB-004).
 - **Если работа по ТЗ приоритетнее:** Опция B (выбрать фичу из spec).
