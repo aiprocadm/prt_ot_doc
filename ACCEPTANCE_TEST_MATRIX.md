@@ -1,6 +1,6 @@
 # ACCEPTANCE_TEST_MATRIX
 
-- **Updated on (UTC):** 2026-04-23
+- **Updated on (UTC):** 2026-04-30
 - **Owner:** QA + Platform + Backend + Frontend
 - **Canonical status vocabulary:** `done` / `partial` / `missing` / `blocked`
 - **Canonical blocker/status source:** `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`

@@ -54,10 +54,14 @@ Each checklist item maps to a concrete workflow/job/artifact and to one or more 
   - Artifact: `artifacts/final_acceptance/summary.json`
   - Pass condition: `overall_status=pass`; no required acceptance scenario remains `partial/missing`.
 
-- [ ] **RB-004 Security ownership & escalation closure** (`RC-005`, `RC-015`)
+- [x] **RB-004 Security ownership & escalation closure** (`RC-005`, `RC-015`)
   - Workflow/job: `.github/workflows/ci.yml` (docs/static gates checks)
   - Artifact/doc: `docs/stabilization/security-gates.md` and `.github/CODEOWNERS`
   - Pass condition: ownership fallback + escalation SLA are codified and versioned.
+  - **Status: DONE** (2026-04-30)
+    - ✅ Ownership domains: auth, rbac/abac, files, migrations, workflows (`.github/CODEOWNERS`)
+    - ✅ Escalation policy: T+0, T+4h, T+1d, break-glass (documented in `security-gates.md` §"Escalation policy")
+    - ✅ Team mappings: 5 reviewer groups aligned (`reviewers-auth`, `reviewers-rbac-abac`, `reviewers-files`, `reviewers-data-platform`, `reviewers-platform-infra`)
 
 - [ ] **RB-005 Secrets-dependent e2e diagnostics closure** (`RC-006`)
   - Workflow/job: `.github/workflows/e2e-smoke.yml`
@@ -72,6 +76,9 @@ Each checklist item maps to a concrete workflow/job/artifact and to one or more 
 ## Binary Go/No-Go
 
 Release may be marked **READY** only when all checklist items RB-001..RB-006 are checked.
+
+**Current status:** 2/6 blockers closed (RB-003, RB-006 done; RB-004 done as of 2026-04-30).
+**Remaining:** RB-001 (restore drill), RB-002 (perf baseline), RB-005 (e2e diagnostics).
 
 ## Synchronization rule
 
