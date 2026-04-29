@@ -1,7 +1,7 @@
 # AI / Engineering implementation report
 
-- **Date (UTC):** 2026-04-28 (обновлено)  
-- **Scope:** documentation inventory, P0 test harness fix, testing doc repair; full-platform audit is **not** completed in a single pass (see «Ограничения»). Последняя волна: **§25 — интеграционные тесты идемпотентности (replay + 409)**; ранее — §24 security audit, webhook "dev-secret" fix, archive bare-except fix; §23 смоук, §22 (`npm run ci` + pytest 9), §21, **P1 Vitest**, **P1 lint**.
+- **Date (UTC):** 2026-04-29 (обновлено)  
+- **Scope:** baseline verification after §25 idempotency tests. Проверены security gate (check_scoped_queries), backend smoke-тесты (16 passed), frontend CI (npm run ci — lint + typecheck + vitest 221 + build — exit 0). Последняя волна: **§26 baseline verification**; ранее — §25 интеграционные тесты идемпотентности, §24 security audit (webhook "dev-secret", bare-except), §23–22 смоук и lint/typecheck/vitest.
 - **Шаблон работы агента:** `docs/AI_AGENT_WORKFLOW.md` (обновляй этот файл по итогам волны; не создавай параллельных «мега-отчётов» в корне).
 
 ## Кандидаты на удаление / архивация (актуальный список)
@@ -635,3 +635,38 @@
 ### Следующий шаг
 - При релизном окне: полный `pytest` / `npm run ci` по `docs/TESTING.md`.
 - Добавить conflict-тест для engine path (`DocGeneratePipelineRequest`) если он будет широко использоваться.
+
+---
+
+## 26. Волна 2026-04-29: baseline verification (smoke + CI)
+
+### Изучено
+- `README.md` (Verification commands, Canonical documentation), `AI_IMPLEMENTATION_REPORT.md` (§1–25).
+- `docs/TEST_BASELINE.md` — must-pass список (check_scoped_queries, pytest, npm run ci, smoke).
+- `RELEASE_BLOCKERS_STATUS.md` (обновлён 2026-04-22, статус: RB-001..005 — partial/missing/blocked, RB-006 ✓ done).
+
+### Проблемы
+- **Новых дефектов не выявлено.** Код из §25 стабилен.
+
+### Что проверено
+
+| Проверка | Результат | Примечание |
+|----------|-----------|-----------|
+| `python scripts/ci/check_scoped_queries.py` | ✅ **PASS** | No forbidden session.query(...) |
+| `py -m pytest tests/test_entrypoints.py tests/test_tenant_header_required.py tests/test_idempotency.py tests/test_template_delete.py tests/api/test_branding_api.py tests/headers/test_engine.py -v` (`PYTHONPATH=backend`) | ✅ **16 passed**, exit 0 | 2 мин 38 сек; warnings в docxcompose, Pydantic, jose (ожидаемо deprecated) |
+| `npm --prefix frontend run ci` (lint + typecheck + vitest + build) | ✅ **PASS**, exit 0 | vitest 221 tests all green; build completed in 13.97s; PWA workbox OK |
+
+### Файлы
+- Только `AI_IMPLEMENTATION_REPORT.md` (эта секция, Scope).
+
+### Мусор
+- Не удалялся.
+
+### Риски
+- Полный `pytest` (все 190 тест-файлов) **не запущен** в этой волне (требует времени; smoke-набор достаточен для baseline).
+- Release blockers RB-001..005 остаются partial/missing/blocked (не входили в scope этой волны).
+
+### Следующий шаг
+- **При релизном окне:** полный `pytest --junitxml=artifacts/backend-junit.xml` + smoke-проверки по `docs/TEST_BASELINE.md`.
+- **Опционально:** приоритизировать RB-001 (restore drill) или RB-004 (security gates) если они критичны для релиза.
+- **Для продуктивной работы:** baseline проверка пройдена, репо стабильно, можно приступать к доработкам по ТЗ или releasе.
