@@ -29,11 +29,16 @@ def test_split_csv_rejects_non_iterable() -> None:
 
 
 def test_binary_exists_with_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import sys
+
     binary = tmp_path / "custom" / "bin"
     binary.parent.mkdir()
     binary.write_text("#!/bin/sh\n")
-    binary.chmod(0o755)
+    # chmod(0o755) doesn't set executable bit on Windows; use os.stat
+    if sys.platform != "win32":
+        binary.chmod(0o755)
 
+    # config.binary_exists checks if file exists (and is executable on non-Windows)
     assert config.binary_exists(str(binary))
     assert config.binary_exists(str(binary.parent)) is True  # directory exists
     assert config.binary_exists(str(tmp_path / "missing")) is False
@@ -41,7 +46,8 @@ def test_binary_exists_with_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     # Ensure PATH lookup is honoured when candidate has no path separators.
     path_binary = tmp_path / "bin"
     path_binary.write_text("#!/bin/sh\n")
-    path_binary.chmod(0o755)
+    if sys.platform != "win32":
+        path_binary.chmod(0o755)
     monkeypatch.setenv("PATH", str(tmp_path))
     assert config.binary_exists("bin") is True
 

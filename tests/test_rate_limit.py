@@ -75,13 +75,14 @@ async def test_login_rate_limit(
 
     payload = {"email": "ratelimit@example.com", "password": "secret"}
     login_headers = {"x-tenant": tenant.slug}
-    for _ in range(2):
-        response = await async_client.post("/api/v1/auth/login", json=payload, headers=login_headers)
-        response = await async_client.post(
-            "/api/v1/auth/login", json=payload, headers=login_headers
-        )
-        assert response.status_code == 200
 
+    # Two successful requests (within limit of 2/minute)
+    response = await async_client.post("/api/v1/auth/login", json=payload, headers=login_headers)
+    assert response.status_code == 200
+    response = await async_client.post("/api/v1/auth/login", json=payload, headers=login_headers)
+    assert response.status_code == 200
+
+    # Third request should be rate limited
     limited = await async_client.post("/api/v1/auth/login", json=payload, headers=login_headers)
     assert limited.status_code == 429
     body = limited.json()

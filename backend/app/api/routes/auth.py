@@ -164,7 +164,6 @@ async def login(
         raise _invalid_credentials()
 
     normalized_email = payload.email.lower()
-    getattr(request.state, "rate_limit_subject", None)
     _ = response.headers
     result = await session.execute(
         select(User)
