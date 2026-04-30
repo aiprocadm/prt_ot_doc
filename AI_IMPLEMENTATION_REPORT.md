@@ -2700,3 +2700,149 @@ docs/WORD_MODULE_GAP_MATRIX.md
    - Решение: CI workflow уже подготовлен; просто запустить вручную
 
 **Примечание:** Волна 37 сфокусирована на анализе и документировании, а не на выполнении. Это необходимо из-за broken local env. Следующая волна 38 должна запустить CI workflows и выполнить cleanup.
+
+---
+
+## 38. Волна 2026-04-30 (четвёртая): очистка документации Group A + подготовка к RB-001
+
+### Изучено
+- AI_IMPLEMENTATION_REPORT.md волны 37 (итерация 2675-2702)
+- Список Group A: 36 wave report files для удаления
+- Текущее состояние кода и git (ветка `claude/blissful-jennings-6f862e`, main merged в 1d13c36)
+
+### Статус окружения (волна 38)
+
+| Окружение | Статус | Комментарий |
+|-----------|--------|------------|
+| Python (local) | ❌ BROKEN | exit code 49 сохраняется; не исправлено в этой волне |
+| Node/npm (local) | ⚠️ PARTIAL | Не меняется в этой волне |
+| Git | ✅ WORKING | Удалены файлы через git rm, коммит успешен |
+
+### Выполненные работы (волна 38)
+
+#### 1. ✅ Очистка Group A (Wave Reports)
+- **Что удалено:** 36 файлов из Group A (CODEX_WAVE_*, CORPORATE_READINESS_*, ENTERPRISE_OPERATIONAL_*, ENTERPRISE_USABILITY_*, OPERATIONAL_MATURITY_*, PHASE_*)
+- **Команда:** `git rm docs/{CODEX_WAVE,CORPORATE_READINESS,ENTERPRISE_OPERATIONAL,ENTERPRISE_USABILITY,OPERATIONAL_MATURITY,PHASE}*.md`
+- **Коммит:** `b334598` — "docs: remove 36 wave report files from doc navigation (cleanup Group A mussed)"
+- **Результат:** ✅ PASSED — Все файлы удалены, коммит успешен, рабочее дерево чистое
+
+#### 2. ⚠️ Priority 1 (RB-001 / pytest CI) — НЕ ВЫПОЛНЕНО (причина ниже)
+- **Причина:** Python окружение broken (exit code 49) блокирует локальное тестирование
+- **Требуется:** GitHub Actions manual dispatch или Docker-based запуск
+- **Кто сможет:** Следующий агент с доступом к GitHub Actions UI или Docker Compose
+
+### Что не сделано и почему
+
+| Что | Почему | Impact | Next |
+|-----|--------|--------|------|
+| Запуск `restore-drill.yml` вручную в CI | Требует GitHub Actions UI или gh CLI | RB-001 не выполнена | Сделать в волне 39 через GitHub Actions UI или gh workflow run |
+| Запуск pytest в CI | Требует GitHub Actions UI | Волна 35 не финально валидирована | Сделать в волне 39 через GitHub Actions UI |
+| Исправление Python exit 49 (local) | Системная проблема, требует диагностики среды | Блокирует локальное тестирование | Требует специализированная диагностика (WSL? Python setup?) |
+
+### Changed Files
+- `docs/CODEX_WAVE_AUDIT.md` — удален
+- `docs/CODEX_WAVE_COMPLETION_REPORT.md` — удален
+- `docs/CODEX_WAVE_NEXT_STEPS.md` — удален
+- `docs/CODEX_WAVE_PLAN.md` — удален
+- `docs/CODEX_WAVE_REMAINING_GAPS.md` — удален
+- `docs/CORPORATE_READINESS_AUDIT.md` — удален
+- `docs/CORPORATE_READINESS_COMPLETION_REPORT.md` — удален
+- `docs/CORPORATE_READINESS_NEXT_STEPS.md` — удален
+- `docs/CORPORATE_READINESS_PHASE_A_COMPLETION.md` — удален
+- `docs/CORPORATE_READINESS_PLAN.md` — удален
+- `docs/CORPORATE_READINESS_REMAINING_GAPS.md` — удален
+- `docs/ENTERPRISE_OPERATIONAL_AUDIT.md` — удален
+- `docs/ENTERPRISE_OPERATIONAL_COMPLETION_REPORT.md` — удален
+- `docs/ENTERPRISE_OPERATIONAL_NEXT_STEPS.md` — удален
+- `docs/ENTERPRISE_OPERATIONAL_PLAN.md` — удален
+- `docs/ENTERPRISE_OPERATIONAL_REMAINING_GAPS.md` — удален
+- `docs/ENTERPRISE_USABILITY_AUDIT.md` — удален
+- `docs/ENTERPRISE_USABILITY_COMPLETION_REPORT.md` — удален
+- `docs/ENTERPRISE_USABILITY_DOCUMENTATION_INDEX.md` — удален
+- `docs/ENTERPRISE_USABILITY_EXECUTIVE_SUMMARY.md` — удален
+- `docs/ENTERPRISE_USABILITY_NEXT_STEPS.md` — удален
+- `docs/ENTERPRISE_USABILITY_PLAN.md` — удален
+- `docs/ENTERPRISE_USABILITY_REMAINING_GAPS.md` — удален
+- `docs/OPERATIONAL_MATURITY_AUDIT.md` — удален
+- `docs/OPERATIONAL_MATURITY_COMPLETION_REPORT.md` — удален
+- `docs/OPERATIONAL_MATURITY_NEXT_STEPS.md` — удален
+- `docs/OPERATIONAL_MATURITY_PLAN.md` — удален
+- `docs/OPERATIONAL_MATURITY_REMAINING_GAPS.md` — удален
+- `docs/PHASE_2_CONSISTENCY_AUDIT.md` — удален
+- `docs/PHASE_2_WEEK_1_IMPLEMENTATION_PLAN.md` — удален
+- `docs/PHASE_2_WEEK_1_INTEGRATION_COMPLETION.md` — удален
+- `docs/PHASE_2_WEEK_1_PROGRESS.md` — удален
+- `docs/PHASE_2_WEEK_2_BATCH_MIGRATION_COMPLETE.md` — удален
+- `docs/PHASE_A_COMPLETION_AND_PHASE_B_ASSIGNMENT.md` — удален
+- `docs/PHASE_B_COMPLETION_REPORT.md` — удален
+
+### Candidates for Cleanup (обновлено, волна 38)
+
+#### Group B: Final snapshots (требуют проверки)
+```
+docs/FINAL_ACCEPTANCE_REPORT.md
+docs/FINAL_BUG_BURNDOWN.md
+docs/FINAL_CRITICAL_GAPS.md
+docs/FINAL_GAP_ANALYSIS.md
+docs/FINAL_PERF_REPORT.md
+docs/CI_PIPELINE_OVERVIEW.md
+docs/CI_STABILIZATION_REPORT.md
+docs/CI_TEST_RECOVERY_PLAN.md
+```
+**Статус:** Не удалены в волне 38, требуют явной проверки перед удалением в волне 39.
+
+#### Group C: Supplementary docs (требуют проверки)
+```
+docs/FRONTEND_ARCHITECTURE.md
+docs/FRONTEND_GAP_ANALYSIS.md
+docs/FRONTEND_KNOWN_LIMITATIONS.md
+docs/FRONTEND_ROUTES_AND_PERMISSIONS.md
+docs/FRONTEND_STATIC_TO_REAL_MAP.md
+docs/FRONTEND_TEST_PLAN.md
+docs/FRONTEND_UX_REVIEW.md
+docs/KNOWN_LIMITATIONS_RC.md
+docs/RELEASE_CANDIDATE_AUDIT.md
+docs/SCHEMA_TEST_AUDIT.md
+docs/WORD_MODULE_ACCEPTANCE.md
+docs/WORD_MODULE_GAP_MATRIX.md
+```
+**Статус:** Не удалены в волне 38, требуют явной проверки перед удалением в волне 39.
+
+### Validation (волна 38)
+
+| Проверка | Статус | Результат |
+|----------|--------|-----------|
+| git status | ✅ PASSED | Working tree clean after commit |
+| git log | ✅ PASSED | Commit b334598 visible, branch 1 commit ahead of origin/main |
+| docs/ mussed count | ✅ VERIFIED | Group A (36) удалены, Group B/C (20) остаются |
+
+### Last Agent Handoff (волна 38)
+
+- **Дата (UTC):** 2026-04-30
+- **Агент:** claude-haiku-4-5 (волна 38)
+- **Задача:** Priority 2 из волны 37 — очистка Group A документации
+- **Статус:** ✅ **COMPLETED** — 36 wave report files удалены, коммит успешен
+- **Что сделано:**
+  1. ✅ Удалены все 36 файлов Group A (wave reports)
+  2. ✅ Создан коммит b334598 с подробным сообщением
+  3. ✅ Рабочее дерево чистое
+- **Где остановился:**
+  - Priority 1 не выполнена (требует GitHub Actions UI или Docker)
+  - Group B/C остаются для проверки в волне 39
+- **Следующий точный шаг:**
+  1. **Priority 1 (CRITICAL):** Запустить GitHub Actions workflow вручную:
+     - `.github/workflows/restore-drill.yml` (manual dispatch) — выполнить RB-001
+     - `.github/workflows/ci.yml` (trigger) — запустить полный pytest (волна 35 validation)
+     - Проверить artifact `latest-postgres-minio.json` содержит `"success": true`
+  2. **Priority 2 (AFTER Priority 1):** После успешного RB-001 — обновить RELEASE_READINESS.md
+     - Изменить RB-001 статус на ✅ DONE
+  3. **Priority 3 (OPTIONAL):** Проверить Group B/C перед удалением в волне 40:
+     - Например, grep -r "FRONTEND_ARCHITECTURE" . (проверить, что ничего на него не ссылается)
+     - Затем удалить, если ничего не ссылается
+
+**Риски:**
+1. **Local Python broken** — продолжает блокировать локальные итерации. Требует специализированной диагностики окружения (возможно WSL/Python version mismatch).
+2. **CI workflows требуют GitHub Actions UI** — нельзя запустить из CLI без gh CLI access.
+3. **Group B/C требуют проверки** — слепое удаление может потерять ценные данные (особенно FINAL_*, CI_*). Рекомендуется grep перед удалением.
+
+**Примечание:** Волна 38 завершила Priority 2 (очистка Group A). Волна 39 должна сфокусироваться на Priority 1 (запуск RB-001 и pytest в GitHub Actions UI и обновление RELEASE_READINESS.md).
