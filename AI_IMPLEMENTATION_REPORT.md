@@ -1,7 +1,7 @@
 # AI / Engineering implementation report
 
 - **Date (UTC):** 2026-04-30 (обновлено)  
-- **Scope:** P0-P1 фича реализация (TZ-2.7-MVP-01 event completeness test). **Волна 29:** создан консолидированный тест `tests/test_event_completeness_mvp.py` для проверки всех 6 обязательных событий (DocumentGenerated, Signed, Exported, RiskAssessed, PPEIssued, TrainingCompleted) в outbox. **Волна 28:** диагностика 5 failing tests, документ `docs/stabilization/FAILING_TESTS_DIAGNOSTICS.md`. **Волна 27:** полный pytest 1039/1044 (99.5%).
+- **Scope:** **Волна 33:** полный `pytest` (1045 тестов на Windows/Python 3.13) → **1035 passed, 8 failed, 2 skipped** (~62½ мин); артефакты см. §33 и `artifacts/backend-junit.xml`. **Волна 32:** Typer-патчи в `tests/conftest.py` удалены (CLI-тесты). **Волна 29:** `test_event_completeness_mvp.py` — один из упавших в §33 (`Document` / `tenant_id`). **§27 исторически:** 1039/1044 до снятия Typer-патчей и до текущих 8 red.
 - **Шаблон работы агента:** `docs/AI_AGENT_WORKFLOW.md` (обновляй этот файл по итогам волны; не создавай параллельных «мега-отчётов» в корне).
 
 ## Кандидаты на удаление / архивация (актуальный список)
@@ -1183,3 +1183,113 @@ npm --prefix frontend ci  # lint + typecheck + test + build
 2. **RB-002 (perf baseline):** опубликовать release-window baseline manifest.
 3. **RB-005 (e2e diagnostics):** запустить e2e tests для access enforcement scenarios.
 4. После закрытия всех 6 → обновить вердикт на **READY**.
+
+---
+
+## Last Agent Handoff
+
+- **Дата (UTC):** 2026-04-30  
+- **Агент (волна пользователя):** полный pytest + синхронизация отчёта.  
+- **Задача:** Прогон всех тестов из `pyproject.toml` (`tests`, `integration_tests`, `backend/tests`) на рабочей машине пользователя (Windows).  
+- **Статус:** Прогон **завершён**; эта запись в REPORT — **handoff по результатам**, без сопутствующих правок коду в той же задаче.  
+- **Итог цифрами:** `collected 1045` → **1035 passed, 8 failed, 2 skipped**, **~3747 s (~62.5 min)**.  
+- **Артефакты:**
+  - `artifacts/backend-junit.xml` — JUnit для CI/анализа;
+  - `artifacts/pytest-full.log` — полный текст вывода (если сохранён при том же командном запуске с `Tee-Object`).  
+- **Где остановился:** Известный список **8 failing** ниже §33; следующему агенту нужно воспроизвести локально или в Linux CI (`pytest --lf` / точечный список) и решить класс ошибок (binary_exists vs Windows repo layout vs модель Document vs staging env).  
+- **Следующий точный шаг:**
+  1. Исправить или локализовать 8 упавших тестов (приоритет: см. таблицу в §33).  
+  2. Повторить полный pytest и обновить эту секцию числами и датой.  
+  3. Параллельно релиз-трекер: RB-001, RB-002, RB-005 — без изменений в приоритетах из RELEASE_READINESS.
+
+---
+
+## 32. Волна 2026-04-30: Typer monkeypatches удалены из `tests/conftest.py`
+
+### Изучено
+- `README.md`, `AI_IMPLEMENTATION_REPORT.md` §27–§31 (`test_backup_command_json`, `test_render_command_invokes_pipeline` — блокеры pytest).
+- `tests/conftest.py` — патчи `TyperArgument.make_metavar` и `TyperOption.__init__`.
+
+### Причины падений
+1. **`test_render_command_invokes_pipeline`:** `TypeError: ParamType.get_metavar() got an unexpected keyword argument 'ctx'` — патч вызывал `self.type.get_metavar(param=self, ctx=ctx)`; для Click 8.1 `Path.get_metavar` принимает только `(self, param)`.
+2. **`test_backup_command_json`:** после загрузки conftest все `flag_value=None` подменялись на `CLICK_UNSET`; опции с значением (`--triggered-by TEXT`) парсились как флаги → `unexpected extra argument (ci)`, `exit_code=2`.
+
+### Решение
+- Удалить оба патча; зафиксировать в комментарии: Typer ≥0.12 и `requirements.txt` (`typer==0.12.3`, `click==8.1.8`) уже совместимы без мутаций `typer.core`.
+
+### Файлы
+- `tests/conftest.py` — удалены патчи (~40 строк), добавлен короткий комментарий-обоснование.
+- `AI_IMPLEMENTATION_REPORT.md` — этот раздел и обновление Scope в шапке.
+
+### Проверки
+| Команда | Результат |
+|---------|-----------|
+| `pytest tests/test_cli_commands.py tests/test_cli_main.py -q` | **13 passed** |
+| `pytest tests/test_entrypoints.py tests/test_tenant_header_required.py tests/test_idempotency.py tests/test_template_delete.py tests/api/test_branding_api.py tests/headers/test_engine.py -q` (`PYTHONPATH=backend`) | **16 passed** |
+| `npm --prefix frontend run ci` | **OK** (lint, typecheck, vitest, build, exit 0) |
+
+### Риски
+- Если когда-нибудь откатить Typer ниже ~0.12 или поднять Click с несовместимым API — старые проблемы могут вернуться; использовать целевой pin из `requirements.txt` и не восстанавливать слепую подмену `flag_value` без регрессионного теста.
+
+### Next steps
+1. По релизу: полный `pytest` (см. `docs/TEST_BASELINE.md`).
+2. Release-блокеры: RB-001, RB-002, RB-005.
+
+---
+
+## 33. Волна 2026-04-30: полный pytest (1045), Windows
+
+### Контекст
+- Запрос пользователя: полный прогон ~1044 тестов.  
+- **Окружение:** `platform win32`, Python **3.13.7**, `pytest-8.3.3`; `PYTHONPATH=backend` (совместимо с README).  
+- Команда (эквивалент):
+
+```powershell
+cd <repo-root>
+$env:PYTHONPATH = "backend"
+py -m pytest --junitxml=artifacts/backend-junit.xml -v --tb=short 2>&1 | Tee-Object -FilePath artifacts/pytest-full.log
+```
+
+(collect задаётся `pyproject.toml` → **1045 items**, не «ровно 1044».)
+
+### Итог
+
+| Метрика | Значение |
+|---------|----------|
+| Собрано | **1045** |
+| **passed** | **1035** |
+| **failed** | **8** |
+| **skipped** | **2** |
+| Время | **3747.51 s (~62.5 min)** |
+
+- **JUnit:** `artifacts/backend-junit.xml`  
+- Лог пайпа: **`artifacts/pytest-full.log`** (если сохранён в той же сессии)
+
+### Перечень failed (конкретно для следующего агента)
+
+| Тест | Симптом (по выводу) | Что проверять |
+|------|---------------------|----------------|
+| `tests/test_core_config_utils.py::test_binary_exists_with_paths` | `binary_exists(...)` вернул `False` там, где тест ждёт `True` | `backend/app/core/config.py` (`binary_exists`), права/exec на Windows, PATH для имени `'bin'` |
+| `tests/test_event_completeness_mvp.py::test_event_emission_checklist` | `Document() got multiple values for keyword argument 'tenant_id'` | фабрика/конструктор `Document` vs фикстуры в этом тесте (§29 файл) |
+| `tests/test_repo_audit.py::test_build_payload_reports_canonical_roots_and_single_frontend_manifest` | `assert 17 == 1` | ожидание одного `frontend/package.json`; на машине возможны **ложные доп. пути** (вложенные копии репо, Cursor worktrees и т.д.) |
+| `tests/test_repo_audit.py::test_repo_audit_generates_markdown_and_json_snapshots` | много лишних путей типа nested `Создание платформы по ОТ/admiring-*/frontend/package.json` | то же: **чистый git clone** или усилить фильтр путей в repo-audit / зафиксировать root |
+| `tests/test_settings_staging_hardening.py` (4 теста) | `Failed: DID NOT RAISE SettingsError` | переменные окружения **до** импорта `config` (в тестах ожидается staging + отклонение дефолтных секретов); часто ломается если `APP_ENV`/`ENVIRONMENT` не совпадает с ожиданиями теста |
+
+### Skipped (для полноты handoff)
+- В логе упоминался скип OpenAPI: `docs/schema/openapi.yaml not available` — не считать регрессией продукта без явного требования к файлу.
+
+### Pluggy / schemathesis
+- В warnings фигурирует `PluggyTeardownRaisedWarning` от **schemathesis** на teardown (дублирует assertion failure). Первичный источник — сам тест, не обязательно плагин.
+
+### Рекомендация следующему агенту
+1. `pytest --lf` или явный список из 8 nodename выше.  
+2. Для `test_repo_audit` — убедиться, что рабочая копия не содержит лишних вложенных checkout (или ослабить тест под multi-root).  
+3. Для `test_settings_staging_hardening` — прочитать тест и гарантировать изоляцию env (как в других тестах настроек).  
+4. После фиксов — снова полный pytest и обновить **Last Agent Handoff** + эту таблицу.
+
+---
+
+### Known Problems / Risks (актуализация)
+
+- **8 интеграционных/окруженческих** несоответствий на Windows-полном прогоне; не смешивать с прошлыми «5 failures» §27 (там другой набор до фиксов).  
+- Дубли Operation ID в OpenAPI (`cancel_job`, `retry_job`) — по-прежнему **warnings**, не failed.
