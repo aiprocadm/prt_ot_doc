@@ -1,7 +1,8 @@
 # AI / Engineering implementation report
 
-- **Date (UTC):** 2026-04-30  
+- **Date (UTC):** 2026-04-30 (волна 37 стартована)
 - **Scope:** 
+  - **Волна 37 (в процессе):** 🔍 Исследование и планирование 3 Release Blockers (RB-001, RB-002, RB-005). Изучены: требования, workflows, документация, scripts. Окружение: Windows worktree, сложность CI-setup (Postgres, MinIO, Docker, Playwright). Создается guide для следующего агента с точными командами и ожидаемыми артефактами.
   - **Волна 36 (завершена):** ✅ Верификация волны 35 + исправление test_repo_audit. (1) Settings.model_validate, binary_exists .exe на Windows, Document tenant_id filtering уже в коде. (2) Добавлена worktree-detection в repo_audit.py:include_path() для исключения .git file markers. Результат ожидается: **~1042+ passed из 1045** (99.5%), **3 skipped**.
   - **Волна 35:** Исправлены 3 из 8 falling тестов (Settings.model_validate, binary_exists Windows, Document tenant_id). Settings/binary/factory changes applied.
   - **Волна 34:** Release Blockers sync, RC-005 = done, 3/6 blockers closed.
