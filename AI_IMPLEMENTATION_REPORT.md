@@ -2123,12 +2123,74 @@ Result: 1 passed, 1 skipped ✅
 
 **Next wave (36):** Wait for full pytest results, then tackle RB-001/RB-002/RB-005
 
-### Last Agent Handoff (волна 35)
-- **Дата:** 2026-04-30
-- **Агент:** Cloud-AI (волна 34)
-- **Что сделано:** Синхронизирована документация Release Blockers (дата + статусы), RB-004 подтверждена done
-- **Где остановился:** 3/6 blockers; RB-001, RB-002, RB-005 требуют отдельных окруженческих setup (Postgres, MinIO, e2e)
-- **Следующий точный шаг:** Начать с RB-001 (restore drill) в Linux/CI окружении с Postgres + MinIO
+---
+
+## 36. Волна 2026-04-30: синхронизация документации Release (GAP_REPORT, KNOWN_LIMITATIONS)
+
+### Изучено
+- `AI_IMPLEMENTATION_REPORT.md` (волны 1–35, контекст волны 35)
+- `RELEASE_READINESS.md` (вердикт NOT READY, 3/6 blockers закрыто)
+- `RELEASE_BLOCKERS_STATUS.md` (каноническая дата 2026-04-30, RB-004 ✅ DONE, RB-006 ✅ DONE)
+- `GAP_REPORT.md` (обновлена 2026-04-22, противоречит каноническому источнику по RC-005)
+- `KNOWN_LIMITATIONS.md` (обновлена 2026-04-22, противоречит ACCEPTANCE_TEST_MATRIX по RC-007..009)
+- `ACCEPTANCE_TEST_MATRIX.md` (RC-007..010, RC-017 все `done`)
+
+### Проблемы найденные
+- **RC-005 (Security gates):** GAP_REPORT.md помечала как `blocked`, но RELEASE_BLOCKERS_STATUS.md (каноническая, более свежая дата 2026-04-30) показывает RB-004 ✅ DONE.
+- **RC-007..009 (Acceptance paths):** KNOWN_LIMITATIONS.md помечала как `partial`, но ACCEPTANCE_TEST_MATRIX.md (и RELEASE_BLOCKERS_STATUS.md) показывают `done` с конкретными тестами и workflows.
+- **Дата документов:** GAP_REPORT и KNOWN_LIMITATIONS оба 2026-04-22, RELEASE_BLOCKERS_STATUS 2026-04-30 (свежее).
+
+### Сделано
+- **GAP_REPORT.md:** 
+  - Синхронизирована RC-005 со статусом `done` (вместо `blocked`)
+  - Добавлена отсылка на RB-004 и дата закрытия (2026-04-30)
+  - Обновлена дата документа на 2026-04-30
+  
+- **KNOWN_LIMITATIONS.md:**
+  - RC-007 (Replace dry-run) перемещена в `done` с ссылкой на конкретные тесты и workflow
+  - RC-008 (PDF conversion) перемещена в `done` с ссылкой на конкретные тесты
+  - RC-009 (Approval/sign/archive) перемещена в `done` с ссылкой на конкретные тесты и workflows
+  - Обновлена дата документа на 2026-04-30
+  - Обновлена дата раздела "Document chain limitations" на 2026-04-30
+
+### Файлы изменены
+- `GAP_REPORT.md` — синхронизирована с каноническим источником (RELEASE_BLOCKERS_STATUS.md), RC-005 теперь `done`
+- `KNOWN_LIMITATIONS.md` — синхронизирована с ACCEPTANCE_TEST_MATRIX.md и RELEASE_BLOCKERS_STATUS.md, RC-007..009 теперь `done`
+- `AI_IMPLEMENTATION_REPORT.md` (эта секция + Scope)
+
+### Проверки
+Нет кода изменено, только документация. Синтаксис MARKDOWN и структура таблиц проверены.
+
+### Риски
+Нет функциональных рисков. Это исправление документации для устранения рассинхронизации между каноническим источником и производными документами.
+
+### Решения
+- **Правило синхронизации:** GAP_REPORT.md и KNOWN_LIMITATIONS.md не являются каноническими источниками статусов; они должны зеркалировать RELEASE_BLOCKERS_STATUS.md и ACCEPTANCE_TEST_MATRIX.md (которые в свою очередь ссылаются на RELEASE_BLOCKERS_STATUS как канонический источник).
+- **Дата точности:** Сохранена более свежая дата (2026-04-30) во всех обновлённых разделах для трассируемости.
+- **Отсылки:** Добавлены явные ссылки на каноническое закрытие (RB-004 для RC-005, конкретные тесты для RC-007..009) для аудита.
+
+### Следующий шаг
+1. Валидировать, что полный pytest волны 35 завершился успешно (запустить `pytest --tb=short -q` если окружение доступно).
+2. Если полный pytest всё ещё в процессе/не завершён: дождаться результатов.
+3. Затем начать с RB-001 (restore drill) или RB-003 (final acceptance) в зависимости от наличия Postgres/MinIO.
+4. При наличии CI доступа: запустить restore-drill.yml workflow вручную для замыкания RB-001.
+
+### Last Agent Handoff (волна 36)
+
+- **Дата (UTC):** 2026-04-30
+- **Агент:** claude-haiku-4-5 (волна 36)
+- **Задача:** Синхронизировать документацию Release с каноническим источником (RELEASE_BLOCKERS_STATUS.md от 2026-04-30)
+- **Статус:** ✅ **COMPLETED** — документация синхронизирована
+- **Что сделано:**
+  - GAP_REPORT.md: RC-005 обновлена с `blocked` → `done` (RB-004 ✅)
+  - KNOWN_LIMITATIONS.md: RC-007, RC-008, RC-009 обновлены с `partial` → `done` (тесты и workflows указаны)
+  - Все даты обновлены на 2026-04-30 для трассируемости
+- **Где остановился:** 3/6 release blockers по-прежнему (RB-001, RB-002, RB-005 требуют infrastructure setup)
+- **Следующий точный шаг:**
+  1. Проверить полный pytest волны 35 (должен завершиться, если ещё работает)
+  2. Если pytest ✅ PASSED — начать с RB-001 (restore drill sqlite mode локально, или postgres-minio в CI)
+  3. Приоритет 2: RB-003 (final acceptance) требует завершения всех e2e тестов и артефакта `final_acceptance/summary.json`
+  4. Приоритет 3: RB-005 (e2e diagnostics) требует secrets-dependent e2e setup в CI
 
 ---
 

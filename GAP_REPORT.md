@@ -1,6 +1,6 @@
 # GAP_REPORT
 
-- **Updated on (UTC):** 2026-04-22
+- **Updated on (UTC):** 2026-04-30
 - **Owner:** Stabilization Program (Platform + QA + Product Engineering)
 - **Canonical status vocabulary:** `done` / `partial` / `missing` / `blocked`
 - **Canonical blocker/status source:** `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`
@@ -10,7 +10,7 @@
 | Criterion ID | Gap area | Unified status | Evidence target / current evidence |
 |---|---|---|---|
 | RC-012 | Restore drill RTO/RPO formal go/no-go criteria | `missing` | Script target: `scripts/restore_drill.py`; test target: `tests/test_health_ready.py`; docs: `docs/stabilization/restore-drill.md`, `docs/runbooks/RESTORE_TENANT.md` |
-| RC-005 | Security ownership fallback + escalation SLA codification | `blocked` | Workflow target: `.github/workflows/ci.yml`; script: `scripts/ci/static_gates.sh`; doc target: `docs/stabilization/security-gates.md`; ownership map target: `.github/CODEOWNERS` |
+| RC-005 | Security ownership fallback + escalation SLA codification | `done` | Workflow target: `.github/workflows/ci.yml`; script: `scripts/ci/static_gates.sh`; doc target: `docs/stabilization/security-gates.md`; ownership map target: `.github/CODEOWNERS`; evidence: closed as RB-004 (2026-04-30). |
 | RC-006 | Secrets-dependent e2e diagnostics hardening | `missing` | Workflow target: `.github/workflows/e2e-smoke.yml`; test target: `tests/e2e/access/test_access_enforcement_matrix.py`; artifact target: `artifacts/e2e/access-enforcement/*.log` |
 | RC-013 | Relational/indexed template scope model migration | `missing` | Workflow target: `.github/workflows/ci.yml`; evidence target in migration tests/scripts |
 | RC-014 | Dedicated branch entity separated from current `Site` model | `missing` | Workflow target: `.github/workflows/ci.yml`; evidence target in contract tests + migration scripts |
