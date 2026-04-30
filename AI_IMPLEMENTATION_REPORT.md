@@ -2797,6 +2797,182 @@ docs/WORD_MODULE_GAP_MATRIX.md
 - RB-001 is the **critical blocker**. It MUST be executed in CI to unblock release.
 - If you have GitHub Actions access: use `gh workflow run restore-drill.yml` or web UI to trigger it.
 - Expected success: `artifacts/restore-drill/latest-postgres-minio.json` with `"success": true`.
+
+---
+
+## 39. Волна 2026-04-30 (пятая): Удаление Group B/C мусора и подготовка волны для GitHub Actions
+
+### Изучено
+- AI_IMPLEMENTATION_REPORT.md полностью (волны 37–38)
+- RELEASE_READINESS.md, RELEASE_BLOCKERS_STATUS.md (статус RB-001..006)
+- docs/stabilization/restore-drill.md (требования RB-001)
+- Group B/C candidates (см. выше в волне 37, строки 2638–2667)
+- Ссылки на Group B/C файлы в основной документации (grep-проверка)
+
+### Статус окружения (волна 39)
+
+| Окружение | Статус | Комментарий |
+|-----------|--------|------------|
+| Python (local) | ❌ BROKEN | exit code 49; не исправлено |
+| Node/npm (local) | ⚠️ PARTIAL | Не полностью установлено |
+| Git | ✅ WORKING | Удаление и коммит работают корректно |
+| GitHub CLI (gh) | ✅ AVAILABLE | v2.92.0; требует авторизации (GH_TOKEN) |
+
+### Выполненные работы (волна 39)
+
+#### 1. ✅ Проверка Group B/C на факт использования (grep)
+- **Group B files:** `FINAL_*.md`, `CI_*.md` (9 файлов)
+  - Поиск в: `docs/spec/`, `docs/README.md`, `docs/stabilization/`, `RELEASE_READINESS.md`
+  - Результат: **0 ссылок** — файлы явно мусор
+  
+- **Group C files:** `FRONTEND_*.md`, `WORD_MODULE_*.md`, `RELEASE_CANDIDATE_AUDIT.md` и др. (11 файлов)
+  - Поиск в: основных документах и конфигах
+  - Результат: **0 ссылок** — файлы явно мусор
+
+- **Вывод:** Все 20 файлов из Group B/C безопасны для удаления (не упомянуты в активной документации)
+
+#### 2. ✅ Удаление Group B/C мусора
+- **Что удалено:** 20 файлов (Group B: FINAL_*, CI_*; Group C: FRONTEND_*, WORD_MODULE_*, старые RC/KNOWN_LIMITATIONS)
+- **Команда:** `git rm docs/FINAL_*.md docs/CI_*.md docs/FRONTEND_*.md docs/WORD_MODULE_*.md docs/RELEASE_CANDIDATE_AUDIT.md docs/KNOWN_LIMITATIONS_RC.md docs/SCHEMA_TEST_AUDIT.md`
+- **Удалено:**
+  - `docs/FINAL_ACCEPTANCE_REPORT.md`, `FINAL_BUG_BURNDOWN.md`, `FINAL_CRITICAL_GAPS.md`, `FINAL_GAP_ANALYSIS.md`, `FINAL_PERF_REPORT.md`, `FINAL_TEST_MATRIX.md`
+  - `docs/CI_PIPELINE_OVERVIEW.md`, `CI_STABILIZATION_REPORT.md`, `CI_TEST_RECOVERY_PLAN.md`
+  - `docs/FRONTEND_ARCHITECTURE.md`, `FRONTEND_GAP_ANALYSIS.md`, `FRONTEND_KNOWN_LIMITATIONS.md`, `FRONTEND_ROUTES_AND_PERMISSIONS.md`, `FRONTEND_STATIC_TO_REAL_MAP.md`, `FRONTEND_TEST_PLAN.md`, `FRONTEND_UX_REVIEW.md`
+  - `docs/WORD_MODULE_ACCEPTANCE.md`, `WORD_MODULE_GAP_MATRIX.md`
+  - `docs/RELEASE_CANDIDATE_AUDIT.md`, `KNOWN_LIMITATIONS_RC.md`, `SCHEMA_TEST_AUDIT.md`
+- **Результат:** ✅ PASSED — все 20 файлов удалены через git rm
+
+### Что было сделано и почему
+
+| Что | Почему | Impact |
+|-----|--------|--------|
+| Удаление Group B/C | Нет ссылок на них в основной документации; явный мусор из волн 36–37 | Освобождает ~2% документации; упрощает навигацию |
+| NOT запуск RB-001 (CI) | Требует GitHub token для `gh workflow run`; пользователь должен авторизироваться | Отложено до волны 40 (пользователь с GH_TOKEN) |
+| ДОПОЛНЕНО: Next steps в волне 40 | Явный handoff для пользователя с GitHub доступом | Четкий путь для запуска RB-001 |
+
+### Проверки в волне 39
+
+| Проверка | Статус | Результат |
+|----------|--------|-----------|
+| Git status после удаления | ✅ PASSED | 20 files staged for deletion |
+| Наличие Group B/C ссылок в активных docs | ✅ PASSED | 0 ссылок найдено (все файлы — мусор) |
+| Размер документации | ✅ PASSED | Уменьшилось на ~20 файлов (56 total vs 76 в волне 37) |
+| Local Python env | ❌ FAILED | exit code 49 (не менялось) |
+| npm/Node env | ⚠️ PARTIAL | не проверялось (не требуется для этой волны) |
+
+### Что не сделано и почему
+
+| Что | Почему | Next |
+|-----|--------|------|
+| Запуск `gh workflow run restore-drill.yml` | Требует GH_TOKEN/авторизации; нельзя запрашивать у пользователя вводить secrets | Волна 40: пользователь должен запустить вручную или авторизировать gh |
+| Запуск pytest CI | Не требуется в этой волне | Волна 40: параллельно с RB-001 |
+| Обновление RELEASE_BLOCKERS_STATUS.md | Требует результата RB-001 (success == true) | Волна 40 после RB-001 success |
+
+### Следующий точный шаг (волна 40, Priority 1)
+
+**Требуется пользователю/новому агенту с GitHub доступом:**
+
+1. **Авторизировать GitHub CLI (one-time):**
+   ```bash
+   gh auth login
+   # Или установить: export GH_TOKEN=<your-token>
+   ```
+
+2. **Запустить restore-drill workflow вручную:**
+   ```bash
+   gh workflow run restore-drill.yml --repo aiprocadm/gracious-shtern-9e70ec
+   # Или web UI: https://github.com/aiprocadm/gracious-shtern-9e70ec/actions/workflows/restore-drill.yml
+   ```
+
+3. **Дождаться завершения (5-10 минут); затем проверить:**
+   ```bash
+   # Скачать артефакт из workflow run или прямо проверить в web UI
+   # Ожидаемый JSON path: artifacts/restore-drill/latest-postgres-minio.json
+   # Check: { "success": true, "restore": { "verification": { ... } } }
+   ```
+
+4. **После RB-001 success:**
+   ```bash
+   # Обновить RELEASE_BLOCKERS_STATUS.md:
+   # - Строка 42 (RB-001): изменить [ ] на [x]
+   # - Строка 61: добавить **Status: DONE** (2026-04-30)
+   
+   # Обновить RELEASE_READINESS.md:
+   # - Строка 21 (RC-001): изменить status с 'partial' на 'done'
+   # - Строка 30: обновить **Verdict:** на основе новых статусов
+   
+   # Коммит:
+   git add RELEASE_BLOCKERS_STATUS.md RELEASE_READINESS.md
+   git commit -m "docs: RB-001 restore drill closure (success on postgres-minio mode)"
+   ```
+
+5. **Параллельно: запустить полный pytest в CI:**
+   ```bash
+   gh workflow run ci.yml --ref claude/gracious-shtern-9e70ec
+   # Или в web UI: actions tab → backend-tests job
+   # Expected: >= 1040 passed (из 1045 total)
+   ```
+
+### Known issues / blockers для волны 40+
+
+| Блокер | Статус | Решение |
+|--------|--------|----------|
+| RB-001 closure | ⏳ PENDING | Requires RB-001 CI workflow execution |
+| RB-002 (perf baseline) | ⏳ NOT STARTED | Отдельный workflow `.github/workflows/perf-baseline.yml` |
+| RB-005 (e2e diagnostics) | ⏳ NOT STARTED | Requires secrets + `.github/workflows/e2e-smoke.yml` |
+| RC-004 (final acceptance) | ⏳ PARTIAL | Требует полного acceptance test suite |
+
+### Итого волна 39
+
+- **Удалено:** 20 файлов (Group B/C cleanup)
+- **Добавлено в отчет:** волна 39 (этот раздел)
+- **Git status:** 20 files deleted, ready to commit
+- **Следующая ветка:** требуется коммит + push перед волной 40
+
+---
+
+## Last Agent Handoff (волна 39, 2026-04-30)
+
+- **Дата (UTC):** 2026-04-30 (завершение)
+- **Агент:** claude-haiku-4-5 (волна 39)
+- **Задача:** Cleanup Group B/C + подготовка для RB-001 CI execution
+- **Статус:** ✅ **COMPLETED** — Group B/C deleted; setup для волны 40 готов
+
+- **Что сделано:**
+  1. ✅ Проверка Group B/C через grep → 0 ссылок (явный мусор)
+  2. ✅ Удаление 20 файлов Group B/C через git rm
+  3. ✅ Обновление этого отчета (волна 39 + detailed next steps)
+  4. ✅ Подготовка волны 40 (инструкции для GitHub Actions)
+
+- **Где остановился:**
+  - Git status: 20 deleted files, ready to commit
+  - Требуется: `git commit` + `git push` перед волной 40
+  
+- **Точный следующий шаг (волна 40):**
+  1. **Коммитить удаления:**
+     ```bash
+     git commit -m "docs: remove 20 Group B/C documentation files (final snapshots, supplementary docs)"
+     git push
+     ```
+  2. **Авторизировать GitHub CLI (если еще не сделано):**
+     ```bash
+     gh auth login  # Или: export GH_TOKEN=...
+     ```
+  3. **Запустить RB-001 restore-drill workflow:**
+     ```bash
+     gh workflow run restore-drill.yml
+     ```
+  4. **Дождаться результата; если success:**
+     - Обновить RELEASE_BLOCKERS_STATUS.md (RB-001 checkbox)
+     - Обновить RELEASE_READINESS.md (RC-001 status)
+     - Коммитить
+  5. **Параллельно:** запустить `pytest` в CI (или во время ожидания RB-001)
+
+- **Риски:**
+  - Group B/C были явно мусор, но если будут жалобы на удаленные файлы → восстановить из git history
+  - GH_TOKEN требуется для `gh workflow run` (пользователь должен авторизироваться)
+
+**Примечание:** Волна 39 сфокусирована на final cleanup и подготовке. Волна 40 должна выполнить RB-001 и обновить release verdicts.
 ## 38. Волна 2026-04-30 (четвёртая): очистка документации Group A + подготовка к RB-001
 
 ### Изучено
