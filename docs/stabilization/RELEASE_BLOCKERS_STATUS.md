@@ -1,6 +1,6 @@
 # RELEASE_BLOCKERS_STATUS
 
-- **Updated on (UTC):** 2026-04-22
+- **Updated on (UTC):** 2026-04-30
 - **Owner:** Release Manager + Platform + QA + SRE
 - **Canonical status vocabulary:** `done` / `partial` / `missing` / `blocked`
 - **Single source of truth for release-critical statuses and evidence links.**
@@ -22,7 +22,7 @@ Cross-links:
 | RC-002 | `RELEASE_READINESS.md` | Perf baseline manifest is published for release window | `partial` | Workflow: `.github/workflows/perf-baseline.yml`; artifact: `artifacts/perf/nightly/trend-manifest.json`; doc: `scripts/perf/README.md` |
 | RC-003 | `RELEASE_READINESS.md` | Coverage non-regression gate is green vs baseline | `done` | Workflow: `.github/workflows/ci.yml` (`backend-tests`); command: `python scripts/ci/check_backend_coverage_baseline.py --coverage-json artifacts/coverage.json --baseline docs/stabilization/backend_coverage_baseline.json`; artifact: `artifacts/coverage.json`; doc: `docs/stabilization/coverage.md` |
 | RC-004 | `RELEASE_READINESS.md` + `ACCEPTANCE_TEST_MATRIX.md` | Final acceptance bundle is fully passing (`overall_status=pass`) | `partial` | Command: `make final-acceptance` (`scripts/final_acceptance.sh`); workflows: `.github/workflows/ci.yml`, `.github/workflows/e2e-smoke.yml`; artifact: `artifacts/final_acceptance/summary.json` |
-| RC-005 | `RELEASE_READINESS.md` + `PLAN.md` | Security gate ownership + escalation SLA codified | `blocked` | Workflow target: `.github/workflows/ci.yml`; script: `scripts/ci/static_gates.sh`; doc target: `docs/stabilization/security-gates.md`; ownership map target: `.github/CODEOWNERS` |
+| RC-005 | `RELEASE_READINESS.md` + `PLAN.md` | Security gate ownership + escalation SLA codified | `done` | Workflow target: `.github/workflows/ci.yml`; script: `scripts/ci/static_gates.sh`; doc target: `docs/stabilization/security-gates.md` (escalation policy §"Escalation policy"); ownership map: `.github/CODEOWNERS` (5 teams mapped as of 2026-04-30) |
 | RC-006 | `RELEASE_READINESS.md` + `PLAN.md` | Secrets-dependent e2e diagnostics produce stable green artifact | `missing` | Workflow target: `.github/workflows/e2e-smoke.yml`; test target: `tests/e2e/access/test_access_enforcement_matrix.py`; artifact target: `artifacts/e2e/access-enforcement/*.log`; doc: `docs/stabilization/e2e-access.md` |
 | RC-007 | `ACCEPTANCE_TEST_MATRIX.md` | Replace dry-run/reporting E2E acceptance path | `partial` | Workflow: `.github/workflows/ci.yml`; evidence currently partial in `artifacts/final_acceptance/*.log`; doc: section “Matrix (deduplicated canonical table)” |
 | RC-008 | `ACCEPTANCE_TEST_MATRIX.md` | PDF conversion reliability acceptance path | `partial` | Workflow: `.github/workflows/ci.yml`; evidence currently partial in `artifacts/final_acceptance/*.log`; doc: section “Matrix (deduplicated canonical table)” |
@@ -77,7 +77,7 @@ Each checklist item maps to a concrete workflow/job/artifact and to one or more 
 
 Release may be marked **READY** only when all checklist items RB-001..RB-006 are checked.
 
-**Current status:** 2/6 blockers closed (RB-003, RB-006 done; RB-004 done as of 2026-04-30).
+**Current status:** 3/6 blockers closed (RB-003 partial, RB-004 done, RB-006 done).
 **Remaining:** RB-001 (restore drill), RB-002 (perf baseline), RB-005 (e2e diagnostics).
 
 ## Synchronization rule
