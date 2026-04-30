@@ -489,7 +489,7 @@ async def _read_restore_state_postgres(cfg: PostgresMinioConfig) -> dict[str, ob
 
 
 def _app_smoke_boot(*, database_url: str, s3_env: dict[str, str] | None = None) -> dict[str, object]:
-    cmd = [sys.executable, "-m", "backend.app.cli.main", "health", "check", "--json"]
+    cmd = [sys.executable, "-m", "backend.app.cli.main", "health-check", "--json"]
     env = os.environ.copy()
     env["DATABASE_URL"] = database_url
     env.setdefault("APP_ENV", "test")
