@@ -3153,3 +3153,227 @@ docs/WORD_MODULE_GAP_MATRIX.md
 3. **Group B/C требуют проверки** — слепое удаление может потерять ценные данные (особенно FINAL_*, CI_*). Рекомендуется grep перед удалением.
 
 **Примечание:** Волна 38 завершила Priority 2 (очистка Group A). Волна 39 должна сфокусироваться на Priority 1 (запуск RB-001 и pytest в GitHub Actions UI и обновление RELEASE_READINESS.md).
+
+---
+
+## 40. Волна 2026-04-30 (шестая): Подготовка RB-001 к выполнению + детальный handoff
+
+### Изучено
+- AI_IMPLEMENTATION_REPORT.md полностью (волны 1–39)
+- `RELEASE_READINESS.md`, `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` (текущий статус: 3/6 blockers)
+- `.github/workflows/restore-drill.yml` — workflow для RB-001
+- `scripts/restore_drill.py` — скрипт для backup/restore drill
+- `docs/stabilization/restore-drill.md` — требования RB-001
+- Git status — ветка синхронизирована с main (волны 38–39 залиты)
+
+### Статус окружения (волна 40)
+
+| Окружение | Статус | Комментарий |
+|-----------|--------|------------|
+| Python (local) | ❌ BROKEN | exit code 49; без изменений с волны 37 |
+| Node/npm (local) | ⚠️ PARTIAL | Не полностью установлено; frontend CI недоступна |
+| Git | ✅ WORKING | Текущая ветка синхронизирована с main |
+| GitHub CLI (gh) | ⚠️ NOT AUTH | v2.92.0 доступна, но не авторизирована (требует `gh auth login`) |
+
+### Попытка запустить RB-001
+
+#### 1. ⚠️ GitHub CLI authentication blocker
+```bash
+$ gh auth status
+You are not logged into any GitHub hosts. To log in, run: gh auth login
+```
+
+**Причина:** GitHub CLI не авторизирована локально. Невозможно выполнить `gh workflow run restore-drill.yml`.
+**Решение:** Пользователь должен авторизировать gh CLI или использовать GitHub Actions web UI.
+
+#### 2. ✅ Верификация что workflow готов к запуску
+- ✅ `.github/workflows/restore-drill.yml` существует и содержит `workflow_dispatch` триггер
+- ✅ Workflow конфигурирует Postgres 16 + MinIO 2026 services
+- ✅ Оба режима (sqlite + postgres-minio) настроены
+- ✅ Artifact upload на 30 дней
+- ✅ Dependencies (asyncpg, minio) в requirements.txt
+
+### Что не сделано и почему
+
+| Что | Почему | Impact | Next |
+|-----|--------|--------|------|
+| Запуск `gh workflow run restore-drill.yml` | gh CLI не авторизирована; нельзя запрашивать credentials | RB-001 не выполнена в этой волне | Пользователь должен авторизировать gh CLI или использовать web UI |
+| Запуск pytest локально | Python env broken (exit code 49) | Волна 35 не валидирована локально | Требуется CI или Python env fix |
+| Запуск `npm run ci` | Node env partial; npm/tsc недоступны | Frontend не проверена | Требуется `npm ci` или Node env fix |
+
+### Deliverable: Детальные инструкции для RB-001 выполнения
+
+#### Метод 1: GitHub web UI (рекомендуется, не требует CLI)
+
+1. **Откройте GitHub Actions:**
+   ```
+   https://github.com/aiprocadm/prt_ot_doc/actions/workflows/restore-drill.yml
+   ```
+
+2. **Нажмите "Run workflow":**
+   - Кнопка справа сверху, главное меню GitHub Actions
+   - Оставьте все параметры по умолчанию (branch = `main` или текущая ветка)
+   - Нажмите **"Run workflow"** (зеленая кнопка)
+
+3. **Дождитесь завершения (5–10 минут):**
+   - Workflow выполнит оба режима: `sqlite` и `postgres-minio`
+   - Status должен измениться с `In progress` → `Completed` или `Failed`
+
+4. **Проверьте артефакт:**
+   - Перейдите в Run Details (кликните на run ID)
+   - Скачайте артефакт `restore-drill-evidence`
+   - Проверьте файл `latest-postgres-minio.json`:
+     ```json
+     {
+       "success": true,
+       "drill_id": "...",
+       "restore": {
+         "verification": {
+           "counts_match": true,
+           "documents_checksum_match": true,
+           "object_content_and_metadata_match": true
+         }
+       },
+       "smoke_boot": {
+         "exit_code": 0
+       }
+     }
+     ```
+   - Если `"success": true` → RB-001 PASS ✅
+
+#### Метод 2: GitHub CLI (требует авторизации)
+
+1. **Авторизируйте gh CLI (one-time):**
+   ```bash
+   gh auth login
+   # Или установите GitHub token в env:
+   export GH_TOKEN=your-github-token
+   ```
+
+2. **Запустите workflow:**
+   ```bash
+   gh workflow run restore-drill.yml --repo aiprocadm/prt_ot_doc
+   ```
+
+3. **Дождитесь результата:**
+   ```bash
+   gh run list --repo aiprocadm/prt_ot_doc --workflow restore-drill.yml --limit 1
+   # Проверьте статус в URL: https://github.com/aiprocadm/prt_ot_doc/actions/runs/<RUN_ID>
+   ```
+
+### После успешного RB-001 (`success == true`)
+
+1. **Обновите RELEASE_BLOCKERS_STATUS.md:**
+   ```bash
+   # Открыть файл: docs/stabilization/RELEASE_BLOCKERS_STATUS.md
+   # Строка ~42: изменить [ ] на [x] для RB-001
+   # Добавить дату выполнения: "Status: DONE (2026-04-30)"
+   ```
+
+2. **Обновите RELEASE_READINESS.md:**
+   ```bash
+   # Строка ~21: RC-001 status с 'partial' на 'done'
+   # Строка ~31: обновить Verdict с "NOT READY" (3/6) на "NOT READY" (4/6) если RB-001 закрыла RC-001
+   # Обновить Updated date на текущую дату
+   ```
+
+3. **Создайте commit:**
+   ```bash
+   git add docs/stabilization/RELEASE_BLOCKERS_STATUS.md RELEASE_READINESS.md
+   git commit -m "docs(release): close RB-001 with restore-drill postgres-minio success"
+   git push
+   ```
+
+### Параллельно: Запустить полный pytest в CI
+
+**Команда в GitHub web UI:**
+1. Перейдите: `https://github.com/aiprocadm/prt_ot_doc/actions/workflows/ci.yml`
+2. Нажмите **"Run workflow"** → выберите branch `main`
+3. Job `backend-tests` должен показать >= 1040 passed из 1045 total
+4. Если passed ≥ 1040 → волна 35 валидирована ✅
+
+### Что не было выполнено в волне 40
+
+| Что | Причина | Priority |
+|-----|---------|----------|
+| RB-001 (restore drill) | GitHub CLI не авторизирована; требуется пользовательское действие | P0 CRITICAL |
+| Полный pytest | Python env broken (local) + требуется CI | P1 |
+| Frontend tests | Node env partial + требуется npm ci | P2 |
+| RB-002, RB-005 | Зависят от separate workflows/setup | P2 |
+
+### Known issues / blockers
+
+1. **Local Python broken (exit code 49):**
+   - Системная проблема, не исправляется в этой волне
+   - **Workaround:** все critical checks должны проходить через CI
+
+2. **GitHub CLI не авторизирована:**
+   - Требует `gh auth login` или GH_TOKEN
+   - **Решение:** пользователь должен авторизировать, или использовать web UI
+
+3. **Release verdict зависит от RB-001:**
+   - Текущий вердикт: NOT READY (3/6 blockers)
+   - Закрытие RB-001 → 4/6 blockers → все еще NOT READY
+   - Требуется RB-002 или RB-005 для READY вердикта
+
+### Следующий шаг (волна 41)
+
+**Priority 1 (IMMEDIATE):** Пользователь должен выполнить RB-001 вручную:
+```bash
+1. Go to GitHub Actions web UI
+2. Navigate to .github/workflows/restore-drill.yml
+3. Run workflow manually (workflow_dispatch)
+4. Wait 5–10 min for completion
+5. Check latest-postgres-minio.json for "success": true
+6. Update RELEASE_BLOCKERS_STATUS.md and RELEASE_READINESS.md
+7. Commit and push
+```
+
+**Priority 2:** Параллельно запустить полный pytest:
+```bash
+1. Go to .github/workflows/ci.yml
+2. Run workflow → backend-tests job
+3. Check >= 1040 passed
+```
+
+**Priority 3:** После RB-001 + pytest success → рассмотреть RB-002/RB-005 для release closure
+
+### Last Agent Handoff (волна 40)
+
+- **Дата (UTC):** 2026-04-30 (завершение)
+- **Агент:** claude-haiku-4-5 (волна 40)
+- **Задача:** Подготовка RB-001 к выполнению; создание инструкций для пользователя
+- **Статус:** ✅ **COMPLETED (PARTIAL)** — инструкции созданы, но RB-001 требует пользовательского действия
+
+- **Что сделано:**
+  1. ✅ Верификация что workflow `.github/workflows/restore-drill.yml` готов к запуску
+  2. ✅ Проверка что оба режима (sqlite + postgres-minio) настроены
+  3. ✅ Создание детальных инструкций для RB-001 (web UI + CLI методы)
+  4. ✅ Создание инструкций для обновления RELEASE_BLOCKERS_STATUS.md
+  5. ✅ Документирование известных blockers (gh auth, local Python)
+  6. ✅ Обновление этого отчета с полным handoff
+
+- **Где остановился:**
+  - GitHub CLI не авторизирована (требует `gh auth login`)
+  - RB-001 не запущена (требует пользовательского действия через GitHub web UI)
+  - Не может быть выполнена локально (no Postgres, MinIO, или Python)
+
+- **Точный следующий шаг (волна 41, IMMEDIATE):**
+  1. **Пользователь выполняет RB-001 вручную (web UI метод выше)**
+  2. **После RB-001 success:**
+     - Обновить `RELEASE_BLOCKERS_STATUS.md` (RB-001 checkbox)
+     - Обновить `RELEASE_READINESS.md` (RC-001 status)
+     - Commit & push
+  3. **Параллельно: запустить pytest в CI**
+     - `.github/workflows/ci.yml` → Run workflow
+     - Проверить >= 1040 passed
+  4. **После успеха обоих:**
+     - Release verdict станет 4/6 blockers (все еще NOT READY)
+     - Рассмотреть RB-002 (perf baseline) или RB-005 (e2e diagnostics)
+
+- **Риски:**
+  1. **Local env broken** — blokcs all local testing; требуется CI для валидации
+  2. **RB-001 требует Postgres + MinIO** — only available in CI
+  3. **Release verdict требует 6/6 blockers** — требуется работа над RB-002 и RB-005 после RB-001
+
+**Примечание:** Волна 40 создала полный handoff и инструкции для RB-001 выполнения. Волна 41 должна быть выполнена пользователем с GitHub доступом через web UI.
