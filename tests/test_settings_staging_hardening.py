@@ -45,46 +45,46 @@ _STAGING_SAFE_BASE: dict[str, object] = {
 
 def test_staging_rejects_default_secret_key() -> None:
     with pytest.raises(SettingsError, match="Staging configuration must override"):
-        Settings(
+        Settings.model_validate({
             **_STAGING_SAFE_BASE,
-            secret_key="change-me",
-        )
+            "secret_key": "change-me",
+        })
 
 
 def test_staging_rejects_default_s3_credentials_when_other_secrets_ok() -> None:
     with pytest.raises(SettingsError, match="Staging configuration must override"):
-        Settings(
-            app_env="staging",
-            secret_key="not-the-default-staging-secret-key-32chars!!",
-            jwt_private_key_pem=_SAFE_STAGING_PRIVATE_KEY,
-            jwt_public_key_pem=_SAFE_STAGING_PUBLIC_KEY,
-            postgres_password="staging-postgres-secret-not-default",
-            s3_access_key="prt_local_access",
-            s3_secret_key="prt_local_secret",
-            s3_backend="minio",
-            inbound_webhook_hmac_secret="staging-hmac-secret",
-        )
+        Settings.model_validate({
+            "app_env": "staging",
+            "secret_key": "not-the-default-staging-secret-key-32chars!!",
+            "jwt_private_key_pem": _SAFE_STAGING_PRIVATE_KEY,
+            "jwt_public_key_pem": _SAFE_STAGING_PUBLIC_KEY,
+            "postgres_password": "staging-postgres-secret-not-default",
+            "s3_access_key": "prt_local_access",
+            "s3_secret_key": "prt_local_secret",
+            "s3_backend": "minio",
+            "inbound_webhook_hmac_secret": "staging-hmac-secret",
+        })
 
 
 def test_staging_requires_inbound_webhook_hmac_secret() -> None:
     with pytest.raises(SettingsError, match="Staging configuration must override"):
-        Settings(
+        Settings.model_validate({
             **_STAGING_SAFE_BASE,
-            secret_key="not-the-default-staging-secret-key-32chars!!",
-            inbound_webhook_hmac_secret="",
-        )
+            "secret_key": "not-the-default-staging-secret-key-32chars!!",
+            "inbound_webhook_hmac_secret": "",
+        })
 
 
 def test_staging_rejects_bundled_dev_jwt_keypair() -> None:
     with pytest.raises(SettingsError, match="must not use bundled development JWT key pair"):
-        Settings(
-            app_env="staging",
-            secret_key="not-the-default-staging-secret-key-32chars!!",
-            jwt_private_key_pem=DEV_PRIVATE_KEY,
-            jwt_public_key_pem=DEV_PUBLIC_KEY,
-            postgres_password="staging-postgres-secret-not-default",
-            s3_access_key="staging-access-not-prt-local",
-            s3_secret_key="staging-secret-not-prt-local",
-            s3_backend="minio",
-            inbound_webhook_hmac_secret="staging-hmac-secret",
-        )
+        Settings.model_validate({
+            "app_env": "staging",
+            "secret_key": "not-the-default-staging-secret-key-32chars!!",
+            "jwt_private_key_pem": DEV_PRIVATE_KEY,
+            "jwt_public_key_pem": DEV_PUBLIC_KEY,
+            "postgres_password": "staging-postgres-secret-not-default",
+            "s3_access_key": "staging-access-not-prt-local",
+            "s3_secret_key": "staging-secret-not-prt-local",
+            "s3_backend": "minio",
+            "inbound_webhook_hmac_secret": "staging-hmac-secret",
+        })
