@@ -9,6 +9,7 @@ MARKDOWN_OUTPUT = REPO_ROOT / "docs/audit/REPOSITORY_AUDIT.md"
 JSON_OUTPUT = REPO_ROOT / "docs/audit/REPOSITORY_AUDIT.json"
 
 EXCLUDED_PARTS = {"node_modules", ".git", ".venv", "dist", "__pycache__", ".pytest_cache"}
+WORKTREE_MARKERS = {".git"}  # Files indicating worktree/nested repo
 
 
 @dataclass(frozen=True)
@@ -162,7 +163,28 @@ def rel(path: Path) -> str:
 
 
 def include_path(path: Path) -> bool:
-    return path.is_file() and not any(part in EXCLUDED_PARTS for part in path.parts)
+    """Check if a path should be included in the audit.
+
+    Excludes:
+    - Non-files
+    - Paths containing excluded parts (node_modules, .git, .venv, etc.)
+    - Paths from worktrees (detected by .git file markers in parent dirs)
+    """
+    if not path.is_file():
+        return False
+
+    if any(part in EXCLUDED_PARTS for part in path.parts):
+        return False
+
+    # Exclude files from worktree directories (detected by .git file in any parent except root)
+    for parent in path.parents:
+        if parent == REPO_ROOT:
+            break
+        git_marker = parent / ".git"
+        if git_marker.exists() and git_marker.is_file():
+            return False  # This is a worktree, exclude it
+
+    return True
 
 
 def find_files(*patterns: str) -> list[str]:
