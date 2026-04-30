@@ -2703,6 +2703,100 @@ docs/WORD_MODULE_GAP_MATRIX.md
 
 ---
 
+### Last Agent Handoff (волна 38, 2026-04-30)
+
+- **Дата (UTC):** 2026-04-30
+- **Агент:** claude-haiku-4-5 (волна 38)
+- **Задача:** Выполнение Priority 1-2 из волны 37 (RB-001, cleanup, pytest) + обновление отчета
+- **Статус:** ✅ **COMPLETED (PARTIAL)** — Group A cleanup done; RB-001/pytest blocked на localized/network issues
+- **Что сделано:**
+  1. ✅ **Deleted 36 Group A files** (wave completion reports):
+     - Все CODEX_WAVE_*, CORPORATE_READINESS_*, ENTERPRISE_*, OPERATIONAL_MATURITY_*, PHASE_* files удалены
+     - Это освобождает ~3% от документации и убирает confusion из `docs/`
+     - Commits: обновлен с 36 удалениями в одном commit (см. git log)
+  2. ⏳ **Attempted RB-001 restore drill execution** (BLOCKED):
+     - Попытался запустить `python scripts/restore_drill.py --mode sqlite` в Docker
+     - Docker build **FAILED** из-за сетевых ошибок при загрузке Debian packages (libreoffice, fonts)
+     - Fallback: Рекомендация запустить через GitHub Actions CI (`.github/workflows/restore-drill.yml`)
+  3. ⏳ **Attempted local Python env verification**:
+     - Python не доступен локально (exit code 49)
+     - Node/npm также не доступны
+     - Docker build fails на apt-get install шаге
+  4. ✅ **Cleaned up temporary files**:
+     - Удален временный `docker-compose.restore-drill.yml`
+     - Репозиторий в чистом состоянии перед commit
+
+- **Где остановился:**
+  - RB-001 recovery требует либо:
+    * GitHub Actions CI workflow (`.github/workflows/restore-drill.yml` → `workflow_dispatch` trigger)
+    * Или фиксить Docker/network в локальном окружении
+  - pytest также требует локального Python или CI
+
+- **Следующий точный шаг (Priority 1 для волны 39):**
+  1. **GitHub Actions workflow dispatch:**
+     ```bash
+     # Требует GitHub CLI или web UI
+     # В web UI: Navigate to .github/workflows/restore-drill.yml → Run workflow
+     # Expected artifact: artifacts/restore-drill/latest-postgres-minio.json
+     # Check: "success": true в JSON
+     # If success: update RELEASE_BLOCKERS_STATUS.md RB-001 checkbox
+     ```
+  2. **После RB-001 success:**
+     - Обновить `RELEASE_BLOCKERS_STATUS.md` строка 42: RB-001 checkbox → `[x]`
+     - Обновить `RELEASE_READINESS.md` RC-001 status → `done`
+     - Перечитать `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` §"Binary Go/No-Go" для полного вердикта
+
+  3. **Параллельно: Запустить pytest в CI:**
+     - Workflow: `.github/workflows/ci.yml` (backend-tests job)
+     - Expected: >= 1040 passed from 1045 total
+     - If success: no action needed (RB-006 already done, RB-003 partial)
+
+  4. **Group B/C cleanup review (Priority 3):**
+     - Не удалял Group B/C (final snapshots + supplementary docs)
+     - Recommend: grep перед удалением, так как могут содержать valuable data
+     - Files listed in previous handoff section "Group B/C"
+
+- **Решения, принятые в волне 38:**
+  - **Решение:** Удалить Group A немедленно (explicit recommendation от волны 37, файлы явно старые)
+    * Причина: Clearly marked as wave completion reports, dates < 2026-04-20, не упомянуты в `docs/README.md` canonical list
+    * Риск: LOW (no other docs reference them, no code imports, replacements exist in `docs/spec/`, `docs/stabilization/`)
+    * Альтернатива: Оставить их и просто пометить deprecated (но это создает confusion для next developers)
+
+- **Проблемы, выявленные в волне 38:**
+  1. **Docker build network failure:**
+     - apt-get packages (libreoffice, poppler-utils, fonts-*) fail to download
+     - IP: 151.101.130.132 (Debian mirror CDN)
+     - Status: Network connectivity issue, not code issue
+     - Workaround: Use GitHub Actions CI workflows instead of local Docker
+  2. **No local Python/Node environment:**
+     - Previous wave (37) also noted this; confirmed in 38
+     - Blocks: restore_drill.py, pytest, npm build, any local testing
+     - Workaround: All critical checks must go through CI
+  3. **RB-001 still not closed:**
+     - Block on network/CI access
+     - Not in scope for this wave (local env limitations)
+     - Recommend: Next agent with GitHub Actions access should execute it
+
+- **Known blockers for next wave:**
+  1. **RB-001 acceptance closure** — no local env; needs CI
+  2. **RB-002 perf baseline** — separate workflow; also blocked on env
+  3. **RB-005 e2e diagnostics** — missing/needs secrets
+  4. **RC-004 final acceptance partial** — partial only; more work needed
+
+- **Validation checklist (wave 38):**
+  - ✅ Git status clean (after commit)
+  - ✅ All Group A files deleted (36 confirmed)
+  - ✅ No new code changes (cleanup only)
+  - ✅ Temporary files cleaned up
+  - ❌ RB-001 not executed (blocked on network)
+  - ❌ pytest not executed (blocked on Python env)
+
+**Next agent notes:**
+- Group A cleanup is DONE. Do not re-add these files.
+- Group B/C are still candidates; grep before deleting (see lists above).
+- RB-001 is the **critical blocker**. It MUST be executed in CI to unblock release.
+- If you have GitHub Actions access: use `gh workflow run restore-drill.yml` or web UI to trigger it.
+- Expected success: `artifacts/restore-drill/latest-postgres-minio.json` with `"success": true`.
 ## 38. Волна 2026-04-30 (четвёртая): очистка документации Group A + подготовка к RB-001
 
 ### Изучено
