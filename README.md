@@ -162,6 +162,7 @@ B2B multi-tenant SaaS платформа для ОТ / ПБ / ПромБез / �
 - `docs/ARCHITECTURE.md`
 - `docs/PROJECT_STRUCTURE.md`
 - `docs/SETUP.md`
+- `docs/troubleshooting.md` — решение типичных проблем при разработке (Python setup, pytest, npm, database, PDF, multi-tenancy)
 - `docs/BACKEND.md`
 - `docs/FRONTEND.md`
 - `docs/MODULES.md`
@@ -179,6 +180,7 @@ B2B multi-tenant SaaS платформа для ОТ / ПБ / ПромБез / �
 - `docs/SECURITY.md`
 - `docs/OBSERVABILITY.md`
 - `docs/TESTING.md`
+- `docs/troubleshooting.md` — quick reference for common issues and how to fix them
 - `docs/audit/TZ_COVERAGE_MATRIX.md`
 - `ACCEPTANCE_TEST_MATRIX.md`
 - `GAP_REPORT.md`
