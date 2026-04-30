@@ -162,6 +162,7 @@ B2B multi-tenant SaaS платформа для ОТ / ПБ / ПромБез / �
 - `docs/ARCHITECTURE.md`
 - `docs/PROJECT_STRUCTURE.md`
 - `docs/SETUP.md`
+- `docs/troubleshooting.md` — решение типичных проблем при разработке (Python setup, pytest, npm, database, PDF, multi-tenancy)
 - `docs/BACKEND.md`
 - `docs/FRONTEND.md`
 - `docs/MODULES.md`
