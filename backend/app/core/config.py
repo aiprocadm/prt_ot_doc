@@ -917,4 +917,16 @@ def binary_exists(candidate: str) -> bool:
     if resolved is not None:
         return True
 
+    import os
+    import sys
+
+    if sys.platform == "win32":
+        path_dirs = os.environ.get("PATH", "").split(os.pathsep)
+        for path_dir in path_dirs:
+            if not path_dir:
+                continue
+            candidate_path = Path(path_dir) / candidate
+            if candidate_path.exists():
+                return True
+
     return path.exists()
