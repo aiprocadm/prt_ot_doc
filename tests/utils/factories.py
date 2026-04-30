@@ -209,7 +209,8 @@ class TestDataFactory:
         creator_obj = creator or await self.create_user(
             tenant=tenant_obj, session=session
         )
-        overrides.pop("tenant_id", None)
+        # Ensure tenant_id is not duplicated if passed in overrides
+        filtered_overrides = {k: v for k, v in overrides.items() if k != "tenant_id"}
         document = Document(
             tenant_id=use_tenant_id,
             template_id=template_obj.id,
@@ -217,7 +218,7 @@ class TestDataFactory:
             person_id=person_obj.id,
             status=status,
             created_by=creator_obj.id,
-            **overrides,
+            **filtered_overrides,
         )
         document, version = await self._save_document_with_version(
             document,
