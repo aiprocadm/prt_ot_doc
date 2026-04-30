@@ -39,6 +39,7 @@ _STAGING_SAFE_BASE: dict[str, object] = {
     "s3_access_key": "staging-access-not-prt-local",
     "s3_secret_key": "staging-secret-not-prt-local",
     "s3_backend": "minio",
+    "inbound_webhook_hmac_secret": "staging-hmac-secret",
 }
 
 
@@ -61,6 +62,7 @@ def test_staging_rejects_default_s3_credentials_when_other_secrets_ok() -> None:
             s3_access_key="prt_local_access",
             s3_secret_key="prt_local_secret",
             s3_backend="minio",
+            inbound_webhook_hmac_secret="staging-hmac-secret",
         )
 
 

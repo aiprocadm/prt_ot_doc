@@ -57,7 +57,7 @@ async def test_event_emission_checklist(
     # When a new document is created, DocumentGenerated should be in outbox
     async with sessionmaker() as session:
         document, version = await data_factory.create_document(
-            tenant_id=tenant_id,
+            tenant=tenant,
             session=session,
             status=DocumentStatus.DRAFT,
         )
