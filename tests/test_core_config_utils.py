@@ -44,12 +44,14 @@ def test_binary_exists_with_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     assert config.binary_exists(str(tmp_path / "missing")) is False
 
     # Ensure PATH lookup is honoured when candidate has no path separators.
-    path_binary = tmp_path / "bin"
+    # Use .exe on Windows for shutil.which() to find the file; on Unix use no extension.
+    bin_name = "bin.exe" if sys.platform == "win32" else "bin"
+    path_binary = tmp_path / bin_name
     path_binary.write_text("#!/bin/sh\n")
     if sys.platform != "win32":
         path_binary.chmod(0o755)
     monkeypatch.setenv("PATH", str(tmp_path))
-    assert config.binary_exists("bin") is True
+    assert config.binary_exists(bin_name) is True
 
 
 def test_settings_normalization_and_validators(tmp_path: Path) -> None:
