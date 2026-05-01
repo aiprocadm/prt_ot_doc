@@ -31,11 +31,19 @@ npm --prefix frontend test
 # Open http://localhost:5173
 # Set in .env: ADMIN_BOOTSTRAP=1, ADMIN_EMAIL=admin@example.com, ADMIN_PASSWORD=admin123, ADMIN_TENANT=demo
 # Restart backend and login
+
+# Step 7: Verify key acceptance scenarios (UI smoke tests)
+# In browser at http://localhost:5173:
+# - Login flow with test credentials
+# - Navigate to documents → see templates
+# - Navigate to risks → see dashboard
+# - Navigate to training → see list
+# - Logout and login again (session persistence)
 ```
 
 ## Previous Baseline Run (2026-02-18 — OUTDATED, REQUIRES RE-VERIFICATION)
 
-Дата прогона: 2026-02-18 (требует обновления)
+Дата прогона: 2026-02-18
 Среда: GitHub Codespaces / dockerless profile
 
 **Status:** REQUIRES RE-RUN in fresh Codespace environment per TZ-1.1-MVP-01 acceptance criteria. Current metrics from 2026-02-18 may be stale.
@@ -54,7 +62,7 @@ npm --prefix frontend test
 
 ### 4) `make cs:test`
 - Статус: **OK**
-- Backend: 287 passed, 1 skipped
+- Backend: 287 passed, 1 skipped (as of 2026-02-18; current count should be higher with Wave 3 additions)
 - Frontend: vitest passed
 - Non-blocking warnings: deprecation/SAWarning/React act warnings in logs.
 
@@ -68,20 +76,36 @@ npm --prefix frontend test
 
 ## Known Non-Blocking Issues
 
-1. Missing `soffice` (LibreOffice) in dev environment — does not block current flow, affects prod PDF parity
+1. Missing `soffice` (LibreOffice) in dev environment — does not block current flow, affects prod PDF parity tests
 2. Locale warnings for `ru-RU` — non-blocking
 3. React act(...) warnings in test output — tests still pass
 4. Cold-start installation delays on first `make cs:dev` — expected
+5. PDF fallback mode tests require LO or explicit `pdf_fallback=true` in .env for demo data
 
 ## Bootstrap Defaults (Dev Only)
 
 Set in `.env` before `make cs:dev`:
-- `ADMIN_BOOTSTRAP=1`
-- `ADMIN_EMAIL=admin@example.com`
-- `ADMIN_PASSWORD=admin123` (dev only)
-- `ADMIN_TENANT=demo`
+- `ADMIN_BOOTSTRAP=1` — enable admin user creation from env
+- `ADMIN_EMAIL=admin@example.com` — default test admin
+- `ADMIN_PASSWORD=admin123` — dev only (⚠️ never use in production)
+- `ADMIN_TENANT=demo` — tenant slug
 
-Never use dev defaults in staging/production.
+Never use dev defaults in staging/production. For production bootstrap, see `docs/OWNER_ADMIN_ACCESS.md`.
+
+## Quick Diagnostic Checklist
+
+If baseline fails, check in order:
+
+1. **Python/Node versions:** `python --version` (3.11+), `node --version` (18+), `npm --version` (9+)
+2. **Git state:** `git status` (clean), `git branch -v` (on expected branch)
+3. **Venv:** `.venv/bin/python` exists after `make cs:reset` and `pip install` completes
+4. **Frontend:** `frontend/node_modules` exists and `npm ci` completed
+5. **Database:** `./dev.db` created after first `make cs:dev` run
+6. **Environment:** `.env` file exists and contains `DATABASE_URL=sqlite+aiosqlite:///./dev.db` (set by dev_lite.py)
+7. **Backend startup:** `http://localhost:8000/docs` returns Swagger UI (FastAPI) within 15s
+8. **Frontend startup:** `http://localhost:5173` returns app (Vite dev server) within 10s
+9. **Tests:** Run `pytest -v tests/test_entrypoints.py` to verify core imports and config work
+10. **Bootstrap:** After login works, test that auth works without hardcoded secrets
 
 ## Acceptance Criteria (TZ-1.1-MVP-01)
 
