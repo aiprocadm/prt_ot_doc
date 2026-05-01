@@ -5,6 +5,8 @@ Last verified: 2026-05-01 (TZ-1.1-MVP-01 verification instructions updated, re-r
 
 ## How to Re-Verify Baseline (for next agent / CI)
 
+### Option A: Manual re-verification in fresh Codespaces environment
+
 Execute in a **fresh GitHub Codespaces environment** or clean CI container:
 
 ```bash
@@ -12,22 +14,26 @@ Execute in a **fresh GitHub Codespaces environment** or clean CI container:
 make cs:reset
 cp .env.example .env
 
-# Step 2: Start backend + frontend (this will install deps automatically)
-make cs:dev  # Keep running in background (Ctrl+C after startup confirmation)
+# Step 2: Install dependencies and prepare environment
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pip install -r requirements.txt -r requirements-dev.txt
+npm --prefix frontend ci
 
-# In a separate terminal:
+# Step 3: Initialize database (SQLite for dev)
+PYTHONPATH=backend python scripts/dev_lite.py --preflight-only
+PYTHONPATH=backend alembic -c backend/app/migrations/alembic.ini upgrade heads
 
-# Step 3: Run tests (backend pytest + frontend vitest)
-make cs:test
+# Step 4: Run all tests (backend + frontend)
+pytest -v --tb=short
+npm --prefix frontend run test
 
-# Step 4: Collect tests
-source .venv/bin/activate
-pytest --collect-only -q
+# Step 5: Collect and display test count
+pytest --collect-only -q | tail -1
 
-# Step 5: Frontend tests (included in cs:test, shown separately for clarity)
-npm --prefix frontend test
-
-# Step 6: Verify login (in browser)
+# Step 6: Verify app startup (optional, manual check in browser)
+# Start backend: python scripts/run_backend_lite.py
+# Start frontend: npm --prefix frontend run dev
 # Open http://localhost:5173
 # Set in .env: ADMIN_BOOTSTRAP=1, ADMIN_EMAIL=admin@example.com, ADMIN_PASSWORD=admin123, ADMIN_TENANT=demo
 # Restart backend and login

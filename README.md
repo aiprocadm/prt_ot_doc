@@ -193,7 +193,8 @@ B2B multi-tenant SaaS платформа для ОТ / ПБ / ПромБез / �
 - `docs/OBSERVABILITY.md`
 - `docs/TESTING.md`
 - `docs/troubleshooting.md` — quick reference for common issues and how to fix them
-- `docs/audit/TZ_COVERAGE_MATRIX.md`
+- `docs/audit/TZ_COVERAGE_MATRIX.md` — матрица покрытия требований ТЗ с tracking статуса реализации
+- `docs/audit/BASELINE_VERIFICATION.md` — **критично для RC tag** (инструкции для baseline проверки в чистой среде; скрипты: `scripts/baseline_verification.sh` / `.ps1`)
 - `ACCEPTANCE_TEST_MATRIX.md`
 - `GAP_REPORT.md`
 - `KNOWN_LIMITATIONS.md`
