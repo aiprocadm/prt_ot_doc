@@ -1,8 +1,7 @@
 # Baseline verification (fail-first)
 
 **CRITICAL:** This document requires fresh re-verification in a clean Codespace/CI environment before release.
-Last verified: 2026-05-01 (updated with CI/CD instructions; re-run recommended before RC tag)
-Status: Ready for CI/CD pipeline integration
+Last verified: 2026-05-01 (TZ-1.1-MVP-01 verification instructions updated, re-run in fresh environment required for final acceptance)
 
 ## How to Re-Verify Baseline (for next agent / CI)
 
@@ -37,42 +36,23 @@ pytest --collect-only -q | tail -1
 # Start frontend: npm --prefix frontend run dev
 # Open http://localhost:5173
 # Set in .env: ADMIN_BOOTSTRAP=1, ADMIN_EMAIL=admin@example.com, ADMIN_PASSWORD=admin123, ADMIN_TENANT=demo
+# Restart backend and login
+
+# Step 7: Verify key acceptance scenarios (UI smoke tests)
+# In browser at http://localhost:5173:
+# - Login flow with test credentials
+# - Navigate to documents → see templates
+# - Navigate to risks → see dashboard
+# - Navigate to training → see list
+# - Logout and login again (session persistence)
 ```
 
-### Option B: Automated CI/CD pipeline execution
+## Previous Baseline Run (2026-02-18 — OUTDATED, REQUIRES RE-VERIFICATION)
 
-Use the provided script for reproducible baseline verification:
+Дата прогона: 2026-02-18
+Среда: GitHub Codespaces / dockerless profile
 
-```bash
-# Run the baseline verification script (see scripts/baseline_verification.sh)
-bash scripts/baseline_verification.sh
-
-# Or integrate into CI/CD (GitHub Actions, GitLab CI, etc.):
-# - Spin up fresh container
-# - Clone repository
-# - Run: bash scripts/baseline_verification.sh
-# - Capture exit code and test results
-```
-
-## Automated Scripts
-
-Baseline verification can be executed automatically using provided scripts:
-
-- **Unix/Linux/macOS:** `bash scripts/baseline_verification.sh`
-- **Windows PowerShell:** `powershell -File scripts/baseline_verification.ps1`
-
-Both scripts:
-- Reset local state (`dev.db`, `.local_storage`, `frontend/coverage`)
-- Create Python virtual environment
-- Install dependencies (backend + frontend)
-- Initialize database (alembic migrations)
-- Run full test suites (backend pytest + frontend vitest)
-- Report results with exit codes (0 = success, 1 = test failure, 2 = setup failure)
-
-## Previous Baseline Run (2026-02-18 — Updated 2026-05-01)
-
-Дата последней проверки: 2026-05-01
-Среда: GitHub Codespaces / dockerless profile (code audit + script preparation)
+**Status:** REQUIRES RE-RUN in fresh Codespace environment per TZ-1.1-MVP-01 acceptance criteria. Current metrics from 2026-02-18 may be stale.
 
 ### 1) `make cs:reset`
 - Статус: **OK**
@@ -88,7 +68,7 @@ Both scripts:
 
 ### 4) `make cs:test`
 - Статус: **OK**
-- Backend: 287 passed, 1 skipped
+- Backend: 287 passed, 1 skipped (as of 2026-02-18; current count should be higher with Wave 3 additions)
 - Frontend: vitest passed
 - Non-blocking warnings: deprecation/SAWarning/React act warnings in logs.
 
@@ -102,32 +82,51 @@ Both scripts:
 
 ## Known Non-Blocking Issues
 
-1. Missing `soffice` (LibreOffice) in dev environment — does not block current flow, affects prod PDF parity
+1. Missing `soffice` (LibreOffice) in dev environment — does not block current flow, affects prod PDF parity tests
 2. Locale warnings for `ru-RU` — non-blocking
 3. React act(...) warnings in test output — tests still pass
 4. Cold-start installation delays on first `make cs:dev` — expected
+5. PDF fallback mode tests require LO or explicit `pdf_fallback=true` in .env for demo data
 
 ## Bootstrap Defaults (Dev Only)
 
 Set in `.env` before `make cs:dev`:
-- `ADMIN_BOOTSTRAP=1`
-- `ADMIN_EMAIL=admin@example.com`
-- `ADMIN_PASSWORD=admin123` (dev only)
-- `ADMIN_TENANT=demo`
+- `ADMIN_BOOTSTRAP=1` — enable admin user creation from env
+- `ADMIN_EMAIL=admin@example.com` — default test admin
+- `ADMIN_PASSWORD=admin123` — dev only (⚠️ never use in production)
+- `ADMIN_TENANT=demo` — tenant slug
 
-Never use dev defaults in staging/production.
+Never use dev defaults in staging/production. For production bootstrap, see `docs/OWNER_ADMIN_ACCESS.md`.
+
+## Quick Diagnostic Checklist
+
+If baseline fails, check in order:
+
+1. **Python/Node versions:** `python --version` (3.11+), `node --version` (18+), `npm --version` (9+)
+2. **Git state:** `git status` (clean), `git branch -v` (on expected branch)
+3. **Venv:** `.venv/bin/python` exists after `make cs:reset` and `pip install` completes
+4. **Frontend:** `frontend/node_modules` exists and `npm ci` completed
+5. **Database:** `./dev.db` created after first `make cs:dev` run
+6. **Environment:** `.env` file exists and contains `DATABASE_URL=sqlite+aiosqlite:///./dev.db` (set by dev_lite.py)
+7. **Backend startup:** `http://localhost:8000/docs` returns Swagger UI (FastAPI) within 15s
+8. **Frontend startup:** `http://localhost:5173` returns app (Vite dev server) within 10s
+9. **Tests:** Run `pytest -v tests/test_entrypoints.py` to verify core imports and config work
+10. **Bootstrap:** After login works, test that auth works without hardcoded secrets
 
 ## Acceptance Criteria (TZ-1.1-MVP-01)
 
-**Status:** Ready for execution in CI/CD or fresh Codespace environment
+**Status: PENDING RE-VERIFICATION in fresh environment (Codespaces or CI)**
 
-- [x] All baseline commands documented and scripts provided
-- [x] Backend pytest: 287+ tests collectible and runnable
-- [x] Frontend vitest: all tests runnable
-- [x] Bootstrap credentials documented (ADMIN_BOOTSTRAP=1)
-- [x] Documentation updated with CI/CD integration paths
-- [ ] **PENDING:** Fresh Codespace/CI execution with results captured
-- [ ] **PENDING:** Test results documented (backend count, frontend coverage)
-- [ ] **PENDING:** All commands verified in clean environment
+To complete TZ-1.1-MVP-01, execute in a **fresh GitHub Codespaces environment** or clean CI container:
 
-**Next step:** Execute `bash scripts/baseline_verification.sh` in fresh Codespace or CI pipeline, capture output, update this document with actual results.
+- [ ] Step 1: `make cs:reset` — State cleaned (dev.db, .local_storage, frontend/coverage removed)
+- [ ] Step 2: `cp .env.example .env` — Environment configured
+- [ ] Step 3: `make cs:dev` — Backend (port 8000) and Frontend (port 5173) start successfully
+- [ ] Step 4: `make cs:test` — All tests pass:
+  - Backend pytest: ≥287 tests passed (or current count from `pytest --collect-only -q`)
+  - Frontend vitest: all tests passed
+- [ ] Step 5: `pytest --collect-only -q` — Test collection succeeds without errors
+- [ ] Step 6: Login flow verification — `http://localhost:5173` accessible with bootstrap credentials (ADMIN_BOOTSTRAP=1, ADMIN_EMAIL=admin@example.com, ADMIN_PASSWORD=admin123, ADMIN_TENANT=demo)
+- [ ] Final: Documentation matches actual commands and output
+
+**Next Agent:** Execute the 6 steps above in a fresh Codespaces environment and update this document with actual results and timestamps. Use this as proof of acceptance for TZ-1.1-MVP-01.
