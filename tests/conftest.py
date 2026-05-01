@@ -248,10 +248,19 @@ async def make_auth_headers(
         email: str | None = None,
         company_id: str | None = None,
         company_name: str | None = None,
+        tenant: str | None = None,
     ) -> dict[str, str]:
         candidate_email = email or f"{role.value}-api@example.com"
         async with sessionmaker() as session:
-            tenant = await data_factory.ensure_tenant(session=session)
+            if tenant:
+                # For multi-tenant tests, fetch the specific tenant by slug
+                result = await session.execute(select(Tenant).where(Tenant.slug == tenant))
+                tenant_record = result.scalar_one_or_none()
+                if tenant_record is None:
+                    raise ValueError(f"Tenant '{tenant}' not found in test data")
+                tenant = tenant_record
+            else:
+                tenant = await data_factory.ensure_tenant(session=session)
             result = await session.execute(select(User).where(User.email == candidate_email))
             user = result.scalar_one_or_none()
             if user is None:
@@ -310,3 +319,94 @@ async def make_auth_headers(
         return {"Authorization": f"Bearer {token}", "x-tenant": request_tenant_id}
 
     return factory
+
+# Multi-tenant test fixtures for audit tests
+
+@pytest.fixture()
+async def test_db_session(sessionmaker):
+    """Provide a database session for audit tests."""
+    async with sessionmaker() as session:
+        yield session
+
+
+@pytest.fixture()
+async def test_companies_multi_tenant(sessionmaker, data_factory: TestDataFactory):
+    """Create test companies in multiple tenants."""
+    companies = {}
+    for tenant_slug in ["tenant-a", "tenant-b"]:
+        async with sessionmaker() as session:
+            # Fetch or ensure tenant exists
+            result = await session.execute(select(Tenant).where(Tenant.slug == tenant_slug))
+            tenant = result.scalar_one_or_none()
+            if tenant is None:
+                # Create if doesn't exist
+                tenant = Tenant(
+                    slug=tenant_slug,
+                    name=tenant_slug.title(),
+                    contact_email=f"{tenant_slug}@example.com",
+                )
+                session.add(tenant)
+                await session.commit()
+                await session.refresh(tenant)
+            
+            # Create a company in this tenant
+            company = await data_factory.create_company(
+                tenant=tenant,
+                name=f"Company in {tenant_slug}",
+                session=session,
+            )
+            companies[tenant_slug] = company
+            await session.commit()
+    
+    yield companies
+
+
+@pytest.fixture()
+async def test_employees_multi_tenant(sessionmaker, data_factory: TestDataFactory, test_companies_multi_tenant):
+    """Create test employees in multiple tenants."""
+    from app.models.models import Employee
+    
+    employees = {}
+    for tenant_slug in ["tenant-a", "tenant-b"]:
+        async with sessionmaker() as session:
+            # Fetch tenant
+            result = await session.execute(select(Tenant).where(Tenant.slug == tenant_slug))
+            tenant = result.scalar_one_or_none()
+            company = test_companies_multi_tenant[tenant_slug]
+            
+            # Create employee
+            employee = await data_factory.create_employee(
+                tenant=tenant,
+                company=company,
+                full_name=f"Employee in {tenant_slug}",
+                session=session,
+            )
+            employees[tenant_slug] = employee
+            await session.commit()
+    
+    yield employees
+
+
+@pytest.fixture()
+async def test_templates_multi_tenant(sessionmaker, data_factory: TestDataFactory):
+    """Create test templates in multiple tenants."""
+    from app.models.models import DocumentTemplate
+    
+    templates = {}
+    for tenant_slug in ["tenant-a", "tenant-b"]:
+        async with sessionmaker() as session:
+            # Fetch tenant
+            result = await session.execute(select(Tenant).where(Tenant.slug == tenant_slug))
+            tenant = result.scalar_one_or_none()
+            
+            # Create template
+            template = await data_factory.create_template(
+                tenant=tenant,
+                code=f"template-{tenant_slug}",
+                name=f"Template in {tenant_slug}",
+                session=session,
+            )
+            templates[tenant_slug] = template
+            await session.commit()
+    
+    yield templates
