@@ -1,7 +1,7 @@
 # Baseline verification (fail-first)
 
-**CRITICAL:** This document must be re-verified in a clean Codespace/CI environment before release.
-Status: **Last manual verified 2026-02-18; logically verified (code + config audit) 2026-05-01. READY FOR FRESH CI/CODESPACE RUN.**
+**CRITICAL:** This document requires fresh re-verification in a clean Codespace/CI environment before release.
+Last verified: 2026-05-01 (TZ-1.1-MVP-01 verification instructions updated, re-run in fresh environment required for final acceptance)
 
 ## How to Re-Verify Baseline (for next agent / CI)
 
@@ -41,28 +41,12 @@ npm --prefix frontend test
 # - Logout and login again (session persistence)
 ```
 
-## Current Status (Code + Config Audit, 2026-05-01)
-
-**Configuration verified as correct:**
-- ✅ Backend entrypoint: `backend/app/main.py` (ASGI)
-- ✅ Frontend entrypoint: `frontend/src/main.tsx` (Vite)
-- ✅ Backend app factory: `backend/app/api/app.py`
-- ✅ Frontend router: `frontend/src/router/AppRouter.tsx`
-- ✅ Test framework: pytest (backend) + vitest (frontend)
-- ✅ Dev launcher: `scripts/dev_lite.py` with auto-install
-- ✅ Bootstrap system: env-based admin creation via `backend/app/services/dev_bootstrap.py`
-- ✅ .env template: `.env.example` with all required variables
-- ✅ Makefile targets: `cs:reset`, `cs:dev`, `cs:test` all present
-
-**Test inventory (from TZ_COVERAGE_MATRIX):**
-- Backend: 1086+ test functions across 95 test files
-- Frontend: 35+ component test cases (JobTimeline, ApprovalTimeline, WizardJobTimeline, Can, DataTable)
-- E2E: smoke.spec.ts + key-scenarios.spec.ts with Playwright
-
-## Previous Baseline Run (2026-02-18 — baseline snapshot)
+## Previous Baseline Run (2026-02-18 — OUTDATED, REQUIRES RE-VERIFICATION)
 
 Дата прогона: 2026-02-18
 Среда: GitHub Codespaces / dockerless profile
+
+**Status:** REQUIRES RE-RUN in fresh Codespace environment per TZ-1.1-MVP-01 acceptance criteria. Current metrics from 2026-02-18 may be stale.
 
 ### 1) `make cs:reset`
 - Статус: **OK**
@@ -125,14 +109,18 @@ If baseline fails, check in order:
 
 ## Acceptance Criteria (TZ-1.1-MVP-01)
 
-**Manual acceptance (in clean Codespace):**
-- [ ] `make cs:reset` — clean state ✅
-- [ ] `cp .env.example .env` — env file created ✅
-- [ ] `make cs:dev` — backend + frontend start without critical errors ✅
-- [ ] `make cs:test` — all backend pytest + frontend vitest pass ✅
-- [ ] `pytest --collect-only -q` — test discovery works ✅
-- [ ] `npm --prefix frontend test` — frontend test suite passes ✅
-- [ ] `http://localhost:5173` login with `admin@example.com` / `admin123` / tenant `demo` — works ✅
-- [ ] Documentation (README, TZ, this file) matches actual commands ✅
+**Status: PENDING RE-VERIFICATION in fresh environment (Codespaces or CI)**
 
-**Status:** ✅ **READY FOR CI/CODESPACE FRESH RUN** — All config verified 2026-05-01. Next agent should execute the 7-step flow in clean environment and report actual test counts in this section.
+To complete TZ-1.1-MVP-01, execute in a **fresh GitHub Codespaces environment** or clean CI container:
+
+- [ ] Step 1: `make cs:reset` — State cleaned (dev.db, .local_storage, frontend/coverage removed)
+- [ ] Step 2: `cp .env.example .env` — Environment configured
+- [ ] Step 3: `make cs:dev` — Backend (port 8000) and Frontend (port 5173) start successfully
+- [ ] Step 4: `make cs:test` — All tests pass:
+  - Backend pytest: ≥287 tests passed (or current count from `pytest --collect-only -q`)
+  - Frontend vitest: all tests passed
+- [ ] Step 5: `pytest --collect-only -q` — Test collection succeeds without errors
+- [ ] Step 6: Login flow verification — `http://localhost:5173` accessible with bootstrap credentials (ADMIN_BOOTSTRAP=1, ADMIN_EMAIL=admin@example.com, ADMIN_PASSWORD=admin123, ADMIN_TENANT=demo)
+- [ ] Final: Documentation matches actual commands and output
+
+**Next Agent:** Execute the 6 steps above in a fresh Codespaces environment and update this document with actual results and timestamps. Use this as proof of acceptance for TZ-1.1-MVP-01.
