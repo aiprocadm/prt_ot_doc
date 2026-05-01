@@ -14,4 +14,4 @@
 - Тесты лежат в `tests/`; покрытие частичное, часть сценариев отсутствует. Предыдущие прогоны падали из-за несовместимости ключей покрытия.
 - CI workflow обнаружен (`.github/workflows/ci.yml`), собирает контейнер и запускает линтеры/тесты, но не публикует OpenAPI/ERD артефакты.
 - Makefile содержит цели `install`, `lint`, `format`, `test`, `run`, `build`, `clean`; миграции/seed/compose нужно добавить.
-- Документация приведена к единой правде: `docs/Backend_TZ.md` (ТЗ), `docs/erd.puml` (ERD), `docs/openapi.yaml` (контракт), `docs/spec_compliance_report.md` (отчёт).
+- Документация приведена к единой правде: `docs/spec/TZ_FULL_UNIFIED.md` (ТЗ), `docs/erd.puml` (ERD), `docs/openapi.yaml` (контракт), `docs/spec_compliance_report.md` (отчёт).

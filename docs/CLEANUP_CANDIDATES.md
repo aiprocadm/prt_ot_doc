@@ -68,18 +68,24 @@
 
 ## Recommended Cleanup Order
 
-### Wave 1 (Safe)
-Удалить явно unused пилотные документы:
-- `docs/CLIENT_PORTAL_PILOT_CHECKLIST.md`
-- `docs/PILOT_LAUNCH_CHECKLIST.md`
-- `docs/PILOT_GO_LIVE_REPORT.md`
-- `docs/PILOT_METRICS.md`
-- `docs/PILOT_SMOKE_MATRIX.md`
+### Wave 1 (Safe) ✅ COMPLETED (2026-05-01)
+Удалены явно unused пилотные документы:
+- ✅ `docs/CLIENT_PORTAL_PILOT_CHECKLIST.md`
+- ✅ `docs/PILOT_LAUNCH_CHECKLIST.md`
+- ✅ `docs/PILOT_GO_LIVE_REPORT.md`
+- ✅ `docs/PILOT_METRICS.md`
+- ✅ `docs/PILOT_SMOKE_MATRIX.md`
 
-### Wave 2 (After Verification)
-Удалить/консолидировать старые runbooks:
-- `docs/LOCAL_TEST_RUNBOOK.md` (переместить в archive или docs/runbooks/)
-- `docs/Backend_TZ.md` (удалить, заменено на spec/TZ_FULL_UNIFIED.md)
+### Wave 2 (After Verification) ✅ COMPLETED (2026-05-01)
+Удалены старые runbooks и документы:
+- ✅ `docs/LOCAL_TEST_RUNBOOK.md` (удалено)
+- ✅ `docs/Backend_TZ.md` (удалено, заменено на spec/TZ_FULL_UNIFIED.md)
+- ✅ `docs/CODEX_HANDOFF_NEXT.md` (удалено)
+- ✅ `docs/COMPLIANCE_REPORT.md` (удалено)
+- ✅ `docs/PRODUCTION_CUTOVER_CHECKLIST.md` (удалено)
+- ✅ `docs/IMPORT_RUNBOOK.md` (удалено)
+- ✅ `docs/ENVIRONMENT.md` (удалено)
+- ✅ `docs/ENV_REFERENCE.md` (удалено, консолидировано в docs/SETUP.md)
 
 ### Wave 3 (After Consolidation)
 - Объединить `docs/ENVIRONMENT.md` и `docs/ENV_REFERENCE.md` в `docs/SETUP.md`
