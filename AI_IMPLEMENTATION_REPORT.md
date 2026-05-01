@@ -1,8 +1,8 @@
 # AI Implementation Report
 
-## Current Status (as of 2026-05-01, updated in this session - Wave 2 cleanup complete)
+## Current Status (as of 2026-05-01, Session 3 - TZ-1.1 Baseline Verification Infrastructure)
 
-Проект находится в состоянии **advanced MVP approaching production readiness, Wave 2 repository cleanup complete**:
+Проект находится в состоянии **advanced MVP approaching production readiness, Wave 2 cleanup complete, TZ-1.1 baseline verification infrastructure in place**:
 - ✅ Baseline инфраструктура работает: `make cs:reset`, `make cs:dev`, `make cs:test`
 - ✅ 1086 тестовых функций в 95 тестовых файлов
 - ✅ Все P0 критичные требования реализованы и тестированы
@@ -20,11 +20,21 @@
 - Задача: Wave 1 cleanup (5 pilot docs), TZ-4.2 MVP screens inventory
 - Статус: Завершено; created docs/FRONTEND_SCREENS_INVENTORY.md
 
-**Текущая сессия (2026-05-01, Session 2):**
+**Сессия 2 (2026-05-01, Wave 2 cleanup):**
 - Агент: Claude Haiku 4.5
-- Задача: Execute Wave 2 cleanup (TZ-6.1) + Verify baseline readiness
-- Статус: Wave 2 cleanup complete, baseline verification pending
-- Где остановился: Завершена Wave 2 cleanup (8 documents удалено, ссылки обновлены)
+- Задача: Execute Wave 2 cleanup (TZ-6.1)
+- Статус: Wave 2 cleanup complete
+- Результат: 8 documents удалено, ссылки обновлены, TZ coverage matrix обновлена
+
+**Текущая сессия (2026-05-01, Session 3 - TZ-1.1 Baseline Verification):**
+- Агент: Claude Haiku 4.5
+- Задача: Prepare TZ-1.1 baseline verification infrastructure for CI/CD
+- Статус: Baseline verification scripts created and documentation updated
+- Результат: 
+  - Created `scripts/baseline_verification.sh` (Unix/Linux/macOS) 
+  - Created `scripts/baseline_verification.ps1` (Windows PowerShell)
+  - Updated `docs/audit/BASELINE_VERIFICATION.md` with CI/CD instructions
+  - Ready for execution in fresh Codespace or CI pipeline
 
 ## Studied Documentation
 
@@ -49,7 +59,40 @@
 | TZ-2.6 (Outbox poison queue) | Dispatcher OK. | Нет dead-letter обработчика. | Добавить poison queue обработку. |
 | TZ-2.10 (PDF fonts) | PDF OK. | Нет assertion embedded fonts. | Добавить font embedding check. |
 
-## Implemented Changes (current session 2026-05-01, Wave 3)
+## Implemented Changes (current session 2026-05-01)
+
+### Session 3: TZ-1.1 Baseline Verification Infrastructure
+
+**Files Created:**
+1. `scripts/baseline_verification.sh` — Automated baseline verification for Unix/Linux/macOS
+   - Resets local state (dev.db, .local_storage, frontend/coverage)
+   - Creates Python virtual environment
+   - Installs dependencies (requirements.txt + requirements-dev.txt, npm ci)
+   - Runs database migrations (alembic upgrade heads)
+   - Executes backend tests (pytest)
+   - Executes frontend tests (vitest)
+   - Reports results with appropriate exit codes
+
+2. `scripts/baseline_verification.ps1` — Automated baseline verification for Windows PowerShell
+   - Same workflow as bash version but Windows-compatible
+   - Uses PowerShell native commands for environment detection
+   - Compatible with GitHub Actions Windows runners
+
+**Files Updated:**
+1. `docs/audit/BASELINE_VERIFICATION.md`:
+   - Updated date to 2026-05-01
+   - Added "Automated Scripts" section referencing new scripts
+   - Enhanced "How to Re-Verify Baseline" with Option A (manual) and Option B (automated)
+   - Updated acceptance criteria with script-ready status
+   - Added CI/CD integration instructions
+
+**Impact:**
+- TZ-1.1-MVP-01 is now ready for execution in CI/CD pipelines
+- Provides reproducible baseline verification in clean environments
+- Enables automated RC (release candidate) validation
+- Documents exact baseline expectations for future releases
+
+## Previous Session Changes (Session 2: Wave 3 Cleanup)
 
 ### Frontend Component Tests (F3 completion):
 Added comprehensive component-level tests for critical UX timeline components to fill F3-MVP-01 gap ("Add focused component tests"). These tests cover:
@@ -189,7 +232,13 @@ These tests directly address TZ-4.3-MVP-01 "Add focused component tests and UX a
 
 ## Known Issues / Gaps Remaining
 
-### Completed in this session (Wave 2 cleanup):
+### Completed in Session 3 (TZ-1.1 Baseline Verification Infrastructure):
+- ✅ **TZ-1.1-MVP-01** (Baseline verification infrastructure) — Scripts created, documentation updated, ready for CI/CD execution
+  - Unix script: `bash scripts/baseline_verification.sh`
+  - Windows script: `powershell -File scripts/baseline_verification.ps1`
+  - **Still pending:** Actual execution in fresh Codespace/CI environment and results capture
+
+### Completed in Session 2 (Wave 2 cleanup):
 - ✅ **TZ-6.1-MVP-01** (Repo hygiene Wave 2) — 8 cleanup documents deleted, cross-references updated
 
 ### Remaining `partial` requirements:
@@ -210,15 +259,20 @@ These tests directly address TZ-4.3-MVP-01 "Add focused component tests and UX a
 
 ### Wave 4 — Immediate (Production Readiness Push)
 
-1. **Verify baseline in clean Codespace** (TZ-1.1) — 🔴 CRITICAL BLOCKER FOR RELEASE
-   - **Status update (2026-05-01):** Instructions updated in `docs/audit/BASELINE_VERIFICATION.md` with exact re-verification steps
-   - Spin up fresh Codespaces environment (or CI container) **or** run baseline check in CI pipeline
-   - Run: `make cs:reset`, `cp .env.example .env`, `make cs:dev`, `make cs:test`
-   - Document any new issues or blockers (new errors, deprecations, etc.)
-   - Update BASELINE_VERIFICATION.md with fresh results and checkmarks for acceptance criteria
-   - Expected time: ~20 minutes
+1. **Execute baseline in clean Codespace** (TZ-1.1) — 🔴 CRITICAL BLOCKER FOR RELEASE
+   - **Status update (2026-05-01, Session 3):** Scripts created and documentation updated
+   - **Infrastructure ready:** 
+     - Unix script: `bash scripts/baseline_verification.sh`
+     - Windows script: `powershell -File scripts/baseline_verification.ps1`
+   - **Next step:** Spin up fresh Codespaces environment (or CI container)
+   - **Run:** `bash scripts/baseline_verification.sh` (or PowerShell equivalent)
+   - **Document:** Results in `docs/audit/BASELINE_VERIFICATION.md` 
+   - **Update checklist:** Mark acceptance criteria as complete with actual test counts
+   - Expected time: ~20 minutes + any issue resolution
    - **Why critical:** Affects RELEASE_READINESS verdict (RC-001, RC-004)
-   - **How to approach:** Either spin up fresh Codespaces, or add baseline-verification job to CI/CD pipeline (recommended for reproducibility)
+   - **How to approach:** 
+     - Option 1 (recommended): Add baseline-verification job to CI/CD pipeline (GitHub Actions, GitLab CI, etc.)
+     - Option 2: Spin up fresh Codespaces manually and run script
 
 2. **Execute Wave 3 cleanup** (TZ-6.1 optional) — LOW PRIORITY
    - Optional consolidation: merge similar runbooks / documentation if time permits
