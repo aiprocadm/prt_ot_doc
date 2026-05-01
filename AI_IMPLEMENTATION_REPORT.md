@@ -48,7 +48,48 @@
 | TZ-2.6 (Outbox poison queue) | Dispatcher OK. | Нет dead-letter обработчика. | Добавить poison queue обработку. |
 | TZ-2.10 (PDF fonts) | PDF OK. | Нет assertion embedded fonts. | Добавить font embedding check. |
 
-## Implemented Changes (current session 2026-05-01)
+## Implemented Changes (current session 2026-05-01, Wave 3)
+
+### Frontend Component Tests (F3 completion):
+Added comprehensive component-level tests for critical UX timeline components to fill F3-MVP-01 gap ("Add focused component tests"). These tests cover:
+
+**1. JobTimeline.test.tsx** (~160 lines, 9 test cases):
+- Empty state handling
+- Single and multiple step rendering with various statuses (success, failed, running, pending, canceled)
+- Duration calculation from start/end timestamps
+- Error code and payload display
+- Artifact extraction and rendering (document URLs, receipts, etc.)
+- Step numbering and attempt tracking
+
+**2. ApprovalTimeline.test.tsx** (~120 lines, 8 test cases):
+- Empty state ("no decisions yet")
+- Single and multiple approval decisions in order
+- Current step indicator updates
+- Comment rendering (with and without comments)
+- Timeline reusability across step counts
+
+**3. WizardJobTimeline.test.tsx** (~170 lines, 12 test cases):
+- Status badge mapping (queued, running, success, done, failed, error, canceled, unknown)
+- Duration calculation with running tasks (Date.now() fallback)
+- Multiple step sequences
+- Error code display with attempt counter
+- Graceful handling of missing timestamps
+- Unknown status handling
+
+**Total:** 450+ lines of focused component tests covering:
+- All JobTimeline statuses and edge cases
+- ApprovalTimeline state transitions
+- WizardJobTimeline badge rendering
+- Duration calculations for both running and completed tasks
+- Error payload and artifact handling
+
+These tests directly address TZ-4.3-MVP-01 "Add focused component tests and UX acceptance checklist" by providing comprehensive vitest coverage for timeline/state-visualization components used in document pipeline and approval workflows.
+
+### Status Update:
+- TZ-4.3-MVP-01: upgraded from **partial** → **in-progress** (component tests now present, acceptance checklist remaining)
+- Test files created: 3 new vitest specs
+- Lines of test code: 450+
+- Coverage: Timeline/state-display UX components (3/3 major timeline components now have tests)
 
 ### TZ Coverage Matrix Cleanup and Updates (6 requirements corrected):
 
@@ -64,8 +105,14 @@
 
 ## Changed Files
 
-- `docs/audit/TZ_COVERAGE_MATRIX.md` — удалено дублирование TZ-2.4, обновлено 5 требований на done (commit 4fd645e, 29c7048)
-- `AI_IMPLEMENTATION_REPORT.md` — обновлен статус
+### Wave 2 (prior):
+- `docs/audit/TZ_COVERAGE_MATRIX.md` — удалено дублирование TZ-2.4, обновлено 5 требований на done
+
+### Wave 3 (current, 2026-05-01):
+- `AI_IMPLEMENTATION_REPORT.md` — обновлен статус и handoff-информация
+- `frontend/src/__tests__/JobTimeline.test.tsx` — NEW: 9 test cases for JobTimeline component (450+ total lines of new tests)
+- `frontend/src/__tests__/ApprovalTimeline.test.tsx` — NEW: 8 test cases for ApprovalTimeline component
+- `frontend/src/__tests__/WizardJobTimeline.test.tsx` — NEW: 12 test cases for WizardJobTimeline component
 
 ## Validation
 
