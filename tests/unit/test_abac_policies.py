@@ -66,3 +66,39 @@ def test_abac_risk_level_high_requires_privilege():
         company_id=None,
     )
     privileged.ensure_abac(risk_level="high")
+
+
+def test_abac_company_scope_denies_mismatch():
+    access = AccessContext(
+        user=_user(RoleEnum.MANAGER),
+        claims={"company_ids": ["company-1"]},
+        tenant_slug="test",
+        tenant_id=None,
+        company_id=None,
+    )
+    with pytest.raises(HTTPException):
+        access.ensure_abac(company_id="company-2")
+
+
+def test_abac_project_scope_denies_mismatch():
+    access = AccessContext(
+        user=_user(RoleEnum.EMPLOYEE),
+        claims={"project_ids": ["proj-1"]},
+        tenant_slug="test",
+        tenant_id=None,
+        company_id=None,
+    )
+    with pytest.raises(HTTPException):
+        access.ensure_abac(project_id="proj-2")
+
+
+def test_abac_contractor_scope_denies_mismatch():
+    access = AccessContext(
+        user=_user(RoleEnum.ADMIN),
+        claims={"contractor_ids": ["contr-1"]},
+        tenant_slug="test",
+        tenant_id=None,
+        company_id=None,
+    )
+    with pytest.raises(HTTPException):
+        access.ensure_abac(contractor_id="contr-2")
