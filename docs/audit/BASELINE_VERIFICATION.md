@@ -1,7 +1,7 @@
 # Baseline verification (fail-first)
 
 **CRITICAL:** This document requires fresh re-verification in a clean Codespace/CI environment before release.
-Last verified: 2026-02-18 (outdated — re-run required to meet TZ-1.1-MVP-01 acceptance criteria)
+Last verified: 2026-05-01 (TZ-1.1-MVP-01 verification instructions updated, re-run in fresh environment required for final acceptance)
 
 ## How to Re-Verify Baseline (for next agent / CI)
 
@@ -33,10 +33,12 @@ npm --prefix frontend test
 # Restart backend and login
 ```
 
-## Previous Baseline Run (2026-02-18 — OUTDATED)
+## Previous Baseline Run (2026-02-18 — OUTDATED, REQUIRES RE-VERIFICATION)
 
 Дата прогона: 2026-02-18 (требует обновления)
 Среда: GitHub Codespaces / dockerless profile
+
+**Status:** REQUIRES RE-RUN in fresh Codespace environment per TZ-1.1-MVP-01 acceptance criteria. Current metrics from 2026-02-18 may be stale.
 
 ### 1) `make cs:reset`
 - Статус: **OK**
@@ -83,8 +85,18 @@ Never use dev defaults in staging/production.
 
 ## Acceptance Criteria (TZ-1.1-MVP-01)
 
-- [ ] All 6 baseline commands execute without critical errors in clean environment
-- [ ] Backend pytest: ≥287 tests passed
-- [ ] Frontend vitest: all tests passed
-- [ ] Login flow works with bootstrap credentials
-- [ ] Documentation matches actual commands and output
+**Status: PENDING RE-VERIFICATION in fresh environment (Codespaces or CI)**
+
+To complete TZ-1.1-MVP-01, execute in a **fresh GitHub Codespaces environment** or clean CI container:
+
+- [ ] Step 1: `make cs:reset` — State cleaned (dev.db, .local_storage, frontend/coverage removed)
+- [ ] Step 2: `cp .env.example .env` — Environment configured
+- [ ] Step 3: `make cs:dev` — Backend (port 8000) and Frontend (port 5173) start successfully
+- [ ] Step 4: `make cs:test` — All tests pass:
+  - Backend pytest: ≥287 tests passed (or current count from `pytest --collect-only -q`)
+  - Frontend vitest: all tests passed
+- [ ] Step 5: `pytest --collect-only -q` — Test collection succeeds without errors
+- [ ] Step 6: Login flow verification — `http://localhost:5173` accessible with bootstrap credentials (ADMIN_BOOTSTRAP=1, ADMIN_EMAIL=admin@example.com, ADMIN_PASSWORD=admin123, ADMIN_TENANT=demo)
+- [ ] Final: Documentation matches actual commands and output
+
+**Next Agent:** Execute the 6 steps above in a fresh Codespaces environment and update this document with actual results and timestamps. Use this as proof of acceptance for TZ-1.1-MVP-01.
