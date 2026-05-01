@@ -15,10 +15,10 @@
 ## Last Agent Handoff
 
 **Предыдущая сессия:**
-- Дата: 2026-04-30 (Wave X, cleanup analysis)
+- Дата: 2026-05-01 (Wave 1+2 cleanup, TZ coverage updates)
 - Агент: Claude / Previous Agent  
-- Задача: Analysis of partial requirements and repo hygiene strategy
-- Статус: Завершено; создан docs/CLEANUP_CANDIDATES.md с Wave 1-3 cleanup плана
+- Задача: Wave 1 cleanup (5 pilot docs), TZ-4.2 MVP screens inventory
+- Статус: Завершено; created docs/FRONTEND_SCREENS_INVENTORY.md
 
 **Текущая сессия (2026-05-01, Session 2):**
 - Агент: Claude Haiku 4.5
@@ -203,17 +203,17 @@ These tests directly address TZ-4.3-MVP-01 "Add focused component tests and UX a
 - All validations performed before each deletion
 
 ### Technical debt (not blocking):
-- ~170 markdown files in docs/ (down from 178) — Wave 2-3 consolidation pending
 - v1.1 and v2.0 scope items not yet started (future waves)
+- Prescriptions skeleton (TZ-3.4-V12-01) awaiting lifecycle finalization
 
 ## Next Steps (Recommended Priority Order)
 
-### Wave (Next) — Immediate (Production Readiness Push)
+### Wave 4 — Immediate (Production Readiness Push)
 
 1. **Verify baseline in clean Codespace** (TZ-1.1) — 🔴 CRITICAL BLOCKER FOR RELEASE
    - Spin up fresh Codespaces environment (or CI container)
    - Run: `make cs:reset`, `cp .env.example .env`, `make cs:dev`, `make cs:test`
-   - Document any new issues or blockers
+   - Document any new issues or blockers (new errors, deprecations, etc.)
    - Update BASELINE_VERIFICATION.md with fresh results
    - Expected time: ~20 minutes
    - **Why critical:** Affects RELEASE_READINESS verdict (RC-001, RC-004)
@@ -330,21 +330,28 @@ These tests directly address TZ-4.3-MVP-01 "Add focused component tests and UX a
 - ✅ All P1 domain modules (Risk, PPE, Training, Incidents, Packs)
 - ✅ Repository is cleaner (no pilot artifacts cluttering docs/)
 
-### Next Agent Should
-1. **Immediately:** Run baseline verification in clean Codespace (TZ-1.1)
-   - Takes ~20 minutes, validates nothing is broken
-   - Documents environment setup for release
-2. **High priority:** Execute Wave 2 cleanup (5-10 more documents)
-   - Remove old specs, redundant runbooks
-   - Update references in README
-3. **Before release:** Add component-level Vitest tests (TZ-4.3)
-   - Test diff viewer, timeline, filters
+### Next Agent Should (Wave 4 priorities)
+1. **🔴 CRITICAL:** Run baseline verification in clean Codespace (TZ-1.1)
+   - Takes ~20-30 minutes, final validation before release
+   - Run: `make cs:reset`, `cp .env.example .env`, `make cs:dev`, `make cs:test`
+   - Update BASELINE_VERIFICATION.md with results
+   - **BLOCKER for RC tag**
+2. **High priority:** Execute Wave 3 cleanup (environment docs consolidation)
+   - Merge ENVIRONMENT.md + ENV_REFERENCE.md into SETUP.md
+   - Archive v2.0 spike docs
+   - Takes ~15-20 minutes
+3. **Before release (optional):** Add component-level Vitest tests (TZ-4.3)
+   - Test diff viewer, timeline, filters, RBAC guards
    - Validates F3 UX components thoroughly
-4. **Optional:** Execute Wave 3 consolidation (environment docs)
-5. **Final:** Tag release candidate v1.0-RC1 after baseline passes
+   - Not blocking, but recommended for confidence
+4. **Final:** After TZ-1.1 passes → Tag release candidate v1.0-RC1
 
-### Release Readiness
+### Release Readiness (as of Wave 3 completion)
 - **Current:** 99% ready for MVP release
-- **Blockers:** None (all P0 done)
-- **Blockers to address before RC:** TZ-1.1 (baseline re-verification)
-- **Nice-to-haves:** TZ-4.3 (component tests), Wave 2-3 cleanup (docs consolidation)
+- **All P0 requirements:** ✅ Done (18/18)
+- **All P1 domains:** ✅ Done (Risk, PPE, Training, Incidents, Packs)
+- **Frontend:** ✅ 65+ MVP screens, all routed and permission-guarded
+- **Blockers:** None (all critical P0 features complete)
+- **MUST-DO before RC:** TZ-1.1 (baseline re-run in clean environment)
+- **Nice-to-haves:** TZ-4.3 (component tests), Wave 3 cleanup (docs consolidation)
+- **Repository health:** ~168 docs (down from 180), pilot artifacts removed, Wave 2 cleanup done
