@@ -80,3 +80,59 @@ async def test_template_by_code_version_conflict_when_not_found(
     body = response.json()
     assert body["code"] == "template_version_not_found"
     assert body["message"] == "Template selection by (code, version) failed"
+
+
+@pytest.mark.anyio
+async def test_template_version_uniqueness_constraint(
+    sessionmaker,
+    data_factory,
+) -> None:
+    """
+    Test TZ-2.5-MVP-01: uniqueness of (template_id, version).
+
+    This test verifies that the database constraint prevents creating
+    two versions with the same version number for the same template.
+    This is critical for strict template selection by (code, version).
+    """
+    async with sessionmaker() as session:
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "test"))).scalar_one()
+
+        # Create a template
+        template = Template(
+            tenant_id=tenant.slug,
+            code="unique-test-code",
+            name="Template with uniqueness check",
+            description="",
+            metadata_json={},
+            storage_key="templates/unique.docx",
+        )
+        session.add(template)
+        await session.flush()
+
+        # Create version 1
+        version_1 = TemplateVersion(
+            tenant_id=tenant.slug,
+            template_id=template.id,
+            version=1,
+            checksum=b"checksum1",
+            status=TemplateVersionStatus.ACTIVE,
+            payload_key="templates/unique_v1.docx",
+        )
+        session.add(version_1)
+        await session.flush()
+
+        # Try to create another version 1 for the same template
+        # This should fail due to UniqueConstraint(template_id, version)
+        version_1_dup = TemplateVersion(
+            tenant_id=tenant.slug,
+            template_id=template.id,
+            version=1,  # Same version number
+            checksum=b"checksum2",
+            status=TemplateVersionStatus.ACTIVE,
+            payload_key="templates/unique_v1_dup.docx",
+        )
+        session.add(version_1_dup)
+
+        # Should raise an integrity error due to uniqueness constraint
+        with pytest.raises(Exception):  # IntegrityError
+            await session.commit()

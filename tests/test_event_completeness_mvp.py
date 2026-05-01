@@ -43,19 +43,15 @@ async def test_event_emission_checklist(
 
     Minimum requirement: At least 3 events must be tested and passing (TZ-2.7-MVP-01).
     """
-    async with sessionmaker() as session:
-        tenant = await data_factory.ensure_tenant(session=session)
-        tenant_id = str(tenant.id)
-
-    admin_headers = await make_auth_headers(RoleEnum.ADMIN)
-    admin_headers["x-tenant"] = tenant_id
-
     # Track which events have been verified in outbox
     events_found = {}
 
     # Test 1: DocumentGenerated event
     # When a new document is created, DocumentGenerated should be in outbox
+    document = None
+    version = None
     async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
         document, version = await data_factory.create_document(
             tenant=tenant,
             session=session,
@@ -63,6 +59,11 @@ async def test_event_emission_checklist(
         )
         document_id = document.id
         version_id = version.id
+        # Get tenant_id from the created document to ensure type consistency
+        tenant_id = str(document.tenant_id)
+
+    admin_headers = await make_auth_headers(RoleEnum.ADMIN)
+    admin_headers["x-tenant"] = tenant_id
 
     async with sessionmaker() as session:
         outbox = (
