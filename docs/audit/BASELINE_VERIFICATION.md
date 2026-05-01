@@ -1,65 +1,90 @@
 # Baseline verification (fail-first)
 
-Дата прогона: 2026-02-18
+**CRITICAL:** This document requires fresh re-verification in a clean Codespace/CI environment before release.
+Last verified: 2026-02-18 (outdated — re-run required to meet TZ-1.1-MVP-01 acceptance criteria)
+
+## How to Re-Verify Baseline (for next agent / CI)
+
+Execute in a **fresh GitHub Codespaces environment** or clean CI container:
+
+```bash
+# Step 1: Reset local state
+make cs:reset
+cp .env.example .env
+
+# Step 2: Start backend + frontend (this will install deps automatically)
+make cs:dev  # Keep running in background (Ctrl+C after startup confirmation)
+
+# In a separate terminal:
+
+# Step 3: Run tests (backend pytest + frontend vitest)
+make cs:test
+
+# Step 4: Collect tests
+source .venv/bin/activate
+pytest --collect-only -q
+
+# Step 5: Frontend tests (included in cs:test, shown separately for clarity)
+npm --prefix frontend test
+
+# Step 6: Verify login (in browser)
+# Open http://localhost:5173
+# Set in .env: ADMIN_BOOTSTRAP=1, ADMIN_EMAIL=admin@example.com, ADMIN_PASSWORD=admin123, ADMIN_TENANT=demo
+# Restart backend and login
+```
+
+## Previous Baseline Run (2026-02-18 — OUTDATED)
+
+Дата прогона: 2026-02-18 (требует обновления)
 Среда: GitHub Codespaces / dockerless profile
-
-## Выполненные команды
-
-1. `make cs:reset`
-2. `cp .env.example .env`
-3. `make cs:dev`
-4. `make cs:test`
-5. `source .venv/bin/activate && pytest --collect-only -q`
-6. `npm --prefix frontend test`
-
-## Результаты
 
 ### 1) `make cs:reset`
 - Статус: **OK**
-- Очистка выполнена: `dev.db`, `.local_storage`, `frontend/coverage`.
+- Очистка: `dev.db`, `.local_storage`, `frontend/coverage`.
 
 ### 2) `cp .env.example .env`
 - Статус: **OK**
-- `.env` создан из шаблона.
 
 ### 3) `make cs:dev`
-- Статус: **OK** (после первичной установки зависимостей)
-- Поднялись сервисы:
-  - backend: `http://localhost:8000`
-  - frontend: `http://localhost:5173`
-- Наблюдения (не блокеры):
-  - предупреждение о отсутствии `soffice` (LibreOffice) в окружении;
-  - предупреждение про locale `ru-RU` недоступен;
-  - используются development JWT keys (ожидаемо для dev).
+- Статус: **OK** 
+- Backend: `http://localhost:8000`, Frontend: `http://localhost:5173`
+- Non-blocking warnings: missing soffice, locale issues, dev JWT keys (expected).
 
 ### 4) `make cs:test`
 - Статус: **OK**
-- Backend pytest: `287 passed, 1 skipped`.
-- Frontend vitest: `23 passed`, `44 passed`.
-- Наблюдения:
-  - много предупреждений deprecation/SAWarning/React act warnings;
-  - тесты при этом зелёные.
+- Backend: 287 passed, 1 skipped
+- Frontend: vitest passed
+- Non-blocking warnings: deprecation/SAWarning/React act warnings in logs.
 
 ### 5) `pytest --collect-only -q`
 - Статус: **OK**
-- Коллекция тестов стабильна, обнаружены backend/integration/unit/contract test suites.
+- Test collection stable.
 
 ### 6) `npm --prefix frontend test`
 - Статус: **OK**
-- Vitest проходит полностью, покрытие формируется.
-- Наблюдения:
-  - предупреждения React Router future flags;
-  - предупреждения об `act(...)` в части компонентных тестов.
+- Vitest coverage generated.
 
-## Fail-first фиксация
-- Критичных падений по baseline-командам не обнаружено.
-- Основные потенциальные риски для новичков:
-  1. долгий cold-start на первом `make cs:dev` из-за установки Python/Node deps;
-  2. отсутствие `soffice` в окружении (не блокирует текущий dev flow, но влияет на прод-паритет PDF пайплайна);
-  3. шум предупреждений в тестах затрудняет чтение логов.
+## Known Non-Blocking Issues
 
-## Воспроизведение
-- Выполнить команды в указанном порядке из раздела «Выполненные команды».
-- Для входа в UI указать в `.env`:
-  - `ADMIN_BOOTSTRAP=1`
-  - `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_TENANT`.
+1. Missing `soffice` (LibreOffice) in dev environment — does not block current flow, affects prod PDF parity
+2. Locale warnings for `ru-RU` — non-blocking
+3. React act(...) warnings in test output — tests still pass
+4. Cold-start installation delays on first `make cs:dev` — expected
+
+## Bootstrap Defaults (Dev Only)
+
+Set in `.env` before `make cs:dev`:
+- `ADMIN_BOOTSTRAP=1`
+- `ADMIN_EMAIL=admin@example.com`
+- `ADMIN_PASSWORD=admin123` (dev only)
+- `ADMIN_TENANT=demo`
+
+Never use dev defaults in staging/production.
+
+## Acceptance Criteria (TZ-1.1-MVP-01)
+
+- [ ] All 6 baseline commands execute without critical errors in clean environment
+- [ ] Backend pytest: ≥287 tests passed
+- [ ] Frontend vitest: all tests passed
+- [ ] Login flow works with bootstrap credentials
+- [ ] Documentation matches actual commands and output
