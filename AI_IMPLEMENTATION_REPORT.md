@@ -211,12 +211,14 @@ These tests directly address TZ-4.3-MVP-01 "Add focused component tests and UX a
 ### Wave 4 — Immediate (Production Readiness Push)
 
 1. **Verify baseline in clean Codespace** (TZ-1.1) — 🔴 CRITICAL BLOCKER FOR RELEASE
-   - Spin up fresh Codespaces environment (or CI container)
+   - **Status update (2026-05-01):** Instructions updated in `docs/audit/BASELINE_VERIFICATION.md` with exact re-verification steps
+   - Spin up fresh Codespaces environment (or CI container) **or** run baseline check in CI pipeline
    - Run: `make cs:reset`, `cp .env.example .env`, `make cs:dev`, `make cs:test`
    - Document any new issues or blockers (new errors, deprecations, etc.)
-   - Update BASELINE_VERIFICATION.md with fresh results
+   - Update BASELINE_VERIFICATION.md with fresh results and checkmarks for acceptance criteria
    - Expected time: ~20 minutes
    - **Why critical:** Affects RELEASE_READINESS verdict (RC-001, RC-004)
+   - **How to approach:** Either spin up fresh Codespaces, or add baseline-verification job to CI/CD pipeline (recommended for reproducibility)
 
 2. **Execute Wave 3 cleanup** (TZ-6.1 optional) — LOW PRIORITY
    - Optional consolidation: merge similar runbooks / documentation if time permits
