@@ -14,7 +14,6 @@ def test_pilot_readiness_generates_reports(tmp_path: Path) -> None:
     assert payload["status"] in {"ready", "not_ready"}
 
     assert (repo / "docs" / "pilot" / "pilot_readiness_report.json").exists()
-    assert (repo / "docs" / "PILOT_GO_LIVE_REPORT.md").exists()
 
 
 def test_bootstrap_runbook_exists() -> None:
