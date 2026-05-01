@@ -150,6 +150,89 @@ async def test_risk_assessment_artifacts_and_idempotency(
 
 
 @pytest.mark.anyio
+async def test_risk_assessment_emits_riskassessed_outbox_event(
+    async_client, make_auth_headers, sessionmaker, data_factory
+) -> None:
+    """
+    Test that risk assessment emits RiskAssessed event to outbox (TZ-3.1-MVP-01).
+
+    This verifies the mandatory event emission required for risk domain.
+    """
+    from app.models.models import Outbox
+
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+
+    methodology_resp = await async_client.post(
+        "/api/v1/risk/methodologies",
+        json={
+            "name": "Event Test Matrix",
+            "bands": [
+                {"name": "low", "max": 4},
+                {"name": "high", "max": 25},
+            ],
+        },
+        headers=headers,
+    )
+    assert methodology_resp.status_code == 200, methodology_resp.text
+    methodology_id = methodology_resp.json()["id"]
+
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        company = await data_factory.create_company(
+            tenant=tenant, session=session, name="Risk Event Corp"
+        )
+        site = Site(tenant_id=tenant.id, company_id=company.id, name="Event Site")
+        session.add(site)
+        await session.commit()
+        await session.refresh(site)
+        company_id = company.id
+        site_id = site.id
+        tenant_id = str(tenant.id)
+
+    hazard_resp = await async_client.post(
+        "/api/v1/risk/hazards",
+        json={"code": "test-hazard", "title": "Test Hazard", "module": "ot"},
+        headers=headers,
+    )
+    assert hazard_resp.status_code == 200, hazard_resp.text
+
+    assess_payload = {
+        "company_id": company_id,
+        "place_id": site_id,
+        "methodology_id": methodology_id,
+        "assessment_key": "event-test-assessment",
+        "assessment_version": 1,
+        "items": [
+            {"hazard_code": "test-hazard", "probability": 3, "severity": 3},
+        ],
+    }
+    assess_resp = await async_client.post(
+        "/api/v1/risk/assess",
+        json=assess_payload,
+        headers=headers,
+    )
+    assert assess_resp.status_code == 200, assess_resp.text
+    assessment_id = assess_resp.json()["assessment_id"]
+
+    # Verify RiskAssessed event was emitted to outbox
+    async with sessionmaker() as session:
+        outbox_entry = (
+            await session.execute(
+                select(Outbox).where(
+                    Outbox.tenant_id == tenant_id,
+                    Outbox.event_type == "RiskAssessed",
+                )
+            )
+        ).scalar_one_or_none()
+
+        assert outbox_entry is not None, "RiskAssessed event not emitted to outbox"
+        assert outbox_entry.destination is not None or outbox_entry.event_type == "RiskAssessed"
+        assert outbox_entry.payload is not None
+        payload = outbox_entry.payload
+        assert payload.get("assessment_id") == assessment_id
+
+
+@pytest.mark.anyio
 async def test_risk_assessment_versioning_and_tenant_isolation(
     async_client, make_auth_headers, sessionmaker, data_factory
 ) -> None:

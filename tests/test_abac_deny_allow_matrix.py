@@ -805,3 +805,211 @@ class TestABACEdgeCases:
 
         assert result_small.allow is True
         assert result_large.allow is False
+
+
+class TestABACNegativeScenarios:
+    """Negative scenarios: explicit denial, cross-tenant, insufficient permissions."""
+
+    def test_cross_tenant_access_denied(self) -> None:
+        """User from tenant-1 should not access resources from tenant-2."""
+        subject = Subject(
+            user_id="user-1",
+            tenant_id="tenant-1",  # User belongs to tenant-1
+            roles=("manager",),
+            permissions=("document:read",),
+            company_ids=("company-a",),
+        )
+        resource = Resource(
+            resource_type="document",
+            resource_id="doc-cross-tenant",
+            attrs={"company_id": "company-a", "tenant_id": "tenant-2"},  # Resource in tenant-2
+        )
+        context = PolicyContext(
+            tenant_id="tenant-2",  # Accessing as if from tenant-2
+            request_attrs={"policies": []},
+        )
+
+        result = evaluate(subject, "read", resource, context)
+
+        # Tenant mismatch should deny regardless of policies
+        assert result.allow is False
+
+    def test_insufficient_role_denies_write(self) -> None:
+        """Employee role should not have write permissions."""
+        subject = Subject(
+            user_id="emp-1",
+            tenant_id="tenant-1",
+            roles=("employee",),  # Employee, not manager
+            permissions=("document:read",),  # Only read, no write
+            company_ids=("company-a",),
+        )
+        resource = Resource(
+            resource_type="document",
+            resource_id="doc-1",
+            attrs={"company_id": "company-a"},
+        )
+        context = PolicyContext(
+            tenant_id="tenant-1",
+            request_attrs={"policies": []},
+        )
+
+        result = evaluate(subject, "write", resource, context)
+
+        # No write permission => deny
+        assert result.allow is False
+        assert result.reason == "missing_permission"
+
+    def test_empty_scope_ids_blocks_query_access(self) -> None:
+        """User with no scope IDs should be denied access even with permission."""
+        subject = Subject(
+            user_id="user-1",
+            tenant_id="tenant-1",
+            roles=("manager",),
+            permissions=("company:read",),
+            company_ids=(),  # EMPTY scope
+        )
+        resource = Resource(
+            resource_type="company",
+            resource_id="comp-1",
+            attrs={"company_id": "company-a"},
+        )
+        context = PolicyContext(
+            tenant_id="tenant-1",
+            request_attrs={"policies": []},
+        )
+
+        result = evaluate(subject, "read", resource, context)
+
+        # Empty scope => deny (no accessible resources)
+        assert result.allow is False
+
+    def test_multiple_conflicts_deny_precedence(self) -> None:
+        """Multiple conflicting policies: deny should always win."""
+        subject = Subject(
+            user_id="user-1",
+            tenant_id="tenant-1",
+            roles=("admin",),
+            permissions=("risk:delete",),
+        )
+        resource = Resource(
+            resource_type="risk",
+            resource_id="risk-1",
+            attrs={"risk_level": 5, "is_critical": True},
+        )
+        # Multiple policies: allow critical risks, but deny high-level risks
+        policies = [
+            type(
+                "AuthzPolicy",
+                (),
+                {
+                    "id": "allow-critical",
+                    "resource": "risk",
+                    "action": "delete",
+                    "effect": "allow",
+                    "conditions_json": {
+                        "all": [{"attr": "is_critical", "op": "eq", "value": True}]
+                    },
+                    "priority": 20,
+                    "enabled": True,
+                },
+            )(),
+            type(
+                "AuthzPolicy",
+                (),
+                {
+                    "id": "deny-high-level",
+                    "resource": "risk",
+                    "action": "delete",
+                    "effect": "deny",
+                    "conditions_json": {
+                        "all": [{"attr": "risk_level", "op": "gt", "value": 3}]
+                    },
+                    "priority": 10,  # Higher priority (lower number)
+                    "enabled": True,
+                },
+            )(),
+        ]
+        context = PolicyContext(
+            tenant_id="tenant-1",
+            request_attrs={"policies": policies},
+        )
+
+        result = evaluate(subject, "delete", resource, context)
+
+        # Deny has higher priority (10 < 20) => deny wins
+        assert result.allow is False
+        assert result.matched_policy_id == "deny-high-level"
+
+    def test_action_mismatch_denies_request(self) -> None:
+        """Policy for 'read' should not cover 'delete' action."""
+        subject = Subject(
+            user_id="user-1",
+            tenant_id="tenant-1",
+            roles=("viewer",),
+            permissions=("document:read",),
+            company_ids=("company-a",),
+        )
+        resource = Resource(
+            resource_type="document",
+            resource_id="doc-1",
+            attrs={"company_id": "company-a"},
+        )
+        policy = type(
+            "AuthzPolicy",
+            (),
+            {
+                "id": "read-only",
+                "resource": "document",
+                "action": "read",  # Only read
+                "effect": "allow",
+                "conditions_json": {"all": []},
+                "priority": 10,
+                "enabled": True,
+            },
+        )()
+        context = PolicyContext(
+            tenant_id="tenant-1",
+            request_attrs={"policies": [policy]},
+        )
+
+        result = evaluate(subject, "delete", resource, context)
+
+        # Action mismatch (policy is for read, request is delete) => deny
+        assert result.allow is False
+
+    def test_resource_type_mismatch_denies_request(self) -> None:
+        """Policy for 'document' should not cover 'risk' resource."""
+        subject = Subject(
+            user_id="user-1",
+            tenant_id="tenant-1",
+            roles=("manager",),
+            permissions=("document:read", "risk:read"),
+            company_ids=("company-a",),
+        )
+        resource = Resource(
+            resource_type="risk",  # Different resource type
+            resource_id="risk-1",
+            attrs={"company_id": "company-a"},
+        )
+        policy = type(
+            "AuthzPolicy",
+            (),
+            {
+                "id": "document-policy",
+                "resource": "document",  # Policy is for documents
+                "action": "read",
+                "effect": "allow",
+                "conditions_json": {"all": []},
+                "priority": 10,
+                "enabled": True,
+            },
+        )()
+        context = PolicyContext(
+            tenant_id="tenant-1",
+            request_attrs={"policies": [policy]},
+        )
+
+        result = evaluate(subject, "read", resource, context)
+
+        # Resource type mismatch => deny
+        assert result.allow is False
