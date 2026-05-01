@@ -23,16 +23,65 @@
 - Следующий точный шаг: Either (1) Execute Phase 0 TZ-1.1 in clean Codespace, OR (2) Skip to Phase 1.1 if MVP release is ready
 
 **Предыдущая сессия (Wave 2 cleanup, 2026-05-01):**
+**Текущая сессия (2026-05-02, Session 4 — vNext Implementation Planning):**
+- Дата: 2026-05-02
+- Агент: Claude Haiku 4.5
+- Задача: Study PLATFORM_VNEXT_UPGRADE_SPEC.md; prepare non-destructive implementation roadmap
+- Статус: ✅ COMPLETED
+  - ✅ Studied vNext spec (37 sections, all product requirements analyzed)
+  - ✅ Performed gap analysis (14 P1 gaps, 11 P2 gaps identified)
+  - ✅ Created 4-phase implementation roadmap: Phase 0 (release readiness), Phase 1 (UX+workspaces), Phase 2 (domain completion), Phase 3 (advanced), Phase 4 (enterprise)
+  - ✅ Documented all risks, dependencies, and success metrics
+  - ✅ Updated README with roadmap link
+- Следующий точный шаг: Execute Phase 0 (baseline re-verification in clean Codespace) — CRITICAL BLOCKER for RC-001
+
+**Предыдущая сессия (2026-05-01, Session 3 — TZ-1.1 Baseline Verification):**
+- Дата: 2026-05-01 (Wave 1+2 cleanup, TZ coverage updates)
+- Агент: Claude / Previous Agent  
+- Задача: TZ-1.1 Baseline verification setup + infrastructure
+- Статус: Завершено; created baseline_verification.sh/ps1 scripts, BASELINE_VERIFICATION.md refreshed
+- Где остановился: Ready for fresh CI/Codespace baseline run
+
+**Wave 2 (2026-05-01, Session 2):**
 - Дата: 2026-05-01 (Wave 1+2 cleanup, TZ coverage updates)
 - Агент: Claude / Previous Agent  
 - Задача: Wave 1 cleanup (5 pilot docs), TZ-4.2 MVP screens inventory, Wave 2 cleanup
 - Статус: Завершено; created docs/FRONTEND_SCREENS_INVENTORY.md, deleted 8 legacy docs
 
-**Текущая сессия (2026-05-01, Session 3):**
-- Агент: Claude Haiku 4.5
-- Задача: TZ-1.1 Baseline verification setup + gap analysis
-- Статус: In progress — BASELINE_VERIFICATION.md instructions updated, ready for fresh Codespace verification
-- Где остановился: Updated TZ-1.1-MVP-01 acceptance criteria with step-by-step re-verification instructions for next agent/CI environment
+## Session 4 Analysis & vNext Planning (2026-05-02)
+
+### Documents Studied
+- ✅ `docs/spec/PLATFORM_VNEXT_UPGRADE_SPEC.md` — 37-section product vision (competitive parity, principles, modules, constraints)
+- ✅ `docs/spec/TZ_FULL_UNIFIED.md` — baseline MVP requirements (P0/P1 scope, frontend structure)
+- ✅ `AI_IMPLEMENTATION_REPORT.md` — current state (P0 18/20, P1 12/15 domains, 82+ screens)
+- ✅ README.md — quick-start verified, canonical paths confirmed
+- ✅ `docs/ARCHITECTURE.md` — module structure, bounded contexts
+- ✅ `docs/MODULES.md` — 36+ backend modules inventory
+
+### Key Findings: Gap Analysis Summary
+
+| Category | Gaps | Status | Phase |
+|----------|------|--------|-------|
+| **P0 Critical** | 2 | Baseline re-run + RC tagging | Phase 0 (immediate) |
+| **P1 Core vNext** | 14 | Workspaces, calendar, medical, SOUT, compliance, committees, field mode, data quality | Phases 1–2 |
+| **P2 Extended** | 11 | Workflow engine, equipment, permits, vertical modules, CRM, analytics, LMS integrations | Phases 3–4 |
+| **P3 Optional** | 3 | AI Copilot, video analytics, advanced white-label | Phase 4+ |
+
+### Implementation Strategy: Non-Destructive Upgrade
+- ✅ **No breaking changes**: All existing APIs remain functional
+- ✅ **Feature flags**: All vNext additions ship disabled by default
+- ✅ **Backward compatibility**: 6-month deprecation periods for any legacy endpoints
+- ✅ **Additive migrations**: Database schema changes add only (no drops without dual-write)
+- ✅ **Test-driven**: >80% coverage required on all new code
+
+### Roadmap Outline
+1. **Phase 0** (1–2w): Baseline validation + RC-001 tag (CRITICAL BLOCKER)
+2. **Phase 1** (4–6w): Role-based workspaces, document diff UI, mobile field mode
+3. **Phase 2** (6–8w): Medical/SOUT/Compliance/Committees completion, employee card unification, data quality layer
+4. **Phase 3** (8–10w): Workflow engine, equipment, permits, analytics, vertical modules, terminal framework
+5. **Phase 4** (6–8w): CRM, trial experience, AI Copilot, final hardening
+
+---
 
 ## Session 4 Analysis & Implementation (2026-05-02 - vNext Planning & Phase 1.3 Audit)
 
@@ -87,6 +136,7 @@ Selected for first vNext implementation because:
 5. Provides code review checklist for Phase 2-10 work
 
 ## Studied Documentation
+## Studied Documentation (Previous Sessions)
 
 - `docs/spec/PLATFORM_VNEXT_UPGRADE_SPEC.md` — полный upgrade-spec vNext (§0–37, 2098 строк); 10 областей pariteta, 5 competitive advantages, 36-37 constraint sections
 - `docs/spec/TZ_FULL_UNIFIED.md` — главное единое ТЗ (§0–7, B1–B5, F1–F4); 56 требований mapped
@@ -96,7 +146,32 @@ Selected for first vNext implementation because:
 - Makefile — cs:* targets verified (reset, dev, test all present)
 - requirements.txt — dependencies reviewed, pins for Python 3.12/3.13 asyncpg correct
 
-## Changed Files (this session, 2026-05-01 Wave 3)
+## Changed Files (Session 4, 2026-05-02)
+
+| File | Change | Reason |
+|---|---|---|
+| `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md` | **CREATED** — Comprehensive 14-section implementation roadmap | Main deliverable: phased vNext upgrade strategy, gap analysis, risks, success criteria |
+| `README.md` | Added link to `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md` | Navigation update: link new roadmap from canonical docs section |
+| `AI_IMPLEMENTATION_REPORT.md` (this file) | Updated Session 4 handoff, added vNext planning analysis | Document Session 4 findings and next steps |
+
+### Session 4 Deliverables
+
+**Primary Deliverable:**
+- ✅ `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md` (14 sections, 2700+ lines)
+  - Gap analysis comparing vNext spec to current implementation (25 gaps identified)
+  - 4-phase implementation roadmap (Phase 0–4, 6 months total)
+  - Prioritized backlog with 25 tasks (P0–P3)
+  - Risk mitigation strategies for data migration, API changes, architectural constraints
+  - Success metrics per phase
+  - Detailed vNext/section-to-phase mapping
+
+**Supporting Updates:**
+- ✅ Updated README.md with roadmap link
+- ✅ Updated AI_IMPLEMENTATION_REPORT.md with Session 4 summary
+
+---
+
+## Changed Files (previous sessions, 2026-05-01 Wave 3)
 
 | File | Change | Reason |
 |---|---|---|
