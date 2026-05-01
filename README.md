@@ -57,10 +57,22 @@ Note for WSL: dependencies must be installed inside the selected Linux distro as
 
 This is the recommended local start path in this workspace. It prepares dockerless env defaults, initializes the SQLite schema, starts backend on `http://localhost:8000`, and starts frontend on `http://localhost:5173`.
 
-Default local login:
-- tenant: `demo`
-- email: `admin@example.com`
-- password: `admin123`
+#### Test login without secrets
+
+Default test credentials for local development (never use in production):
+- **Tenant:** `demo`
+- **Email:** `admin@example.com`
+- **Password:** `admin123`
+
+These credentials are **non-production defaults only** and are populated by `dev_bootstrap.py` / `demo_bootstrap.py` scripts during `make dev-lite`. To customize test credentials, edit `backend/app/services/dev_bootstrap.py` before running `make dev-lite` for the first time.
+
+For Codespaces or CI environments with env-based bootstrap, set:
+- `ADMIN_BOOTSTRAP=1` — enable admin bootstrap from environment
+- `ADMIN_EMAIL` — test admin email
+- `ADMIN_PASSWORD` — test admin password
+- `ADMIN_TENANT` — tenant slug
+
+See `docs/OWNER_ADMIN_ACCESS.md` for bootstrap details.
 
 ### Manual backend start
 ```bash
