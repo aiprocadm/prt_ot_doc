@@ -17,6 +17,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.core.config import Settings, get_settings
 from app.db.session import engine
 from app.domains.files import s3
+from app.modules.health_checks import HealthCheckService
 
 logger = logging.getLogger("app.api.health")
 router = APIRouter(tags=["service"], include_in_schema=False)
@@ -145,6 +146,69 @@ async def healthz() -> JSONResponse:
 @router.get("/readyz")
 async def readyz(request: Request) -> JSONResponse:
     return await ready(request)
+
+
+@router.get("/api/v1/health/comprehensive", tags=["health"])
+async def health_comprehensive(
+    request: Request,
+    skip_cache: bool = False,
+    skip_slow: bool = False,
+) -> JSONResponse:
+    """
+    Comprehensive health check for tenant admins.
+
+    Checks critical dependencies (postgres, redis, minio) and optional services
+    (workers, integrations, email). Results are cached for 60s by default.
+
+    Query parameters:
+    - skip_cache: Force fresh check (bypass cache)
+    - skip_slow: Skip optional/slow checks (workers, integrations)
+
+    Required headers:
+    - X-Tenant-Id: Tenant ID for scoping
+
+    Returns:
+    - 200 OK: All checks passed (status="ok")
+    - 503 Service Unavailable: Critical check failed (status="failed")
+    - 503 Service Unavailable: Optional check failed (status="degraded")
+    - 400 Bad Request: Missing X-Tenant-Id header
+    - 403 Forbidden: Comprehensive health checks disabled
+    """
+    settings = _resolve_settings(request)
+
+    if not settings.health_check_comprehensive_enabled:
+        return JSONResponse(
+            status_code=status.HTTP_403_FORBIDDEN,
+            content={"error": "comprehensive health checks disabled"},
+        )
+
+    tenant_id = request.headers.get("X-Tenant-Id")
+    if not tenant_id:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"error": "X-Tenant-Id header required"},
+        )
+
+    try:
+        service = HealthCheckService(settings)
+        result = await service.run_all_checks(
+            tenant_id=tenant_id,
+            skip_cache=skip_cache,
+            skip_slow=skip_slow,
+        )
+
+        code = (
+            status.HTTP_200_OK
+            if result.status == "ok"
+            else status.HTTP_503_SERVICE_UNAVAILABLE
+        )
+        return JSONResponse(status_code=code, content=result.model_dump())
+    except Exception as e:
+        logger.exception("health.comprehensive_failed")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"error": "health check failed", "detail": str(e)[:100]},
+        )
 
 
 __all__ = ["router", "_ping_postgres", "_ping_redis"]
