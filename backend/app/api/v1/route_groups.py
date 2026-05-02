@@ -132,6 +132,7 @@ OPERATIONS_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
     (operational_dashboard.router, {"prefix": "", "tags": ["operational"]}),
     (jobs.router, {}),
     (tasks.router, {"prefix": "/tasks", "tags": ["tasks"]}),
+    (operational_dashboard.router, {"tags": ["operational"]}),
     (workspace.router, {}),
     (tenancy.router, {}),
     (outbox_admin.router, {"prefix": "/admin/outbox", "tags": ["outbox"]}),
