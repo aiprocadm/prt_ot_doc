@@ -1,15 +1,13 @@
-"""Operational Dashboard module (Phase 2.1 - Command Center)."""
+"""Operational dashboard module for tenant operational visibility."""
 
-from app.modules.operational_dashboard.service import OperationalDashboardService
 from app.modules.operational_dashboard.schemas import (
     AlertItem,
-    OperationalDashboardMetrics,
     OperationalDashboardResponse,
 )
+from app.modules.operational_dashboard.service import OperationalDashboardService
 
 __all__ = [
     "OperationalDashboardService",
     "AlertItem",
-    "OperationalDashboardMetrics",
     "OperationalDashboardResponse",
 ]

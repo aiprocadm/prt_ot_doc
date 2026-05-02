@@ -25,8 +25,8 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 | Phase | Priority | Focus | Est. Sessions | Status |
 |-------|----------|-------|----------------|--------|
 | Phase 0: Release Blockers | P0 | TZ-1.1 baseline re-verification | 1 session | 🔴 CRITICAL (deferred) |
-| Phase 1: Architectural Foundation | P1 | Role-based workspaces ✅, RBAC module access ✅, tenant isolation (pending) | 2-3 sessions | 🟡 IN PROGRESS (1.1-1.2 done, 1.3 remains) |
-| Phase 2: Operational Dashboard | P1 | Command Center, health checks, operational visibility | 2-3 sessions | 📋 Planned |
+| Phase 1: Architectural Foundation | P1 | Role-based workspaces ✅, RBAC module access ✅, tenant isolation ✅ | 2-3 sessions | ✅ COMPLETE |
+| Phase 2: Operational Dashboard | P1 | Command Center (backend ✅, 2.1a done), health checks ✅, operational visibility | 2-3 sessions | 🟡 IN PROGRESS (2.2 done, 2.1 partial, pending frontend) |
 | Phase 3: Data Quality & Master Data | P1 | Data Quality Layer, unified employee/site cards, deduplication | 2-3 sessions | 📋 Planned |
 | Phase 4: Calendar & Search | P2 | Smart Calendar improvements, universal search + command bar | 2-3 sessions | 📋 Planned |
 | Phase 5: Document Factory Hardening | P2 | Template engine, header/footer, replace engine improvements | 2-3 sessions | 📋 Planned |
