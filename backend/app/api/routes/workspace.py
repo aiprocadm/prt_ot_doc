@@ -624,3 +624,166 @@ async def role_workspace_summary(
         overdue_deadlines=overdue_deadlines,
         recommendations=recs,
     )
+
+
+# ---------------------------------------------------------------------------
+# PHASE 1.1: Role-Based Workspaces - User Workspace Config
+# ---------------------------------------------------------------------------
+
+class WorkspaceConfig(BaseModel):
+    """Role-specific workspace configuration for authenticated user."""
+    role: str
+    workspace_type: str
+    primary_modules: list[str] = Field(default_factory=list)
+    dashboard_route: str
+    kpis_enabled: list[str] = Field(default_factory=list)
+    quick_actions: list[dict[str, str]] = Field(default_factory=list)
+
+
+_ROLE_WORKSPACE_MAPPING: dict[str, dict[str, object]] = {
+    # OT/Safety roles
+    "owner": {
+        "workspace_type": "executive",
+        "dashboard_route": "/dashboard",
+        "primary_modules": ["dashboard", "risk", "incidents", "inspections", "training", "ppe", "documents"],
+        "kpis_enabled": ["overdue_tasks", "critical_obligations", "incidents_open", "training_status"],
+        "quick_actions": [
+            {"label": "Create Document", "route": "/documents/wizard"},
+            {"label": "View Tasks", "route": "/tasks"},
+            {"label": "Run Master", "route": "/packs"},
+        ],
+    },
+    "admin": {
+        "workspace_type": "admin",
+        "dashboard_route": "/dashboard",
+        "primary_modules": ["dashboard", "admin", "rbac_abac", "tenancy", "risk", "incidents", "documents"],
+        "kpis_enabled": ["overdue_tasks", "critical_obligations", "incidents_open", "readiness_blockers"],
+        "quick_actions": [
+            {"label": "Manage Users", "route": "/admin/users"},
+            {"label": "View Tasks", "route": "/tasks"},
+            {"label": "System Health", "route": "/admin"},
+        ],
+    },
+    "ot_pb_lead": {
+        "workspace_type": "safety_lead",
+        "dashboard_route": "/dashboard",
+        "primary_modules": ["dashboard", "risk", "incidents", "inspections", "ppe", "documents", "tasks"],
+        "kpis_enabled": ["overdue_tasks", "open_incidents", "open_inspections", "expired_ppe"],
+        "quick_actions": [
+            {"label": "New Incident", "route": "/incidents"},
+            {"label": "Schedule Inspection", "route": "/inspections"},
+            {"label": "My Tasks", "route": "/tasks?assigned=me"},
+        ],
+    },
+    "ot_specialist": {
+        "workspace_type": "specialist",
+        "dashboard_route": "/dashboard",
+        "primary_modules": ["dashboard", "risk", "ppe", "incidents", "documents", "tasks"],
+        "kpis_enabled": ["overdue_tasks", "expired_ppe"],
+        "quick_actions": [
+            {"label": "Check PPE", "route": "/ppe"},
+            {"label": "My Tasks", "route": "/tasks?assigned=me"},
+            {"label": "View Risks", "route": "/risks"},
+        ],
+    },
+    "hr": {
+        "workspace_type": "hr",
+        "dashboard_route": "/dashboard",
+        "primary_modules": ["dashboard", "training", "medical", "persons", "documents", "tasks"],
+        "kpis_enabled": ["overdue_training", "overdue_tasks"],
+        "quick_actions": [
+            {"label": "Assign Training", "route": "/training"},
+            {"label": "Register Medical", "route": "/medical"},
+            {"label": "Manage Employees", "route": "/persons"},
+        ],
+    },
+    "teacher": {
+        "workspace_type": "trainer",
+        "dashboard_route": "/dashboard",
+        "primary_modules": ["dashboard", "training", "briefings", "documents"],
+        "kpis_enabled": ["overdue_training"],
+        "quick_actions": [
+            {"label": "My Assignments", "route": "/training?teacher=me"},
+            {"label": "Create Briefing", "route": "/briefings"},
+        ],
+    },
+    "student": {
+        "workspace_type": "learner",
+        "dashboard_route": "/dashboard",
+        "primary_modules": ["dashboard", "training", "documents"],
+        "kpis_enabled": [],
+        "quick_actions": [
+            {"label": "My Training", "route": "/training?student=me"},
+            {"label": "My Documents", "route": "/documents?owner=me"},
+        ],
+    },
+    "manager": {
+        "workspace_type": "manager",
+        "dashboard_route": "/dashboard",
+        "primary_modules": ["dashboard", "tasks", "team", "documents", "incidents"],
+        "kpis_enabled": ["overdue_tasks", "team_performance"],
+        "quick_actions": [
+            {"label": "Team Tasks", "route": "/tasks?team=me"},
+            {"label": "View Team", "route": "/team"},
+        ],
+    },
+    "worker": {
+        "workspace_type": "operator",
+        "dashboard_route": "/dashboard",
+        "primary_modules": ["dashboard", "tasks", "documents"],
+        "kpis_enabled": [],
+        "quick_actions": [
+            {"label": "My Tasks", "route": "/tasks?assigned=me"},
+            {"label": "My Documents", "route": "/documents?owner=me"},
+        ],
+    },
+    "auditor_ro": {
+        "workspace_type": "auditor",
+        "dashboard_route": "/dashboard",
+        "primary_modules": ["dashboard", "audit", "documents", "risks", "incidents"],
+        "kpis_enabled": ["open_incidents", "high_risks"],
+        "quick_actions": [
+            {"label": "View Audit Log", "route": "/audit"},
+            {"label": "Compliance Check", "route": "/compliance"},
+        ],
+    },
+}
+
+
+@router.get("/users/me/workspace", response_model=WorkspaceConfig)
+async def get_user_workspace_config(
+    tenant: TenantDep,
+    access: AccessDep,
+) -> WorkspaceConfig:
+    """Get role-specific workspace configuration for the authenticated user.
+
+    Returns workspace layout, primary modules, enabled KPIs, and quick actions
+    based on the user's role.
+    """
+    TenantContextValidator.ensure_tenant_context(tenant)
+
+    role = access.user.role.value if hasattr(access.user.role, "value") else str(access.user.role)
+
+    # Get role-specific configuration or use sensible defaults
+    config = _ROLE_WORKSPACE_MAPPING.get(role)
+    if config is None:
+        # Default fallback for unmapped roles
+        config = {
+            "workspace_type": "standard",
+            "dashboard_route": "/dashboard",
+            "primary_modules": ["dashboard", "documents", "tasks"],
+            "kpis_enabled": ["overdue_tasks"],
+            "quick_actions": [
+                {"label": "View Tasks", "route": "/tasks"},
+                {"label": "View Documents", "route": "/documents"},
+            ],
+        }
+
+    return WorkspaceConfig(
+        role=role,
+        workspace_type=str(config.get("workspace_type", "standard")),
+        primary_modules=list(config.get("primary_modules", [])),
+        dashboard_route=str(config.get("dashboard_route", "/dashboard")),
+        kpis_enabled=list(config.get("kpis_enabled", [])),
+        quick_actions=list(config.get("quick_actions", [])),
+    )

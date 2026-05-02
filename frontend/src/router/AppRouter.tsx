@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useRef } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import { AuthLayout } from "@/layouts/AuthLayout";
@@ -15,7 +15,17 @@ import { trackUxMetric } from "@/utils/uxMetrics";
 
 const LandingRedirect = () => {
   const { can } = useAbility();
-  return <Navigate to={getLandingRoute(can)} replace />;
+  const [landingRoute, setLandingRoute] = useState<string | null>(null);
+
+  useEffect(() => {
+    getLandingRoute(can).then(setLandingRoute);
+  }, [can]);
+
+  if (!landingRoute) {
+    return <div className="flex min-h-screen items-center justify-center">Загрузка...</div>;
+  }
+
+  return <Navigate to={landingRoute} replace />;
 };
 
 const RouteMetricsTracker = () => {
