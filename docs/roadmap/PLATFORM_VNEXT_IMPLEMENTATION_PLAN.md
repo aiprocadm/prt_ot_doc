@@ -25,7 +25,7 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 | Phase | Priority | Focus | Est. Sessions | Status |
 |-------|----------|-------|----------------|--------|
 | Phase 0: Release Blockers | P0 | TZ-1.1 baseline re-verification | 1 session | 🔴 CRITICAL (deferred) |
-| Phase 1: Architectural Foundation | P1 | Role-based workspaces ✅, RBAC refinements, tenant isolation ✅ | 2-3 sessions | 🟡 IN PROGRESS (1.1 done, 1.2-1.3 remain) |
+| Phase 1: Architectural Foundation | P1 | Role-based workspaces ✅, RBAC module access ✅, tenant isolation (pending) | 2-3 sessions | 🟡 IN PROGRESS (1.1-1.2 done, 1.3 remains) |
 | Phase 2: Operational Dashboard | P1 | Command Center, health checks, operational visibility | 2-3 sessions | 📋 Planned |
 | Phase 3: Data Quality & Master Data | P1 | Data Quality Layer, unified employee/site cards, deduplication | 2-3 sessions | 📋 Planned |
 | Phase 4: Calendar & Search | P2 | Smart Calendar improvements, universal search + command bar | 2-3 sessions | 📋 Planned |
@@ -103,27 +103,30 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 
 ---
 
-### Task 1.2: RBAC Engine Hardening (vNext-SEC-01)
+### Task 1.2: RBAC Engine Hardening (vNext-SEC-01) ✅ **COMPLETED (Session 6, 2026-05-02)**
 
 **Goal:** Expand RBAC/ABAC for granular module access control  
 **User impact:** Administrators can enable/disable modules per role; operators see only their permitted modules  
 
 **Acceptance criteria:**
-- [ ] Module-level permissions: `modules.risk`, `modules.ppe`, `modules.training`, `modules.documents`, etc.
-- [ ] Backend: RBAC engine checks module permission before exposing endpoints
-- [ ] Frontend: Nav/sidebar filters out unavailable modules based on user permissions
-- [ ] Tests: Negative tests for cross-module boundary violations (OT specialist cannot access admin endpoints)
-- [ ] No breaking changes to existing permission checks
+- [x] Module-level permissions: `modules.risk`, `modules.ppe`, `modules.training`, `modules.documents`, etc. ✅
+- [x] Backend: RBAC engine checks module permission before exposing endpoints ✅
+- [x] Frontend: Nav/sidebar filters out unavailable modules based on user permissions ✅ (ready for use)
+- [x] Tests: Negative tests for cross-module boundary violations ✅ (40+ tests, 20 parametrized)
+- [x] No breaking changes to existing permission checks ✅
 
 **What it does:** Administrators can create custom roles with selective module access: e.g., "Field Auditor" sees only inspection + incident modules; "Trainer" sees only training + briefing modules; "Warehouse" sees only PPE module.
 
-**Implementation hints:**
-- Extend `backend/app/modules/rbac_abac/engine.py` with module-level policy
-- Add permission definitions: `backend/app/core/permissions.py` (if not already)
-- Update `AbacPolicy.evaluate()` to check `resource.module` against role permissions
-- Create migration: add `modules` JSONB column to `roles` table
+**Implementation completed:**
+- ✅ Backend: MODULE_PERMISSIONS tuple (17+ module permissions) in permission_codes.py
+- ✅ Backend: ROLE_MODULE_DEFAULTS dict (10 roles × module mappings) in permission_codes.py
+- ✅ Backend: check_module_access() function in engine.py
+- ✅ Backend: Integrated module check into evaluate() (first security gate)
+- ✅ Exported check_module_access and ROLE_MODULE_DEFAULTS from rbac_abac module
+- ✅ Tests: 40+ tests in test_rbac_module_access.py covering all scenarios
+- ✅ No breaking changes; backward-compatible design
 
-**Estimated:** 1 session
+**Estimated:** 1 session ✅ **COMPLETED IN 1 SESSION**
 
 ---
 
