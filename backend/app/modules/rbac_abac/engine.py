@@ -6,6 +6,7 @@ from typing import Any
 from app.core.rbac_abac import ActorContext, policy_engine
 from app.models.models import AuthzPolicy
 
+from .permission_codes import ROLE_MODULE_DEFAULTS
 from .types import Decision, PolicyContext, Resource, Subject
 
 _POLICY_CACHE: dict[str, tuple[datetime, tuple[AuthzPolicy, ...]]] = {}
@@ -78,6 +79,19 @@ def _match_policy_conditions(conditions: dict[str, Any], attrs: dict[str, Any], 
     return all_ok
 
 
+def check_module_access(subject: Subject, module_name: str) -> tuple[bool, str]:
+    """Check if subject has access to a specific module.
+
+    Returns: (allowed: bool, reason: str)
+    """
+    normalized_role = str(subject.roles[0]).lower() if subject.roles else "default"
+    allowed_modules = ROLE_MODULE_DEFAULTS.get(normalized_role, [])
+
+    if module_name in allowed_modules:
+        return True, "module_allowed"
+    return False, "module_denied"
+
+
 def _get_cached_policies(ctx: PolicyContext) -> tuple[AuthzPolicy, ...]:
     provided = (ctx.request_attrs or {}).get("policies")
     if isinstance(provided, (list, tuple)):
@@ -100,6 +114,17 @@ def evaluate(subject: Subject, action: str, resource: Resource, context: PolicyC
         ctx.update(context.request_attrs or {})
     if context and context.tenant_id:
         ctx.setdefault("tenant_id", context.tenant_id)
+
+    # Module-level access control (vNext-SEC-01)
+    module_name = resource.attrs.get("module") or resource.resource_type.split(".")[0]
+    if module_name:
+        module_ok, module_reason = check_module_access(subject, module_name)
+        if not module_ok:
+            return Decision(
+                allow=False,
+                reason=f"module_access_denied",
+                audit_fields={"module": module_name, "resource": resource.resource_type}
+            )
 
     # RBAC precondition
     normalized_permission = f"{resource.resource_type}:{action}".lower()
