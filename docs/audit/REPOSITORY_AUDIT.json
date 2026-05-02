@@ -366,8 +366,11 @@
       ".github",
       ".hypothesis",
       ".local_storage",
+      ".mypy_cache",
+      ".ruff_cache",
       ".vscode",
       "app",
+      "artifacts",
       "backend",
       "config",
       "docs",
@@ -378,7 +381,9 @@
       "samples",
       "scripts",
       "seed",
-      "tests"
+      "tests",
+      "Создание платформы по ОТ",
+      "Создание платформы по ОТs"
     ]
   },
   "findings": {

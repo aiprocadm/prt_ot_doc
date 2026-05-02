@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,11 +21,15 @@ class DataQualityService:
         self.db = db
         self.engine = DataQualityRuleEngine(tenant_id, db)
 
-    async def get_completeness_percent(self) -> float:
-        """Calculate data completeness percentage (0-100)."""
-        # Placeholder implementation
-        # In production, would calculate based on actual data model
-        return 85.0  # Assume 85% completeness
+    @staticmethod
+    def _compute_completeness(total_checked: int, total_issues: int) -> float:
+        """Rough completeness from rule coverage vs issues (bounded 0–100)."""
+        if total_issues <= 0:
+            return 100.0
+        if total_checked <= 0:
+            return max(5.0, round(100.0 - min(95.0, float(total_issues) * 6.0), 2))
+        ratio = min(1.0, total_issues / max(float(total_checked), 1.0))
+        return max(0.0, min(100.0, round(100.0 * (1.0 - ratio), 2)))
 
     async def run_comprehensive_check(self) -> DataQualityReport:
         """Run all data quality checks and return comprehensive report."""
@@ -44,8 +48,9 @@ class DataQualityService:
         all_issues.sort(key=lambda x: severity_order.get(x.severity, 999))
 
         # Calculate metrics
-        completeness_percent = await self.get_completeness_percent()
         total_issues = len(all_issues)
+        total_checked = sum(int(r["total_checked"]) for r in check_results)
+        completeness_percent = self._compute_completeness(total_checked, total_issues)
 
         # Count by severity
         severity_counts: dict[IssueSeverity, int] = {
@@ -98,7 +103,7 @@ class DataQualityService:
             entity_breakdown=entity_type_counts,
             issues=all_issues[:20],  # Return top 20 issues
             check_results=check_result_dtos,
-            generated_at=datetime.utcnow(),
+            generated_at=datetime.now(tz=timezone.utc),
         )
 
         logger.info(f"Data quality check completed: {total_issues} issues found, {completeness_percent:.1f}% complete")

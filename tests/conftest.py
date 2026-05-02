@@ -320,6 +320,24 @@ async def make_auth_headers(
 
     return factory
 
+
+@pytest_asyncio.fixture()
+async def auth_headers(make_auth_headers) -> dict[str, str]:
+    """Admin auth headers with explicit X-Tenant-Id for operational/DQ APIs."""
+    base = await make_auth_headers(RoleEnum.ADMIN)
+    merged = dict(base)
+    tid = merged.get("x-tenant") or merged.get("X-Tenant-Id")
+    if tid:
+        merged["X-Tenant-Id"] = str(tid)
+    return merged
+
+
+@pytest_asyncio.fixture()
+async def authenticated_client(async_client: AsyncClient, auth_headers: dict[str, str]) -> AsyncClient:
+    async_client.headers.update(auth_headers)
+    yield async_client
+
+
 # Multi-tenant test fixtures for audit tests
 
 @pytest.fixture()
@@ -363,9 +381,7 @@ async def test_companies_multi_tenant(sessionmaker, data_factory: TestDataFactor
 
 @pytest.fixture()
 async def test_employees_multi_tenant(sessionmaker, data_factory: TestDataFactory, test_companies_multi_tenant):
-    """Create test employees in multiple tenants."""
-    from app.models.models import Employee
-    
+    """Create test persons (employees) in multiple tenants."""
     employees = {}
     for tenant_slug in ["tenant-a", "tenant-b"]:
         async with sessionmaker() as session:
@@ -373,17 +389,17 @@ async def test_employees_multi_tenant(sessionmaker, data_factory: TestDataFactor
             result = await session.execute(select(Tenant).where(Tenant.slug == tenant_slug))
             tenant = result.scalar_one_or_none()
             company = test_companies_multi_tenant[tenant_slug]
-            
-            # Create employee
-            employee = await data_factory.create_employee(
+
+            employee = await data_factory.create_person(
                 tenant=tenant,
                 company=company,
-                full_name=f"Employee in {tenant_slug}",
+                first_name="Emp",
+                last_name=tenant_slug.replace("-", " ").title(),
                 session=session,
             )
             employees[tenant_slug] = employee
             await session.commit()
-    
+
     yield employees
 
 

@@ -201,10 +201,10 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 **User impact:** Operators can self-serve diagnose integration failures, data issues, system health  
 
 **Acceptance criteria:**
-- [ ] Backend: `/api/v1/health/comprehensive` checks: database, integrations, file storage, email, workers, external APIs
+- [x] Backend: `/api/v1/health/comprehensive` checks: database, integrations, file storage, email, workers, external APIs
 - [ ] Frontend: Health status page with drill-down per service
 - [ ] Alerts: Send notifications if critical services degrade
-- [ ] Tests: Mock failures and verify correct alerting
+- [x] Tests: Basic coverage (`tests/test_health_comprehensive.py`); mocking of external failures deferred
 
 **What it does:** Tenant can run a system health check: "Database OK | 1C API: timeout | Email: OK | PDF generator: slow | Workers: 2 queued jobs". Helps diagnose issues before they impact end-users.
 
@@ -230,10 +230,13 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 **User impact:** Data admins can proactively fix issues; prevent broken documents, invalid permits, incomplete records  
 
 **Acceptance criteria:**
-- [ ] Backend: Data quality rules engine (`backend/app/modules/data_quality/`)
-- [ ] Rules cover: missing mandatory fields, logical conflicts, duplicates, broken relationships, integration mismatches, expired records, docs not ready for generation, permits not valid for contractors
-- [ ] Dashboard: `/api/v1/data-quality/report` shows tenant completeness %, critical issues, affected objects/employees
-- [ ] Tests: 20+ rule tests covering positive and negative cases
+- [x] Backend: Data quality rules engine (`backend/app/modules/data_quality/`) — MVP rules on live models
+- [ ] Rules cover *full spec*: logical conflicts, integration mismatches, docs not ready for generation, permits not valid for contractors *(partial — see incremental note below)*
+- [x] API: `/api/v1/data-quality/report` returns completeness % (heuristic), severities, top issues (tenant headers + RBAC); JSON-safe responses
+- [ ] Dashboard UI: dedicated Data Quality screen *(deferred)*
+- [x] Tests: focused suite in `tests/test_data_quality.py` (rules + endpoints); expand for 20+ cases as rules grow
+
+**Incremental note (2026-05-02):** Implemented rules touch **missing mandatory Person/Site fields**, **broken refs** (`Document.person_id`, `Workplace.site_id`), **expired MedicalExam / Training(cert expiry)**, **duplicate Person emails**; operational dashboard aggregates fixed to canonical models (no phantom `app.domains.*` imports).
 
 **What it does:** Tenant runs data quality check and sees: "90% completeness | Issues: 5 sites missing SOУТ, 12 employees missing medical, 3 contractors with expired permits". Can click each issue to see details and fix.
 

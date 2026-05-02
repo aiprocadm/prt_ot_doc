@@ -24,6 +24,12 @@ pytest -q tests/test_tenant_header_required.py tests/test_idempotency.py tests/t
 
 **Frontend:** `npm --prefix frontend run ci` (или по отдельности `typecheck`, `test`, `build` — см. `frontend/package.json`).
 
+## Полный pytest (зафиксированный прогон)
+
+Актуальные цифры, разбивка по каталогам и группы падений: **`docs/audit/BASELINE_VERIFICATION.md`** — секция *Full pytest (все `testpaths`) — 2026-05-02*.
+
+Кратко (Windows, Python 3.13.7, агрегат трёх прогонов = полный `testpaths`): **1147** собрано, **1086** passed, **52** failed, **7** skipped, **2** errors.
+
 ## Среда pytest
 
 `tests/conftest.py` задаёт тестовые `DATABASE_URL` (sqlite), Redis memory, плейсхолды для S3; при пустом `SECRET_KEY` в окружении выставляется безопасное тестовое значение, чтобы `bootstrap("api")` не падал.

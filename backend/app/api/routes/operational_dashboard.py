@@ -9,12 +9,23 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.core.security import TenantContextValidator, require_auth
-from app.db.session import get_db_session
+from app.api.dependencies import get_session
+from app.core.security import AccessContext, rbac
 from app.modules.operational_dashboard import OperationalDashboardService
 
 logger = logging.getLogger("app.api.operational_dashboard")
 router = APIRouter(prefix="/operational", tags=["operational"])
+
+_OPS_DASHBOARD_ROLES = ["admin", "owner", "hr", "ot_pb_lead", "line_manager", "manager"]
+
+
+def _tenant_uuid_from_request(request: Request, _access: AccessContext) -> str | None:
+    """Operational dashboard alerts are scoped strictly by tenant headers."""
+    for key in ("X-Tenant-Id", "x-tenant-id", "x-tenant"):
+        raw = request.headers.get(key)
+        if raw and str(raw).strip():
+            return str(raw).strip()
+    return None
 
 
 @router.get(
@@ -24,8 +35,8 @@ router = APIRouter(prefix="/operational", tags=["operational"])
 )
 async def get_operational_dashboard(
     request: Request,
-    current_user = Depends(require_auth),
-    db: AsyncSession = Depends(get_db_session),
+    access: AccessContext = Depends(rbac(required_roles=_OPS_DASHBOARD_ROLES)),
+    db: AsyncSession = Depends(get_session),
 ) -> JSONResponse:
     """
     Get operational dashboard aggregating all critical alerts.
@@ -45,13 +56,12 @@ async def get_operational_dashboard(
     """
     settings = get_settings()
 
-    tenant_validator = TenantContextValidator(request=request)
-    tenant_id = tenant_validator.get_tenant_id()
+    tenant_id = _tenant_uuid_from_request(request, access)
 
     if not tenant_id:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
-            content={"error": "X-Tenant-Id header required"},
+            content={"error": "Tenant scope required (X-Tenant-Id or x-tenant)"},
         )
 
     try:
@@ -63,7 +73,7 @@ async def get_operational_dashboard(
             if dashboard.status == "ok"
             else status.HTTP_200_OK
         )
-        return JSONResponse(status_code=code, content=dashboard.model_dump())
+        return JSONResponse(status_code=code, content=dashboard.model_dump(mode="json"))
     except Exception as e:
         logger.exception("operational_dashboard.get_dashboard_failed")
         return JSONResponse(

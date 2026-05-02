@@ -1,8 +1,8 @@
 # AI Implementation Report
 
-## Current Status (as of 2026-05-02, Session 9 - Phase 3.1a Data Quality Rules Engine)
+## Current Status (as of 2026-05-02, Session 10 - Phase 3.1 backend hardening + app import fix)
 
-Проект находится в состоянии **advanced MVP + vNext Phase 1 COMPLETED + Phase 2 IN PROGRESS + Phase 3 IN PROGRESS (1/2)**:
+Проект находится в состоянии **advanced MVP + vNext Phase 1 COMPLETE + Phase 2 IN PROGRESS + Phase 3.1 backend MVP rules на реальных моделях**:
 - ✅ Baseline инфраструктура работает: `make cs:reset`, `make cs:dev`, `make cs:test`
 - ✅ 1200+ тестовых функций в 100+ тестовых файлов (+ 50+ для Phase 2-3)
 - ✅ Все P0 критичные требования реализованы и тестированы
@@ -16,18 +16,33 @@
   - ✅ Phase 2.1a: Operational Dashboard Backend API
   - ✅ Phase 2.2: Health Check Engine
   - 📋 Phase 2.1b: Frontend Dashboard UI (deferred)
-- 🟡 **Phase 3.1a (Data Quality Rules Engine)** 🟡 IN PROGRESS:
-  - 🟡 Rule engine with 4 rules (missing fields, broken relationships, expired records, duplicates)
-  - 🟡 DataQualityService with comprehensive checks
-  - 🟡 Endpoints `/api/v1/data-quality/report` and `/api/v1/data-quality/check`
-  - 🟡 Test suite with 20+ tests
-  - 📋 Phase 3.1b: Dashboard & Report UI (deferred)
+- 🟢 **Phase 3.1a (Data Quality — backend MVP)** 🟢 **BACKEND READY** (Session 10):
+  - ✅ Правила на **ORM**: `Person` / `Site` (обязательные поля), `Document→Person`, `Workplace→Site` (сломанные связи), `MedicalExam` + `Training` (просрочка), дубликаты **email сотрудников**
+  - ✅ `GET /api/v1/data-quality/report|check`: `Depends(rbac(...))`, tenant только из заголовков; ответ **`model_dump(mode="json")`** (исправлен 500 serialization)
+  - ✅ `OperationalDashboardService`: убраны битые импорты `app.domains.*`; агрегаты на `TrainingEnrollment`, `MedicalExam`, `PPEIssue`, `Document` (REVIEW), `Risk`, obligations `Task`
+  - ✅ `GET /api/v1/operational/dashboard`: `rbac` + tenant headers; `model_dump(mode="json")`
+  - ✅ Конвейер приложения: исправлен `get_db_session` → `get_session`; удалены несуществующие `require_auth` / `TenantContextValidator` из маршрутов
+  - ✅ Тесты: переписан `tests/test_data_quality.py`; фикстуры `auth_headers` / `authenticated_client` в `conftest.py`; `test_employees_multi_tenant` → `create_person`
+  - ✅ Прогон: `pytest tests/test_data_quality.py tests/test_operational_dashboard.py -q -p no:schemathesis` — **зелёный** (локально Windows, ~160s)
+  - 📋 Phase 3.1b: Dashboard UI + расширение правил (интеграции, генерация документов, допуски подрядчиков)
 - ✅ Repository hygiene Wave 1-2 завершены (удалено 13 файлов, очищены references)
 - ✅ TZ-4.2 завершена: полная инвентаризация экранов в docs/FRONTEND_SCREENS_INVENTORY.md
 
 ## Last Agent Handoff
 
-**Текущая сессия (2026-05-02, Session 9 - Phase 3.1a Data Quality Rules Engine):**
+**Текущая сессия (2026-05-02, Session 10 — Data Quality backend + Operational dashboard fix)**
+
+- Дата: 2026-05-02  
+- Агент: Composer (GPT-5.2)  
+- Задача: **Phase 3.1 — закрепить движок качества данных на реальных моделях; восстановить импорт приложения (`create_app`/pytest)**  
+- Статус: ✅ **COMPLETE** для инкремента backend + тестов  
+- Контекст: маршруты `data_quality` / `operational_dashboard` импортировали `get_db_session` (не существует) и несуществующие символы из `app.core.security`; `OperationalDashboardService` ссылался на несуществующие модули `app.domains.*` → падения 500/module not found  
+- Что сделано: см. блок «Session 10» в Implemented Changes ниже  
+- Следующий точный шаг: **Phase 3.1b UI** (`DataQualityDashboard` / операционный frontend) **или** расширить правила (contractor permits, readiness для документов) + увеличить покрытие тестами до порога плана  
+
+---
+
+**Предыдущая сессия (2026-05-02, Session 9 - Phase 3.1a Data Quality Rules Engine):**
 - Дата: 2026-05-02
 - Агент: Claude Haiku 4.5
 - Задача: **Phase 3.1a: Data Quality Rules Engine (vNext-DQ-01, part 1)**
@@ -836,10 +851,25 @@ Selected for first vNext implementation because:
 - `docs/spec/PLATFORM_VNEXT_UPGRADE_SPEC.md` — полный upgrade-spec vNext (§0–37, 2098 строк); 10 областей pariteta, 5 competitive advantages, 36-37 constraint sections
 - `docs/spec/TZ_FULL_UNIFIED.md` — главное единое ТЗ (§0–7, B1–B5, F1–F4); 56 требований mapped
 - `docs/audit/TZ_COVERAGE_MATRIX.md` — матрица покрытия (54 done, 2 partial v1.x, 2 missing v1.x)
-- `docs/audit/BASELINE_VERIFICATION.md` — baseline-команды verified, 1086+ backend + 35+ frontend tests
+- `docs/audit/BASELINE_VERIFICATION.md` — baseline-команды; полный pytest 2026-05-02: 1147 собрано (см. документ)
 - README.md — canonical entry point, quick-start commands verified
 - Makefile — cs:* targets verified (reset, dev, test all present)
 - requirements.txt — dependencies reviewed, pins for Python 3.12/3.13 asyncpg correct
+
+## Changed Files (Session 10, 2026-05-02)
+
+| File | Change | Reason |
+|---|---|---|
+| `backend/app/modules/data_quality/rules.py` | Переписан: правила по реальным моделям, tenant-filter | Замена placeholder Session 9 |
+| `backend/app/modules/data_quality/service.py` | Эвристическая completeness%; UTC timestamps | Отчёт и JSON-сериализация |
+| `backend/app/api/routes/data_quality.py` | `get_session`, `rbac`, tenant headers only, `model_dump(mode="json")` | Рабочий импорт v1 router |
+| `backend/app/api/routes/operational_dashboard.py` | То же паттерень + JSON | Устранение ImportError при старте |
+| `backend/app/modules/operational_dashboard/service.py` | Агрегаты на канонических моделях | Нет `app.domains.*` |
+| `backend/app/modules/operational_dashboard/__init__.py` | Экспорт `AlertCategory`, `AlertSeverity` | Совместимость тестов |
+| `tests/test_data_quality.py` | Переписан | Фиксация Person/factory/API |
+| `tests/test_operational_dashboard.py` | `/api/v1` префикс, фиксы интеграции | Совпадение с реальными маршрутами |
+| `tests/conftest.py` | `auth_headers`, `authenticated_client`; `create_person` в multi-tenant persons | Отсутствующие фикстуры |
+| `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md` | Частичное закрытие критериев Task 2.2 / 3.1 | Документ оставался устаревшим |
 
 ## Changed Files (Session 9, 2026-05-02 - Phase 3.1a)
 
@@ -874,7 +904,9 @@ Selected for first vNext implementation because:
 |---|---|---|
 | `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md` | **CREATED** — Comprehensive 14-section implementation roadmap | Main deliverable: phased vNext upgrade strategy, gap analysis, risks, success criteria |
 | `README.md` | Added link to `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md` | Navigation update: link new roadmap from canonical docs section |
-| `AI_IMPLEMENTATION_REPORT.md` (this file) | Updated Session 4 handoff, added vNext planning analysis | Document Session 4 findings and next steps |
+| `docs/audit/BASELINE_VERIFICATION.md` | Секция *Full pytest (все testpaths) — 2026-05-02* + обновлён «Last verified» | Зафиксирован полный прогон pytest на Windows (1147 собрано; агрегат passed/failed/skipped/errors) |
+| `docs/TESTING.md` | Ссылка на секцию baseline с краткой сводкой | Навигация к последнему полному pytest |
+| `AI_IMPLEMENTATION_REPORT.md` (this file) | Session 4 handoff + статус по pytest | vNext planning + фактический результат полного pytest |
 
 ### Session 4 Deliverables
 
@@ -890,6 +922,7 @@ Selected for first vNext implementation because:
 **Supporting Updates:**
 - ✅ Updated README.md with roadmap link
 - ✅ Updated AI_IMPLEMENTATION_REPORT.md with Session 4 summary
+- ✅ Полный pytest (Windows, 2026-05-02): три последовательных прогона (`tests/`, `integration_tests/`, `backend/tests/`), метрики и группы падений в `docs/audit/BASELINE_VERIFICATION.md`
 
 ---
 
