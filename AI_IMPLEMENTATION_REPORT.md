@@ -1,5 +1,81 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-03, Session 11 — Data Quality rule expansion: Permits + PPE issuances)
+
+- **Дата:** 2026-05-03
+- **Агент:** Claude (Opus 4.7)
+- **Задача:** Phase 3.1 expansion (vNext-DQ-01) — расширить движок Data Quality правилами на реальных моделях `Permit` и `PPEIssue`, чтобы покрыть «permits not valid for contractors» и «expiring PPE» из спецификации.
+- **Статус:** ✅ COMPLETE для инкремента (новые правила + тесты, без миграций и breaking changes).
+- **Где остановился:** backend Phase 3.1 теперь покрывает 6 правил на ORM (см. ниже). Frontend `DataQualityDashboard` и расширенные правила (integration mismatches, document-readiness) по-прежнему отложены.
+- **Следующий точный шаг:**
+  1. Реализовать **Phase 3.1b — Frontend `DataQualityDashboard`** на базе `/api/v1/data-quality/report` (карточки severity, фильтр по типу/entity, drill-down к источникам).
+  2. ИЛИ продолжить расширение правил: `IntegrationMismatchesRule` (Document↔Person/Site контрагентов), `DocumentReadinessRule` (DRAFT-документы без обязательных полей шаблона).
+  3. ИЛИ перейти к **Phase 3.2** (Unified Employee Card backend — единый `/api/v1/employees/{id}` с агрегатом по training/medicals/PPE/permits/incidents).
+
+### Studied Documentation (Session 11)
+- `README.md` — общий контекст.
+- `docs/spec/PLATFORM_VNEXT_UPGRADE_SPEC.md` — vNext source of truth.
+- `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md` — фазы + статусы (Phase 3.1a отмечена как backend-MVP).
+- `AI_IMPLEMENTATION_REPORT.md` — handoff Session 10 (Composer GPT-5.2).
+- `backend/app/modules/data_quality/{rules,service,schemas}.py`, `tests/test_data_quality.py` — текущая реализация Phase 3.1a.
+- `backend/app/models/models.py` — `Permit`, `PermitStatus`, `PPEIssue`, `PPEIssueStatus`.
+- `tests/utils/factories.py` — `TestDataFactory` для построения tenant/company/person.
+
+### Selected Plan Item (Session 11)
+- **Фаза:** Phase 3 — Data Quality & Master Data.
+- **Приоритет:** P1 (data integrity).
+- **Задача:** Phase 3.1 incremental — добавить правила для просроченных `Permit` и `PPEIssue`.
+- **Почему выбрана:** план явно отмечает «permits not valid for contractors» и «expiring PPE» как ещё не покрытые; задача аддитивная, без миграций, без изменения API-контракта, продолжает курс прошлой сессии (Session 10 закрепила engine на ORM, Session 11 расширяет покрытие).
+
+### Implemented Changes (Session 11)
+- **`ExpiredPermitsRule`** (`backend/app/modules/data_quality/rules.py`):
+  - Selects `Permit` rows where `tenant_id == self.tenant_id` AND `status == PermitStatus.ACTIVE` AND `valid_until IS NOT NULL` AND `valid_until < today`.
+  - Severity: HIGH; `issue_type=EXPIRED_RECORD`; `affected_entity_type="permit"`; `additional_info={person_id, permit_type, valid_until}`.
+- **`ExpiredPPEIssuesRule`** (`backend/app/modules/data_quality/rules.py`):
+  - Selects `PPEIssue` rows where `tenant_id == self.tenant_id` AND `deleted_at IS NULL` AND `status == PPEIssueStatus.ISSUED` AND `expires_at IS NOT NULL` AND `expires_at < now (UTC)`.
+  - Severity: MEDIUM; `affected_entity_type="ppe_issue"`; `additional_info={person_id, item_name, expires_at}`.
+- **`DataQualityRuleEngine.rules`**: расширено с 4 → 6 элементов; новые правила исполняются параллельно через `asyncio.gather` в `run_all_checks()`.
+- **Imports**: `rules.py` теперь импортирует `Permit`, `PermitStatus`, `PPEIssue`, `PPEIssueStatus` из `app.models.models` (уже экспортированы из `app.models.__init__`).
+
+### Changed Files
+- `backend/app/modules/data_quality/rules.py` — добавлены `ExpiredPermitsRule`, `ExpiredPPEIssuesRule`; зарегистрированы в `DataQualityRuleEngine.rules`.
+- `tests/test_data_quality.py` — обновлено ожидание `len(report.check_results)` (с 4 → 6 правил, через `expected_rules.issubset(...)` для устойчивости); добавлены классы `TestExpiredPermitsRule` (positive + ignores REVOKED/future) и `TestExpiredPPEIssuesRule` (positive + ignores RETURNED/unexpired); расширен импорт-блок.
+- `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md` — добавлен incremental note 2026-05-03.
+
+### Deleted / Moved Files
+- Нет.
+
+### Decisions Made
+- **Решение:** оформить новые проверки отдельными `DataQualityRule`-классами вместо расширения `ExpiredRecordsRule`.
+  - Причина: разные `affected_entity_type`, разная `severity`, разные источники и поля; отдельные классы проще тестировать, отчёт по `check_results` остаётся гранулярным.
+  - Альтернативы: расширить `ExpiredRecordsRule` (отвергнуто — нарушает SRP, усложняет фильтрацию issues по правилу).
+  - Риск: дополнительная пара выборок при каждом отчёте — низкий (правила фильтруют по `tenant_id` + индексированным полям, выполняются в `asyncio.gather`).
+- **Решение:** не вводить новый `IssueType`, переиспользовать `IssueType.EXPIRED_RECORD`.
+  - Причина: семантически совпадает с уже существующими «expired medical/training».
+  - Альтернатива: ввести `EXPIRED_PERMIT` / `EXPIRED_PPE` — отвергнуто, чтобы не ломать UI, который, вероятно, фильтрует по типу (`affected_entity_type` уже различает сущности).
+
+### Issues Fixed
+- Нет регрессий; данная сессия — additive expansion.
+
+### Known Problems / Risks
+- Severity `HIGH` для просроченных permits может быть консервативным для tenant-ов без подрядчиков; в будущей итерации можно сделать конфигурируемой через `tenant_settings`.
+- `ExpiredPPEIssuesRule` не проверяет PPE без `expires_at` (модель допускает NULL); это сознательно — без срока годности мы не можем считать запись просроченной.
+- Тесты прогнаны на Python 3.13 локально (Windows); CI требует 3.12 (`.python-version: 3.12.12`) — поведение должно совпадать (используются только стандартный sqlalchemy/pydantic).
+
+### Validation
+- **Команда:** `py -3.13 -m pytest tests/test_data_quality.py -q -p no:schemathesis`
+- **Результат:** `12 passed` (включая 4 новых: `TestExpiredPermitsRule::test_flags_expired_active_permit`, `…::test_ignores_revoked_or_future_permits`, `TestExpiredPPEIssuesRule::test_flags_expired_issued_ppe`, `…::test_ignores_returned_or_unexpired_ppe`).
+- **Команда:** `py -3.13 -m pytest tests/test_operational_dashboard.py -p no:schemathesis`
+- **Результат:** `17 passed` (никаких регрессий в смежной фиче).
+- **Не запускалось:** полный `make cs:test` (1200+ тестов) — на этой машине нет Python 3.12 и докера; CI должен прогнать суиту по обычному пайплайну.
+
+### Next Steps
+1. **Phase 3.1b — Frontend `DataQualityDashboard`**: страница, потребляющая `/api/v1/data-quality/report`, с карточками severity (`critical/high/medium/low`), таблицей issues (фильтр по `affected_entity_type` ∈ {person, site, document, workplace, medical_exam, training, permit, ppe_issue}, по `issue_type`), drill-down ссылкой на сущность.
+2. Расширить engine: `IntegrationMismatchesRule` (несоответствие между `Document.person_id` и фактическим контрагентом из `Company` подрядчика) и `DocumentReadinessRule` (DRAFT-документы без обязательных полей шаблона перед генерацией).
+3. Phase 3.2 backend: разработать единый `/api/v1/employees/{id}` aggregate (Personal/Roles/Training/Medicals/PPE/Permits/Incidents/Audit), переиспользуя существующие сервисы.
+
+---
+
 ## Current Status (as of 2026-05-02, Session 10 - Phase 3.1 backend hardening + app import fix)
 
 Проект находится в состоянии **advanced MVP + vNext Phase 1 COMPLETE + Phase 2 IN PROGRESS + Phase 3.1 backend MVP rules на реальных моделях**:

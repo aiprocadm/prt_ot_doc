@@ -16,7 +16,11 @@ from app.models.document import Document
 from app.models.models import (
     EmploymentStatus,
     MedicalExam,
+    Permit,
+    PermitStatus,
     Person,
+    PPEIssue,
+    PPEIssueStatus,
     Site,
     Training,
     TrainingStatus,
@@ -293,6 +297,112 @@ class ExpiredRecordsRule(DataQualityRule):
             logger.exception("expired_records rule failed: %s", e)
 
 
+class ExpiredPermitsRule(DataQualityRule):
+    """Permits past valid_until that are still flagged ACTIVE."""
+
+    @property
+    def rule_name(self) -> str:
+        return "expired_permits"
+
+    @property
+    def rule_description(self) -> str:
+        return "Permits with valid_until in the past while still marked active"
+
+    async def check(self) -> None:
+        self.issues = []
+        today = date.today()
+        try:
+            stmt = select(Permit).where(
+                Permit.tenant_id == self.tenant_id,
+                Permit.status == PermitStatus.ACTIVE,
+                Permit.valid_until.is_not(None),
+                Permit.valid_until < today,
+            )
+            permits = (await self.db.execute(stmt)).scalars().all()
+            self.total_checked = len(permits)
+
+            for permit in permits:
+                valid_until_iso = (
+                    permit.valid_until.isoformat() if permit.valid_until else ""
+                )
+                self.issues.append(
+                    DataQualityIssue(
+                        id=f"{self.rule_name}:permit:{permit.id}",
+                        issue_type=IssueType.EXPIRED_RECORD,
+                        severity=IssueSeverity.HIGH,
+                        title=f"permit {permit.id} expired ({permit.permit_type})",
+                        description=(
+                            "Permit is past valid_until but status is still ACTIVE; "
+                            "renew or revoke to restore data integrity."
+                        ),
+                        affected_entity_type="permit",
+                        affected_entity_id=str(permit.id),
+                        additional_info={
+                            "person_id": str(permit.person_id),
+                            "permit_type": permit.permit_type,
+                            "valid_until": valid_until_iso,
+                        },
+                    )
+                )
+        except Exception as e:
+            logger.exception("expired_permits rule failed: %s", e)
+
+
+class ExpiredPPEIssuesRule(DataQualityRule):
+    """PPE issuances with expires_at in the past while still ISSUED."""
+
+    @property
+    def rule_name(self) -> str:
+        return "expired_ppe_issues"
+
+    @property
+    def rule_description(self) -> str:
+        return "PPE issuances past expires_at while still marked ISSUED"
+
+    async def check(self) -> None:
+        self.issues = []
+        now = datetime.now(tz=timezone.utc)
+        try:
+            stmt = select(PPEIssue).where(
+                PPEIssue.tenant_id == self.tenant_id,
+                PPEIssue.deleted_at.is_(None),
+                PPEIssue.status == PPEIssueStatus.ISSUED,
+                PPEIssue.expires_at.is_not(None),
+                PPEIssue.expires_at < now,
+            )
+            issuances = (await self.db.execute(stmt)).scalars().all()
+            self.total_checked = len(issuances)
+
+            for issuance in issuances:
+                expires_iso = (
+                    issuance.expires_at.isoformat() if issuance.expires_at else ""
+                )
+                self.issues.append(
+                    DataQualityIssue(
+                        id=f"{self.rule_name}:ppe_issue:{issuance.id}",
+                        issue_type=IssueType.EXPIRED_RECORD,
+                        severity=IssueSeverity.MEDIUM,
+                        title=(
+                            f"PPE issuance {issuance.id} expired "
+                            f"({issuance.item_name})"
+                        ),
+                        description=(
+                            "PPE expires_at is in the past but the issuance is still "
+                            "ISSUED; reissue, return, or write off to fix."
+                        ),
+                        affected_entity_type="ppe_issue",
+                        affected_entity_id=str(issuance.id),
+                        additional_info={
+                            "person_id": str(issuance.person_id),
+                            "item_name": issuance.item_name,
+                            "expires_at": expires_iso,
+                        },
+                    )
+                )
+        except Exception as e:
+            logger.exception("expired_ppe_issues rule failed: %s", e)
+
+
 class DuplicateRecordsRule(DataQualityRule):
     """Duplicate person emails within a tenant (case-insensitive)."""
 
@@ -352,6 +462,8 @@ class DataQualityRuleEngine:
             MissingMandatoryFieldsRule,
             BrokenRelationshipsRule,
             ExpiredRecordsRule,
+            ExpiredPermitsRule,
+            ExpiredPPEIssuesRule,
             DuplicateRecordsRule,
         ]
 
