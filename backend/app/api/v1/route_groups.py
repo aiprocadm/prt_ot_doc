@@ -23,6 +23,7 @@ from app.api.routes import (
     contractors,
     contracts,
     dashboard,
+    data_quality,
     departments,
     documents,
     edo_workflow,
@@ -143,6 +144,7 @@ OPERATIONS_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
     (pwa_sync.router, {}),
     (external_registry.router, {}),
     (reports.router, {"tags": ["reports"]}),
+    (data_quality.router, {"tags": ["data-quality"]}),
 )
 
 _LEGACY_FILES_ROUTER_REGISTRATION: RouterRegistration = (
