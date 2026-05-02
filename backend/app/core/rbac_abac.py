@@ -111,6 +111,21 @@ def actor_from_claims(claims: dict[str, Any] | Any, roles: list[str]) -> ActorCo
     )
 
 
+MODULE_NAMES: tuple[str, ...] = (
+    "documents",
+    "templates",
+    "risk",
+    "ppe",
+    "training",
+    "incidents",
+    "inspections",
+    "contractors",
+    "reports",
+    "admin",
+    "briefings",
+    "audit",
+)
+
 RESOURCE_PERMISSIONS: dict[str, set[str]] = {
     "templates": {"read", "list", "create", "update", "delete", "approve"},
     "template_versions": {"read", "list", "create", "update", "delete", "approve"},
@@ -150,6 +165,30 @@ _ROLE_FULL = {
     f"{resource}:{action}"
     for resource, actions in RESOURCE_PERMISSIONS.items()
     for action in actions
+}
+
+MODULE_PERMISSIONS: dict[str, set[str]] = {
+    "owner": set(MODULE_NAMES),
+    "admin": set(MODULE_NAMES),
+    "methodist": {"documents", "templates"},
+    "lawyer": {"documents", "templates"},
+    "project_manager": {"documents", "reports"},
+    "executor": {"documents"},
+    "clerk": {"documents"},
+    "instructor": {"training", "briefings"},
+    "student": {"training"},
+    "hse_head": {"documents", "risk", "ppe", "inspections", "incidents", "contractors"},
+    "hse_specialist": {"documents", "risk", "ppe", "inspections", "incidents"},
+    "fire_engineer": {"inspections", "incidents"},
+    "ecologist": {"documents", "risk", "incidents"},
+    "hr": {"documents", "training"},
+    "accountant": {"reports"},
+    "line_manager": {"documents", "incidents", "inspections"},
+    "client": {"documents", "reports", "contractors"},
+    "auditor_ro": {"documents", "risk", "ppe", "inspections", "incidents", "reports"},
+    "inspector_contractor": {"inspections", "incidents", "contractors"},
+    "client_admin": {"contractors"},
+    "client_user": {"contractors"},
 }
 
 ROLE_PERMISSIONS: dict[str, set[str]] = {
@@ -348,6 +387,29 @@ class PolicyEngine:
         "cancel": "cancel_job",
     }
 
+    _RESOURCE_TO_MODULE: dict[str, str] = {
+        "templates": "templates",
+        "template_versions": "templates",
+        "documents": "documents",
+        "document_versions": "documents",
+        "document_jobs": "documents",
+        "files": "documents",
+        "package_presets": "documents",
+        "package_profiles": "documents",
+        "risk_maps": "risk",
+        "risk_methodologies": "risk",
+        "ppe_norms": "ppe",
+        "ppe_issues": "ppe",
+        "warehouse_stock": "ppe",
+        "trainings": "training",
+        "briefings": "briefings",
+        "incidents": "incidents",
+        "inspections": "inspections",
+        "contractors": "contractors",
+        "reports": "reports",
+        "admin": "admin",
+    }
+
     def enforce(
         self,
         actor: ActorContext,
@@ -371,6 +433,17 @@ class PolicyEngine:
         normalized_action = self._ACTION_ALIASES.get(action.lower(), action.lower())
         normalized_resource = resource.lower()
         permission_code = f"{normalized_resource}:{normalized_action}"
+
+        # Check module-level access first
+        module = self._RESOURCE_TO_MODULE.get(normalized_resource)
+        if module:
+            allowed_modules = set()
+            for role in actor.roles:
+                allowed_modules.update(MODULE_PERMISSIONS.get(role, set()))
+            if module not in allowed_modules:
+                return Decision(
+                    False, "module_access_denied", audit_meta={"module": module, "resource": normalized_resource}
+                )
 
         matched_roles = tuple(
             role for role in actor.roles if permission_code in ROLE_PERMISSIONS.get(role, set())
