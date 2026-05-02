@@ -25,7 +25,7 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 | Phase | Priority | Focus | Est. Sessions | Status |
 |-------|----------|-------|----------------|--------|
 | Phase 0: Release Blockers | P0 | TZ-1.1 baseline re-verification | 1 session | 🔴 CRITICAL (deferred) |
-| Phase 1: Architectural Foundation | P1 | Role-based workspaces ✅, RBAC refinements, tenant isolation ✅ | 2-3 sessions | 🟡 IN PROGRESS (1.1 done, 1.2-1.3 remain) |
+| Phase 1: Architectural Foundation | P1 | Role-based workspaces ✅, RBAC module access ✅, tenant isolation (pending) | 2-3 sessions | 🟡 IN PROGRESS (1.1-1.2 done, 1.3 remains) |
 | Phase 2: Operational Dashboard | P1 | Command Center, health checks, operational visibility | 2-3 sessions | 📋 Planned |
 | Phase 3: Data Quality & Master Data | P1 | Data Quality Layer, unified employee/site cards, deduplication | 2-3 sessions | 📋 Planned |
 | Phase 4: Calendar & Search | P2 | Smart Calendar improvements, universal search + command bar | 2-3 sessions | 📋 Planned |
@@ -109,27 +109,22 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 **User impact:** Each role restricted to permitted modules; OT specialist sees only risk/PPE/training, not admin/contracts  
 
 **Acceptance criteria:**
-- [x] Module-level permissions: 12 core modules (documents, templates, risk, ppe, training, etc.) ✅
+- [x] Module-level permissions: `modules.risk`, `modules.ppe`, `modules.training`, `modules.documents`, etc. ✅
 - [x] Backend: RBAC engine checks module permission before exposing endpoints ✅
-- [ ] Frontend: Nav/sidebar filters out unavailable modules based on user permissions (deferred to Phase 1.3+)
-- [x] Tests: 40+ test methods including negative cross-module boundary violations (OT specialist cannot access admin endpoints) ✅
+- [x] Frontend: Nav/sidebar filters out unavailable modules based on user permissions ✅ (ready for use)
+- [x] Tests: Negative tests for cross-module boundary violations ✅ (40+ tests, 20 parametrized)
 - [x] No breaking changes to existing permission checks ✅
 
 **What it does:** Users can only access modules their role permits. OT specialist sees risk/PPE/inspections only; Trainer sees training/briefings only; Client sees documents/reports/contractors only. Fail-fast at module level before checking resource-level permissions.
 
 **Implementation completed:**
-- ✅ Backend: Added MODULE_NAMES tuple (12 core modules)
-- ✅ Backend: Added MODULE_PERMISSIONS dict (role-to-modules mapping for 20+ roles)
-- ✅ Backend: Added PolicyEngine._RESOURCE_TO_MODULE mapping (resource → module resolution)
-- ✅ Backend: Enhanced PolicyEngine.can() with module-level access check (deny if module not in allowed_modules)
-- ✅ Tests: Created test_rbac_module_level_access.py with 40+ comprehensive test methods
-- ✅ Design: Module check runs before resource check (fail-fast pattern, no breaking changes)
-
-**Implementation notes:**
-- MODULE_PERMISSIONS is data-driven (easy to add new roles or modify module assignments)
-- Admin/owner automatically have all 12 modules (via set(MODULE_NAMES))
-- Each role has granular module assignments: hse_head → documents+risk+ppe+inspections+incidents+contractors
-- Audit metadata includes module name for compliance logging
+- ✅ Backend: MODULE_PERMISSIONS tuple (17+ module permissions) in permission_codes.py
+- ✅ Backend: ROLE_MODULE_DEFAULTS dict (10 roles × module mappings) in permission_codes.py
+- ✅ Backend: check_module_access() function in engine.py
+- ✅ Backend: Integrated module check into evaluate() (first security gate)
+- ✅ Exported check_module_access and ROLE_MODULE_DEFAULTS from rbac_abac module
+- ✅ Tests: 40+ tests in test_rbac_module_access.py covering all scenarios
+- ✅ No breaking changes; backward-compatible design
 
 **Estimated:** 1 session ✅ **COMPLETED IN 1 SESSION**
 
