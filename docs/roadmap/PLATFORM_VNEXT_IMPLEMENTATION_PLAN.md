@@ -68,8 +68,8 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 ## Phase 1: Architectural Foundation (vNext Core)
 
 **Focus:** Solidify multi-tenancy, RBAC, and modular architecture for safe growth  
-**Estimated:** 2-3 sessions  
-**Dependencies:** Phase 0 complete (deferred but Phase 1 started anyway)
+**Estimated:** 2-3 sessions (2 of 3 complete: 1.1 ✅, 1.2 ✅, 1.3 ready)
+**Dependencies:** Phase 0 deferred; Phase 1.1-1.2 complete
 
 ### Task 1.1: Role-Based Workspaces (vNext-IA-01) ✅ **COMPLETED (Session 5, 2026-05-02)**
 
@@ -106,7 +106,7 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 ### Task 1.2: RBAC Engine Hardening (vNext-SEC-01) ✅ **COMPLETED (Session 6, 2026-05-02)**
 
 **Goal:** Expand RBAC/ABAC for granular module access control  
-**User impact:** Administrators can enable/disable modules per role; operators see only their permitted modules  
+**User impact:** Each role restricted to permitted modules; OT specialist sees only risk/PPE/training, not admin/contracts  
 
 **Acceptance criteria:**
 - [x] Module-level permissions: `modules.risk`, `modules.ppe`, `modules.training`, `modules.documents`, etc. ✅
@@ -115,7 +115,7 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 - [x] Tests: Negative tests for cross-module boundary violations ✅ (40+ tests, 20 parametrized)
 - [x] No breaking changes to existing permission checks ✅
 
-**What it does:** Administrators can create custom roles with selective module access: e.g., "Field Auditor" sees only inspection + incident modules; "Trainer" sees only training + briefing modules; "Warehouse" sees only PPE module.
+**What it does:** Users can only access modules their role permits. OT specialist sees risk/PPE/inspections only; Trainer sees training/briefings only; Client sees documents/reports/contractors only. Fail-fast at module level before checking resource-level permissions.
 
 **Implementation completed:**
 - ✅ Backend: MODULE_PERMISSIONS tuple (17+ module permissions) in permission_codes.py

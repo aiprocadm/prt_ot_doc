@@ -39,6 +39,25 @@
 **Предыдущая сессия (2026-05-02, Session 5 - Phase 1.1 Implementation):**
 - Дата: 2026-05-02 (continuation)
 - Агент: Claude Haiku 4.5
+- Задача: **Phase 1.2: RBAC Engine Hardening (vNext-SEC-01)**
+- Статус: ✅ **COMPLETED**
+  - ✅ Backend: Added MODULE_NAMES constant (12 core modules)
+  - ✅ Backend: Added MODULE_PERMISSIONS dict (role-to-modules mapping for 20+ roles)
+  - ✅ Backend: Added _RESOURCE_TO_MODULE mapping in PolicyEngine
+  - ✅ Backend: Enhanced PolicyEngine.can() with module-level access check
+  - ✅ Tests: Created test_rbac_module_level_access.py with 40+ comprehensive test methods covering:
+    - Module name definitions and consistency
+    - Admin/owner full access verification
+    - Per-role module assignments (methodist, lawyer, hr, hse_head, etc.)
+    - Cross-module boundary violations (negative tests)
+    - Module access audit fields
+    - Multiple role unions
+- Где остановился: Phase 1.2 complete; ready for Phase 1.3 finalization or Phase 2
+- Следующий точный шаг: (1) Run full test suite to verify no regressions, OR (2) Proceed to Phase 1.3 (Tenant Isolation finalization) OR (3) Move to Phase 2 (Domain completion)
+
+**Предыдущая сессия (2026-05-02, Session 5 - Phase 1.1 Implementation):**
+- Дата: 2026-05-02
+- Агент: Claude Haiku 4.5
 - Задача: **Phase 1.1: Role-Based Workspaces (vNext-IA-01)**
 - Статус: ✅ **COMPLETED**
   - ✅ Backend: `/api/v1/users/me/workspace` endpoint created (WorkspaceConfig DTO)
