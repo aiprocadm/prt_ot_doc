@@ -461,6 +461,15 @@ class Settings(BaseSettings):
     enable_openapi_docs: bool = Field(True, alias="ENABLE_OPENAPI_DOCS")
     enable_gzip: bool = Field(True, alias="ENABLE_GZIP")
     enable_files_legacy_routes: bool = Field(True, alias="ENABLE_FILES_LEGACY_ROUTES")
+    health_check_comprehensive_enabled: bool = Field(
+        False, alias="HEALTH_CHECK_COMPREHENSIVE_ENABLED"
+    )
+    health_check_cache_ttl_seconds: int = Field(
+        60, alias="HEALTH_CHECK_CACHE_TTL_SECONDS"
+    )
+    health_check_timeout_per_check_seconds: float = Field(
+        5.0, alias="HEALTH_CHECK_TIMEOUT_PER_CHECK_SECONDS"
+    )
     max_request_body_bytes: int = Field(1_048_576, alias="MAX_REQUEST_BODY_BYTES")
     request_timeout_seconds: float = Field(15.0, alias="REQUEST_TIMEOUT_SECONDS")
     trace_header_name: str = Field("X-Correlation-Id", alias="TRACE_HEADER_NAME")
