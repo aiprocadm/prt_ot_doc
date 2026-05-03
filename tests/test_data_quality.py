@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from datetime import date, datetime, timedelta, timezone
 
+from app.models.document import Document, DocumentStatus
 from app.models.models import (
     EmploymentStatus,
     Permit,
@@ -19,6 +20,7 @@ from app.models.models import (
 )
 from app.modules.data_quality import DataQualityService, IssueType
 from app.modules.data_quality.rules import (
+    DocumentPersonCompanyMismatchRule,
     DuplicateRecordsRule,
     ExpiredPermitsRule,
     ExpiredPPEIssuesRule,
@@ -179,6 +181,7 @@ class TestDataQualityService:
             "expired_records",
             "expired_permits",
             "expired_ppe_issues",
+            "document_person_company_mismatch",
             "potential_duplicates",
         }
         assert expected_rules.issubset(rule_names)
@@ -381,6 +384,97 @@ class TestExpiredPPEIssuesRule:
         await test_db_session.commit()
 
         rule = ExpiredPPEIssuesRule(str(tenant.id), test_db_session)
+        await rule.check()
+
+        assert not rule.issues
+
+
+@pytest.mark.anyio
+class TestDocumentPersonCompanyMismatchRule:
+    """Documents whose company differs from the linked person's employer must be flagged."""
+
+    async def test_flags_document_when_companies_differ(
+        self,
+        test_db_session: AsyncSession,
+        data_factory: TestDataFactory,
+    ) -> None:
+        tenant = await data_factory.ensure_tenant(session=test_db_session)
+        person_company = await data_factory.create_company(
+            tenant=tenant, session=test_db_session
+        )
+        document_company = await data_factory.create_company(
+            tenant=tenant, session=test_db_session
+        )
+        person = await data_factory.create_person(
+            tenant=tenant,
+            company=person_company,
+            first_name="Mismatch",
+            last_name="Subject",
+            email="mismatch@example.com",
+            session=test_db_session,
+        )
+        document, _ = await data_factory.create_document(
+            tenant=tenant,
+            company=document_company,
+            person=person,
+            session=test_db_session,
+        )
+
+        rule = DocumentPersonCompanyMismatchRule(str(tenant.id), test_db_session)
+        await rule.check()
+
+        assert any(i.affected_entity_id == str(document.id) for i in rule.issues)
+        assert all(
+            i.issue_type == IssueType.DATA_MISMATCH for i in rule.issues
+        )
+        flagged = next(i for i in rule.issues if i.affected_entity_id == str(document.id))
+        assert flagged.additional_info["person_company_id"] == str(person_company.id)
+        assert flagged.additional_info["document_company_id"] == str(document_company.id)
+
+    async def test_ignores_aligned_company_or_unlinked_documents(
+        self,
+        test_db_session: AsyncSession,
+        data_factory: TestDataFactory,
+    ) -> None:
+        tenant = await data_factory.ensure_tenant(session=test_db_session)
+        company = await data_factory.create_company(tenant=tenant, session=test_db_session)
+        person = await data_factory.create_person(
+            tenant=tenant,
+            company=company,
+            first_name="Aligned",
+            last_name="Subject",
+            email="aligned@example.com",
+            session=test_db_session,
+        )
+        # Aligned: document.company_id == person.company_id
+        await data_factory.create_document(
+            tenant=tenant,
+            company=company,
+            person=person,
+            session=test_db_session,
+        )
+        # Unlinked: document without person — must not be flagged even if company differs
+        other_company = await data_factory.create_company(
+            tenant=tenant, session=test_db_session
+        )
+        unlinked = Document(
+            tenant_id=tenant.id,
+            template_id=(
+                await data_factory.create_template(
+                    tenant=tenant, session=test_db_session
+                )
+            ).id,
+            company_id=other_company.id,
+            person_id=None,
+            status=DocumentStatus.DRAFT,
+            created_by=(
+                await data_factory.create_user(tenant=tenant, session=test_db_session)
+            ).id,
+        )
+        test_db_session.add(unlinked)
+        await test_db_session.commit()
+
+        rule = DocumentPersonCompanyMismatchRule(str(tenant.id), test_db_session)
         await rule.check()
 
         assert not rule.issues
