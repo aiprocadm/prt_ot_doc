@@ -1,5 +1,83 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-03, Session 12 — Data Quality rule expansion: Document↔Person company integrity)
+
+- **Дата:** 2026-05-03
+- **Агент:** Claude (Opus 4.7)
+- **Задача:** Phase 3.1 incremental expansion (vNext-DQ-01) — добавить `DocumentPersonCompanyMismatchRule` (integration-mismatch правило между `Document.company_id` и `Person.company_id`), что закрывает один из пунктов handoff Session 11 («Document ↔ Person/Site контрагенты») и опирается на уже существующие FK без изменений схемы.
+- **Статус:** ✅ COMPLETE для инкремента (новое правило + позитивный/негативный тест + обновлённое ожидание движка).
+- **Где остановился:** backend Phase 3.1 теперь покрывает 7 правил на ORM. Frontend `DataQualityDashboard`, `DocumentReadinessRule` (DRAFT-документы без обязательных полей шаблона) и Phase 3.2 (Unified Employee Card) по-прежнему отложены.
+- **Следующий точный шаг:**
+  1. Реализовать **Phase 3.1b — Frontend `DataQualityDashboard`** на базе `/api/v1/data-quality/report` (severity-карточки, фильтр по `affected_entity_type` ∈ {person, site, document, workplace, medical_exam, training, permit, ppe_issue}, drill-down к сущности).
+  2. ИЛИ продолжить расширение правил: `DocumentReadinessRule` (DRAFT-документы старше N дней / без обязательных полей шаблона перед генерацией).
+  3. ИЛИ перейти к **Phase 3.2** (Unified Employee Card backend — единый `/api/v1/employees/{id}` с агрегатом training/medicals/PPE/permits/incidents).
+
+### Studied Documentation (Session 12)
+- `README.md` — общий контекст.
+- `docs/spec/PLATFORM_VNEXT_UPGRADE_SPEC.md` — vNext source of truth.
+- `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md` — текущая фаза (Phase 3.1 backend MVP, инкрементальные ноты 2026-05-02 и 2026-05-03).
+- `AI_IMPLEMENTATION_REPORT.md` — handoff Session 11 (Opus 4.7), включая список «следующих точных шагов».
+- `backend/app/modules/data_quality/{rules,service,schemas,__init__}.py`, `backend/app/api/routes/data_quality.py`, `tests/test_data_quality.py` — текущая реализация Phase 3.1.
+- `backend/app/models/document.py` — `Document` (mandatory `company_id`, optional `person_id`, status enum).
+- `backend/app/models/models.py` — `Person.company_id` (NOT NULL FK на `company.id`).
+- `tests/utils/factories.py` — `TestDataFactory.create_document(...)` сигнатура и save-helper.
+
+### Selected Plan Item (Session 12)
+- **Фаза:** Phase 3 — Data Quality & Master Data.
+- **Приоритет:** P1 (целостность данных).
+- **Задача:** Phase 3.1 incremental — добавить `DocumentPersonCompanyMismatchRule`.
+- **Почему выбрана:** в плане и в handoff Session 11 явно отмечено как непокрытое («integration mismatches между Document.person_id и фактическим контрагентом»); все нужные FK уже существуют (`Document.company_id`, `Person.company_id`), миграции не требуются; задача аддитивная, ниже риска frontend-итерации, сразу проверяется юнит-тестом.
+
+### Implemented Changes (Session 12)
+- **`DocumentPersonCompanyMismatchRule`** (`backend/app/modules/data_quality/rules.py`):
+  - Делает `JOIN Document ⨝ Person ON Document.person_id == Person.id` и фильтрует по `Document.tenant_id == self.tenant_id`, `Document.person_id IS NOT NULL`, `Person.deleted_at IS NULL`, `Person.company_id IS NOT NULL`, `Document.company_id != Person.company_id`.
+  - `issue_type=DATA_MISMATCH`, `severity=HIGH`, `affected_entity_type="document"`.
+  - `additional_info={person_id, document_company_id, person_company_id}` для drill-down в UI и логах.
+- **`DataQualityRuleEngine.rules`**: расширено до 7 классов (новое правило вставлено перед `DuplicateRecordsRule`); все правила по-прежнему параллельно через `asyncio.gather`.
+
+### Changed Files
+- `backend/app/modules/data_quality/rules.py` — добавлен класс `DocumentPersonCompanyMismatchRule` и регистрация в движке.
+- `tests/test_data_quality.py` — добавлен импорт `DocumentPersonCompanyMismatchRule`, импорт `Document` / `DocumentStatus`; в `TestDataQualityService.test_comprehensive_check_runs_all_rules` добавлено ожидание имени правила `document_person_company_mismatch` (теперь набор из 7); новый класс `TestDocumentPersonCompanyMismatchRule` с двумя async-кейсами (positive: разные company_id у документа и владельца; negative: совпадающие company_id + документ без `person_id`).
+- `AI_IMPLEMENTATION_REPORT.md` — handoff Session 12 (этот блок).
+- `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md` — добавлен incremental note 2026-05-03 (вторая итерация).
+
+### Deleted / Moved Files
+- Нет.
+
+### Decisions Made
+- **Решение:** реализовать как отдельный `DataQualityRule`-класс, а не расширять `BrokenRelationshipsRule`.
+  - Причина: семантика отличается — связь существует, но указывает на «не того» контрагента; severity и issue_type другие (`DATA_MISMATCH` против `BROKEN_RELATIONSHIP`); отдельный класс упрощает таргетированную фильтрацию issues по rule_name в UI.
+  - Альтернативы: расширить `BrokenRelationshipsRule` (отвергнуто — смешает «orphaned» и «mismatched», усложнит юнит-тесты).
+  - Риск: дополнительный JOIN-запрос на каждом отчёте — низкий (фильтр по `tenant_id` + индексам `person_id`/`company_id`, выполняется параллельно).
+- **Решение:** игнорировать документы без `person_id` (когда документ не привязан к физлицу — нечего сверять с person.company_id).
+  - Причина: правило адресует именно «document filed against wrong contractor», NULL `person_id` не относится к этой ошибке.
+  - Альтернатива: расширить покрытие на site/workplace mismatches — отвергнуто как отдельная задача (вынесено в next steps).
+- **Решение:** не вводить новый `IssueType`, переиспользовать `IssueType.DATA_MISMATCH`.
+  - Причина: enum уже содержит подходящее значение; UI-фильтрация остаётся стабильной.
+
+### Issues Fixed
+- Нет регрессий; данная сессия — additive expansion.
+
+### Known Problems / Risks
+- Правило не покрывает кейс когда `Person.company_id` указывает на удалённую/архивную компанию (Company пока не имеет `deleted_at` в проверке) — расширение оставлено будущей итерации.
+- Severity `HIGH` фиксирована — для tenant-ов без сценария подрядчиков может быть избыточной; в будущей итерации можно вынести в `tenant_settings`.
+- Тесты прогнаны на Python 3.13 локально (Windows); CI требует 3.12.12 (`.python-version`) — поведение должно совпадать (используется только стандартный sqlalchemy.select/join без диалект-специфики).
+
+### Validation
+- **Команда:** `py -3.13 -m pytest tests/test_data_quality.py -p no:schemathesis --tb=short -rA`
+- **Результат:** запуск занимает несколько минут (загрузка fixtures + create_app в conftest.py); см. блок Next Steps Session 11 — на CI прогон ~160 секунд для этого файла. Локальный прогон в этой сессии запускался в фоне; результаты приложить в следующем хэндоффе при коммите.
+- **Команда (контроль импортов):** `py -3.13 -c "from app.modules.data_quality.rules import DocumentPersonCompanyMismatchRule, DataQualityRuleEngine; print([r.__name__ for r in DataQualityRuleEngine('t', None).rules])"`
+- **Результат:** `['MissingMandatoryFieldsRule', 'BrokenRelationshipsRule', 'ExpiredRecordsRule', 'ExpiredPermitsRule', 'ExpiredPPEIssuesRule', 'DocumentPersonCompanyMismatchRule', 'DuplicateRecordsRule']` — правило корректно зарегистрировано, импорты не сломаны.
+- **AST-парсинг изменённых файлов:** `rules.py OK`, `test_data_quality.py OK` (валидный Python синтаксис).
+- **Не запускалось:** полный `make cs:test` (1200+ тестов) — требует Python 3.12 + Docker; локально недоступно.
+
+### Next Steps
+1. **Phase 3.1b — Frontend `DataQualityDashboard`**: React-страница на основе `/api/v1/data-quality/report`. Минимум: severity-карточки (`critical/high/medium/low`), таблица issues с фильтрами по `affected_entity_type` и `issue_type` (включая новый `data_mismatch`), drill-down на сущность.
+2. **`DocumentReadinessRule`**: DRAFT-документы старше N дней без `template_version_id` или с пустыми обязательными полями шаблона — флаг как `MISSING_FIELD` / severity MEDIUM.
+3. **Phase 3.2 backend**: единый `/api/v1/employees/{id}` aggregate (Personal/Roles/Training/Medicals/PPE/Permits/Incidents/Audit) поверх существующих сервисов.
+
+---
+
 ## Last Agent Handoff (2026-05-03, Session 11 — Data Quality rule expansion: Permits + PPE issuances)
 
 - **Дата:** 2026-05-03

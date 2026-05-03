@@ -403,6 +403,70 @@ class ExpiredPPEIssuesRule(DataQualityRule):
             logger.exception("expired_ppe_issues rule failed: %s", e)
 
 
+class DocumentPersonCompanyMismatchRule(DataQualityRule):
+    """Documents where Document.company_id != Person.company_id (integration mismatch)."""
+
+    @property
+    def rule_name(self) -> str:
+        return "document_person_company_mismatch"
+
+    @property
+    def rule_description(self) -> str:
+        return (
+            "Documents whose company differs from the linked person's employer "
+            "(catches misfiled paperwork between parent/contractor companies)"
+        )
+
+    async def check(self) -> None:
+        self.issues = []
+        try:
+            stmt = (
+                select(
+                    Document.id,
+                    Document.company_id,
+                    Document.person_id,
+                    Person.company_id.label("person_company_id"),
+                )
+                .join(Person, Document.person_id == Person.id)
+                .where(
+                    Document.tenant_id == self.tenant_id,
+                    Document.person_id.is_not(None),
+                    Person.deleted_at.is_(None),
+                    Person.company_id.is_not(None),
+                    Document.company_id != Person.company_id,
+                )
+            )
+            rows = (await self.db.execute(stmt)).all()
+            self.total_checked = len(rows)
+
+            for doc_id, doc_company_id, person_id, person_company_id in rows:
+                self.issues.append(
+                    DataQualityIssue(
+                        id=f"{self.rule_name}:document:{doc_id}",
+                        issue_type=IssueType.DATA_MISMATCH,
+                        severity=IssueSeverity.HIGH,
+                        title=(
+                            f"document {doc_id} filed under wrong company "
+                            f"(person belongs to {person_company_id})"
+                        ),
+                        description=(
+                            "Document.company_id and the linked Person.company_id "
+                            "disagree; verify the document was filed against the "
+                            "person's actual employer/contractor."
+                        ),
+                        affected_entity_type="document",
+                        affected_entity_id=str(doc_id),
+                        additional_info={
+                            "person_id": str(person_id),
+                            "document_company_id": str(doc_company_id),
+                            "person_company_id": str(person_company_id),
+                        },
+                    )
+                )
+        except Exception as e:
+            logger.exception("document_person_company_mismatch rule failed: %s", e)
+
+
 class DuplicateRecordsRule(DataQualityRule):
     """Duplicate person emails within a tenant (case-insensitive)."""
 
@@ -464,6 +528,7 @@ class DataQualityRuleEngine:
             ExpiredRecordsRule,
             ExpiredPermitsRule,
             ExpiredPPEIssuesRule,
+            DocumentPersonCompanyMismatchRule,
             DuplicateRecordsRule,
         ]
 
