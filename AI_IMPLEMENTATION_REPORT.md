@@ -1,5 +1,42 @@
 # AI Implementation Report
 
+## Test Results (Session 11, 2026-05-03 — full pytest run)
+
+**📄 Полный отчёт прогона:** [`docs/test_runs/PYTEST_RUN_2026-05-03.md`](docs/test_runs/PYTEST_RUN_2026-05-03.md)
+
+**Сырые артефакты (локально, не в git — `artifacts/` в .gitignore; регенерируются командой ниже):**
+- `artifacts/test_runs/pytest_full.txt` — полный stdout/stderr (1890 строк)
+- `artifacts/test_runs/collect.txt` — `pytest --collect-only` (290 файлов / 1238 тестов)
+- `artifacts/test_runs/failed_list.txt` — 85 FAILED
+- `artifacts/test_runs/error_list.txt` — 5 ERROR (4 collection + 1 setup)
+
+**Сводка (Windows 11, Python 3.13.7, pytest 8.3.3, ~50 мин):**
+
+| Метрика | Значение |
+|---|---|
+| Файлов с тестами | **290** |
+| Собрано тестов | **1238** |
+| ✅ Passed | **1145** (~92,5 %) |
+| ❌ Failed | **85** |
+| 💥 Error (per-test) | **1** |
+| ⏭️ Skipped | **7** |
+| 🔥 Collection errors | **4 файла** (тесты не запускались) |
+
+**Ключевые группы падений** (детально — в [PYTEST_RUN_2026-05-03.md](docs/test_runs/PYTEST_RUN_2026-05-03.md)):
+1. Контракт RBAC-deny: `module_access_denied` ↔ `policy_deny` (~25 тестов).
+2. Удалённые `app.domains.{audit,workflows,integrations,notifications}` всё ещё импортируются в `test_tenant_isolation_audit.py` (11 тестов).
+3. Health-check `email`: `Settings` не имеет `webhook_notification_url` (8 тестов).
+4. Outbox / Jobs API: смена путей/enum (≈ 19 тестов).
+5. `staging_hardening`: тесты ожидают rejection слабых секретов (4 теста).
+6. Collection errors: `create_test_user` / `app.api.main` отсутствуют (2 + 2 файла).
+
+**Команда воспроизведения:**
+```bash
+py -X utf8 -m pytest --continue-on-collection-errors -q --tb=short --maxfail=0 -p no:cacheprovider
+```
+
+---
+
 ## Current Status (as of 2026-05-02, Session 10 - Phase 3.1 backend hardening + app import fix)
 
 Проект находится в состоянии **advanced MVP + vNext Phase 1 COMPLETE + Phase 2 IN PROGRESS + Phase 3.1 backend MVP rules на реальных моделях**:
