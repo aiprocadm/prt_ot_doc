@@ -240,6 +240,8 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 
 **Incremental note (2026-05-03):** Engine extended with **`ExpiredPermitsRule`** (`Permit.valid_until < today` AND `status=ACTIVE`) and **`ExpiredPPEIssuesRule`** (`PPEIssue.expires_at < now` AND `status=ISSUED`); both registered in `DataQualityRuleEngine.rules` (now 6 rules). Focused unit tests added in `tests/test_data_quality.py` (positive + negative paths for each rule); local run on Windows: `pytest tests/test_data_quality.py -q -p no:schemathesis` → 12 passed; `pytest tests/test_operational_dashboard.py -q -p no:schemathesis` → 17 passed.
 
+**Incremental note (2026-05-03, later):** Engine extended with **`OrphanedAssignmentsRule`** (active `Person.position_id`/`workplace_id` referencing soft-deleted records) and **`CompanyRequisitesRule`** (Company without `inn` → HIGH; without `ogrn`/`legal_address` → LOW). Registered in `DataQualityRuleEngine.rules` (now 8 rules). Six new unit tests added in `tests/test_data_quality.py` covering positive flags, severity levels, and clean-baseline negative paths; local run on Windows (Python 3.13.7 fallback per `CLAUDE.md`): `py -m pytest tests/test_data_quality.py -q -p no:schemathesis` → 18 passed.
+
 **What it does:** Tenant runs data quality check and sees: "90% completeness | Issues: 5 sites missing SOУТ, 12 employees missing medical, 3 contractors with expired permits". Can click each issue to see details and fix.
 
 **Implementation hints:**
