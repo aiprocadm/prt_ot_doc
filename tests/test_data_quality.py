@@ -17,14 +17,16 @@ from app.models.models import (
     PPEIssue,
     PPEIssueStatus,
     RoleEnum,
+    Workplace,
 )
-from app.modules.data_quality import DataQualityService, IssueType
+from app.modules.data_quality import DataQualityService, IssueSeverity, IssueType
 from app.modules.data_quality.rules import (
     DocumentPersonCompanyMismatchRule,
     DuplicateRecordsRule,
     ExpiredPermitsRule,
     ExpiredPPEIssuesRule,
     MissingMandatoryFieldsRule,
+    OrphanedAssignmentsRule,
 )
 from tests.utils.factories import TestDataFactory
 

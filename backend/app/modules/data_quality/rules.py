@@ -14,11 +14,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.document import Document
 from app.models.models import (
+    Company,
     EmploymentStatus,
     MedicalExam,
     Permit,
     PermitStatus,
     Person,
+    Position,
     PPEIssue,
     PPEIssueStatus,
     Site,
