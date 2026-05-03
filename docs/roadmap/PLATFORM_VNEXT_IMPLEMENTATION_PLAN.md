@@ -238,6 +238,8 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 
 **Incremental note (2026-05-02):** Implemented rules touch **missing mandatory Person/Site fields**, **broken refs** (`Document.person_id`, `Workplace.site_id`), **expired MedicalExam / Training(cert expiry)**, **duplicate Person emails**; operational dashboard aggregates fixed to canonical models (no phantom `app.domains.*` imports).
 
+**Incremental note (2026-05-03):** Engine extended with **`ExpiredPermitsRule`** (`Permit.valid_until < today` AND `status=ACTIVE`) and **`ExpiredPPEIssuesRule`** (`PPEIssue.expires_at < now` AND `status=ISSUED`); both registered in `DataQualityRuleEngine.rules` (now 6 rules). Focused unit tests added in `tests/test_data_quality.py` (positive + negative paths for each rule); local run on Windows: `pytest tests/test_data_quality.py -q -p no:schemathesis` → 12 passed; `pytest tests/test_operational_dashboard.py -q -p no:schemathesis` → 17 passed.
+
 **What it does:** Tenant runs data quality check and sees: "90% completeness | Issues: 5 sites missing SOУТ, 12 employees missing medical, 3 contractors with expired permits". Can click each issue to see details and fix.
 
 **Implementation hints:**
