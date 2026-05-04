@@ -91,6 +91,23 @@
 - Объединить `docs/ENVIRONMENT.md` и `docs/ENV_REFERENCE.md` в `docs/SETUP.md`
 - Удалить дубликаты после консолидации
 
+### Wave 4 (TZ canonicalization, 2026-05-04) 🟡 IN PROGRESS
+
+После того как `docs/spec/TZ_FULL_UNIFIED.md` стал каноническим и единственным источником истины «по ТЗ» (с разделами A — MVP, B — полный объём vNext, C — статус, D — фазы, E — правила доработки), часть документов превращается в дубликаты или историко-справочные. Действия:
+
+- **Помечены deprecated, кандидаты на удаление в следующей волне:**
+  - `docs/NEXT_FEATURES.md` — содержание полностью покрыто разделом B `TZ_FULL_UNIFIED.md` и `docs/spec/PLATFORM_VNEXT_UPGRADE_SPEC.md §7..§30`. Удалить после убирания внешних ссылок.
+  - `docs/SPEC_TRACEABILITY_MATRIX.md` — функция перекрыта `docs/audit/TZ_COVERAGE_MATRIX.md`; преобразовать в навигационный индекс или удалить.
+  - `docs/spec_compliance_report.md` / `docs/p1_compliance_report.md` — статус истинный отслеживается в `TZ_COVERAGE_MATRIX.md` + `RELEASE_READINESS.md` + `GAP_REPORT.md`. Архив, не использовать для приёмки.
+- **Оставить как историко-справочное (без новых ссылок):**
+  - `docs/spec/TZ.md` — первая версия ТЗ (v1.0, 2025-11-05). Хранить, не обновлять, не использовать для приёмки.
+  - `docs/Backend_TZ.md` (уже удалён в Wave 2).
+- **Не удалять, но убедиться, что не плодят альтернатив:**
+  - `RB_BLOCKERS_EXECUTION_READY.md`, `SESSION_SUMMARY_PHASE_A_COMPLETE.md`, `PHASE_2_WEEK_3_PARTIAL_COMPLETION.md`, `wave-37-rb-guide.md` — снимки прошлых волн в корне. Не дублировать формат `AI_IMPLEMENTATION_REPORT.md`. Кандидаты на перенос в `docs/archive/` после ревью.
+  - `docs/facts.md` — снимок ранней волны (устаревшие debts). Помечен `DEPRECATED` 2026-05-04, кандидат на удаление в Wave 4.
+
+Перед удалением — `grep -r "DOCUMENT_NAME" .` (см. блок Validation ниже) и обновление ссылок в `README.md`/`docs/README.md`/`docs/spec/README.md`.
+
 ## Validation
 
 Перед удалением каждого документа:

@@ -1,5 +1,153 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-04, Session 14 — TZ doc-set consolidation: иерархия vNext-spec, согласованность всех файлов)
+
+- **Дата:** 2026-05-04 (последующий шаг после Session 13)
+- **Агент:** Claude Opus 4.7 (cloud)
+- **Задача:** «Проанализируй файлы по содержимому, важно чтобы всё было максимально логично, обнови при необходимости документацию, важно чтобы не было дублей и противоречий, файлу `PLATFORM_VNEXT_UPGRADE_SPEC.md` удели внимание».
+- **Статус:** ✅ COMPLETE (структурная починка vNext-spec + согласование всех ссылающихся файлов; код не менялся).
+
+### Что было найдено и поправлено
+
+1. **`docs/spec/PLATFORM_VNEXT_UPGRADE_SPEC.md`** — структурные дефекты документа:
+   - **103 нарушения иерархии заголовков** — все подразделы вида `## N.M` (4.1–4.8, 5.1–5.4, 6.1–6.10, 7.1–7.5, 8.1–8.4, 9.1–9.3, 10.1–10.2, 11.1–11.5, 12.1–12.5, 13.1–13.3, 14.1–14.4, 15.1–15.4, 17.1–17.4, 19.1–19.4, 20.1–20.4, 23.1–23.4, 24.1–24.4, 25.1–25.3, 27.1–27.4, 28.1–28.4, 29.1–29.3, 30.1–30.3, 31.1–31.6, 33.1–33.3) сидели на уровне h2, а должны быть h3 под главным h2 раздела `## N.`. Это ломало TOC, навигацию и якоря, которые ожидаются TZ_FULL_UNIFIED разделом B.
+   - Внутренние подзаголовки `### Модульная навигация`/`### Сценарная навигация` (под 4.1) и `### Контур 1: PWA`/`### Контур 2: Field mode` (под 27.1) сидели на h3, должны быть h4. Поправлено.
+   - Между `---` и `## 21. Терминалы…` отсутствовала пустая строка — поправлено.
+   - В начало документа добавлено **полное оглавление** (37 разделов), без него навигация по 2098 строкам была болезненной.
+   - Переписана преамбула: явно указано «канонический источник истины — `TZ_FULL_UNIFIED.md`; этот файл — продуктовая рамка vNext + разд. 36; не использовать как чек-лист кода».
+2. **`docs/spec/mapping.md`** — был сильно устаревший (упоминал `backend/app/core/security.py` как RBAC, `domains/medical`, `domains/inspections` и т.п., чего давно нет). Полностью переписан под канонические разделы (`A.X` / `vNext §X.Y`) с тегами MVP/vNext и реальными путями `backend/app/modules/*`, `backend/app/api/routes/*`, `frontend/src/{features,pages}/*`, `tests/*`.
+3. **`docs/spec/PLATFORM_DESIGN.md`** — подзаголовок «(Source of Truth)» убран; добавлена шапка с явной ссылкой «канон — `TZ_FULL_UNIFIED.md`, полная архитектурная рамка — `PLATFORM_VNEXT_UPGRADE_SPEC.md` §28–§32; этот файл — рабочее описание архитектуры MVP-уровня».
+4. **`docs/ARCHITECTURE.md`** — переписан как короткий навигатор: ссылки на канон, на разделы vNext-spec (28–32, 36), на `product_spec.py`. Добавлены правила доработки (vNext §36, шесть вопросов).
+5. **`docs/MODULES.md`** — был обрывочный список из 7 модулей; переписан как полная актуальная инвентаризация всех 41 модуля `backend/app/modules/*` + 13 легаси-доменов `backend/app/domains/*` + frontend counterparts + verification companions, с привязкой каждого к разделу канона/vNext.
+6. **`docs/spec/TZ_FULL_UNIFIED.md`**, прил. 4 — было компактное перечисление bounded contexts vNext §28.3 в одну строку. Заменено на **полную таблицу** `bounded context → реальный backend модуль/роут → статус (MVP done / partial / [v1.1]…)`. Это даёт следующему агенту прямой mapping для «продолжай по ТЗ».
+7. **`docs/audit/TZ_COVERAGE_MATRIX.md`** — обнаружены дубли REQ-ID:
+   - `TZ-2.3-MVP-01` (Immutable audit) — две записи (строки 22 и 24 разные test-наборы);
+   - `TZ-2.5-MVP-01` (Templates strict) — две записи (строки 23 и 26 разные test-наборы).
+   Дубли убраны, а уникальные тесты из дублирующих строк перенесены в основные записи (объединение test-списков). Матрица — 46 строк (было 48), валидация проходит.
+8. **`scripts/audit/check_tz_coverage_matrix.py`** — добавлена проверка уникальности `REQ-ID` (раньше валидатор её не делал, что и допустило дубли). Теперь повторение даст явную ошибку с указанием первой и второй строки.
+9. **`docs/facts.md`** — отмечен `DEPRECATED` (снимок ранней волны, неактуален: упоминает `domains/medical` пустыми, отсутствие моделей и т.п. — давно закрыто). Внесён в Wave 4 cleanup.
+10. **`docs/CLEANUP_CANDIDATES.md`** — расширена Wave 4: `docs/facts.md` добавлен.
+11. **`KNOWN_LIMITATIONS.md`** — обновлена дата (2026-05-04) и добавлена ссылка «Canonical TZ → TZ_FULL_UNIFIED.md».
+12. **`docs/spec/TZ_FULL_UNIFIED.md`** — поправлено указание «Канонические пути» в шапке: было `PLATFORM_VNEXT_UPGRADE_SPEC_PATH` обратными кавычками (выглядело как путь), стало явное разделение «программные константы → код / полный vNext-spec → `.md`».
+
+### Изменённые файлы
+
+- `docs/spec/PLATFORM_VNEXT_UPGRADE_SPEC.md` — иерархия заголовков (103 правки) + преамбула + оглавление.
+- `docs/spec/mapping.md` — переписан полностью.
+- `docs/spec/PLATFORM_DESIGN.md` — шапка приведена в соответствие.
+- `docs/spec/TZ_FULL_UNIFIED.md` — Прил. 4 расширено таблицей bounded contexts→modules; шапка уточнена.
+- `docs/ARCHITECTURE.md` — переписан как короткий навигатор.
+- `docs/MODULES.md` — переписан как полная актуальная инвентаризация.
+- `docs/audit/TZ_COVERAGE_MATRIX.md` — устранены дубли REQ-ID (2 строки убраны, тесты объединены).
+- `scripts/audit/check_tz_coverage_matrix.py` — добавлена проверка уникальности REQ-ID.
+- `docs/facts.md` — банер DEPRECATED.
+- `docs/CLEANUP_CANDIDATES.md` — Wave 4 расширена.
+- `KNOWN_LIMITATIONS.md` — дата + ссылка на канон.
+- `AI_IMPLEMENTATION_REPORT.md` — этот блок (Session 14).
+- `CHANGELOG.md` — запись 2026-05-04 (вторая в дне).
+
+### Решения
+
+- **Не переписывал бизнес-формулировки vNext-spec.** Только структурные правки (h2→h3) и преамбула. Содержание разделов 0–37 не менялось — это полная продуктовая рамка пользователя, и канон ссылается на номера разделов; их менять нельзя.
+- **Не удалял `mapping.md` / `PLATFORM_DESIGN.md` / `ARCHITECTURE.md` / `MODULES.md`,** хотя часть содержания пересекается. Каждый из этих файлов теперь имеет узкое назначение и не дублирует канон: `mapping.md` — таблица spec↔code, `PLATFORM_DESIGN.md` — рабочее описание архитектуры MVP-слоя, `ARCHITECTURE.md` — короткий навигатор, `MODULES.md` — актуальная инвентаризация модулей. Они дополняют, а не дублируют ТЗ.
+- **Не делал bulk-удаление deprecated-файлов** (Wave 4). Это будет отдельная волна после `grep -r` на отсутствие ссылок.
+- **Дубли REQ-ID в матрице — слиты, а не удалены.** Сохранены все упомянутые тесты из обеих строк (объединение test-списков), `plan` — подробнее из объединённых строк. Это сохраняет полноту покрытия.
+
+### Validation
+
+- **Иерархия заголовков vNext-spec:** скрипт on-the-fly прогнал regex `^(#{1,6})\s+(\d+(?:\.\d+)*)\.?\s` по 2147 строкам после правок → 0 нарушений.
+- **Дубли REQ-ID в матрице:** `awk -F'|' 'NR>=11{print $2}' | sort | uniq -c | sort -rn` → все REQ-ID уникальны.
+- **Валидатор матрицы:** `python3 scripts/audit/check_tz_coverage_matrix.py` → `passed: 46 rows`. Проверка уникальности REQ-ID добавлена и проходит.
+- **Markdown-ссылки внутри `TZ_FULL_UNIFIED.md`** ведут на существующие файлы.
+- **Тесты не запускались** — изменений в коде не было (только в `scripts/audit/check_tz_coverage_matrix.py`, проверен прогон валидатора → ok).
+
+### Risks
+
+- Если у внешних агентов закэширован старый текст vNext-spec, ссылки `vNext §4.1` могут не сразу попасть в правильный якорь — однако пути по тексту и нумерация разделов сохранены, изменился только уровень заголовков.
+- Прил. 4 в каноне теперь содержит фактические пути модулей. Если backend будет реструктуризирован (например, `modules/approval` → `modules/approvals` объединение), таблицу нужно будет обновить вместе с рефакторингом — это явно отмечено в `MODULES.md`.
+
+### Next Steps
+
+1. **Phase 0 (CRITICAL):** TZ-1.1 baseline re-verification в чистом Codespace/CI; обновить `docs/audit/BASELINE_VERIFICATION.md` свежими цифрами; разблокировать RC-001.
+2. **Phase 3.1b:** Frontend `DataQualityDashboard` поверх `/api/v1/data-quality/report`.
+3. **Wave 4 cleanup (отдельная волна):** `grep -r` отсутствие ссылок на deprecated и удалить `docs/NEXT_FEATURES.md`, `docs/SPEC_TRACEABILITY_MATRIX.md`, `docs/spec_compliance_report.md`, `docs/p1_compliance_report.md`, `docs/facts.md`; перенести root-level snapshot-отчёты в `docs/archive/`.
+
+---
+
+## Last Agent Handoff (2026-05-04, Session 13 — TZ canonicalization: единый источник «по ТЗ» + чистка дублей)
+
+- **Дата:** 2026-05-04
+- **Агент:** Claude Opus 4.7 (cloud)
+- **Задача:** «Изучи `docs/spec/PLATFORM_VNEXT_UPGRADE_SPEC.md`, `docs/NEXT_FEATURES.md`, проверь весь репозиторий и собери единое полное ТЗ (MVP + полный объём для эталонной платформы), помечай дубликаты, чтобы любой агент при «продолжай по ТЗ» однозначно понимал, что делать».
+- **Статус:** ✅ COMPLETE (документация-канонизация; код не менялся).
+- **Ключевое решение:** **`docs/spec/TZ_FULL_UNIFIED.md` назначен каноническим и единственным источником истины для «по ТЗ».** Внутри добавлены разделы:
+  - `0` — алгоритм работы агента «по ТЗ» (триада: TZ_FULL_UNIFIED + AI_IMPLEMENTATION_REPORT + TZ_COVERAGE_MATRIX);
+  - `A` — объём и приёмка MVP (теги `[MVP]`, P0/P1, B1..B5, F1..F4);
+  - `B` — полный объём (vNext) с тегами `[v1.1]/[v1.2]/[v2.0]` — короткие пункты + ссылки на разделы `PLATFORM_VNEXT_UPGRADE_SPEC.md §1..§34`;
+  - `C` — где смотреть текущий статус (живые источники, не дублировать);
+  - `D` — фазы реализации (Phase 0..10);
+  - `E` — обязательные правила доработки (разд. 36 vNext: ARCHITECTURE_RULES / ENGINEERING_RULES / PRODUCT_UX_RULES / SIX_QUESTIONS, программный путь — `backend/app/core/product_spec.py`);
+  - `F` — критерии приёмки vNext §35;
+  - `G` — карта канонических документов и запрет на дубли;
+  - `H` — шаблон финального отчёта в PR;
+  - Прил. 1–4 (B1..B5 → код; F1..F4 → код; источник тегов; bounded contexts).
+- **Согласовано с агент-инструментарием:**
+  - `AGENTS.md` — переписан, точка входа «по ТЗ» — только `TZ_FULL_UNIFIED.md`.
+  - `.cursor/rules/tz-spec-priority.mdc` и `.cursor/rules/ai-agent-workflow.mdc` — переписаны под новую точку входа.
+  - `docs/AI_AGENT_WORKFLOW.md` — обновлён порядок и приоритет источников.
+  - `docs/spec/README.md`, `docs/spec/TZ_OVERVIEW.md` — переписаны как «хаб → канон».
+  - `README.md` — секция Canonical documentation: канонический ТЗ-файл идёт первым с явной пометкой «единственный источник истины», `vNext spec` помечен как «подключается по ссылкам из раздела B канона».
+- **Помечены deprecated (баннер в начало файла; контент сохранён, чтобы не ломать ссылки):**
+  - `docs/NEXT_FEATURES.md` — содержание полностью перекрыто разделом B канона + `PLATFORM_VNEXT_UPGRADE_SPEC.md §7..§30`.
+  - `docs/spec/TZ.md` — историческая v1.0; не для приёмки.
+  - `docs/SPEC_TRACEABILITY_MATRIX.md` — функция перекрыта `docs/audit/TZ_COVERAGE_MATRIX.md`.
+  - `docs/spec_compliance_report.md` — ссылается на уже удалённый `Backend_TZ.md`.
+  - `docs/p1_compliance_report.md` — снимок прошлой волны.
+- **`docs/CLEANUP_CANDIDATES.md`** — добавлена Wave 4 (TZ canonicalization). Корневые snapshot-отчёты (`RB_BLOCKERS_EXECUTION_READY.md`, `SESSION_SUMMARY_PHASE_A_COMPLETE.md`, `PHASE_2_WEEK_3_PARTIAL_COMPLETION.md`, `wave-37-rb-guide.md`) отмечены как кандидаты на перенос в `docs/archive/` после ревью.
+
+### Что *не* трогалось в этой волне
+- Код backend / frontend / тесты — без изменений (это документ-канонизация).
+- `docs/audit/TZ_COVERAGE_MATRIX.md` — оставлен как есть (живой статус); ссылки на него обновлены.
+- `RELEASE_READINESS.md`, `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` — без изменений (canonical для релиза).
+- Полный текст `PLATFORM_VNEXT_UPGRADE_SPEC.md` (2098 строк) — не редактировался, остаётся подробным каталогом по разделу B канона.
+
+### Изменённые файлы
+- `docs/spec/TZ_FULL_UNIFIED.md` — переписан; теперь канонический и единственный источник истины «по ТЗ» (MVP + полный объём + правила доработки + карта канона).
+- `docs/spec/README.md` — переписан как хаб с приоритетом `TZ_FULL_UNIFIED.md`.
+- `docs/spec/TZ_OVERVIEW.md` — переписан с новой mermaid-диаграммой и таблицей.
+- `AGENTS.md` — переписан под единую точку входа.
+- `README.md` — секция Canonical documentation, явный приоритет `TZ_FULL_UNIFIED.md`.
+- `docs/AI_AGENT_WORKFLOW.md` — обновлён порядок чтения и список источников истины.
+- `.cursor/rules/tz-spec-priority.mdc` — переписан.
+- `.cursor/rules/ai-agent-workflow.mdc` — обновлён.
+- `docs/CLEANUP_CANDIDATES.md` — добавлена Wave 4.
+- `docs/NEXT_FEATURES.md` / `docs/spec/TZ.md` / `docs/SPEC_TRACEABILITY_MATRIX.md` / `docs/spec_compliance_report.md` / `docs/p1_compliance_report.md` — добавлены deprecated-баннеры.
+- `AI_IMPLEMENTATION_REPORT.md` — этот блок.
+
+### Решения
+- **Не выносить полный текст vNext в `TZ_FULL_UNIFIED.md`.** Раздел B канона использует «короткое описание + ссылку на §X из vNext-spec». Причина: дублирование 2 100 строк удваивало бы объём канона и создавало бы расхождения; vNext-spec остаётся подробным каталогом.
+- **Не удалять deprecated-файлы немедленно.** Сначала помечаем баннером, очищаем ссылки, фиксируем в Wave 4 — удаление будет отдельным коммитом следующей волны (по принципу `docs/AI_AGENT_WORKFLOW.md §1`).
+- **Не править `TZ_COVERAGE_MATRIX.md`.** Это живой статус; правка статусов вне волны кода — нарушение разд. E канона. Оставляем матрицу как есть, ссылки в README обновлены.
+- **Не переносить snapshot-отчёты в `docs/archive/` в этой волне.** Они отмечены в `CLEANUP_CANDIDATES.md` Wave 4; перенос — отдельный коммит после явного согласования.
+
+### Validation
+- Все изменённые `.md` файлы — текстовые, без кода; синтаксис markdown проверен глазами.
+- Ссылки внутри `TZ_FULL_UNIFIED.md` ведут на существующие файлы (`docs/spec/PLATFORM_VNEXT_UPGRADE_SPEC.md`, `docs/audit/TZ_COVERAGE_MATRIX.md`, `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md`, `backend/app/core/product_spec.py`, `AI_IMPLEMENTATION_REPORT.md`, `RELEASE_READINESS.md`, `KNOWN_LIMITATIONS.md`, `docs/AI_AGENT_WORKFLOW.md`).
+- Тесты не запускались — изменений в коде нет, регрессии не ожидаются.
+- `python scripts/audit/check_tz_coverage_matrix.py` — не запускался (матрица не редактировалась; этот валидатор проверяет именно её).
+
+### Risks
+- Внешние агенты, помнящие старую инструкцию «начинать с PLATFORM_VNEXT_UPGRADE_SPEC.md», могут не сразу заметить переход. Митигация: единый и явный баннер во всех ключевых файлах + обновлённые `.cursor/rules/*.mdc` (alwaysApply: true).
+- В `docs/spec_compliance_report.md` остались ссылки на удалённый `docs/Backend_TZ.md`; это deprecated-файл, ссылки исправлять не имеет смысла (помечено в баннере).
+- Полный объём vNext в разделе B канона дан **сжато** (по 1–6 строк на блок). Это сознательный компромисс: подробности — в `PLATFORM_VNEXT_UPGRADE_SPEC.md §X`. Если в будущем потребуется развернуть конкретный блок (например, B.13 «Проверки/CAPA») — расширять только в канонe и удалять из других файлов, чтобы не плодить дубли.
+
+### Next Steps
+1. **Phase 0 (CRITICAL):** TZ-1.1 baseline re-verification в чистом Codespace/CI (`make cs:reset && cp .env.example .env && make cs:dev && make cs:test`); обновить `docs/audit/BASELINE_VERIFICATION.md` свежими цифрами; отметить RC-001 в `RELEASE_READINESS.md`.
+2. **Phase 3.1b (если Phase 0 уже на CI):** Frontend `DataQualityDashboard` поверх `/api/v1/data-quality/report` (см. handoff Session 12 ниже).
+3. **Wave 4 cleanup (отдельная волна):** проверить `grep -r` отсутствие ссылок на deprecated-файлы и удалить `docs/NEXT_FEATURES.md`, `docs/SPEC_TRACEABILITY_MATRIX.md`, `docs/spec_compliance_report.md`, `docs/p1_compliance_report.md`; перенести `RB_BLOCKERS_EXECUTION_READY.md`, `SESSION_SUMMARY_PHASE_A_COMPLETE.md`, `PHASE_2_WEEK_3_PARTIAL_COMPLETION.md`, `wave-37-rb-guide.md` в `docs/archive/`.
+
+---
+
 ## Last Agent Handoff (2026-05-03, Session 12 — Data Quality rule expansion: Document↔Person company integrity)
 
 - **Дата:** 2026-05-03

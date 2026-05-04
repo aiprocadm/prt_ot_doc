@@ -54,6 +54,7 @@ def main() -> int:
 
     errors: list[str] = []
     data_rows = 0
+    seen_req_ids: dict[str, int] = {}
 
     for row_idx in range(table_start + 2, len(lines)):
         line = lines[row_idx].strip()
@@ -77,6 +78,16 @@ def main() -> int:
         for key in ("REQ-ID", "status", "priority"):
             if not row[key] or row[key] == "-":
                 errors.append(f"Line {row_idx + 1}: '{key}' must be non-empty")
+
+        req_id = row["REQ-ID"]
+        if req_id and req_id != "-":
+            if req_id in seen_req_ids:
+                errors.append(
+                    f"Line {row_idx + 1}: duplicate REQ-ID '{req_id}' "
+                    f"(first seen at line {seen_req_ids[req_id] + 1})"
+                )
+            else:
+                seen_req_ids[req_id] = row_idx
 
         status = row["status"].lower()
         if status not in ALLOWED_STATUS:
