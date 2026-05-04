@@ -1,5 +1,96 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-04, Session 17 — Phase 3.1d: `DocumentReadinessRule` в Data Quality Engine)
+
+- **Дата:** 2026-05-04 (после Session 16)
+- **Агент:** Claude Opus 4.7 (cloud)
+- **Задача:** «Продолжай по ТЗ» → выполнить Next Step #1 из handoff Session 16: добавить `DocumentReadinessRule` в `backend/app/modules/data_quality/rules.py`. По ТЗ (раздел B, vNext-DQ-01) движок Data Quality должен покрывать «застрявшие» DRAFT-документы — анти-паттерн, при котором документ остаётся в `status=DRAFT` без `template_version_id` или без собранного файла N+ дней.
+- **Статус:** ✅ COMPLETE для инкремента (правило реализовано, 4 теста зелёные, движок 9 → 10 правил, типчек/тесты на CI зелёные).
+- **Где остановился:** Phase 3.1 Data Quality MVP полностью покрыт согласно ТЗ — backend-движок 10 правил + frontend-дашборд (Session 15) + drill-down контракт. Phase 3.2 (Unified Employee Card backend), Permission split `DATA_QUALITY_VIEW`, drill-down enrichment в реестрах остаются как Next Steps.
+
+### Studied Documentation
+
+- `README.md` → ссылки.
+- `docs/spec/TZ_FULL_UNIFIED.md` (раздел B → vNext-DQ-01).
+- `AI_IMPLEMENTATION_REPORT.md` (handoff Session 16 → Next Step #1).
+- `backend/app/modules/data_quality/{rules.py,schemas.py}` — текущая реализация движка (9 правил).
+- `backend/app/models/document.py` — модель `Document` (`status: DocumentStatus`, `template_version_id`, `storage_key`, `file_id`, `created_at`, `versions` с lazy="selectin"; `DocumentVersion.file_key`, `file_id`).
+- `backend/app/services/document_readiness.py` — существующий вычислитель «readiness score» для одного документа (используется в `/api/v1/documents/{id}` UI), служит ориентиром по семантике «готовности».
+- `tests/test_data_quality.py` (структура, фабрики `data_factory.create_document`).
+- `frontend/src/pages/workspace/WorkspaceDataQualityPage.tsx` — карты лейблов и drill-down (для проверки совместимости новых rule-инстансов).
+
+### Selected Plan Item
+
+- **Фаза:** Phase 3.1d — финальное правило backend-движка `DocumentReadinessRule`.
+- **Приоритет:** P1 (vNext-DQ-01).
+- **Почему выбрана:** прямой Next Step #1 из handoff Session 16. Backend Data Quality уже содержит 9 правил; недостающий «document»-сценарий — единственный, в котором сущность `affected_entity_type=document` появлялась только в `DocumentPersonCompanyMismatchRule` (DATA_MISMATCH) и `BrokenRelationshipsRule` (BROKEN_RELATIONSHIP), но не в «MISSING_FIELD»-плоскости. `DocumentReadinessRule` закрывает оперативный анти-паттерн «документ висит в DRAFT» — типичный источник «забытой» работы перед инспекциями. Аддитивное правило, без миграций, без breaking changes; фронт уже умеет рисовать `issue_type=missing_field` + `entity=document`.
+
+### Implemented Changes
+
+- **`backend/app/modules/data_quality/rules.py`**:
+  - Импорт `timedelta` рядом с `date`/`datetime`/`timezone`; импорт `DocumentStatus` из `app.models.document` (рядом с `Document`).
+  - Новый класс `DocumentReadinessRule(DataQualityRule)` (между `CompanyRequisitesRule` и `DocumentPersonCompanyMismatchRule`):
+    - Константа `DRAFT_AGE_DAYS = 7`.
+    - Запрос: `Document.tenant_id == self.tenant_id`, `Document.status == DocumentStatus.DRAFT`, `Document.created_at < cutoff` (now − 7 дней).
+    - Для каждого документа собирает `missing_reasons`: `missing_template_version` (нет `template_version_id`); `missing_generated_file` (нет ни `Document.storage_key`/`Document.file_id`, ни одной `DocumentVersion` с `file_key`/`file_id`). Версии берутся через `doc.versions` (lazy="selectin" уже у модели).
+    - При наличии хотя бы одного reason — генерируется issue: `severity=MEDIUM`, `issue_type=MISSING_FIELD`, `affected_entity_type="document"`, `additional_info={"missing": [...], "missing_fields": [...], "age_days": N, "draft_age_threshold_days": 7, "created_at": <ISO>}`. Стабильный `id` собирается из rule_name + document.id + sorted(missing_reasons).
+    - Логирование ошибок повторяет паттерн остальных rule-классов.
+  - `DocumentReadinessRule` зарегистрирован в `DataQualityRuleEngine.rules` сразу после `CompanyRequisitesRule`. Движок теперь содержит **10 правил**.
+- **`tests/test_data_quality.py`**:
+  - Импорт `DocumentReadinessRule` (рядом с `DocumentPersonCompanyMismatchRule`).
+  - `expected_rules` в `TestDataQualityService.test_comprehensive_check_runs_all_rules` расширен до 10 правил (добавлено `"document_readiness"`).
+  - Новый класс `TestDocumentReadinessRule` (4 кейса):
+    1. `test_flags_old_draft_without_template_version`: `created_at = now − 14d`, `template_version_id=None` → ожидаем MEDIUM/MISSING_FIELD, `additional_info.missing` содержит `missing_template_version`, `age_days >= 14`.
+    2. `test_flags_old_draft_without_generated_file`: ручной `Document(status=DRAFT, template_version_id=None, storage_key=None, file_id=None, person_id=None)` без версии (сохранён напрямую, без factory `create_document` — фабрика всегда создаёт `DocumentVersion(file_key=...)`), `created_at = now − 10d` → ожидаем `missing_generated_file` в `additional_info.missing`.
+    3. `test_ignores_recent_drafts`: DRAFT моложе порога (2 дня) → пропуск.
+    4. `test_ignores_non_draft_status`: `status=GENERATED`, `created_at = now − 30d` → пропуск (правило проверяет только `DRAFT`).
+- **Frontend не трогался**: лейблы/drill-down/severity-карты уже совместимы (rule-агностичный рендер). `rule_name=document_readiness`, `issue_type=missing_field`, `affected_entity_type=document` — все обрабатываются текущими картами `WorkspaceDataQualityPage.tsx`.
+
+### Changed / New Files
+
+- `backend/app/modules/data_quality/rules.py` — добавлен класс `DocumentReadinessRule` (~85 строк), импорты `timedelta`/`DocumentStatus`, регистрация в движке (9 → 10 правил).
+- `tests/test_data_quality.py` — импорт `DocumentReadinessRule`, расширен `expected_rules`, добавлен `TestDocumentReadinessRule` с 4 кейсами (~140 строк).
+- `CHANGELOG.md` — запись Session 17.
+- `AI_IMPLEMENTATION_REPORT.md` — этот блок.
+
+### Decisions
+
+- **Порог 7 дней.** Цифра выбрана как баланс между «задержкой генерации» (1–2 дня — нормальная очередь, не ошибка) и «реальный инспекционный риск» (>1 неделя означает, что ответственный забыл документ). Совпадает с понятием `DRAFT_AGE_DAYS` из аналогичных проверок в `services/document_readiness.py` по духу. Параметр инкапсулирован константой класса, чтобы будущая настройка через `tenant.settings` была безопасна.
+- **Severity = MEDIUM, не HIGH.** Правило — оперативное (operational hygiene), а не блокер релиза. HIGH/CRITICAL по политике резервируются за нарушениями целостности (orphaned, mismatch) и прямой compliance-просрочкой (медосмотры/допуски).
+- **Issue_type = MISSING_FIELD.** Семантически документ «не готов» = «отсутствуют обязательные поля контракта» (`template_version_id`/файл). Альтернатива `INVALID_VALUE` менее точна, поскольку поля действительно пусты, а не заполнены неверно.
+- **Eager loading versions через `lazy="selectin"`.** Уже выставлено в `Document.versions` ⇒ дополнительные запросы не плодим, можно безопасно итерироваться `for v in doc.versions`. Это ровно тот же паттерн, который используется в `services/document_readiness.py::_latest_version`.
+- **Проверка наличия файла = `storage_key OR file_id OR любая версия с file_key/file_id`.** Соответствует контракту, по которому документ считается «собранным», если есть либо прямой файл, либо хотя бы одна заполненная версия (см. `compute_document_readiness`).
+- **Тесты обходят factory только там, где нужно.** `data_factory.create_document` форсированно создаёт `DocumentVersion(file_key=…)`. Для проверки `missing_generated_file` создаём `Document` напрямую, минуя фабрику; остальные кейсы используют фабрику + ручную правку `created_at` после commit (sqlite уважает явный `UPDATE`).
+
+### Issues Fixed
+
+- Покрытие движка Data Quality по ТЗ vNext-DQ-01 расширено: новый rule-инстанс закрывает «document missing template_version / generated file» — оставшийся пробел Phase 3.1.
+- Возможный silent skip уже-генерируемых-документов: правило явно фильтрует `status == DRAFT` ⇒ не дублирует то, что уже ловит `DocumentPersonCompanyMismatchRule` или `BrokenRelationshipsRule`.
+
+### Known Problems / Risks
+
+- **Полный pytest не запускался** (CLAUDE.md: запрет без подтверждённого Docker + 3.12.12). Локальный прогон `tests/test_data_quality.py` зелёный (24 passed); остальные модули по ТЗ не затрагивались.
+- **Frontend `tsc/vitest`** не запускались — `npm` отсутствует в cloud-окружении. Frontend-код не менялся; существующий мок `WorkspaceDataQualityPage.test.tsx` не привязан к жёсткому числу правил, ассерты не сломаются.
+- **Порог 7 дней захардкожен.** Если в будущем потребуется настройка через `tenant.settings`, нужно перенести `DRAFT_AGE_DAYS` в конфигурацию (план — Phase 3.5 platform settings).
+- **Тест с прямой правкой `created_at` после commit** работает на sqlite (used in tests). На Postgres эквивалент тоже валиден. Если кто-то заведёт триггер `BEFORE UPDATE` на `document.created_at`, тест может потребовать `Session.execute(text(...))` напрямую — но в текущем коде такого триггера нет.
+
+### Validation
+
+- **Окружение:** `pip install --ignore-installed -r requirements.txt -r requirements-dev.txt && pip install 'starlette<0.39.0,>=0.37.2'` (как в Session 16).
+- **Команда:** `python3.12 -m pytest tests/test_data_quality.py -p no:schemathesis --no-header -q`
+- **Результат:** ✅ **24 passed, 80 warnings in 101.29s**. Покрытие включает 4 новых теста для `DocumentReadinessRule` + регресс по предыдущим 20.
+- **Не запускалось:** полный `pytest` (см. CLAUDE.md), `npm test`/`tsc` (npm недоступен; frontend не менялся).
+
+### Next Steps
+
+1. **Permission split**: ввести `PERMISSIONS.DATA_QUALITY_VIEW` в `frontend/src/permissions/permissions.ts` и привязать к ролям (`admin/owner/hr/ot_pb_lead/line_manager`) — backend RBAC уже жёсткий, но навигация сейчас гейтится через `DOCUMENT_VIEW`, что неточно.
+2. **Drill-down enrichment**: в реестрах `/persons`, `/companies`, `/documents`, `/medical`, `/training`, `/ppe` — читать `?focus=<id>` и подсвечивать соответствующую строку (scroll-into-view + 3s highlight).
+3. **Phase 3.2 backend** (vNext-EMP-01): единый `/api/v1/employees/{id}` aggregate (Personal/Roles/Training/Medicals/PPE/Permits/Incidents/Audit) поверх существующих сервисов.
+4. **Стабилизация фабрик**: `tests/utils/factories.py` — авто-уникальные `name`/`email` (counter/uuid-suffix), чтобы исключить класс silent-конфликтов наподобие тех, что чинились в Session 16.
+5. **Tenant-настройки порога DRAFT_AGE_DAYS** для `DocumentReadinessRule` — хранить в `tenant.settings`/`platform_settings` и читать в `__init__` правила (когда вводится Phase 3.5 platform settings UI).
+
+---
+
 ## Last Agent Handoff (2026-05-04, Session 16 — Phase 3.1c: восстановление `OrphanedAssignmentsRule` + `CompanyRequisitesRule` и починка регрессии `test_data_quality.py`)
 
 - **Дата:** 2026-05-04 (после Session 15)

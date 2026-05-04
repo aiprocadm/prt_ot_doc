@@ -6,13 +6,13 @@ import asyncio
 import logging
 import time
 from abc import ABC, abstractmethod
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.document import Document
+from app.models.document import Document, DocumentStatus
 from app.models.models import (
     Company,
     EmploymentStatus,
@@ -601,6 +601,94 @@ class CompanyRequisitesRule(DataQualityRule):
             logger.exception("company_requisites rule failed: %s", e)
 
 
+class DocumentReadinessRule(DataQualityRule):
+    """DRAFT documents older than the readiness threshold without a usable template/version.
+
+    Captures the operational anti-pattern of "documents stuck in DRAFT": after
+    ``DRAFT_AGE_DAYS`` days, any document still in ``DRAFT`` that either has no
+    ``template_version_id`` bound, or has no persisted file (``file_id`` /
+    ``storage_key``) on the document and no version with ``file_key`` / ``file_id``,
+    is silently rotting and will not pass briefing/approval pipelines. Severity
+    is ``MEDIUM`` so it surfaces alongside expired records but does not block
+    inspections by itself.
+    """
+
+    DRAFT_AGE_DAYS = 7
+
+    @property
+    def rule_name(self) -> str:
+        return "document_readiness"
+
+    @property
+    def rule_description(self) -> str:
+        return (
+            "DRAFT documents older than 7 days with missing template version "
+            "or no generated file (stuck-in-draft anti-pattern)"
+        )
+
+    async def check(self) -> None:
+        self.issues = []
+        now = datetime.now(tz=timezone.utc)
+        cutoff = now - timedelta(days=self.DRAFT_AGE_DAYS)
+        try:
+            stmt = select(Document).where(
+                Document.tenant_id == self.tenant_id,
+                Document.status == DocumentStatus.DRAFT,
+                Document.created_at < cutoff,
+            )
+            documents = (await self.db.execute(stmt)).scalars().all()
+            self.total_checked = len(documents)
+
+            for doc in documents:
+                missing_reasons: list[str] = []
+                if not doc.template_version_id:
+                    missing_reasons.append("missing_template_version")
+
+                has_doc_file = bool(doc.storage_key) or bool(doc.file_id)
+                has_version_file = any(
+                    bool(getattr(v, "file_key", None))
+                    or bool(getattr(v, "file_id", None))
+                    for v in (doc.versions or [])
+                )
+                if not has_doc_file and not has_version_file:
+                    missing_reasons.append("missing_generated_file")
+
+                if not missing_reasons:
+                    continue
+
+                age_days = max(0, (now - doc.created_at).days)
+                self.issues.append(
+                    DataQualityIssue(
+                        id=(
+                            f"{self.rule_name}:document:{doc.id}:"
+                            f"{'-'.join(sorted(missing_reasons))}"
+                        ),
+                        issue_type=IssueType.MISSING_FIELD,
+                        severity=IssueSeverity.MEDIUM,
+                        title=(
+                            f"document {doc.id} stuck in DRAFT for {age_days} days"
+                        ),
+                        description=(
+                            "DRAFT document is past the readiness threshold and "
+                            "lacks a bound template version or generated file; "
+                            "finish generation, attach a published template version, "
+                            "or revoke."
+                        ),
+                        affected_entity_type="document",
+                        affected_entity_id=str(doc.id),
+                        additional_info={
+                            "missing": missing_reasons,
+                            "missing_fields": missing_reasons,
+                            "age_days": age_days,
+                            "draft_age_threshold_days": self.DRAFT_AGE_DAYS,
+                            "created_at": doc.created_at.isoformat(),
+                        },
+                    )
+                )
+        except Exception as e:
+            logger.exception("document_readiness rule failed: %s", e)
+
+
 class DocumentPersonCompanyMismatchRule(DataQualityRule):
     """Documents where Document.company_id != Person.company_id (integration mismatch)."""
 
@@ -728,6 +816,7 @@ class DataQualityRuleEngine:
             ExpiredPPEIssuesRule,
             OrphanedAssignmentsRule,
             CompanyRequisitesRule,
+            DocumentReadinessRule,
             DocumentPersonCompanyMismatchRule,
             DuplicateRecordsRule,
         ]
