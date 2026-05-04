@@ -1,5 +1,96 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-04, Session 16 — Phase 3.1c: восстановление `OrphanedAssignmentsRule` + `CompanyRequisitesRule` и починка регрессии `test_data_quality.py`)
+
+- **Дата:** 2026-05-04 (после Session 15)
+- **Агент:** Claude Opus 4.7 (cloud)
+- **Задача:** «Продолжай по ТЗ» → диагностика текущего состояния `vNext-DQ-01` (Phase 3.1) и устранение регрессии: `tests/test_data_quality.py` импортировал `OrphanedAssignmentsRule`, которого больше не было в `backend/app/modules/data_quality/rules.py` после merge `17e3c61`. Это давало collection-error на каждом запуске теста. По ТЗ (раздел B, vNext-DQ-01) правильным решением было восстановить оба удалённых правила (`OrphanedAssignmentsRule`, `CompanyRequisitesRule`) — они закрывают сценарии «битая HR-связка с soft-deleted Position/Workplace» и «отсутствие легальных реквизитов компании» — и довосстановить тесты.
+- **Статус:** ✅ COMPLETE для инкремента (правила восстановлены, тесты зелёные: 20 passed; pre-existing collection-error на main починен).
+- **Где остановился:** Phase 3.1 теперь стабилизирована: backend-движок 9 правил, фронтенд-дашборд корректно их отрисовывает (типы/сущности уже поддерживаются картами). Phase 3.2 (Unified Employee Card backend) и `DocumentReadinessRule` остаются отложенными.
+
+### Studied Documentation
+
+- `README.md` → ссылки.
+- `docs/spec/TZ_FULL_UNIFIED.md` (раздел B → vNext-DQ-01).
+- `AI_IMPLEMENTATION_REPORT.md` (handoff Session 15: Phase 3.1b завершена).
+- `backend/app/modules/data_quality/rules.py` (текущая реализация — 7 правил после merge).
+- `tests/test_data_quality.py` (импорт `OrphanedAssignmentsRule` без объявления в коде ⇒ collection-error).
+- История git: `git log --oneline --all -- backend/app/modules/data_quality/rules.py` показала, что коммит `200d385` добавил `OrphanedAssignmentsRule`+`CompanyRequisitesRule`, но затем merge `17e3c61` (merge main → claude/elated-kowalevski-127495) их удалил. На main после `3de2d70` остался импорт без класса.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 3.1c — восстановление полного набора правил Data Quality (Step 1) + починка collection-регрессии (Step 0).
+- **Приоритет:** P0 для регрессии (любой `pytest tests/test_data_quality.py` падал на сборе) + P1 для самих правил (vNext-DQ-01).
+- **Почему выбрана:** на старте сессии любая попытка прогнать data_quality тесты падала с `ImportError: cannot import name 'OrphanedAssignmentsRule'`. Это делало невозможным сверять прогресс по `vNext-DQ-01`. Восстановление правил по факту является продолжением «по ТЗ» — раздел B канона требует движка с покрытием `OrphanedAssignmentsRule` (HR-orphaned) и `CompanyRequisitesRule` (legal требы) среди обязательных проверок MVP-уровня для бизнес-решений.
+
+### Implemented Changes
+
+- **`backend/app/modules/data_quality/rules.py`**:
+  - Восстановлен `OrphanedAssignmentsRule` (между `ExpiredPPEIssuesRule` и `DocumentPersonCompanyMismatchRule`):
+    - JOIN `Person × Position` по `position_id`, фильтр `Position.deleted_at IS NOT NULL`, severity `HIGH`, `issue_type=BROKEN_RELATIONSHIP`, `affected_entity_type="person"`, `additional_info.reason="position_soft_deleted"`.
+    - JOIN `Person × Workplace` по `workplace_id`, фильтр `Workplace.deleted_at IS NOT NULL`, severity `MEDIUM`, `additional_info.reason="workplace_soft_deleted"`.
+    - Только `EmploymentStatus.ACTIVE`, `Person.deleted_at IS NULL`.
+  - Восстановлен `CompanyRequisitesRule`:
+    - Сканирует все `Company` тенанта (без soft-deleted), смотрит `inn`/`ogrn`/`legal_address`.
+    - `inn` отсутствует → severity `HIGH`, ниже `legal_address`/`ogrn` отсутствуют — добавляются в тот же issue.
+    - Только recommended-требы (без INN-критики) → severity `LOW`.
+    - `issue_type=MISSING_FIELD`, `affected_entity_type="company"`, `additional_info` содержит `missing_critical`/`missing_recommended`/`missing_fields`.
+  - Оба класса зарегистрированы в `DataQualityRuleEngine.rules`. Движок снова содержит **9 правил** (был 7).
+- **`tests/test_data_quality.py`**:
+  - Импорт `CompanyRequisitesRule` добавлен (рядом с `OrphanedAssignmentsRule`).
+  - `expected_rules` в `TestDataQualityService.test_comprehensive_check_runs_all_rules` расширен до 9 правил.
+  - Восстановлены классы `TestOrphanedAssignmentsRule` (3 кейса: deleted-position HIGH, deleted-workplace MEDIUM, healthy-baseline) и `TestCompanyRequisitesRule` (3 кейса: missing INN HIGH, only-recommended LOW, complete company skipped).
+  - Дополнительно починены **два pre-existing бага** в `TestDocumentPersonCompanyMismatchRule`, которые проявлялись после установки чистых deps:
+    - `test_flags_document_when_companies_differ`: создавал две `Company` с дефолтным `name="ACME Corp"` ⇒ `uq_company_tenant_name`. Теперь — `Person Co` / `Document Co`.
+    - `test_ignores_aligned_company_or_unlinked_documents`: создавал нескольких `User` без email через `create_user(...)` ⇒ `uq_user_email_tenant`. Теперь явный `email="unlinked-creator@example.com"` и `name="Other Co"` / `name="Unlinked tpl"`.
+- **Frontend не трогался**: `WorkspaceDataQualityPage.tsx` уже корректно отрисует новые правила. Карты:
+  - `ISSUE_TYPE_LABELS["missing_field"]="Отсутствуют поля"`, `ISSUE_TYPE_LABELS["broken_relationship"]="Битая связь"` (для company_requisites/orphaned_assignments).
+  - `ENTITY_TYPE_LABELS["company"]="Контрагенты"`, `ENTITY_TYPE_LABELS["person"]="Сотрудники"`.
+  - `ENTITY_DRILL_DOWN["company"]=(id) => "/companies?focus="+id`, `ENTITY_DRILL_DOWN["person"]=(id) => "/persons?focus="+id`.
+
+### Changed / New Files
+
+- `backend/app/modules/data_quality/rules.py` — добавлены классы `OrphanedAssignmentsRule`, `CompanyRequisitesRule` (~190 строк), движок 7 → 9 правил.
+- `tests/test_data_quality.py` — новый импорт `CompanyRequisitesRule`, новые классы тестов (~200 строк), починка двух pre-existing коллизий в `TestDocumentPersonCompanyMismatchRule`.
+- `CHANGELOG.md` — запись Session 16.
+- `AI_IMPLEMENTATION_REPORT.md` — этот блок.
+
+### Decisions
+
+- **Восстановление через cherry-pick семантики, не git revert.** Коммит `200d385` принимался в main через PR #521; merge `17e3c61` (merge main в feature-ветку) откатил их случайно. Чистый `git revert` смёл бы и легитимные изменения других тестов; точечное восстановление безопаснее.
+- **Положение правил в движке: между `ExpiredPPEIssues...` и `DocumentPersonCompanyMismatchRule`.** Это совпадает с порядком в `200d385` и сохраняет «логические группы» (validity → orphans → integration mismatch → duplicates).
+- **Починка pre-existing багов в одном PR.** Оба теста были скрытыми мина́ми (на main `tests/test_data_quality.py` нельзя было даже собрать, поэтому никто их не прогонял). При отдельном PR пришлось бы делать две миграции — это тратит время агента на ту же логику.
+- **Frontend без изменений.** Дашборд уже умеет рендерить любые `entity_type` ∈ {person, company, …} и любые `issue_type` ∈ {missing_field, broken_relationship, …}; новые правила не вводят новых классов, а только новые экземпляры.
+
+### Issues Fixed
+
+- **Регрессия collection-error в `tests/test_data_quality.py`** (P0 для CI): `ImportError: cannot import name 'OrphanedAssignmentsRule'` → починено восстановлением класса.
+- **Pre-existing `IntegrityError` в `TestDocumentPersonCompanyMismatchRule`**: два теста создавали дубли по `name`/`email` в одном тенанте → починено явными уникальными значениями.
+- **Регресс покрытия Data Quality**: движок ушёл с 9 правил обратно к 7, потеряв проверки HR-orphaned-assignments и company-requisites. Покрытие восстановлено.
+
+### Known Problems / Risks
+
+- **Скрипт `make cs:test`/полный pytest в чистом окружении не запускался** (CLAUDE.md прямо запрещает этот target без подтверждённого Docker + Python 3.12.12). Локальный прогон именно `tests/test_data_quality.py` зелёный, остальные модули по ТЗ не затрагивались.
+- **Frontend-проверки `tsc/vitest` не выполнялись**: `npm` отсутствует в текущем cloud-окружении. Это нормально, поскольку frontend-код не менялся, но если CI оставит старые snapshot-ассерты — обновить вручную в новой волне.
+- **Тесты используют sqlite через aiosqlite**: на Postgres соответствующие constraints (`uq_company_tenant_name`, `uq_user_email_tenant`) ведут себя так же, поэтому переход на real-DB не даст новых сюрпризов. Но если кто-то ужесточит miscellaneous unique-индексы по компаниям — стоит ещё раз проверить детерминированность фабричных значений.
+
+### Validation
+
+- **Команда:** `pip install -r requirements.txt && pip install --ignore-installed -r requirements-dev.txt && pip install 'starlette<0.39.0,>=0.37.2'` — установлено в чистый VM.
+- **Команда:** `python3.12 -m pytest tests/test_data_quality.py -p no:schemathesis --no-header`
+- **Результат:** ✅ **20 passed, 81 warnings in 81.36s**. Покрытие включает 3 + 3 новых тест-кейса для восстановленных правил, оба ранее падающих теста на pre-existing коллизиях, плюс существующие 11 тестов.
+- **Не запускалось:** полный `pytest` (1200+ тестов; CLAUDE.md запрещает без подтверждённого 3.12.12 + Docker), `npm test`/`tsc` (npm недоступен, frontend не менялся).
+
+### Next Steps
+
+1. **`DocumentReadinessRule`** в `backend/app/modules/data_quality/rules.py` — DRAFT-документы старше N дней без `template_version_id` или с пустыми обязательными полями; severity MEDIUM, `affected_entity_type="document"`. После добавления — расширить лейблы в `WorkspaceDataQualityPage.tsx` и `entity_breakdown` сводки.
+2. **Drill-down enrichment** во фронтенде: реестры `/persons`, `/companies`, `/documents`, `/medical`, `/training`, `/ppe` — читать `?focus=<id>` и подсвечивать соответствующую строку (scroll-into-view + 3s highlight). Это закрывает интерфейсный контракт из Session 15.
+3. **Phase 3.2 backend**: единый `/api/v1/employees/{id}` aggregate (Personal/Roles/Training/Medicals/PPE/Permits/Incidents/Audit) поверх существующих сервисов.
+4. **Permission split**: ввести `PERMISSIONS.DATA_QUALITY_VIEW` в `frontend/src/permissions/permissions.ts` и привязать к ролям, согласованным с backend (`admin/owner/hr/ot_pb_lead/line_manager`).
+5. **Стабилизация фабрик**: добавить в `tests/utils/factories.py` авто-уникальные `name`/`email` (через counter или uuid-suffix), чтобы исключить целый класс silent-конфликтов наподобие восстановленных pre-existing.
+
+---
+
 ## Last Agent Handoff (2026-05-04, Session 15 — Phase 3.1b: Frontend `DataQualityDashboard` поверх `/api/v1/data-quality/report`)
 
 - **Дата:** 2026-05-04 (после Session 14)
