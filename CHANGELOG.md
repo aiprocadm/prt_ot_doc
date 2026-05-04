@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 2026-05-04 (Session 16 — Phase 3.1c: восстановление OrphanedAssignmentsRule + CompanyRequisitesRule + починка регрессии в test_data_quality.py)
+- **`backend/app/modules/data_quality/rules.py`** — восстановлены два правила Data Quality движка, удалённые во время merge `17e3c61` ⇒ движок снова содержит **9 правил** (из 7 обратно до 9): `OrphanedAssignmentsRule` (ACTIVE-сотрудники с `position_id`/`workplace_id` на soft-deleted записи; HIGH/MEDIUM) и `CompanyRequisitesRule` (компании без INN — HIGH; без OGRN/legal_address — LOW). Оба зарегистрированы в `DataQualityRuleEngine.rules`.
+- **`tests/test_data_quality.py`** — починена регрессия collection-error: импорт `OrphanedAssignmentsRule` оставался после отката, но самого класса в коде не было. Добавлен импорт `CompanyRequisitesRule`, восстановлены классы `TestOrphanedAssignmentsRule` (3 кейса) и `TestCompanyRequisitesRule` (3 кейса), `expected_rules` в `TestDataQualityService` расширен до 9 правил.
+- **Заодно починены два пред-существующих бага в `TestDocumentPersonCompanyMismatchRule`**: тесты создавали несколько `Company`/`User` с одинаковыми дефолтными `name`/`email`, что нарушало `uq_company_tenant_name` и `uq_user_email_tenant`. Передаются явные уникальные значения.
+- **Frontend не менялся**: `WorkspaceDataQualityPage.tsx` уже корректно отрисовывает новые правила (типы `missing_field`/`broken_relationship` и сущности `person`/`company` поддерживаются `ISSUE_TYPE_LABELS`/`ENTITY_TYPE_LABELS`/`ENTITY_DRILL_DOWN`).
+- **Validation:** `python3.12 -m pytest tests/test_data_quality.py -p no:schemathesis` → **20 passed (0:01:21)** в чистом окружении после установки `requirements.txt` + `requirements-dev.txt`.
+
 ## 2026-05-04 (Session 15 — Phase 3.1b: Frontend Data Quality Dashboard)
 - **`frontend/src/pages/workspace/WorkspaceDataQualityPage.tsx`** — заменена страница-заглушка на реальный дашборд качества данных поверх `/api/v1/data-quality/report`: severity-карточки (полнота / critical / high / medium / low), срезы по типу проблемы и сущности (с интерактивной фильтрацией), топ-20 нарушений с фильтром по уровню риска, drill-down на реестры (`/persons`, `/companies`, `/documents`, `/risk`, `/medical`, `/training`, `/contractors`, `/ppe`, `/incidents`), таблица покрытия rule-классами с временем выполнения.
 - **`frontend/src/api/dataQuality.ts`** — добавлен API-клиент `dataQualityApi.getReport()` поверх `apiClient`.
