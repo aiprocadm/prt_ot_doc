@@ -1,9 +1,10 @@
 # KNOWN_LIMITATIONS
 
-- **Updated on (UTC):** 2026-04-30
+- **Updated on (UTC):** 2026-05-04
 - **Owner:** Product Engineering + Platform
 - **Canonical status vocabulary:** `done` / `partial` / `missing` / `blocked`
 - **Canonical blocker/status source:** `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`
+- **Canonical TZ:** `docs/spec/TZ_FULL_UNIFIED.md` (раздел A — MVP, B — vNext)
 
 ## Release-critical limitations subset
 

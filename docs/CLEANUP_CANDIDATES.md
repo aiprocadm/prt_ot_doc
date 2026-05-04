@@ -104,6 +104,7 @@
   - `docs/Backend_TZ.md` (уже удалён в Wave 2).
 - **Не удалять, но убедиться, что не плодят альтернатив:**
   - `RB_BLOCKERS_EXECUTION_READY.md`, `SESSION_SUMMARY_PHASE_A_COMPLETE.md`, `PHASE_2_WEEK_3_PARTIAL_COMPLETION.md`, `wave-37-rb-guide.md` — снимки прошлых волн в корне. Не дублировать формат `AI_IMPLEMENTATION_REPORT.md`. Кандидаты на перенос в `docs/archive/` после ревью.
+  - `docs/facts.md` — снимок ранней волны (устаревшие debts). Помечен `DEPRECATED` 2026-05-04, кандидат на удаление в Wave 4.
 
 Перед удалением — `grep -r "DOCUMENT_NAME" .` (см. блок Validation ниже) и обновление ссылок в `README.md`/`docs/README.md`/`docs/spec/README.md`.
 
