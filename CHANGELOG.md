@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 2026-05-04 (Session 18 — Phase 3.1e: Permission split `DATA_QUALITY_VIEW`)
+- **`frontend/src/permissions/permissions.ts`** — добавлено новое право `PERMISSIONS.DATA_QUALITY_VIEW` (`"data_quality.view"`); привязано явно к ролям `hr` и `line_manager` (чтобы они могли видеть страницу). Роли `owner`/`admin`/`ot_pb_head` получают его автоматически через `ALL_PERMISSIONS`.
+- **`frontend/src/permissions/ability.ts`** — добавлены `PERMISSION_ALIASES["data_quality.read"] = DATA_QUALITY_VIEW` и `["data_quality.view"]`, плюс `ROLE_ALIASES["ot_pb_lead"] = "ot_pb_head"`, чтобы пользователь с backend-ролью `ot_pb_lead` корректно матчился на фронте.
+- **`frontend/src/router/navigationConfig.ts`** — пункт меню «Качество данных» теперь гейтится `DATA_QUALITY_VIEW` вместо общего `DOCUMENT_VIEW`.
+- **`frontend/src/router/routeGroups.tsx`** — маршрут `/workspace/data-quality` вынесен в отдельную группу под `DATA_QUALITY_VIEW` (вместо `DASHBOARD_VIEW`), что согласовано с backend RBAC `_DQ_READ_ROLES`.
+- **`backend/app/core/rbac_abac.py`** — добавлен ресурс `data_quality` в `RESOURCE_PERMISSIONS` (`{"read"}`); `data_quality:read` явно прописан в `ROLE_PERMISSIONS["hr"]` и `ROLE_PERMISSIONS["line_manager"]`. `owner`/`admin` уже включают это право через `_ROLE_FULL`. Это синхронизирует ответ `/api/v1/auth/me` с фронт-навигацией.
+- **`frontend/src/__tests__/ability.test.ts`** — два новых тест-кейса: `DATA_QUALITY_VIEW` open для `owner/admin/ot_pb_head/ot_pb_lead/hr/line_manager`; closed для `worker/student/ot_specialist`.
+- **Validation:** `python3.12 -m pytest tests/test_data_quality.py -p no:schemathesis` → **24 passed (0:01:27)**. Frontend-тесты не запускались (npm недоступен в cloud-окружении), правки локализованы и совместимы с существующими тестами `RoutePermissionMatrix`/`SideNav`/`NavMenuProvider`.
+
 ## 2026-05-04 (Session 17 — Phase 3.1d: DocumentReadinessRule в Data Quality Engine)
 - **`backend/app/modules/data_quality/rules.py`** — добавлено новое правило `DocumentReadinessRule`: фиксирует «застрявшие» документы со статусом `DRAFT` старше 7 дней, у которых не привязана `template_version_id` или нет ни одного собранного файла (`Document.storage_key`/`Document.file_id` пусты и ни одна `DocumentVersion` не имеет `file_key`/`file_id`). `severity=MEDIUM`, `issue_type=missing_field`, `affected_entity_type=document`, `additional_info` содержит `missing` (`missing_template_version`/`missing_generated_file`), `age_days`, `draft_age_threshold_days=7`, `created_at`. Правило зарегистрировано в `DataQualityRuleEngine.rules` ⇒ движок теперь содержит **10 правил** (было 9).
 - **`tests/test_data_quality.py`** — добавлен класс `TestDocumentReadinessRule` (4 кейса): old DRAFT без template_version (HIGH-сценарий, MEDIUM severity), old DRAFT без файлов, recent DRAFT (игнор), GENERATED со старой датой (игнор). `expected_rules` в `TestDataQualityService` расширен до 10 правил.

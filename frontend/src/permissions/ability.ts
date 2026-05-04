@@ -56,7 +56,9 @@ const PERMISSION_ALIASES: Record<string, Permission> = {
   "audit.read": PERMISSIONS.AUDIT_VIEW,
   "admin.roles": PERMISSIONS.ADMIN_MANAGE_ROLES,
   "admin.tenants": PERMISSIONS.ADMIN_MANAGE_TENANTS,
-  "billing.read": PERMISSIONS.REPORTS_VIEW
+  "billing.read": PERMISSIONS.REPORTS_VIEW,
+  "data_quality.read": PERMISSIONS.DATA_QUALITY_VIEW,
+  "data_quality.view": PERMISSIONS.DATA_QUALITY_VIEW
 };
 
 const ROLE_ALIASES: Record<string, Role> = {
@@ -68,7 +70,8 @@ const ROLE_ALIASES: Record<string, Role> = {
   deloproizvoditel: "office_manager",
   slushatel: "student",
   auditor: "auditor_ro",
-  inspector_contractor: "contractor_inspector"
+  inspector_contractor: "contractor_inspector",
+  ot_pb_lead: "ot_pb_head"
 };
 
 const normalizeRole = (role: string): Role | null => {

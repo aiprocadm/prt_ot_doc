@@ -66,4 +66,35 @@ describe("buildAbility", () => {
     expect(byPermission.can(PERMISSIONS.WAREHOUSE_VIEW)).toBe(true);
   });
 
+  it("открывает Data Quality для ролей, согласованных с backend RBAC", () => {
+    const owner = buildAbility({ ...baseUser, roles: ["owner"], permissions: [] });
+    expect(owner.can(PERMISSIONS.DATA_QUALITY_VIEW)).toBe(true);
+
+    const admin = buildAbility({ ...baseUser, roles: ["admin"], permissions: [] });
+    expect(admin.can(PERMISSIONS.DATA_QUALITY_VIEW)).toBe(true);
+
+    const otHead = buildAbility({ ...baseUser, roles: ["ot_pb_head"], permissions: [] });
+    expect(otHead.can(PERMISSIONS.DATA_QUALITY_VIEW)).toBe(true);
+
+    const otLead = buildAbility({ ...baseUser, roles: ["ot_pb_lead"], permissions: [] });
+    expect(otLead.can(PERMISSIONS.DATA_QUALITY_VIEW)).toBe(true);
+
+    const hr = buildAbility({ ...baseUser, roles: ["hr"], permissions: [] });
+    expect(hr.can(PERMISSIONS.DATA_QUALITY_VIEW)).toBe(true);
+
+    const lineManager = buildAbility({ ...baseUser, roles: ["line_manager"], permissions: [] });
+    expect(lineManager.can(PERMISSIONS.DATA_QUALITY_VIEW)).toBe(true);
+  });
+
+  it("закрывает Data Quality для ролей вне backend RBAC", () => {
+    const worker = buildAbility({ ...baseUser, roles: ["worker"], permissions: [] });
+    expect(worker.can(PERMISSIONS.DATA_QUALITY_VIEW)).toBe(false);
+
+    const student = buildAbility({ ...baseUser, roles: ["student"], permissions: [] });
+    expect(student.can(PERMISSIONS.DATA_QUALITY_VIEW)).toBe(false);
+
+    const otSpecialist = buildAbility({ ...baseUser, roles: ["ot_specialist"], permissions: [] });
+    expect(otSpecialist.can(PERMISSIONS.DATA_QUALITY_VIEW)).toBe(false);
+  });
+
 });
