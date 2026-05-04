@@ -23,6 +23,7 @@ from app.modules.data_quality import DataQualityService, IssueSeverity, IssueTyp
 from app.modules.data_quality.rules import (
     CompanyRequisitesRule,
     DocumentPersonCompanyMismatchRule,
+    DocumentReadinessRule,
     DuplicateRecordsRule,
     ExpiredPermitsRule,
     ExpiredPPEIssuesRule,
@@ -186,6 +187,7 @@ class TestDataQualityService:
             "expired_ppe_issues",
             "orphaned_assignments",
             "company_requisites",
+            "document_readiness",
             "document_person_company_mismatch",
             "potential_duplicates",
         }
@@ -687,4 +689,131 @@ class TestCompanyRequisitesRule:
 
         assert not any(
             i.affected_entity_id == str(company.id) for i in rule.issues
+        )
+
+
+@pytest.mark.anyio
+class TestDocumentReadinessRule:
+    """Stale DRAFT documents missing template version or generated file."""
+
+    async def test_flags_old_draft_without_template_version(
+        self,
+        test_db_session: AsyncSession,
+        data_factory: TestDataFactory,
+    ) -> None:
+        tenant = await data_factory.ensure_tenant(session=test_db_session)
+        company = await data_factory.create_company(tenant=tenant, session=test_db_session)
+        document, _ = await data_factory.create_document(
+            tenant=tenant,
+            company=company,
+            status=DocumentStatus.DRAFT,
+            session=test_db_session,
+        )
+        document.template_version_id = None
+        document.created_at = datetime.now(tz=timezone.utc) - timedelta(days=14)
+        await test_db_session.commit()
+
+        rule = DocumentReadinessRule(str(tenant.id), test_db_session)
+        await rule.check()
+
+        flagged = [i for i in rule.issues if i.affected_entity_id == str(document.id)]
+        assert flagged, "Expected a readiness issue for the stale DRAFT"
+        assert all(i.severity == IssueSeverity.MEDIUM for i in flagged)
+        assert all(i.issue_type == IssueType.MISSING_FIELD for i in flagged)
+        assert any(
+            "missing_template_version" in i.additional_info.get("missing", [])
+            for i in flagged
+        )
+        assert all(
+            i.additional_info.get("age_days", 0) >= 14 for i in flagged
+        )
+
+    async def test_flags_old_draft_without_generated_file(
+        self,
+        test_db_session: AsyncSession,
+        data_factory: TestDataFactory,
+    ) -> None:
+        tenant = await data_factory.ensure_tenant(session=test_db_session)
+        company = await data_factory.create_company(tenant=tenant, session=test_db_session)
+        document = Document(
+            tenant_id=tenant.id,
+            template_id=(
+                await data_factory.create_template(
+                    tenant=tenant, name="Stale tpl", session=test_db_session
+                )
+            ).id,
+            template_version_id=None,
+            company_id=company.id,
+            person_id=None,
+            status=DocumentStatus.DRAFT,
+            created_by=(
+                await data_factory.create_user(
+                    tenant=tenant,
+                    email="stale-creator@example.com",
+                    session=test_db_session,
+                )
+            ).id,
+        )
+        test_db_session.add(document)
+        await test_db_session.commit()
+        await test_db_session.refresh(document)
+        document.created_at = datetime.now(tz=timezone.utc) - timedelta(days=10)
+        await test_db_session.commit()
+
+        rule = DocumentReadinessRule(str(tenant.id), test_db_session)
+        await rule.check()
+
+        flagged = [i for i in rule.issues if i.affected_entity_id == str(document.id)]
+        assert flagged
+        assert any(
+            "missing_generated_file" in i.additional_info.get("missing", [])
+            for i in flagged
+        )
+
+    async def test_ignores_recent_drafts(
+        self,
+        test_db_session: AsyncSession,
+        data_factory: TestDataFactory,
+    ) -> None:
+        tenant = await data_factory.ensure_tenant(session=test_db_session)
+        company = await data_factory.create_company(tenant=tenant, session=test_db_session)
+        document, _ = await data_factory.create_document(
+            tenant=tenant,
+            company=company,
+            status=DocumentStatus.DRAFT,
+            session=test_db_session,
+        )
+        document.template_version_id = None
+        document.created_at = datetime.now(tz=timezone.utc) - timedelta(days=2)
+        await test_db_session.commit()
+
+        rule = DocumentReadinessRule(str(tenant.id), test_db_session)
+        await rule.check()
+
+        assert not any(
+            i.affected_entity_id == str(document.id) for i in rule.issues
+        )
+
+    async def test_ignores_non_draft_status(
+        self,
+        test_db_session: AsyncSession,
+        data_factory: TestDataFactory,
+    ) -> None:
+        tenant = await data_factory.ensure_tenant(session=test_db_session)
+        company = await data_factory.create_company(tenant=tenant, session=test_db_session)
+        document, _ = await data_factory.create_document(
+            tenant=tenant,
+            company=company,
+            status=DocumentStatus.GENERATED,
+            session=test_db_session,
+        )
+        document.template_version_id = None
+        document.created_at = datetime.now(tz=timezone.utc) - timedelta(days=30)
+        await test_db_session.commit()
+
+        rule = DocumentReadinessRule(str(tenant.id), test_db_session)
+        await rule.check()
+
+        assert not any(
+            i.affected_entity_id == str(document.id) for i in rule.issues
         )
