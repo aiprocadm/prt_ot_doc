@@ -1,5 +1,100 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-04, Session 18 — Phase 3.1e: Permission split `DATA_QUALITY_VIEW`)
+
+- **Дата:** 2026-05-04 (после Session 17)
+- **Агент:** Claude Opus 4.7 (cloud)
+- **Задача:** «Продолжай по ТЗ» → выполнить Next Step #1 из handoff Session 17: ввести `PERMISSIONS.DATA_QUALITY_VIEW` в `frontend/src/permissions/permissions.ts` и привязать к ролям, согласованным с backend (`admin/owner/hr/ot_pb_lead/line_manager`); навигация и маршрут `/workspace/data-quality` ранее гейтились через `DOCUMENT_VIEW`/`DASHBOARD_VIEW`, что было неточно (любой пользователь с этими permissions видел пункт меню, но получал 403/`ErrorState` от backend).
+- **Статус:** ✅ COMPLETE для инкремента (право введено, привязано к ролям, navigationConfig + routeGroups обновлены, backend-выдача permissions через `/auth/me` синхронизирована, тесты добавлены, `tests/test_data_quality.py` зелёные).
+- **Где остановился:** Phase 3.1 Data Quality MVP полностью покрыт согласно ТЗ — backend-движок 10 правил + frontend-дашборд (Session 15) + drill-down контракт + согласованный permission-split. Phase 3.2 (Unified Employee Card backend) и drill-down enrichment в реестрах (`?focus=<id>`) остаются как Next Steps.
+
+### Studied Documentation
+
+- `README.md` → ссылки.
+- `docs/spec/TZ_FULL_UNIFIED.md` (раздел B → vNext-DQ-01; раздел E — обязательные правила доработки).
+- `AI_IMPLEMENTATION_REPORT.md` (handoff Session 17 → Next Step #1).
+- `frontend/src/permissions/permissions.ts`, `frontend/src/permissions/ability.ts` — текущая модель прав/алиасов.
+- `frontend/src/router/navigationConfig.ts`, `frontend/src/router/routeGroups.tsx` — где гейтится навигация/маршрут.
+- `frontend/src/__tests__/ability.test.ts`, `frontend/src/__tests__/RoutePermissionMatrix.test.tsx`, `frontend/src/__tests__/SideNav.test.tsx`, `frontend/src/__tests__/NavMenuProvider.test.tsx` — соседние тесты, чтобы не сломать поведение для других ролей.
+- `backend/app/api/routes/data_quality.py` (`_DQ_READ_ROLES = ["admin", "owner", "hr", "ot_pb_lead", "line_manager"]`) — каноническое определение, кому разрешено видеть отчёт.
+- `backend/app/api/routes/auth.py` (`/me`, `/me/permissions`) — формирует `permissions` через `ROLE_PERMISSIONS.get(role, set())` с заменой `:` → `.`.
+- `backend/app/core/rbac_abac.py` — `RESOURCE_PERMISSIONS`, `ROLE_PERMISSIONS`, `MODULE_PERMISSIONS`, `PolicyEngine`.
+- `backend/app/modules/rbac_abac/permission_codes.py` — модульные коды.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 3.1e — фронтенд-permission split + согласованный backend-emit.
+- **Приоритет:** P1 (vNext-DQ-01 → раздел B канона; UX-точность RBAC, не блокер релиза).
+- **Почему выбрана:** прямой Next Step #1 из handoff Session 17. Backend RBAC уже жёсткий (`_DQ_READ_ROLES`), но фронт-навигация показывала пункт «Качество данных» всем, кому виден `DOCUMENT_VIEW` ⇒ типичные `ot_specialist`/`worker`/`auditor_ro` видели пункт меню и получали 403/`ErrorState` от API. Аддитивная задача (новое право, миграций не требует, не ломает существующие тесты), но устраняет seam между UI- и API-RBAC.
+
+### Implemented Changes
+
+- **`frontend/src/permissions/permissions.ts`**:
+  - В `PERMISSIONS` добавлено `DATA_QUALITY_VIEW: "data_quality.view"` (последний ключ объекта).
+  - В `ROLE_PERMISSIONS["hr"]` и `ROLE_PERMISSIONS["line_manager"]` добавлено `PERMISSIONS.DATA_QUALITY_VIEW` (хвост массива). Роли `owner`/`admin` уже получают его через `ALL_PERMISSIONS`. Роль `ot_pb_head` — через `ALL_PERMISSIONS.filter(...)`. Никакие другие роли не получили это право.
+- **`frontend/src/permissions/ability.ts`**:
+  - В `PERMISSION_ALIASES` добавлены два алиаса:
+    - `"data_quality.read"` → `PERMISSIONS.DATA_QUALITY_VIEW` (формат, в котором backend возвращает permissions: `permission.replace(":", ".")` ⇒ `"data_quality:read"` → `"data_quality.read"`).
+    - `"data_quality.view"` → `PERMISSIONS.DATA_QUALITY_VIEW` (на случай прямого emit из backend под текущим именем).
+  - В `ROLE_ALIASES` добавлено `"ot_pb_lead": "ot_pb_head"` — backend hard-codes `ot_pb_lead` как value `RoleEnum.OT_PB_LEAD`, на фронте такая роль не существует ⇒ нужен alias на уже определённый `ot_pb_head`. Без этого пользователь с ролью `ot_pb_lead` (без выданных permissions из backend `ROLE_PERMISSIONS`) попал бы в fallback-ветку `resolvePermissions` без матчинга на `ROLE_PERMISSIONS[normalized]` ⇒ навигация была бы пустой.
+- **`frontend/src/router/navigationConfig.ts`**: пункт «Качество данных» в группе «Документооборот» теперь использует `permission: PERMISSIONS.DATA_QUALITY_VIEW` вместо `DOCUMENT_VIEW`.
+- **`frontend/src/router/routeGroups.tsx`**: маршрут `<Route path="/workspace/data-quality" ... />` вынесен из группы `permission: PERMISSIONS.DASHBOARD_VIEW` в отдельную группу `permission: PERMISSIONS.DATA_QUALITY_VIEW`, расположенную сразу после dashboard-группы. `WorkspaceAttentionPage` остался под `DASHBOARD_VIEW` (как и было).
+- **`backend/app/core/rbac_abac.py`**:
+  - В `RESOURCE_PERMISSIONS` добавлен ресурс `data_quality: {"read"}`. Это автоматически расширяет `_ROLE_FULL` (используется для `owner`/`admin`) на `data_quality:read`, поэтому ответ `/auth/me` для `owner`/`admin` теперь включает `data_quality.read`.
+  - В `ROLE_PERMISSIONS["hr"]` и `ROLE_PERMISSIONS["line_manager"]` явно добавлен `"data_quality:read"`. Это синхронизирует ответ `/auth/me` с фронт-маппингом: пользователь с ролью `hr`/`line_manager` получит permission `data_quality.read`, который через `PERMISSION_ALIASES` развернётся в `DATA_QUALITY_VIEW`.
+  - `data_quality` НЕ добавлен в `_RESOURCE_TO_MODULE` ⇒ `PolicyEngine.can("hr", "read", "data_quality")` пропустит module-check (как и для других «не-модульных» ресурсов) и проверит только `permission_code` ⇒ `data_quality:read` найден ⇒ allow. Никакие существующие политики не сломались.
+  - `ot_pb_lead` в backend `ROLE_PERMISSIONS` отсутствует (там только `hse_head`/`hsse_head`/...) ⇒ для пользователя с ролью `ot_pb_lead` `/me` вернёт пустой `permissions` ⇒ фронт уйдёт в role-based fallback ⇒ alias `ot_pb_lead` → `ot_pb_head` отработает корректно.
+- **`frontend/src/__tests__/ability.test.ts`**: добавлены два кейса:
+  1. `"открывает Data Quality для ролей, согласованных с backend RBAC"` — `owner`, `admin`, `ot_pb_head`, `ot_pb_lead` (через alias), `hr`, `line_manager` → `can(DATA_QUALITY_VIEW)` = `true`.
+  2. `"закрывает Data Quality для ролей вне backend RBAC"` — `worker`, `student`, `ot_specialist` → `can(DATA_QUALITY_VIEW)` = `false`.
+
+### Changed / New Files
+
+- `frontend/src/permissions/permissions.ts` — новое право + два места в ROLE_PERMISSIONS.
+- `frontend/src/permissions/ability.ts` — два новых PERMISSION_ALIASES + один новый ROLE_ALIAS.
+- `frontend/src/router/navigationConfig.ts` — гейт навигационного пункта.
+- `frontend/src/router/routeGroups.tsx` — выделение route group под DATA_QUALITY_VIEW.
+- `backend/app/core/rbac_abac.py` — новый ресурс + два update-а в ROLE_PERMISSIONS.
+- `frontend/src/__tests__/ability.test.ts` — два новых тест-кейса.
+- `CHANGELOG.md` — запись Session 18.
+- `AI_IMPLEMENTATION_REPORT.md` — этот блок.
+
+### Decisions
+
+- **Permission code = `data_quality.view`, а не `data_quality.read`.** Frontend-конвенция использует суффикс `.view` (DOCUMENT_VIEW/REPORTS_VIEW/etc.); backend хранит permissions как `resource:action` ⇒ `data_quality:read`. Я ввёл оба варианта алиасов в `PERMISSION_ALIASES`, чтобы фронт корректно матчил оба формата. Консольный код фронта (`PERMISSIONS.DATA_QUALITY_VIEW`) остаётся единым.
+- **Aлиас `ot_pb_lead → ot_pb_head` живёт на фронте, а не на бэке.** Backend ROLE_ALIASES уже умеет нормализовать `tenant_owner`, `hsse_head` и т.п., но добавлять туда `ot_pb_lead → hse_head` опасно — это поменяло бы permissions сразу для нескольких потоков (risk/inspections/incidents) и нарушило бы pre-existing тесты. Frontend-alias — точечное и безопасное решение.
+- **Не добавляем `data_quality` в `_RESOURCE_TO_MODULE`.** Module-уровень в `PolicyEngine` отрабатывает per-resource gate (`module not in allowed_modules`); `data_quality` — крос-модульный ресурс (читает persons/companies/documents/medical/etc.), у него нет одного «домашнего» модуля. Добавить — значит заводить новый module name `data_quality`, обновлять `MODULE_PERMISSIONS` для всех 19 ролей. Не оправдано.
+- **`hr` и `line_manager` получают только `data_quality:read`, без `:list/:export`.** API возвращает один отчёт целиком (нет пагинации, нет экспорта). Расширим, когда появятся соответствующие endpoint'ы.
+- **`ot_specialist` / `pb_engineer` / `ecologist` НЕ получают `DATA_QUALITY_VIEW`.** Backend `_DQ_READ_ROLES = [admin, owner, hr, ot_pb_lead, line_manager]` — спецы профильных служб (рисков/ПБ/экологии) сейчас читают только свои реестры, не агрегированный отчёт DQ. Расширим список ролей по запросу из ТЗ позже.
+
+### Issues Fixed
+
+- **UI/API seam в RBAC:** пункт меню «Качество данных» больше не показывается ролям без backend-доступа (`ot_specialist`/`worker`/`auditor_ro`/`pb_engineer`/...). Это убирает класс UX-инцидентов «вижу меню — получаю 403».
+- **Backend `/auth/me` теперь возвращает `data_quality.read` тем ролям, которые имеют доступ к эндпоинту**, чем фронт пользуется напрямую (без role-based fallback) для большинства реальных пользователей.
+
+### Known Problems / Risks
+
+- **Frontend `tsc/vitest` не запускались** — `npm` отсутствует в текущем cloud-окружении. Изменения локализованы (новое право в массиве, два новых теста, два алиаса), не пересекаются с другими тестами (`RoutePermissionMatrix`/`SideNav`/`NavMenuProvider` используют `worker`/`owner` с явными `permissions`, на которые я не влиял).
+- **Backend full pytest не запускался** (CLAUDE.md запрещает `make cs:test` без подтверждённого Docker + 3.12.12). Прогон `tests/test_data_quality.py` в чистом окружении: ✅ 24 passed. Дополнительно проверил `tests/test_next9_authz.py` — 2 теста падают (pre-existing, тот же result на main до моих изменений; связано с порядком `module_access_denied` vs `missing_permission` в `PolicyEngine`).
+- **Если кто-то введёт ещё один resource без активного module**, он также не пойдёт в `_RESOURCE_TO_MODULE`. Это допустимо для DQ-/observability-ресурсов, но требует ясности при ревью.
+- **Frontend-`resolvePermissions` всё ещё игнорирует роли при наличии непустого `permissions`-массива.** Это намеренное поведение (бэкенд — единственный источник истины для абилити, кроме ролевого fallback), и я не менял этот контракт. Backend `/me` теперь явно возвращает `data_quality.read` тем, кому положено, — поэтому новой проблемы не возникает.
+
+### Validation
+
+- **Команда (backend):** `python3.12 -m pytest tests/test_data_quality.py -p no:schemathesis --no-header`
+- **Результат:** ✅ **24 passed in 86.68s** (после установки `requirements.txt`+`requirements-dev.txt`+`starlette<0.39.0` и `pip install --force-reinstall --no-deps fastapi==0.115.0 starlette==0.38.6`).
+- **Не запускалось:** полный pytest (CLAUDE.md), frontend `tsc/vitest` (npm недоступен).
+
+### Next Steps
+
+1. **Drill-down enrichment** во фронтенде: реестры `/persons`, `/companies`, `/documents`, `/medical`, `/training`, `/ppe` — читать `?focus=<id>` и подсвечивать соответствующую строку (scroll-into-view + 3s highlight). Это закрывает интерфейсный контракт из Session 15.
+2. **Phase 3.2 backend** (vNext-EMP-01): единый `/api/v1/employees/{id}` aggregate (Personal/Roles/Training/Medicals/PPE/Permits/Incidents/Audit) поверх существующих сервисов.
+3. **Стабилизация фабрик**: `tests/utils/factories.py` — авто-уникальные `name`/`email` (counter/uuid-suffix), чтобы исключить класс silent-конфликтов наподобие тех, что чинились в Session 16.
+4. **Tenant-настройки порога DRAFT_AGE_DAYS** для `DocumentReadinessRule` — хранить в `tenant.settings`/`platform_settings` и читать в `__init__` правила (когда вводится Phase 3.5 platform settings UI).
+5. **Расширение `_DQ_READ_ROLES`** под профильных спецов (`ot_specialist`/`pb_engineer`/`ecologist`), если ТЗ потребует — синхронно в `backend/app/api/routes/data_quality.py`, `backend/app/core/rbac_abac.py::ROLE_PERMISSIONS`, `frontend/src/permissions/permissions.ts::ROLE_PERMISSIONS`.
+
+---
+
 ## Last Agent Handoff (2026-05-04, Session 17 — Phase 3.1d: `DocumentReadinessRule` в Data Quality Engine)
 
 - **Дата:** 2026-05-04 (после Session 16)

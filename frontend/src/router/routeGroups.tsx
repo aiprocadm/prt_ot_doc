@@ -86,7 +86,12 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
         <Route key="/dashboard/training" path="/dashboard/training" element={<TrainingDashboardPage />} />,
         <Route key="/dashboard/ppe" path="/dashboard/ppe" element={<PpeDashboardPage />} />,
         <Route key="/dashboard/client-delivery" path="/dashboard/client-delivery" element={<ClientDeliveryDashboardPage />} />,
-        <Route key="/workspace/attention" path="/workspace/attention" element={<WorkspaceAttentionPage />} />,
+        <Route key="/workspace/attention" path="/workspace/attention" element={<WorkspaceAttentionPage />} />
+      ]
+    },
+    {
+      permission: PERMISSIONS.DATA_QUALITY_VIEW,
+      routes: [
         <Route key="/workspace/data-quality" path="/workspace/data-quality" element={<WorkspaceDataQualityPage />} />
       ]
     },
