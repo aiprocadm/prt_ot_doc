@@ -262,11 +262,11 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 **User impact:** HR/OT specialist edits once, all modules see updates; reduced data duplication  
 
 **Acceptance criteria:**
-- [ ] Backend: Unified `/api/v1/employees/{id}` with all employee data (personal, role, assignments, trainings, medicals, PPE, docs, incidents, audit trail)
-- [ ] Tabs: Personal | Roles & Assignments | Training | Medicals | PPE | Documents | Incidents | Audit
-- [ ] Consistency: No contradictions between tabs; data flows from source module
-- [ ] Tests: Full lifecycle test from onboarding to offboarding
-- [ ] No data duplication; use relationships not copies
+- [x] Backend: Unified `/api/v1/employees/{id}` with all employee data (personal, role, assignments, trainings, medicals, PPE, docs, incidents, audit trail) — *done in Session 19; documents tab deferred to follow-up extension (см. handoff Session 19, Next Step #4)*
+- [ ] Tabs: Personal | Roles & Assignments | Training | Medicals | PPE | Documents | Incidents | Audit (frontend `EmployeeCard.tsx` — `[v1.1]`)
+- [x] Consistency: No contradictions between tabs; data flows from source module (read-only aggregate over existing tables)
+- [x] Tests: Full lifecycle test from onboarding to offboarding (`tests/test_employee_card.py::TestEmployeeCardService::test_aggregates_full_lifecycle`)
+- [x] No data duplication; use relationships not copies
 
 **What it does:** HR creates an employee once. OT specialist sees all training requirements. Trainer assigns course. System auto-generates mandatory briefings. Medical clinic registers medical. Warehouse tracks PPE issuance. All in one unified record with audit trail.
 

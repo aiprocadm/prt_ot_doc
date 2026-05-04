@@ -1,5 +1,107 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-04, Session 19 — Phase 3.2: Unified Employee Card backend aggregate)
+
+- **Дата:** 2026-05-04 (после Session 18)
+- **Агент:** Claude Opus 4.7 (cloud)
+- **Задача:** «Продолжай по ТЗ» → выполнить Next Step #2 из handoff Session 18: реализовать Phase 3.2 backend (vNext-EMP-01, раздел B / `vNext §5.2`) — единый `GET /api/v1/employees/{id}` aggregate (Personal / Roles & Assignments / Training / Medicals / PPE / Permits / Incidents / Audit) поверх существующих доменных сервисов. Frontend единой карточки сотрудника отнесён на `[v1.1]` (см. раздел C/D канона).
+- **Статус:** ✅ COMPLETE для backend-инкремента (route + service + schema + RBAC + 6 интеграционных тестов; миграций нет, контракты других модулей не тронуты).
+- **Где остановился:** Phase 3 на стороне backend закрывает оба основных контракта — Data Quality MVP (10 правил, Sessions 13–17) и Unified Employee Card aggregate (Session 19). Следующее по плану — frontend Employee Card UI (`[v1.1]`) и/или drill-down enrichment в реестрах под `?focus=<id>` из Session 15.
+
+### Studied Documentation
+
+- `README.md` → ссылки.
+- `docs/spec/TZ_FULL_UNIFIED.md` → раздел B (vNext-MD-01 / §5.2 — единая карточка сотрудника), раздел E (правила доработки), раздел C (статус: «DQ backend done; frontend и employee card pending»).
+- `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md` → Task 3.2 *Unified Employee Card (vNext-MD-01)* — acceptance criteria и hint: «Extend existing employee entity with more relationships … Use database relationships, not data copies».
+- `AI_IMPLEMENTATION_REPORT.md` → handoff Session 18, Next Step #2.
+- `backend/app/api/routes/persons.py`, `backend/app/api/routes/medical.py`, `backend/app/api/routes/data_quality.py` — образцы текущих стилей (RBAC, Tenant-scope, Pydantic-схемы, audit-decorator).
+- `backend/app/models/models.py` (Person/Position/Workplace/Company/User/UserRole/TrainingSession/Training/TrainingCertificate/MedicalExam/PPEIssue/Permit/Incident/IncidentPerson/AuditLog/EmploymentStatus/RoleEnum), `backend/app/models/document.py` (Document — для будущего расширения карточки документами).
+- `backend/app/core/rbac_abac.py` — `RESOURCE_PERMISSIONS`/`ROLE_PERMISSIONS`/`MODULE_PERMISSIONS`, политики `_DQ_READ_ROLES` как ориентир.
+- `tests/conftest.py`, `tests/utils/factories.py` — fixtures `make_auth_headers`, `data_factory`, `test_db_session`.
+- `tests/test_data_quality.py`, `tests/api/test_incidents_api.py` — паттерн интеграционных тестов поверх `async_client` + `make_auth_headers`.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 3.2 — backend Unified Employee Card (`vNext-EMP-01` / `vNext §5.2`).
+- **Приоритет:** P1 (Phase 3 канона; `[full]`-уровень B-раздела, целевая фаза `[v1.1]` для UI; backend-агрегат — задел под HR/OT-PB workflows и фронт-карточку).
+- **Почему выбрана:** прямой Next Step #2 из handoff Session 18. Из трёх Next Steps выбран этот, так как (a) даёт больший продуктовый эффект (один эндпоинт закрывает кросс-модульный сценарий «вижу сотрудника целиком»), (b) полностью additive (ни одной миграции, ни изменения существующих контрактов), (c) Next Step #1 (drill-down enrichment в реестрах под `?focus=<id>`) — frontend-задача, а в текущем cloud-окружении нет `npm` для тестов; Next Step #3 (стабилизация фабрик) — рефакторинг тестов без продуктового эффекта.
+
+### Implemented Changes
+
+- **`backend/app/schemas/employee.py`** (новый) — read-only Pydantic-модели агрегата (`EmployeeCard`, `EmployeePersonal`, `EmployeeRolesAndAssignments`+`EmployeeUserAccount`, секции `EmployeeTrainingSection`/`EmployeeMedicalSection`/`EmployeePPESection`/`EmployeePermitsSection`/`EmployeeIncidentsSection`/`EmployeeAuditSection`). Все наследуют `BaseSchema` (timezone-aware ISO). Каждая секция несёт `count` (полный) + ограниченный `items`; где это имеет UI-смысл — `expired_count`/`active_count`/`open_count`.
+- **`backend/app/services/employee_card.py`** (новый) — `EmployeeCardService(tenant_id, db).build(person_id)`: 1) загрузка `Person` (tenant + `deleted_at IS NULL`), 2) подгрузка `Company`/`Position`/`Workplace`, 3) сборка секций отдельными `select`-ами:
+  - **Roles & Assignments:** linked system user — поиск `User` по тому же `tenant_id` и `LOWER(email) = LOWER(person.email)`; дополнительные `UserRole` подтягиваются отдельным запросом.
+  - **Training:** объединение `TrainingSession` (modern, JOIN с `TrainingCourse.title`) и legacy `Training` (без `course_id`, через `course_name`); `TrainingCertificate` (JOIN с `TrainingCourse.title`). Поле `status` для legacy маппится через `_legacy_training_status`.
+  - **Medicals:** `MedicalExam` с фильтром tenant + `deleted_at IS NULL`; `is_expired = valid_until < today`.
+  - **PPE:** `PPEIssue` с фильтром tenant + `deleted_at IS NULL`; `expired_count` считает только `status=ISSUED AND expires_at < now`. `active_count` = все `status=ISSUED` (включая `expired`), чтобы UI мог показать «активных всего vs из них просрочено».
+  - **Permits:** `Permit` (без soft-delete у этой модели); `expired_count` = `status=ACTIVE AND valid_until < today`.
+  - **Incidents:** JOIN `Incident ⨝ IncidentPerson` (роль участника); `open_count` считается по сэмплу из items (`status NOT IN {closed, cancelled}`); `count` — полный по таблице.
+  - **Audit:** `AuditLog` где `object_type='person' AND object_id=<id>`; чтобы не нагружать ответ — только `MAX_ITEMS_PER_SECTION=50` записей; `count` — полный.
+- **`backend/app/api/routes/employees.py`** (новый) — `GET /api/v1/employees/{person_id} → EmployeeCard`. RBAC: `_EMPLOYEE_READ_ROLES = ["admin", "owner", "hr", "line_manager", "ot_pb_lead"]` (тот же набор, что `_DQ_READ_ROLES`). Tenant scope валидируется `TenantContextValidator.ensure_tenant_context`. 404 если person отсутствует или принадлежит другому tenant.
+- **`backend/app/api/v1/route_groups.py`** — `employees` подключён в `COMPLIANCE_AND_ADMIN_ROUTER_REGISTRATIONS` сразу после `persons` (см. наследование `require_tenant_slug`).
+- **`tests/test_employee_card.py`** (новый) — 6 тестов:
+  - `TestEmployeeCardService::test_returns_none_for_unknown_person` — несуществующий ID.
+  - `TestEmployeeCardService::test_isolates_other_tenants` — person в `tenant-a` не виден из `tenant-b`.
+  - `TestEmployeeCardService::test_aggregates_full_lifecycle` — Person + linked User + 2 MedicalExam + 3 PPEIssue (active/expired-issued/returned) + 2 Permit (active/expired-but-active) + legacy Training + Incident+IncidentPerson + AuditLog. Проверяет `personal.fio`, `position_name`/`workplace_name`, `roles_and_assignments.user_account.role == 'hr'`, корректные `count`/`expired_count`/`active_count`, `incidents.items[0].role`, `audit.items[0].action`.
+  - `TestEmployeeCardEndpoint::test_returns_card_for_admin` — успешный GET по эндпоинту через `async_client`.
+  - `TestEmployeeCardEndpoint::test_returns_404_for_unknown_employee` — несуществующий UUID.
+  - `TestEmployeeCardEndpoint::test_forbidden_for_unauthorized_role` — `RoleEnum.STUDENT` получает 401/403.
+
+### Changed / New Files
+
+- `backend/app/schemas/employee.py` — новая schema (~210 строк).
+- `backend/app/services/employee_card.py` — новый service (~470 строк, чистые SQLAlchemy-запросы).
+- `backend/app/api/routes/employees.py` — новый route (~70 строк).
+- `backend/app/api/v1/route_groups.py` — два аддитивных edit'а (импорт + регистрация).
+- `tests/test_employee_card.py` — новый файл (~315 строк, 6 тестов).
+- `CHANGELOG.md` — запись Session 19.
+- `AI_IMPLEMENTATION_REPORT.md` — этот блок.
+
+### Decisions
+
+- **Не дублируем данные, только агрегируем.** Все секции — read-only через существующие модели, без новых таблиц / миграций. Acceptance criterion из плана «No data duplication; use relationships not copies» соблюдён.
+- **`EmployeeCard` — единый top-level объект, а не page-структура.** UI получает всё разом, но размер ограничен `MAX_ITEMS_PER_SECTION = 50`. Если в будущем понадобятся таб-специфичные пагинации — ввести подмаршруты `…/training`, `…/medicals` (deferred).
+- **Roles & Assignments = поле в карточке, а не отдельный сервис.** Текущая модель `Person` не имеет прямой связи с `User`; матчим по `tenant_id + LOWER(email)`. Если в одном tenant под одним email несколько активных пользователей — берём первого; для редкого корнер-кейса этого достаточно, в будущем можно ввести явный `Person.user_id`.
+- **Legacy `Training` + modern `TrainingSession` оба в Training-секции.** В реальных тенантах могут существовать обе таблицы; маппинг legacy `TrainingStatus` → `TrainingSessionStatus` сделан через локальную утилиту `_legacy_training_status` (`completed → COMPLETED`, иначе `SCHEDULED`).
+- **Audit ограничен `object_type='person'`.** Action на связанные сущности (training-session created, ppe-issued) логируется с собственным `object_type`/`object_id` и здесь не показывается. UI получит «лог изменений по самой карточке сотрудника» — самый частый кейс. Расширить под cross-object timeline можно в Phase 8 (analytics).
+- **RBAC = `_DQ_READ_ROLES`-подобный набор.** `admin/owner/hr/line_manager/ot_pb_lead` — те же роли, что уже видят DQ-отчёт (Session 18). Это устраняет UX-несостыковку «Я вижу нарушения по сотруднику в DQ, но не могу открыть его карточку».
+- **Не добавляем `employee` в `RESOURCE_PERMISSIONS`/`_RESOURCE_TO_MODULE`.** Используем `abac()` без resource-кода (как `medical` route): RBAC-проверка идёт по `required_roles`, ABAC — по `tenant_id`. Нет необходимости вводить новый ресурс, т.к. это derived view, а не самостоятельная сущность; module-уровень не применяется (cross-module aggregate).
+- **`expired`/`active` логика.** Для PPE намеренно подставлено `active_count >= expired_count` (active_count = все `status=ISSUED`, expired_count = subset с `expires_at < now`). UI может показать badge «активных N, из них просрочено M». Аналогично Permit. Для медосмотров активного концепта нет — показываем `count` и `expired_count`.
+- **Incidents.open_count из items.** Полная статистика «open/closed» требует сводной агрегации; пока считаем из видимых `items` (max 50), что достаточно для UI-бейджа. Если в будущем потребуется строгий полный счётчик — подменим на `select count` с фильтром по статусу.
+
+### Issues Fixed
+
+- Отсутствовал единый GET-эндпоинт «всё про сотрудника» — клиенту приходилось дёргать `/persons/{id}`, `/medical/exams?person_id`, `/training-*`, `/ppe/issues?person_id`, `/incidents?…` и склеивать на фронте. Теперь — один запрос, один контракт, один RBAC-чек.
+- Отсутствие связки `Person ↔ User` приводило к тому, что фронт не знал, есть ли у сотрудника аккаунт. В `EmployeeUserAccount` теперь явно отражено: `user_id`, `role`, `is_active`, `last_login_at`, `additional_roles`.
+
+### Known Problems / Risks
+
+- **Полный pytest не запускался** (CLAUDE.md: запрет без подтверждённого Docker + 3.12.12). Локальный прогон новых тестов: ✅ 6 passed; регрессия `tests/test_data_quality.py` — 24 passed; `tests/test_api_app_factory.py`+`tests/test_api_dependencies.py` — 5 passed. Pre-existing fail в `tests/api/test_incidents_api.py::test_incident_capa_deadline_enforcement` подтверждён на main без моих изменений (см. ниже).
+- **Frontend `tsc/vitest`** не запускались — `npm` отсутствует. Frontend-код не менялся в этой волне (UI единой карточки — `[v1.1]`).
+- **Performance:** агрегат делает ~20 коротких `SELECT`-ов (по одному на секцию + по одному на каждый `count`). На большом tenant с 10K сотрудников endpoint вызывается на одном person, поэтому это безопасно. Если в будущем нужен bulk — ввести `/employees:batch`.
+- **Linked user lookup по email** — case-insensitive (через `func.lower`). На Postgres работает, на sqlite в тестах тоже валидно.
+- **`Permit.deleted_at`** не существует у модели; запрос корректно его не использует. `MedicalExam` и `PPEIssue` — используют `deleted_at IS NULL`.
+- **`AuditLog.object_id` хранит UUID-string** (`String(128)`), мы передаём `str(person.id)` — совпадает с тем, как пишет `audit_decorator`.
+
+### Validation
+
+- **Окружение:** `pip install --ignore-installed -r requirements.txt -r requirements-dev.txt` + `pip install 'starlette<0.39.0,>=0.37.2'` (как в Session 16/17/18).
+- **Команда:** `python3.12 -m pytest tests/test_employee_card.py -p no:schemathesis --no-header -q`
+- **Результат:** ✅ **6 passed in ~32s**.
+- **Регрессия:** `python3.12 -m pytest tests/test_data_quality.py -p no:schemathesis` → ✅ **24 passed**. `python3.12 -m pytest tests/test_api_app_factory.py tests/test_api_dependencies.py -p no:schemathesis` → ✅ **5 passed**.
+- **Pre-existing failure:** `tests/api/test_incidents_api.py::test_incident_capa_deadline_enforcement` падает в текущем cloud-окружении и на main, и на моей ветке (подтверждено `git stash`-проверкой). Не связано с этой волной.
+- **Не запускалось:** полный `pytest` (см. CLAUDE.md), `npm test`/`tsc` (npm недоступен; frontend не менялся).
+
+### Next Steps
+
+1. **Frontend Employee Card UI** (`[v1.1]`, vNext-EMP-01 продолжение): создать `frontend/src/pages/EmployeeCard.tsx` с табами Personal / Roles & Assignments / Training / Medicals / PPE / Permits / Incidents / Audit поверх нового `/api/v1/employees/{id}`. DTO зеркалить из `app.schemas.employee` в `frontend/src/types/dto/employee.ts`. Интегрировать в `/persons` (drill-down → Employee Card).
+2. **Drill-down enrichment в реестрах** (Next Step #1 из Session 18, всё ещё открыт): `/persons`, `/companies`, `/documents`, `/medical`, `/training`, `/ppe` — читать `?focus=<id>` и подсвечивать строку (scroll-into-view + 3s highlight). Это закрывает интерфейсный контракт из Session 15 (DQ Dashboard).
+3. **Стабилизация фабрик** (Next Step #3 из Session 18): `tests/utils/factories.py` — авто-уникальные `name`/`email` (counter/uuid-suffix), чтобы исключить класс silent-конфликтов из Session 16.
+4. **Расширение `/employees/{id}` (по запросу UI):** добавить секцию Documents (через `Document.person_id`), Briefings (через `BriefingEntry.person_id`), Compliance Deadlines (через `ComplianceDeadline.person_id`). Все три модели уже имеют FK на person — пятиминутное расширение.
+5. **Bulk Employee Card** (`POST /employees:batch`) — если фронту понадобится прелоад нескольких карточек одновременно (например, для команды/бригады).
+
+---
+
 ## Last Agent Handoff (2026-05-04, Session 18 — Phase 3.1e: Permission split `DATA_QUALITY_VIEW`)
 
 - **Дата:** 2026-05-04 (после Session 17)
