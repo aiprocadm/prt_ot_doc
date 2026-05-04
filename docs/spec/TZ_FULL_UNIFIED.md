@@ -3,9 +3,9 @@
 > **Этот документ — канонический и единственный источник истины для фразы «продолжай по ТЗ».**
 > Ссылается на `docs/spec/PLATFORM_VNEXT_UPGRADE_SPEC.md` (продуктовая рамка vNext, разделы 0–37) и на текущее состояние реализации (`AI_IMPLEMENTATION_REPORT.md`, `docs/audit/TZ_COVERAGE_MATRIX.md`). Не дублируйте требования в других файлах: при расхождениях побеждает этот файл, далее — `PLATFORM_VNEXT_UPGRADE_SPEC.md` (только в части продуктовой рамки и разд. 36 ограничений).
 
-- **Версия:** 2026-05-04 (вторая редакция)
+- **Версия:** 2026-05-04 (вторая редакция, согласована с PLATFORM_VNEXT_UPGRADE_SPEC.md разд. 0–37)
 - **Статус:** активный
-- **Канонический путь в коде:** `backend/app/core/product_spec.py` (короткие правила) + `docs/spec/PLATFORM_VNEXT_UPGRADE_SPEC_PATH` (полный vNext-spec).
+- **Канонические пути:** `backend/app/core/product_spec.py` (программные константы — `PLATFORM_VNEXT_UPGRADE_SPEC_PATH` + сжатые правила разд. 36), [`docs/spec/PLATFORM_VNEXT_UPGRADE_SPEC.md`](./PLATFORM_VNEXT_UPGRADE_SPEC.md) (полный vNext-spec).
 
 ---
 
@@ -704,9 +704,42 @@
 - `[MVP]` — раздел A этого файла + строки `done`/`partial`/`missing` со `priority=p0/p1` в `TZ_COVERAGE_MATRIX.md`.
 - `[v1.1]/[v1.2]/[v2.0]` — раздел B этого файла + Phases 4–10 в `PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md`.
 
-### Прил. 4. Минимальный bounded-contexts набор (vNext §28.3)
+### Прил. 4. Bounded contexts → реальные модули backend (vNext §28.3)
 
-IAM/Tenancy · Organizations/HR Core · Documents · Approvals & Signatures · NPA & Compliance · Risks · PPE & Warehouse · Training · Briefings & Journals · Med Exams · SOUT · Incidents · Inspections & CAPA · Contractors & Access · Equipment & Transport · Ecology/Fire/Industrial/Electrical/GO-ЧС · CRM & Billing · Files & Search · Notifications · Workflows & Rules · Mobile Sync · Analytics · AI Copilot.
+| Bounded context (vNext §28.3) | Backend модуль / роут | Статус |
+|-------------------------------|----------------------|--------|
+| IAM / Tenancy | `backend/app/modules/{tenancy,rbac_abac}/*`, `backend/app/middleware/tenant.py` | MVP done |
+| Organizations / HR Core | `backend/app/modules/org_structure/*`, `backend/app/api/routes/{companies,sites,departments,persons,tenancy,tenants}.py` | MVP done |
+| Documents | `backend/app/modules/{templates,branding,headers,replace,pdf,pipelines,jobs,doc_render,packs}/*` | MVP done |
+| Approvals & Signatures | `backend/app/modules/{approval,approvals,sign}/*`, `backend/app/api/routes/{approval_orchestration,approval_signing_v1}.py` | partial (vNext §6.9) |
+| NPA & Compliance | `backend/app/modules/compliance_deadlines/*`, `backend/app/api/routes/{npa,compliance,obligations}.py`, `backend/app/domains/npa/*` | partial (vNext §19) |
+| Risks | `backend/app/modules/risk/*`, `backend/app/api/routes/{risk,risk_enterprise}.py` | MVP done (PxS); v1.1 — Fine-Kinney + auto-generation |
+| PPE & Warehouse | `backend/app/modules/ppe/*`, `backend/app/domains/ppe/*` | MVP done; склад — `[v1.1]` |
+| Training | `backend/app/modules/training/*`, `backend/app/api/routes/{training,training_next,attestations}.py` | MVP done; внешние интеграции — `[v1.1]` |
+| Briefings & Journals | `backend/app/modules/briefings/*`, `backend/app/api/routes/{briefings,journals}.py` | MVP done; kiosk — `[v1.1]` |
+| Med Exams | `backend/app/api/routes/medical.py` | partial (`[v1.1]`) |
+| SOUT | (часть risk + sites) | partial (`[v1.1]`) |
+| Incidents | `backend/app/modules/incidents/*`, `backend/app/api/routes/incidents.py` | MVP done |
+| Inspections & CAPA | `backend/app/modules/{inspections,inspection_prep,capa}/*`, `backend/app/api/routes/{inspections,prescriptions,findings...}.py` | MVP done; prescriptions — `[v1.2]` |
+| Contractors & Access | `backend/app/modules/{contractors,client_portal}/*`, `backend/app/api/routes/{contractors,client_portal,portal_requests,access,integration_readiness}.py` | partial (vNext §15) |
+| Equipment & Transport | `backend/app/api/routes/items.py` (частично) | `[v1.2]` |
+| Ecology / Fire / Industrial / Electrical / GO-ЧС | `backend/app/api/routes/{fire-safety,fire-inspections,fire-training}.py` (только ПБ skeleton) | `[v1.2]`/`[v2.0]` |
+| CRM & Billing | `backend/app/api/routes/{billing,invoices,orders,contracts,client_portal}.py` | partial (`[v1.1]`) |
+| Files & Search | `backend/app/modules/{files,search}/*`, `backend/app/api/routes/{files,public_api}.py` | MVP done; universal search UI — `[v1.1]` |
+| Notifications | `backend/app/modules/notifications/*`, `backend/app/api/routes/notifications.py` | MVP done |
+| Workflows & Rules | `backend/app/modules/workflow/*`, `backend/app/api/routes/jobs.py` | partial (vNext §25) |
+| Mobile Sync | `backend/app/modules/pwa_sync/*`, `backend/app/api/routes/pwa_sync.py` | partial (`[v1.1]`) |
+| Analytics | `backend/app/modules/{analytics,export_center,projections}/*`, `backend/app/api/routes/{reports,exports,dashboard}.py` | partial (`[v1.1]`) |
+| AI Copilot | — | `[v2.0]` |
+| **Cross-cutting:** Operational dashboard | `backend/app/modules/operational_dashboard/*` | backend done (Phase 2.1), frontend `[v1.1]` |
+| **Cross-cutting:** Data Quality | `backend/app/modules/data_quality/*` | backend MVP done (7 правил, Phase 3.1), Dashboard UI `[v1.1]` |
+| **Cross-cutting:** Health checks | `backend/app/modules/health_checks/*` | done (Phase 2.2) |
+| **Cross-cutting:** Audit | `backend/app/modules/audit/*`, `backend/app/domains/audit/*` | MVP done |
+| **Cross-cutting:** EDO | `backend/app/modules/edo/*`, `backend/app/api/routes/edo_workflow.py` | partial (vNext §6.9) |
+| **Cross-cutting:** External Registry | `backend/app/modules/external_registry/*` | partial (`[v1.1]`) |
+| **Cross-cutting:** Calendar (smart calendar) | `backend/app/modules/calendar/*`, `backend/app/api/routes/calendar.py` | partial (vNext §4.4) |
+
+Развёрнутая карта «спецификация → код → тесты» — в [`docs/spec/mapping.md`](./mapping.md). Список модулей с описаниями — в [`docs/MODULES.md`](../MODULES.md).
 
 ---
 
