@@ -21,6 +21,7 @@ from app.models.models import (
 )
 from app.modules.data_quality import DataQualityService, IssueSeverity, IssueType
 from app.modules.data_quality.rules import (
+    CompanyRequisitesRule,
     DocumentPersonCompanyMismatchRule,
     DuplicateRecordsRule,
     ExpiredPermitsRule,
@@ -183,6 +184,8 @@ class TestDataQualityService:
             "expired_records",
             "expired_permits",
             "expired_ppe_issues",
+            "orphaned_assignments",
+            "company_requisites",
             "document_person_company_mismatch",
             "potential_duplicates",
         }
@@ -402,10 +405,10 @@ class TestDocumentPersonCompanyMismatchRule:
     ) -> None:
         tenant = await data_factory.ensure_tenant(session=test_db_session)
         person_company = await data_factory.create_company(
-            tenant=tenant, session=test_db_session
+            tenant=tenant, name="Person Co", session=test_db_session
         )
         document_company = await data_factory.create_company(
-            tenant=tenant, session=test_db_session
+            tenant=tenant, name="Document Co", session=test_db_session
         )
         person = await data_factory.create_person(
             tenant=tenant,
@@ -457,20 +460,24 @@ class TestDocumentPersonCompanyMismatchRule:
         )
         # Unlinked: document without person — must not be flagged even if company differs
         other_company = await data_factory.create_company(
-            tenant=tenant, session=test_db_session
+            tenant=tenant, name="Other Co", session=test_db_session
         )
         unlinked = Document(
             tenant_id=tenant.id,
             template_id=(
                 await data_factory.create_template(
-                    tenant=tenant, session=test_db_session
+                    tenant=tenant, name="Unlinked tpl", session=test_db_session
                 )
             ).id,
             company_id=other_company.id,
             person_id=None,
             status=DocumentStatus.DRAFT,
             created_by=(
-                await data_factory.create_user(tenant=tenant, session=test_db_session)
+                await data_factory.create_user(
+                    tenant=tenant,
+                    email="unlinked-creator@example.com",
+                    session=test_db_session,
+                )
             ).id,
         )
         test_db_session.add(unlinked)
@@ -480,3 +487,204 @@ class TestDocumentPersonCompanyMismatchRule:
         await rule.check()
 
         assert not rule.issues
+
+
+@pytest.mark.anyio
+class TestOrphanedAssignmentsRule:
+    """Active persons assigned to soft-deleted positions/workplaces must be flagged."""
+
+    async def test_flags_active_person_with_deleted_position(
+        self,
+        test_db_session: AsyncSession,
+        data_factory: TestDataFactory,
+    ) -> None:
+        tenant = await data_factory.ensure_tenant(session=test_db_session)
+        company = await data_factory.create_company(tenant=tenant, session=test_db_session)
+        position = Position(
+            tenant_id=tenant.id,
+            company_id=company.id,
+            name="Retired role",
+            deleted_at=datetime.now(tz=timezone.utc),
+        )
+        test_db_session.add(position)
+        await test_db_session.commit()
+        await test_db_session.refresh(position)
+
+        person = await data_factory.create_person(
+            tenant=tenant,
+            company=company,
+            first_name="Orphaned",
+            last_name="Worker",
+            email="orphan@example.com",
+            position_id=position.id,
+            employment_status=EmploymentStatus.ACTIVE,
+            session=test_db_session,
+        )
+
+        rule = OrphanedAssignmentsRule(str(tenant.id), test_db_session)
+        await rule.check()
+
+        flagged = [i for i in rule.issues if i.affected_entity_id == str(person.id)]
+        assert flagged, "Expected an orphaned-assignment issue for the test person"
+        assert any(
+            i.additional_info.get("reason") == "position_soft_deleted" for i in flagged
+        )
+        assert all(i.severity == IssueSeverity.HIGH for i in flagged)
+
+    async def test_flags_active_person_with_deleted_workplace(
+        self,
+        test_db_session: AsyncSession,
+        data_factory: TestDataFactory,
+    ) -> None:
+        tenant = await data_factory.ensure_tenant(session=test_db_session)
+        company = await data_factory.create_company(tenant=tenant, session=test_db_session)
+        workplace = Workplace(
+            tenant_id=tenant.id,
+            company_id=company.id,
+            name="Decommissioned bench",
+            deleted_at=datetime.now(tz=timezone.utc),
+        )
+        test_db_session.add(workplace)
+        await test_db_session.commit()
+        await test_db_session.refresh(workplace)
+
+        person = await data_factory.create_person(
+            tenant=tenant,
+            company=company,
+            first_name="Bench",
+            last_name="Worker",
+            email="bench@example.com",
+            workplace_id=workplace.id,
+            employment_status=EmploymentStatus.ACTIVE,
+            session=test_db_session,
+        )
+
+        rule = OrphanedAssignmentsRule(str(tenant.id), test_db_session)
+        await rule.check()
+
+        assert any(
+            i.affected_entity_id == str(person.id)
+            and i.additional_info.get("reason") == "workplace_soft_deleted"
+            for i in rule.issues
+        )
+
+    async def test_ignores_healthy_assignment(
+        self,
+        test_db_session: AsyncSession,
+        data_factory: TestDataFactory,
+    ) -> None:
+        tenant = await data_factory.ensure_tenant(session=test_db_session)
+        company = await data_factory.create_company(tenant=tenant, session=test_db_session)
+        position = Position(
+            tenant_id=tenant.id,
+            company_id=company.id,
+            name="Active role",
+        )
+        workplace = Workplace(
+            tenant_id=tenant.id,
+            company_id=company.id,
+            name="Active bench",
+        )
+        test_db_session.add_all([position, workplace])
+        await test_db_session.commit()
+        await test_db_session.refresh(position)
+        await test_db_session.refresh(workplace)
+
+        await data_factory.create_person(
+            tenant=tenant,
+            company=company,
+            first_name="Happy",
+            last_name="Worker",
+            email="happy@example.com",
+            position_id=position.id,
+            workplace_id=workplace.id,
+            employment_status=EmploymentStatus.ACTIVE,
+            session=test_db_session,
+        )
+
+        rule = OrphanedAssignmentsRule(str(tenant.id), test_db_session)
+        await rule.check()
+
+        assert not rule.issues
+
+
+@pytest.mark.anyio
+class TestCompanyRequisitesRule:
+    """Companies missing INN/OGRN must be flagged with appropriate severity."""
+
+    async def test_flags_company_missing_inn_high_severity(
+        self,
+        test_db_session: AsyncSession,
+        data_factory: TestDataFactory,
+    ) -> None:
+        tenant = await data_factory.ensure_tenant(session=test_db_session)
+        company = await data_factory.create_company(
+            tenant=tenant,
+            name="No-INN LLC",
+            session=test_db_session,
+        )
+        company.inn = None
+        company.ogrn = None
+        company.legal_address = None
+        await test_db_session.commit()
+
+        rule = CompanyRequisitesRule(str(tenant.id), test_db_session)
+        await rule.check()
+
+        flagged = [i for i in rule.issues if i.affected_entity_id == str(company.id)]
+        assert flagged
+        assert all(i.severity == IssueSeverity.HIGH for i in flagged)
+        assert any(
+            "inn" in i.additional_info.get("missing_critical", []) for i in flagged
+        )
+
+    async def test_flags_only_recommended_with_low_severity(
+        self,
+        test_db_session: AsyncSession,
+        data_factory: TestDataFactory,
+    ) -> None:
+        tenant = await data_factory.ensure_tenant(session=test_db_session)
+        company = await data_factory.create_company(
+            tenant=tenant,
+            name="INN-Only LLC",
+            inn="7700000001",
+            session=test_db_session,
+        )
+
+        rule = CompanyRequisitesRule(str(tenant.id), test_db_session)
+        await rule.check()
+
+        flagged = [i for i in rule.issues if i.affected_entity_id == str(company.id)]
+        assert flagged
+        assert all(i.severity == IssueSeverity.LOW for i in flagged)
+        assert all(
+            not i.additional_info.get("missing_critical") for i in flagged
+        )
+        recommended = {
+            field
+            for issue in flagged
+            for field in issue.additional_info.get("missing_recommended", [])
+        }
+        assert {"ogrn", "legal_address"}.issubset(recommended)
+
+    async def test_skips_complete_company(
+        self,
+        test_db_session: AsyncSession,
+        data_factory: TestDataFactory,
+    ) -> None:
+        tenant = await data_factory.ensure_tenant(session=test_db_session)
+        company = await data_factory.create_company(
+            tenant=tenant,
+            name="Complete LLC",
+            inn="7700000002",
+            ogrn="1027700000002",
+            legal_address="Moscow, Tverskaya 1",
+            session=test_db_session,
+        )
+
+        rule = CompanyRequisitesRule(str(tenant.id), test_db_session)
+        await rule.check()
+
+        assert not any(
+            i.affected_entity_id == str(company.id) for i in rule.issues
+        )

@@ -405,6 +405,202 @@ class ExpiredPPEIssuesRule(DataQualityRule):
             logger.exception("expired_ppe_issues rule failed: %s", e)
 
 
+class OrphanedAssignmentsRule(DataQualityRule):
+    """Active persons whose position_id or workplace_id points to a soft-deleted record.
+
+    Distinct from ``BrokenRelationshipsRule`` (documents/workplaces) — focuses on the
+    HR side: an ACTIVE employee assigned to a position that was retired, or to a
+    workplace that was decommissioned, is a silent data error that breaks
+    risk/PPE/training pipelines.
+    """
+
+    @property
+    def rule_name(self) -> str:
+        return "orphaned_assignments"
+
+    @property
+    def rule_description(self) -> str:
+        return (
+            "Active persons referencing soft-deleted positions or workplaces "
+            "(breaks risk/PPE/training pipelines)"
+        )
+
+    async def check(self) -> None:
+        self.issues = []
+        try:
+            pos_stmt = (
+                select(Person.id, Person.first_name, Person.last_name, Person.position_id)
+                .join(Position, Person.position_id == Position.id)
+                .where(
+                    Person.tenant_id == self.tenant_id,
+                    Person.deleted_at.is_(None),
+                    Person.employment_status == EmploymentStatus.ACTIVE,
+                    Person.position_id.is_not(None),
+                    Position.deleted_at.is_not(None),
+                )
+            )
+            pos_rows = (await self.db.execute(pos_stmt)).all()
+            self.total_checked += len(pos_rows)
+
+            for person_id, first, last, position_id in pos_rows:
+                display = (
+                    " ".join(p for p in (first or "", last or "") if str(p).strip()).strip()
+                    or "(unnamed)"
+                )
+                self.issues.append(
+                    DataQualityIssue(
+                        id=f"{self.rule_name}:person:{person_id}:position:{position_id}",
+                        issue_type=IssueType.BROKEN_RELATIONSHIP,
+                        severity=IssueSeverity.HIGH,
+                        title=f"person {person_id} assigned to deleted position",
+                        description=(
+                            "Active employee references a soft-deleted Position. "
+                            "Reassign to an existing position to restore HR/OT pipelines."
+                        ),
+                        affected_entity_type="person",
+                        affected_entity_id=str(person_id),
+                        affected_entity_name=display[:255],
+                        additional_info={
+                            "position_id": str(position_id),
+                            "reason": "position_soft_deleted",
+                        },
+                    )
+                )
+
+            wp_stmt = (
+                select(Person.id, Person.first_name, Person.last_name, Person.workplace_id)
+                .join(Workplace, Person.workplace_id == Workplace.id)
+                .where(
+                    Person.tenant_id == self.tenant_id,
+                    Person.deleted_at.is_(None),
+                    Person.employment_status == EmploymentStatus.ACTIVE,
+                    Person.workplace_id.is_not(None),
+                    Workplace.deleted_at.is_not(None),
+                )
+            )
+            wp_rows = (await self.db.execute(wp_stmt)).all()
+            self.total_checked += len(wp_rows)
+
+            for person_id, first, last, workplace_id in wp_rows:
+                display = (
+                    " ".join(p for p in (first or "", last or "") if str(p).strip()).strip()
+                    or "(unnamed)"
+                )
+                self.issues.append(
+                    DataQualityIssue(
+                        id=f"{self.rule_name}:person:{person_id}:workplace:{workplace_id}",
+                        issue_type=IssueType.BROKEN_RELATIONSHIP,
+                        severity=IssueSeverity.MEDIUM,
+                        title=f"person {person_id} assigned to deleted workplace",
+                        description=(
+                            "Active employee references a soft-deleted Workplace. "
+                            "Reassign to an existing workplace; risk/SOUT context may be stale."
+                        ),
+                        affected_entity_type="person",
+                        affected_entity_id=str(person_id),
+                        affected_entity_name=display[:255],
+                        additional_info={
+                            "workplace_id": str(workplace_id),
+                            "reason": "workplace_soft_deleted",
+                        },
+                    )
+                )
+        except Exception as e:
+            logger.exception("orphaned_assignments rule failed: %s", e)
+
+
+class CompanyRequisitesRule(DataQualityRule):
+    """Active companies missing legal requisites needed for branded documents.
+
+    For RU jurisdiction, INN (tax id) is the minimum required identifier on legal
+    paperwork. OGRN/legal_address are strongly recommended; their absence is
+    flagged at LOW severity so admins can complete profiles before mass
+    document generation.
+    """
+
+    @property
+    def rule_name(self) -> str:
+        return "company_requisites"
+
+    @property
+    def rule_description(self) -> str:
+        return (
+            "Companies missing requisites required for legal documents "
+            "(INN critical, OGRN/legal_address recommended)"
+        )
+
+    async def check(self) -> None:
+        self.issues = []
+        try:
+            stmt = select(Company).where(
+                Company.tenant_id == self.tenant_id,
+                Company.deleted_at.is_(None),
+            )
+            companies = (await self.db.execute(stmt)).scalars().all()
+            self.total_checked = len(companies)
+
+            for company in companies:
+                missing_critical: list[str] = []
+                missing_recommended: list[str] = []
+
+                if _is_blank(company.inn):
+                    missing_critical.append("inn")
+                if _is_blank(company.ogrn):
+                    missing_recommended.append("ogrn")
+                if _is_blank(company.legal_address):
+                    missing_recommended.append("legal_address")
+
+                if not missing_critical and not missing_recommended:
+                    continue
+
+                if missing_critical:
+                    severity = IssueSeverity.HIGH
+                    missing = missing_critical + missing_recommended
+                    title = (
+                        f'company "{company.name}" missing INN'
+                        if missing_critical == ["inn"] and not missing_recommended
+                        else f'company "{company.name}" missing {", ".join(missing)}'
+                    )
+                    description = (
+                        "Company is missing INN — branded legal documents "
+                        "(orders, contracts, briefing journals) cannot be generated."
+                    )
+                else:
+                    severity = IssueSeverity.LOW
+                    missing = missing_recommended
+                    title = (
+                        f'company "{company.name}" missing recommended requisites '
+                        f'({", ".join(missing)})'
+                    )
+                    description = (
+                        "Company has INN but is missing recommended requisites; "
+                        "complete the profile before bulk document generation."
+                    )
+
+                self.issues.append(
+                    DataQualityIssue(
+                        id=(
+                            f"{self.rule_name}:company:{company.id}:"
+                            f"{'-'.join(sorted(missing))}"
+                        ),
+                        issue_type=IssueType.MISSING_FIELD,
+                        severity=severity,
+                        title=title[:255],
+                        description=description,
+                        affected_entity_type="company",
+                        affected_entity_id=str(company.id),
+                        affected_entity_name=company.name[:255] if company.name else None,
+                        additional_info={
+                            "missing_fields": missing,
+                            "missing_critical": missing_critical,
+                            "missing_recommended": missing_recommended,
+                        },
+                    )
+                )
+        except Exception as e:
+            logger.exception("company_requisites rule failed: %s", e)
+
+
 class DocumentPersonCompanyMismatchRule(DataQualityRule):
     """Documents where Document.company_id != Person.company_id (integration mismatch)."""
 
@@ -530,6 +726,8 @@ class DataQualityRuleEngine:
             ExpiredRecordsRule,
             ExpiredPermitsRule,
             ExpiredPPEIssuesRule,
+            OrphanedAssignmentsRule,
+            CompanyRequisitesRule,
             DocumentPersonCompanyMismatchRule,
             DuplicateRecordsRule,
         ]
