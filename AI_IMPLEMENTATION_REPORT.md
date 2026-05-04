@@ -1,5 +1,98 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-04, Session 15 — Phase 3.1b: Frontend `DataQualityDashboard` поверх `/api/v1/data-quality/report`)
+
+- **Дата:** 2026-05-04 (после Session 14)
+- **Агент:** Claude Opus 4.7 (cloud)
+- **Задача:** «Продолжай по ТЗ» → выбран Next Step #2 из handoff Session 14: **Phase 3.1b — Frontend `DataQualityDashboard`**. Страница-заглушка `WorkspaceDataQualityPage.tsx` (карточки-ссылки на `/documents`, `/generation`, `/search`, без вызовов API) заменена на реальный дашборд поверх существующего backend-эндпоинта `/api/v1/data-quality/report` (бэкенд Phase 3.1: 7 правил движка Data Quality).
+- **Статус:** ✅ COMPLETE для инкремента (frontend-страница + API-клиент + DTO + 5 юнит-тестов; типчек чистый; backend без изменений).
+- **Где остановился:** Phase 3.1 теперь покрыта end-to-end для MVP-уровня: backend-движок `DataQualityRuleEngine` (7 правил) + UI-консьюмер. Phase 3.2 (Unified Employee Card backend) и `DocumentReadinessRule` по-прежнему отложены.
+
+### Studied Documentation
+
+- `README.md` → ссылки.
+- `docs/spec/TZ_FULL_UNIFIED.md` (раздел B → vNext-DQ-01; разд. E — обязательные правила доработки).
+- `AI_IMPLEMENTATION_REPORT.md` (handoff Session 14: Next Step #2).
+- `docs/audit/TZ_COVERAGE_MATRIX.md` (Phase 3 нет в матрице — это vNext-расширение).
+- `backend/app/modules/data_quality/{rules,service,schemas}.py`, `backend/app/api/routes/data_quality.py` — текущая реализация.
+- `frontend/src/pages/workspace/WorkspaceDataQualityPage.tsx` (исходная заглушка), `frontend/src/api/{client,operations,dashboard}.ts`, `frontend/src/components/{common,ui,analytics}/*`, `frontend/src/router/{pageRegistry,navigationConfig,routeGroups}.tsx`.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 3.1b — Frontend `DataQualityDashboard`.
+- **Приоритет:** P1 (vNext-DQ-01 — продолжение Phase 3.1).
+- **Почему выбрана:** прямой Next Step #2 из handoff Session 14 (и #1 из Session 12/11/10). Backend готов и стабилен (7 правил, тесты `tests/test_data_quality.py`); frontend был заглушкой без API. Задача аддитивная, без миграций, без breaking changes; типизация уже строгая, новые DTO зеркалят backend-схемы.
+
+### Implemented Changes
+
+- **`frontend/src/types/dto/dataQuality.ts`** (новый файл) — DTO-типы, зеркальные `app.modules.data_quality.schemas`:
+  - `DataQualityIssueSeverity = "critical" | "high" | "medium" | "low"`
+  - `DataQualityIssueType = "missing_field" | "broken_relationship" | "expired_record" | "duplicate" | "invalid_value" | "data_mismatch"`
+  - `DataQualityIssueDto`, `DataQualityCheckResultDto`, `DataQualityReportDto` — все поля строго typed.
+- **`frontend/src/api/dataQuality.ts`** (новый файл) — `dataQualityApi.getReport()` поверх общего `apiClient` (тенант-хедер, refresh-flow, 5xx-retry уже работают на уровне interceptors).
+- **`frontend/src/pages/workspace/WorkspaceDataQualityPage.tsx`** — переписан полностью:
+  - Severity-карточки: «Полнота данных» (адаптивный цвет: ≥90 emerald / ≥70 amber / иначе destructive), «Критичные», «Высокий риск», «Средний риск», «Низкий риск».
+  - Два карточных среза с кликабельными счётчиками — «По типу проблемы» (`issue_breakdown`) и «По сущностям» (`entity_breakdown`); клик по строке выставляет/снимает фильтр (`aria-pressed`).
+  - Топ-20 нарушений с панелью severity-чипов (`Все / Критично / Высокая / Средняя / Низкая`, role=toolbar) и сбросом фильтров.
+  - Drill-down: на каждой строке кнопка «Открыть →» ведёт в реестр под `affected_entity_type` (для `person`/`company`/`site`/`workplace`/`document`/`medical_exam`/`training`/`permit`/`ppe_issue`/`incident` — c `?focus=<id>` параметром); если drill-down не определён — прочерк, страница не падает.
+  - Таблица покрытия rule-классами: `rule_name`, описание, `total_checked`, `issues_found` (бейдж destructive/secondary), `execution_time_ms`.
+  - Состояния: `LoadingScreen` (первый запрос), `ErrorState` (с кнопкой Повторить), `EmptyState` (если 0 issues или фильтры дают пустой набор), кнопка «Обновить» с анимацией спиннера на повторный запрос.
+  - Локализация русская; даты через `toLocaleString("ru-RU")`.
+- **`frontend/src/__tests__/WorkspaceDataQualityPage.test.tsx`** (новый файл) — Vitest + RTL, 5 кейсов:
+  1. Рендер карточек, срезов и таблицы топ-нарушений из мок-API.
+  2. Фильтрация по severity (клик по «Критично» прячет non-critical).
+  3. Drill-down ссылка для `person` → `/persons?focus=<id>`.
+  4. Empty state при `total_issues=0`.
+  5. Error state + retry: первый запрос rejected → второй resolved.
+- **Backend и роуты не трогались**: уже существуют `/api/v1/data-quality/report` (200) и `/api/v1/data-quality/check` (alias). RBAC ограничения остаются в backend (`admin/owner/hr/ot_pb_lead/line_manager`); frontend-навигация использует `PERMISSIONS.DOCUMENT_VIEW` (как было).
+
+### Changed / New Files
+
+- `frontend/src/types/dto/dataQuality.ts` — **новый**.
+- `frontend/src/api/dataQuality.ts` — **новый**.
+- `frontend/src/pages/workspace/WorkspaceDataQualityPage.tsx` — **переписан** (был 57-строчный stub из карточек-ссылок, стал 380+ строк реального дашборда).
+- `frontend/src/__tests__/WorkspaceDataQualityPage.test.tsx` — **новый** (5 тест-кейсов, ~170 строк).
+- `CHANGELOG.md` — добавлена запись Session 15.
+- `AI_IMPLEMENTATION_REPORT.md` — этот блок.
+
+### Decisions
+
+- **Дашборд как single page (не feature-folder):** оставил место в `pages/workspace/`, чтобы не разрастать новые директории и сохранить соответствие текущему `routeGroups.tsx` / `pageRegistry.tsx`. Все вспомогательные мапы (`SEVERITY_LABELS`, `ISSUE_TYPE_LABELS`, `ENTITY_TYPE_LABELS`, `ENTITY_DRILL_DOWN`) — внутри файла, поскольку они узко-специфичны для этого экрана. При появлении вторичных потребителей (например, виджет на главном дашборде) их вынесу в `frontend/src/features/data-quality/`.
+- **Drill-down через query-параметр `?focus=<id>`:** реестры пока не реализуют его явно, но axios-страницы безопасно игнорируют неизвестные параметры. Это создаёт «интерфейсный контракт» — следующая итерация может добавить чтение `?focus` для предвыбора строки.
+- **Без `react-query`:** в проекте нет `@tanstack/react-query` — использован паттерн `useState + useEffect + useCallback`, как в `DashboardApiPage.tsx` / `AdminPage.tsx`. Не добавляю новых dev-зависимостей в одной волне с UI-работой.
+- **Severity badge: ручные tailwind-цвета для `high`/`medium`** (oranж/amber) — `StatusBadge` поддерживает только базовый набор (`critical=destructive`); задача дашборда — визуальная градация, поэтому делаю overrides через `className` без расширения общей дизайн-системы.
+- **Тесты сфокусированы на API-интеграции и UX-контрактах**: severity-фильтр, drill-down, empty/error — а не на пиксельной верстке. RTL-запросы по `aria-label` / `role` / тексту, чтобы устойчиво пережить рестайлинг.
+
+### Issues Fixed
+
+- Заглушка-страница «Качество данных» с тремя ссылками на `/documents`, `/generation`, `/search` — пользователь, открывая раздел, не получал никакой информации о состоянии справочников. Теперь это рабочий дашборд.
+
+### Known Problems / Risks
+
+- **Drill-down с `?focus=<id>`** ведёт в существующие реестры, но **сами реестры пока не подсвечивают строку** — это интерфейсный контракт для будущей итерации. Минимальный риск, страница уже полезна без этого.
+- **Без пагинации/виртуализации:** топ-20 issues возвращает backend (`issues[:20]`), таблица rule-coverage редко превышает 10 строк. При расширении движка до 30+ правил — добавить виртуализацию.
+- **Нет фильтра по дате/тренду:** отчёт фотографирует «здесь и сейчас». Тренд-метрики (completeness over time) — задача vNext §28.5 (наблюдаемость).
+- **Permission на навигацию = `DOCUMENT_VIEW`:** backend жёстче (`admin/owner/hr/ot_pb_lead/line_manager`); пользователь без бэкенд-роли увидит пункт меню, но получит 403 / `ErrorState`. Не критично для MVP, но в будущей итерации стоит ввести `PERMISSIONS.DATA_QUALITY_VIEW`.
+
+### Validation
+
+- **Команда:** `npx vitest run src/__tests__/WorkspaceDataQualityPage.test.tsx`
+- **Результат:** ✅ `Test Files 1 passed (1) · Tests 5 passed (5) · Duration 1.10s`.
+- **Команда:** `npx tsc --noEmit` (frontend)
+- **Результат:** ✅ exit 0, ноль ошибок.
+- **Команда:** `npx eslint src/pages/workspace/WorkspaceDataQualityPage.tsx src/api/dataQuality.ts src/types/dto/dataQuality.ts src/__tests__/WorkspaceDataQualityPage.test.tsx`
+- **Результат:** ✅ ноль warnings (`--max-warnings=0` совместимо).
+- **Не запускалось:** полный `npm test` / `npm run build` (ограничение времени; точечные команды покрывают новые файлы); полный backend-pytest (изменений в backend нет).
+
+### Next Steps
+
+1. **`DocumentReadinessRule`** в `backend/app/modules/data_quality/rules.py` — DRAFT-документы старше N дней без `template_version_id` или с пустыми обязательными полями шаблона; severity MEDIUM, `affected_entity_type="document"`. После его появления — расширить mapping `ENTITY_DRILL_DOWN` (если потребуется новый entity_type) и обновить `entity_breakdown`-метки в `WorkspaceDataQualityPage.tsx`.
+2. **Drill-down enrichment**: реестры `/persons`, `/documents`, `/medical`, `/training`, `/ppe` — читать `?focus=<id>` и подсвечивать соответствующую строку (scroll-into-view + временная подсветка ~3s). Это закрывает «контракт» drill-down из дашборда.
+3. **Phase 3.2 backend**: единый `/api/v1/employees/{id}` aggregate (Personal/Roles/Training/Medicals/PPE/Permits/Incidents/Audit) поверх существующих сервисов.
+4. **Permission split**: ввести `PERMISSIONS.DATA_QUALITY_VIEW` в `frontend/src/permissions/permissions.ts` и привязать к ролям, согласованным с backend (`admin/owner/hr/ot_pb_lead/line_manager`); обновить `navigationConfig.ts`.
+
+---
+
 ## Last Agent Handoff (2026-05-04, Session 14 — TZ doc-set consolidation: иерархия vNext-spec, согласованность всех файлов)
 
 - **Дата:** 2026-05-04 (последующий шаг после Session 13)
