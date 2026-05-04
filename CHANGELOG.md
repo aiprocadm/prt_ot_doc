@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 2026-05-04 (Session 15 — Phase 3.1b: Frontend Data Quality Dashboard)
+- **`frontend/src/pages/workspace/WorkspaceDataQualityPage.tsx`** — заменена страница-заглушка на реальный дашборд качества данных поверх `/api/v1/data-quality/report`: severity-карточки (полнота / critical / high / medium / low), срезы по типу проблемы и сущности (с интерактивной фильтрацией), топ-20 нарушений с фильтром по уровню риска, drill-down на реестры (`/persons`, `/companies`, `/documents`, `/risk`, `/medical`, `/training`, `/contractors`, `/ppe`, `/incidents`), таблица покрытия rule-классами с временем выполнения.
+- **`frontend/src/api/dataQuality.ts`** — добавлен API-клиент `dataQualityApi.getReport()` поверх `apiClient`.
+- **`frontend/src/types/dto/dataQuality.ts`** — DTO-типы (`DataQualityReportDto`, `DataQualityIssueDto`, `DataQualityCheckResultDto`, `DataQualityIssueSeverity`, `DataQualityIssueType`), зеркальные backend-схемам `app.modules.data_quality.schemas`.
+- **`frontend/src/__tests__/WorkspaceDataQualityPage.test.tsx`** — Vitest-юнит-тесты (5 кейсов): рендер карточек/срезов из API, фильтрация по severity, drill-down link, empty state, error state + retry.
+- **Backend не менялся**: используется уже существующий эндпоинт `/api/v1/data-quality/report` (бэкенд Phase 3.1 — 7 правил Data Quality).
+
 ## 2026-05-04 (Session 14 — TZ doc-set consolidation)
 - **`docs/spec/PLATFORM_VNEXT_UPGRADE_SPEC.md`** — починена иерархия заголовков (103 нарушения: подразделы `## N.M` → `### N.M`), внутренние подзаголовки h3→h4, добавлено полное оглавление, преамбула явно отсылает к канону.
 - **`docs/spec/mapping.md`** — переписан полностью под текущую структуру `backend/app/modules/*` + `frontend/src/{features,pages}/*`; устаревшие пути (`backend/app/core/security.py` как RBAC, несуществующие домены) удалены; добавлены теги MVP/vNext.
