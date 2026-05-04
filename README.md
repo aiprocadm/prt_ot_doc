@@ -166,12 +166,19 @@ B2B multi-tenant SaaS платформа для ОТ / ПБ / ПромБез / �
 6. Continue via header/footer, replace, PDF, approvals, signatures, archive.
 
 ## Canonical documentation
-- [docs/spec/TZ_FULL_UNIFIED.md](docs/spec/TZ_FULL_UNIFIED.md) — единое полное ТЗ (объём продукта, P0/P1, теги [MVP], критерии приёмки)
-- [docs/spec/PLATFORM_VNEXT_UPGRADE_SPEC.md](docs/spec/PLATFORM_VNEXT_UPGRADE_SPEC.md) — продуктовый upgrade-spec / vNext (дорожная карта, критерии, ограничения на доработки, в т.ч. разд. 36)
-- [docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md](docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md) — phased implementation roadmap (4 phases, gap analysis, non-destructive upgrade strategy)
-- [docs/spec/README.md](docs/spec/README.md) — хаб ТЗ в `docs/spec` (приоритет `TZ_FULL` vs vNext, схема файлов, навигация)
+
+> **«По ТЗ» / «продолжай по ТЗ» = одна точка входа:** [`docs/spec/TZ_FULL_UNIFIED.md`](docs/spec/TZ_FULL_UNIFIED.md). Раздел A — MVP, раздел B — полный объём (vNext), раздел C — где смотреть статус, раздел D — фазы, раздел E — правила доработки (разд. 36 vNext), раздел G — карта канонических документов и запрет на дубли. Подробнее: [`AGENTS.md`](AGENTS.md) и [`docs/spec/README.md`](docs/spec/README.md).
+
+- **[docs/spec/TZ_FULL_UNIFIED.md](docs/spec/TZ_FULL_UNIFIED.md) — канонический и единственный источник истины ТЗ** (MVP-объём, полный vNext-объём, статус, фазы, правила доработки).
+- [docs/spec/PLATFORM_VNEXT_UPGRADE_SPEC.md](docs/spec/PLATFORM_VNEXT_UPGRADE_SPEC.md) — полный текст продуктового upgrade-spec vNext (разд. 0–37). Подключается по ссылкам из раздела B канона; в ежедневной работе целиком не открывается.
+- [docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md](docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md) — фазированный план реализации (Phase 0..10).
+- [docs/spec/README.md](docs/spec/README.md) — хаб ТЗ + правила «по ТЗ».
+- [docs/spec/TZ_OVERVIEW.md](docs/spec/TZ_OVERVIEW.md) — карта файлов «одним взглядом».
+- [docs/audit/TZ_COVERAGE_MATRIX.md](docs/audit/TZ_COVERAGE_MATRIX.md) — машинно-проверяемая матрица покрытия MVP-требований.
+- [AI_IMPLEMENTATION_REPORT.md](AI_IMPLEMENTATION_REPORT.md) — журнал волн / handoff / «Следующий точный шаг».
 - [RELEASE_READINESS.md](RELEASE_READINESS.md) — **готовность к релизу** (вердикт, RC-критерии; каноника блокеров: [`docs/stabilization/RELEASE_BLOCKERS_STATUS.md`](docs/stabilization/RELEASE_BLOCKERS_STATUS.md); **порядок обновления вердикта** — раздел *How to update the release verdict* в `RELEASE_READINESS.md`, ссылки в README при смене вердикта не требуют правок)
-- `docs/AI_AGENT_WORKFLOW.md` — компактный цикл для AI/агентов (сначала README, ТЗ, отчёт `AI_IMPLEMENTATION_REPORT.md`, кандидаты на чистку доков)
+- [AGENTS.md](AGENTS.md) — короткая подсказка для AI/агентов (точка входа «по ТЗ»).
+- `docs/AI_AGENT_WORKFLOW.md` — компактный цикл для AI/агентов (сначала README → `docs/spec/TZ_FULL_UNIFIED.md` → `AI_IMPLEMENTATION_REPORT.md` → код).
 - `docs/ARCHITECTURE.md`
 - `docs/PROJECT_STRUCTURE.md`
 - `docs/SETUP.md`

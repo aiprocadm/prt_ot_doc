@@ -1,16 +1,35 @@
 ---
-description: Какой ТЗ-файл в приоритете при фразе «по ТЗ» без ссылки; см. AGENTS.md
+description: Канонический источник «по ТЗ» — docs/spec/TZ_FULL_UNIFIED.md; см. AGENTS.md
 alwaysApply: true
 ---
 
 # Приоритет спецификаций (репозиторий)
 
-Если пользователь пишет **«по ТЗ»**, **«продолжай по ТЗ»** или не называет конкретный документ — **не** начинай с `PLATFORM_VNEXT_UPGRADE_SPEC.md` как с полного чеклиста кода.
+Если пользователь пишет **«по ТЗ»**, **«продолжай по ТЗ»** или не называет конкретный документ — **точка входа одна**:
 
-1. **Объём работ, P0/P1, теги [MVP], критерии приёмки** — `docs/spec/TZ_FULL_UNIFIED.md` и при необходимости `docs/audit/TZ_COVERAGE_MATRIX.md`.
-2. **Ограничения на доработку** (не ломать существующее, feature flags, миграции, тесты, UX) — разд. 36 в `docs/spec/PLATFORM_VNEXT_UPGRADE_SPEC.md` **или** сжатое в `backend/app/core/product_spec.py`.
-3. **Полный vNext как продукт/дорожная карта** — `PLATFORM_VNEXT_UPGRADE_SPEC.md` **только** если задача явно про vNext, продукт в целом, или пользователь назвал этот файл.
+**`docs/spec/TZ_FULL_UNIFIED.md`** (канонический и единственный источник истины).
 
-Полный текст по умолчанию: `docs/spec/README.md` (блок в начале). Кратко: **корневой `AGENTS.md`**.
+## Разделы канона
 
-При сомнении — **уточнить у пользователя**, к какому файлу привязать приёмку, вместо расширения scope из vNext-спека.
+- `A` — объём и приёмка MVP (теги `[MVP]`, P0/P1).
+- `B` — полный объём (vNext: `[v1.1] / [v1.2] / [v2.0]`).
+- `C` — где смотреть текущий статус (живые источники, не дублировать).
+- `D` — фазы реализации (Phase 0..10).
+- `E` — обязательные правила доработки (разд. 36 vNext: `ARCHITECTURE_RULES`, `ENGINEERING_RULES`, `PRODUCT_UX_RULES`, `SIX_QUESTIONS`; программный путь — `backend/app/core/product_spec.py`).
+- `G` — карта канонических документов и запрет на дубли.
+- `H` — шаблон финального отчёта в PR.
+
+## Что *не* делать
+
+1. Не использовать `docs/spec/PLATFORM_VNEXT_UPGRADE_SPEC.md` как чек-лист кода. В него заходите **по ссылкам из раздела B** канона за подробностями конкретного блока.
+2. Не использовать `docs/spec/TZ.md`, `docs/NEXT_FEATURES.md`, `docs/spec_compliance_report.md`, `docs/p1_compliance_report.md` для приёмки — они помечены как историко-справочные / deprecated (см. раздел G канона и `docs/CLEANUP_CANDIDATES.md`).
+3. Не плодить альтернативные «обзоры», «единые ТЗ», «полные roadmap», «status reports» — обновляйте канонические файлы.
+
+## Сверка статуса
+
+- MVP-статус — `docs/audit/TZ_COVERAGE_MATRIX.md`.
+- Текущий handoff и «Следующий точный шаг» — `AI_IMPLEMENTATION_REPORT.md`.
+- vNext-фазы — `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md`.
+- Релиз-вердикт — `RELEASE_READINESS.md` (canonical: `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`).
+
+При сомнении уточняйте у пользователя, к какому разделу канона привязать приёмку, вместо расширения scope из vNext.

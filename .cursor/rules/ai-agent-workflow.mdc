@@ -1,12 +1,21 @@
 ---
-description: Порядок агента — README first; обновлять AI_IMPLEMENTATION_REPORT; см. docs/AI_AGENT_WORKFLOW.md
+description: Порядок агента — README → TZ_FULL_UNIFIED.md → AI_IMPLEMENTATION_REPORT.md → код; см. docs/AI_AGENT_WORKFLOW.md
 alwaysApply: true
 ---
 
 # Рабочий цикл агента
 
-1. **Порядок:** `README.md` → ссылки на ТЗ/архитектуру → **`AI_IMPLEMENTATION_REPORT.md`** → релевантные доки → **только потом** код. Не меняй код до чтения README+отчёта, кроме явного P0-инцидента (тогда кратко в отчёте).
-2. **Полная инструкция:** `docs/AI_AGENT_WORKFLOW.md` (мусор/дубли, запреты, проверки, формат краткого ответа).
-3. **После волны** обновляй **`AI_IMPLEMENTATION_REPORT.md`**; **README** — если сменились ссылки, запуск или навигация.
-4. **ТЗ без имени файла** — `tz-spec-priority.mdc` + `AGENTS.md`.
-5. В **чате** — кратко по пунктам из §10 workflow; детали в отчёте.
+1. **Порядок:**
+   1. `README.md` (ссылки на ТЗ/релиз/runbook).
+   2. **`docs/spec/TZ_FULL_UNIFIED.md`** — канонический источник истины (раздел A — MVP, раздел B — полный объём, раздел E — правила доработки).
+   3. **`AI_IMPLEMENTATION_REPORT.md`** — последний handoff и «Следующий точный шаг».
+   4. Релевантные доки рядом с модулем.
+   5. **Только потом** — код.
+2. Не меняй код до прочтения 1–3, кроме явного P0-инцидента (тогда кратко зафиксируй в `AI_IMPLEMENTATION_REPORT.md`).
+3. Полная инструкция: `docs/AI_AGENT_WORKFLOW.md` (мусор/дубли, запреты, проверки, формат краткого ответа).
+4. После волны:
+   - **обнови** `AI_IMPLEMENTATION_REPORT.md` (handoff: что сделано, какие файлы, проверки, риски, «Следующий точный шаг»);
+   - при необходимости — `docs/audit/TZ_COVERAGE_MATRIX.md` и `CHANGELOG.md`;
+   - `README.md` — только если сменились ссылки, запуск или навигация.
+5. **«По ТЗ» без имени файла** — `tz-spec-priority.mdc` + `AGENTS.md`. Точка входа: `docs/spec/TZ_FULL_UNIFIED.md`.
+6. В **чате** — кратко по пунктам §10 workflow; детали — в `AI_IMPLEMENTATION_REPORT.md`.
