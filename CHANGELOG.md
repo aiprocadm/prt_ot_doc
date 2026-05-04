@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 2026-05-04
+- **TZ canonicalization:** `docs/spec/TZ_FULL_UNIFIED.md` назначен **каноническим и единственным источником истины** для фразы «продолжай по ТЗ». Внутри добавлены разделы A (MVP-объём), B (полный объём vNext с тегами `[v1.1]/[v1.2]/[v2.0]`), C (где смотреть статус), D (фазы реализации), E (правила доработки — разд. 36 vNext), F (vNext §35), G (карта канонических документов и запрет на дубли), H (шаблон финального отчёта в PR), приложения 1–4. Раздел B содержит сжатые формулировки + ссылки на `PLATFORM_VNEXT_UPGRADE_SPEC.md §1..§34`, чтобы не плодить дубли.
+- **Документация-навигация:** `AGENTS.md`, `docs/AI_AGENT_WORKFLOW.md`, `docs/spec/README.md`, `docs/spec/TZ_OVERVIEW.md`, `README.md`, `.cursor/rules/tz-spec-priority.mdc`, `.cursor/rules/ai-agent-workflow.mdc` — все согласованно ведут в `TZ_FULL_UNIFIED.md` как первую и единственную точку входа.
+- **Deprecated:** `docs/NEXT_FEATURES.md` (полностью покрыт разделом B канона), `docs/spec/TZ.md` (история v1.0), `docs/SPEC_TRACEABILITY_MATRIX.md` (перекрыт `docs/audit/TZ_COVERAGE_MATRIX.md`), `docs/spec_compliance_report.md`, `docs/p1_compliance_report.md` — баннер deprecated добавлен; кандидаты на удаление в Wave 4 (см. `docs/CLEANUP_CANDIDATES.md`).
+- **AI handoff:** `AI_IMPLEMENTATION_REPORT.md` — Session 13 (Claude Opus 4.7) с описанием канонизации и «Следующий точный шаг» (Phase 0 baseline re-verification).
+- **Код не менялся** — это документация-канонизация.
+
 ## 2026-04-29
 - **Status report:** `AI_IMPLEMENTATION_REPORT.md` §27 — baseline verification ✅, release NOT READY (RB-001..005 pending, RB-006 ✓ done). Три опции для next action: Release focus (RB-001/004), Feature focus (TZ_FULL P0–P1), или Developer productivity (full pytest + cleanup warnings). Репо стабилен, dokumentacija актуальна, нет новых дефектов.
 - **Documentation:** `docs/stabilization/PYTEST_FULL_RUN.md` — пошаговая инструкция для полного `pytest` прогона на 287+ тестов (Developer productivity опция). Включает troubleshooting, expected results, и связанные команды.
