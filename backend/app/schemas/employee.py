@@ -19,6 +19,7 @@ from typing import Any
 
 from pydantic import Field
 
+from app.models.document import DocumentStatus
 from app.models.models import (
     EmploymentStatus,
     IncidentPersonRole,
@@ -193,6 +194,61 @@ class EmployeeAuditSection(BaseSchema):
     items: list[EmployeeAuditItem] = Field(default_factory=list)
 
 
+class EmployeeDocumentItem(BaseSchema):
+    """Tenant-scoped document referencing this person via `Document.person_id`."""
+
+    id: str
+    template_id: str | None = None
+    template_name: str | None = None
+    status: DocumentStatus
+    is_signed: bool = False
+    created_at: datetime
+
+
+class EmployeeDocumentsSection(BaseSchema):
+    count: int
+    signed_count: int
+    items: list[EmployeeDocumentItem] = Field(default_factory=list)
+
+
+class EmployeeBriefingItem(BaseSchema):
+    """Single instructional briefing entry referencing this person."""
+
+    id: str
+    briefing_template_id: str | None = None
+    briefing_template_title: str | None = None
+    briefing_type: str
+    briefing_date: datetime
+    valid_until: datetime | None = None
+    status: str
+    is_expired: bool = False
+
+
+class EmployeeBriefingsSection(BaseSchema):
+    count: int
+    expired_count: int
+    items: list[EmployeeBriefingItem] = Field(default_factory=list)
+
+
+class EmployeeComplianceDeadlineItem(BaseSchema):
+    """Compliance deadline (medicals/training/PPE/etc.) tied to this person."""
+
+    id: str
+    entity_type: str
+    entity_id: str
+    due_at: datetime
+    status: str
+    reminder_policy: str | None = None
+    is_overdue: bool = False
+
+
+class EmployeeComplianceDeadlinesSection(BaseSchema):
+    count: int
+    overdue_count: int
+    upcoming_count: int
+    items: list[EmployeeComplianceDeadlineItem] = Field(default_factory=list)
+
+
 class EmployeeCard(BaseSchema):
     """Top-level Unified Employee Card response."""
 
@@ -206,4 +262,7 @@ class EmployeeCard(BaseSchema):
     ppe: EmployeePPESection
     permits: EmployeePermitsSection
     incidents: EmployeeIncidentsSection
+    documents: EmployeeDocumentsSection
+    briefings: EmployeeBriefingsSection
+    compliance_deadlines: EmployeeComplianceDeadlinesSection
     audit: EmployeeAuditSection

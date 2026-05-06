@@ -23,6 +23,15 @@ export type EmployeeIncidentStatus =
 
 export type EmployeeIncidentPersonRole = "victim" | "witness" | "participant";
 
+export type EmployeeDocumentStatus =
+  | "draft"
+  | "generated"
+  | "review"
+  | "approved"
+  | "signed"
+  | "archived"
+  | "revoked";
+
 export interface EmployeePersonalDto {
   id: string;
   company_id: string;
@@ -178,6 +187,55 @@ export interface EmployeeAuditSectionDto {
   items: EmployeeAuditItemDto[];
 }
 
+export interface EmployeeDocumentItemDto {
+  id: string;
+  template_id?: string | null;
+  template_name?: string | null;
+  status: EmployeeDocumentStatus | string;
+  is_signed: boolean;
+  created_at: string;
+}
+
+export interface EmployeeDocumentsSectionDto {
+  count: number;
+  signed_count: number;
+  items: EmployeeDocumentItemDto[];
+}
+
+export interface EmployeeBriefingItemDto {
+  id: string;
+  briefing_template_id?: string | null;
+  briefing_template_title?: string | null;
+  briefing_type: string;
+  briefing_date: string;
+  valid_until?: string | null;
+  status: string;
+  is_expired: boolean;
+}
+
+export interface EmployeeBriefingsSectionDto {
+  count: number;
+  expired_count: number;
+  items: EmployeeBriefingItemDto[];
+}
+
+export interface EmployeeComplianceDeadlineItemDto {
+  id: string;
+  entity_type: string;
+  entity_id: string;
+  due_at: string;
+  status: string;
+  reminder_policy?: string | null;
+  is_overdue: boolean;
+}
+
+export interface EmployeeComplianceDeadlinesSectionDto {
+  count: number;
+  overdue_count: number;
+  upcoming_count: number;
+  items: EmployeeComplianceDeadlineItemDto[];
+}
+
 export interface EmployeeCardDto {
   person_id: string;
   tenant_id: string;
@@ -189,5 +247,8 @@ export interface EmployeeCardDto {
   ppe: EmployeePPESectionDto;
   permits: EmployeePermitsSectionDto;
   incidents: EmployeeIncidentsSectionDto;
+  documents: EmployeeDocumentsSectionDto;
+  briefings: EmployeeBriefingsSectionDto;
+  compliance_deadlines: EmployeeComplianceDeadlinesSectionDto;
   audit: EmployeeAuditSectionDto;
 }

@@ -150,6 +150,79 @@ const sampleCard: EmployeeCardDto = {
       }
     ]
   },
+  documents: {
+    count: 2,
+    signed_count: 1,
+    items: [
+      {
+        id: "doc-1",
+        template_id: "tmpl-1",
+        template_name: "Карточка СИЗ",
+        status: "signed",
+        is_signed: true,
+        created_at: "2026-04-20T10:00:00Z"
+      },
+      {
+        id: "doc-2",
+        template_id: "tmpl-2",
+        template_name: "Журнал инструктажей",
+        status: "draft",
+        is_signed: false,
+        created_at: "2026-05-01T09:00:00Z"
+      }
+    ]
+  },
+  briefings: {
+    count: 2,
+    expired_count: 1,
+    items: [
+      {
+        id: "brf-1",
+        briefing_template_id: "btmpl-1",
+        briefing_template_title: "Первичный инструктаж",
+        briefing_type: "primary",
+        briefing_date: "2026-04-01T08:00:00Z",
+        valid_until: "2027-04-01T00:00:00Z",
+        status: "signed",
+        is_expired: false
+      },
+      {
+        id: "brf-2",
+        briefing_template_id: "btmpl-2",
+        briefing_template_title: "Целевой инструктаж",
+        briefing_type: "targeted",
+        briefing_date: "2025-01-10T08:00:00Z",
+        valid_until: "2025-12-31T00:00:00Z",
+        status: "signed",
+        is_expired: true
+      }
+    ]
+  },
+  compliance_deadlines: {
+    count: 2,
+    overdue_count: 1,
+    upcoming_count: 1,
+    items: [
+      {
+        id: "dl-1",
+        entity_type: "medical_exam",
+        entity_id: "exam-1",
+        due_at: "2026-04-01T00:00:00Z",
+        status: "upcoming",
+        reminder_policy: "за 14 дней",
+        is_overdue: true
+      },
+      {
+        id: "dl-2",
+        entity_type: "training_session",
+        entity_id: "ts-1",
+        due_at: "2026-06-01T00:00:00Z",
+        status: "upcoming",
+        reminder_policy: null,
+        is_overdue: false
+      }
+    ]
+  },
   audit: {
     count: 1,
     items: [
@@ -189,7 +262,7 @@ describe("EmployeeCardPage", () => {
     expect(screen.getByText(/Инженер ОТ · ООО Ромашка · Цех №3/)).toBeInTheDocument();
   });
 
-  it("renders all 8 tab triggers", async () => {
+  it("renders all 11 tab triggers", async () => {
     getCardMock.mockResolvedValueOnce(sampleCard);
 
     renderPage();
@@ -202,8 +275,60 @@ describe("EmployeeCardPage", () => {
     expect(screen.getByRole("tab", { name: /Медосмотры/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /СИЗ/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Допуски/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Документы/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Инструктажи/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Сроки/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Происшествия/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Аудит/ })).toBeInTheDocument();
+  });
+
+  it("opens the Documents tab and renders signed-document drill-down link", async () => {
+    const user = userEvent.setup();
+    getCardMock.mockResolvedValueOnce(sampleCard);
+
+    renderPage();
+
+    await screen.findByRole("heading", { level: 1, name: "Иванов Иван Иванович" });
+
+    await user.click(screen.getByRole("tab", { name: /Документы/ }));
+
+    const docLink = await screen.findByRole("link", { name: "Карточка СИЗ" });
+    expect(docLink).toHaveAttribute("href", "/documents?focus=doc-1");
+    const signedRow = docLink.closest("tr");
+    expect(signedRow).not.toBeNull();
+    // "Подписан" appears twice in a signed row: once as the document status
+    // cell (DOCUMENT_STATUS_LABELS.signed) and once as the is_signed badge.
+    expect(within(signedRow as HTMLElement).getAllByText("Подписан")).toHaveLength(2);
+  });
+
+  it("opens the Briefings tab and shows expired badge", async () => {
+    const user = userEvent.setup();
+    getCardMock.mockResolvedValueOnce(sampleCard);
+
+    renderPage();
+
+    await screen.findByRole("heading", { level: 1, name: "Иванов Иван Иванович" });
+
+    await user.click(screen.getByRole("tab", { name: /Инструктажи/ }));
+
+    const targetedRow = (await screen.findByText("Целевой инструктаж")).closest("tr");
+    expect(targetedRow).not.toBeNull();
+    expect(within(targetedRow as HTMLElement).getByText("Просрочен")).toBeInTheDocument();
+  });
+
+  it("opens the Deadlines tab with overdue badge for medical exam", async () => {
+    const user = userEvent.setup();
+    getCardMock.mockResolvedValueOnce(sampleCard);
+
+    renderPage();
+
+    await screen.findByRole("heading", { level: 1, name: "Иванов Иван Иванович" });
+
+    await user.click(screen.getByRole("tab", { name: /Сроки/ }));
+
+    const medicalRow = (await screen.findByText("Медосмотр")).closest("tr");
+    expect(medicalRow).not.toBeNull();
+    expect(within(medicalRow as HTMLElement).getByText("Просрочен")).toBeInTheDocument();
   });
 
   it("shows linked user account on the Roles tab when present", async () => {

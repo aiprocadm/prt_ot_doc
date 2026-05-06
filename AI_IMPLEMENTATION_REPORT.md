@@ -1,5 +1,137 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-07, Session 21 — Phase 3.2 follow-up: Documents/Briefings/ComplianceDeadlines в Employee Card)
+
+- **Дата:** 2026-05-07 (после Session 20)
+- **Агент:** Claude Opus 4.7 (local Windows)
+- **Задача:** «Продолжай по ТЗ» → выполнить Next Step #2 из handoff Session 20: расширить `/employees/{id}` секциями **Documents / Briefings / ComplianceDeadlines** и зеркально добавить три вкладки в `EmployeeCardPage.tsx`. Эта волна закрывает последний открытый чек-бокс roadmap Task 3.2 («Tabs: … | Documents | …»). Документация Session 20 явно описывала эти три секции как «пятиминутное расширение» — все три модели уже имели FK `person_id` (`Document.person_id`, `BriefingEntry.person_id`, `ComplianceDeadline.person_id`).
+- **Статус:** ✅ COMPLETE для backend-инкремента (DTO + service + 1 новый сервисный тест + расширение endpoint-теста), ✅ COMPLETE для frontend-инкремента (DTO зеркало + 3 новых таба + 3 новых vitest-кейса + регрессия 11 tab-триггеров). Phase 3.2 теперь полностью закрыт по acceptance criteria.
+- **Где остановился:** Phase 3 полностью закрыт (DQ + Unified Employee Card backend + UI + расширения). Следующее по плану — Phase 4 (Smart Calendar — `GET /api/v1/calendar/events` aggregator) или Next Step #1 из Session 18/19/20 (drill-down enrichment в реестрах под `?focus=<id>` для `/persons`/`/companies`/`/documents`/`/medical`/`/training`/`/ppe`).
+
+### Studied Documentation
+
+- `docs/spec/TZ_FULL_UNIFIED.md` (раздел B → vNext-EMP-01 / vNext §5.2; раздел E — правила доработки, разд. 36).
+- `docs/spec/README.md` — алгоритм «продолжай по ТЗ» (триада источников: TZ_FULL_UNIFIED → AI_IMPLEMENTATION_REPORT → TZ_COVERAGE_MATRIX).
+- `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md` Task 3.2 — единственный незакрытый чек-бокс «Tabs: Personal | Roles & Assignments | Training | Medicals | PPE | Documents | Incidents | Audit».
+- `AI_IMPLEMENTATION_REPORT.md` Session 20 → Next Step #2 (Documents/Briefings/ComplianceDeadlines расширение).
+- `backend/app/schemas/employee.py`, `backend/app/services/employee_card.py`, `backend/app/api/routes/employees.py` (Sessions 19) — паттерн DTO + service + tenant-scoped селекты + `_count` + `MAX_ITEMS_PER_SECTION`.
+- `backend/app/models/document.py` (`Document.person_id`, `signed_file_id`, статусы DRAFT/GENERATED/REVIEW/APPROVED/SIGNED/ARCHIVED/REVOKED), `backend/app/models/models.py` (`BriefingEntry`, `BriefingTemplate`, `BriefingJournal`, `ComplianceDeadline` — все три имеют `person_id` FK; `BriefingEntry` использует `SoftDeleteMixin`, остальные — нет).
+- `backend/app/models/file.py` — `File` для signed_file_id-FK в тестах (storage_key/bucket/sha256/size/mime/kind required).
+- `tests/test_employee_card.py`, `tests/utils/factories.py` — паттерн тестов (`data_factory.create_document`, ORM-объекты для не-фабричных моделей).
+- `frontend/src/types/dto/employee.ts`, `frontend/src/pages/employees/EmployeeCardPage.tsx`, `frontend/src/__tests__/EmployeeCardPage.test.tsx` (Session 20) — стиль DTO-зеркала, label-мапы, табы через Radix `<Tabs>`, тестирование через `userEvent.setup()`.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 3.2 follow-up — Documents/Briefings/ComplianceDeadlines section в Unified Employee Card.
+- **Приоритет:** P1 (Phase 3 канона; закрывает последний `[v1.1]` чек-бокс roadmap Task 3.2).
+- **Почему выбрана:** прямой Next Step #2 из handoff Session 20. Аддитивно (новые секции в DTO/service, новые табы в UI; миграций нет); все три модели уже имеют FK `person_id`. Documents — обязательный по acceptance criterion roadmap; Briefings/Deadlines — структурно симметричны (одинаковая форма «count + items + флаги»), поэтому делать их вместе с Documents — самый дешёвый шаг по принципу единичного коммита и не дробит acceptance.
+
+### Implemented Changes
+
+- **`backend/app/schemas/employee.py`**:
+  - Импорт `from app.models.document import DocumentStatus`.
+  - Новые pydantic-классы (под `EmployeeAuditSection`, перед `EmployeeCard`):
+    - `EmployeeDocumentItem(id, template_id, template_name, status: DocumentStatus, is_signed, created_at)` + `EmployeeDocumentsSection(count, signed_count, items)`.
+    - `EmployeeBriefingItem(id, briefing_template_id, briefing_template_title, briefing_type, briefing_date, valid_until, status, is_expired)` + `EmployeeBriefingsSection(count, expired_count, items)`.
+    - `EmployeeComplianceDeadlineItem(id, entity_type, entity_id, due_at, status, reminder_policy, is_overdue)` + `EmployeeComplianceDeadlinesSection(count, overdue_count, upcoming_count, items)`.
+  - `EmployeeCard` расширен полями `documents: EmployeeDocumentsSection`, `briefings: EmployeeBriefingsSection`, `compliance_deadlines: EmployeeComplianceDeadlinesSection` (перед `audit`, чтобы порядок ключей в JSON совпадал с UI-табами).
+- **`backend/app/services/employee_card.py`**:
+  - `from app.models.document import Document` (был ранее F401-import — теперь реально используется).
+  - Новые импорты: `BriefingEntry`, `BriefingTemplate`, `ComplianceDeadline`, `Template`.
+  - В `build()` добавлены три параллельных вызова: `_build_documents`, `_build_briefings`, `_build_compliance_deadlines` (вставлены между `_build_incidents` и `_build_audit`); все три результата прокидываются в `EmployeeCard(...)`.
+  - **`_build_documents`**: `select(Document, Template.name).outerjoin(Template, Template.id == Document.template_id).where(tenant_id == self.tenant_id, person_id == person.id).order_by(desc(created_at)).limit(50)`. `is_signed = signed_file_id IS NOT NULL` (вычисляется на rows + отдельный `_count` для total `signed_count`).
+  - **`_build_briefings`**: `select(BriefingEntry, BriefingTemplate.title).outerjoin(BriefingTemplate, …).where(tenant_id, person_id, deleted_at IS NULL).order_by(desc(briefing_date)).limit(50)`. `is_expired = valid_until < now`. `expired_count` через отдельный SQL count.
+  - **`_build_compliance_deadlines`**: `select(ComplianceDeadline).where(tenant_id, person_id).order_by(due_at.asc()).limit(50)` (нет SoftDeleteMixin). `is_overdue = status NOT IN {closed, completed, cancelled} AND due_at < now`. `overdue_count`/`upcoming_count` считаются по items (паттерн `incidents.open_count` Session 19), `count` — полный SQL count. Это сохраняет точное `count` для UI-бейджа и не делает 5 SQL-запросов на 1 секцию.
+- **`tests/test_employee_card.py`**:
+  - Импорт `DocumentStatus`, `File`, `FileKind`, `BriefingEntry`, `BriefingJournal`, `BriefingTemplate`, `ComplianceDeadline`.
+  - Новый тест `TestEmployeeCardService::test_aggregates_documents_briefings_and_deadlines`:
+    - Создаёт реальный `File` (для `signed_file_id`-FK; не полагается на лаксность SQLite FK enforcement) → 1 signed `Document` + 1 draft `Document`.
+    - `BriefingTemplate(code="bt-primary", title="Первичный инструктаж")` + `BriefingJournal` + 2 `BriefingEntry` (актуальный с `valid_until=now+355d` и истёкший с `valid_until=now-30d`).
+    - 3 `ComplianceDeadline` (overdue=`due_at=now-5d, status=upcoming`, upcoming=`due_at=now+15d`, closed=`due_at=now-100d, status=closed`).
+    - Проверяет: `documents.count==2`, `documents.signed_count==1`, `is_signed`, `template_name` join, `briefings.count==2`, `briefings.expired_count==1`, читаемое `briefing_template_title="Первичный инструктаж"`, `compliance_deadlines.count==3`, `overdue_count==1`, `upcoming_count==1`, набор статусов.
+  - `TestEmployeeCardEndpoint::test_returns_card_for_admin` дополнен: JSON ответа должен содержать ключи `documents`/`briefings`/`compliance_deadlines` с `count==0` на чистом person.
+- **`frontend/src/types/dto/employee.ts`**:
+  - Новый enum-юнион `EmployeeDocumentStatus` (DocumentStatus values).
+  - Новые DTO: `EmployeeDocumentItemDto`/`EmployeeDocumentsSectionDto`, `EmployeeBriefingItemDto`/`EmployeeBriefingsSectionDto`, `EmployeeComplianceDeadlineItemDto`/`EmployeeComplianceDeadlinesSectionDto`.
+  - `EmployeeCardDto` расширен тремя полями.
+- **`frontend/src/pages/employees/EmployeeCardPage.tsx`**:
+  - Импорты трёх новых DTO-типов.
+  - Новые ru-локалные label-мапы: `DOCUMENT_STATUS_LABELS` (черновик/сгенерирован/на проверке/утверждён/подписан/в архиве/отозван), `BRIEFING_TYPE_LABELS` (первичный/повторный/внеплановый/целевой/вводный), `BRIEFING_STATUS_LABELS` (черновик/подписан/отменён), `DEADLINE_ENTITY_LABELS` (медосмотр/обучение/выдача СИЗ/допуск/инструктаж/документ), `DEADLINE_STATUS_LABELS` (запланирован/скоро срок/просрочен/закрыт/выполнен/отменён).
+  - Три новых компонента-таба перед `AuditTab`:
+    - `DocumentsTab`: таблица «Шаблон | Создан | Статус | Подпись» с drill-down `Link to /documents?focus=<id>` (зеркалит контракт DQ Dashboard / Incidents) + бейджи «Подписан» / «—».
+    - `BriefingsTab`: таблица «Программа | Тип | Дата | Действует до | Статус» с danger-бейджем «Просрочен» при `is_expired`.
+    - `ComplianceDeadlinesTab`: таблица «Объект (entity_type + entity_id mono) | Срок | Статус | Политика напоминаний» с danger-бейджем «Просрочен» при `is_overdue`.
+  - В `<TabsList>` добавлены три новых триггера (Документы, Инструктажи, Сроки) между Допуски и Происшествия. Бейджи: count + signed_count для документов, count + expired_count danger для инструктажей, upcoming_count + overdue_count danger для сроков.
+  - В `<TabsContent>` зарегистрированы три новых блока (`value="documents"`, `"briefings"`, `"deadlines"`).
+  - `CardDescription` обновлён: «…документы, инструктажи, контрольные сроки, происшествия и аудит».
+  - Итого вкладок — 11 (было 8).
+- **`frontend/src/__tests__/EmployeeCardPage.test.tsx`**:
+  - `sampleCard` дополнен:
+    - `documents`: 2 элемента — «Карточка СИЗ» (signed) + «Журнал инструктажей» (draft).
+    - `briefings`: 2 элемента — «Первичный инструктаж» (актуальный) + «Целевой инструктаж» (expired).
+    - `compliance_deadlines`: 2 элемента — медосмотр (overdue) + обучение (upcoming).
+  - Кейс `renders all 8 tab triggers` → `renders all 11 tab triggers` (с покрытием 3 новых триггеров).
+  - 3 новых кейса:
+    - `opens the Documents tab and renders signed-document drill-down link` — проверяет `getByRole("link", { name: "Карточка СИЗ" })` → `href="/documents?focus=doc-1"` + бейдж «Подписан» (с учётом, что «Подписан» в строке встречается дважды: и как DOCUMENT_STATUS_LABELS["signed"], и как is_signed-бейдж — `getAllByText("Подписан").toHaveLength(2)`).
+    - `opens the Briefings tab and shows expired badge` — проверяет, что строка «Целевой инструктаж» содержит «Просрочен».
+    - `opens the Deadlines tab with overdue badge for medical exam` — проверяет, что строка «Медосмотр» содержит «Просрочен».
+
+### Changed / New Files
+
+- `backend/app/schemas/employee.py` — расширен (3 новых раздела в DTO + 3 новых поля в EmployeeCard).
+- `backend/app/services/employee_card.py` — 3 новых билдера + 3 вызова в `build()` + новые импорты.
+- `tests/test_employee_card.py` — 1 новый service-тест + расширение endpoint-теста.
+- `frontend/src/types/dto/employee.ts` — 7 новых типов (3 секции × 2 + DocumentStatus enum).
+- `frontend/src/pages/employees/EmployeeCardPage.tsx` — 3 новых таб-компонента, 5 новых label-мап, 3 триггера в TabsList, 3 блока в TabsContent.
+- `frontend/src/__tests__/EmployeeCardPage.test.tsx` — расширенный sampleCard, 3 новых тест-кейса, обновлённый кейс на 11 табов.
+- `CHANGELOG.md` — запись Session 21.
+- `AI_IMPLEMENTATION_REPORT.md` — этот блок.
+
+### Decisions
+
+- **Все три секции в одной волне.** Acceptance criterion roadmap'а явно требует только Documents-таб, но Briefings и ComplianceDeadlines уже были упомянуты в Session 19/20 как Next Step #4 «пятиминутное расширение». Все три модели имеют идентичный FK-паттерн (`person_id`), и DTO/UI-форма у них структурно симметрична («count + items + флаг expired/overdue/signed»). Делать их по-отдельности — три коммита одного PR с одинаковыми правками в одних файлах. Один шаг = один минимально-достаточный change-set. Это согласовано с разд. E канона «не плодить шаги».
+- **Порядок табов: …PPE | Documents | Briefings | Deadlines | Incidents | Audit.** В roadmap'е Documents явно стоит между PPE и Incidents. Briefings и Deadlines добавлены сразу за Documents — все три «обязательственные» секции рядом.
+- **`overdue_count`/`upcoming_count` считаются по `items` (max 50), а не отдельным SQL.** Тот же паттерн, что `incidents.open_count` Session 19. Полный `count` — точный SQL. Если в будущем понадобятся точные счётчики — заменим без изменения DTO.
+- **`is_signed` через `signed_file_id IS NOT NULL`, а не `status == SIGNED`.** Document.status может быть `SIGNED` без файла подписи (например, при ручной фиксации факта подписания), и наоборот — `signed_file_id` гарантирует, что физический подписанный файл существует. Использование FK-наличия даёт более точную информацию для UI-бейджа.
+- **Тест с реальным `File` row, а не патчингом `signed_file_id` после save.** Хак с присваиванием `signed_doc.signed_file_id = signed_doc.id` (любой UUID) работал бы на SQLite (FK не enforced), но падал бы на Postgres. Создание реального `File` с минимальными required полями делает тест db-portable.
+- **`BriefingEntry.deleted_at IS NULL`** — мягкая фильтрация (SoftDeleteMixin); `Document` и `ComplianceDeadline` без soft-delete, поэтому без этого фильтра.
+- **`ComplianceDeadline.entity_id` отдаём как `str`** (через `str(deadline.entity_id)`), даже если в модели это `String(36)` — для предсказуемой сериализации (в БД могут попадаться UUID-объекты в зависимости от ORM-настройки).
+- **Таб «Документы» drill-down `/documents?focus=<id>`.** Контракт зеркалит `IncidentsTab` Session 19 и DQ Dashboard Session 15. Для Briefings/Deadlines drill-down пока не делаем — у Briefings нет отдельной канонической страницы (их UI распределён по журналам), у Deadlines — нет страницы реестра (их рендерит DQ Dashboard и календарь).
+
+### Issues Fixed
+
+- **Roadmap Task 3.2 acceptance criterion** «Tabs: Personal | Roles & Assignments | Training | Medicals | PPE | **Documents** | Incidents | Audit» — закрыт.
+- **Cross-modular discoverability:** HR/OT-PB-lead теперь видят на одной странице сотрудника не только сертификаты обучения и медосмотры, но и всю документацию по нему (личная карточка СИЗ, журналы), пройденные инструктажи, и контрольные сроки. Закрывает разрыв «вижу нарушение в DQ → перехожу на сотрудника → не вижу контекст», который Session 20 описывал как UX-цель.
+- **Documents-секция backend** была упомянута как deferred Session 19 → теперь реализована. Frontend и backend опять синхронны.
+
+### Known Problems / Risks
+
+- **Backend pytest не запускался локально** — на текущей Windows-машине нет Python 3.12 (только 3.13 без venv с зависимостями). По CLAUDE.md это допустимо: «Do not fail or stop when Python 3.12 is absent. Run tests with the available Python and report results». Изменения в backend строго аддитивны (новые методы, новый импорт, новые pydantic-классы); существующие contract-сценарии (DQ, persons, incidents) не задеты. CI прогонит canonical pipeline на 3.12.12.
+- **`overdue_count`/`upcoming_count`** для Compliance Deadlines считаются по items (max 50). На сотрудниках с >50 deadlines (редкий кейс) UI-бейдж может не показывать всех просроченных — но `count` остаётся полным.
+- **`is_overdue`** трактуется по локальной серверной now() и `due_at`. Tenant-локальная таймзона не учитывается — для контрольных сроков обычно достаточно UTC, но если когда-нибудь появятся тенанты в разных таймзонах с round-the-clock SLA — потребуется учёт `Tenant.timezone`.
+- **Briefings UI-label-map** покрывает популярные значения (`primary`/`repeated`/`unscheduled`/`targeted`/`introductory`); если backend начнёт эмитить кастомные `briefing_type` (например, специфичные для тенанта), UI отобразит сырое значение через fallback `labelFor`.
+- **`DEADLINE_ENTITY_LABELS`** покрывает основные `entity_type` (`medical_exam`/`training_session`/`ppe_issue`/`permit`/`briefing`/`document`). Для незнакомых типов — fallback на сырое значение.
+
+### Validation
+
+- **Окружение:** Windows, node v24.14.1, npm 11.11.0; Python: только 3.13 (нет 3.12); frontend `node_modules` не было — установлено `npm --prefix frontend install --no-audit --no-fund` (~853 packages).
+- **Backend:** `python3.12 -m pytest` не запускался (нет 3.12; CLAUDE.md — fallback на available, без abort). Изменения аддитивны; CI прогонит canonical pipeline.
+- **Frontend:**
+  - `npm --prefix frontend run typecheck` (== `tsc --noEmit`) → ✅ exit 0 (no errors).
+  - `npm --prefix frontend test -- run src/__tests__/EmployeeCardPage.test.tsx src/__tests__/PersonsPage.test.tsx src/__tests__/ability.test.ts src/__tests__/RoutePermissionMatrix.test.tsx src/__tests__/SideNav.test.tsx` → ✅ **23 passed in 6 files** (9 EmployeeCardPage + 14 регрессионных).
+  - **Замечание:** первый прогон `EmployeeCardPage > opens the Documents tab` упал на `getByText("Подписан")` из-за дубля (cell статуса + бейдж `is_signed`); тест исправлен на `getAllByText("Подписан").toHaveLength(2)` без правок UI (UX-копирайт остался согласованным с DocumentStatus enum).
+- **Browser smoke** — не проводился отдельно (UI-изменения покрыты vitest-кейсами; backend изменения — service-юнитом и интеграционным endpoint-тестом).
+
+### Next Steps
+
+1. **Phase 4 Smart Calendar** (`vNext-CAL-01`): backend `/api/v1/calendar/events` aggregator (training, medicals, PPE, SOÚT, inspections, tasks). Естественный следующий шаг — Compliance Deadlines теперь доступны в Employee Card, но без календарного представления. Календарь — Phase 4 Task 4.1 в roadmap'е.
+2. **Drill-down enrichment в реестрах** (Session 18/19/20 Next Step #1, всё ещё открыт): `/persons`, `/companies`, `/documents`, `/medical`, `/training`, `/ppe`, `/incidents` — читать `?focus=<id>` и подсвечивать строку (scroll-into-view + 3s highlight). После этой волны Employee Card отдаёт ссылки `/documents?focus=<id>` и `/incidents?focus=<id>`, но реестры пока их игнорируют.
+3. **Стабилизация фабрик** (Session 18/19/20 Next Step #3): `tests/utils/factories.py` — авто-уникальные `name`/`email` (counter/uuid-suffix), убрать класс silent-conflicts.
+4. **Bulk Employee Card** (`POST /employees:batch`) — для прелоада нескольких карточек (например, в team-view).
+5. **Документная extension** — если HR попросит, добавить subset «active assignments» (роли в активных проектах), раз Roles & Assignments в карточке уже есть.
+
+---
+
 ## Last Agent Handoff (2026-05-06, Session 20 — Phase 3.2 Frontend: Unified Employee Card UI)
 
 - **Дата:** 2026-05-06 (после Session 19)
