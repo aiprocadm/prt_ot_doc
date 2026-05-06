@@ -9,8 +9,14 @@ from fastapi import status
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.document import DocumentStatus
+from app.models.file import File, FileKind
 from app.models.models import (
     AuditLog,
+    BriefingEntry,
+    BriefingJournal,
+    BriefingTemplate,
+    ComplianceDeadline,
     EmploymentStatus,
     Incident,
     IncidentPerson,
@@ -278,6 +284,150 @@ class TestEmployeeCardService:
         assert card.audit.items[0].action == "update"
         assert card.audit.items[0].correlation_id == "corr-emp-test"
 
+    async def test_aggregates_documents_briefings_and_deadlines(
+        self,
+        test_db_session: AsyncSession,
+        data_factory: TestDataFactory,
+    ) -> None:
+        """vNext-EMP-01 follow-up: card surfaces Documents/Briefings/Deadlines."""
+        tenant = await data_factory.ensure_tenant(session=test_db_session)
+        company = await data_factory.create_company(tenant=tenant, session=test_db_session)
+        person = await data_factory.create_person(
+            tenant=tenant,
+            company=company,
+            session=test_db_session,
+            first_name="Doc",
+            last_name="Holder",
+            email="doc-holder@example.com",
+        )
+
+        # File row used as a real signed-file FK target (avoids relying on
+        # SQLite's lax FK enforcement).
+        signed_file = File(
+            tenant_id=tenant.id,
+            storage_key="test/signed.pdf",
+            bucket="signed",
+            sha256="0" * 64,
+            size=1,
+            mime="application/pdf",
+            kind=FileKind.DOCUMENT,
+        )
+        test_db_session.add(signed_file)
+        await test_db_session.flush()
+
+        signed_doc, _ = await data_factory.create_document(
+            tenant=tenant,
+            company=company,
+            person=person,
+            status=DocumentStatus.SIGNED,
+            session=test_db_session,
+            signed_file_id=signed_file.id,
+        )
+        await data_factory.create_document(
+            tenant=tenant,
+            company=company,
+            person=person,
+            status=DocumentStatus.DRAFT,
+            session=test_db_session,
+        )
+        # Reference the var so linters don't flag it as unused.
+        assert signed_doc.signed_file_id == signed_file.id
+
+        # Briefing template + journal + two entries (one current, one expired).
+        now = datetime.now(timezone.utc)
+        briefing_template = BriefingTemplate(
+            tenant_id=tenant.id,
+            code="bt-primary",
+            title="Первичный инструктаж",
+            briefing_type="primary",
+        )
+        journal = BriefingJournal(
+            tenant_id=tenant.id,
+            code="bj-primary",
+            title="Журнал первичных",
+            journal_type="primary",
+        )
+        test_db_session.add_all([briefing_template, journal])
+        await test_db_session.flush()
+
+        briefing_current = BriefingEntry(
+            tenant_id=tenant.id,
+            briefing_journal_id=journal.id,
+            briefing_template_id=briefing_template.id,
+            person_id=person.id,
+            briefing_type="primary",
+            briefing_date=now - timedelta(days=10),
+            valid_until=now + timedelta(days=355),
+            status="signed",
+        )
+        briefing_expired = BriefingEntry(
+            tenant_id=tenant.id,
+            briefing_journal_id=journal.id,
+            briefing_template_id=briefing_template.id,
+            person_id=person.id,
+            briefing_type="primary",
+            briefing_date=now - timedelta(days=400),
+            valid_until=now - timedelta(days=30),
+            status="signed",
+        )
+        test_db_session.add_all([briefing_current, briefing_expired])
+
+        # Compliance deadlines — overdue, upcoming, closed.
+        deadline_overdue = ComplianceDeadline(
+            tenant_id=tenant.id,
+            entity_type="medical_exam",
+            entity_id="medical-1",
+            person_id=person.id,
+            due_at=now - timedelta(days=5),
+            status="upcoming",
+        )
+        deadline_upcoming = ComplianceDeadline(
+            tenant_id=tenant.id,
+            entity_type="training_session",
+            entity_id="training-1",
+            person_id=person.id,
+            due_at=now + timedelta(days=15),
+            status="upcoming",
+        )
+        deadline_closed = ComplianceDeadline(
+            tenant_id=tenant.id,
+            entity_type="ppe_issue",
+            entity_id="ppe-1",
+            person_id=person.id,
+            due_at=now - timedelta(days=100),
+            status="closed",
+        )
+        test_db_session.add_all([deadline_overdue, deadline_upcoming, deadline_closed])
+
+        await test_db_session.commit()
+
+        service = EmployeeCardService(tenant_id=str(tenant.id), db=test_db_session)
+        card = await service.build(person.id)
+        assert card is not None
+
+        assert card.documents.count == 2
+        assert card.documents.signed_count == 1
+        assert {item.status for item in card.documents.items} == {
+            DocumentStatus.SIGNED,
+            DocumentStatus.DRAFT,
+        }
+        assert any(item.is_signed for item in card.documents.items)
+        assert all(
+            item.template_name is not None for item in card.documents.items
+        ), "template join must hydrate readable names"
+
+        assert card.briefings.count == 2
+        assert card.briefings.expired_count == 1
+        titles = {item.briefing_template_title for item in card.briefings.items}
+        assert "Первичный инструктаж" in titles
+        assert any(item.is_expired for item in card.briefings.items)
+
+        assert card.compliance_deadlines.count == 3
+        assert card.compliance_deadlines.overdue_count == 1
+        assert card.compliance_deadlines.upcoming_count == 1
+        statuses = {item.status for item in card.compliance_deadlines.items}
+        assert statuses == {"upcoming", "closed"}
+
 
 @pytest.mark.anyio
 class TestEmployeeCardEndpoint:
@@ -311,6 +461,12 @@ class TestEmployeeCardEndpoint:
         assert body["personal"]["last_name"] == "User"
         assert "training" in body and "medicals" in body and "ppe" in body
         assert "permits" in body and "incidents" in body and "audit" in body
+        # vNext-EMP-01 follow-up — Documents/Briefings/Deadlines sections.
+        assert "documents" in body and "briefings" in body
+        assert "compliance_deadlines" in body
+        assert body["documents"]["count"] == 0
+        assert body["briefings"]["count"] == 0
+        assert body["compliance_deadlines"]["count"] == 0
 
     async def test_returns_404_for_unknown_employee(
         self,

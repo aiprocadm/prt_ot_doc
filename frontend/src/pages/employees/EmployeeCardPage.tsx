@@ -14,7 +14,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { ApiError } from "@/types/dto/common";
 import type {
   EmployeeAuditItemDto,
+  EmployeeBriefingItemDto,
   EmployeeCardDto,
+  EmployeeComplianceDeadlineItemDto,
+  EmployeeDocumentItemDto,
   EmployeeIncidentItemDto,
   EmployeeMedicalItemDto,
   EmployeePermitItemDto,
@@ -74,6 +77,49 @@ const INCIDENT_ROLE_LABELS: Record<string, string> = {
   victim: "Пострадавший",
   witness: "Свидетель",
   participant: "Участник"
+};
+
+const DOCUMENT_STATUS_LABELS: Record<string, string> = {
+  draft: "Черновик",
+  generated: "Сгенерирован",
+  review: "На проверке",
+  approved: "Утверждён",
+  signed: "Подписан",
+  archived: "В архиве",
+  revoked: "Отозван"
+};
+
+const BRIEFING_TYPE_LABELS: Record<string, string> = {
+  primary: "Первичный",
+  repeated: "Повторный",
+  unscheduled: "Внеплановый",
+  targeted: "Целевой",
+  introductory: "Вводный"
+};
+
+const BRIEFING_STATUS_LABELS: Record<string, string> = {
+  draft: "Черновик",
+  signed: "Подписан",
+  cancelled: "Отменён"
+};
+
+const DEADLINE_ENTITY_LABELS: Record<string, string> = {
+  medical_exam: "Медосмотр",
+  training_session: "Обучение",
+  training: "Обучение",
+  ppe_issue: "Выдача СИЗ",
+  permit: "Допуск",
+  briefing: "Инструктаж",
+  document: "Документ"
+};
+
+const DEADLINE_STATUS_LABELS: Record<string, string> = {
+  upcoming: "Запланирован",
+  due_soon: "Скоро срок",
+  overdue: "Просрочен",
+  closed: "Закрыт",
+  completed: "Выполнен",
+  cancelled: "Отменён"
 };
 
 const labelFor = (map: Record<string, string>, key: string | null | undefined) =>
@@ -473,6 +519,149 @@ const IncidentsTab = ({ card }: { card: EmployeeCardDto }) => {
   );
 };
 
+const DocumentsTab = ({ card }: { card: EmployeeCardDto }) => {
+  const { documents } = card;
+  if (documents.items.length === 0) {
+    return <EmptyTabContent message="Документов по сотруднику не найдено." />;
+  }
+  return (
+    <Card>
+      <CardContent className="px-0 pb-0 pt-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Шаблон</TableHead>
+              <TableHead className="w-[160px]">Создан</TableHead>
+              <TableHead className="w-[140px]">Статус</TableHead>
+              <TableHead className="w-[120px]">Подпись</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {documents.items.map((doc: EmployeeDocumentItemDto) => (
+              <TableRow key={doc.id}>
+                <TableCell className="text-sm font-medium">
+                  <Link
+                    to={`/documents?focus=${encodeURIComponent(doc.id)}`}
+                    className="text-primary hover:underline"
+                  >
+                    {doc.template_name ?? "Без названия"}
+                  </Link>
+                </TableCell>
+                <TableCell className="text-sm">{formatDateTime(doc.created_at)}</TableCell>
+                <TableCell className="text-sm">
+                  {labelFor(DOCUMENT_STATUS_LABELS, String(doc.status))}
+                </TableCell>
+                <TableCell>
+                  {doc.is_signed ? (
+                    <Badge variant="secondary">Подписан</Badge>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">—</span>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+};
+
+const BriefingsTab = ({ card }: { card: EmployeeCardDto }) => {
+  const { briefings } = card;
+  if (briefings.items.length === 0) {
+    return <EmptyTabContent message="Инструктажей не зарегистрировано." />;
+  }
+  return (
+    <Card>
+      <CardContent className="px-0 pb-0 pt-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Программа</TableHead>
+              <TableHead className="w-[140px]">Тип</TableHead>
+              <TableHead className="w-[160px]">Дата</TableHead>
+              <TableHead className="w-[160px]">Действует до</TableHead>
+              <TableHead className="w-[140px]">Статус</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {briefings.items.map((entry: EmployeeBriefingItemDto) => (
+              <TableRow key={entry.id}>
+                <TableCell className="text-sm font-medium">
+                  {entry.briefing_template_title ?? "Без программы"}
+                </TableCell>
+                <TableCell className="text-sm">
+                  {labelFor(BRIEFING_TYPE_LABELS, String(entry.briefing_type))}
+                </TableCell>
+                <TableCell className="text-sm">{formatDateTime(entry.briefing_date)}</TableCell>
+                <TableCell className="text-sm">{formatDateTime(entry.valid_until)}</TableCell>
+                <TableCell>
+                  {entry.is_expired ? (
+                    <Badge variant="destructive">Просрочен</Badge>
+                  ) : (
+                    <Badge variant="secondary">
+                      {labelFor(BRIEFING_STATUS_LABELS, String(entry.status))}
+                    </Badge>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+};
+
+const ComplianceDeadlinesTab = ({ card }: { card: EmployeeCardDto }) => {
+  const { compliance_deadlines: deadlines } = card;
+  if (deadlines.items.length === 0) {
+    return <EmptyTabContent message="Контрольных сроков нет." />;
+  }
+  return (
+    <Card>
+      <CardContent className="px-0 pb-0 pt-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Объект</TableHead>
+              <TableHead className="w-[160px]">Срок</TableHead>
+              <TableHead className="w-[140px]">Статус</TableHead>
+              <TableHead>Политика напоминаний</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {deadlines.items.map((deadline: EmployeeComplianceDeadlineItemDto) => (
+              <TableRow key={deadline.id}>
+                <TableCell className="text-sm font-medium">
+                  {labelFor(DEADLINE_ENTITY_LABELS, String(deadline.entity_type))}
+                  <div className="text-xs font-mono text-muted-foreground">
+                    {deadline.entity_id}
+                  </div>
+                </TableCell>
+                <TableCell className="text-sm">{formatDateTime(deadline.due_at)}</TableCell>
+                <TableCell>
+                  {deadline.is_overdue ? (
+                    <Badge variant="destructive">Просрочен</Badge>
+                  ) : (
+                    <Badge variant="secondary">
+                      {labelFor(DEADLINE_STATUS_LABELS, String(deadline.status))}
+                    </Badge>
+                  )}
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {deadline.reminder_policy ?? "—"}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+};
+
 const AuditTab = ({ card }: { card: EmployeeCardDto }) => {
   const { audit } = card;
   if (audit.items.length === 0) {
@@ -589,7 +778,8 @@ export default function EmployeeCardPage() {
             <CardTitle className="text-lg">Полные данные сотрудника</CardTitle>
             <CardDescription>
               Источник — единый агрегат <code>/api/v1/employees/{"{id}"}</code>: персональные
-              данные, роли, обучение, медосмотры, СИЗ, допуски, происшествия, аудит.
+              данные, роли, обучение, медосмотры, СИЗ, допуски, документы, инструктажи,
+              контрольные сроки, происшествия и аудит.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -625,6 +815,21 @@ export default function EmployeeCardPage() {
                   <TabBadge count={card.permits.active_count} />
                   <TabBadge count={card.permits.expired_count} danger />
                 </TabsTrigger>
+                <TabsTrigger value="documents">
+                  Документы
+                  <TabBadge count={card.documents.count} />
+                  <TabBadge count={card.documents.signed_count} />
+                </TabsTrigger>
+                <TabsTrigger value="briefings">
+                  Инструктажи
+                  <TabBadge count={card.briefings.count} />
+                  <TabBadge count={card.briefings.expired_count} danger />
+                </TabsTrigger>
+                <TabsTrigger value="deadlines">
+                  Сроки
+                  <TabBadge count={card.compliance_deadlines.upcoming_count} />
+                  <TabBadge count={card.compliance_deadlines.overdue_count} danger />
+                </TabsTrigger>
                 <TabsTrigger value="incidents">
                   Происшествия
                   <TabBadge count={card.incidents.count} />
@@ -653,6 +858,15 @@ export default function EmployeeCardPage() {
               </TabsContent>
               <TabsContent value="permits">
                 <PermitsTab card={card} />
+              </TabsContent>
+              <TabsContent value="documents">
+                <DocumentsTab card={card} />
+              </TabsContent>
+              <TabsContent value="briefings">
+                <BriefingsTab card={card} />
+              </TabsContent>
+              <TabsContent value="deadlines">
+                <ComplianceDeadlinesTab card={card} />
               </TabsContent>
               <TabsContent value="incidents">
                 <IncidentsTab card={card} />

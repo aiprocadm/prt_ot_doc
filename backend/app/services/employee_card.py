@@ -21,10 +21,13 @@ from typing import Any
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.document import Document  # noqa: F401  # imported for parity with audit chains
+from app.models.document import Document
 from app.models.models import (
     AuditLog,
+    BriefingEntry,
+    BriefingTemplate,
     Company,
+    ComplianceDeadline,
     Incident,
     IncidentPerson,
     MedicalExam,
@@ -34,6 +37,7 @@ from app.models.models import (
     Position,
     PPEIssue,
     PPEIssueStatus,
+    Template,
     Training,
     TrainingCertificate,
     TrainingCourse,
@@ -46,7 +50,13 @@ from app.models.models import (
 from app.schemas.employee import (
     EmployeeAuditItem,
     EmployeeAuditSection,
+    EmployeeBriefingItem,
+    EmployeeBriefingsSection,
     EmployeeCard,
+    EmployeeComplianceDeadlineItem,
+    EmployeeComplianceDeadlinesSection,
+    EmployeeDocumentItem,
+    EmployeeDocumentsSection,
     EmployeeIncidentItem,
     EmployeeIncidentsSection,
     EmployeeMedicalItem,
@@ -103,6 +113,9 @@ class EmployeeCardService:
         ppe = await self._build_ppe(person)
         permits = await self._build_permits(person)
         incidents = await self._build_incidents(person)
+        documents = await self._build_documents(person)
+        briefings = await self._build_briefings(person)
+        compliance_deadlines = await self._build_compliance_deadlines(person)
         audit = await self._build_audit(person)
 
         return EmployeeCard(
@@ -116,6 +129,9 @@ class EmployeeCardService:
             ppe=ppe,
             permits=permits,
             incidents=incidents,
+            documents=documents,
+            briefings=briefings,
+            compliance_deadlines=compliance_deadlines,
             audit=audit,
         )
 
@@ -559,6 +575,155 @@ class EmployeeCardService:
         )
         open_count = sum(1 for inc, _ in rows if inc.status not in {"closed", "cancelled"})
         return EmployeeIncidentsSection(count=total, open_count=open_count, items=items)
+
+    async def _build_documents(self, person: Person) -> EmployeeDocumentsSection:
+        stmt = (
+            select(Document, Template.name)
+            .outerjoin(Template, Template.id == Document.template_id)
+            .where(
+                Document.tenant_id == self.tenant_id,
+                Document.person_id == person.id,
+            )
+            .order_by(desc(Document.created_at))
+            .limit(MAX_ITEMS_PER_SECTION)
+        )
+        rows = (await self.db.execute(stmt)).all()
+        items = [
+            EmployeeDocumentItem(
+                id=str(doc.id),
+                template_id=str(doc.template_id) if doc.template_id else None,
+                template_name=template_name,
+                status=doc.status,
+                is_signed=doc.signed_file_id is not None,
+                created_at=doc.created_at,
+            )
+            for doc, template_name in rows
+        ]
+        total = await self._count(
+            select(func.count())
+            .select_from(Document)
+            .where(
+                Document.tenant_id == self.tenant_id,
+                Document.person_id == person.id,
+            )
+        )
+        signed = await self._count(
+            select(func.count())
+            .select_from(Document)
+            .where(
+                Document.tenant_id == self.tenant_id,
+                Document.person_id == person.id,
+                Document.signed_file_id.is_not(None),
+            )
+        )
+        return EmployeeDocumentsSection(count=total, signed_count=signed, items=items)
+
+    async def _build_briefings(self, person: Person) -> EmployeeBriefingsSection:
+        now = _utcnow()
+        stmt = (
+            select(BriefingEntry, BriefingTemplate.title)
+            .outerjoin(
+                BriefingTemplate,
+                BriefingTemplate.id == BriefingEntry.briefing_template_id,
+            )
+            .where(
+                BriefingEntry.tenant_id == self.tenant_id,
+                BriefingEntry.person_id == person.id,
+                BriefingEntry.deleted_at.is_(None),
+            )
+            .order_by(desc(BriefingEntry.briefing_date))
+            .limit(MAX_ITEMS_PER_SECTION)
+        )
+        rows = (await self.db.execute(stmt)).all()
+        items = [
+            EmployeeBriefingItem(
+                id=str(entry.id),
+                briefing_template_id=(
+                    str(entry.briefing_template_id) if entry.briefing_template_id else None
+                ),
+                briefing_template_title=template_title,
+                briefing_type=entry.briefing_type,
+                briefing_date=entry.briefing_date,
+                valid_until=entry.valid_until,
+                status=entry.status,
+                is_expired=bool(
+                    entry.valid_until is not None and entry.valid_until < now
+                ),
+            )
+            for entry, template_title in rows
+        ]
+        total = await self._count(
+            select(func.count())
+            .select_from(BriefingEntry)
+            .where(
+                BriefingEntry.tenant_id == self.tenant_id,
+                BriefingEntry.person_id == person.id,
+                BriefingEntry.deleted_at.is_(None),
+            )
+        )
+        expired = await self._count(
+            select(func.count())
+            .select_from(BriefingEntry)
+            .where(
+                BriefingEntry.tenant_id == self.tenant_id,
+                BriefingEntry.person_id == person.id,
+                BriefingEntry.deleted_at.is_(None),
+                BriefingEntry.valid_until.is_not(None),
+                BriefingEntry.valid_until < now,
+            )
+        )
+        return EmployeeBriefingsSection(count=total, expired_count=expired, items=items)
+
+    async def _build_compliance_deadlines(
+        self, person: Person
+    ) -> EmployeeComplianceDeadlinesSection:
+        now = _utcnow()
+        stmt = (
+            select(ComplianceDeadline)
+            .where(
+                ComplianceDeadline.tenant_id == self.tenant_id,
+                ComplianceDeadline.person_id == person.id,
+            )
+            .order_by(ComplianceDeadline.due_at.asc())
+            .limit(MAX_ITEMS_PER_SECTION)
+        )
+        rows = (await self.db.execute(stmt)).scalars().all()
+        items = [
+            EmployeeComplianceDeadlineItem(
+                id=str(deadline.id),
+                entity_type=deadline.entity_type,
+                entity_id=str(deadline.entity_id),
+                due_at=deadline.due_at,
+                status=deadline.status,
+                reminder_policy=deadline.reminder_policy,
+                is_overdue=bool(
+                    deadline.status not in {"closed", "completed", "cancelled"}
+                    and deadline.due_at < now
+                ),
+            )
+            for deadline in rows
+        ]
+        total = await self._count(
+            select(func.count())
+            .select_from(ComplianceDeadline)
+            .where(
+                ComplianceDeadline.tenant_id == self.tenant_id,
+                ComplianceDeadline.person_id == person.id,
+            )
+        )
+        overdue = sum(1 for item in items if item.is_overdue)
+        upcoming = sum(
+            1
+            for item in items
+            if item.status not in {"closed", "completed", "cancelled"}
+            and not item.is_overdue
+        )
+        return EmployeeComplianceDeadlinesSection(
+            count=total,
+            overdue_count=overdue,
+            upcoming_count=upcoming,
+            items=items,
+        )
 
     async def _build_audit(self, person: Person) -> EmployeeAuditSection:
         stmt = (
