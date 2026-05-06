@@ -25,6 +25,7 @@ import {
   CorrectiveActionsPage,
   CrmFinancePage,
   DashboardPage,
+  EmployeeCardPage,
   ExecutiveDashboardPage,
   ExportsPage,
   FindingsPage,
@@ -97,6 +98,12 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
     },
     { permission: PERMISSIONS.COMPANY_VIEW, routes: [<Route key="/companies" path="/companies" element={<CompaniesPage />} />] },
     { permission: PERMISSIONS.PERSON_VIEW, routes: [<Route key="/persons" path="/persons" element={<PersonsPage />} />] },
+    {
+      permission: PERMISSIONS.EMPLOYEE_CARD_VIEW,
+      routes: [
+        <Route key="/employees/:personId" path="/employees/:personId" element={<EmployeeCardPage />} />
+      ]
+    },
     { permission: PERMISSIONS.TEMPLATE_VIEW, routes: [<Route key="/templates" path="/templates" element={<TemplatesPage />} />] },
     { permission: PERMISSIONS.PACK_VIEW, routes: [<Route key="/packs" path="/packs" element={<PacksPage />} />] },
     {

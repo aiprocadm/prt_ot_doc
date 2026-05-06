@@ -4,6 +4,7 @@ export const LoginPage = lazy(() => import("@/pages/auth/LoginPage"));
 export const DashboardPage = lazy(() => import("@/pages/dashboard/DashboardPage"));
 export const CompaniesPage = lazy(() => import("@/pages/companies/CompaniesPage"));
 export const PersonsPage = lazy(() => import("@/pages/persons/PersonsPage"));
+export const EmployeeCardPage = lazy(() => import("@/pages/employees/EmployeeCardPage"));
 export const TemplatesPage = lazy(() => import("@/pages/templates/TemplatesPage"));
 export const PacksPage = lazy(() => import("@/pages/packs/PacksPage"));
 export const TasksPage = lazy(() => import("@/pages/tasks/TasksPage"));

@@ -1,5 +1,118 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-06, Session 20 — Phase 3.2 Frontend: Unified Employee Card UI)
+
+- **Дата:** 2026-05-06 (после Session 19)
+- **Агент:** Claude Opus 4.7 (local Windows)
+- **Задача:** «Продолжай по ТЗ» → выполнить Next Step #1 из handoff Session 19: Frontend Employee Card UI (`vNext-EMP-01` / vNext §5.2, целевая фаза `[v1.1]`). Backend-агрегат `/api/v1/employees/{person_id}` уже сделан в Session 19; нужно создать единую карточку сотрудника на фронте с 8 вкладками поверх этого эндпоинта, повторив паттерн UI/API-permission-split из Session 18.
+- **Статус:** ✅ COMPLETE для frontend-инкремента (страница, маршрут, drill-down из `/persons`, синхронизированный backend-permission, тесты, type/lint/test gate clean). Phase 3.2 закрыт целиком: backend-агрегат + frontend UI + RBAC-симметрия.
+- **Где остановился:** Phase 3 фактически закрыт по фронту/бэку (Data Quality MVP — Sessions 13–18; Unified Employee Card — Sessions 19–20). Следующее по плану (handoff Session 19, Next Step #2) — drill-down enrichment в реестрах под `?focus=<id>`, и/или расширение `/employees/{id}` секциями Documents/Briefings/ComplianceDeadlines (Next Step #4).
+
+### Studied Documentation
+
+- `docs/spec/TZ_FULL_UNIFIED.md` (раздел B → vNext-EMP-01 / §5.2 — единая карточка сотрудника, целевая фаза `[v1.1]`).
+- `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md` Task 3.2 — acceptance criteria («Tabs: Personal | Roles & Assignments | Training | Medicals | PPE | Documents | Incidents | Audit (frontend `EmployeeCard.tsx` — `[v1.1]`)»).
+- `AI_IMPLEMENTATION_REPORT.md` Session 19 → Next Step #1 (Frontend Employee Card UI).
+- `backend/app/schemas/employee.py`, `backend/app/services/employee_card.py`, `backend/app/api/routes/employees.py` — DTO/сервис/роут Session 19, для зеркалирования контрактов.
+- `frontend/src/pages/workspace/WorkspaceDataQualityPage.tsx`, `frontend/src/api/dataQuality.ts`, `frontend/src/types/dto/dataQuality.ts`, `frontend/src/__tests__/WorkspaceDataQualityPage.test.tsx` — паттерн страницы + DTO + API + тестов из Session 15.
+- `frontend/src/permissions/permissions.ts`, `frontend/src/permissions/ability.ts`, `backend/app/core/rbac_abac.py` — паттерн permission-split из Session 18 (`DATA_QUALITY_VIEW` + `data_quality:read` в ROLE_PERMISSIONS).
+- `frontend/src/router/pageRegistry.tsx`, `frontend/src/router/routeGroups.tsx`, `frontend/src/components/ui/{tabs,card,table,badge,breadcrumb,button}.tsx`, `frontend/src/components/common/{ListStateGuard,ErrorState,LoadingScreen,EmptyState}.tsx` — UI-примитивы и шаблон guarded-роута.
+- `frontend/src/pages/persons/PersonsPage.tsx`, `frontend/src/__tests__/PersonsPage.test.tsx` — точка drill-down + регрессионная проверка существующих тестов.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 3.2 — frontend Unified Employee Card UI (`vNext-EMP-01` / `vNext §5.2`).
+- **Приоритет:** P1 (фактически `[v1.1]`, но логически замыкает Phase 3 на фронте; backend-агрегат без UI бесполезен для конечного пользователя).
+- **Почему выбрана:** прямой Next Step #1 из handoff Session 19, чисто аддитивный (новые файлы + точечные edit-ы в роутере/permissions + один UI-edit в `PersonsPage`); закрывает acceptance criterion плана Task 3.2 «Tabs: Personal | Roles & Assignments | Training | Medicals | PPE | Documents | Incidents | Audit». Documents-таб отнесён на extension (Session 19 Next Step #4).
+
+### Implemented Changes
+
+- **`frontend/src/types/dto/employee.ts`** (~165 строк) — DTO-зеркало `app.schemas.employee`: `EmployeeCardDto` (top-level) + 13 интерфейсов секций/айтемов; enum-юнионы (`EmployeeEmploymentStatus`, `EmployeeTrainingStatus`, `EmployeePermitStatus`, `EmployeePPEIssueStatus`, `EmployeeIncidentSeverity/Type/Status/PersonRole`). Все enum-юнионы расширены `| string`, чтобы переносить незапланированные backend-значения без crash.
+- **`frontend/src/api/employees.ts`** (~10 строк) — `employeesApi.getCard(personId)` поверх существующего `apiClient.get` (`baseURL=/api/v1`). Не дублирует логику авторизации/tenant-заголовков.
+- **`frontend/src/pages/employees/EmployeeCardPage.tsx`** (~520 строк) — страница `/employees/:personId`:
+  - `useParams<{ personId: string }>()` → `useEffect(load, [personId])` → `employeesApi.getCard(personId)`.
+  - Заголовок: `Breadcrumb` (Главная → Сотрудники → ФИО), `<h1>` ФИО, подзаголовок с position/company/workplace, время сборки (`generated_at`), кнопки Назад (`navigate(-1)`) и Обновить (re-fetch).
+  - `ErrorState` (показывает структурированную ошибку API + retry) и `LoadingScreen` для первичной загрузки.
+  - Внутри `<Card>` — `<Tabs defaultValue="personal">` с 8 триггерами: Персональные данные, Роли и назначения (бейдж «аккаунт» если есть `user_account`), Обучение (`sessions_count + certificates_count`), Медосмотры (count + danger-бейдж `expired_count`), СИЗ (`active_count` + danger `expired_count`), Допуски (`active_count` + danger `expired_count`), Происшествия (`count` + danger `open_count`), Аудит (`count`).
+  - Каждый таб реализован как локальный component (`PersonalTab`/`RolesTab`/`TrainingTab`/`MedicalsTab`/`PPETab`/`PermitsTab`/`IncidentsTab`/`AuditTab`) — таблицы / grid с `Info` ярлыками; пустое состояние через `EmptyTabContent`.
+  - `IncidentsTab` строит drill-down `Link` на `/incidents?focus=<id>` (зеркалит контракт DQ-страницы Session 15).
+  - `AuditTab` отображает changed_fields как chip-список ключей (полные diff вынесены в admin-аудит).
+  - `formatDate`/`formatDateTime` — безопасное форматирование ru-RU с fallback на ISO при невалидной дате.
+- **`frontend/src/router/pageRegistry.tsx`** — `EmployeeCardPage = lazy(() => import("@/pages/employees/EmployeeCardPage"))` сразу после `PersonsPage` (lazy-чанк через Vite).
+- **`frontend/src/router/routeGroups.tsx`** — новая guarded-группа `permission: PERMISSIONS.EMPLOYEE_CARD_VIEW` с одним маршрутом `/employees/:personId`. Поставлена сразу после группы `PERSON_VIEW` (логическая последовательность: реестр → детальная карточка).
+- **`frontend/src/permissions/permissions.ts`** — `PERMISSIONS.EMPLOYEE_CARD_VIEW = "employee_card.view"` (последний ключ объекта); ROLE_PERMISSIONS обновлён для `hr` и `line_manager` (хвост массива). `owner`/`admin` уже включают через `ALL_PERMISSIONS`; `ot_pb_head` — через `ALL_PERMISSIONS.filter(...)`.
+- **`frontend/src/permissions/ability.ts`** — два новых `PERMISSION_ALIASES` (`employee_card.read` и `employee_card.view` → `EMPLOYEE_CARD_VIEW`), чтобы matcher принял оба формата emit-а из backend.
+- **`backend/app/core/rbac_abac.py`** — добавлен ресурс `employee_card: {"read"}` в `RESOURCE_PERMISSIONS` (это автоматически добавляет `employee_card:read` в `_ROLE_FULL`, поэтому `owner/admin` получат это право в `/auth/me`); явный `"employee_card:read"` добавлен в `ROLE_PERMISSIONS["hr"]` и `ROLE_PERMISSIONS["line_manager"]`. `employee_card` НЕ добавлен в `_RESOURCE_TO_MODULE` (cross-module ресурс — паттерн Session 18 для `data_quality`).
+- **`frontend/src/pages/persons/PersonsPage.tsx`** — у выбранного сотрудника (`selectedPerson`) появилась кнопка «Открыть карточку» под `<Can permission={EMPLOYEE_CARD_VIEW}>` с `<Link to={"/employees/<id>"}>`. Кнопка показывается всегда, когда есть permission, не только при `focusedPersonId` — это естественный путь drill-down. Существующие кнопки «Сбросить фокус» и «Сформировать документы по случаю» остались внутри `focusedPersonId`-ветки.
+- **`frontend/src/__tests__/EmployeeCardPage.test.tsx`** (~250 строк) — 6 тест-кейсов:
+  - Загрузка агрегата с заголовком ФИО + информация о должности/компании.
+  - Наличие всех 8 tab-триггеров (через `getByRole("tab", { name: /…/ })`).
+  - Переключение на Roles → отображение `user_account.email/role` + дополнительной роли.
+  - Переключение на Medicals → таблица содержит «Периодический» и бейдж «Просрочен».
+  - Переключение на Incidents → drill-down ссылка на `/incidents?focus=inc-1`.
+  - ErrorState + retry path.
+  - Все клики по табам идут через `userEvent.setup()` (Radix Tabs не реагирует надёжно на `fireEvent.click` в jsdom — потребовалось перейти на `userEvent`).
+
+### Changed / New Files
+
+- `frontend/src/types/dto/employee.ts` — новый файл (~165 строк).
+- `frontend/src/api/employees.ts` — новый файл (~10 строк).
+- `frontend/src/pages/employees/EmployeeCardPage.tsx` — новый файл (~520 строк).
+- `frontend/src/router/pageRegistry.tsx` — добавлен lazy-импорт.
+- `frontend/src/router/routeGroups.tsx` — новый импорт + новая guarded-группа.
+- `frontend/src/permissions/permissions.ts` — новое право + два места в ROLE_PERMISSIONS.
+- `frontend/src/permissions/ability.ts` — два новых alias-а.
+- `frontend/src/pages/persons/PersonsPage.tsx` — кнопка «Открыть карточку» + рефакторинг JSX-обёртки кнопок.
+- `backend/app/core/rbac_abac.py` — новый ресурс + два update-а в ROLE_PERMISSIONS.
+- `frontend/src/__tests__/EmployeeCardPage.test.tsx` — новый тест-файл (~250 строк).
+- `CHANGELOG.md` — запись Session 20.
+- `AI_IMPLEMENTATION_REPORT.md` — этот блок.
+
+### Decisions
+
+- **`/employees/:personId` как новый top-level маршрут, не поддерево `/persons/:id`.** Backend prefix — `/api/v1/employees/{person_id}`; держим симметрию URL'ов. `/persons` остаётся реестром, `/employees/:id` — единая агрегатная карточка.
+- **Permission `EMPLOYEE_CARD_VIEW` отдельно от `PERSON_VIEW`.** Backend route жёстко гейтится `_EMPLOYEE_READ_ROLES = ["admin", "owner", "hr", "line_manager", "ot_pb_lead"]` (Session 19). Если бы фронт-маршрут был под `PERSON_VIEW` (более широкий — включает `worker`/`auditor_ro`), пользователь увидел бы кнопку «Открыть карточку», а получил бы 403/404 от API (тот же UI/API seam, который Session 18 чинил для DQ). Поэтому ввёл новое право и привязал к точному набору ролей; кнопка drill-down под `<Can>` тоже автоматически скрывается у нерелевантных ролей.
+- **Backend RBAC расширен (`employee_card:read`)** — паттерн Session 18: добавил resource в `RESOURCE_PERMISSIONS` и `ROLE_PERMISSIONS["hr"|"line_manager"]`. Это синхронизирует `/auth/me` permissions с фронтом, так что пользователи с явным `permissions[]` (нынешний дефолт для admin/owner) получат matched permission без role-fallback.
+- **8 вкладок, Documents отложены.** Acceptance criterion плана включает «Documents» tab, но в Session 19 Documents/Briefings/ComplianceDeadlines секции были явно отнесены в Next Step #4 (расширение backend-агрегата). Я не добавляю Documents-таб как пустой, чтобы не вводить заведомо «мёртвый» UI; когда backend-секция появится — таб добавится одним симметричным шагом.
+- **Бейджи на табах: count + danger.** Решение: показывать `count` (нейтральный) и при наличии «опасных» (`expired_count`/`open_count`) добавлять второй danger-бейдж. Это даёт двухуровневую индикацию без перегруза. На табе Roles бейдж — текстовый «аккаунт» (не number), чтобы быстро различить «есть учётная запись» / «нет».
+- **`Tabs` использует Radix `<Tabs>` с дефолтным non-forced mounting.** В тестах из-за этого `fireEvent.click` не всегда переключал содержимое; перешёл на `userEvent.setup()` (паттерн `TemplateDetails.test.tsx`). Это самый дешёвый и совместимый путь без `forceMount`.
+- **`updated PersonsPage` минимально.** Никакого нового `Tabs`-блока для embedded-карточки в реестре не добавлял (он там уже есть как stub). Drill-down через явную кнопку — естественный UX-паттерн, не ломает существующие тесты `PersonsPage.test.tsx` (проверял `npx vitest run … PersonsPage` → 2 passed).
+- **DTO с `| string` на enum-юнионах.** Стандартный приём: backend может ввести новое значение (например, новый IncidentStatus), и UI не должен падать на decode. Все label-функции имеют fallback (`labelFor` возвращает ключ, если нет в map).
+
+### Issues Fixed
+
+- **Закрыта acceptance criterion из roadmap Task 3.2:** «Tabs: Personal | Roles & Assignments | Training | Medicals | PPE | Documents | Incidents | Audit (frontend `EmployeeCard.tsx` — `[v1.1]`)» — теперь есть 8 вкладок (Documents отложен по сознательной декомпозиции, см. Decisions).
+- **UI/API permission seam устранён до его появления:** маршрут и кнопка drill-down скрыты у ролей, которым backend всё равно вернёт 403. Если в будущем бэкенд расширит `_EMPLOYEE_READ_ROLES`, его нужно будет синхронно расширить в трёх местах: `backend/app/api/routes/employees.py::_EMPLOYEE_READ_ROLES`, `backend/app/core/rbac_abac.py::ROLE_PERMISSIONS`, `frontend/src/permissions/permissions.ts::ROLE_PERMISSIONS`.
+- **Drill-down с реестра `/persons` → карточка:** раньше клик по сотруднику просто раскрывал embedded-блок с 4 пустыми табами-заглушками; теперь есть явный путь к полноценной карточке с реальными данными.
+
+### Known Problems / Risks
+
+- **Documents-секция отсутствует** (отложена в Next Step #4 по явной декомпозиции Session 19). Acceptance criterion плана не закрыт на 100%, но backend-агрегат тоже не покрывает Documents — синхронно отстаёт.
+- **Browser smoke-тестирование частично:** локальный backend (port 8000) был запущен из main-репо (commit `ae1b6d5`), который не содержит Session 19 коммита `23da913`. Из-за этого live-запрос к `/employees/<id>` возвращает 404 (route не существует в той версии). Это фиксирует, что **frontend корректно обрабатывает 404**: показывает `ErrorState` с кодом NOT_FOUND и кнопкой Повторить. Happy-path-рендеринг с реальными данными подтверждён через mock fetch (см. preview-снимок: 8 tabs, badges 1/1 для Медосмотров, 2/1 для СИЗ, таблицы корректно). После рестарта backend в этом worktree (commit `74970fc`) live-данные пойдут без правок.
+- **Vitest-тестирование Radix `<Tabs>` через `userEvent`:** в окружении jsdom это иногда чуть дольше, чем `fireEvent.click`, но более надёжно. Есть жалобы React-act warnings от @radix-ui/react-presence — не блокируют тесты, идут от внутреннего animation-state Radix; общеизвестная проблема.
+- **`Permit.position_id`** включён в DTO, но в UI пока не отображается (пользователю не нужен — должность видна в таб Personal). Зарезервирован для будущей детализации.
+- **Auth `additional_roles` в `EmployeeUserAccount`** показываются как outline-бейджи — если ролей много (>10), верстка может ехать. На текущих данных это не проблема (1-2 роли максимум).
+
+### Validation
+
+- **Окружение:** Windows, node v24.14.1, npm 11.11.0; frontend deps установлены (`npm install` 853 packages).
+- **Команды:**
+  - `npm run typecheck` (== `tsc --noEmit`) → ✅ clean (no errors).
+  - `npx vitest run src/__tests__/EmployeeCardPage.test.tsx src/__tests__/PersonsPage.test.tsx src/__tests__/WorkspaceDataQualityPage.test.tsx src/__tests__/ability.test.ts src/__tests__/RoutePermissionMatrix.test.tsx src/__tests__/SideNav.test.tsx` → ✅ **23 passed in 6 files** (новые 6 EmployeeCardPage + 17 регрессионных).
+  - `npx eslint src/pages/employees/ src/api/employees.ts src/types/dto/employee.ts src/__tests__/EmployeeCardPage.test.tsx src/permissions/permissions.ts src/permissions/ability.ts src/router/pageRegistry.tsx src/router/routeGroups.tsx src/pages/persons/PersonsPage.tsx --max-warnings=0` → ✅ exit 0.
+  - Browser smoke (Vite dev server `npm run dev` через preview tool): /employees/<id> рендерит правильный 404-ErrorState на реальный backend (preview backend на стороннем коммите); happy-path с mocked-fetch → 8 tabs + бейджи + таблицы корректно. Снимок viewport: ФИО Петров Иван Сергеевич, Инженер по охране труда · ООО Демо Компания · Цех №3, generated_at, активный таб Медосмотры с таблицей Периодический/10.01.2024/10.01.2025.
+- **Не запускалось:** полный backend pytest (CLAUDE.md ограничение); backend-изменение в `rbac_abac.py` — простое расширение dict-ов, не затрагивающее существующие политики.
+
+### Next Steps
+
+1. **Drill-down enrichment в реестрах** (Session 18 Next Step #1, Session 19 Next Step #2 — всё ещё открыт): `/persons`, `/companies`, `/documents`, `/medical`, `/training`, `/ppe` — читать `?focus=<id>` и подсвечивать строку (scroll-into-view + 3s highlight). Закрывает интерфейсный контракт Session 15 (DQ Dashboard) и Session 19 (Incidents drill-down из Employee Card → `/incidents?focus=<id>`).
+2. **Расширение `/employees/{id}` секциями Documents/Briefings/ComplianceDeadlines** (Session 19 Next Step #4): обе модели (`Document.person_id`, `BriefingEntry.person_id`, `ComplianceDeadline.person_id`) уже имеют FK на person — backend-расширение должно быть пятиминутным; затем зеркальные правки в `frontend/src/types/dto/employee.ts` + новый таб в `EmployeeCardPage.tsx`. Это закроет последнюю acceptance criterion roadmap Task 3.2.
+3. **Стабилизация фабрик** (Session 18/19 Next Step #3): `tests/utils/factories.py` — авто-уникальные `name`/`email`.
+4. **Bulk Employee Card** (`POST /employees:batch`) — если фронту понадобится прелоад нескольких карточек (Session 19 Next Step #5).
+5. **Phase 4 Smart Calendar** — следующая фаза roadmap, начинается с backend `/api/v1/calendar/events` aggregator.
+
+---
+
 ## Last Agent Handoff (2026-05-04, Session 19 — Phase 3.2: Unified Employee Card backend aggregate)
 
 - **Дата:** 2026-05-04 (после Session 18)
