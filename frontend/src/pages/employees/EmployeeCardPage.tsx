@@ -1,0 +1,669 @@
+import { ArrowLeft, RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+
+import { employeesApi } from "@/api/employees";
+import { ErrorState } from "@/components/common/ErrorState";
+import { LoadingScreen } from "@/components/common/LoadingScreen";
+import { Badge } from "@/components/ui/badge";
+import { Breadcrumb } from "@/components/ui/breadcrumb";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { ApiError } from "@/types/dto/common";
+import type {
+  EmployeeAuditItemDto,
+  EmployeeCardDto,
+  EmployeeIncidentItemDto,
+  EmployeeMedicalItemDto,
+  EmployeePermitItemDto,
+  EmployeePPEIssueItemDto,
+  EmployeeTrainingCertificateDto,
+  EmployeeTrainingItemDto
+} from "@/types/dto/employee";
+
+const EMPLOYMENT_STATUS_LABELS: Record<string, string> = {
+  active: "Работает",
+  on_leave: "В отпуске",
+  suspended: "Отстранён",
+  terminated: "Уволен"
+};
+
+const TRAINING_STATUS_LABELS: Record<string, string> = {
+  scheduled: "Запланировано",
+  in_progress: "В процессе",
+  completed: "Пройдено",
+  failed: "Провалено"
+};
+
+const PERMIT_STATUS_LABELS: Record<string, string> = {
+  active: "Действует",
+  expired: "Истёк",
+  revoked: "Отозван"
+};
+
+const PPE_ISSUE_STATUS_LABELS: Record<string, string> = {
+  issued: "Выдано",
+  returned: "Возвращено",
+  lost: "Утрачено"
+};
+
+const INCIDENT_TYPE_LABELS: Record<string, string> = {
+  accident: "Несчастный случай",
+  microtrauma: "Микротравма",
+  near_miss: "Опасное событие",
+  unsafe_condition: "Опасное состояние"
+};
+
+const INCIDENT_SEVERITY_LABELS: Record<string, string> = {
+  low: "Низкая",
+  medium: "Средняя",
+  high: "Высокая"
+};
+
+const INCIDENT_STATUS_LABELS: Record<string, string> = {
+  reported: "Зарегистрирован",
+  investigating: "Расследование",
+  corrective_actions: "Меры",
+  closed: "Закрыт",
+  cancelled: "Отменён"
+};
+
+const INCIDENT_ROLE_LABELS: Record<string, string> = {
+  victim: "Пострадавший",
+  witness: "Свидетель",
+  participant: "Участник"
+};
+
+const labelFor = (map: Record<string, string>, key: string | null | undefined) =>
+  (key && map[key]) || (key ?? "—");
+
+const formatDate = (iso: string | null | undefined) => {
+  if (!iso) return "—";
+  try {
+    const dt = new Date(iso);
+    if (Number.isNaN(dt.getTime())) return iso;
+    return dt.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" });
+  } catch {
+    return iso ?? "—";
+  }
+};
+
+const formatDateTime = (iso: string | null | undefined) => {
+  if (!iso) return "—";
+  try {
+    const dt = new Date(iso);
+    if (Number.isNaN(dt.getTime())) return iso;
+    return dt.toLocaleString("ru-RU", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  } catch {
+    return iso ?? "—";
+  }
+};
+
+const Info = ({ label, value }: { label: string; value?: string | null }) => (
+  <div>
+    <div className="text-xs uppercase text-muted-foreground">{label}</div>
+    <div className="text-sm font-medium">{value && value !== "" ? value : "—"}</div>
+  </div>
+);
+
+const TabBadge = ({ count, danger }: { count: number; danger?: boolean }) =>
+  count > 0 ? (
+    <Badge
+      variant={danger ? "destructive" : "secondary"}
+      className="ml-2 px-1.5 text-[11px]"
+    >
+      {count}
+    </Badge>
+  ) : null;
+
+const EmptyTabContent = ({ message }: { message: string }) => (
+  <p className="text-sm text-muted-foreground">{message}</p>
+);
+
+const PersonalTab = ({ card }: { card: EmployeeCardDto }) => {
+  const { personal } = card;
+  return (
+    <div className="grid gap-3 md:grid-cols-2">
+      <Info label="Компания" value={personal.company_name} />
+      <Info label="Должность" value={personal.position_name} />
+      <Info label="Рабочее место" value={personal.workplace_name} />
+      <Info
+        label="Статус занятости"
+        value={labelFor(EMPLOYMENT_STATUS_LABELS, personal.employment_status)}
+      />
+      <Info label="Дата приёма" value={formatDate(personal.hired_at)} />
+      <Info label="Дата рождения" value={formatDate(personal.birth_date)} />
+      <Info label="Email" value={personal.email} />
+      <Info label="Телефон" value={personal.phone} />
+      <Info label="Табельный номер" value={personal.personnel_number} />
+      <Info label="СНИЛС" value={personal.snils} />
+      <Info label="Класс условий труда" value={personal.working_conditions_class} />
+      {personal.hazardous_factors.length > 0 ? (
+        <div className="md:col-span-2">
+          <div className="text-xs uppercase text-muted-foreground">Вредные факторы</div>
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {personal.hazardous_factors.map((factor) => (
+              <Badge key={factor} variant="outline" className="text-xs">
+                {factor}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
+const RolesTab = ({ card }: { card: EmployeeCardDto }) => {
+  const { roles_and_assignments: roles } = card;
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 md:grid-cols-2">
+        <Info label="Компания" value={roles.company_name} />
+        <Info label="Должность" value={roles.position_name} />
+        <Info label="Рабочее место" value={roles.workplace_name} />
+        <Info
+          label="Статус занятости"
+          value={labelFor(EMPLOYMENT_STATUS_LABELS, roles.employment_status)}
+        />
+      </div>
+      <div className="rounded-md border p-3">
+        <div className="text-xs uppercase text-muted-foreground">Системный аккаунт</div>
+        {roles.user_account ? (
+          <div className="mt-2 grid gap-2 md:grid-cols-2">
+            <Info label="Email" value={roles.user_account.email} />
+            <Info label="Основная роль" value={roles.user_account.role} />
+            <Info
+              label="Активен"
+              value={roles.user_account.is_active ? "да" : "нет"}
+            />
+            <Info label="Последний вход" value={formatDateTime(roles.user_account.last_login_at)} />
+            {roles.user_account.additional_roles.length > 0 ? (
+              <div className="md:col-span-2">
+                <div className="text-xs uppercase text-muted-foreground">Дополнительные роли</div>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {roles.user_account.additional_roles.map((role) => (
+                    <Badge key={role} variant="outline" className="text-xs">
+                      {role}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <p className="mt-2 text-sm text-muted-foreground">Нет связанной учётной записи.</p>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const TrainingTab = ({ card }: { card: EmployeeCardDto }) => {
+  const { training } = card;
+  if (training.sessions.length === 0 && training.certificates.length === 0) {
+    return <EmptyTabContent message="Нет записей об обучении." />;
+  }
+  return (
+    <div className="space-y-6">
+      <section>
+        <h3 className="text-sm font-semibold">Курсы и сессии · {training.sessions_count}</h3>
+        {training.sessions.length === 0 ? (
+          <EmptyTabContent message="Сессии обучения не зафиксированы." />
+        ) : (
+          <Card className="mt-2">
+            <CardContent className="px-0 pb-0 pt-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Курс</TableHead>
+                    <TableHead className="w-[140px]">Статус</TableHead>
+                    <TableHead className="w-[140px]">Начало</TableHead>
+                    <TableHead className="w-[140px]">Завершение</TableHead>
+                    <TableHead className="w-[100px] text-right">Балл</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {training.sessions.map((session: EmployeeTrainingItemDto) => (
+                    <TableRow key={session.id}>
+                      <TableCell className="text-sm font-medium">
+                        {session.course_title ?? "—"}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {labelFor(TRAINING_STATUS_LABELS, String(session.status))}
+                      </TableCell>
+                      <TableCell className="text-sm">{formatDate(session.started_at)}</TableCell>
+                      <TableCell className="text-sm">{formatDate(session.completed_at)}</TableCell>
+                      <TableCell className="text-right text-sm">
+                        {session.score ?? "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
+      </section>
+      <section>
+        <h3 className="text-sm font-semibold">
+          Удостоверения · {training.certificates_count}
+        </h3>
+        {training.certificates.length === 0 ? (
+          <EmptyTabContent message="Удостоверения не зарегистрированы." />
+        ) : (
+          <Card className="mt-2">
+            <CardContent className="px-0 pb-0 pt-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Курс</TableHead>
+                    <TableHead className="w-[160px]">Номер</TableHead>
+                    <TableHead className="w-[140px]">Выдано</TableHead>
+                    <TableHead className="w-[140px]">Действует до</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {training.certificates.map((cert: EmployeeTrainingCertificateDto) => (
+                    <TableRow key={cert.id}>
+                      <TableCell className="text-sm font-medium">
+                        {cert.course_title ?? "—"}
+                      </TableCell>
+                      <TableCell className="text-sm font-mono">{cert.code ?? "—"}</TableCell>
+                      <TableCell className="text-sm">{formatDate(cert.issued_at)}</TableCell>
+                      <TableCell className="text-sm">{formatDate(cert.valid_until)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
+      </section>
+    </div>
+  );
+};
+
+const MedicalsTab = ({ card }: { card: EmployeeCardDto }) => {
+  const { medicals } = card;
+  if (medicals.items.length === 0) {
+    return <EmptyTabContent message="Медосмотры не найдены." />;
+  }
+  return (
+    <Card>
+      <CardContent className="px-0 pb-0 pt-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Тип</TableHead>
+              <TableHead className="w-[140px]">Дата</TableHead>
+              <TableHead className="w-[160px]">Действителен до</TableHead>
+              <TableHead>Заключение</TableHead>
+              <TableHead className="w-[100px]">Статус</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {medicals.items.map((exam: EmployeeMedicalItemDto) => (
+              <TableRow key={exam.id}>
+                <TableCell className="text-sm font-medium">{exam.exam_type}</TableCell>
+                <TableCell className="text-sm">{formatDate(exam.exam_date)}</TableCell>
+                <TableCell className="text-sm">{formatDate(exam.valid_until)}</TableCell>
+                <TableCell className="text-sm">{exam.conclusion ?? "—"}</TableCell>
+                <TableCell>
+                  {exam.is_expired ? (
+                    <Badge variant="destructive">Просрочен</Badge>
+                  ) : (
+                    <Badge variant="secondary">Актуален</Badge>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+};
+
+const PPETab = ({ card }: { card: EmployeeCardDto }) => {
+  const { ppe } = card;
+  if (ppe.items.length === 0) {
+    return <EmptyTabContent message="Выдач СИЗ нет." />;
+  }
+  return (
+    <Card>
+      <CardContent className="px-0 pb-0 pt-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Номенклатура</TableHead>
+              <TableHead className="w-[80px] text-right">Кол-во</TableHead>
+              <TableHead className="w-[160px]">Выдано</TableHead>
+              <TableHead className="w-[160px]">Действует до</TableHead>
+              <TableHead className="w-[120px]">Статус</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {ppe.items.map((issue: EmployeePPEIssueItemDto) => (
+              <TableRow key={issue.id}>
+                <TableCell className="text-sm font-medium">{issue.item_name}</TableCell>
+                <TableCell className="text-right text-sm">{issue.quantity}</TableCell>
+                <TableCell className="text-sm">{formatDateTime(issue.issued_at)}</TableCell>
+                <TableCell className="text-sm">{formatDateTime(issue.expires_at)}</TableCell>
+                <TableCell>
+                  {issue.is_expired ? (
+                    <Badge variant="destructive">Просрочено</Badge>
+                  ) : (
+                    <Badge variant="secondary">
+                      {labelFor(PPE_ISSUE_STATUS_LABELS, String(issue.status))}
+                    </Badge>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+};
+
+const PermitsTab = ({ card }: { card: EmployeeCardDto }) => {
+  const { permits } = card;
+  if (permits.items.length === 0) {
+    return <EmptyTabContent message="Допусков и нарядов нет." />;
+  }
+  return (
+    <Card>
+      <CardContent className="px-0 pb-0 pt-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Тип допуска</TableHead>
+              <TableHead className="w-[140px]">Выдан</TableHead>
+              <TableHead className="w-[160px]">Действует до</TableHead>
+              <TableHead className="w-[120px]">Статус</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {permits.items.map((permit: EmployeePermitItemDto) => (
+              <TableRow key={permit.id}>
+                <TableCell className="text-sm font-medium">{permit.permit_type}</TableCell>
+                <TableCell className="text-sm">{formatDate(permit.issued_at)}</TableCell>
+                <TableCell className="text-sm">{formatDate(permit.valid_until)}</TableCell>
+                <TableCell>
+                  {permit.is_expired ? (
+                    <Badge variant="destructive">Просрочен</Badge>
+                  ) : (
+                    <Badge variant="secondary">
+                      {labelFor(PERMIT_STATUS_LABELS, String(permit.status))}
+                    </Badge>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+};
+
+const IncidentsTab = ({ card }: { card: EmployeeCardDto }) => {
+  const { incidents } = card;
+  if (incidents.items.length === 0) {
+    return <EmptyTabContent message="Происшествий с участием сотрудника не зарегистрировано." />;
+  }
+  return (
+    <Card>
+      <CardContent className="px-0 pb-0 pt-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Заголовок</TableHead>
+              <TableHead className="w-[160px]">Тип</TableHead>
+              <TableHead className="w-[100px]">Тяжесть</TableHead>
+              <TableHead className="w-[160px]">Дата</TableHead>
+              <TableHead className="w-[140px]">Роль</TableHead>
+              <TableHead className="w-[140px]">Статус</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {incidents.items.map((incident: EmployeeIncidentItemDto) => (
+              <TableRow key={incident.id}>
+                <TableCell className="text-sm font-medium">
+                  <Link
+                    to={`/incidents?focus=${encodeURIComponent(incident.id)}`}
+                    className="text-primary hover:underline"
+                  >
+                    {incident.title}
+                  </Link>
+                </TableCell>
+                <TableCell className="text-sm">
+                  {labelFor(INCIDENT_TYPE_LABELS, String(incident.incident_type))}
+                </TableCell>
+                <TableCell>
+                  <Badge
+                    variant={String(incident.severity) === "high" ? "destructive" : "secondary"}
+                  >
+                    {labelFor(INCIDENT_SEVERITY_LABELS, String(incident.severity))}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-sm">{formatDateTime(incident.occurred_at)}</TableCell>
+                <TableCell className="text-sm">
+                  {labelFor(INCIDENT_ROLE_LABELS, String(incident.role))}
+                </TableCell>
+                <TableCell className="text-sm">
+                  {labelFor(INCIDENT_STATUS_LABELS, String(incident.status))}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+};
+
+const AuditTab = ({ card }: { card: EmployeeCardDto }) => {
+  const { audit } = card;
+  if (audit.items.length === 0) {
+    return <EmptyTabContent message="Изменений по карточке не зафиксировано." />;
+  }
+  return (
+    <Card>
+      <CardContent className="px-0 pb-0 pt-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[180px]">Когда</TableHead>
+              <TableHead className="w-[200px]">Действие</TableHead>
+              <TableHead className="w-[220px]">Кто</TableHead>
+              <TableHead>Изменения</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {audit.items.map((entry: EmployeeAuditItemDto) => (
+              <TableRow key={entry.id}>
+                <TableCell className="text-sm">{formatDateTime(entry.when)}</TableCell>
+                <TableCell className="text-sm font-mono">{entry.action}</TableCell>
+                <TableCell className="text-sm">{entry.actor_email ?? "—"}</TableCell>
+                <TableCell className="text-xs">
+                  {Object.keys(entry.changed_fields ?? {}).length > 0 ? (
+                    <code className="rounded bg-muted px-1.5 py-0.5">
+                      {Object.keys(entry.changed_fields).join(", ")}
+                    </code>
+                  ) : (
+                    "—"
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+};
+
+export default function EmployeeCardPage() {
+  const { personId = "" } = useParams<{ personId: string }>();
+  const navigate = useNavigate();
+  const [card, setCard] = useState<EmployeeCardDto | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  const load = useCallback(async () => {
+    if (!personId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await employeesApi.getCard(personId);
+      setCard(data);
+    } catch (err) {
+      setError((err as ApiError) ?? { status: 0, message: "Не удалось загрузить карточку", field_errors: [] });
+    } finally {
+      setLoading(false);
+    }
+  }, [personId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const headerName = card ? card.personal.fio || `${card.personal.last_name} ${card.personal.first_name}`.trim() : "Сотрудник";
+
+  return (
+    <div className="space-y-6 p-6">
+      <Breadcrumb
+        items={[
+          { label: "Главная", to: "/dashboard" },
+          { label: "Сотрудники", to: "/persons" },
+          { label: headerName }
+        ]}
+      />
+
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">{headerName}</h1>
+          {card ? (
+            <p className="text-muted-foreground mt-1 text-sm">
+              {card.personal.position_name ?? "Без должности"}
+              {card.personal.company_name ? ` · ${card.personal.company_name}` : ""}
+              {card.personal.workplace_name ? ` · ${card.personal.workplace_name}` : ""}
+            </p>
+          ) : null}
+          {card ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Карточка собрана: {formatDateTime(card.generated_at)}
+            </p>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="ghost" onClick={() => navigate(-1)}>
+            <ArrowLeft className="mr-2 h-4 w-4" aria-hidden="true" />
+            Назад
+          </Button>
+          <Button type="button" variant="secondary" onClick={load} disabled={loading}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
+            Обновить
+          </Button>
+        </div>
+      </div>
+
+      <ErrorState error={error ?? undefined} onRetry={load} />
+
+      {loading && !card ? <LoadingScreen label="Загрузка карточки сотрудника" /> : null}
+
+      {!loading && !error && card ? (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">Полные данные сотрудника</CardTitle>
+            <CardDescription>
+              Источник — единый агрегат <code>/api/v1/employees/{"{id}"}</code>: персональные
+              данные, роли, обучение, медосмотры, СИЗ, допуски, происшествия, аудит.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Tabs defaultValue="personal">
+              <TabsList className="flex h-auto flex-wrap gap-1">
+                <TabsTrigger value="personal">Персональные данные</TabsTrigger>
+                <TabsTrigger value="roles">
+                  Роли и назначения
+                  {card.roles_and_assignments.user_account ? (
+                    <Badge variant="secondary" className="ml-2 px-1.5 text-[11px]">
+                      аккаунт
+                    </Badge>
+                  ) : null}
+                </TabsTrigger>
+                <TabsTrigger value="training">
+                  Обучение
+                  <TabBadge
+                    count={card.training.sessions_count + card.training.certificates_count}
+                  />
+                </TabsTrigger>
+                <TabsTrigger value="medicals">
+                  Медосмотры
+                  <TabBadge count={card.medicals.count} />
+                  <TabBadge count={card.medicals.expired_count} danger />
+                </TabsTrigger>
+                <TabsTrigger value="ppe">
+                  СИЗ
+                  <TabBadge count={card.ppe.active_count} />
+                  <TabBadge count={card.ppe.expired_count} danger />
+                </TabsTrigger>
+                <TabsTrigger value="permits">
+                  Допуски
+                  <TabBadge count={card.permits.active_count} />
+                  <TabBadge count={card.permits.expired_count} danger />
+                </TabsTrigger>
+                <TabsTrigger value="incidents">
+                  Происшествия
+                  <TabBadge count={card.incidents.count} />
+                  <TabBadge count={card.incidents.open_count} danger />
+                </TabsTrigger>
+                <TabsTrigger value="audit">
+                  Аудит
+                  <TabBadge count={card.audit.count} />
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="personal">
+                <PersonalTab card={card} />
+              </TabsContent>
+              <TabsContent value="roles">
+                <RolesTab card={card} />
+              </TabsContent>
+              <TabsContent value="training">
+                <TrainingTab card={card} />
+              </TabsContent>
+              <TabsContent value="medicals">
+                <MedicalsTab card={card} />
+              </TabsContent>
+              <TabsContent value="ppe">
+                <PPETab card={card} />
+              </TabsContent>
+              <TabsContent value="permits">
+                <PermitsTab card={card} />
+              </TabsContent>
+              <TabsContent value="incidents">
+                <IncidentsTab card={card} />
+              </TabsContent>
+              <TabsContent value="audit">
+                <AuditTab card={card} />
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
+      ) : null}
+    </div>
+  );
+}
