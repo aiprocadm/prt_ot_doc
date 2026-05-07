@@ -37,6 +37,9 @@ export interface CalendarEventItemDto {
   site_id?: string | null;
   company_id?: string | null;
   assigned_user_id?: string | null;
+  expected_at?: string | null;
+  actual_at?: string | null;
+  variance_days?: number | null;
   extra: Record<string, unknown>;
 }
 
@@ -62,4 +65,5 @@ export interface CalendarEventsQuery {
   source_types?: CalendarSourceType[];
   person_id?: string;
   site_id?: string;
+  include_fact?: boolean;
 }
