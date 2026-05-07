@@ -97,4 +97,41 @@ describe("buildAbility", () => {
     expect(otSpecialist.can(PERMISSIONS.DATA_QUALITY_VIEW)).toBe(false);
   });
 
+  it("открывает Smart Calendar для HSE-ролей, согласованных с backend _CALENDAR_READ_ROLES", () => {
+    const owner = buildAbility({ ...baseUser, roles: ["owner"], permissions: [] });
+    expect(owner.can(PERMISSIONS.CALENDAR_VIEW)).toBe(true);
+
+    const admin = buildAbility({ ...baseUser, roles: ["admin"], permissions: [] });
+    expect(admin.can(PERMISSIONS.CALENDAR_VIEW)).toBe(true);
+
+    const otHead = buildAbility({ ...baseUser, roles: ["ot_pb_head"], permissions: [] });
+    expect(otHead.can(PERMISSIONS.CALENDAR_VIEW)).toBe(true);
+
+    const hr = buildAbility({ ...baseUser, roles: ["hr"], permissions: [] });
+    expect(hr.can(PERMISSIONS.CALENDAR_VIEW)).toBe(true);
+
+    const lineManager = buildAbility({ ...baseUser, roles: ["line_manager"], permissions: [] });
+    expect(lineManager.can(PERMISSIONS.CALENDAR_VIEW)).toBe(true);
+
+    const otSpecialist = buildAbility({ ...baseUser, roles: ["ot_specialist"], permissions: [] });
+    expect(otSpecialist.can(PERMISSIONS.CALENDAR_VIEW)).toBe(true);
+
+    const pbEngineer = buildAbility({ ...baseUser, roles: ["pb_engineer"], permissions: [] });
+    expect(pbEngineer.can(PERMISSIONS.CALENDAR_VIEW)).toBe(true);
+
+    const ecologist = buildAbility({ ...baseUser, roles: ["ecologist"], permissions: [] });
+    expect(ecologist.can(PERMISSIONS.CALENDAR_VIEW)).toBe(true);
+  });
+
+  it("закрывает Smart Calendar для ролей вне HSE-набора", () => {
+    const worker = buildAbility({ ...baseUser, roles: ["worker"], permissions: [] });
+    expect(worker.can(PERMISSIONS.CALENDAR_VIEW)).toBe(false);
+
+    const student = buildAbility({ ...baseUser, roles: ["student"], permissions: [] });
+    expect(student.can(PERMISSIONS.CALENDAR_VIEW)).toBe(false);
+
+    const client = buildAbility({ ...baseUser, roles: ["client"], permissions: [] });
+    expect(client.can(PERMISSIONS.CALENDAR_VIEW)).toBe(false);
+  });
+
 });

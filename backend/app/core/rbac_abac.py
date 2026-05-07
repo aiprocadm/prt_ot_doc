@@ -161,6 +161,7 @@ RESOURCE_PERMISSIONS: dict[str, set[str]] = {
     "admin": {"read", "list", "create", "update", "delete"},
     "data_quality": {"read"},
     "employee_card": {"read"},
+    "calendar": {"read"},
 }
 
 _ROLE_FULL = {
@@ -308,6 +309,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "risk_maps:list",
         "incidents:read",
         "incidents:list",
+        "calendar:read",
     },
     "hr": {
         "documents:read",
@@ -318,6 +320,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "trainings:update",
         "data_quality:read",
         "employee_card:read",
+        "calendar:read",
     },
     "accountant": {"reports:read", "reports:list", "reports:export"},
     "line_manager": {
@@ -329,6 +332,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "inspections:list",
         "data_quality:read",
         "employee_card:read",
+        "calendar:read",
     },
     "client": {
         "documents:read",
