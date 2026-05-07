@@ -1,5 +1,119 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-07, Session 23 — Phase 4.1: Smart Calendar frontend + CALENDAR_VIEW split, vNext-CAL-01)
+
+- **Дата:** 2026-05-07 (после Session 22)
+- **Агент:** Claude Opus 4.7 (local Windows)
+- **Задача:** «Продолжай по ТЗ» → выполнить Next Step #1 из handoff Session 22: открыть UI-сторону Phase 4.1 (`SmartCalendar.tsx`/`CalendarPage.tsx` поверх агрегатора `/api/v1/calendar/events`). Старая `CalendarPage.tsx` сидела на legacy эндпоинте `/notifications/calendar/events` с устаревшим DTO-контрактом (`{source, entity_type, date, deeplink}`); нужно переписать под новый агрегат (`{source_type, source_id, starts_at, is_overdue, by_source, ...}`) с day/week/month/year/list видами, фильтрами и drill-down.
+- **Статус:** ✅ COMPLETE для frontend-инкремента Phase 4.1. Закрыты acceptance criteria #2 (Views: day/week/month/year) и #3 (filter by event type, owner, status). Дополнительно: split-permission `CALENDAR_VIEW` зеркально Sessions 18/20 — backend `_CALENDAR_READ_ROLES` шире, чем frontend `TASK_VIEW`, что закрывало доступ для `pb_engineer`/`ecologist` несмотря на backend разрешение.
+- **Где остановился:** Phase 4.1 UI закрыт. Остались Next Steps #2 (ICS export endpoint), #3 (plan/fact comparison), #5 (Universal Search + Command Bar Task 4.2), #6 (стабилизация фабрик), #7 (Universal Calendar Card).
+
+### Studied Documentation
+
+- `docs/spec/TZ_FULL_UNIFIED.md` (раздел B.3 — IA & UI с Smart Calendar §4.4; раздел E — правила доработки 36).
+- `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md` Phase 4 Task 4.1 acceptance criteria.
+- `AI_IMPLEMENTATION_REPORT.md` Session 22 → Next Step #1 «`SmartCalendar.tsx` фронтенд».
+- `backend/app/schemas/calendar.py`, `backend/app/api/routes/calendar.py`, `backend/app/services/calendar_aggregator.py` — контракт нового эндпоинта.
+- `frontend/src/pages/employees/EmployeeCardPage.tsx` (Session 20) — паттерн ru-локалных label-мап + drill-down `?focus=<id>`.
+- `frontend/src/pages/workspace/WorkspaceDataQualityPage.tsx` (Session 15) — паттерн severity-чипов + interactive фильтрация.
+- `frontend/src/__tests__/EmployeeCardPage.test.tsx`, `WorkspaceDataQualityPage.test.tsx` — стиль mock/test для табов и chip-фильтра.
+- `frontend/src/__tests__/ability.test.ts` (Session 18) — паттерн open/closed permission-кейсов.
+- `backend/app/core/rbac_abac.py` (Sessions 18/20) — `data_quality:read`/`employee_card:read` как образец нового resource в `RESOURCE_PERMISSIONS` + явная привязка к `hr`/`line_manager`/`ecologist`.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 4 Task 4.1 — Smart Calendar UI (`vNext-CAL-01`/`vNext §4.4`).
+- **Приоритет:** P2 (Phase 4 канона; первый шаг open после Session 22).
+- **Почему выбрана:** прямой Next Step #1 из handoff Session 22. Аддитивный фронт-инкремент: новые DTO/api/тесты, существующая страница переписана, миграций нет. Backend agg уже готов и оттестирован (10 кейсов). Дополнительный split-permission `CALENDAR_VIEW` — копия паттернов Sessions 18 (DATA_QUALITY) и 20 (EMPLOYEE_CARD): backend RBAC шире TASK_VIEW, фронт нужно синхронизировать.
+
+### Implemented Changes
+
+- **`frontend/src/types/dto/calendar.ts`** (new): DTO-зеркало `app.schemas.calendar`. Экспортирует `CalendarSourceType` enum-юнион (8 значений), readonly tuple `CALENDAR_SOURCE_TYPES`, `CalendarEventItemDto`, `CalendarSourceCountDto`, `CalendarEventsResponseDto`, и query-shape `CalendarEventsQuery`.
+- **`frontend/src/api/calendar.ts`** — переписан полностью. `calendarApi.getEvents(query)` принимает опциональные `from_at/to_at/source_types[]/person_id/site_id` и пробрасывает в GET `/calendar/events`. `paramsSerializer.indexes=null` обеспечивает `?source_types=A&source_types=B` (FastAPI default), без `[0]/[1]` индексов axios.
+- **`frontend/src/pages/calendar/CalendarPage.tsx`** — переписан полностью. Ключевые блоки:
+  - Локальные хелперы: `startOfDay/Week/Month/Year`, `bucketKeyFor(view, isoDate)`, `formatBucketLabel`, `formatDateTime`, `buildDrillDown`.
+  - `SOURCE_LABELS` (8 ru-меток), `DRILL_DOWN` (карта `source_type → frontend route`): medical_exam→/medical, ppe_issue→/ppe, permit→/persons, training_session→/training, inspection→/inspections, compliance_deadline→/workspace/data-quality, briefing_entry→/briefings. `calendar_event` (legacy projection) — без drill-down (намеренно).
+  - 5 view-toggles (`day/week/month/year/list`); чипы по 8 источникам с per-source `count` + danger-бейдж overdue; фильтры person_id/site_id (Apply/Reset).
+  - URL-state: `view`, `sources` (csv), `person_id`, `site_id` — синхронизированы с `useSearchParams`.
+  - Bucket key: `startOfWeek` использует ISO-week (понедельник), не американский (воскресенье); `startOfMonth/Year` нормализуют к началу периода.
+  - Composite `id.split(":")[0]` отдаётся в drill-down — стабильная ссылка типа `/medical?focus=<source_id>`.
+  - Overdue highlighting: на каждой строке (Badge `destructive`) + на bucket-заголовке (Badge с количеством просрочек).
+  - Loading/Error/Empty states зеркалят `EmployeeCardPage.tsx` и `WorkspaceDataQualityPage.tsx`.
+  - `useMemo` обёртки на `items` (deps: `[response]`) и `buckets` (deps: `[items, view]`) — эслинт `react-hooks/exhaustive-deps` чист.
+- **`frontend/src/permissions/permissions.ts`** — `PERMISSIONS.CALENDAR_VIEW = "calendar.view"`. Явные привязки: `hr`, `line_manager`, `ot_specialist`, `pb_engineer`, `ecologist`. `owner/admin/ot_pb_head` получают через `ALL_PERMISSIONS`/filter.
+- **`frontend/src/permissions/ability.ts`** — `PERMISSION_ALIASES["calendar.read"|"calendar.view"] = CALENDAR_VIEW`.
+- **`frontend/src/router/routeGroups.tsx`** — `/calendar` вынесен в собственную группу под `CALENDAR_VIEW` (was `TASK_VIEW`).
+- **`frontend/src/router/navigationConfig.ts`** — пункт «Календарь» теперь гейтится `CALENDAR_VIEW`.
+- **`backend/app/core/rbac_abac.py`** — `RESOURCE_PERMISSIONS["calendar"] = {"read"}`; `calendar:read` добавлен в `ROLE_PERMISSIONS["hr"]`, `["line_manager"]`, `["ecologist"]`. `owner/admin` через `_ROLE_FULL`.
+- **`frontend/src/__tests__/CalendarPage.test.tsx`** (new, 7 кейсов): загрузка + header + counts; рендер 5 view-toggles + click «Год»; фильтр по source-чипу + проверка вызова `getEvents({source_types: ["medical_exam"]})`; drill-down link для medical_exam + бейдж «Просрочен»; применение `person_id` через Apply; empty state; ErrorState + retry.
+- **`frontend/src/__tests__/ability.test.ts`** — два кейса для `CALENDAR_VIEW`: open для 8 ролей (owner/admin/ot_pb_head/hr/line_manager/ot_specialist/pb_engineer/ecologist) + closed для worker/student/client.
+- **`frontend/src/__tests__/WorkflowCalendarPages.test.tsx`** — обновлён: mock сместился с `apiClient.get("/notifications/calendar/events")` на `calendarApi.getEvents`; expected query string changed to `view=week&sources=training_session`; empty-state текст «Событий в календаре нет».
+
+### Changed / New Files
+
+- `frontend/src/types/dto/calendar.ts` — новый файл (~60 строк).
+- `frontend/src/api/calendar.ts` — переписан.
+- `frontend/src/pages/calendar/CalendarPage.tsx` — переписан (~440 строк).
+- `frontend/src/permissions/permissions.ts` — +5 строк.
+- `frontend/src/permissions/ability.ts` — +2 строки.
+- `frontend/src/router/routeGroups.tsx` — рестракт группы.
+- `frontend/src/router/navigationConfig.ts` — 1 строка.
+- `backend/app/core/rbac_abac.py` — +5 строк (resource + 3 role entries).
+- `frontend/src/__tests__/CalendarPage.test.tsx` — новый файл (~220 строк).
+- `frontend/src/__tests__/ability.test.ts` — +37 строк.
+- `frontend/src/__tests__/WorkflowCalendarPages.test.tsx` — обновлён под новый контракт.
+- `CHANGELOG.md`, `AI_IMPLEMENTATION_REPORT.md` — записи Session 23.
+
+### Decisions
+
+- **Composite `id.split(":")[0]` для drill-down вместо `source_type` поля.** Backend уже отдаёт `id` как `<source_type>:<source_id>`, но также отдельно `source_type/source_id`. Использую `source_type` для маршрутизации, `source_id` для focus-параметра — без парсинга `id`. Это надёжнее (если `source_id` содержит двоеточие).
+- **`compliance_deadline` drill-down → `/workspace/data-quality?focus=<id>`, а не отдельная страница.** Compliance Deadlines пока не имеют выделенного registry; ближайший аналог — Data Quality Dashboard (Session 15) с `?focus` параметром. Когда появится `/compliance-deadlines` page — обновлю карту в одном месте.
+- **`calendar_event` (legacy projection) — без drill-down.** Эти строки могут дублировать события из других источников (они проецируются `CalendarProjectionService` Session 22). Открывать «реестр calendar_events» бессмысленно — это технический буфер. UI отдаёт строку без линка, только title + status.
+- **Split-permission `CALENDAR_VIEW`, а не reuse `TASK_VIEW`.** Backend `_CALENDAR_READ_ROLES` Session 22 включает `pb_engineer`/`ecologist` — у них нет `TASK_VIEW`. Без split фронт отрезал бы доступ. Альтернатива (расширить `TASK_VIEW`) изменила бы доступ к `/tasks`/`/workflow`/`/notifications` — нежелательно. Паттерн уже стандарт после Sessions 18 (DATA_QUALITY) и 20 (EMPLOYEE_CARD).
+- **`paramsSerializer.indexes=null`.** Без этого axios сериализует `source_types: ["A", "B"]` как `?source_types[0]=A&source_types[1]=B`, что FastAPI парсит как два отдельных ключа. Repeatable `?source_types=A&source_types=B` — каноничная форма для `list[str] = Query(None)`.
+- **URL state для view/sources/person_id/site_id.** Чтобы линк на конкретный отфильтрованный календарь был sharable (например, в email/Slack: «вот календарь HSE-просрочек по сотруднику X»). Альтернатива (только in-component state) — теряется при copy-paste URL.
+- **`startOfWeek` использует ISO-week (понедельник).** Российский календарь начинает неделю с понедельника. JS `Date.getDay()` возвращает 0=воскресенье, поэтому `(day + 6) % 7` даёт смещение до пн.
+- **`useMemo` обёртки.** ESLint react-hooks/exhaustive-deps жалуется на derived `items = response?.items ?? []` в deps useMemo (новый array на каждый рендер). Обёртка через `useMemo([response])` решает.
+
+### Issues Fixed
+
+- **Phase 4.1 acceptance criteria #2 (Views) и #3 (filters)** — закрыты.
+- **Permission gap** — backend разрешал `pb_engineer`/`ecologist` читать календарь, но frontend `TASK_VIEW` не давал. Исправлено через split-permission.
+- **Legacy contract gap** — старый CalendarPage сидел на устаревшем `/notifications/calendar/events`; новый агрегатор Session 22 не использовался. Исправлено.
+
+### Known Problems / Risks
+
+- **`compliance_deadline` drill-down — временный.** `/workspace/data-quality?focus=<id>` показывает все DQ issues, не только конкретный deadline. Когда появится `/compliance` registry — обновить `DRILL_DOWN` карту.
+- **`permit` drill-down → `/persons`** — это reuse страницы сотрудников с `?focus=<permit_id>`, что не вполне корректно (permit_id ≠ person_id). Лучше всего иметь `/permits` registry, но его нет в текущей маршрутизации. Альтернатива — открывать карточку сотрудника и переключать там на таб «Допуски». Помечено в `DRILL_DOWN` как кандидат на refactor.
+- **Backend pytest на 3.12 не запускался локально** — Python 3.12 отсутствует на Windows-машине. Backend pytest на 3.13: 9 calendar passed, 24 data_quality passed, 6 employee_card passed + 1 pre-existing failure (`test_aggregates_documents_briefings_and_deadlines` Session 21 — фабричная UNIQUE-проблема, не связана с Calendar изменениями). Frontend vitest на установленных npm-пакетах: 37 passed in 7 files.
+- **`act()` warnings в vitest** — React Testing Library жалуется на не-обёрнутые state updates. Это не падающие тесты, а warnings в stderr; характерно для async useEffect c `setLoading`/`setResponse`. Лечить — обернуть тесты в `await act(...)`. Не блокирует merge.
+- **Year-view может слипнуть событий многих сотрудников в один bucket.** При 1000+ событий timeline станет тяжёлым. Решение для года — UI должен делать `from_at/to_at` на год, а не отдавать дефолт; либо backend получит pagination. Сейчас защита через `MAX_ITEMS_PER_SOURCE=50` Session 22.
+- **`buildDrillDown` не учитывает tenant scope в URL.** На фронте всё работает через `X-Tenant` header в axios interceptor. Если кто-то скопирует URL и откроет в другом tenant — увидит «нет данных» (RBAC отрежет).
+
+### Validation
+
+- **Frontend typecheck:** `npm run typecheck` (tsc --noEmit) → ✅ clean.
+- **Frontend vitest:**
+  - `npx vitest run … CalendarPage.test.tsx ability.test.ts WorkflowCalendarPages.test.tsx` → ✅ 19 passed in 3 files.
+  - Регрессия `… SideNav RoutePermissionMatrix NavMenuProvider navigationConfigRoutes` → ✅ 7 passed in 4 files.
+  - Расширенная регрессия `… EmployeeCardPage WorkspaceDataQualityPage` (после моих changes к ability/permissions) → ✅ 37 passed in 7 files (общий).
+- **Frontend ESLint:** `npx eslint <changed files> --max-warnings=0` → ✅ exit 0.
+- **Backend imports:** `py -3.13 -c "from app.core.rbac_abac import RESOURCE_PERMISSIONS, ROLE_PERMISSIONS"` → `calendar: {'read'}`, `hr/line_manager/ecologist` все имеют `calendar:read`.
+- **Backend pytest (3.13 fallback):** `tests/test_calendar_aggregator.py + test_data_quality.py + test_employee_card.py` → 39 passed + 1 pre-existing failure (Session 21).
+- **CI** прогонит canonical pipeline на 3.12.12 (Codespace).
+
+### Next Steps
+
+1. **ICS / iCalendar export endpoint** (Phase 4.1 acceptance #4): `GET /api/v1/calendar/events.ics` — поверх того же агрегатора, формирует `text/calendar` через `icalendar` пакет (или stdlib `email`). Подписка из Outlook/Google/Apple.
+2. **Plan/Fact comparison** (Phase 4.1 smart features): `?include_fact=true` параметр + DTO расширение `expected_at` vs `actual_at` для completed events.
+3. **Saved filters / SLA tracking** — Phase 4.1 follow-up; использовать `user_preferences` или новую таблицу `saved_calendar_views`.
+4. **Universal Search + Command Bar (Task 4.2)** — параллельный трек Phase 4. Postgres tsvector или Elasticsearch.
+5. **Universal Calendar Card** — frontend компонент карточки события с edit/cancel/reschedule (vNext §4.6).
+6. **Стабилизация фабрик** (всё ещё открыто с Sessions 18-22): `tests/utils/factories.py::create_user` уникализация email через counter/uuid suffix.
+7. **`/permits` и `/compliance-deadlines` registries** — закроют временные drill-down (`permit` → `/persons`, `compliance_deadline` → `/workspace/data-quality`) на профильные страницы.
+
+---
+
 ## Last Agent Handoff (2026-05-07, Session 22 — Phase 4.1: Smart Calendar aggregator backend, vNext-CAL-01)
 
 - **Дата:** 2026-05-07 (после Session 21)

@@ -123,9 +123,12 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
       routes: [
         <Route key="/tasks" path="/tasks" element={<TasksPage />} />,
         <Route key="/workflow" path="/workflow" element={<WorkflowPage />} />,
-        <Route key="/notifications" path="/notifications" element={<NotificationsPage />} />,
-        <Route key="/calendar" path="/calendar" element={<CalendarPage />} />
+        <Route key="/notifications" path="/notifications" element={<NotificationsPage />} />
       ]
+    },
+    {
+      permission: PERMISSIONS.CALENDAR_VIEW,
+      routes: [<Route key="/calendar" path="/calendar" element={<CalendarPage />} />]
     },
     { permission: PERMISSIONS.RISK_VIEW, routes: [<Route key="/risk" path="/risk" element={<RiskPage />} />] },
     { permission: PERMISSIONS.ACTIVITY_VIEW, routes: [<Route key="/activities" path="/activities" element={<ActivitiesPage />} />] },

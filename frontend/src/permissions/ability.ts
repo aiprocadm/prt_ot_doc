@@ -60,7 +60,9 @@ const PERMISSION_ALIASES: Record<string, Permission> = {
   "data_quality.read": PERMISSIONS.DATA_QUALITY_VIEW,
   "data_quality.view": PERMISSIONS.DATA_QUALITY_VIEW,
   "employee_card.read": PERMISSIONS.EMPLOYEE_CARD_VIEW,
-  "employee_card.view": PERMISSIONS.EMPLOYEE_CARD_VIEW
+  "employee_card.view": PERMISSIONS.EMPLOYEE_CARD_VIEW,
+  "calendar.read": PERMISSIONS.CALENDAR_VIEW,
+  "calendar.view": PERMISSIONS.CALENDAR_VIEW
 };
 
 const ROLE_ALIASES: Record<string, Role> = {

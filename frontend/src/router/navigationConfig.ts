@@ -59,7 +59,7 @@ export const MAIN_NAV_GROUPS: NavGroup[] = [
       { label: "Экспорты", to: "/exports", icon: Archive, permission: PERMISSIONS.REPORTS_VIEW },
       { label: "Задачи", to: "/tasks", icon: ClipboardCheck, permission: PERMISSIONS.TASK_VIEW },
       { label: "Уведомления", to: "/notifications", icon: AlertTriangle, permission: PERMISSIONS.TASK_VIEW },
-      { label: "Календарь", to: "/calendar", icon: Activity, permission: PERMISSIONS.TASK_VIEW }
+      { label: "Календарь", to: "/calendar", icon: Activity, permission: PERMISSIONS.CALENDAR_VIEW }
     ]
   },
   {
