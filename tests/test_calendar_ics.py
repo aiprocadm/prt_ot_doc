@@ -393,6 +393,127 @@ class TestRenderCalendarIcs:
         # Negative variance keeps its native `-` sign without a redundant prefix.
         assert "Отклонение: -5 дн." in unfolded
 
+    def test_description_contains_sla_when_provided(self) -> None:
+        # When the aggregator has populated days_to_due/sla_band, the
+        # renderer surfaces them in DESCRIPTION so subscribed calendar
+        # clients can see the SLA band at a glance.
+        item = CalendarEventItem(
+            id="permit:1",
+            source_type="permit",
+            source_id="1",
+            title="Допуск: высота",
+            starts_at=datetime(2026, 5, 14, 0, 0, tzinfo=timezone.utc),
+            status="active",
+            is_overdue=False,
+            days_to_due=7,
+            sla_band="critical",
+        )
+        response = CalendarEventsResponse(
+            generated_at=datetime(2026, 5, 7, 12, 0, tzinfo=timezone.utc),
+            range_from=None,
+            range_to=None,
+            total=1,
+            overdue_count=0,
+            by_source=[
+                CalendarSourceCount(source_type="permit", count=1, overdue_count=0)
+            ],
+            items=[item],
+        )
+        text = render_calendar_ics(response)
+        unfolded = text.replace("\r\n ", "")
+        assert "До срока: 7 дн." in unfolded
+        assert "SLA: critical" in unfolded
+
+    def test_description_omits_sla_when_absent(self) -> None:
+        # Default (include_sla=False) leaves days_to_due/sla_band as None
+        # — DESCRIPTION must not contain any SLA fragments.
+        item = CalendarEventItem(
+            id="permit:1",
+            source_type="permit",
+            source_id="1",
+            title="Допуск",
+            starts_at=datetime(2026, 4, 1, 0, 0, tzinfo=timezone.utc),
+            status="active",
+        )
+        response = CalendarEventsResponse(
+            generated_at=datetime(2026, 5, 7, 12, 0, tzinfo=timezone.utc),
+            range_from=None,
+            range_to=None,
+            total=1,
+            overdue_count=0,
+            by_source=[
+                CalendarSourceCount(source_type="permit", count=1, overdue_count=0)
+            ],
+            items=[item],
+        )
+        text = render_calendar_ics(response)
+        unfolded = text.replace("\r\n ", "")
+        assert "До срока" not in unfolded
+        assert "Просрочено на" not in unfolded
+        assert "Срок сегодня" not in unfolded
+        assert "SLA:" not in unfolded
+
+    def test_description_renders_overdue_and_today_phrasing(self) -> None:
+        # `days_to_due` < 0 ⇒ "Просрочено на N дн."; `== 0` ⇒ "Срок сегодня";
+        # `> 0` ⇒ "До срока: N дн.". Verify all three branches in one render.
+        items = [
+            CalendarEventItem(
+                id="medical_exam:over",
+                source_type="medical_exam",
+                source_id="over",
+                title="Просроченный медосмотр",
+                starts_at=datetime(2026, 5, 1, 0, 0, tzinfo=timezone.utc),
+                status="expired",
+                is_overdue=True,
+                days_to_due=-6,
+                sla_band="overdue",
+            ),
+            CalendarEventItem(
+                id="medical_exam:today",
+                source_type="medical_exam",
+                source_id="today",
+                title="Сегодняшний медосмотр",
+                starts_at=datetime(2026, 5, 7, 0, 0, tzinfo=timezone.utc),
+                status="active",
+                is_overdue=False,
+                days_to_due=0,
+                sla_band="critical",
+            ),
+            CalendarEventItem(
+                id="medical_exam:future",
+                source_type="medical_exam",
+                source_id="future",
+                title="Будущий медосмотр",
+                starts_at=datetime(2026, 5, 14, 0, 0, tzinfo=timezone.utc),
+                status="active",
+                is_overdue=False,
+                days_to_due=21,
+                sla_band="warning",
+            ),
+        ]
+        response = CalendarEventsResponse(
+            generated_at=datetime(2026, 5, 7, 12, 0, tzinfo=timezone.utc),
+            range_from=None,
+            range_to=None,
+            total=3,
+            overdue_count=1,
+            by_source=[
+                CalendarSourceCount(
+                    source_type="medical_exam", count=3, overdue_count=1
+                )
+            ],
+            items=items,
+        )
+        text = render_calendar_ics(response)
+        unfolded = text.replace("\r\n ", "")
+        assert "Просрочено на 6 дн." in unfolded
+        assert "Срок сегодня" in unfolded
+        assert "До срока: 21 дн." in unfolded
+        # Each band string survives the round-trip.
+        assert "SLA: overdue" in unfolded
+        assert "SLA: critical" in unfolded
+        assert "SLA: warning" in unfolded
+
 
 # ---------------------------------------------------------------------------
 # Endpoint smoke tests

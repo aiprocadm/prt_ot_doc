@@ -94,6 +94,24 @@ class CalendarEventItem(BaseSchema):
             "recompute from `starts_at` alone."
         ),
     )
+    days_to_due: int | None = Field(
+        default=None,
+        description=(
+            "Whole-day delta from the request's `now` to the event anchor "
+            "(positive ⇒ event is in the future; negative ⇒ already past-due). "
+            "Populated only when `include_sla=true`; otherwise None."
+        ),
+    )
+    sla_band: str | None = Field(
+        default=None,
+        description=(
+            "SLA bucket derived from `days_to_due` and source-specific "
+            "thresholds: `overdue` (already past or `is_overdue=True`), "
+            "`critical` (within the inner warning window), `warning` (within the "
+            "outer warning window), or `ok` (further out). Populated only when "
+            "`include_sla=true`."
+        ),
+    )
     extra: dict[str, Any] = Field(
         default_factory=dict,
         description="Source-specific fields (permit_type, exam_type, etc.)",
