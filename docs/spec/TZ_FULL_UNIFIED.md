@@ -501,8 +501,9 @@
 - vNext Phase 0 (Baseline re-verification) — инфраструктура готова, пере-прогон в чистом окружении — `pending` (RB-001, RC-001).
 - vNext Phase 1 (Architectural foundation) — `complete` (Workspaces / RBAC module / Tenant isolation audit).
 - vNext Phase 2 (Operational dashboard / Health checks) — backend `done`, frontend `pending`.
-- vNext Phase 3 (Data Quality + Unified Employee Card) — DQ backend MVP `done` (10 правил), DQ Dashboard frontend `done`, Employee Card backend aggregate `done` (Session 19 — `GET /api/v1/employees/{id}`); Employee Card UI `pending` `[v1.1]`.
-- vNext Phases 4–10 — `planned` (см. §D).
+- vNext Phase 3 (Data Quality + Unified Employee Card) — DQ backend MVP `done` (10 правил), DQ Dashboard frontend `done`, Employee Card backend aggregate + UI + Documents/Briefings/Deadlines секции `done` (Sessions 19/20/21 — `GET /api/v1/employees/{id}` + `EmployeeCardPage.tsx` 11 табов).
+- vNext Phase 4 (Calendar & Search) — Smart Calendar backend aggregator `done` (Session 22 — `GET /api/v1/calendar/events` агрегирует MedicalExam/PPE/Permit/Training/Inspection/ComplianceDeadline/Briefing/CalendarEvent); UI views, ICS export, Universal Search/Command Bar — `pending` (Phase 4.2).
+- vNext Phases 5–10 — `planned` (см. §D).
 
 ---
 
@@ -515,8 +516,8 @@
 | Phase 0 — Release Blockers | P0 | TZ-1.1 baseline re-verification, RC-001..006 | 🔴 deferred |
 | Phase 1 — Architectural Foundation | P1 | Role-based workspaces / RBAC module / Tenant isolation audit | ✅ complete |
 | Phase 2 — Operational Dashboard | P1 | Command Center / Health Check Engine | 🟡 backend done, frontend pending |
-| Phase 3 — Data Quality & Master Data | P1 | DQ Layer / Unified Employee Card / Site Card | 🟡 DQ backend+frontend done; Employee Card backend done; Employee Card UI и Site Card pending |
-| Phase 4 — Calendar & Search | P2 | Smart Calendar / Universal Search / Command Bar | 📋 planned |
+| Phase 3 — Data Quality & Master Data | P1 | DQ Layer / Unified Employee Card / Site Card | 🟢 DQ + Employee Card (backend + UI + Documents/Briefings/Deadlines) done; Site Card pending |
+| Phase 4 — Calendar & Search | P2 | Smart Calendar / Universal Search / Command Bar | 🟡 Smart Calendar backend aggregator done (Session 22); UI/ICS/search pending |
 | Phase 5 — Document Factory Hardening | P2 | Template lint / Compare / Header-footer / Replace edge cases | 📋 planned |
 | Phase 6 — Integration & Webhooks | P2 | Webhook delivery / Public API hardening / Импорт | 📋 planned |
 | Phase 7 — Mobile & Field-Ready | P2 | PWA hardening / Offline sync / Field workflows / Kiosk | 📋 planned |
