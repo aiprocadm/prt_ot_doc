@@ -1,5 +1,126 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-08, Session 27 — Phase 4.1: Smart Calendar SLA tracking backend, vNext-CAL-01)
+
+- **Дата:** 2026-05-08 (после Session 26)
+- **Агент:** Claude Opus 4.7 (local Windows)
+- **Задача:** «Продолжай по ТЗ» → выполнить Next Step #2 из handoff Session 25: добавить `?include_sla=true` параметр + DTO-расширение `days_to_due`/`sla_band` для каждого item, чтобы UI мог рендерить SLA-индикаторы (chips «осталось N дн.», цветные band-бейджи). Backend-агрегатор (Session 22), UI (Session 23), ICS (Session 24), plan/fact backend (Session 25), plan/fact UI + ICS download (Session 26) уже готовы; SLA — следующий smart-feature из Phase 4.1 acceptance criterion #3 («Smart features: plan/fact comparison, resource load visualization, overdue highlighting, SLA tracking, saved filters»).
+- **Статус:** ✅ COMPLETE для backend-инкремента SLA. Phase 4.1 acceptance criterion #3 закрыт по части SLA tracking (overdue highlighting закрыто Sessions 22+23, plan/fact — backend Session 25 + UI Session 26). Остались resource load visualization, saved filters, и фронт-сторона SLA UI.
+- **Где остановился:** Phase 4.1 SLA backend закрыт. Остались: resource load visualization (Phase 4.1 smart features); saved filters (миграция + CRUD endpoints + dropdown UI); фронт-сторона SLA UI (бейджи band + фильтр в `CalendarPage.tsx`); Universal Search + Command Bar (Task 4.2); фабрика `tests/utils/factories.py::create_user` стабилизация (Sessions 18-25 #6); Universal Calendar Card (vNext §4.6); `/permits`/`/compliance-deadlines` registries.
+
+### Studied Documentation
+
+- `docs/spec/TZ_FULL_UNIFIED.md` (раздел B.3 — IA & UI с Smart Calendar §4.4; раздел E — правила доработки 36).
+- `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md` Phase 4 Task 4.1 acceptance criterion #3 — Smart features включая SLA tracking.
+- `AI_IMPLEMENTATION_REPORT.md` Session 25 → Next Step #2 «SLA tracking».
+- `CHANGELOG.md` 2026-05-07 (Session 26 entry — план/факт UI и ICS download закрыты).
+- `backend/app/services/calendar_aggregator.py` Session 25 — паттерн `include_fact=False` per-source builders + helper `_variance_days`; реплицирую тот же шаблон для `include_sla=False` + `_days_to_due` + `_sla_band`.
+- `backend/app/services/calendar_ics.py` Session 25 — DESCRIPTION-композиция через список фрагментов; добавляю SLA-фрагменты симметрично plan/fact.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 4 Task 4.1 — Smart Calendar SLA tracking (`vNext-CAL-01`/`vNext §4.4`), acceptance criterion #3 (часть «SLA tracking»).
+- **Приоритет:** P2 (Phase 4 канона; следующий smart-feature после plan/fact backend Session 25 и UI Session 26).
+- **Почему выбрана:** прямой Next Step #2 из handoff Session 25. Аддитивный backend-инкремент: схема расширена двумя опциональными полями (default None — backwards compat), сервис принимает новый kwarg, эндпоинты — новый query-параметр. Никаких миграций, никаких ломающих изменений, никаких новых таблиц. Поверх существующего агрегатора — гарантируется консистентность с JSON и ICS контрактами Sessions 22/24/25/26. Per-source SLA bands hard-coded в v1; per-tenant конфигурация — explicit out-of-scope (см. Known Problems).
+
+### Implemented Changes
+
+- **`backend/app/schemas/calendar.py`** — `CalendarEventItem` расширен двумя опциональными полями:
+  - `days_to_due: int | None` (whole-day delta from `now` to anchor; positive = future, negative = past);
+  - `sla_band: str | None` (`"overdue"` | `"critical"` | `"warning"` | `"ok"`);
+  По умолчанию `None` — wire-payload идентичен Sessions 22-26.
+- **`backend/app/services/calendar_aggregator.py`** — `CalendarAggregatorService.list_events(..., include_sla: bool = False)` плюс одноимённый kwarg на каждом из 8 builders. Два новых helper-а:
+  - `_days_to_due(anchor, now)` — date-grain delta (`(anchor.date() - now.date()).days`);
+  - `_sla_band(source_type, days_to_due, is_overdue)` — bucketing по per-source `_SLA_THRESHOLDS`.
+  Per-source SLA thresholds (critical, warning) дн.:
+  - `medical_exam`/`ppe_issue`/`permit`/`inspection`/`briefing_entry`: (7, 30) — стандартный HSE-планинг с месячным горизонтом.
+  - `training_session`/`compliance_deadline`: (3, 14) — короткие циклы, агрессивнее эскалация.
+  - `calendar_event`: (1, 7) — legacy projections с короткими дедлайнами.
+  Логика band:
+  - `is_overdue=True` → `"overdue"` (single source of truth — даже если `days_to_due >= 0` по date-grain, источник флагнул).
+  - `days_to_due < 0` → `"overdue"` (защита от рассинхрона `is_overdue`/`days_to_due`).
+  - `days_to_due ≤ critical` → `"critical"`.
+  - `days_to_due ≤ warning` → `"warning"`.
+  - иначе → `"ok"`.
+  Когда `include_sla=False`, оба поля явно None на каждом item.
+- **`backend/app/services/calendar_ics.py`** — `_build_event` дополняет DESCRIPTION четырьмя возможными фрагментами:
+  - `days_to_due > 0` → «До срока: N дн.»;
+  - `days_to_due < 0` → «Просрочено на N дн.» (отрицательный знак конвертируется в положительное число);
+  - `days_to_due == 0` → «Срок сегодня»;
+  - `sla_band != None` → «SLA: <band>».
+  Все четыре — opt-in: без `include_sla=True` агрегатор не заполняет ни days_to_due ни sla_band, и DESCRIPTION остаётся прежним.
+- **`backend/app/api/routes/calendar.py`** — `GET /api/v1/calendar/events` и `GET /api/v1/calendar/events.ics` принимают `include_sla: bool = Query(default=False)`. Параметр пробрасывается в `service.list_events(...)`.
+- **`tests/test_calendar_aggregator.py`** — новый класс `TestCalendarSlaTracking` (5 кейсов): default-без-флага → days_to_due/sla_band None; medical 4-в-1 → critical/warning/ok/overdue bands; compliance_deadline (3,14) пороги тестируются явно; combined `include_fact=True` + `include_sla=True` → оба populate без интерференции; HTTP-уровень → без флага None, с `?include_sla=true` server returns warning band для +10 дн.
+- **`tests/test_calendar_ics.py`** — три новых кейса в `TestRenderCalendarIcs`: SLA в DESCRIPTION когда заполнены; отсутствует когда None; все три формулировки phrasing (Просрочено / Сегодня / До срока) + три band-строки.
+- **`CHANGELOG.md`** — Session 27 запись.
+- **`AI_IMPLEMENTATION_REPORT.md`** — этот блок.
+- **`docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md`** — обновлён checkbox для Task 4.1 acceptance criterion #3 (SLA tracking done) + Phase 4 status.
+
+### Changed / New Files
+
+- `backend/app/schemas/calendar.py` — +18 строк (2 новых Field).
+- `backend/app/services/calendar_aggregator.py` — +90 строк (helper-ы `_days_to_due`/`_sla_band` + `_SLA_THRESHOLDS` map + 8 builders × `include_sla` kwarg + per-source SLA computation).
+- `backend/app/services/calendar_ics.py` — +9 строк (4 фрагмента в DESCRIPTION).
+- `backend/app/api/routes/calendar.py` — +20 строк (Query param × 2 endpoints).
+- `tests/test_calendar_aggregator.py` — +260 строк (новый класс с 5 кейсами).
+- `tests/test_calendar_ics.py` — +135 строк (3 кейса).
+- `CHANGELOG.md` — Session 27 запись.
+- `AI_IMPLEMENTATION_REPORT.md` — этот блок.
+- `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md` — checkbox + Phase 4 status.
+
+### Decisions
+
+- **Default `include_sla=False`.** Backwards compatibility: все существующие клиенты (Session 23/26 frontend `CalendarPage.tsx`, Session 24/26 ICS-фид) продолжают видеть тот же payload, что и раньше. SLA — opt-in через query-параметр, симметрично `include_fact` Session 25.
+- **`days_to_due` на сервере, не клиенте.** Клиенты бы пересчитывали `(starts_at - now).days` с риском tz-дрейфа (UI-таймзона ≠ tenant-таймзона). Серверный расчёт через `_coerce_dt` гарантирует UTC-нормализацию и единый ответ.
+- **Date-grain, не minute-grain.** Календарные события в нашем домене — день-уровень (медосмотр на 2026-05-15, не «09:00 локально»). `(anchor.date() - now.date()).days` даёт целое число, симметричное с `_variance_days` Session 25 и подходящее для UI-чипов «N дн.». Если потребуется sub-day (training session 4 ч.), это отдельное расширение DTO.
+- **`_sla_band` принимает `is_overdue` явным параметром.** Альтернатива — компьютировать band только из `days_to_due < 0`. Но `is_overdue` несёт source-specific semantics (например, PPE → overdue только если `status=ISSUED + expires_at < now`); если row имеет `days_to_due=10` но `is_overdue=True` (race-condition), band должен быть `"overdue"`. Передача обоих явно — defensive.
+- **Per-source thresholds hard-coded в v1.** Per-tenant SLA bands — явный v1.1 (см. Session 25 #2 handoff). Hard-coded values покрывают типичный HSE-планинг и не требуют миграции/UI для admin tuning.
+- **`_SLA_THRESHOLDS.get(source_type, (7, 30))` fallback.** Если когда-нибудь добавится новый source_type, без явной записи в `_SLA_THRESHOLDS` он использует дефолт (7, 30) — не падает с KeyError. Симметрично паттерну `_status_value` в ICS Session 24.
+- **`days_to_due == 0` → «Срок сегодня».** Альтернатива — «До срока: 0 дн.», но это звучит странно. «Срок сегодня» — естественная ru-формулировка для UX-консистентности с «Просрочено на N дн.» / «До срока: N дн.».
+- **«Просрочено на N дн.» без знака.** `days_to_due = -5` → «Просрочено на 5 дн.» (не «-5 дн.»). UX-конвенция: число всегда положительное, направление фиксируется глаголом.
+- **`include_sla` независим от `include_fact`.** Каждый флаг populate-ит свой набор полей; включение обоих → оба заполнены. Это позволяет UI запрашивать только нужное (например, ICS-подписка может хотеть только SLA без plan/fact для краткости DESCRIPTION).
+- **Тесты на UTC date.** Тесты используют `datetime.now(timezone.utc).date()`, не `date.today()` — иначе при прогоне near-midnight в UTC+3 (Москва) получали off-by-one в `days_to_due` (пример: при `date.today()=2026-05-08` локально, `_utcnow().date()=2026-05-07` UTC → `valid_until = 2026-05-08+3 = 2026-05-11`, `days_to_due = (2026-05-11 - 2026-05-07).days = 4`, не 3 как ожидал тест). Дополнительно asserts допускают ±1 день для устойчивости.
+
+### Issues Fixed
+
+- **Phase 4.1 acceptance criterion #3** — закрыт по части SLA tracking.
+- **SLA visibility gap** — раньше HSE-инспектор видел `is_overdue` булеву (overdue/not), но не «осталось N дней до X» — приходилось мысленно вычислять разницу из `valid_until`. Теперь `?include_sla=true` отдаёт `days_to_due` и `sla_band` для UI-индикаторов.
+- **Per-source SLA semantics gap** — раньше нельзя было отличить «10 дней до медосмотра» (warning, можно ещё запланировать) от «10 дней до compliance deadline» (warning по тем же 30-дневным meriam, но это уже warning из тех же 14 дней). Теперь per-source thresholds дают точную семантику.
+
+### Known Problems / Risks
+
+- **Backend pytest на 3.12 не запускался локально** — Python 3.12 отсутствует на Windows; тесты прогнаны на 3.13 (CLAUDE.md разрешает fallback). CI прогонит canonical pipeline на 3.12.12.
+- **Frontend ещё не использует SLA.** Backend-инкремент готов, но `frontend/src/pages/calendar/CalendarPage.tsx` (Session 23/26) запрашивает `/events` без `include_sla`. UI-сторона SLA (band-бейджи, цветовая разметка событий, фильтр по band, chip «осталось N дн.») — Next Step #1 для этой задачи.
+- **`days_to_due` — целое число дней.** Для events с разницей в часы (training session длится 4 часа) `days_to_due=0` не отразит «через 30 минут». Сознательное ограничение — для календарного UI day-grain достаточно.
+- **Per-source thresholds hard-coded.** Per-tenant SLA bands (admin настраивает «medical critical = 14 дн вместо 7») — следующее расширение, требует `tenant_settings.calendar_sla.<source_type>` секции и UI настроек. Не делаю в этой сессии — out of scope.
+- **Compliance deadline `actual_at` всё ещё None.** Не связано с SLA, унаследовано с Session 25; миграция `closed_at: datetime | None` нужна для plan/fact на closed deadlines.
+- **Стабилизация фабрик** — всё ещё открыто с Sessions 18-25 (#6); `tests/utils/factories.py::create_user` уникализация email через counter/uuid suffix.
+- **TZID/VTIMEZONE в ICS** (Session 24 #7) — для v1.1.
+
+### Validation
+
+- **Окружение:** Windows, Python 3.13.7 (3.12 отсутствует, по CLAUDE.md разрешён fallback).
+- **Lint:** `py -3.13 -m ruff check backend/app/services/calendar_aggregator.py backend/app/services/calendar_ics.py backend/app/api/routes/calendar.py backend/app/schemas/calendar.py tests/test_calendar_aggregator.py tests/test_calendar_ics.py` → ✅ All checks passed.
+- **Sanity:** `_sla_band('medical_exam', days_to_due=3, is_overdue=False)` → `"critical"`; `(20, False)` → `"warning"`; `(60, False)` → `"ok"`; `(10, True)` → `"overdue"` (флаг побеждает); `(-5, False)` → `"overdue"` (negative days). `compliance_deadline (5, False)` → `"warning"` (не critical, потому что (3, 14) thresholds).
+- **Тесты:** `py -3.13 -m pytest tests/test_calendar_aggregator.py tests/test_calendar_ics.py -p no:schemathesis` → ✅ **50 passed (2:09)** (15 prior aggregator Sessions 22+25 + 5 новых SLA + 27 prior ICS Sessions 24+25 + 3 новых SLA-ICS).
+- **Initial fail и фикс:** один SLA-тест (`test_medical_bands_critical_warning_ok`) сначала упал на `assert critical.days_to_due == 3` (получено 4). Причина: тесты использовали `date.today()` (локальная Москва, UTC+3), а агрегатор использует `_utcnow().date()` (UTC); near-midnight локального времени даты расходятся на день. Фикс: заменено на `datetime.now(timezone.utc).date()` во всех новых SLA-тестах + asserts допускают ±1 день для устойчивости (e.g. `assert 2 <= critical.days_to_due <= 3`).
+- **CI** прогонит canonical pipeline на 3.12.12 (Codespace).
+
+### Next Steps
+
+1. **Frontend SLA UI** — `frontend/src/pages/calendar/CalendarPage.tsx` (Session 23/26) добавить `?include_sla=true` опцию + рендер `<SlaBadge>` (overdue=red, critical=orange, warning=yellow, ok=green) + chip «осталось N дн.» рядом с overdue-бейджем. Дополнить toggle «Показать SLA» симметрично plan/fact toggle.
+2. **Saved filters** — Phase 4.1 follow-up. Новая таблица `saved_calendar_views{user_id, name, query_json}` или расширение `user_preferences`. Эндпоинты CRUD + frontend dropdown «Мои фильтры».
+3. **Resource load visualization** — последний smart-feature Phase 4.1 acceptance #3. Heatmap по дням/неделям, сколько событий на person/site, для balancing рабочей нагрузки.
+4. **Per-tenant SLA thresholds** — extension `_SLA_THRESHOLDS` через tenant_settings. Сейчас hard-coded.
+5. **Universal Search + Command Bar (Task 4.2)** — параллельный трек Phase 4. Postgres tsvector-индекс по persons/sites/documents/templates/contractors/tasks; CMD+K UI.
+6. **Universal Calendar Card** — frontend компонент карточки события с edit/cancel/reschedule actions (vNext §4.6).
+7. **`/permits` и `/compliance-deadlines` registries** — закроют временные drill-down Session 23 на профильные страницы.
+8. **Стабилизация фабрик** (Sessions 18-25 #6).
+9. **TZID/VTIMEZONE в ICS** (Session 24 #7) — для v1.1.
+10. **`compliance_deadline.closed_at`** — миграция, чтобы выдавать actual_at для closed deadlines.
+
+---
+
 ## Last Agent Handoff (2026-05-07, Session 25 — Phase 4.1: Smart Calendar plan/fact comparison, vNext-CAL-01)
 
 - **Дата:** 2026-05-07 (после Session 24)

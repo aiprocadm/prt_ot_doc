@@ -950,3 +950,290 @@ class TestCalendarPlanFactComparison:
         assert fact_item["expected_at"] is not None
         assert fact_item["actual_at"] is not None
         assert fact_item["variance_days"] == 2
+
+
+@pytest.mark.anyio
+class TestCalendarSlaTracking:
+    """`include_sla=True` populates `days_to_due`/`sla_band` per source thresholds."""
+
+    async def test_default_omits_sla_fields(
+        self,
+        test_db_session: AsyncSession,
+        data_factory: TestDataFactory,
+    ) -> None:
+        tenant = await data_factory.ensure_tenant(session=test_db_session)
+        company = await data_factory.create_company(
+            tenant=tenant, session=test_db_session
+        )
+        person = await data_factory.create_person(
+            tenant=tenant,
+            company=company,
+            session=test_db_session,
+            first_name="Sla",
+            last_name="Default",
+            email="sla-default@example.com",
+        )
+        today = date.today()
+        test_db_session.add(
+            MedicalExam(
+                tenant_id=tenant.id,
+                person_id=person.id,
+                exam_type="periodic",
+                exam_date=today - timedelta(days=10),
+                valid_until=today + timedelta(days=15),
+            )
+        )
+        await test_db_session.commit()
+
+        service = CalendarAggregatorService(
+            tenant_id=str(tenant.id), db=test_db_session
+        )
+        # Without `include_sla` the wire payload stays identical to the
+        # pre-vNext-CAL-01 contract.
+        response = await service.list_events(source_types=["medical_exam"])
+        item = response.items[0]
+        assert item.days_to_due is None
+        assert item.sla_band is None
+
+    async def test_medical_bands_critical_warning_ok(
+        self,
+        test_db_session: AsyncSession,
+        data_factory: TestDataFactory,
+    ) -> None:
+        tenant = await data_factory.ensure_tenant(session=test_db_session)
+        company = await data_factory.create_company(
+            tenant=tenant, session=test_db_session
+        )
+        person = await data_factory.create_person(
+            tenant=tenant,
+            company=company,
+            session=test_db_session,
+            first_name="Sla",
+            last_name="Bands",
+            email="sla-bands@example.com",
+        )
+        # Anchor on the UTC date the aggregator will see — using
+        # `date.today()` would drift relative to `_utcnow()` for
+        # tests run near local midnight in non-UTC timezones.
+        today_utc = datetime.now(timezone.utc).date()
+        test_db_session.add_all(
+            [
+                MedicalExam(
+                    tenant_id=tenant.id,
+                    person_id=person.id,
+                    exam_type="critical",
+                    exam_date=today_utc - timedelta(days=300),
+                    # 3 days to expiry → within (≤7) critical window
+                    valid_until=today_utc + timedelta(days=3),
+                ),
+                MedicalExam(
+                    tenant_id=tenant.id,
+                    person_id=person.id,
+                    exam_type="warning",
+                    exam_date=today_utc - timedelta(days=300),
+                    # 20 days → within (≤30) outer warning window
+                    valid_until=today_utc + timedelta(days=20),
+                ),
+                MedicalExam(
+                    tenant_id=tenant.id,
+                    person_id=person.id,
+                    exam_type="ok",
+                    exam_date=today_utc - timedelta(days=300),
+                    # 60 days → beyond warning window → ok
+                    valid_until=today_utc + timedelta(days=60),
+                ),
+                MedicalExam(
+                    tenant_id=tenant.id,
+                    person_id=person.id,
+                    exam_type="overdue",
+                    exam_date=today_utc - timedelta(days=400),
+                    # already past → overdue (negative days_to_due)
+                    valid_until=today_utc - timedelta(days=2),
+                ),
+            ]
+        )
+        await test_db_session.commit()
+
+        service = CalendarAggregatorService(
+            tenant_id=str(tenant.id), db=test_db_session
+        )
+        response = await service.list_events(
+            source_types=["medical_exam"], include_sla=True
+        )
+        by_type = {
+            item.extra["exam_type"]: item for item in response.items
+        }
+
+        critical = by_type["critical"]
+        assert critical.days_to_due is not None
+        assert 2 <= critical.days_to_due <= 3  # tolerate a 1-day clock drift
+        assert critical.sla_band == "critical"
+
+        warning = by_type["warning"]
+        assert warning.days_to_due is not None
+        assert 19 <= warning.days_to_due <= 20
+        assert warning.sla_band == "warning"
+
+        ok_item = by_type["ok"]
+        assert ok_item.days_to_due is not None
+        assert 59 <= ok_item.days_to_due <= 60
+        assert ok_item.sla_band == "ok"
+
+        # `is_overdue=True` always wins, even though days_to_due is also negative.
+        overdue = by_type["overdue"]
+        assert overdue.days_to_due is not None
+        assert -3 <= overdue.days_to_due <= -2
+        assert overdue.sla_band == "overdue"
+        assert overdue.is_overdue is True
+
+    async def test_compliance_deadline_uses_tighter_thresholds(
+        self,
+        test_db_session: AsyncSession,
+        data_factory: TestDataFactory,
+    ) -> None:
+        # ComplianceDeadline thresholds are (3, 14) — tighter than the
+        # default (7, 30). A 5-day-out deadline must land in `warning`,
+        # not `critical`, even though the same 5-day delta is `critical`
+        # for medicals/permits.
+        tenant = await data_factory.ensure_tenant(session=test_db_session)
+        now = datetime.now(timezone.utc)
+        test_db_session.add_all(
+            [
+                ComplianceDeadline(
+                    tenant_id=tenant.id,
+                    entity_type="medical_exam",
+                    entity_id="ent-critical",
+                    due_at=now + timedelta(days=2),
+                    status="open",
+                ),
+                ComplianceDeadline(
+                    tenant_id=tenant.id,
+                    entity_type="medical_exam",
+                    entity_id="ent-warning",
+                    due_at=now + timedelta(days=5),
+                    status="open",
+                ),
+                ComplianceDeadline(
+                    tenant_id=tenant.id,
+                    entity_type="medical_exam",
+                    entity_id="ent-ok",
+                    due_at=now + timedelta(days=20),
+                    status="open",
+                ),
+            ]
+        )
+        await test_db_session.commit()
+
+        service = CalendarAggregatorService(
+            tenant_id=str(tenant.id), db=test_db_session
+        )
+        response = await service.list_events(
+            source_types=["compliance_deadline"], include_sla=True
+        )
+        by_entity = {
+            item.extra["entity_id"]: item for item in response.items
+        }
+        assert by_entity["ent-critical"].sla_band == "critical"
+        assert by_entity["ent-warning"].sla_band == "warning"
+        assert by_entity["ent-ok"].sla_band == "ok"
+
+    async def test_combined_with_include_fact(
+        self,
+        test_db_session: AsyncSession,
+        data_factory: TestDataFactory,
+    ) -> None:
+        # Both flags are independent; turning on both populates plan/fact
+        # *and* SLA fields side-by-side without interference.
+        tenant = await data_factory.ensure_tenant(session=test_db_session)
+        company = await data_factory.create_company(
+            tenant=tenant, session=test_db_session
+        )
+        site = await data_factory.create_site(
+            tenant=tenant, company=company, session=test_db_session
+        )
+        today_utc = datetime.now(timezone.utc).date()
+        scheduled = today_utc + timedelta(days=4)
+        test_db_session.add(
+            Inspection(
+                tenant_id=tenant.id,
+                company_id=company.id,
+                site_id=site.id,
+                inspection_type=InspectionType.INTERNAL,
+                authority="SLA-test",
+                scheduled_at=scheduled,
+                status=InspectionStatus.PLANNED,
+            )
+        )
+        await test_db_session.commit()
+
+        service = CalendarAggregatorService(
+            tenant_id=str(tenant.id), db=test_db_session
+        )
+        response = await service.list_events(
+            source_types=["inspection"], include_fact=True, include_sla=True
+        )
+        item = response.items[0]
+        # Plan/fact populated (expected_at mirrors anchor; actual_at None
+        # for PLANNED row).
+        assert item.expected_at is not None
+        assert item.actual_at is None
+        assert item.variance_days is None
+        # SLA populated (4 days → ≤7 inspection critical window).
+        assert item.days_to_due is not None
+        assert 3 <= item.days_to_due <= 4
+        assert item.sla_band == "critical"
+
+    async def test_endpoint_passes_include_sla_query_param(
+        self,
+        async_client: AsyncClient,
+        make_auth_headers,
+        sessionmaker,
+        data_factory: TestDataFactory,
+    ) -> None:
+        async with sessionmaker() as session:
+            tenant = await data_factory.ensure_tenant(session=session)
+            company = await data_factory.create_company(
+                tenant=tenant, session=session
+            )
+            person = await data_factory.create_person(
+                tenant=tenant,
+                company=company,
+                session=session,
+                first_name="Sla",
+                last_name="Endpoint",
+                email="sla-endpoint@example.com",
+            )
+            today_utc = datetime.now(timezone.utc).date()
+            session.add(
+                MedicalExam(
+                    tenant_id=tenant.id,
+                    person_id=person.id,
+                    exam_type="periodic",
+                    exam_date=today_utc - timedelta(days=10),
+                    valid_until=today_utc + timedelta(days=10),
+                )
+            )
+            await session.commit()
+
+        headers = _cal_headers(await make_auth_headers(RoleEnum.ADMIN))
+        # Without include_sla the wire payload omits SLA fields.
+        legacy = await async_client.get(
+            f"{API_PREFIX}/calendar/events?source_types=medical_exam",
+            headers=headers,
+        )
+        assert legacy.status_code == status.HTTP_200_OK, legacy.text
+        legacy_item = legacy.json()["items"][0]
+        assert legacy_item["days_to_due"] is None
+        assert legacy_item["sla_band"] is None
+
+        # With include_sla=true the server returns days_to_due + band.
+        sla = await async_client.get(
+            f"{API_PREFIX}/calendar/events?source_types=medical_exam&include_sla=true",
+            headers=headers,
+        )
+        assert sla.status_code == status.HTTP_200_OK, sla.text
+        sla_item = sla.json()["items"][0]
+        assert sla_item["days_to_due"] is not None
+        assert 9 <= sla_item["days_to_due"] <= 10
+        # 9-10 days → within medical (7, 30) ⇒ warning band.
+        assert sla_item["sla_band"] == "warning"

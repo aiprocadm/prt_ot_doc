@@ -156,6 +156,15 @@ def _build_event(
     if item.variance_days is not None:
         sign = "+" if item.variance_days > 0 else ""
         desc_parts.append(f"Отклонение: {sign}{item.variance_days} дн.")
+    if item.days_to_due is not None:
+        if item.days_to_due > 0:
+            desc_parts.append(f"До срока: {item.days_to_due} дн.")
+        elif item.days_to_due < 0:
+            desc_parts.append(f"Просрочено на {-item.days_to_due} дн.")
+        else:
+            desc_parts.append("Срок сегодня")
+    if item.sla_band:
+        desc_parts.append(f"SLA: {item.sla_band}")
     if item.person_id:
         desc_parts.append(f"person_id: {item.person_id}")
     if item.site_id:

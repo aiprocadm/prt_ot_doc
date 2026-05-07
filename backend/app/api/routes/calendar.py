@@ -101,6 +101,15 @@ async def list_events(
             "the wire payload identical to the pre-vNext-CAL-01 contract."
         ),
     ),
+    include_sla: bool = Query(
+        default=False,
+        description=(
+            "When true, populate `days_to_due` and `sla_band` so the UI can show "
+            "SLA indicators (e.g. «осталось 5 дн.», «critical», «warning»). Bands "
+            "are derived from per-source thresholds; default false keeps the wire "
+            "payload identical to the pre-vNext-CAL-01 contract."
+        ),
+    ),
 ) -> CalendarEventsResponse:
     TenantContextValidator.ensure_tenant_context(tenant)
     _ = access
@@ -114,6 +123,7 @@ async def list_events(
             person_id=person_id,
             site_id=site_id,
             include_fact=include_fact,
+            include_sla=include_sla,
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
@@ -149,6 +159,13 @@ async def export_events_ics(
             "Отклонение: ±N дн.`) to each VEVENT DESCRIPTION."
         ),
     ),
+    include_sla: bool = Query(
+        default=False,
+        description=(
+            "When true, attach SLA metadata (`До срока: N дн.` / `Просрочено на N дн.` "
+            "/ `Срок сегодня` and `SLA: <band>`) to each VEVENT DESCRIPTION."
+        ),
+    ),
 ) -> Response:
     """Export the same aggregator output as an iCalendar feed.
 
@@ -168,6 +185,7 @@ async def export_events_ics(
             person_id=person_id,
             site_id=site_id,
             include_fact=include_fact,
+            include_sla=include_sla,
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
