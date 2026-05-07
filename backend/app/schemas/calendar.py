@@ -66,6 +66,34 @@ class CalendarEventItem(BaseSchema):
     site_id: str | None = None
     company_id: str | None = None
     assigned_user_id: str | None = None
+    expected_at: datetime | None = Field(
+        default=None,
+        description=(
+            "Planned/expected timestamp of the event (the original deadline or "
+            "scheduled date). Populated only when `include_fact=true`; otherwise None. "
+            "Mirrors `starts_at` for sources whose anchor is the plan itself."
+        ),
+    )
+    actual_at: datetime | None = Field(
+        default=None,
+        description=(
+            "Actual completion/issue timestamp recorded by the source module "
+            "(e.g. `Inspection.finished_at`, `TrainingSession.completed_at`, "
+            "`PPEIssue.returned_at`). Populated only when `include_fact=true` and "
+            "the source provides a distinct fact column for completed rows. "
+            "Sources without a fact column or rows that are not yet finished leave "
+            "this field as `None`."
+        ),
+    )
+    variance_days: int | None = Field(
+        default=None,
+        description=(
+            "Difference in whole days between `actual_at` and `expected_at` "
+            "(positive ⇒ fact is later than plan; negative ⇒ earlier). Computed "
+            "server-side only when both timestamps are known; clients should not "
+            "recompute from `starts_at` alone."
+        ),
+    )
     extra: dict[str, Any] = Field(
         default_factory=dict,
         description="Source-specific fields (permit_type, exam_type, etc.)",

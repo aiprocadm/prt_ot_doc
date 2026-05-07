@@ -1,5 +1,123 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-07, Session 25 — Phase 4.1: Smart Calendar plan/fact comparison, vNext-CAL-01)
+
+- **Дата:** 2026-05-07 (после Session 24)
+- **Агент:** Claude Opus 4.7 (local Windows)
+- **Задача:** «Продолжай по ТЗ» → выполнить Next Step #1 из handoff Session 24: добавить `?include_fact=true` параметр + DTO-расширение `expected_at`/`actual_at`/`variance_days` для completed events. Backend агрегатор (Session 22), UI (Session 23) и ICS (Session 24) уже готовы; plan/fact — первый smart-feature из Phase 4.1 acceptance criterion #3 («Smart features: plan/fact comparison, resource load visualization, overdue highlighting, SLA tracking, saved filters»).
+- **Статус:** ✅ COMPLETE для backend-инкремента plan/fact. Phase 4.1 acceptance criterion #3 закрыт по части plan/fact comparison (overdue highlighting уже сделано Sessions 22+23). Остались resource load visualization, SLA tracking, saved filters (UI-сторона + бэкенд для SLA).
+- **Где остановился:** Phase 4.1 plan/fact backend закрыт. Остались: SLA tracking + saved filters (Phase 4.1 smart features), Universal Search + Command Bar (Task 4.2), фабрика `tests/utils/factories.py::create_user` стабилизация (Sessions 18–24 #6), Universal Calendar Card (vNext §4.6), `/permits`/`/compliance-deadlines` registries, фронт-сторона plan/fact UI (стрелочные индикаторы variance/SLA в `CalendarPage.tsx`).
+
+### Studied Documentation
+
+- `docs/spec/TZ_FULL_UNIFIED.md` (раздел B.3 — IA & UI с Smart Calendar §4.4; раздел E — правила доработки 36).
+- `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md` Phase 4 Task 4.1 acceptance criterion #3 — Smart features включая plan/fact comparison.
+- `AI_IMPLEMENTATION_REPORT.md` Session 24 → Next Step #1 «Plan/Fact comparison».
+- `backend/app/services/calendar_aggregator.py` (Session 22) — структура per-source builders + контракт `_coerce_dt`.
+- `backend/app/services/calendar_ics.py` (Session 24) — `_build_event` DESCRIPTION-композиция.
+- `backend/app/models/models.py` — поля fact-данных:
+  - `MedicalExam.exam_date` (Date) — фактическая дата осмотра (anchor = `valid_until`).
+  - `Permit.issued_at` (Date) — дата выдачи допуска (anchor = `valid_until`).
+  - `BriefingEntry.briefing_date` (DateTime) — фактическая дата проведения инструктажа.
+  - `TrainingSession.completed_at` (DateTime nullable, COMPLETED).
+  - `Inspection.finished_at` (DateTime nullable, COMPLETED).
+  - `PPEIssue.returned_at` (DateTime nullable, RETURNED).
+  - `ComplianceDeadline` и `CalendarEvent` — fact-колонок нет, остаются `actual_at=None`.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 4 Task 4.1 — Smart Calendar plan/fact (`vNext-CAL-01`/`vNext §4.4`), acceptance criterion #3 (часть «plan/fact comparison»).
+- **Приоритет:** P2 (Phase 4 канона; первый smart-feature после закрытия трёх backend-инкрементов Sessions 22-24).
+- **Почему выбрана:** прямой Next Step #1 из handoff Session 24. Аддитивный backend-инкремент: схема расширена опциональными полями (default None — backwards compat), сервис принимает новый kwarg, эндпоинты — новый query-параметр. Никаких миграций, никаких ломающих изменений, никаких новых таблиц. Поверх существующего агрегатора — гарантируется консистентность с JSON и ICS контрактами Sessions 22/24.
+
+### Implemented Changes
+
+- **`backend/app/schemas/calendar.py`** — `CalendarEventItem` расширен тремя опциональными полями:
+  - `expected_at: datetime | None` (плановая дата; mirror `starts_at` когда `include_fact=True`, иначе None);
+  - `actual_at: datetime | None` (фактическая дата завершения/возврата; для каждого источника свой fact-маппинг — см. ниже);
+  - `variance_days: int | None` (`(actual_at - expected_at).days`, положительное = опоздание).
+  Поля обязательно опциональные c default `None` — wire-payload по умолчанию идентичен Session 22-24.
+- **`backend/app/services/calendar_aggregator.py`** — `CalendarAggregatorService.list_events(..., include_fact: bool = False)` плюс одноимённый kwarg на каждом из 8 builders. Helper `_variance_days(expected, actual) -> int | None` нормализует расчёт. Per-source маппинг fact-данных (заполняется только при `include_fact=True`):
+  - `medical_exam` → `actual_at=_coerce_dt(exam_date)` (Date → 00:00 UTC).
+  - `ppe_issue` → `actual_at=returned_at` только для `status == RETURNED`.
+  - `permit` → `actual_at=_coerce_dt(issued_at)` (всегда есть).
+  - `training_session` → `actual_at=completed_at` только для `status == COMPLETED`.
+  - `inspection` → `actual_at=finished_at` только для `status == COMPLETED`.
+  - `compliance_deadline` → `actual_at=None` (нет fact-колонки в модели).
+  - `briefing_entry` → `actual_at=_coerce_dt(briefing_date)` (всегда есть, anchor = `valid_until`).
+  - `calendar_event` → `actual_at=None` (legacy projection, plan-only).
+  Когда `include_fact=False`, все три поля явно None на каждом item — никаких изменений в наблюдаемом поведении для существующих клиентов.
+- **`backend/app/services/calendar_ics.py`** — `_build_event` дополняет DESCRIPTION фрагментами «План: <ISO-date>», «Факт: <ISO-date>», «Отклонение: ±N дн.» когда соответствующие поля заполнены. Положительное `variance_days` рендерится с явным `+`, отрицательное — c нативным `-`. Без plan/fact-данных DESCRIPTION прежний (тестируется отдельно).
+- **`backend/app/api/routes/calendar.py`** — `GET /api/v1/calendar/events` и `GET /api/v1/calendar/events.ics` принимают `include_fact: bool = Query(default=False)`. Параметр пробрасывается в `service.list_events(...)`.
+- **`tests/test_calendar_aggregator.py`** — новый класс `TestCalendarPlanFactComparison` (5 кейсов): default-без-флага → все три поля None; inspection COMPLETED + finished_at позже scheduled_at → variance=+3, PLANNED-row → expected_at заполнен но actual_at/variance None; training COMPLETED → variance=+2, SCHEDULED → actual_at None; ppe RETURNED → variance=+5, ISSUED → actual_at None; HTTP-уровень — без флага все три поля None, с `?include_fact=true` сервер возвращает variance=2 для inspection.
+- **`tests/test_calendar_ics.py`** — три новых кейса в `TestRenderCalendarIcs`: plan/fact в DESCRIPTION когда поля заполнены (содержит «План:», «Факт:», «Отклонение: +3 дн.»); отсутствует когда поля None (default state); отрицательное variance рендерится без `+`.
+- **`CHANGELOG.md`** — Session 25 запись.
+- **`AI_IMPLEMENTATION_REPORT.md`** — этот блок.
+- **`docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md`** — обновлён checkbox для Task 4.1 acceptance criterion #3 (plan/fact comparison done) + Phase 4 status строка.
+
+### Changed / New Files
+
+- `backend/app/schemas/calendar.py` — +30 строк (3 новых Field).
+- `backend/app/services/calendar_aggregator.py` — +60 строк (helper + 8 builders с include_fact + per-source fact mapping).
+- `backend/app/services/calendar_ics.py` — +9 строк (3 фрагмента в DESCRIPTION).
+- `backend/app/api/routes/calendar.py` — +20 строк (Query param × 2 endpoints).
+- `tests/test_calendar_aggregator.py` — +250 строк (новый класс с 5 кейсами).
+- `tests/test_calendar_ics.py` — +90 строк (3 кейса).
+- `CHANGELOG.md` — Session 25 запись.
+- `AI_IMPLEMENTATION_REPORT.md` — этот блок.
+- `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md` — checkbox Task 4.1 #3 + Phase 4 status.
+
+### Decisions
+
+- **Default `include_fact=False`.** Backwards compatibility: все существующие клиенты (Session 23 frontend `CalendarPage.tsx`, Session 24 ICS-фид) продолжают видеть тот же payload, что и раньше. Plan/fact — opt-in через query-параметр.
+- **`expected_at` как mirror `starts_at` (а не отдельная колонка).** В наших моделях нет отдельного «scheduled_at» отличного от anchor (например, для медосмотров anchor = valid_until, а не «когда планировался следующий осмотр»). Mirror anchor-а — самое простое и однозначное определение «плановой даты»: то, что мы показываем в календаре как событие. UI может рендерить tooltip «План: 2026-04-01 / Факт: 2026-04-04».
+- **`variance_days` на сервере, а не клиенте.** Клиенты бы пересчитывали по `(actual_at - starts_at)` с риском tz-дрейфа. Серверный расчёт через `_coerce_dt` гарантирует UTC-нормализацию и единый ответ для всех клиентов.
+- **Per-source fact-маппинг с status-фильтром где это уместно.** Для training/inspection/ppe фактическая дата релевантна только для completed/returned состояний (иначе actual=None). Для medical/permit/briefing — фактическая дата в модели всегда доступна, и осмысленна сама по себе (когда был последний осмотр / когда выдан допуск / когда проведён инструктаж). Без status-фильтра в этих трёх случаях variance показывает «насколько досрочно сделали» (отрицательное = план в будущем, факт раньше).
+- **Compliance deadline и calendar_event без fact.** Нет fact-колонки в моделях; `actual_at=None`, `variance_days=None`. Это явно прописано в коде (а не by-omission), чтобы было однозначно при чтении.
+- **ICS DESCRIPTION enrichment без отдельного флага в renderer.** Renderer читает поля из item; если они есть (потому что вызывающий передал `include_fact=true`) — рендерит. Если нет — пропускает. Это симметрично DESCRIPTION-pattern для `is_overdue`/`person_id`/`site_id`: добавляются только когда заполнены. Никакой кросс-резерв-логики между сервисом и рендером.
+- **`+` префикс только для положительной variance.** Отрицательное число имеет нативный `-` знак; добавлять `+` к положительной — общая UX-конвенция (Excel, Notion, Linear). Ноль рендерится как «0 дн.» без префикса (variance_days==0 → не положительное → без `+`).
+
+### Issues Fixed
+
+- **Phase 4.1 acceptance criterion #3** — закрыт по части plan/fact comparison.
+- **Inspection actuals visibility gap** — раньше HSE-инспектор видел `Inspection.scheduled_at` в календаре, но `finished_at` не был выставлен в DTO; теперь `?include_fact=true` отдаёт оба + variance.
+- **Training completion timing gap** — `TrainingSession.started_at` и `completed_at` лежат в DB, но фронт получал только `starts_at`. Теперь plan/fact явно.
+- **PPE return delay tracking** — `PPEIssue.returned_at` теперь видим как фактическая дата возврата vs плановой `expires_at`.
+
+### Known Problems / Risks
+
+- **`backend pytest на 3.12 не запускался локально`** — Python 3.12 отсутствует на Windows; тесты прогнаны на 3.13 (CLAUDE.md разрешает fallback). CI прогонит canonical pipeline на 3.12.12.
+- **Frontend ещё не использует plan/fact.** Backend-инкремент готов, но `frontend/src/pages/calendar/CalendarPage.tsx` (Session 23) запрашивает `/events` без `include_fact`. UI-сторона plan/fact (стрелочные индикаторы variance, dual-lane plan/fact rendering) — Next Step #1 для этой задачи.
+- **`variance_days` — целочисленные дни.** Для events с разницей в часы (training session длится 4 часа) variance=0 не отразит «опоздание на 30 минут». Это сознательное ограничение — для календарного UI day-grain достаточно. Для часов нужен отдельный `variance_minutes` поле, но это значимое расширение DTO; не блокер.
+- **Status-фильтр для training/inspection/ppe.** В training с `status==SCHEDULED` мы не выдаём actual_at, даже если completed_at внезапно заполнен (race-condition). Это намеренно: COMPLETED — единственный валидный статус для actual. Для PPE — RETURNED. Для inspection — COMPLETED. Если статус не совпадает, fact-данные игнорируются (defensive).
+- **`compliance_deadline` без fact-колонки.** Модель не отслеживает «когда дедлайн был фактически закрыт». Если такая семантика нужна, потребуется миграция (`closed_at: datetime | None`). Не делаю в этой сессии — out of scope.
+- **`expected_at == starts_at`** — некоторые UI-клиенты могут показывать оба как одну дату. Это намеренно: `starts_at` — для отображения, `expected_at` — для plan/fact-логики. Дублирование сделано, чтобы UI мог переключиться на dual-lane без break-change.
+- **Стабилизация фабрик** — всё ещё открыто с Sessions 18-24 (#6); `tests/utils/factories.py::create_user` уникализация email через counter/uuid suffix.
+
+### Validation
+
+- **Окружение:** Windows, Python 3.13.7 (3.12 отсутствует, по CLAUDE.md разрешён fallback).
+- **Lint:** `py -3.13 -m ruff check backend/app/services/calendar_aggregator.py backend/app/services/calendar_ics.py backend/app/api/routes/calendar.py backend/app/schemas/calendar.py tests/test_calendar_aggregator.py tests/test_calendar_ics.py` → ✅ All checks passed.
+- **Тесты:**
+  - `py -3.13 -m pytest tests/test_calendar_ics.py -p no:schemathesis --tb=short` → ✅ **27 passed (31s)** (24 prior Session 24 + 3 новых plan/fact в DESCRIPTION).
+  - `py -3.13 -m pytest tests/test_calendar_aggregator.py -p no:schemathesis --tb=short` → ✅ **15 passed (2:18)** (10 prior Session 22 + 5 новых plan/fact кейсов в `TestCalendarPlanFactComparison`).
+- **Initial fail и фикс:** один ICS-тест (`test_description_contains_plan_fact_when_provided`) сначала упал на `assert "План: 2026-04-01" in text`. Причина: DESCRIPTION-строка длинная (Cyrillic 2 байта/символ + ASCII-метаданные), `_fold` Session 24 сворачивает её по 75 октетов с CRLF+SPACE continuation; фолд может прийтись между «План: » и датой, что разрывает substring. Фикс: применять asserts к `text.replace("\r\n ", "")` (unfolded формат), что симметрично RFC 5545 unfold-семантике; та же стратегия применена ко всем трём новым plan/fact кейсам.
+- **CI** прогонит canonical pipeline на 3.12.12 (Codespace).
+
+### Next Steps
+
+1. **Frontend plan/fact UI** — `frontend/src/pages/calendar/CalendarPage.tsx` (Session 23) добавить `?include_fact=true` опцию + рендер variance-чипа («±N дн.») рядом с overdue badge, dual-lane plan/fact в day/week views.
+2. **SLA tracking** — Phase 4.1 smart features. Стрелочные индикаторы «осталось N дней до X» в дополнение к overdue. Backend: `?include_sla=true` + DTO `days_to_due` (computed). Связано с per-tenant SLA bands (например, медосмотр — 7 дней до valid_until = warning, 0 = overdue).
+3. **Saved filters** — Phase 4.1 follow-up. Новая таблица `saved_calendar_views{user_id, name, query_json}` или расширение `user_preferences`. Эндпоинты CRUD + frontend dropdown «Мои фильтры».
+4. **Universal Search + Command Bar (Task 4.2)** — параллельный трек Phase 4. Postgres tsvector-индекс по persons/sites/documents/templates/contractors/tasks; CMD+K UI.
+5. **Universal Calendar Card** — frontend компонент карточки события с edit/cancel/reschedule actions (vNext §4.6).
+6. **`/permits` и `/compliance-deadlines` registries** — закроют временные drill-down Session 23 на профильные страницы.
+7. **Стабилизация фабрик** (Sessions 18-24 #6).
+8. **TZID/VTIMEZONE в ICS** (Session 24 #7) — для v1.1.
+9. **`compliance_deadline.closed_at`** — миграция, чтобы выдавать actual_at для closed deadlines.
+
+---
+
 ## Last Agent Handoff (2026-05-07, Session 24 — Phase 4.1: Smart Calendar ICS / iCalendar export, vNext-CAL-01)
 
 - **Дата:** 2026-05-07 (после Session 23)

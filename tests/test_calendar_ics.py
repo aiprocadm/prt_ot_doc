@@ -294,6 +294,105 @@ class TestRenderCalendarIcs:
         assert "2026-05-01" in text
         assert "2026-05-31" in text
 
+    def test_description_contains_plan_fact_when_provided(self) -> None:
+        # When the aggregator has populated expected_at/actual_at/variance_days,
+        # the renderer surfaces them in DESCRIPTION so subscribed calendar
+        # clients can show plan/fact at a glance.
+        item = CalendarEventItem(
+            id="inspection:1",
+            source_type="inspection",
+            source_id="1",
+            title="Проверка: Аудит",
+            starts_at=datetime(2026, 4, 1, 0, 0, tzinfo=timezone.utc),
+            ends_at=datetime(2026, 4, 4, 0, 0, tzinfo=timezone.utc),
+            status="completed",
+            is_overdue=False,
+            expected_at=datetime(2026, 4, 1, 0, 0, tzinfo=timezone.utc),
+            actual_at=datetime(2026, 4, 4, 0, 0, tzinfo=timezone.utc),
+            variance_days=3,
+        )
+        response = CalendarEventsResponse(
+            generated_at=datetime(2026, 5, 7, 12, 0, tzinfo=timezone.utc),
+            range_from=None,
+            range_to=None,
+            total=1,
+            overdue_count=0,
+            by_source=[
+                CalendarSourceCount(
+                    source_type="inspection", count=1, overdue_count=0
+                )
+            ],
+            items=[item],
+        )
+        text = render_calendar_ics(response)
+        # The DESCRIPTION line is long (Russian text, 2 bytes/char) and gets
+        # folded at 75 octets per RFC 5545 §3.1, so we can't rely on
+        # contiguous substring matches. Reconstruct by stripping the fold
+        # continuations (`\r\n ` → ``) before asserting fragments.
+        unfolded = text.replace("\r\n ", "")
+        assert "План: 2026-04-01" in unfolded
+        assert "Факт: 2026-04-04" in unfolded
+        # Late variance gets a `+` prefix.
+        assert "Отклонение: +3 дн." in unfolded
+
+    def test_description_omits_plan_fact_when_absent(self) -> None:
+        # Default (include_fact=False) leaves expected_at/actual_at/variance_days
+        # as None — DESCRIPTION must not contain the planning fragments.
+        item = CalendarEventItem(
+            id="permit:1",
+            source_type="permit",
+            source_id="1",
+            title="Допуск",
+            starts_at=datetime(2026, 4, 1, 0, 0, tzinfo=timezone.utc),
+            status="active",
+        )
+        response = CalendarEventsResponse(
+            generated_at=datetime(2026, 5, 7, 12, 0, tzinfo=timezone.utc),
+            range_from=None,
+            range_to=None,
+            total=1,
+            overdue_count=0,
+            by_source=[
+                CalendarSourceCount(source_type="permit", count=1, overdue_count=0)
+            ],
+            items=[item],
+        )
+        text = render_calendar_ics(response)
+        unfolded = text.replace("\r\n ", "")
+        assert "План:" not in unfolded
+        assert "Факт:" not in unfolded
+        assert "Отклонение" not in unfolded
+
+    def test_description_negative_variance_renders_without_plus(self) -> None:
+        item = CalendarEventItem(
+            id="ppe_issue:1",
+            source_type="ppe_issue",
+            source_id="1",
+            title="СИЗ: Каска",
+            starts_at=datetime(2026, 4, 10, 0, 0, tzinfo=timezone.utc),
+            status="returned",
+            expected_at=datetime(2026, 4, 10, 0, 0, tzinfo=timezone.utc),
+            actual_at=datetime(2026, 4, 5, 0, 0, tzinfo=timezone.utc),
+            variance_days=-5,
+        )
+        response = CalendarEventsResponse(
+            generated_at=datetime(2026, 5, 7, 12, 0, tzinfo=timezone.utc),
+            range_from=None,
+            range_to=None,
+            total=1,
+            overdue_count=0,
+            by_source=[
+                CalendarSourceCount(
+                    source_type="ppe_issue", count=1, overdue_count=0
+                )
+            ],
+            items=[item],
+        )
+        text = render_calendar_ics(response)
+        unfolded = text.replace("\r\n ", "")
+        # Negative variance keeps its native `-` sign without a redundant prefix.
+        assert "Отклонение: -5 дн." in unfolded
+
 
 # ---------------------------------------------------------------------------
 # Endpoint smoke tests

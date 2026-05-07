@@ -93,6 +93,14 @@ async def list_events(
     ),
     person_id: str | None = Query(default=None),
     site_id: str | None = Query(default=None),
+    include_fact: bool = Query(
+        default=False,
+        description=(
+            "When true, populate `expected_at`/`actual_at`/`variance_days` on each "
+            "item so the UI can render plan-vs-fact comparison. Default false keeps "
+            "the wire payload identical to the pre-vNext-CAL-01 contract."
+        ),
+    ),
 ) -> CalendarEventsResponse:
     TenantContextValidator.ensure_tenant_context(tenant)
     _ = access
@@ -105,6 +113,7 @@ async def list_events(
             source_types=source_types,
             person_id=person_id,
             site_id=site_id,
+            include_fact=include_fact,
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
@@ -133,6 +142,13 @@ async def export_events_ics(
     ),
     person_id: str | None = Query(default=None),
     site_id: str | None = Query(default=None),
+    include_fact: bool = Query(
+        default=False,
+        description=(
+            "When true, attach plan-vs-fact metadata (`План: …; Факт: …; "
+            "Отклонение: ±N дн.`) to each VEVENT DESCRIPTION."
+        ),
+    ),
 ) -> Response:
     """Export the same aggregator output as an iCalendar feed.
 
@@ -151,6 +167,7 @@ async def export_events_ics(
             source_types=source_types,
             person_id=person_id,
             site_id=site_id,
+            include_fact=include_fact,
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
