@@ -24,7 +24,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
@@ -36,6 +36,7 @@ from app.services.calendar_aggregator import (
     ALL_SOURCES,
     CalendarAggregatorService,
 )
+from app.services.calendar_ics import render_calendar_ics
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
 
@@ -107,3 +108,60 @@ async def list_events(
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+
+@router.get(
+    "/events.ics",
+    response_class=Response,
+    summary="Smart Calendar export as RFC 5545 iCalendar (.ics) feed",
+    responses={
+        200: {
+            "content": {"text/calendar": {}},
+            "description": "iCalendar (.ics) payload — subscribe from Outlook/Google/Apple Calendar.",
+        }
+    },
+)
+async def export_events_ics(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: CalendarReadAccess,
+    from_at: datetime | None = Query(default=None),
+    to_at: datetime | None = Query(default=None),
+    source_types: list[str] | None = Query(
+        default=None,
+        description=f"Filter to a subset of {sorted(ALL_SOURCES)!r}",
+    ),
+    person_id: str | None = Query(default=None),
+    site_id: str | None = Query(default=None),
+) -> Response:
+    """Export the same aggregator output as an iCalendar feed.
+
+    Reuses `CalendarAggregatorService` so the ICS feed is consistent
+    with the JSON endpoint (`GET /events`). All filters are forwarded.
+    """
+
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = access
+
+    service = CalendarAggregatorService(tenant_id=str(tenant.id), db=session)
+    try:
+        payload = await service.list_events(
+            from_at=from_at,
+            to_at=to_at,
+            source_types=source_types,
+            person_id=person_id,
+            site_id=site_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    body = render_calendar_ics(payload)
+    filename = f"calendar-{payload.generated_at.date().isoformat()}.ics"
+    return Response(
+        content=body,
+        media_type="text/calendar; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
+    )

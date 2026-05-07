@@ -1,5 +1,104 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-07, Session 24 — Phase 4.1: Smart Calendar ICS / iCalendar export, vNext-CAL-01)
+
+- **Дата:** 2026-05-07 (после Session 23)
+- **Агент:** Claude Opus 4.7 (local Windows)
+- **Задача:** «Продолжай по ТЗ» → выполнить Next Step #1 из handoff Session 23: добавить `GET /api/v1/calendar/events.ics` поверх существующего агрегатора, чтобы закрыть Phase 4.1 acceptance criterion #4 («Export: ICS, Google Calendar, Outlook integration»). Backend агрегатор (Session 22) и UI (Session 23) уже готовы; ICS — третий и последний backend-инкремент Task 4.1.
+- **Статус:** ✅ COMPLETE. Phase 4.1 acceptance criterion #4 закрыт по части ICS-эндпоинта (Outlook/Google/Apple Calendar потребляют `text/calendar` через подписку URL). Совпадает с обновлением статуса Phase 4 в roadmap (4.1 backend aggregator + UI + ICS done).
+- **Где остановился:** Phase 4.1 ICS закрыт. Остались: plan/fact comparison + saved filters / SLA tracking (smart features Phase 4.1), Universal Search + Command Bar (Task 4.2), фабрика `tests/utils/factories.py::create_user` стабилизация (Sessions 18–23 #6), Universal Calendar Card (vNext §4.6), `/permits`/`/compliance-deadlines` registries.
+
+### Studied Documentation
+
+- `docs/spec/TZ_FULL_UNIFIED.md` (раздел B.3 — IA & UI с Smart Calendar §4.4; раздел E — правила доработки 36).
+- `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md` Phase 4 Task 4.1 acceptance criterion #4 — Export: ICS/Google/Outlook.
+- `AI_IMPLEMENTATION_REPORT.md` Session 23 → Next Step #1 «ICS / iCalendar export endpoint».
+- RFC 5545 (iCalendar Format) — §3.1 (folding), §3.3.5 (date-time UTC), §3.3.11 (TEXT escape rules), §3.6.1 (VEVENT), §3.7 (VCALENDAR).
+- `backend/app/services/calendar_aggregator.py` (Session 22) — контракт `CalendarAggregatorService.list_events`, нормализация tz через `_coerce_dt`.
+- `backend/app/api/routes/calendar.py` (Session 22 + 23) — паттерн RBAC через `CalendarReadAccess`, `_CALENDAR_READ_ROLES`.
+- `backend/app/api/routes/audit.py:200` — паттерн `StreamingResponse(media_type=...)`; `backend/app/api/routes/packs.py:1022,1070` — паттерн `Content-Disposition: attachment`.
+- `requirements.txt` — `icalendar` пакет отсутствует (PRODID, экранирование и сворачивание проще написать в 200 строк, чем тянуть зависимость).
+- `tests/test_calendar_aggregator.py` — паттерн service-level + endpoint-level тестов, фикстуры `test_db_session`/`data_factory`/`async_client`/`make_auth_headers`/`sessionmaker`.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 4 Task 4.1 — Smart Calendar (`vNext-CAL-01`/`vNext §4.4`), acceptance criterion #4.
+- **Приоритет:** P2 (Phase 4 канона; первый шаг open после Session 23).
+- **Почему выбрана:** прямой Next Step #1 из handoff Session 23. Аддитивный backend-инкремент: новый сервис, новый эндпоинт, новые тесты — никаких миграций, никаких ломающих изменений. Поверх существующего `CalendarAggregatorService` (Session 22), что гарантирует контракт-консистентность с JSON-эндпоинтом `/events`. ICS — стандартный протокол, без вариаций; реализация ограничена RFC 5545 и оценивается в одну сессию.
+
+### Implemented Changes
+
+- **`backend/app/services/calendar_ics.py`** (new, ~190 строк): pure-Python RFC 5545 сериализатор. Без новой зависимости (`icalendar` пакет не в `requirements.txt`).
+  - `_escape_text` — экранирование TEXT-полей по §3.3.11. Backslash экранируется первым (`\\` → `\\\\`), затем `;` → `\\;`, `,` → `\\,`, `\r\n`/`\n`/`\r` → `\\n`. Порядок важен: если бы `\\` экранировался последним, наш собственный `\\,` для запятой превратился бы в `\\\\,`.
+  - `_format_dt` — UTC-форма `YYYYMMDDTHHMMSSZ` по §3.3.5. `tz-naive` → trace as UTC; aware → `astimezone(utc)`. Это согласуется с `CalendarAggregatorService._coerce_dt`, который уже нормализует все anchors к UTC.
+  - `_fold` — байтовое сворачивание длинных строк по 75 октетов с `CRLF + SPACE` continuation per §3.1. Первый chunk = 75 октетов, последующие = 74 (lead-space делает их 75). Цикл «backup из multi-byte continuation byte» (`(byte & 0xC0) == 0x80`) обеспечивает, что split не случится в середине UTF-8 sequence — критично для ru-кириллицы (2 байта/символ → длинные SUMMARY/DESCRIPTION гарантированно превышают 75 октетов и требуют сворачивания).
+  - `_status_value` — маппинг внутреннего статуса в iCalendar STATUS-триаду (CONFIRMED/TENTATIVE/CANCELLED). `active/signed/approved/completed/issued/valid` → CONFIRMED; `draft/scheduled/planned/upcoming/review/expired` → TENTATIVE (включая `expired`, чтобы клиенты ещё показывали просроченные события — CANCELLED их скрыл бы); `cancelled/closed/revoked/archived` → CANCELLED. Неизвестный/пустой → CONFIRMED (тот же fallback, что Outlook/Google применяют, когда STATUS отсутствует).
+  - `_build_event` — yield-генератор VEVENT-строк. UID = `<id>@<domain>` где `id = <source_type>:<source_id>` (стабильно между запросами → подписки корректно обновляют записи); DTSTAMP/DTSTART (UTC); DTEND только если `ends_at` задан; SUMMARY с префиксом `[Просрочено]` для overdue; DESCRIPTION агрегирует метаданные (`Источник: ...; Статус: ...; person_id/site_id/company_id/assigned_user_id`); CATEGORIES — `source_type` + опц. `overdue` маркер; STATUS из `_status_value`.
+  - `render_calendar_ics(response, *, domain, calendar_name)` — финальная сборка VCALENDAR. PRODID `-//OT Platform//Smart Calendar//RU`, VERSION:2.0, CALSCALE:GREGORIAN, METHOD:PUBLISH, X-WR-CALNAME (по умолчанию «ОТ Платформа — Календарь HSE»), X-WR-CALDESC с диапазоном дат если заданы `range_from`/`range_to`. CRLF-терминатор после каждой строки, включая финальный `END:VCALENDAR\r\n` (требование §3.1).
+- **`backend/app/api/routes/calendar.py`** — добавлен `GET /api/v1/calendar/events.ics`. Query-параметры идентичны `/events` (`from_at`/`to_at`/`source_types[]`/`person_id`/`site_id`); внутри вызывает тот же `CalendarAggregatorService.list_events(...)` и рендерит результат через `render_calendar_ics`. Это гарантирует, что ICS-фид и JSON-ответ — одни и те же данные, фильтры и RBAC. Response: `text/calendar; charset=utf-8`, `Content-Disposition: attachment; filename="calendar-<YYYY-MM-DD>.ics"`, `Cache-Control: no-store`. Неизвестный source_type → 400. RBAC переиспользует `CalendarReadAccess`/`_CALENDAR_READ_ROLES` (admin/owner/hr/line_manager/ot_pb_lead/ot_specialist/pb_engineer/ecologist).
+- **`tests/test_calendar_ics.py`** (new, ~340 строк, 24 кейса):
+  - **Pure-function (15 кейсов):** `TestEscapeText` (4) — backslash-first, `,`/`;`, CRLF/LF/CR all collapse to `\n`, passthrough plain Russian text; `TestFormatDt` (2) — naive→UTC, aware (+03:00) → astimezone; `TestFold` (3) — short line unchanged, ASCII 200 chars → ≥3 chunks с проверкой ≤75 октетов на каждом и leading SPACE на continuation, ru-Я × 80 (160 байт UTF-8) → корректно сворачивается без разрыва multi-byte и rejoin даёт исходную строку; `TestStatusValue` (5) — маппинг для каждой ветки + неизвестный/пустой default.
+  - **Renderer (5 кейсов):** минимальный envelope (CRLF-терминатор, PRODID, VERSION:2.0, METHOD:PUBLISH, без VEVENT для пустого ответа); VEVENT с обязательными полями (UID, DTSTAMP, DTSTART, SUMMARY, STATUS, CATEGORIES, без DTEND для point-in-time); overdue → префикс `[Просрочено]` в SUMMARY + `CATEGORIES:permit,overdue` + `STATUS:TENTATIVE` (для `expired`); экранирование специальных символов в title; DTEND emit когда `ends_at` задан; X-WR-CALDESC содержит ISO-формат `range_from`/`range_to`.
+  - **Endpoint (4 кейса):** admin получает 200 + `text/calendar; charset=utf-8` + `Content-Disposition: attachment` + `.ics` filename + ru-кириллица в body + BEGIN/END VCALENDAR + минимум одно VEVENT; пустая аренда → 200 + body без VEVENT; неизвестный source_type → 400; student → 401/403.
+
+### Changed / New Files
+
+- `backend/app/services/calendar_ics.py` — новый файл (~190 строк).
+- `backend/app/api/routes/calendar.py` — +60 строк (новый эндпоинт + импорт).
+- `tests/test_calendar_ics.py` — новый файл (~340 строк, 24 кейса).
+- `CHANGELOG.md` — Session 24 запись.
+- `AI_IMPLEMENTATION_REPORT.md` — этот блок.
+- `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md` — обновлён checkbox acceptance criterion #4 для Task 4.1 + Phase 4 status строка.
+
+### Decisions
+
+- **Pure-Python RFC 5545 без `icalendar` зависимости.** `requirements.txt` не содержит `icalendar`; добавлять пакет ради одного эндпоинта избыточно (RFC 5545 простой, ~200 строк pure-Python покрывают то, что мы используем — VCALENDAR/VEVENT с UID/DTSTAMP/DTSTART/SUMMARY/STATUS/CATEGORIES). Это согласуется с практикой репо: все сериализаторы (CSV, NDJSON, ICS) — без сторонних библиотек.
+- **Байтовое сворачивание (octet-aware), не char-aware.** RFC 5545 говорит «75 octets», не «75 characters». Для ASCII разницы нет, но ru-кириллица (2 байта/символ) ломает char-based сворачивание: `"М" * 40` = 40 chars = 80 octets, что превышает limit. Octet-based сворачивание + walk-back из multi-byte continuation byte — единственный корректный путь.
+- **`expired` → TENTATIVE, не CANCELLED.** Просроченные события всё ещё показываются в календарных клиентах как «требующие внимания». CANCELLED заставит Outlook/Google скрыть их (или зачеркнуть в некоторых клиентах). TENTATIVE сохраняет видимость — что соответствует UI-семантике календаря на фронте Session 23 (overdue выделены красным, но видны).
+- **DESCRIPTION агрегирует метаданные через `; `.** Альтернатива — multi-line DESCRIPTION с `\n`-разделителями. Но многие клиенты (Outlook на Windows) плохо рендерят `\n` в DESCRIPTION. Inline `; `-разделитель — самый совместимый формат.
+- **`Content-Disposition: attachment` (не `inline`).** Подписка в Outlook/Google/Apple идёт через URL и тип `text/calendar` — Content-Disposition не используется при подписке. Но при ручном открытии URL в браузере `attachment` дает рабочий download-flow вместо «отобразить ICS как plain text», что было бы непонятно. Outlook/Google subscription URL не зависят от Content-Disposition.
+- **`Cache-Control: no-store`.** ICS-фид — динамический; статус событий, overdue флаги, фильтры — всё может меняться. `no-store` гарантирует, что Outlook/Google перетянут свежий фид при следующей подписке (типичный refresh interval — 15 мин). Альтернатива — позволить browser cache, но при подписке кэш ничего не даёт.
+- **UID `<source_type>:<source_id>@<domain>`.** Стабильный UID критичен: при повторной подписке клиенты обновляют существующие записи по UID, а не создают дубликаты. `domain` сейчас захардкоден `ot-platform.local`; вынос в settings/derive-from-host — кандидат на v1.1 если потребуется (для multi-domain deploy).
+- **Тот же RBAC, что и `/events`.** Фид контентом совпадает с JSON-ответом — разные роли для разных форматов привели бы к багу «роль X видит JSON, но не ICS». Использование `CalendarReadAccess` гарантирует консистентность.
+- **`media_type="text/calendar; charset=utf-8"`.** Без `charset=utf-8` некоторые клиенты (старые Outlook) интерпретируют байты как Latin-1 и ломают ru-кириллицу в SUMMARY. Явный charset — самый надёжный способ.
+- **Тесты на pure-функции отдельно от endpoint-тестов.** Pure-функции не нуждаются в БД/факториях; их быстрые синхронные тесты в `TestEscapeText/TestFormatDt/TestFold/TestStatusValue/TestRenderCalendarIcs` дают быстрый сигнал о regress в чистой логике. Endpoint-тесты — отдельный класс `TestCalendarIcsEndpoint`, использующий те же фикстуры, что `test_calendar_aggregator.py`.
+
+### Issues Fixed
+
+- **Phase 4.1 acceptance criterion #4** — закрыт по части ICS-эндпоинта.
+- **Outlook/Google/Apple subscription gap** — раньше HSE-инспектор не мог подписаться на сводный календарь HSE-событий из мобильного календаря; теперь URL `/api/v1/calendar/events.ics` отдаёт RFC 5545 фид, который вживую обновляется в всех major-клиентах.
+
+### Known Problems / Risks
+
+- **Backend pytest на 3.12 не запускался локально** — Python 3.12 отсутствует на Windows-машине; тесты прогнаны на 3.13 (CLAUDE.md разрешает fallback). 24 ICS-теста прошли (57s); 10 aggregator-тестов прошли (2:05). CI прогонит canonical pipeline на 3.12.12.
+- **`domain` захардкожен** — `ot-platform.local` в `render_calendar_ics`. Не блокер: UID должен быть глобально уникальным, а `<source_type>:<source_id>` уже уникален в пределах нашей инсталляции. Но если планируется multi-domain deploy, домен лучше тянуть из settings/request host.
+- **Лимит `MAX_ITEMS_PER_SOURCE=50` per source унаследован от агрегатора** — для типичных day/week/month диапазонов достаточно. Year-view из Outlook subscription может «обрезать» события свыше 50 на источник; для этого случая в follow-up можно добавить `?expanded=true` с пагинацией или расширением лимита для ICS-фида (сейчас не блокер — типичная подписка обновляется ежемесячно с разумными диапазонами).
+- **Charset utf-8 в media_type** — RFC 5545 не требует charset (по дефолту utf-8), но старые Outlook на Windows бывают чувствительны. Явное `charset=utf-8` — defensive.
+- **`Cache-Control: no-store`** — клиенты, которые агрессивно кэшируют (Apple Calendar на macOS), могут показывать stale данные если их refresh interval > 1 часа. Это поведение клиента, не фида.
+- **TZID отсутствует** — все DTSTART в UTC (`Z` суффикс). Это технически корректно по RFC 5545, но клиенты отображают события в local timezone пользователя, что может выглядеть странно для tenant-локальных событий (например, медосмотр запланирован на 09:00 локально → отобразится в UTC). Решение для v1.1 — добавлять VTIMEZONE с tenant timezone и использовать `DTSTART;TZID=...` вместо UTC. Сейчас не блокер: события часто планируются на дату-без-времени, а UTC midnight — общепринятый default.
+- **Стабилизация фабрик** — всё ещё открыто с Sessions 18-22 (#6); `tests/utils/factories.py::create_user` уникализация email через counter/uuid suffix, чтобы повторные `create_document` в `test_employee_card.py::TestEmployeeCardService::test_aggregates_documents_briefings_and_deadlines` не падали на UNIQUE.
+
+### Validation
+
+- **Окружение:** Windows, Python 3.13.7 (3.12 отсутствует, по CLAUDE.md разрешён fallback).
+- **Lint:** `py -3.13 -m ruff check backend/app/services/calendar_ics.py backend/app/api/routes/calendar.py tests/test_calendar_ics.py` → ✅ All checks passed.
+- **Импорты:** косвенно через pytest — все 24 кейса успешно собирают `app.services.calendar_ics`, `app.schemas.calendar`, `app.api.routes.calendar`.
+- **Тесты:** `py -3.13 -m pytest tests/test_calendar_ics.py -p no:schemathesis` → ✅ **24 passed (57s)**.
+- **Регрессия:** `py -3.13 -m pytest tests/test_calendar_aggregator.py -p no:schemathesis` → ✅ **10 passed (2:05)**, без новых failures.
+- **CI** прогонит canonical pipeline на 3.12.12 (Codespace).
+
+### Next Steps
+
+1. **Plan/Fact comparison** (Phase 4.1 smart features): `?include_fact=true` параметр + DTO расширение `expected_at` vs `actual_at` для completed events. Backend получает второй проход через агрегатор, который возвращает фактические сроки выполнения для completed-источников (training completed_at, medical_exam exam_date, ppe_issue returned_at, ...).
+2. **Saved filters / SLA tracking** — Phase 4.1 follow-up; новая таблица `saved_calendar_views` или расширение `user_preferences`. SLA — стрелочные индикаторы «осталось 7 дней до medical» в дополнение к overdue.
+3. **Universal Search + Command Bar (Task 4.2)** — параллельный трек Phase 4. Postgres tsvector-индекс по persons/sites/documents/templates/contractors/tasks; CMD+K UI в `frontend/src/components/CommandBar.tsx`.
+4. **Universal Calendar Card** — frontend компонент карточки события с edit/cancel/reschedule actions (vNext §4.6).
+5. **`/permits` и `/compliance-deadlines` registries** — закроют временные drill-down (`permit` → `/persons`, `compliance_deadline` → `/workspace/data-quality`) Session 23 на профильные страницы.
+6. **Стабилизация фабрик** (всё ещё Next Step #6 Sessions 18-23): `tests/utils/factories.py::create_user` уникализация email через counter/uuid suffix, чтобы повторные `create_document` не падали на UNIQUE.
+7. **TZID/VTIMEZONE в ICS** — для v1.1, чтобы события отображались в tenant-локальном времени, а не UTC.
+
+---
+
 ## Last Agent Handoff (2026-05-07, Session 23 — Phase 4.1: Smart Calendar frontend + CALENDAR_VIEW split, vNext-CAL-01)
 
 - **Дата:** 2026-05-07 (после Session 22)
