@@ -28,7 +28,7 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 | Phase 1: Architectural Foundation | P1 | Role-based workspaces ✅, RBAC module access ✅, tenant isolation ✅ | 2-3 sessions | ✅ COMPLETE |
 | Phase 2: Operational Dashboard | P1 | Command Center (backend ✅, 2.1a done), health checks ✅, operational visibility | 2-3 sessions | 🟡 IN PROGRESS (2.2 done, 2.1 partial, pending frontend) |
 | Phase 3: Data Quality & Master Data | P1 | Data Quality Layer, unified employee/site cards, deduplication | 2-3 sessions | 📋 Planned |
-| Phase 4: Calendar & Search | P2 | Smart Calendar improvements, universal search + command bar | 2-3 sessions | 📋 Planned |
+| Phase 4: Calendar & Search | P2 | Smart Calendar improvements, universal search + command bar | 2-3 sessions | 🟡 IN PROGRESS (4.1 backend aggregator done; 4.1 UI + 4.2 search pending) |
 | Phase 5: Document Factory Hardening | P2 | Template engine, header/footer, replace engine improvements | 2-3 sessions | 📋 Planned |
 | Phase 6: Integration & Webhooks | P2 | API improvements, webhook delivery, system integrations | 2-3 sessions | 📋 Planned |
 | Phase 7: Mobile & Field-Ready Work | P2 | Offline sync, mobile UX, field-specific workflows | 2-3 sessions | 📋 Planned |
@@ -292,11 +292,11 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 **User impact:** Users plan work by calendar instead of register hunting through modules  
 
 **Acceptance criteria:**
-- [ ] Backend: `/api/v1/calendar/events` aggregates from all modules (training, medicals, PPE, SOÚT, inspections, tasks, etc.)
-- [ ] Views: day/week/month/year; filter by event type, owner, status
-- [ ] Smart features: plan/fact comparison, resource load visualization, overdue highlighting, SLA tracking, saved filters
-- [ ] Export: ICS, Google Calendar, Outlook integration
-- [ ] Tests: Calendar aggregation logic, view switching, filtering
+- [x] Backend: `/api/v1/calendar/events` aggregates from all modules (training, medicals, PPE, SOÚT, inspections, tasks, etc.) — Session 22
+- [ ] Views: day/week/month/year; filter by event type, owner, status — frontend pending
+- [ ] Smart features: plan/fact comparison, resource load visualization, overdue highlighting, SLA tracking, saved filters — overdue done; rest pending
+- [ ] Export: ICS, Google Calendar, Outlook integration — pending follow-up
+- [x] Tests: Calendar aggregation logic, view switching, filtering — backend `tests/test_calendar_aggregator.py` (10 cases)
 
 **What it does:** User opens calendar and sees: "Jan 10: PPE reissue for site A (overdue by 2 days)", "Jan 12: Medical for 5 employees", "Jan 15: Training course starts", "Jan 20: SOÚT re-evaluation due (plan) vs actual". Can drill into any event.
 

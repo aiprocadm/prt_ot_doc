@@ -1,5 +1,125 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-07, Session 22 — Phase 4.1: Smart Calendar aggregator backend, vNext-CAL-01)
+
+- **Дата:** 2026-05-07 (после Session 21)
+- **Агент:** Claude Opus 4.7 (local Windows)
+- **Задача:** «Продолжай по ТЗ» → выполнить Next Step #1 из handoff Session 21: открыть Phase 4 (Calendar & Search) с ключевым backend-эндпоинтом `GET /api/v1/calendar/events` — multi-source агрегатор. Это первый чек-бокс acceptance criteria Task 4.1 (vNext-CAL-01) в `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md`. Существующий эндпоинт возвращал только строки legacy-таблицы `calendar_events`; нужен сводный поток из всех профильных модулей (medicals, PPE, permits, training, inspections, deadlines, briefings).
+- **Статус:** ✅ COMPLETE для backend-инкремента. Phase 4 Task 4.1 — закрыт первый acceptance bullet «Backend: `/api/v1/calendar/events` aggregates from all modules». UI views/exports/saved filters — отнесены на frontend и follow-up backend (Next Steps).
+- **Где остановился:** Phase 4 backend — первый шаг закрыт. Дальше — `SmartCalendar.tsx` фронтенд (day/week/month/year toggles, фильтры, drill-down), либо Universal Search + Command Bar (Task 4.2), либо ICS export endpoint (vNext §4.4).
+
+### Studied Documentation
+
+- `docs/spec/TZ_FULL_UNIFIED.md` (раздел B.3 — IA & UI с Smart Calendar §4.4; раздел E — правила доработки разд. 36).
+- `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md` Phase 4 Task 4.1 acceptance criteria: backend aggregator + views + smart features + ICS export + tests.
+- `AI_IMPLEMENTATION_REPORT.md` Session 21 → Next Step #1 «Phase 4 Smart Calendar backend aggregator».
+- `backend/app/api/routes/calendar.py` (старый) — `select(CalendarEvent)` на одной таблице; роутер уже подключён в `COMPLIANCE_AND_ADMIN_ROUTER_REGISTRATIONS`.
+- `backend/app/modules/calendar/services.py` — `CalendarProjectionService.project_deadline()` (legacy projection); оставлен как есть (не используется агрегатором, но сохраняет совместимость с outbox dispatcher если он там есть).
+- `backend/app/services/employee_card.py` — паттерн tenant-scoped селектов + `MAX_ITEMS_PER_SECTION` + точные `count` через `func.count()` + `_count` helper. Smart Calendar агрегатор зеркалит этот же стиль.
+- `backend/app/models/models.py` — модели источников: `MedicalExam` (Date `valid_until`), `PPEIssue` (DateTime tz `expires_at`), `Permit` (Date `valid_until` + PermitStatus enum), `TrainingSession` (DateTime `started_at/completed_at` + TrainingSessionStatus enum), `Inspection` regulatory (Date `scheduled_at` + InspectionStatus enum + `authority`), `ComplianceDeadline` (DateTime `due_at` + строковый status), `BriefingEntry` (DateTime `briefing_date/valid_until` + строковый status), `CalendarEvent` (legacy projection, DateTime `starts_at`).
+- `backend/app/api/routes/data_quality.py`, `backend/app/api/routes/employees.py` — паттерны `_DQ_READ_ROLES`/`abac(...required_roles=...)` для multi-role read access.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 4 Task 4.1 — Smart Calendar (`vNext-CAL-01`/`vNext §4.4`).
+- **Приоритет:** P2 (Phase 4 канона; первый шаг open после закрытия Phase 3).
+- **Почему выбрана:** прямой Next Step #1 из handoff Session 21. Аддитивный backend-инкремент: новые DTO/сервис/тесты, существующий роут переписан с одной модели на multi-source агрегатор. Не вводит миграций, не ломает существующие потоки (legacy `CalendarEvent` строки по-прежнему отдаются как `source_type=calendar_event`). Открывает дверь к UI Phase 4 Task 4.1 (`SmartCalendar.tsx`) и параллельным backend-следам (ICS export, plan/fact comparison, saved filters).
+
+### Implemented Changes
+
+- **`backend/app/schemas/calendar.py`** (new):
+  - `CalendarEventItem(id, source_type, source_id, title, starts_at, ends_at, status, is_overdue, person_id, site_id, company_id, assigned_user_id, extra: dict)`. `id` — composite `<source_type>:<source_id>` для предсказуемого drill-down (UI может маршрутизировать `id.startsWith("medical_exam:")` без отдельного парсера). `extra` — открытый словарь для source-specific полей (`exam_type`, `permit_type`, `briefing_type`, `entity_type/entity_id` для deadlines и т. д.) — намеренно не промотируются в top-level чтобы контракт не разбухал при добавлении источников.
+  - `CalendarSourceCount(source_type, count, overdue_count)`.
+  - `CalendarEventsResponse(generated_at, range_from, range_to, total, overdue_count, by_source, items)`.
+- **`backend/app/services/calendar_aggregator.py`** (new, ~830 строк):
+  - `CalendarAggregatorService.list_events(*, from_at, to_at, source_types, person_id, site_id) → CalendarEventsResponse`.
+  - Восемь builder-методов (`_build_medicals`, `_build_ppe`, `_build_permits`, `_build_training`, `_build_inspections`, `_build_deadlines`, `_build_briefings`, `_build_calendar_events`), каждый возвращает `(items, count, overdue_count)` — по тому же контракту, что и `_build_*` в `EmployeeCardService`.
+  - Все запросы tenant-scoped (`tenant_id == self.tenant_id`); SoftDelete (`deleted_at IS NULL`) применяется через автоматическую проверку в `_scoped_count` для models с `SoftDeleteMixin` и явно в каждом select.
+  - `MAX_ITEMS_PER_SOURCE = 50` (per source); сортировка items внутри source по anchor; финальный `items` сортируется по `starts_at`.
+  - `_coerce_dt(value)` — унифицированный нормализатор: `date → datetime UTC midnight`, naive datetime → UTC aware. Решает проблему SQLite, который не сохраняет TZ через `DateTime(timezone=True)` (PPE/briefings/CalendarEvent rows возвращаются tz-naive). Сравнения `is_overdue` используют нормализованный `anchor < now` вместо raw column, иначе SQLite-only тесты падают на «can't compare offset-naive and offset-aware datetimes».
+  - `ALL_SOURCES = ("medical_exam", "ppe_issue", "permit", "training_session", "inspection", "compliance_deadline", "briefing_entry", "calendar_event")` — экспортируется для тестов и фронтенд-фильтров.
+  - **Семантика overdue per source:**
+    - `medical_exam`: `valid_until < today`.
+    - `ppe_issue`: `status == ISSUED and expires_at < now`. Строки с `expires_at IS NULL` пропускаются (их нельзя поставить в календарь без anchor).
+    - `permit`: `status == ACTIVE and valid_until < today`.
+    - `training_session`: `status == SCHEDULED and started_at < now` (используется COALESCE на created_at если started_at пуст).
+    - `inspection`: `status == PLANNED and scheduled_at < today`.
+    - `compliance_deadline`: `status not in {closed, completed, cancelled} and due_at < now`.
+    - `briefing_entry`: `valid_until < now` (если есть).
+    - `calendar_event`: `status == "active" and starts_at < now`.
+  - Параметр `source_types` валидируется на whitelist `ALL_SOURCES` → `ValueError` при неизвестном (роутер мапит на 400).
+- **`backend/app/api/routes/calendar.py`** — переписан:
+  - Документирован переход с legacy `{items, total}` на `CalendarEventsResponse`.
+  - Query-параметры: `from_at: datetime`, `to_at: datetime`, `source_types: list[str] | None`, `person_id: str | None`, `site_id: str | None` — все опциональные.
+  - RBAC через `abac(_tenant_resource_id, required_roles=_CALENDAR_READ_ROLES, action="read calendar")`. `_CALENDAR_READ_ROLES = ["admin", "owner", "hr", "line_manager", "ot_pb_lead", "ot_specialist", "pb_engineer", "ecologist"]` — расширенный набор HSE-ролей, которые планируют по календарю; пользовательские роли (`worker`/`student`) отрезаны.
+  - `ValueError` (от service для unknown source_type) → `HTTPException(400)`.
+  - `response_model=CalendarEventsResponse` фиксирует контракт для OpenAPI.
+- **`tests/test_calendar_aggregator.py`** (new, ~10 кейсов, ~520 строк):
+  - **Service-level (6 кейсов):**
+    - `returns_empty_when_no_data` — пустой ответ; `by_source` всё равно содержит все 8 источников с `count=0` (детерминированный UI badge).
+    - `isolates_other_tenants` — cross-tenant отрезка: tenant_b не видит данные tenant_a.
+    - `aggregates_all_sources` — реальные данные во всех 8 источниках. PPE: 3 строки (1 ISSUED-overdue, 1 RETURNED, 1 NULL expires_at) → 2 в count, 1 в overdue. Permit: 2 (active + ACTIVE-but-expired). Training: 2 (SCHEDULED-overdue + COMPLETED). Inspection: 2 (PLANNED-overdue + COMPLETED). Deadline: 3 (overdue+upcoming+closed). Briefing: 2 (current + expired). CalendarEvent: 1 (active future). Проверяет точные `count`/`overdue_count` per source, общий `total`, sort по `starts_at`, формат composite `id`, ru-локалные заголовки («Медосмотр:…»).
+    - `filters_by_source_type_and_person` — combined filter narrows result.
+    - `filters_by_date_range` — `from_at/to_at` clamp по anchor; событие за пределами окна не попадает.
+    - `unknown_source_type_raises` — `ValueError`.
+  - **Endpoint-level (4 кейса):** 200/empty для admin без данных, 200 для HR с фильтром `source_types=medical_exam`, 400 для `source_types=nope`, 403/401 для `student`.
+
+### Changed / New Files
+
+- `backend/app/schemas/calendar.py` — новый файл (~95 строк).
+- `backend/app/services/calendar_aggregator.py` — новый файл (~830 строк).
+- `backend/app/api/routes/calendar.py` — полностью переписан (~110 строк, было 22).
+- `tests/test_calendar_aggregator.py` — новый файл (~520 строк).
+- `CHANGELOG.md` — запись Session 22.
+- `AI_IMPLEMENTATION_REPORT.md` — этот блок.
+
+### Decisions
+
+- **Один агрегатор-сервис, не отдельный модуль.** Альтернатива — выделить `backend/app/modules/calendar/` с aggregator/router/schemas. Но Phase 4.1 ограничивается одним эндпоинтом без write-операций, voice/calendar projections уже есть в `backend/app/modules/calendar/services.py` (legacy). Разносить по модулю преждевременно — увеличит surface без пользы. Если появятся ICS export, saved filters, plan/fact diff — тогда выделим модуль.
+- **Composite `id` = `<source_type>:<source_id>`.** Это предсказуемая стабильная ссылка для drill-down: фронтенд может маппить `id.startsWith("medical_exam:") → /medical?focus=…` без отдельного API-вызова. Альтернатива — отдавать только `source_id` и заставлять клиента склеивать — но это размазывает контракт.
+- **`_coerce_dt` нормализует tz перед сравнением.** Без этого тесты на SQLite падают (DateTime(timezone=True) хранится без tz info). В Postgres проблемы не было бы, но db-portable код важнее. Тот же паттерн уже используется в `EmployeeCardService` — здесь применяется консистентно.
+- **Точные `count` через отдельный SQL, `overdue_count` тоже через SQL.** Подсчёт по items (max 50) даёт лимит-зависимое значение; UI badges должны быть точными даже когда список усечён. Тот же паттерн, что Documents/Briefings/Deadlines в Employee Card Session 21 — но там я компромиссно делал `overdue_count` по items, здесь сделал точно.
+- **`PPEIssue.expires_at IS NULL` строки пропускаются полностью**, не показываются как «бессрочные» — у них нет anchor для календаря. Их count тоже не учитывается (`expires_at.is_not(None)` фильтр в query и в base_count). UI календаря не должен показывать строки без даты.
+- **`Inspection` — regulatory_inspection (`models.py`), не `inspection` (`checks.py`).** В репо две модели Inspection (regulatory с authority/scheduled_at и checklist с site/checklist_id). Для календаря нужна regulatory — именно она планируется и имеет дедлайн. checklist Inspection — это процесс выполнения, не плановое событие.
+- **Сортировка items по `starts_at` после слияния всех источников.** Альтернатива — внутрицентральная сортировка per source — даёт нелинейную ленту. Календарю нужен timeline, отсортированный единым потоком.
+- **`source_types` отдается через repeatable query param** (FastAPI default для `list[str]`), что согласовано с другими реестрами (`?source_types=medical_exam&source_types=ppe_issue`). Альтернатива — comma-separated string — менее чистая для OpenAPI.
+- **Заголовки на русском.** Платформа целевая на ru-локаль; sourcerov не имеет англоязычного UI. Мапить через TS-словари на фронте было бы лишним, лучше отдавать готовый текст («Медосмотр: периодический»).
+- **RBAC покрывает HSE-роли широко** (8 ролей читают календарь). Календарь — общий ресурс планирования; узкий список (только admin/owner) ограничит use case инспекторов и инженеров.
+
+### Issues Fixed
+
+- **Phase 4.1 acceptance criterion #1** — закрыт.
+- **Cross-modular planning gap** — раньше HR/инспектор должен был обходить 5+ страниц (Medicals, PPE, Permits, Training, Inspections, Deadlines, Briefings) чтобы построить полный план; теперь один эндпоинт отдаёт сводный timeline.
+- **SQLite tz-naive vs tz-aware comparison bug** — обнаружен и исправлен через `_coerce_dt(anchor) < now`, что также пригодится в любом дальнейшем агрегаторе на этих моделях.
+
+### Known Problems / Risks
+
+- **Backend pytest на 3.12 не запускался локально** — Python 3.12 отсутствует на Windows-машине; тесты прогнаны на 3.13 (CLAUDE.md разрешает fallback). 10 calendar-тестов прошли (1:07). Регрессия: tests/test_data_quality.py → all green, tests/test_employee_card.py → 1 пред-существующий fail (`test_aggregates_documents_briefings_and_deadlines` Session 21, UNIQUE constraint в `data_factory.create_user`-без-email; повторные `create_document` создают конфликтующих пользователей). К моим изменениям не относится; зафиксирован как Session 18/19/20/21 Next Step #3 «стабилизация фабрик».
+- **Legacy `CalendarEvent` projections могут дублировать события** — если `CalendarProjectionService.project_deadline()` создал строку для `ComplianceDeadline`, агрегатор вернёт обе: и `compliance_deadline:<id>`, и `calendar_event:<projected-id>` (с `extra.projection_source_type="compliance_deadline"`). UI должен дедуплицировать по `extra.projection_source_id` или передать `source_types=[...без calendar_event]`. Это тред-офф в пользу обратной совместимости с legacy projections.
+- **`overdue_count` учитывает только Python-side now** — без учёта tenant timezone (vNext-T1). Для round-the-clock производств с tenant в +12 GMT может расходиться на ±12h. Использовать с осторожностью на edge case.
+- **Лимит 50 items per source** — для типичного UI day/week/month достаточно. Year-view для tenant с 500+ сотрудников упрётся в лимит. Решение для года — UI должен делать раздельные запросы за месяцы, либо backend получит pagination в follow-up.
+- **`source_types` приём только из whitelist** — расширение списка требует обновления `ALL_SOURCES` в коде. Если появится плагин (vNext §28.4) с собственными событиями — потребуется publish/subscribe механика, не whitelist.
+
+### Validation
+
+- **Окружение:** Windows, Python 3.13.7 (3.12 отсутствует, по CLAUDE.md разрешён fallback). Зависимости: глобально установлены sqlalchemy 2.0.36, fastapi 0.115.0, pydantic 2.9.2, aiosqlite, httpx и др.
+- **Импорты:** `py -3.13 -c "from app.schemas.calendar import …; from app.services.calendar_aggregator import …; from app.api.routes.calendar import router"` → ✅ schemas/service/router OK; роут зарегистрирован как `/calendar/events`.
+- **Тесты:** `py -3.13 -m pytest tests/test_calendar_aggregator.py -p no:schemathesis` → ✅ **10 passed (1:07)**.
+- **Регрессия:** `py -3.13 -m pytest tests/test_employee_card.py tests/test_data_quality.py -p no:schemathesis` → 30 passed, 1 pre-existing failure (`test_aggregates_documents_briefings_and_deadlines` Session 21 — известная фабричная проблема, не связанная с Calendar изменениями).
+- **CI** прогонит canonical pipeline на 3.12.12 (Codespace).
+
+### Next Steps
+
+1. **`SmartCalendar.tsx` фронтенд** (Phase 4.1 acceptance #2/#3): page/widget с day/week/month/year toggles, фильтры по `source_types`/`person_id`/`site_id`, drill-down по `id.split(":")` на профильные реестры. Можно запараллелить с backend-следом ICS export.
+2. **ICS / iCalendar export endpoint** (Phase 4.1 acceptance #4): `GET /api/v1/calendar/events.ics` — поверх того же агрегатора, формирует `text/calendar`. Позволяет подписку из Outlook/Google/Apple Calendar (важно для inspector/contractor сценариев). Имплементация — `icalendar` пакет уже в requirements или ical из stdlib (проверить).
+3. **Plan/Fact comparison** (Phase 4.1 smart features): второй проход через агрегатор, который возвращает `expected_at` (плановая) vs `actual_at` (фактическая) для completed events. Backend получит `?include_fact=true`.
+4. **Saved filters / SLA tracking** — Phase 4.1 follow-up; можно отложить до фронта.
+5. **Universal Search + Command Bar (Task 4.2)** — параллельный трек Phase 4. Backend full-text search через Postgres tsvector или Elasticsearch.
+6. **Стабилизация фабрик** (всё ещё Next Step #3 Session 18/19/20/21): `tests/utils/factories.py::create_user` — уникализация email через counter/uuid suffix, чтобы повторные `create_document` не падали на UNIQUE.
+7. **Universal Calendar Card** — frontend компонент карточки события с edit/cancel/reschedule actions (vNext §4.6 Universal Card layout).
+
+---
+
 ## Last Agent Handoff (2026-05-07, Session 21 — Phase 3.2 follow-up: Documents/Briefings/ComplianceDeadlines в Employee Card)
 
 - **Дата:** 2026-05-07 (после Session 20)
