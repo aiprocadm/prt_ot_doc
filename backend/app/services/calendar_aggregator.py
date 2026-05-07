@@ -91,6 +91,15 @@ def _coerce_dt(value: date | datetime | None) -> datetime | None:
     return datetime.combine(value, time.min, tzinfo=timezone.utc)
 
 
+def _variance_days(
+    expected: datetime | None, actual: datetime | None
+) -> int | None:
+    """Return whole-day delta `actual - expected` (positive = late)."""
+    if expected is None or actual is None:
+        return None
+    return (actual - expected).days
+
+
 class CalendarAggregatorService:
     """Build a tenant-scoped `CalendarEventsResponse`."""
 
@@ -106,6 +115,7 @@ class CalendarAggregatorService:
         source_types: Iterable[str] | None = None,
         person_id: str | None = None,
         site_id: str | None = None,
+        include_fact: bool = False,
     ) -> CalendarEventsResponse:
         sources = tuple(source_types) if source_types else ALL_SOURCES
         unknown = [s for s in sources if s not in ALL_SOURCES]
@@ -118,7 +128,11 @@ class CalendarAggregatorService:
 
         if "medical_exam" in sources:
             collected, total, overdue = await self._build_medicals(
-                from_at=from_at, to_at=to_at, person_id=person_id, now=now
+                from_at=from_at,
+                to_at=to_at,
+                person_id=person_id,
+                now=now,
+                include_fact=include_fact,
             )
             items.extend(collected)
             by_source.append(
@@ -129,7 +143,11 @@ class CalendarAggregatorService:
 
         if "ppe_issue" in sources:
             collected, total, overdue = await self._build_ppe(
-                from_at=from_at, to_at=to_at, person_id=person_id, now=now
+                from_at=from_at,
+                to_at=to_at,
+                person_id=person_id,
+                now=now,
+                include_fact=include_fact,
             )
             items.extend(collected)
             by_source.append(
@@ -140,7 +158,11 @@ class CalendarAggregatorService:
 
         if "permit" in sources:
             collected, total, overdue = await self._build_permits(
-                from_at=from_at, to_at=to_at, person_id=person_id, now=now
+                from_at=from_at,
+                to_at=to_at,
+                person_id=person_id,
+                now=now,
+                include_fact=include_fact,
             )
             items.extend(collected)
             by_source.append(
@@ -151,7 +173,11 @@ class CalendarAggregatorService:
 
         if "training_session" in sources:
             collected, total, overdue = await self._build_training(
-                from_at=from_at, to_at=to_at, person_id=person_id, now=now
+                from_at=from_at,
+                to_at=to_at,
+                person_id=person_id,
+                now=now,
+                include_fact=include_fact,
             )
             items.extend(collected)
             by_source.append(
@@ -162,7 +188,11 @@ class CalendarAggregatorService:
 
         if "inspection" in sources:
             collected, total, overdue = await self._build_inspections(
-                from_at=from_at, to_at=to_at, site_id=site_id, now=now
+                from_at=from_at,
+                to_at=to_at,
+                site_id=site_id,
+                now=now,
+                include_fact=include_fact,
             )
             items.extend(collected)
             by_source.append(
@@ -178,6 +208,7 @@ class CalendarAggregatorService:
                 person_id=person_id,
                 site_id=site_id,
                 now=now,
+                include_fact=include_fact,
             )
             items.extend(collected)
             by_source.append(
@@ -195,6 +226,7 @@ class CalendarAggregatorService:
                 person_id=person_id,
                 site_id=site_id,
                 now=now,
+                include_fact=include_fact,
             )
             items.extend(collected)
             by_source.append(
@@ -205,7 +237,11 @@ class CalendarAggregatorService:
 
         if "calendar_event" in sources:
             collected, total, overdue = await self._build_calendar_events(
-                from_at=from_at, to_at=to_at, site_id=site_id, now=now
+                from_at=from_at,
+                to_at=to_at,
+                site_id=site_id,
+                now=now,
+                include_fact=include_fact,
             )
             items.extend(collected)
             by_source.append(
@@ -238,6 +274,7 @@ class CalendarAggregatorService:
         to_at: datetime | None,
         person_id: str | None,
         now: datetime,
+        include_fact: bool = False,
     ) -> tuple[list[CalendarEventItem], int, int]:
         today = now.date()
         stmt = (
@@ -263,6 +300,8 @@ class CalendarAggregatorService:
             if anchor is None:
                 continue
             is_overdue = exam.valid_until < today
+            expected_at = anchor if include_fact else None
+            actual_at = _coerce_dt(exam.exam_date) if include_fact else None
             items.append(
                 CalendarEventItem(
                     id=f"medical_exam:{exam.id}",
@@ -276,6 +315,9 @@ class CalendarAggregatorService:
                     person_id=str(exam.person_id) if exam.person_id else None,
                     site_id=None,
                     company_id=None,
+                    expected_at=expected_at,
+                    actual_at=actual_at,
+                    variance_days=_variance_days(expected_at, actual_at),
                     extra={
                         "exam_type": exam.exam_type,
                         "exam_date": exam.exam_date.isoformat() if exam.exam_date else None,
@@ -302,6 +344,7 @@ class CalendarAggregatorService:
         to_at: datetime | None,
         person_id: str | None,
         now: datetime,
+        include_fact: bool = False,
     ) -> tuple[list[CalendarEventItem], int, int]:
         stmt = (
             select(PPEIssue)
@@ -334,6 +377,12 @@ class CalendarAggregatorService:
                 if is_overdue
                 else (issue.status.value if hasattr(issue.status, "value") else str(issue.status))
             )
+            expected_at = anchor if include_fact else None
+            actual_at = (
+                _coerce_dt(issue.returned_at)
+                if include_fact and issue.status == PPEIssueStatus.RETURNED
+                else None
+            )
             items.append(
                 CalendarEventItem(
                     id=f"ppe_issue:{issue.id}",
@@ -345,6 +394,9 @@ class CalendarAggregatorService:
                     status=status_value,
                     is_overdue=is_overdue,
                     person_id=str(issue.person_id) if issue.person_id else None,
+                    expected_at=expected_at,
+                    actual_at=actual_at,
+                    variance_days=_variance_days(expected_at, actual_at),
                     extra={
                         "item_name": issue.item_name,
                         "quantity": issue.quantity,
@@ -380,6 +432,7 @@ class CalendarAggregatorService:
         to_at: datetime | None,
         person_id: str | None,
         now: datetime,
+        include_fact: bool = False,
     ) -> tuple[list[CalendarEventItem], int, int]:
         today = now.date()
         stmt = (
@@ -412,6 +465,8 @@ class CalendarAggregatorService:
             status_value = (
                 permit.status.value if hasattr(permit.status, "value") else str(permit.status)
             )
+            expected_at = anchor if include_fact else None
+            actual_at = _coerce_dt(permit.issued_at) if include_fact else None
             items.append(
                 CalendarEventItem(
                     id=f"permit:{permit.id}",
@@ -423,6 +478,9 @@ class CalendarAggregatorService:
                     status="expired" if is_overdue else status_value,
                     is_overdue=is_overdue,
                     person_id=str(permit.person_id) if permit.person_id else None,
+                    expected_at=expected_at,
+                    actual_at=actual_at,
+                    variance_days=_variance_days(expected_at, actual_at),
                     extra={
                         "permit_type": permit.permit_type,
                         "issued_at": permit.issued_at.isoformat()
@@ -455,6 +513,7 @@ class CalendarAggregatorService:
         to_at: datetime | None,
         person_id: str | None,
         now: datetime,
+        include_fact: bool = False,
     ) -> tuple[list[CalendarEventItem], int, int]:
         # `started_at` is the planning anchor; if absent, fall back to
         # `created_at` so unscheduled drafts still surface.
@@ -487,6 +546,12 @@ class CalendarAggregatorService:
             is_overdue = bool(
                 session_row.status == TrainingSessionStatus.SCHEDULED and anchor < now
             )
+            expected_at = anchor if include_fact else None
+            actual_at = (
+                _coerce_dt(session_row.completed_at)
+                if include_fact and session_row.status == TrainingSessionStatus.COMPLETED
+                else None
+            )
             items.append(
                 CalendarEventItem(
                     id=f"training_session:{session_row.id}",
@@ -500,6 +565,9 @@ class CalendarAggregatorService:
                     status=status_raw,
                     is_overdue=is_overdue,
                     person_id=str(session_row.person_id) if session_row.person_id else None,
+                    expected_at=expected_at,
+                    actual_at=actual_at,
+                    variance_days=_variance_days(expected_at, actual_at),
                     extra={
                         "course_id": str(session_row.course_id)
                         if session_row.course_id
@@ -529,6 +597,7 @@ class CalendarAggregatorService:
         to_at: datetime | None,
         site_id: str | None,
         now: datetime,
+        include_fact: bool = False,
     ) -> tuple[list[CalendarEventItem], int, int]:
         today = now.date()
         stmt = (
@@ -564,6 +633,12 @@ class CalendarAggregatorService:
                 and inspection.scheduled_at is not None
                 and inspection.scheduled_at < today
             )
+            expected_at = anchor if include_fact else None
+            actual_at = (
+                _coerce_dt(inspection.finished_at)
+                if include_fact and inspection.status == InspectionStatus.COMPLETED
+                else None
+            )
             items.append(
                 CalendarEventItem(
                     id=f"inspection:{inspection.id}",
@@ -579,6 +654,9 @@ class CalendarAggregatorService:
                     assigned_user_id=str(inspection.responsible_id)
                     if inspection.responsible_id
                     else None,
+                    expected_at=expected_at,
+                    actual_at=actual_at,
+                    variance_days=_variance_days(expected_at, actual_at),
                     extra={
                         "authority": inspection.authority,
                         "purpose": inspection.purpose,
@@ -620,6 +698,7 @@ class CalendarAggregatorService:
         person_id: str | None,
         site_id: str | None,
         now: datetime,
+        include_fact: bool = False,
     ) -> tuple[list[CalendarEventItem], int, int]:
         stmt = (
             select(ComplianceDeadline)
@@ -645,6 +724,7 @@ class CalendarAggregatorService:
             is_overdue = bool(
                 deadline.status not in _CLOSED_DEADLINE_STATUSES and anchor < now
             )
+            expected_at = anchor if include_fact else None
             items.append(
                 CalendarEventItem(
                     id=f"compliance_deadline:{deadline.id}",
@@ -657,6 +737,9 @@ class CalendarAggregatorService:
                     is_overdue=is_overdue,
                     person_id=str(deadline.person_id) if deadline.person_id else None,
                     site_id=str(deadline.site_id) if deadline.site_id else None,
+                    expected_at=expected_at,
+                    actual_at=None,
+                    variance_days=None,
                     extra={
                         "entity_type": deadline.entity_type,
                         "entity_id": str(deadline.entity_id),
@@ -685,6 +768,7 @@ class CalendarAggregatorService:
         person_id: str | None,
         site_id: str | None,
         now: datetime,
+        include_fact: bool = False,
     ) -> tuple[list[CalendarEventItem], int, int]:
         # Anchor on `valid_until` so the calendar shows when re-briefing is
         # due; rows without `valid_until` (one-shot/targeted) fall back to
@@ -727,6 +811,8 @@ class CalendarAggregatorService:
                 if template_title
                 else f"Инструктаж: {entry.briefing_type}"
             )
+            expected_at = anchor if include_fact else None
+            actual_at = _coerce_dt(entry.briefing_date) if include_fact else None
             items.append(
                 CalendarEventItem(
                     id=f"briefing_entry:{entry.id}",
@@ -739,6 +825,9 @@ class CalendarAggregatorService:
                     is_overdue=is_overdue,
                     person_id=str(entry.person_id) if entry.person_id else None,
                     site_id=str(entry.site_id) if entry.site_id else None,
+                    expected_at=expected_at,
+                    actual_at=actual_at,
+                    variance_days=_variance_days(expected_at, actual_at),
                     extra={
                         "briefing_type": entry.briefing_type,
                         "briefing_template_id": str(entry.briefing_template_id)
@@ -774,6 +863,7 @@ class CalendarAggregatorService:
         to_at: datetime | None,
         site_id: str | None,
         now: datetime,
+        include_fact: bool = False,
     ) -> tuple[list[CalendarEventItem], int, int]:
         stmt = (
             select(CalendarEvent)
@@ -795,6 +885,7 @@ class CalendarAggregatorService:
             if anchor is None:
                 continue
             is_overdue = bool(event.status == "active" and anchor < now)
+            expected_at = anchor if include_fact else None
             items.append(
                 CalendarEventItem(
                     id=f"calendar_event:{event.id}",
@@ -809,6 +900,9 @@ class CalendarAggregatorService:
                     assigned_user_id=str(event.assigned_user_id)
                     if event.assigned_user_id
                     else None,
+                    expected_at=expected_at,
+                    actual_at=None,
+                    variance_days=None,
                     extra={
                         "projection_source_type": event.source_type,
                         "projection_source_id": str(event.source_id),

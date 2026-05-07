@@ -663,3 +663,290 @@ class TestCalendarEventsEndpoint:
             status.HTTP_401_UNAUTHORIZED,
             status.HTTP_403_FORBIDDEN,
         }
+
+
+@pytest.mark.anyio
+class TestCalendarPlanFactComparison:
+    """`include_fact=True` populates `expected_at`/`actual_at`/`variance_days`."""
+
+    async def test_default_omits_plan_fact_fields(
+        self,
+        test_db_session: AsyncSession,
+        data_factory: TestDataFactory,
+    ) -> None:
+        tenant = await data_factory.ensure_tenant(session=test_db_session)
+        company = await data_factory.create_company(
+            tenant=tenant, session=test_db_session
+        )
+        person = await data_factory.create_person(
+            tenant=tenant,
+            company=company,
+            session=test_db_session,
+            first_name="Plan",
+            last_name="Default",
+            email="plan-default@example.com",
+        )
+        today = date.today()
+        test_db_session.add(
+            MedicalExam(
+                tenant_id=tenant.id,
+                person_id=person.id,
+                exam_type="periodic",
+                exam_date=today - timedelta(days=20),
+                valid_until=today + timedelta(days=10),
+            )
+        )
+        await test_db_session.commit()
+
+        service = CalendarAggregatorService(
+            tenant_id=str(tenant.id), db=test_db_session
+        )
+        # Default keeps wire payload identical to the legacy contract.
+        response = await service.list_events(source_types=["medical_exam"])
+        assert response.total == 1
+        item = response.items[0]
+        assert item.expected_at is None
+        assert item.actual_at is None
+        assert item.variance_days is None
+
+    async def test_inspection_completed_emits_variance(
+        self,
+        test_db_session: AsyncSession,
+        data_factory: TestDataFactory,
+    ) -> None:
+        tenant = await data_factory.ensure_tenant(session=test_db_session)
+        company = await data_factory.create_company(
+            tenant=tenant, session=test_db_session
+        )
+        site = await data_factory.create_site(
+            tenant=tenant, company=company, session=test_db_session
+        )
+        today = date.today()
+        scheduled_day = today - timedelta(days=10)
+        finished_dt = datetime.combine(
+            today - timedelta(days=7), datetime.min.time(), timezone.utc
+        )
+        test_db_session.add_all(
+            [
+                Inspection(
+                    tenant_id=tenant.id,
+                    company_id=company.id,
+                    site_id=site.id,
+                    inspection_type=InspectionType.INTERNAL,
+                    authority="Внутренний аудит",
+                    scheduled_at=scheduled_day,
+                    started_at=finished_dt - timedelta(days=1),
+                    finished_at=finished_dt,
+                    status=InspectionStatus.COMPLETED,
+                ),
+                Inspection(
+                    tenant_id=tenant.id,
+                    company_id=company.id,
+                    site_id=site.id,
+                    inspection_type=InspectionType.EXTERNAL,
+                    authority="Ростехнадзор",
+                    scheduled_at=today + timedelta(days=5),
+                    status=InspectionStatus.PLANNED,
+                ),
+            ]
+        )
+        await test_db_session.commit()
+
+        service = CalendarAggregatorService(
+            tenant_id=str(tenant.id), db=test_db_session
+        )
+        response = await service.list_events(
+            source_types=["inspection"], include_fact=True
+        )
+        items = {item.title: item for item in response.items}
+        assert "Проверка: Внутренний аудит" in items
+        completed = items["Проверка: Внутренний аудит"]
+        assert completed.expected_at is not None
+        assert completed.expected_at.date() == scheduled_day
+        assert completed.actual_at == finished_dt
+        # finished 3 days after scheduled.
+        assert completed.variance_days == 3
+
+        planned = items["Проверка: Ростехнадзор"]
+        # Plan-only row keeps actual_at/variance None even with include_fact.
+        assert planned.expected_at is not None
+        assert planned.actual_at is None
+        assert planned.variance_days is None
+
+    async def test_training_completed_emits_actual_at(
+        self,
+        test_db_session: AsyncSession,
+        data_factory: TestDataFactory,
+    ) -> None:
+        tenant = await data_factory.ensure_tenant(session=test_db_session)
+        company = await data_factory.create_company(
+            tenant=tenant, session=test_db_session
+        )
+        person = await data_factory.create_person(
+            tenant=tenant,
+            company=company,
+            session=test_db_session,
+            first_name="Plan",
+            last_name="Training",
+            email="plan-training@example.com",
+        )
+        course = TrainingCourse(
+            tenant_id=tenant.id,
+            title="Промбезопасность",
+            duration_hours=16,
+        )
+        test_db_session.add(course)
+        await test_db_session.flush()
+
+        now = datetime.now(timezone.utc)
+        test_db_session.add_all(
+            [
+                TrainingSession(
+                    tenant_id=tenant.id,
+                    person_id=person.id,
+                    course_id=course.id,
+                    status=TrainingSessionStatus.COMPLETED,
+                    started_at=now - timedelta(days=5),
+                    completed_at=now - timedelta(days=3),
+                ),
+                TrainingSession(
+                    tenant_id=tenant.id,
+                    person_id=person.id,
+                    course_id=course.id,
+                    status=TrainingSessionStatus.SCHEDULED,
+                    started_at=now + timedelta(days=2),
+                ),
+            ]
+        )
+        await test_db_session.commit()
+
+        service = CalendarAggregatorService(
+            tenant_id=str(tenant.id), db=test_db_session
+        )
+        response = await service.list_events(
+            source_types=["training_session"], include_fact=True
+        )
+        statuses = {item.status: item for item in response.items}
+        completed = statuses["completed"]
+        assert completed.expected_at is not None
+        assert completed.actual_at is not None
+        assert completed.variance_days == 2  # completed_at - started_at = +2 days
+        scheduled = statuses["scheduled"]
+        assert scheduled.actual_at is None
+        assert scheduled.variance_days is None
+
+    async def test_ppe_returned_emits_variance(
+        self,
+        test_db_session: AsyncSession,
+        data_factory: TestDataFactory,
+    ) -> None:
+        tenant = await data_factory.ensure_tenant(session=test_db_session)
+        company = await data_factory.create_company(
+            tenant=tenant, session=test_db_session
+        )
+        person = await data_factory.create_person(
+            tenant=tenant,
+            company=company,
+            session=test_db_session,
+            first_name="Plan",
+            last_name="Ppe",
+            email="plan-ppe@example.com",
+        )
+        now = datetime.now(timezone.utc)
+        test_db_session.add_all(
+            [
+                PPEIssue(
+                    tenant_id=tenant.id,
+                    person_id=person.id,
+                    item_name="Каска",
+                    quantity=1,
+                    issued_at=now - timedelta(days=400),
+                    expires_at=now - timedelta(days=10),
+                    returned_at=now - timedelta(days=5),  # returned 5 days late
+                    status=PPEIssueStatus.RETURNED,
+                ),
+                PPEIssue(
+                    tenant_id=tenant.id,
+                    person_id=person.id,
+                    item_name="Перчатки",
+                    quantity=1,
+                    issued_at=now - timedelta(days=10),
+                    expires_at=now + timedelta(days=20),
+                    status=PPEIssueStatus.ISSUED,
+                ),
+            ]
+        )
+        await test_db_session.commit()
+
+        service = CalendarAggregatorService(
+            tenant_id=str(tenant.id), db=test_db_session
+        )
+        response = await service.list_events(
+            source_types=["ppe_issue"], include_fact=True
+        )
+        by_name = {item.title: item for item in response.items}
+        returned = by_name["СИЗ: Каска"]
+        assert returned.actual_at is not None
+        # returned_at is 5 days after expires_at → variance = +5
+        assert returned.variance_days == 5
+        active = by_name["СИЗ: Перчатки"]
+        # ISSUED row has no fact data even with include_fact.
+        assert active.actual_at is None
+        assert active.variance_days is None
+
+    async def test_endpoint_passes_include_fact_query_param(
+        self,
+        async_client: AsyncClient,
+        make_auth_headers,
+        sessionmaker,
+        data_factory: TestDataFactory,
+    ) -> None:
+        async with sessionmaker() as session:
+            tenant = await data_factory.ensure_tenant(session=session)
+            company = await data_factory.create_company(
+                tenant=tenant, session=session
+            )
+            site = await data_factory.create_site(
+                tenant=tenant, company=company, session=session
+            )
+            today = date.today()
+            session.add(
+                Inspection(
+                    tenant_id=tenant.id,
+                    company_id=company.id,
+                    site_id=site.id,
+                    inspection_type=InspectionType.INTERNAL,
+                    authority="Аудит",
+                    scheduled_at=today - timedelta(days=4),
+                    finished_at=datetime.combine(
+                        today - timedelta(days=2),
+                        datetime.min.time(),
+                        timezone.utc,
+                    ),
+                    status=InspectionStatus.COMPLETED,
+                )
+            )
+            await session.commit()
+
+        headers = _cal_headers(await make_auth_headers(RoleEnum.ADMIN))
+        # Without include_fact: legacy payload (None values).
+        response_legacy = await async_client.get(
+            f"{API_PREFIX}/calendar/events?source_types=inspection",
+            headers=headers,
+        )
+        assert response_legacy.status_code == status.HTTP_200_OK, response_legacy.text
+        legacy_item = response_legacy.json()["items"][0]
+        assert legacy_item["expected_at"] is None
+        assert legacy_item["actual_at"] is None
+        assert legacy_item["variance_days"] is None
+
+        # With include_fact=true: variance computed.
+        response_fact = await async_client.get(
+            f"{API_PREFIX}/calendar/events?source_types=inspection&include_fact=true",
+            headers=headers,
+        )
+        assert response_fact.status_code == status.HTTP_200_OK, response_fact.text
+        fact_item = response_fact.json()["items"][0]
+        assert fact_item["expected_at"] is not None
+        assert fact_item["actual_at"] is not None
+        assert fact_item["variance_days"] == 2

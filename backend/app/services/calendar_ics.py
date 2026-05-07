@@ -149,6 +149,13 @@ def _build_event(
         desc_parts.append(f"Статус: {item.status}")
     if item.is_overdue:
         desc_parts.append("Событие просрочено")
+    if item.expected_at is not None:
+        desc_parts.append(f"План: {item.expected_at.date().isoformat()}")
+    if item.actual_at is not None:
+        desc_parts.append(f"Факт: {item.actual_at.date().isoformat()}")
+    if item.variance_days is not None:
+        sign = "+" if item.variance_days > 0 else ""
+        desc_parts.append(f"Отклонение: {sign}{item.variance_days} дн.")
     if item.person_id:
         desc_parts.append(f"person_id: {item.person_id}")
     if item.site_id:
