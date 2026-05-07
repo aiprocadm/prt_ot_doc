@@ -323,7 +323,7 @@
 - Базовые сущности (`vNext §5.1`): группы компаний, компании, филиалы, объекты, площадки, подразделения, рабочие места, должности, профессии, сотрудники, назначения, подрядчики, посетители, оборудование, договоры, проекты.
 - Единая карточка сотрудника (360°) — `vNext §5.2`. Phase 3.2 backend, frontend deferred.
 - Единая карточка объекта — `vNext §5.3`.
-- Data Quality Layer + Data Quality Dashboard — `vNext §5.4`. Backend MVP сделан (Phase 3.1, 7 правил), Dashboard UI `[v1.1]`.
+- Data Quality Layer + Data Quality Dashboard — `vNext §5.4`. Backend MVP сделан (Phase 3.1, 10 правил движка), Dashboard UI `[v1.1]`.
 
 ### B.5 Документная фабрика и ЭДО-контур `[full]`
 - Сквозная трассировка: template → version → layout → replace map → pipeline profile → instance → version → approvals → signatures → archive → external delivery (`vNext §6.1`).
@@ -501,7 +501,7 @@
 - vNext Phase 0 (Baseline re-verification) — инфраструктура готова, пере-прогон в чистом окружении — `pending` (RB-001, RC-001).
 - vNext Phase 1 (Architectural foundation) — `complete` (Workspaces / RBAC module / Tenant isolation audit).
 - vNext Phase 2 (Operational dashboard / Health checks) — backend `done`, frontend `pending`.
-- vNext Phase 3 (Data Quality + Unified Employee Card) — DQ backend MVP `done` (7 правил), DQ Dashboard frontend и Employee Card aggregate — `pending`.
+- vNext Phase 3 (Data Quality + Unified Employee Card) — DQ backend MVP `done` (10 правил движка), DQ Dashboard frontend и Employee Card aggregate — `pending`.
 - vNext Phases 4–10 — `planned` (см. §D).
 
 ---
@@ -732,7 +732,7 @@
 | Analytics | `backend/app/modules/{analytics,export_center,projections}/*`, `backend/app/api/routes/{reports,exports,dashboard}.py` | partial (`[v1.1]`) |
 | AI Copilot | — | `[v2.0]` |
 | **Cross-cutting:** Operational dashboard | `backend/app/modules/operational_dashboard/*` | backend done (Phase 2.1), frontend `[v1.1]` |
-| **Cross-cutting:** Data Quality | `backend/app/modules/data_quality/*` | backend MVP done (7 правил, Phase 3.1), Dashboard UI `[v1.1]` |
+| **Cross-cutting:** Data Quality | `backend/app/modules/data_quality/*` | backend MVP done (10 правил, Phase 3.1), Dashboard UI `[v1.1]` |
 | **Cross-cutting:** Health checks | `backend/app/modules/health_checks/*` | done (Phase 2.2) |
 | **Cross-cutting:** Audit | `backend/app/modules/audit/*`, `backend/app/domains/audit/*` | MVP done |
 | **Cross-cutting:** EDO | `backend/app/modules/edo/*`, `backend/app/api/routes/edo_workflow.py` | partial (vNext §6.9) |

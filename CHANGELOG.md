@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 2026-05-05 (Session 17 — Phase 3.1d: DocumentReadinessRule)
+- **`backend/app/modules/data_quality/rules.py`** — добавлено правило **`DocumentReadinessRule`** (`document_readiness`): DRAFT-документы старше **7** суток без `template_version_id` (MEDIUM, `missing_field`); DRAFT с привязанной `TemplateVersion`, у которой в `required_fields_schema` задан массив **`required`**, — проверка последней ревизии `DocumentVersion.data_json` на пустые обязательные поля (учёт вложенных корней `values` / `payload` / `fields` / `data`). Движок: **10 правил**.
+- **`tests/test_data_quality.py`** — класс `TestDocumentReadinessRule` (4 кейса), `expected_rules` в `TestDataQualityService` дополнен `document_readiness`.
+- **Frontend:** без изменений (`document` + `missing_field` уже в `WorkspaceDataQualityPage.tsx`).
+- **Validation:** локальный прогон `pytest tests/test_data_quality.py` в этой сессии не выполнен (Python runtime недоступен в agent shell); ожидается CI / локально: `python -m pytest tests/test_data_quality.py -p no:schemathesis`.
+
 ## 2026-05-04 (Session 16 — Phase 3.1c: восстановление OrphanedAssignmentsRule + CompanyRequisitesRule + починка регрессии в test_data_quality.py)
 - **`backend/app/modules/data_quality/rules.py`** — восстановлены два правила Data Quality движка, удалённые во время merge `17e3c61` ⇒ движок снова содержит **9 правил** (из 7 обратно до 9): `OrphanedAssignmentsRule` (ACTIVE-сотрудники с `position_id`/`workplace_id` на soft-deleted записи; HIGH/MEDIUM) и `CompanyRequisitesRule` (компании без INN — HIGH; без OGRN/legal_address — LOW). Оба зарегистрированы в `DataQualityRuleEngine.rules`.
 - **`tests/test_data_quality.py`** — починена регрессия collection-error: импорт `OrphanedAssignmentsRule` оставался после отката, но самого класса в коде не было. Добавлен импорт `CompanyRequisitesRule`, восстановлены классы `TestOrphanedAssignmentsRule` (3 кейса) и `TestCompanyRequisitesRule` (3 кейса), `expected_rules` в `TestDataQualityService` расширен до 9 правил.

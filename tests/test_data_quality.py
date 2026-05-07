@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from datetime import date, datetime, timedelta, timezone
 
-from app.models.document import Document, DocumentStatus
+from app.models.document import Document, DocumentStatus, DocumentVersion
 from app.models.models import (
     EmploymentStatus,
     Permit,
@@ -17,12 +18,15 @@ from app.models.models import (
     PPEIssue,
     PPEIssueStatus,
     RoleEnum,
+    TemplateVersion,
+    TemplateVersionStatus,
     Workplace,
 )
 from app.modules.data_quality import DataQualityService, IssueSeverity, IssueType
 from app.modules.data_quality.rules import (
     CompanyRequisitesRule,
     DocumentPersonCompanyMismatchRule,
+    DocumentReadinessRule,
     DuplicateRecordsRule,
     ExpiredPermitsRule,
     ExpiredPPEIssuesRule,
@@ -186,6 +190,7 @@ class TestDataQualityService:
             "expired_ppe_issues",
             "orphaned_assignments",
             "company_requisites",
+            "document_readiness",
             "document_person_company_mismatch",
             "potential_duplicates",
         }
@@ -487,6 +492,231 @@ class TestDocumentPersonCompanyMismatchRule:
         await rule.check()
 
         assert not rule.issues
+
+
+@pytest.mark.anyio
+class TestDocumentReadinessRule:
+    """Draft documents: stale without template version, or missing required wizard fields."""
+
+    async def test_flags_stale_draft_without_template_version(
+        self,
+        test_db_session: AsyncSession,
+        data_factory: TestDataFactory,
+    ) -> None:
+        tenant = await data_factory.ensure_tenant(session=test_db_session)
+        company = await data_factory.create_company(tenant=tenant, session=test_db_session)
+        person = await data_factory.create_person(
+            tenant=tenant,
+            company=company,
+            first_name="Stale",
+            last_name="Draft",
+            email="stale-draft@example.com",
+            session=test_db_session,
+        )
+        template = await data_factory.create_template(
+            tenant=tenant, name="ReadinessTpl", session=test_db_session
+        )
+        creator = await data_factory.create_user(
+            tenant=tenant, email="stale-creator@example.com", session=test_db_session
+        )
+        doc = Document(
+            tenant_id=tenant.id,
+            company_id=company.id,
+            person_id=person.id,
+            template_id=template.id,
+            template_version_id=None,
+            status=DocumentStatus.DRAFT,
+            created_by=creator.id,
+        )
+        test_db_session.add(doc)
+        await test_db_session.commit()
+        await test_db_session.refresh(doc)
+        doc.created_at = datetime.now(tz=timezone.utc) - timedelta(days=14)
+        await test_db_session.commit()
+
+        rule = DocumentReadinessRule(str(tenant.id), test_db_session)
+        await rule.check()
+
+        assert any(
+            i.affected_entity_id == str(doc.id)
+            and i.additional_info.get("reason") == "stale_draft_missing_template_version"
+            for i in rule.issues
+        )
+        assert any(i.severity == IssueSeverity.MEDIUM for i in rule.issues)
+
+    async def test_skips_recent_draft_without_template_version(
+        self,
+        test_db_session: AsyncSession,
+        data_factory: TestDataFactory,
+    ) -> None:
+        tenant = await data_factory.ensure_tenant(session=test_db_session)
+        company = await data_factory.create_company(tenant=tenant, session=test_db_session)
+        person = await data_factory.create_person(
+            tenant=tenant,
+            company=company,
+            first_name="Fresh",
+            last_name="Draft",
+            email="fresh-draft@example.com",
+            session=test_db_session,
+        )
+        template = await data_factory.create_template(
+            tenant=tenant, name="ReadinessTpl2", session=test_db_session
+        )
+        creator = await data_factory.create_user(
+            tenant=tenant, email="fresh-creator@example.com", session=test_db_session
+        )
+        doc = Document(
+            tenant_id=tenant.id,
+            company_id=company.id,
+            person_id=person.id,
+            template_id=template.id,
+            template_version_id=None,
+            status=DocumentStatus.DRAFT,
+            created_by=creator.id,
+        )
+        test_db_session.add(doc)
+        await test_db_session.commit()
+
+        rule = DocumentReadinessRule(str(tenant.id), test_db_session)
+        await rule.check()
+
+        assert not any(i.affected_entity_id == str(doc.id) for i in rule.issues)
+
+    async def test_flags_missing_required_fields_from_template_schema(
+        self,
+        test_db_session: AsyncSession,
+        data_factory: TestDataFactory,
+    ) -> None:
+        tenant = await data_factory.ensure_tenant(session=test_db_session)
+        company = await data_factory.create_company(tenant=tenant, session=test_db_session)
+        person = await data_factory.create_person(
+            tenant=tenant,
+            company=company,
+            first_name="Incomplete",
+            last_name="Wizard",
+            email="incomplete-wizard@example.com",
+            session=test_db_session,
+        )
+        template = await data_factory.create_template(
+            tenant=tenant, name="SchemaTpl", session=test_db_session
+        )
+        creator = await data_factory.create_user(
+            tenant=tenant, email="schema-creator@example.com", session=test_db_session
+        )
+        checksum = hashlib.sha256(b"v1").digest()
+        tv = TemplateVersion(
+            tenant_id=tenant.id,
+            template_id=template.id,
+            version=1,
+            checksum=checksum,
+            status=TemplateVersionStatus.ACTIVE,
+            payload_key="templates/schema.docx",
+            required_fields_schema={
+                "type": "object",
+                "required": ["full_name", "sign_date"],
+                "properties": {
+                    "full_name": {"type": "string"},
+                    "sign_date": {"type": "string"},
+                },
+            },
+        )
+        test_db_session.add(tv)
+        await test_db_session.flush()
+
+        doc = Document(
+            tenant_id=tenant.id,
+            company_id=company.id,
+            person_id=person.id,
+            template_id=template.id,
+            template_version_id=tv.id,
+            status=DocumentStatus.DRAFT,
+            created_by=creator.id,
+        )
+        version = DocumentVersion(
+            tenant_id=tenant.id,
+            document=doc,
+            template_version="1",
+            data_json={"full_name": "Ada"},
+            file_key="stub.docx",
+        )
+        test_db_session.add(doc)
+        test_db_session.add(version)
+        await test_db_session.commit()
+
+        rule = DocumentReadinessRule(str(tenant.id), test_db_session)
+        await rule.check()
+
+        flagged = [
+            i
+            for i in rule.issues
+            if i.affected_entity_id == str(doc.id)
+            and i.additional_info.get("reason") == "missing_required_wizard_fields"
+        ]
+        assert flagged
+        assert "sign_date" in flagged[0].additional_info.get("missing_fields", [])
+
+    async def test_ok_when_nested_values_contains_required_fields(
+        self,
+        test_db_session: AsyncSession,
+        data_factory: TestDataFactory,
+    ) -> None:
+        tenant = await data_factory.ensure_tenant(session=test_db_session)
+        company = await data_factory.create_company(tenant=tenant, session=test_db_session)
+        person = await data_factory.create_person(
+            tenant=tenant,
+            company=company,
+            first_name="Nested",
+            last_name="Ok",
+            email="nested-ok@example.com",
+            session=test_db_session,
+        )
+        template = await data_factory.create_template(
+            tenant=tenant, name="NestedTpl", session=test_db_session
+        )
+        creator = await data_factory.create_user(
+            tenant=tenant, email="nested-creator@example.com", session=test_db_session
+        )
+        checksum = hashlib.sha256(b"v2").digest()
+        tv = TemplateVersion(
+            tenant_id=tenant.id,
+            template_id=template.id,
+            version=1,
+            checksum=checksum,
+            status=TemplateVersionStatus.ACTIVE,
+            payload_key="templates/nested.docx",
+            required_fields_schema={
+                "type": "object",
+                "required": ["title"],
+                "properties": {"title": {"type": "string"}},
+            },
+        )
+        test_db_session.add(tv)
+        await test_db_session.flush()
+
+        doc = Document(
+            tenant_id=tenant.id,
+            company_id=company.id,
+            person_id=person.id,
+            template_id=template.id,
+            template_version_id=tv.id,
+            status=DocumentStatus.DRAFT,
+            created_by=creator.id,
+        )
+        version = DocumentVersion(
+            tenant_id=tenant.id,
+            document=doc,
+            template_version="1",
+            data_json={"values": {"title": "Safety briefing"}},
+            file_key="stub2.docx",
+        )
+        test_db_session.add(doc)
+        test_db_session.add(version)
+        await test_db_session.commit()
+
+        rule = DocumentReadinessRule(str(tenant.id), test_db_session)
+        await rule.check()
+
+        assert not any(i.affected_entity_id == str(doc.id) for i in rule.issues)
 
 
 @pytest.mark.anyio

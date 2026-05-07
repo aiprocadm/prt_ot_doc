@@ -6,13 +6,13 @@ import asyncio
 import logging
 import time
 from abc import ABC, abstractmethod
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.document import Document
+from app.models.document import Document, DocumentStatus, DocumentVersion
 from app.models.models import (
     Company,
     EmploymentStatus,
@@ -24,10 +24,15 @@ from app.models.models import (
     PPEIssue,
     PPEIssueStatus,
     Site,
+    TemplateVersion,
     Training,
     TrainingStatus,
     Workplace,
 )
+
+
+# Drafts older than this without a pinned TemplateVersion are reported (wizard abandon).
+DOCUMENT_READINESS_STALE_DRAFT_DAYS = 7
 
 from .schemas import DataQualityIssue, IssueSeverity, IssueType
 
@@ -36,6 +41,39 @@ logger = logging.getLogger("app.modules.data_quality")
 
 def _is_blank(value: str | None) -> bool:
     return value is None or not str(value).strip()
+
+
+def _json_schema_required_fields(schema: dict[str, Any] | None) -> list[str]:
+    if not schema or not isinstance(schema, dict):
+        return []
+    req = schema.get("required")
+    if not isinstance(req, list):
+        return []
+    return [str(k) for k in req if isinstance(k, str) and k]
+
+
+def _lookup_wizard_field(data_json: dict[str, Any], key: str) -> Any:
+    if key in data_json:
+        return data_json[key]
+    for nested_key in ("values", "payload", "fields", "data"):
+        nested = data_json.get(nested_key)
+        if isinstance(nested, dict) and key in nested:
+            return nested[key]
+    return None
+
+
+def _wizard_required_value_blank(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return _is_blank(value)
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, (int, float)):
+        return False
+    if isinstance(value, (list, dict, tuple)):
+        return len(value) == 0
+    return False
 
 
 class DataQualityRule(ABC):
@@ -601,6 +639,137 @@ class CompanyRequisitesRule(DataQualityRule):
             logger.exception("company_requisites rule failed: %s", e)
 
 
+class DocumentReadinessRule(DataQualityRule):
+    """Draft documents that are stuck (no template version) or miss required wizard data."""
+
+    @property
+    def rule_name(self) -> str:
+        return "document_readiness"
+
+    @property
+    def rule_description(self) -> str:
+        return (
+            "Draft documents stale without a pinned template version, or missing "
+            "fields required by the template JSON schema"
+        )
+
+    async def check(self) -> None:
+        self.issues = []
+        try:
+            now = datetime.now(tz=timezone.utc)
+            stale_cutoff = now - timedelta(days=DOCUMENT_READINESS_STALE_DRAFT_DAYS)
+
+            draft_stmt = select(Document).where(
+                Document.tenant_id == self.tenant_id,
+                Document.status == DocumentStatus.DRAFT,
+            )
+            drafts = (await self.db.execute(draft_stmt)).scalars().all()
+            self.total_checked = len(drafts)
+
+            stale_stmt = select(Document).where(
+                Document.tenant_id == self.tenant_id,
+                Document.status == DocumentStatus.DRAFT,
+                Document.template_version_id.is_(None),
+                Document.created_at < stale_cutoff,
+            )
+            stale_docs = (await self.db.execute(stale_stmt)).scalars().all()
+
+            for doc in stale_docs:
+                self.issues.append(
+                    DataQualityIssue(
+                        id=f"{self.rule_name}:document:{doc.id}:stale_no_template_version",
+                        issue_type=IssueType.MISSING_FIELD,
+                        severity=IssueSeverity.MEDIUM,
+                        title=f"Draft document {doc.id} stuck without template version",
+                        description=(
+                            f"This draft was created more than {DOCUMENT_READINESS_STALE_DRAFT_DAYS} days ago "
+                            "but still has no pinned template_version_id. Pin a version or delete the abandoned draft."
+                        ),
+                        affected_entity_type="document",
+                        affected_entity_id=str(doc.id),
+                        additional_info={
+                            "reason": "stale_draft_missing_template_version",
+                            "created_at": doc.created_at.isoformat()
+                            if doc.created_at
+                            else None,
+                            "threshold_days": DOCUMENT_READINESS_STALE_DRAFT_DAYS,
+                        },
+                    )
+                )
+
+            tv_docs = [d for d in drafts if d.template_version_id is not None]
+            if not tv_docs:
+                return
+
+            doc_ids = [d.id for d in tv_docs]
+            vers_stmt = select(
+                DocumentVersion.document_id,
+                DocumentVersion.data_json,
+                DocumentVersion.version_number,
+            ).where(DocumentVersion.document_id.in_(doc_ids))
+            rows = (await self.db.execute(vers_stmt)).all()
+
+            latest_payload: dict[str, dict[str, Any]] = {}
+            best_vn: dict[str, int] = {}
+            for doc_id, data_json, vn in rows:
+                prev = best_vn.get(doc_id)
+                if prev is None or vn > prev:
+                    best_vn[doc_id] = vn
+                    latest_payload[doc_id] = data_json if isinstance(data_json, dict) else {}
+
+            tv_ids = {d.template_version_id for d in tv_docs if d.template_version_id}
+            tv_map: dict[str, TemplateVersion] = {}
+            if tv_ids:
+                tv_rows = (
+                    await self.db.execute(
+                        select(TemplateVersion).where(TemplateVersion.id.in_(tv_ids))
+                    )
+                ).scalars().all()
+                tv_map = {tv.id: tv for tv in tv_rows}
+
+            for doc in tv_docs:
+                tv_id = doc.template_version_id
+                if not tv_id:
+                    continue
+                tv = tv_map.get(str(tv_id))
+                if tv is None:
+                    continue
+                required = _json_schema_required_fields(
+                    tv.required_fields_schema
+                    if isinstance(tv.required_fields_schema, dict)
+                    else None
+                )
+                if not required:
+                    continue
+
+                data_json = latest_payload.get(doc.id, {})
+                missing = [k for k in required if _wizard_required_value_blank(_lookup_wizard_field(data_json, k))]
+                if not missing:
+                    continue
+
+                self.issues.append(
+                    DataQualityIssue(
+                        id=f"{self.rule_name}:document:{doc.id}:missing_required",
+                        issue_type=IssueType.MISSING_FIELD,
+                        severity=IssueSeverity.MEDIUM,
+                        title=f"Draft document {doc.id} missing required fields",
+                        description=(
+                            "Draft is missing one or more fields listed as required in the "
+                            "template version JSON schema. Complete the wizard before generation."
+                        ),
+                        affected_entity_type="document",
+                        affected_entity_id=str(doc.id),
+                        additional_info={
+                            "reason": "missing_required_wizard_fields",
+                            "template_version_id": str(tv_id),
+                            "missing_fields": missing,
+                        },
+                    )
+                )
+        except Exception as e:
+            logger.exception("document_readiness rule failed: %s", e)
+
+
 class DocumentPersonCompanyMismatchRule(DataQualityRule):
     """Documents where Document.company_id != Person.company_id (integration mismatch)."""
 
@@ -728,6 +897,7 @@ class DataQualityRuleEngine:
             ExpiredPPEIssuesRule,
             OrphanedAssignmentsRule,
             CompanyRequisitesRule,
+            DocumentReadinessRule,
             DocumentPersonCompanyMismatchRule,
             DuplicateRecordsRule,
         ]
