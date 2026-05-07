@@ -28,7 +28,7 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 | Phase 1: Architectural Foundation | P1 | Role-based workspaces ✅, RBAC module access ✅, tenant isolation ✅ | 2-3 sessions | ✅ COMPLETE |
 | Phase 2: Operational Dashboard | P1 | Command Center (backend ✅, 2.1a done), health checks ✅, operational visibility | 2-3 sessions | 🟡 IN PROGRESS (2.2 done, 2.1 partial, pending frontend) |
 | Phase 3: Data Quality & Master Data | P1 | Data Quality Layer, unified employee/site cards, deduplication | 2-3 sessions | 📋 Planned |
-| Phase 4: Calendar & Search | P2 | Smart Calendar improvements, universal search + command bar | 2-3 sessions | 🟡 IN PROGRESS (4.1 backend aggregator + UI + ICS export + plan/fact backend done; 4.1 SLA + saved filters + 4.2 search pending) |
+| Phase 4: Calendar & Search | P2 | Smart Calendar improvements, universal search + command bar | 2-3 sessions | 🟡 IN PROGRESS (4.1 backend aggregator + UI + ICS export + plan/fact backend+UI done; 4.1 SLA + saved filters + resource load + 4.2 search pending) |
 | Phase 5: Document Factory Hardening | P2 | Template engine, header/footer, replace engine improvements | 2-3 sessions | 📋 Planned |
 | Phase 6: Integration & Webhooks | P2 | API improvements, webhook delivery, system integrations | 2-3 sessions | 📋 Planned |
 | Phase 7: Mobile & Field-Ready Work | P2 | Offline sync, mobile UX, field-specific workflows | 2-3 sessions | 📋 Planned |
@@ -294,7 +294,7 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 **Acceptance criteria:**
 - [x] Backend: `/api/v1/calendar/events` aggregates from all modules (training, medicals, PPE, SOÚT, inspections, tasks, etc.) — Session 22
 - [x] Views: day/week/month/year; filter by event type, owner, status — Session 23 (`CalendarPage.tsx` 5 view-toggles + 8 source-чипов + person_id/site_id фильтры + URL-state)
-- [ ] Smart features: plan/fact comparison, resource load visualization, overdue highlighting, SLA tracking, saved filters — overdue highlighting done (Sessions 22+23); plan/fact backend done (Session 25 — `?include_fact=true` query param + `expected_at`/`actual_at`/`variance_days` DTO fields + ICS DESCRIPTION enrichment); resource load + SLA + saved filters + frontend plan/fact UI pending
+- [ ] Smart features: plan/fact comparison, resource load visualization, overdue highlighting, SLA tracking, saved filters — overdue highlighting done (Sessions 22+23); plan/fact closed (backend Session 25 — `?include_fact=true` query param + `expected_at`/`actual_at`/`variance_days` DTO fields + ICS DESCRIPTION enrichment; UI Session 26 — toggle button, conditional «План/Факт/Отклонение» columns, late/early/on-time `<VarianceBadge>`, summary line, URL-state persistence; ICS download button via `calendarApi.downloadIcs`); resource load + SLA + saved filters pending
 - [x] Export: ICS, Google Calendar, Outlook integration — Session 24 (`GET /api/v1/calendar/events.ics`, RFC 5545 pure-Python serializer; same query params and RBAC as `/events`; subscribed by Outlook/Google/Apple via URL)
 - [x] Tests: Calendar aggregation logic, view switching, filtering — backend `tests/test_calendar_aggregator.py` (10 cases) + frontend `frontend/src/__tests__/CalendarPage.test.tsx` (7 cases)
 

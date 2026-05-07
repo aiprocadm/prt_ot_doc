@@ -63,7 +63,8 @@ describe("Workflow and Calendar operational states", () => {
       expect(getCalendarEventsMock).toHaveBeenCalledWith({
         source_types: ["training_session"],
         person_id: undefined,
-        site_id: undefined
+        site_id: undefined,
+        include_fact: undefined
       });
     });
   });

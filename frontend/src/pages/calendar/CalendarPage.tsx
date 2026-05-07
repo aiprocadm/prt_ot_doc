@@ -1,4 +1,4 @@
-import { RefreshCw } from "lucide-react";
+import { Download, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
@@ -27,6 +27,7 @@ import {
   type CalendarSourceCountDto,
   type CalendarSourceType
 } from "@/types/dto/calendar";
+import { downloadBlob } from "@/utils/download";
 
 type CalendarView = "day" | "week" | "month" | "year" | "list";
 
@@ -135,6 +136,17 @@ const formatDateTime = (iso: string | null | undefined): string => {
   });
 };
 
+const formatDateOnly = (iso: string | null | undefined): string => {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleDateString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric"
+  });
+};
+
 const buildDrillDown = (item: CalendarEventItemDto): string | null => {
   const base = DRILL_DOWN[item.source_type];
   if (!base) return null;
@@ -171,7 +183,21 @@ const SourceChip = ({
   </Button>
 );
 
-const EventRow = ({ item }: { item: CalendarEventItemDto }) => {
+const VarianceBadge = ({ days }: { days: number }) => {
+  if (days === 0) {
+    return <Badge variant="secondary">В срок</Badge>;
+  }
+  if (days > 0) {
+    return <Badge variant="destructive">+{days} дн.</Badge>;
+  }
+  return (
+    <Badge variant="outline" className="text-emerald-600 border-emerald-300">
+      {days} дн.
+    </Badge>
+  );
+};
+
+const EventRow = ({ item, includeFact }: { item: CalendarEventItemDto; includeFact: boolean }) => {
   const link = buildDrillDown(item);
   return (
     <TableRow>
@@ -189,6 +215,19 @@ const EventRow = ({ item }: { item: CalendarEventItemDto }) => {
         {SOURCE_LABELS[item.source_type] ?? item.source_type}
       </TableCell>
       <TableCell className="text-sm">{item.status ?? "—"}</TableCell>
+      {includeFact ? (
+        <>
+          <TableCell className="text-sm">{formatDateOnly(item.expected_at)}</TableCell>
+          <TableCell className="text-sm">{formatDateOnly(item.actual_at)}</TableCell>
+          <TableCell>
+            {typeof item.variance_days === "number" ? (
+              <VarianceBadge days={item.variance_days} />
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            )}
+          </TableCell>
+        </>
+      ) : null}
       <TableCell>
         {item.is_overdue ? (
           <Badge variant="destructive">Просрочен</Badge>
@@ -206,6 +245,7 @@ const CalendarPage = () => {
   const initialSources = parseSources(searchParams.get("sources"));
   const initialPersonId = searchParams.get("person_id") ?? "";
   const initialSiteId = searchParams.get("site_id") ?? "";
+  const initialIncludeFact = searchParams.get("include_fact") === "1";
 
   const [view, setView] = useState<CalendarView>(initialView);
   const [selectedSources, setSelectedSources] = useState<CalendarSourceType[]>(initialSources);
@@ -213,10 +253,13 @@ const CalendarPage = () => {
   const [siteId, setSiteId] = useState(initialSiteId);
   const [appliedPersonId, setAppliedPersonId] = useState(initialPersonId);
   const [appliedSiteId, setAppliedSiteId] = useState(initialSiteId);
+  const [includeFact, setIncludeFact] = useState(initialIncludeFact);
 
   const [response, setResponse] = useState<CalendarEventsResponseDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
+  const [icsLoading, setIcsLoading] = useState(false);
+  const [icsError, setIcsError] = useState<string | null>(null);
 
   const updateQueryParams = useCallback(
     (patch: {
@@ -224,6 +267,7 @@ const CalendarPage = () => {
       sources?: CalendarSourceType[];
       person_id?: string;
       site_id?: string;
+      include_fact?: boolean;
     }) => {
       const next = new URLSearchParams(searchParams);
       if (patch.view !== undefined) {
@@ -242,6 +286,10 @@ const CalendarPage = () => {
         if (patch.site_id) next.set("site_id", patch.site_id);
         else next.delete("site_id");
       }
+      if (patch.include_fact !== undefined) {
+        if (patch.include_fact) next.set("include_fact", "1");
+        else next.delete("include_fact");
+      }
       setSearchParams(next, { replace: true });
     },
     [searchParams, setSearchParams]
@@ -254,7 +302,8 @@ const CalendarPage = () => {
       const data = await calendarApi.getEvents({
         source_types: selectedSources.length > 0 ? selectedSources : undefined,
         person_id: appliedPersonId || undefined,
-        site_id: appliedSiteId || undefined
+        site_id: appliedSiteId || undefined,
+        include_fact: includeFact || undefined
       });
       setResponse(data);
     } catch (nextError) {
@@ -268,7 +317,7 @@ const CalendarPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [selectedSources, appliedPersonId, appliedSiteId]);
+  }, [selectedSources, appliedPersonId, appliedSiteId, includeFact]);
 
   useEffect(() => {
     void load();
@@ -310,8 +359,38 @@ const CalendarPage = () => {
     setSiteId("");
     setAppliedPersonId("");
     setAppliedSiteId("");
-    updateQueryParams({ sources: [], person_id: "", site_id: "" });
+    setIncludeFact(false);
+    updateQueryParams({ sources: [], person_id: "", site_id: "", include_fact: false });
   }, [updateQueryParams]);
+
+  const togglePlanFact = useCallback(() => {
+    setIncludeFact((current) => {
+      const next = !current;
+      updateQueryParams({ include_fact: next });
+      return next;
+    });
+  }, [updateQueryParams]);
+
+  const handleDownloadIcs = useCallback(async () => {
+    setIcsLoading(true);
+    setIcsError(null);
+    try {
+      const blob = await calendarApi.downloadIcs({
+        source_types: selectedSources.length > 0 ? selectedSources : undefined,
+        person_id: appliedPersonId || undefined,
+        site_id: appliedSiteId || undefined,
+        include_fact: includeFact || undefined
+      });
+      const today = new Date().toISOString().slice(0, 10);
+      downloadBlob(blob, `calendar-${today}.ics`);
+    } catch (nextError) {
+      const message =
+        (nextError as ApiError | undefined)?.message ?? "Не удалось скачать .ics";
+      setIcsError(message);
+    } finally {
+      setIcsLoading(false);
+    }
+  }, [selectedSources, appliedPersonId, appliedSiteId, includeFact]);
 
   const items = useMemo(() => response?.items ?? [], [response]);
 
@@ -334,12 +413,33 @@ const CalendarPage = () => {
       }));
   }, [items, view]);
 
+  const factSummary = useMemo(() => {
+    if (!includeFact || items.length === 0) {
+      return { withFact: 0, late: 0, early: 0, onTime: 0 };
+    }
+    let withFact = 0;
+    let late = 0;
+    let early = 0;
+    let onTime = 0;
+    items.forEach((item) => {
+      if (typeof item.variance_days !== "number") return;
+      withFact += 1;
+      if (item.variance_days > 0) late += 1;
+      else if (item.variance_days < 0) early += 1;
+      else onTime += 1;
+    });
+    return { withFact, late, early, onTime };
+  }, [includeFact, items]);
+
   const counts = response?.by_source ?? [];
   const total = response?.total ?? 0;
   const overdueTotal = response?.overdue_count ?? 0;
   const generatedAtLabel = response?.generated_at ? formatDateTime(response.generated_at) : null;
   const filtersActive =
-    selectedSources.length > 0 || appliedPersonId.length > 0 || appliedSiteId.length > 0;
+    selectedSources.length > 0 ||
+    appliedPersonId.length > 0 ||
+    appliedSiteId.length > 0 ||
+    includeFact;
 
   return (
     <div className="space-y-4">
@@ -349,10 +449,28 @@ const CalendarPage = () => {
           <div>
             <CardTitle>Умный календарь</CardTitle>
             <CardDescription>
-              Сводный поток медосмотров, СИЗ, допусков, обучений, проверок, контрольных сроков и инструктажей с подсветкой просрочек.
+              Сводный поток медосмотров, СИЗ, допусков, обучений, проверок, контрольных сроков и инструктажей с подсветкой просрочек и сравнением план/факт.
             </CardDescription>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant={includeFact ? "default" : "outline"}
+              size="sm"
+              onClick={togglePlanFact}
+              aria-pressed={includeFact}
+            >
+              {includeFact ? "Скрыть план/факт" : "Сравнить план/факт"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void handleDownloadIcs()}
+              disabled={icsLoading}
+            >
+              <Download className="mr-2 h-4 w-4" /> Скачать .ics
+            </Button>
             <Button
               type="button"
               variant="outline"
@@ -425,7 +543,12 @@ const CalendarPage = () => {
               <Button type="button" onClick={applyFilters} disabled={loading}>
                 Применить
               </Button>
-              <Button type="button" variant="outline" onClick={resetFilters} disabled={!filtersActive && selectedSources.length === 0}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={resetFilters}
+                disabled={!filtersActive && selectedSources.length === 0}
+              >
                 Сбросить
               </Button>
             </div>
@@ -441,7 +564,20 @@ const CalendarPage = () => {
               </strong>
             </span>
             {generatedAtLabel ? <span>Сформировано: {generatedAtLabel}</span> : null}
+            {includeFact ? (
+              <span data-testid="fact-summary">
+                Факт зафиксирован: <strong className="text-foreground">{factSummary.withFact}</strong>{" "}
+                · опозданий: <strong className="text-destructive">{factSummary.late}</strong> ·
+                досрочно: <strong className="text-emerald-600">{factSummary.early}</strong> ·
+                в срок: <strong className="text-foreground">{factSummary.onTime}</strong>
+              </span>
+            ) : null}
           </div>
+          {icsError ? (
+            <div role="alert" className="text-sm text-destructive">
+              {icsError}
+            </div>
+          ) : null}
           <ErrorState error={error ?? undefined} onRetry={() => void load()} />
           {loading ? <LoadingScreen label="Загрузка событий" /> : null}
           {!loading && !error && items.length === 0 ? (
@@ -469,12 +605,19 @@ const CalendarPage = () => {
                         <TableHead>Событие</TableHead>
                         <TableHead className="w-[160px]">Источник</TableHead>
                         <TableHead className="w-[140px]">Статус</TableHead>
+                        {includeFact ? (
+                          <>
+                            <TableHead className="w-[120px]">План</TableHead>
+                            <TableHead className="w-[120px]">Факт</TableHead>
+                            <TableHead className="w-[120px]">Отклонение</TableHead>
+                          </>
+                        ) : null}
                         <TableHead className="w-[120px]">Срок</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {bucket.items.map((item) => (
-                        <EventRow key={item.id} item={item} />
+                        <EventRow key={item.id} item={item} includeFact={includeFact} />
                       ))}
                     </TableBody>
                   </Table>
