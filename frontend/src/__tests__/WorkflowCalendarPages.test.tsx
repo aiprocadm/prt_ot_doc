@@ -64,7 +64,8 @@ describe("Workflow and Calendar operational states", () => {
         source_types: ["training_session"],
         person_id: undefined,
         site_id: undefined,
-        include_fact: undefined
+        include_fact: undefined,
+        include_sla: undefined
       });
     });
   });

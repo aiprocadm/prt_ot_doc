@@ -24,6 +24,15 @@ export const CALENDAR_SOURCE_TYPES: readonly CalendarSourceType[] = [
   "calendar_event"
 ] as const;
 
+export type CalendarSlaBand = "overdue" | "critical" | "warning" | "ok";
+
+export const CALENDAR_SLA_BANDS: readonly CalendarSlaBand[] = [
+  "overdue",
+  "critical",
+  "warning",
+  "ok"
+] as const;
+
 export interface CalendarEventItemDto {
   id: string;
   source_type: CalendarSourceType;
@@ -40,6 +49,8 @@ export interface CalendarEventItemDto {
   expected_at?: string | null;
   actual_at?: string | null;
   variance_days?: number | null;
+  days_to_due?: number | null;
+  sla_band?: CalendarSlaBand | null;
   extra: Record<string, unknown>;
 }
 
@@ -66,4 +77,5 @@ export interface CalendarEventsQuery {
   person_id?: string;
   site_id?: string;
   include_fact?: boolean;
+  include_sla?: boolean;
 }
