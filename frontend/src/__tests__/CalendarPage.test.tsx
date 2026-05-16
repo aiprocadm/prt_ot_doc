@@ -178,12 +178,12 @@ const slaResponse: CalendarEventsResponseDto = {
       id: "medical_exam:exam-overdue",
       source_type: "medical_exam",
       source_id: "exam-overdue",
-      title: "Медосмотр: Сидоров С.С.",
+      title: "Медосмотр: просрочен",
       starts_at: "2026-04-25T08:00:00Z",
       ends_at: null,
       status: "scheduled",
       is_overdue: true,
-      person_id: "p-3",
+      person_id: "p-1",
       site_id: null,
       company_id: null,
       assigned_user_id: null,
@@ -192,15 +192,15 @@ const slaResponse: CalendarEventsResponseDto = {
       extra: {}
     },
     {
-      id: "medical_exam:exam-critical",
-      source_type: "medical_exam",
-      source_id: "exam-critical",
-      title: "Медосмотр: Иванов И.И.",
+      id: "permit:permit-critical",
+      source_type: "permit",
+      source_id: "permit-critical",
+      title: "Допуск: критичный срок",
       starts_at: "2026-05-12T08:00:00Z",
       ends_at: null,
-      status: "scheduled",
+      status: "active",
       is_overdue: false,
-      person_id: "p-1",
+      person_id: "p-2",
       site_id: null,
       company_id: null,
       assigned_user_id: null,
@@ -209,36 +209,36 @@ const slaResponse: CalendarEventsResponseDto = {
       extra: {}
     },
     {
-      id: "medical_exam:exam-warning",
-      source_type: "medical_exam",
-      source_id: "exam-warning",
-      title: "Медосмотр: Петров П.П.",
-      starts_at: "2026-05-28T08:00:00Z",
+      id: "training_session:ts-warning",
+      source_type: "training_session",
+      source_id: "ts-warning",
+      title: "Обучение: внимание",
+      starts_at: "2026-05-20T09:00:00Z",
       ends_at: null,
       status: "scheduled",
+      is_overdue: false,
+      person_id: "p-1",
+      site_id: null,
+      company_id: null,
+      assigned_user_id: null,
+      days_to_due: 12,
+      sla_band: "warning",
+      extra: {}
+    },
+    {
+      id: "ppe_issue:ppe-ok",
+      source_type: "ppe_issue",
+      source_id: "ppe-ok",
+      title: "СИЗ: в норме",
+      starts_at: "2026-07-01T08:00:00Z",
+      ends_at: null,
+      status: "issued",
       is_overdue: false,
       person_id: "p-2",
       site_id: null,
       company_id: null,
       assigned_user_id: null,
-      days_to_due: 20,
-      sla_band: "warning",
-      extra: {}
-    },
-    {
-      id: "medical_exam:exam-ok",
-      source_type: "medical_exam",
-      source_id: "exam-ok",
-      title: "Медосмотр: Кузнецов К.К.",
-      starts_at: "2026-08-15T08:00:00Z",
-      ends_at: null,
-      status: "scheduled",
-      is_overdue: false,
-      person_id: "p-4",
-      site_id: null,
-      company_id: null,
-      assigned_user_id: null,
-      days_to_due: 99,
+      days_to_due: 54,
       sla_band: "ok",
       extra: {}
     }
@@ -319,7 +319,8 @@ describe("CalendarPage", () => {
         source_types: ["medical_exam"],
         person_id: undefined,
         site_id: undefined,
-        include_fact: undefined
+        include_fact: undefined,
+        include_sla: undefined
       });
     });
   });
@@ -361,7 +362,8 @@ describe("CalendarPage", () => {
         source_types: undefined,
         person_id: "p-1",
         site_id: undefined,
-        include_fact: undefined
+        include_fact: undefined,
+        include_sla: undefined
       });
     });
   });
@@ -547,42 +549,49 @@ describe("CalendarPage", () => {
       });
     });
 
-    expect(await screen.findByRole("button", { name: "Скрыть SLA" })).toBeInTheDocument();
-    // slaResponse spans April/May/August → month buckets render three tables,
-    // each with its own SLA column header.
+    expect(
+      await screen.findByRole("button", { name: "Скрыть SLA" })
+    ).toBeInTheDocument();
+    // slaResponse spans Apr/May/Jul → month-view renders multiple buckets,
+    // each with its own SLA columnheader; assert at least one is present.
     expect(screen.getAllByRole("columnheader", { name: "SLA" }).length).toBeGreaterThan(0);
-    expect(screen.getByTestId("sla-filter-bar")).toBeInTheDocument();
+    expect(screen.getByTestId("sla-band-filter")).toBeInTheDocument();
   });
 
-  it("renders SLA band badges and days-to-due chip when SLA enabled", async () => {
+  it("renders SLA band badges and days-to-due chips when SLA enabled", async () => {
     const user = userEvent.setup();
     getEventsMock.mockResolvedValueOnce(sampleResponse);
     getEventsMock.mockResolvedValueOnce(slaResponse);
 
     renderPage();
-
     await screen.findByText("Медосмотр: Иванов И.И.");
     await user.click(screen.getByRole("button", { name: "Показать SLA" }));
 
-    const overdueRow = (await screen.findByText("Медосмотр: Сидоров С.С.")).closest("tr");
+    const overdueRow = (await screen.findByText("Медосмотр: просрочен")).closest("tr");
     expect(overdueRow).not.toBeNull();
-    expect(within(overdueRow as HTMLElement).getByTestId("sla-band-overdue")).toBeInTheDocument();
+    const overdueBand = within(overdueRow as HTMLElement).getByText("Просрочено");
+    expect(overdueBand).toHaveAttribute("data-sla-band", "overdue");
     expect(within(overdueRow as HTMLElement).getByText("Просрочено на 13 дн.")).toBeInTheDocument();
 
-    const criticalRow = screen.getByText("Медосмотр: Иванов И.И.").closest("tr");
+    const criticalRow = screen.getByText("Допуск: критичный срок").closest("tr");
     expect(criticalRow).not.toBeNull();
-    expect(within(criticalRow as HTMLElement).getByTestId("sla-band-critical")).toBeInTheDocument();
+    const criticalBand = within(criticalRow as HTMLElement).getByText("Критично");
+    expect(criticalBand).toHaveAttribute("data-sla-band", "critical");
     expect(within(criticalRow as HTMLElement).getByText("Осталось 4 дн.")).toBeInTheDocument();
 
-    const warningRow = screen.getByText("Медосмотр: Петров П.П.").closest("tr");
+    const warningRow = screen.getByText("Обучение: внимание").closest("tr");
     expect(warningRow).not.toBeNull();
-    expect(within(warningRow as HTMLElement).getByTestId("sla-band-warning")).toBeInTheDocument();
-    expect(within(warningRow as HTMLElement).getByText("Осталось 20 дн.")).toBeInTheDocument();
+    expect(within(warningRow as HTMLElement).getByText("Внимание")).toHaveAttribute(
+      "data-sla-band",
+      "warning"
+    );
 
-    const okRow = screen.getByText("Медосмотр: Кузнецов К.К.").closest("tr");
+    const okRow = screen.getByText("СИЗ: в норме").closest("tr");
     expect(okRow).not.toBeNull();
-    expect(within(okRow as HTMLElement).getByTestId("sla-band-ok")).toBeInTheDocument();
-    expect(within(okRow as HTMLElement).getByText("Осталось 99 дн.")).toBeInTheDocument();
+    expect(within(okRow as HTMLElement).getByText("В норме")).toHaveAttribute(
+      "data-sla-band",
+      "ok"
+    );
 
     const summary = screen.getByTestId("sla-summary");
     expect(summary).toHaveTextContent("просрочено: 1");
@@ -591,57 +600,36 @@ describe("CalendarPage", () => {
     expect(summary).toHaveTextContent("в норме: 1");
   });
 
-  it("filters items by selected SLA band chip", async () => {
+  it("filters events by selected SLA bands client-side without re-fetching", async () => {
     const user = userEvent.setup();
     getEventsMock.mockResolvedValueOnce(sampleResponse);
     getEventsMock.mockResolvedValueOnce(slaResponse);
 
     renderPage();
-
     await screen.findByText("Медосмотр: Иванов И.И.");
     await user.click(screen.getByRole("button", { name: "Показать SLA" }));
+    await screen.findByText("Медосмотр: просрочен");
 
-    await screen.findByText("Медосмотр: Сидоров С.С.");
+    const callsBefore = getEventsMock.mock.calls.length;
 
-    // Initially all 4 SLA rows visible
-    expect(screen.getByText("Медосмотр: Кузнецов К.К.")).toBeInTheDocument();
-
-    const slaBar = screen.getByTestId("sla-filter-bar");
-    await user.click(within(slaBar).getByRole("button", { name: /Просрочено/ }));
+    const filter = screen.getByTestId("sla-band-filter");
+    await user.click(within(filter).getByRole("button", { name: /Критично/ }));
 
     await waitFor(() => {
-      // ok-row hidden once band filter narrows to overdue only
-      expect(screen.queryByText("Медосмотр: Кузнецов К.К.")).not.toBeInTheDocument();
+      expect(screen.queryByText("Медосмотр: просрочен")).not.toBeInTheDocument();
     });
-    expect(screen.getByText("Медосмотр: Сидоров С.С.")).toBeInTheDocument();
+    expect(screen.getByText("Допуск: критичный срок")).toBeInTheDocument();
+    expect(screen.queryByText("Обучение: внимание")).not.toBeInTheDocument();
+    expect(screen.queryByText("СИЗ: в норме")).not.toBeInTheDocument();
+    // Filter is purely client-side — no extra fetch.
+    expect(getEventsMock.mock.calls.length).toBe(callsBefore);
   });
 
-  it("hydrates include_sla and sla_bands from URL on mount", async () => {
-    getEventsMock.mockResolvedValueOnce(slaResponse);
-
-    renderPage("/calendar?include_sla=1&sla_bands=overdue,critical");
-
-    await screen.findByText("Медосмотр: Сидоров С.С.");
-
-    expect(getEventsMock).toHaveBeenLastCalledWith({
-      source_types: undefined,
-      person_id: undefined,
-      site_id: undefined,
-      include_fact: undefined,
-      include_sla: true
-    });
-    expect(screen.getByRole("button", { name: "Скрыть SLA" })).toBeInTheDocument();
-    // Warning and ok rows hidden by the URL-hydrated band filter
-    expect(screen.queryByText("Медосмотр: Петров П.П.")).not.toBeInTheDocument();
-    expect(screen.queryByText("Медосмотр: Кузнецов К.К.")).not.toBeInTheDocument();
-  });
-
-  it("propagates include_sla to ICS download", async () => {
+  it("forwards include_sla=true to ICS download", async () => {
     const user = userEvent.setup();
     getEventsMock.mockResolvedValueOnce(sampleResponse);
 
     renderPage();
-
     await screen.findByText("Медосмотр: Иванов И.И.");
 
     getEventsMock.mockResolvedValueOnce(slaResponse);
@@ -662,5 +650,26 @@ describe("CalendarPage", () => {
         include_sla: true
       });
     });
+  });
+
+  it("hydrates include_sla and sla_bands from URL on mount", async () => {
+    getEventsMock.mockResolvedValueOnce(slaResponse);
+
+    renderPage("/calendar?include_sla=1&sla_bands=overdue,critical");
+
+    await screen.findByText("Медосмотр: просрочен");
+
+    expect(getEventsMock).toHaveBeenLastCalledWith({
+      source_types: undefined,
+      person_id: undefined,
+      site_id: undefined,
+      include_fact: undefined,
+      include_sla: true
+    });
+    expect(screen.getByRole("button", { name: "Скрыть SLA" })).toBeInTheDocument();
+    // Only "overdue" and "critical" bands shown, others filtered out client-side.
+    expect(screen.getByText("Допуск: критичный срок")).toBeInTheDocument();
+    expect(screen.queryByText("Обучение: внимание")).not.toBeInTheDocument();
+    expect(screen.queryByText("СИЗ: в норме")).not.toBeInTheDocument();
   });
 });

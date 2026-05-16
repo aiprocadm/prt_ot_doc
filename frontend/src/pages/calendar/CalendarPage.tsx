@@ -69,32 +69,11 @@ const SLA_BAND_LABELS: Record<CalendarSlaBand, string> = {
   ok: "В норме"
 };
 
-const SLA_BAND_CLASSES: Record<CalendarSlaBand, string> = {
-  overdue: "border-transparent bg-destructive text-destructive-foreground",
-  critical: "border-transparent bg-orange-500 text-white",
-  warning: "border-transparent bg-yellow-400 text-yellow-950",
-  ok: "border-emerald-300 bg-emerald-50 text-emerald-700"
-};
-
 const isCalendarSource = (value: string): value is CalendarSourceType =>
   (CALENDAR_SOURCE_TYPES as readonly string[]).includes(value);
 
 const isSlaBand = (value: string): value is CalendarSlaBand =>
   (CALENDAR_SLA_BANDS as readonly string[]).includes(value);
-
-const parseSlaBands = (raw: string | null): CalendarSlaBand[] => {
-  if (!raw) return [];
-  return raw
-    .split(",")
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0 && isSlaBand(part)) as CalendarSlaBand[];
-};
-
-const formatDaysToDue = (days: number): string => {
-  if (days === 0) return "Срок сегодня";
-  if (days > 0) return `Осталось ${days} дн.`;
-  return `Просрочено на ${Math.abs(days)} дн.`;
-};
 
 const isView = (value: string | null): value is CalendarView =>
   value === "day" || value === "week" || value === "month" || value === "year" || value === "list";
@@ -107,23 +86,13 @@ const parseSources = (raw: string | null): CalendarSourceType[] => {
     .filter((part) => part.length > 0 && isCalendarSource(part)) as CalendarSourceType[];
 };
 
-const SlaBadge = ({ band }: { band: CalendarSlaBand }) => (
-  <span
-    className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${SLA_BAND_CLASSES[band]}`}
-    data-testid={`sla-band-${band}`}
-  >
-    {SLA_BAND_LABELS[band]}
-  </span>
-);
-
-const DaysToDueChip = ({ days }: { days: number }) => (
-  <span
-    className="text-xs text-muted-foreground"
-    data-testid="sla-days-to-due"
-  >
-    {formatDaysToDue(days)}
-  </span>
-);
+const parseSlaBands = (raw: string | null): CalendarSlaBand[] => {
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0 && isSlaBand(part)) as CalendarSlaBand[];
+};
 
 const startOfDay = (value: Date) => {
   const next = new Date(value);
@@ -248,6 +217,35 @@ const VarianceBadge = ({ days }: { days: number }) => {
   );
 };
 
+const SLA_BAND_BADGE_CLASS: Record<CalendarSlaBand, string> = {
+  overdue: "border-transparent bg-destructive text-destructive-foreground",
+  critical: "border-transparent bg-orange-500 text-white",
+  warning: "border-transparent bg-amber-400 text-amber-950",
+  ok: "border-transparent bg-emerald-500 text-white"
+};
+
+const SlaBadge = ({ band }: { band: CalendarSlaBand }) => (
+  <Badge variant="outline" className={SLA_BAND_BADGE_CLASS[band]} data-sla-band={band}>
+    {SLA_BAND_LABELS[band]}
+  </Badge>
+);
+
+const formatDaysToDueLabel = (days: number): string => {
+  if (days === 0) return "Срок сегодня";
+  if (days > 0) return `Осталось ${days} дн.`;
+  return `Просрочено на ${Math.abs(days)} дн.`;
+};
+
+const DaysToDueChip = ({ days }: { days: number }) => (
+  <Badge
+    variant="outline"
+    className="text-muted-foreground"
+    data-testid="days-to-due-chip"
+  >
+    {formatDaysToDueLabel(days)}
+  </Badge>
+);
+
 const EventRow = ({
   item,
   includeFact,
@@ -289,16 +287,14 @@ const EventRow = ({
       ) : null}
       {includeSla ? (
         <TableCell>
-          {item.sla_band || typeof item.days_to_due === "number" ? (
-            <div className="flex flex-col gap-1">
-              {item.sla_band ? <SlaBadge band={item.sla_band} /> : null}
-              {typeof item.days_to_due === "number" ? (
-                <DaysToDueChip days={item.days_to_due} />
-              ) : null}
-            </div>
-          ) : (
-            <span className="text-muted-foreground">—</span>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {item.sla_band ? <SlaBadge band={item.sla_band} /> : (
+              <span className="text-muted-foreground">—</span>
+            )}
+            {typeof item.days_to_due === "number" ? (
+              <DaysToDueChip days={item.days_to_due} />
+            ) : null}
+          </div>
         </TableCell>
       ) : null}
       <TableCell>
@@ -330,7 +326,7 @@ const CalendarPage = () => {
   const [appliedSiteId, setAppliedSiteId] = useState(initialSiteId);
   const [includeFact, setIncludeFact] = useState(initialIncludeFact);
   const [includeSla, setIncludeSla] = useState(initialIncludeSla || initialSlaBands.length > 0);
-  const [selectedSlaBands, setSelectedSlaBands] = useState<CalendarSlaBand[]>(initialSlaBands);
+  const [selectedBands, setSelectedBands] = useState<CalendarSlaBand[]>(initialSlaBands);
 
   const [response, setResponse] = useState<CalendarEventsResponseDto | null>(null);
   const [loading, setLoading] = useState(true);
@@ -449,7 +445,7 @@ const CalendarPage = () => {
     setAppliedSiteId("");
     setIncludeFact(false);
     setIncludeSla(false);
-    setSelectedSlaBands([]);
+    setSelectedBands([]);
     updateQueryParams({
       sources: [],
       person_id: "",
@@ -471,33 +467,26 @@ const CalendarPage = () => {
   const toggleSla = useCallback(() => {
     setIncludeSla((current) => {
       const next = !current;
+      updateQueryParams({ include_sla: next });
       if (!next) {
-        setSelectedSlaBands([]);
-        updateQueryParams({ include_sla: false, sla_bands: [] });
-      } else {
-        updateQueryParams({ include_sla: true });
+        setSelectedBands([]);
+        updateQueryParams({ sla_bands: [] });
       }
       return next;
     });
   }, [updateQueryParams]);
 
-  const toggleSlaBand = useCallback(
+  const toggleBand = useCallback(
     (band: CalendarSlaBand) => {
-      setSelectedSlaBands((current) => {
+      setSelectedBands((current) => {
         const next = current.includes(band)
           ? current.filter((value) => value !== band)
           : [...current, band];
-        // Selecting a band implies enabling SLA mode
-        if (next.length > 0 && !includeSla) {
-          setIncludeSla(true);
-          updateQueryParams({ include_sla: true, sla_bands: next });
-        } else {
-          updateQueryParams({ sla_bands: next });
-        }
+        updateQueryParams({ sla_bands: next });
         return next;
       });
     },
-    [includeSla, updateQueryParams]
+    [updateQueryParams]
   );
 
   const handleDownloadIcs = useCallback(async () => {
@@ -522,13 +511,11 @@ const CalendarPage = () => {
     }
   }, [selectedSources, appliedPersonId, appliedSiteId, includeFact, includeSla]);
 
-  const allItems = useMemo(() => response?.items ?? [], [response]);
   const items = useMemo(() => {
-    if (!includeSla || selectedSlaBands.length === 0) return allItems;
-    return allItems.filter(
-      (item) => item.sla_band !== null && item.sla_band !== undefined && selectedSlaBands.includes(item.sla_band)
-    );
-  }, [allItems, includeSla, selectedSlaBands]);
+    const all = response?.items ?? [];
+    if (!includeSla || selectedBands.length === 0) return all;
+    return all.filter((item) => item.sla_band && selectedBands.includes(item.sla_band));
+  }, [response, includeSla, selectedBands]);
 
   const buckets = useMemo(() => {
     if (items.length === 0) return [];
@@ -568,20 +555,16 @@ const CalendarPage = () => {
   }, [includeFact, items]);
 
   const slaSummary = useMemo(() => {
-    const summary: Record<CalendarSlaBand, number> = {
-      overdue: 0,
-      critical: 0,
-      warning: 0,
-      ok: 0
-    };
-    if (!includeSla) return summary;
-    // Counts are taken from the unfiltered allItems so the band chips
-    // always reflect the underlying mix, not the current band filter.
-    allItems.forEach((item) => {
-      if (item.sla_band) summary[item.sla_band] += 1;
-    });
-    return summary;
-  }, [includeSla, allItems]);
+    const empty = { overdue: 0, critical: 0, warning: 0, ok: 0 };
+    const all = response?.items ?? [];
+    if (!includeSla || all.length === 0) return empty;
+    return all.reduce((acc, item) => {
+      if (item.sla_band && item.sla_band in acc) {
+        acc[item.sla_band] += 1;
+      }
+      return acc;
+    }, { ...empty });
+  }, [includeSla, response]);
 
   const counts = response?.by_source ?? [];
   const total = response?.total ?? 0;
@@ -593,7 +576,7 @@ const CalendarPage = () => {
     appliedSiteId.length > 0 ||
     includeFact ||
     includeSla ||
-    selectedSlaBands.length > 0;
+    selectedBands.length > 0;
 
   return (
     <div className="space-y-4">
@@ -680,31 +663,24 @@ const CalendarPage = () => {
             })}
           </div>
           {includeSla ? (
-            <div
-              className="flex flex-wrap items-center gap-2"
-              data-testid="sla-filter-bar"
-            >
+            <div className="flex flex-wrap items-center gap-2" data-testid="sla-band-filter">
               <span className="text-xs uppercase text-muted-foreground">SLA:</span>
-              {CALENDAR_SLA_BANDS.map((band) => {
-                const selected = selectedSlaBands.includes(band);
-                const count = slaSummary[band];
-                return (
-                  <Button
-                    key={band}
-                    type="button"
-                    size="sm"
-                    variant={selected ? "default" : "outline"}
-                    onClick={() => toggleSlaBand(band)}
-                    aria-pressed={selected}
-                    className="gap-2"
-                  >
-                    <span>{SLA_BAND_LABELS[band]}</span>
-                    <Badge variant={selected ? "secondary" : "outline"} className="px-1.5 text-[11px]">
-                      {count}
-                    </Badge>
-                  </Button>
-                );
-              })}
+              {CALENDAR_SLA_BANDS.map((band) => (
+                <Button
+                  key={band}
+                  type="button"
+                  size="sm"
+                  variant={selectedBands.includes(band) ? "default" : "outline"}
+                  onClick={() => toggleBand(band)}
+                  aria-pressed={selectedBands.includes(band)}
+                  className="gap-2"
+                >
+                  <span>{SLA_BAND_LABELS[band]}</span>
+                  <Badge variant="secondary" className="px-1.5 text-[11px]">
+                    {slaSummary[band]}
+                  </Badge>
+                </Button>
+              ))}
             </div>
           ) : null}
           <div className="grid gap-3 md:grid-cols-3">
@@ -766,10 +742,10 @@ const CalendarPage = () => {
             {includeSla ? (
               <span data-testid="sla-summary">
                 SLA — просрочено:{" "}
-                <strong className="text-destructive">{slaSummary.overdue}</strong> ·
-                критично: <strong className="text-orange-600">{slaSummary.critical}</strong> ·
-                внимание: <strong className="text-yellow-700">{slaSummary.warning}</strong> ·
-                в норме: <strong className="text-emerald-600">{slaSummary.ok}</strong>
+                <strong className="text-destructive">{slaSummary.overdue}</strong> · критично:{" "}
+                <strong className="text-orange-600">{slaSummary.critical}</strong> · внимание:{" "}
+                <strong className="text-amber-600">{slaSummary.warning}</strong> · в норме:{" "}
+                <strong className="text-emerald-600">{slaSummary.ok}</strong>
               </span>
             ) : null}
           </div>
@@ -812,7 +788,7 @@ const CalendarPage = () => {
                             <TableHead className="w-[120px]">Отклонение</TableHead>
                           </>
                         ) : null}
-                        {includeSla ? <TableHead className="w-[160px]">SLA</TableHead> : null}
+                        {includeSla ? <TableHead className="w-[200px]">SLA</TableHead> : null}
                         <TableHead className="w-[120px]">Срок</TableHead>
                       </TableRow>
                     </TableHeader>
