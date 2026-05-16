@@ -166,6 +166,85 @@ const factResponse: CalendarEventsResponseDto = {
   ]
 };
 
+const slaResponse: CalendarEventsResponseDto = {
+  generated_at: "2026-05-08T10:00:00Z",
+  range_from: null,
+  range_to: null,
+  total: 4,
+  overdue_count: 1,
+  by_source: sampleResponse.by_source,
+  items: [
+    {
+      id: "medical_exam:exam-overdue",
+      source_type: "medical_exam",
+      source_id: "exam-overdue",
+      title: "Медосмотр: Сидоров С.С.",
+      starts_at: "2026-04-25T08:00:00Z",
+      ends_at: null,
+      status: "scheduled",
+      is_overdue: true,
+      person_id: "p-3",
+      site_id: null,
+      company_id: null,
+      assigned_user_id: null,
+      days_to_due: -13,
+      sla_band: "overdue",
+      extra: {}
+    },
+    {
+      id: "medical_exam:exam-critical",
+      source_type: "medical_exam",
+      source_id: "exam-critical",
+      title: "Медосмотр: Иванов И.И.",
+      starts_at: "2026-05-12T08:00:00Z",
+      ends_at: null,
+      status: "scheduled",
+      is_overdue: false,
+      person_id: "p-1",
+      site_id: null,
+      company_id: null,
+      assigned_user_id: null,
+      days_to_due: 4,
+      sla_band: "critical",
+      extra: {}
+    },
+    {
+      id: "medical_exam:exam-warning",
+      source_type: "medical_exam",
+      source_id: "exam-warning",
+      title: "Медосмотр: Петров П.П.",
+      starts_at: "2026-05-28T08:00:00Z",
+      ends_at: null,
+      status: "scheduled",
+      is_overdue: false,
+      person_id: "p-2",
+      site_id: null,
+      company_id: null,
+      assigned_user_id: null,
+      days_to_due: 20,
+      sla_band: "warning",
+      extra: {}
+    },
+    {
+      id: "medical_exam:exam-ok",
+      source_type: "medical_exam",
+      source_id: "exam-ok",
+      title: "Медосмотр: Кузнецов К.К.",
+      starts_at: "2026-08-15T08:00:00Z",
+      ends_at: null,
+      status: "scheduled",
+      is_overdue: false,
+      person_id: "p-4",
+      site_id: null,
+      company_id: null,
+      assigned_user_id: null,
+      days_to_due: 99,
+      sla_band: "ok",
+      extra: {}
+    }
+  ]
+};
+
 const renderPage = (initialPath = "/calendar") =>
   render(
     <MemoryRouter initialEntries={[initialPath]}>
@@ -194,7 +273,8 @@ describe("CalendarPage", () => {
       source_types: undefined,
       person_id: undefined,
       site_id: undefined,
-      include_fact: undefined
+      include_fact: undefined,
+      include_sla: undefined
     });
   });
 
@@ -333,7 +413,8 @@ describe("CalendarPage", () => {
         source_types: undefined,
         person_id: undefined,
         site_id: undefined,
-        include_fact: true
+        include_fact: true,
+        include_sla: undefined
       });
     });
 
@@ -399,7 +480,8 @@ describe("CalendarPage", () => {
         source_types: undefined,
         person_id: undefined,
         site_id: undefined,
-        include_fact: true
+        include_fact: true,
+        include_sla: undefined
       });
     });
 
@@ -437,8 +519,148 @@ describe("CalendarPage", () => {
       source_types: undefined,
       person_id: undefined,
       site_id: undefined,
-      include_fact: true
+      include_fact: true,
+      include_sla: undefined
     });
     expect(screen.getByRole("button", { name: "Скрыть план/факт" })).toBeInTheDocument();
+  });
+
+  it("toggles SLA mode and reissues request with include_sla=true", async () => {
+    const user = userEvent.setup();
+    getEventsMock.mockResolvedValueOnce(sampleResponse);
+
+    renderPage();
+
+    await screen.findByText("Медосмотр: Иванов И.И.");
+
+    getEventsMock.mockResolvedValueOnce(slaResponse);
+
+    await user.click(screen.getByRole("button", { name: "Показать SLA" }));
+
+    await waitFor(() => {
+      expect(getEventsMock).toHaveBeenLastCalledWith({
+        source_types: undefined,
+        person_id: undefined,
+        site_id: undefined,
+        include_fact: undefined,
+        include_sla: true
+      });
+    });
+
+    expect(await screen.findByRole("button", { name: "Скрыть SLA" })).toBeInTheDocument();
+    // slaResponse spans April/May/August → month buckets render three tables,
+    // each with its own SLA column header.
+    expect(screen.getAllByRole("columnheader", { name: "SLA" }).length).toBeGreaterThan(0);
+    expect(screen.getByTestId("sla-filter-bar")).toBeInTheDocument();
+  });
+
+  it("renders SLA band badges and days-to-due chip when SLA enabled", async () => {
+    const user = userEvent.setup();
+    getEventsMock.mockResolvedValueOnce(sampleResponse);
+    getEventsMock.mockResolvedValueOnce(slaResponse);
+
+    renderPage();
+
+    await screen.findByText("Медосмотр: Иванов И.И.");
+    await user.click(screen.getByRole("button", { name: "Показать SLA" }));
+
+    const overdueRow = (await screen.findByText("Медосмотр: Сидоров С.С.")).closest("tr");
+    expect(overdueRow).not.toBeNull();
+    expect(within(overdueRow as HTMLElement).getByTestId("sla-band-overdue")).toBeInTheDocument();
+    expect(within(overdueRow as HTMLElement).getByText("Просрочено на 13 дн.")).toBeInTheDocument();
+
+    const criticalRow = screen.getByText("Медосмотр: Иванов И.И.").closest("tr");
+    expect(criticalRow).not.toBeNull();
+    expect(within(criticalRow as HTMLElement).getByTestId("sla-band-critical")).toBeInTheDocument();
+    expect(within(criticalRow as HTMLElement).getByText("Осталось 4 дн.")).toBeInTheDocument();
+
+    const warningRow = screen.getByText("Медосмотр: Петров П.П.").closest("tr");
+    expect(warningRow).not.toBeNull();
+    expect(within(warningRow as HTMLElement).getByTestId("sla-band-warning")).toBeInTheDocument();
+    expect(within(warningRow as HTMLElement).getByText("Осталось 20 дн.")).toBeInTheDocument();
+
+    const okRow = screen.getByText("Медосмотр: Кузнецов К.К.").closest("tr");
+    expect(okRow).not.toBeNull();
+    expect(within(okRow as HTMLElement).getByTestId("sla-band-ok")).toBeInTheDocument();
+    expect(within(okRow as HTMLElement).getByText("Осталось 99 дн.")).toBeInTheDocument();
+
+    const summary = screen.getByTestId("sla-summary");
+    expect(summary).toHaveTextContent("просрочено: 1");
+    expect(summary).toHaveTextContent("критично: 1");
+    expect(summary).toHaveTextContent("внимание: 1");
+    expect(summary).toHaveTextContent("в норме: 1");
+  });
+
+  it("filters items by selected SLA band chip", async () => {
+    const user = userEvent.setup();
+    getEventsMock.mockResolvedValueOnce(sampleResponse);
+    getEventsMock.mockResolvedValueOnce(slaResponse);
+
+    renderPage();
+
+    await screen.findByText("Медосмотр: Иванов И.И.");
+    await user.click(screen.getByRole("button", { name: "Показать SLA" }));
+
+    await screen.findByText("Медосмотр: Сидоров С.С.");
+
+    // Initially all 4 SLA rows visible
+    expect(screen.getByText("Медосмотр: Кузнецов К.К.")).toBeInTheDocument();
+
+    const slaBar = screen.getByTestId("sla-filter-bar");
+    await user.click(within(slaBar).getByRole("button", { name: /Просрочено/ }));
+
+    await waitFor(() => {
+      // ok-row hidden once band filter narrows to overdue only
+      expect(screen.queryByText("Медосмотр: Кузнецов К.К.")).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("Медосмотр: Сидоров С.С.")).toBeInTheDocument();
+  });
+
+  it("hydrates include_sla and sla_bands from URL on mount", async () => {
+    getEventsMock.mockResolvedValueOnce(slaResponse);
+
+    renderPage("/calendar?include_sla=1&sla_bands=overdue,critical");
+
+    await screen.findByText("Медосмотр: Сидоров С.С.");
+
+    expect(getEventsMock).toHaveBeenLastCalledWith({
+      source_types: undefined,
+      person_id: undefined,
+      site_id: undefined,
+      include_fact: undefined,
+      include_sla: true
+    });
+    expect(screen.getByRole("button", { name: "Скрыть SLA" })).toBeInTheDocument();
+    // Warning and ok rows hidden by the URL-hydrated band filter
+    expect(screen.queryByText("Медосмотр: Петров П.П.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Медосмотр: Кузнецов К.К.")).not.toBeInTheDocument();
+  });
+
+  it("propagates include_sla to ICS download", async () => {
+    const user = userEvent.setup();
+    getEventsMock.mockResolvedValueOnce(sampleResponse);
+
+    renderPage();
+
+    await screen.findByText("Медосмотр: Иванов И.И.");
+
+    getEventsMock.mockResolvedValueOnce(slaResponse);
+    await user.click(screen.getByRole("button", { name: "Показать SLA" }));
+    await screen.findByRole("button", { name: "Скрыть SLA" });
+
+    const blob = new Blob(["BEGIN:VCALENDAR"], { type: "text/calendar" });
+    downloadIcsMock.mockResolvedValueOnce(blob);
+
+    await user.click(screen.getByRole("button", { name: /Скачать \.ics/ }));
+
+    await waitFor(() => {
+      expect(downloadIcsMock).toHaveBeenCalledWith({
+        source_types: undefined,
+        person_id: undefined,
+        site_id: undefined,
+        include_fact: undefined,
+        include_sla: true
+      });
+    });
   });
 });

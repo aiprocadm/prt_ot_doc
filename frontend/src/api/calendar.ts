@@ -14,6 +14,7 @@ const buildParams = (query: CalendarEventsQuery): Record<string, unknown> => {
   if (query.person_id) params.person_id = query.person_id;
   if (query.site_id) params.site_id = query.site_id;
   if (query.include_fact) params.include_fact = true;
+  if (query.include_sla) params.include_sla = true;
   return params;
 };
 
