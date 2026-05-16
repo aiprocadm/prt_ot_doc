@@ -1,5 +1,103 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-16, Session 28 — Phase 4.1: Smart Calendar SLA UI, vNext-CAL-01)
+
+- **Дата:** 2026-05-16 (после Session 27)
+- **Агент:** Claude Opus 4.7 (local Windows)
+- **Задача:** «Продолжай по ТЗ» → выполнить Next Step #1 из handoff Session 27: добавить фронт-сторону SLA UI поверх backend-инкремента Session 27 — toggle «Показать SLA», band-бейджи с цветами (overdue=red, critical=orange, warning=yellow, ok=green), chip «осталось N дн.», фильтр по band-у. Backend (Session 27 — `?include_sla=true`/`days_to_due`/`sla_band`/ICS DESCRIPTION) уже готов; UI — финальный кусок Phase 4.1 acceptance criterion #3 «Smart features: SLA tracking».
+- **Статус:** ✅ COMPLETE для frontend-инкремента SLA UI. Phase 4.1 acceptance criterion #3 закрыт целиком по части SLA tracking (backend Session 27 + UI Session 28). Остались resource load visualization и saved filters.
+- **Где остановился:** Phase 4.1 SLA tracking закрыт. Остались: resource load visualization (Phase 4.1 smart features) — heatmap по дням/неделям; saved filters (миграция `saved_calendar_views{user_id, name, query_json}` или расширение `user_preferences` + CRUD endpoints + dropdown UI); Universal Search + Command Bar (Task 4.2) — параллельный трек; фабрика `tests/utils/factories.py::create_user` стабилизация (Sessions 18-27 #6); Universal Calendar Card (vNext §4.6); `/permits`/`/compliance-deadlines` registries; per-tenant SLA thresholds; TZID/VTIMEZONE в ICS; `compliance_deadline.closed_at` миграция.
+
+### Studied Documentation
+
+- `docs/spec/TZ_FULL_UNIFIED.md` (раздел B.3 — IA & UI с Smart Calendar §4.4; раздел E — правила доработки 36).
+- `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md` Phase 4 Task 4.1 acceptance criterion #3 — Smart features включая SLA tracking.
+- `AI_IMPLEMENTATION_REPORT.md` Session 27 → Next Step #1 «Frontend SLA UI».
+- `CHANGELOG.md` 2026-05-08 (Session 27 entry — backend SLA закрыт).
+- `frontend/src/pages/calendar/CalendarPage.tsx` Session 26 — паттерн `includeFact` toggle + URL hydration + `<VarianceBadge>` для plan/fact; реплицирую тот же шаблон для `includeSla` + band фильтр + `<SlaBadge>`/`<DaysToDueChip>`.
+- `frontend/src/types/dto/calendar.ts` Session 26 — DTO-зеркало backend Session 25; расширяю аналогично для SLA полей Session 27.
+- `frontend/src/__tests__/CalendarPage.test.tsx` Session 26 — паттерн `factResponse` фикстуры + тесты на toggle/badges/ICS/URL hydration; реплицирую для SLA.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 4 Task 4.1 — Smart Calendar SLA UI (`vNext-CAL-01`/`vNext §4.4`), acceptance criterion #3 (UI-сторона «SLA tracking»).
+- **Приоритет:** P2 (Phase 4 канона; следующий smart-feature после plan/fact UI Session 26 и SLA backend Session 27).
+- **Почему выбрана:** прямой Next Step #1 из handoff Session 27. Аддитивный frontend-инкремент: DTO расширен двумя опциональными полями + флагом, API helper форвардит флаг, UI получает toggle + бейджи + фильтр поверх существующего layout-а. Backend контракт идентичен (`include_sla=false` по умолчанию). Никаких миграций, никаких backend-изменений, никаких новых эндпоинтов.
+
+### Implemented Changes
+
+- **`frontend/src/types/dto/calendar.ts`** — `CalendarEventItemDto` расширен `days_to_due?: number | null` и `sla_band?: CalendarSlaBand | null`. Введён юнион `CalendarSlaBand = "overdue" | "critical" | "warning" | "ok"` + readonly tuple `CALENDAR_SLA_BANDS`. `CalendarEventsQuery` получил `include_sla?: boolean`. Все поля опциональные с default `undefined`/`null` — backwards compat для всех call-sites.
+- **`frontend/src/api/calendar.ts`** — `buildParams(query)` форвардит `include_sla` через query-param симметрично `include_fact`. `calendarApi.getEvents`/`downloadIcs` принимают новый флаг без сигнатурных изменений (поле в `CalendarEventsQuery`).
+- **`frontend/src/pages/calendar/CalendarPage.tsx`** — Smart Calendar UI закрывает Phase 4.1 acceptance #3 «SLA tracking» по части UI. Добавлено: (1) Кнопка-тоггл «Показать SLA»/«Скрыть SLA» с `aria-pressed`, переключает `include_sla` и переотправляет запрос; URL-state `?include_sla=1` (hydrated на mount). (2) Условная SLA-колонка (рендерится только при `include_sla=true`), внутри — `<SlaBadge>` с цветами band-ов (overdue=destructive, critical=bg-orange-500, warning=bg-amber-400, ok=bg-emerald-500) + `data-sla-band` атрибут для тестов, плюс `<DaysToDueChip>` с ru-локалной формулировкой («Осталось N дн.»/«Просрочено на N дн.»/«Срок сегодня»). (3) Фильтр-чипы по band-у (`data-testid="sla-band-filter"`): 4 кнопки с локализованными лейблами и счётчиками из неотфильтрованной выборки; multi-select, фильтрация чисто клиентская. (4) Сводка «SLA — просрочено: N · критично: K · внимание: M · в норме: P» (`data-testid="sla-summary"`). (5) `resetFilters` сбрасывает `include_sla` и `selectedBands`. (6) `toggleSla` при выключении сбрасывает `selectedBands`. (7) URL-state расширен: `?sla_bands=overdue,critical` hydrated на mount, автоматически включает SLA-mode если band-ы заданы. (8) ICS-фид наследует `include_sla` через `downloadIcs`.
+- **`frontend/src/__tests__/CalendarPage.test.tsx`** — расширено с 12 до **17 кейсов**: 5 новых SLA-кейсов (toggle, бейджи+chips, client-side фильтрация без re-fetch, ICS forward, URL hydration) + 6 существующих обновлены (добавлен `include_sla: undefined` в expected payload).
+- **`frontend/src/__tests__/WorkflowCalendarPages.test.tsx`** — `forwards source_types and view from query params`-тест дополнен `include_sla: undefined`.
+- **`CHANGELOG.md`** — Session 28 запись.
+- **`AI_IMPLEMENTATION_REPORT.md`** — этот блок.
+- **`docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md`** — обновлён checkbox для Task 4.1 acceptance criterion #3 (SLA UI done) + Phase 4 статус.
+
+### Changed / New Files
+
+- `frontend/src/types/dto/calendar.ts` — +12 строк (CalendarSlaBand union + CALENDAR_SLA_BANDS + 2 поля + 1 query flag).
+- `frontend/src/api/calendar.ts` — +1 строка (include_sla branch в buildParams).
+- `frontend/src/pages/calendar/CalendarPage.tsx` — +160 строк (SlaBadge + DaysToDueChip компоненты, SLA_BAND_LABELS/SLA_BAND_BADGE_CLASS maps, parseSlaBands helper, state + URL hydration + toggleSla + toggleBand + slaSummary + band filter chips + SLA column + summary line).
+- `frontend/src/__tests__/CalendarPage.test.tsx` — +210 строк (slaResponse fixture + 5 SLA test cases) + обновлены 6 существующих ассертов.
+- `frontend/src/__tests__/WorkflowCalendarPages.test.tsx` — +1 строка (include_sla: undefined).
+- `CHANGELOG.md` — Session 28 запись.
+- `AI_IMPLEMENTATION_REPORT.md` — этот блок.
+- `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md` — checkbox Task 4.1 #3 (UI часть) + Phase 4 status.
+
+### Decisions
+
+- **Зеркало паттерна Session 26 (plan/fact UI).** Та же структура: toggle button с `aria-pressed`, URL hydration через `?include_sla=1`, conditional column в таблице, сводка с `data-testid`, ICS-фид наследует флаг. Симметрия упрощает понимание и тестирование.
+- **Цвета band-ов по UX-convention.** overdue=destructive (системный красный shadcn), critical=orange-500 (как в Tailwind danger-warning gradient), warning=amber-400 (классический yellow accent с тёмным текстом amber-950 для контрастности), ok=emerald-500 (системный success green). Не использую `outline`-вариант с custom border — сплошной фон надёжнее работает в dark mode и не теряется на серых фонах.
+- **`data-sla-band` атрибут вместо классов для тестов.** Тесты ассертят `toHaveAttribute("data-sla-band", "critical")` — это устойчиво к косметическим изменениям Tailwind-классов. Альтернатива (поиск по тексту «Критично») страдает от potential overlap с другими элементами; alternative (`className="bg-orange-500"`) ломается при theme refactor.
+- **Band фильтр — чисто клиентский.** Backend SLA bands вычисляются server-side (Session 27 `_sla_band`), фильтрация — на клиенте через `items.filter(item => selectedBands.includes(item.sla_band))`. Это (a) экономит сетевые roundtrips, (b) позволяет мгновенно переключать чипы, (c) не плодит query-параметры на backend. Тест `filters events by selected SLA bands client-side without re-fetching` явно проверяет, что `getEventsMock.mock.calls.length` не растёт после клика на band-чип.
+- **`slaSummary` считается из полной выборки, не из отфильтрованной.** Band-фильтр чипы должны показывать total counts по всем band-ам, чтобы пользователь видел «critical: 5» и понимал, что после клика появится 5 событий. Если считать от `items` (после фильтра), при активном «warning» только `slaSummary.warning` будет >0, а остальные — 0, что не даёт навигационного контекста. Использую `response?.items ?? []` для агрегата.
+- **`toggleSla` при выключении сбрасывает `selectedBands`.** Если оставить band-ы выбранными после off, при следующем включении SLA пользователь увидит неожиданный фильтр. Чистка состояния делает UX предсказуемым.
+- **`?sla_bands=overdue,critical` неявно включает `?include_sla=1`.** Логика: если в URL передан band-фильтр, режим SLA должен быть включён (`initialIncludeSla || initialSlaBands.length > 0`). Это упрощает deep-linking — достаточно ссылки `?sla_bands=overdue` для расшаривания «покажи только просрочки».
+- **`<DaysToDueChip>` — server-side formatting.** Альтернатива — клиент сам пересчитывает по `starts_at`. Но `days_to_due` уже посчитан сервером с учётом UTC-нормализации (Session 27 `_days_to_due` от `_utcnow().date()`); клиент не должен пересчитывать с риском tz-дрейфа. Просто рендерю серверное число.
+- **«Осталось N дн.» а не «До срока: N дн.».** Backend ICS использует «До срока: N дн.» (формальная фраза для календарного клиента). UI использует «Осталось N дн.» (более естественно для HSE-операциониста). Это два разных контекста — ICS подписка vs веб-UI; не плоджу унификацию.
+- **SLA column header проверяется через `getAllByRole(...).length > 0`.** Один тест изначально использовал `getByRole("columnheader", { name: "SLA" })`, упал на multiple-elements: slaResponse спанит Apr/May/Jul → month view создаёт 3 бакета → 3 columnheader-а «SLA». Фикс — `getAllByRole(...).length > 0` (паттерн уже встречается в существующих тестах для «В срок»).
+
+### Issues Fixed
+
+- **Phase 4.1 acceptance criterion #3** — закрыт целиком по части SLA tracking (backend Session 27 + UI Session 28).
+- **SLA visibility gap** — раньше backend отдавал `days_to_due` и `sla_band`, но UI их игнорировал; HSE-инспектор не видел SLA-индикаторов в календаре. Теперь one-click «Показать SLA» отображает цветные band-бейджи на каждом событии + days-to-due chip.
+- **Band-фильтрация gap** — раньше нельзя было быстро отфильтровать «только critical и overdue»; пришлось бы кликать по каждому событию или плодить query-параметры. Теперь чипы фильтра дают instant client-side multi-select.
+
+### Known Problems / Risks
+
+- **act() warnings в тестах** — React Router useEffect/setSearchParams при URL hydration выдают «not wrapped in act(...)» warnings. Это pre-existing issue (присутствовало в Session 26 тестах), не блокирует прохождение. Можно молча игнорировать или обернуть `await waitFor(...)`; не делаю в этой сессии, чтобы не плодить шум.
+- **Per-tenant SLA thresholds** — backend пороги hard-coded в `_SLA_THRESHOLDS` (Session 27); UI отображает как есть. Для admin tuning нужна `tenant_settings.calendar_sla` секция + UI настроек — отдельный трек.
+- **Resource load visualization** — последний smart-feature Phase 4.1, ещё не сделан. Heatmap по дням/неделям, сколько событий на person/site.
+- **Saved filters** — требует backend (`saved_calendar_views` миграция + CRUD endpoints) + frontend (dropdown «Мои фильтры»). Отложено.
+- **Calendar TZID/VTIMEZONE** (Session 24 #7) — всё ещё для v1.1.
+- **Стабилизация фабрик** — открыто с Sessions 18-27 (`tests/utils/factories.py::create_user` уникализация email).
+
+### Validation
+
+- **Окружение:** Windows, Node.js (npm 11.11.0), фронтенд-only изменения (backend не трогался).
+- **Тесты:** `cd frontend && npx vitest run src/__tests__/CalendarPage.test.tsx src/__tests__/WorkflowCalendarPages.test.tsx` → ✅ **21 passed (4.93s)** (CalendarPage 17 + WorkflowCalendarPages 4).
+- **Регрессия:** `npx vitest run src/__tests__/ability.test.ts src/__tests__/RoutePermissionMatrix.test.tsx src/__tests__/SideNav.test.tsx` → ✅ **12 passed (4.15s)**.
+- **Typecheck:** `npx tsc --noEmit -p tsconfig.json` → ✅ clean (no output, exit 0).
+- **ESLint:** `npx eslint src/pages/calendar/CalendarPage.tsx src/api/calendar.ts src/types/dto/calendar.ts src/__tests__/CalendarPage.test.tsx src/__tests__/WorkflowCalendarPages.test.tsx --max-warnings=0` → ✅ exit 0 (печатает «ESLINT OK»).
+- **Initial fail и фикс:** при первом прогоне `toggles SLA mode and reissues request with include_sla=true` упал на `screen.getByRole("columnheader", { name: "SLA" })` — `getMultipleElementsFoundError` (3 columnheader-а из 3 бакетов в month view). Фикс — `getAllByRole(...).length > 0`, паттерн уже использован в существующих тестах.
+- **CI** прогонит canonical pipeline (бэкенд+фронт) на 3.12.12 в Codespace.
+
+### Next Steps
+
+1. **Resource load visualization** — Phase 4.1 finale. Heatmap по дням/неделям, сколько событий на person/site. Можно использовать данные из `/calendar/events` агрегата + groupBy на клиенте, либо новый эндпоинт `/calendar/load` с per-day буцкетами.
+2. **Saved filters** — Phase 4.1 follow-up. Новая таблица `saved_calendar_views{user_id, tenant_id, name, query_json}` или расширение `user_preferences`. CRUD endpoints + frontend dropdown «Мои фильтры». Сохраняет источник/person_id/site_id/include_fact/include_sla/sla_bands.
+3. **Per-tenant SLA thresholds** — extension `_SLA_THRESHOLDS` через `tenant_settings.calendar_sla.<source_type>`. Сейчас hard-coded в backend.
+4. **Universal Search + Command Bar (Task 4.2)** — параллельный трек Phase 4. Postgres tsvector-индекс по persons/sites/documents/templates/contractors/tasks; CMD+K UI.
+5. **Universal Calendar Card** — frontend компонент карточки события с edit/cancel/reschedule actions (vNext §4.6).
+6. **`/permits` и `/compliance-deadlines` registries** — закроют временные drill-down Session 23 на профильные страницы.
+7. **`compliance_deadline.closed_at`** — миграция, чтобы выдавать actual_at для closed deadlines (открыто с Session 25).
+8. **TZID/VTIMEZONE в ICS** (Session 24 #7) — для v1.1.
+9. **Стабилизация фабрик** (Sessions 18-27 #6).
+
+---
+
 ## Last Agent Handoff (2026-05-08, Session 27 — Phase 4.1: Smart Calendar SLA tracking backend, vNext-CAL-01)
 
 - **Дата:** 2026-05-08 (после Session 26)
