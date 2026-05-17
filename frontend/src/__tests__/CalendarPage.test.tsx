@@ -9,11 +9,19 @@ import type { CalendarEventsResponseDto } from "@/types/dto/calendar";
 const getEventsMock = vi.fn();
 const downloadIcsMock = vi.fn();
 const downloadBlobMock = vi.fn();
+const listSavedViewsMock = vi.fn();
+const createSavedViewMock = vi.fn();
+const updateSavedViewMock = vi.fn();
+const deleteSavedViewMock = vi.fn();
 
 vi.mock("@/api/calendar", () => ({
   calendarApi: {
     getEvents: (...args: unknown[]) => getEventsMock(...args),
-    downloadIcs: (...args: unknown[]) => downloadIcsMock(...args)
+    downloadIcs: (...args: unknown[]) => downloadIcsMock(...args),
+    listSavedViews: (...args: unknown[]) => listSavedViewsMock(...args),
+    createSavedView: (...args: unknown[]) => createSavedViewMock(...args),
+    updateSavedView: (...args: unknown[]) => updateSavedViewMock(...args),
+    deleteSavedView: (...args: unknown[]) => deleteSavedViewMock(...args)
   }
 }));
 
@@ -257,6 +265,11 @@ describe("CalendarPage", () => {
     getEventsMock.mockReset();
     downloadIcsMock.mockReset();
     downloadBlobMock.mockReset();
+    listSavedViewsMock.mockReset();
+    listSavedViewsMock.mockResolvedValue([]);
+    createSavedViewMock.mockReset();
+    updateSavedViewMock.mockReset();
+    deleteSavedViewMock.mockReset();
   });
 
   it("loads aggregate from /calendar/events and renders header + counts", async () => {
@@ -671,5 +684,339 @@ describe("CalendarPage", () => {
     expect(screen.getByText("Допуск: критичный срок")).toBeInTheDocument();
     expect(screen.queryByText("Обучение: внимание")).not.toBeInTheDocument();
     expect(screen.queryByText("СИЗ: в норме")).not.toBeInTheDocument();
+  });
+
+  it("toggles resource load heatmap and shows entities grouped by person", async () => {
+    const user = userEvent.setup();
+    getEventsMock.mockResolvedValueOnce(sampleResponse);
+
+    renderPage();
+
+    await screen.findByText("Медосмотр: Иванов И.И.");
+
+    // Toggle off → no heatmap.
+    expect(screen.queryByTestId("resource-load-heatmap")).not.toBeInTheDocument();
+
+    const callsBefore = getEventsMock.mock.calls.length;
+    await user.click(screen.getByRole("button", { name: "Показать загрузку" }));
+
+    // Client-side only — no extra fetch.
+    expect(getEventsMock.mock.calls.length).toBe(callsBefore);
+    expect(
+      await screen.findByRole("button", { name: "Скрыть загрузку" })
+    ).toBeInTheDocument();
+    const heatmap = screen.getByTestId("resource-load-heatmap");
+    expect(heatmap).toBeInTheDocument();
+
+    // sampleResponse has person_id values: p-1 (×3) and p-2 (×1).
+    const p1Row = within(heatmap).getAllByRole("row").find((row) =>
+      row.getAttribute("data-load-entity") === "p-1"
+    );
+    expect(p1Row).toBeDefined();
+    expect(p1Row).toHaveAttribute("data-load-total", "3");
+
+    const p2Row = within(heatmap).getAllByRole("row").find((row) =>
+      row.getAttribute("data-load-entity") === "p-2"
+    );
+    expect(p2Row).toBeDefined();
+    expect(p2Row).toHaveAttribute("data-load-total", "1");
+  });
+
+  it("switches resource load dimension between persons and sites", async () => {
+    const user = userEvent.setup();
+    const responseWithSite: CalendarEventsResponseDto = {
+      ...sampleResponse,
+      items: [
+        { ...sampleResponse.items[0], site_id: "site-A" },
+        { ...sampleResponse.items[1], site_id: "site-B" },
+        { ...sampleResponse.items[2], site_id: "site-A" },
+        { ...sampleResponse.items[3], site_id: null }
+      ]
+    };
+    getEventsMock.mockResolvedValueOnce(responseWithSite);
+
+    renderPage();
+    await screen.findByText("Медосмотр: Иванов И.И.");
+
+    await user.click(screen.getByRole("button", { name: "Показать загрузку" }));
+
+    // Default = person → buttons are in the section header, not in the table.
+    const section = await screen.findByTestId("resource-load-section");
+    expect(within(section).getByRole("button", { name: "По людям" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(within(section).getByRole("button", { name: "По объектам" })).toHaveAttribute(
+      "aria-pressed",
+      "false"
+    );
+
+    // Switch to site → 2 rows (site-A=2 events, site-B=1); the briefing with no site_id excluded.
+    await user.click(within(section).getByRole("button", { name: "По объектам" }));
+
+    await waitFor(() => {
+      expect(within(section).getByRole("button", { name: "По объектам" })).toHaveAttribute(
+        "aria-pressed",
+        "true"
+      );
+    });
+
+    const heatmap = await screen.findByTestId("resource-load-heatmap");
+    const siteARow = within(heatmap).getAllByRole("row").find((row) =>
+      row.getAttribute("data-load-entity") === "site-A"
+    );
+    expect(siteARow).toBeDefined();
+    expect(siteARow).toHaveAttribute("data-load-total", "2");
+    const siteBRow = within(heatmap).getAllByRole("row").find((row) =>
+      row.getAttribute("data-load-entity") === "site-B"
+    );
+    expect(siteBRow).toBeDefined();
+    expect(siteBRow).toHaveAttribute("data-load-total", "1");
+  });
+
+  it("shows empty-state when no events have entity ids in the selected dimension", async () => {
+    const user = userEvent.setup();
+    const responseNoSites: CalendarEventsResponseDto = {
+      ...sampleResponse,
+      items: sampleResponse.items.map((item) => ({ ...item, site_id: null }))
+    };
+    getEventsMock.mockResolvedValueOnce(responseNoSites);
+
+    renderPage();
+    await screen.findByText("Медосмотр: Иванов И.И.");
+
+    await user.click(screen.getByRole("button", { name: "Показать загрузку" }));
+    const section = await screen.findByTestId("resource-load-section");
+    await user.click(within(section).getByRole("button", { name: "По объектам" }));
+
+    expect(await screen.findByTestId("resource-load-empty")).toHaveTextContent("site_id");
+    expect(screen.queryByTestId("resource-load-heatmap")).not.toBeInTheDocument();
+  });
+
+  it("hydrates include_load and load_dim from URL on mount", async () => {
+    const responseWithSite: CalendarEventsResponseDto = {
+      ...sampleResponse,
+      items: [
+        { ...sampleResponse.items[0], site_id: "site-A" },
+        { ...sampleResponse.items[2], site_id: "site-A" }
+      ]
+    };
+    getEventsMock.mockResolvedValueOnce(responseWithSite);
+
+    renderPage("/calendar?include_load=1&load_dim=site");
+
+    await screen.findByText("Медосмотр: Иванов И.И.");
+
+    expect(
+      await screen.findByRole("button", { name: "Скрыть загрузку" })
+    ).toBeInTheDocument();
+    const section = await screen.findByTestId("resource-load-section");
+    expect(within(section).getByRole("button", { name: "По объектам" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    const heatmap = await screen.findByTestId("resource-load-heatmap");
+    const siteARow = within(heatmap).getAllByRole("row").find((row) =>
+      row.getAttribute("data-load-entity") === "site-A"
+    );
+    expect(siteARow).toBeDefined();
+    expect(siteARow).toHaveAttribute("data-load-total", "2");
+  });
+
+  // --- Saved views (vNext-CAL-01 / Phase 4.1 — saved filters) ---
+
+  it("populates the saved-views dropdown from /calendar/saved-views on mount", async () => {
+    getEventsMock.mockResolvedValueOnce(sampleResponse);
+    listSavedViewsMock.mockResolvedValueOnce([
+      {
+        id: "view-overdue",
+        name: "Только просрочки",
+        payload: {
+          view: "week",
+          sources: ["medical_exam"],
+          person_id: null,
+          site_id: null,
+          include_fact: false,
+          include_sla: true,
+          sla_bands: ["overdue"],
+          include_load: false,
+          load_dim: null
+        },
+        created_at: "2026-05-17T10:00:00Z",
+        updated_at: "2026-05-17T10:00:00Z"
+      }
+    ]);
+
+    renderPage();
+
+    await screen.findByText("Медосмотр: Иванов И.И.");
+
+    const select = await screen.findByTestId("saved-views-select");
+    // Default option + 1 saved view.
+    expect(within(select).getAllByRole("option")).toHaveLength(2);
+    expect(within(select).getByRole("option", { name: "Только просрочки" })).toBeInTheDocument();
+  });
+
+  it("applies a saved view by reissuing /calendar/events with its filters", async () => {
+    const user = userEvent.setup();
+    getEventsMock.mockResolvedValueOnce(sampleResponse);
+    listSavedViewsMock.mockResolvedValueOnce([
+      {
+        id: "view-medical-sla",
+        name: "Медосмотры SLA",
+        payload: {
+          view: "week",
+          sources: ["medical_exam"],
+          person_id: "p-1",
+          site_id: null,
+          include_fact: false,
+          include_sla: true,
+          sla_bands: ["overdue", "critical"],
+          include_load: true,
+          load_dim: "site"
+        },
+        created_at: "2026-05-17T10:00:00Z",
+        updated_at: "2026-05-17T10:00:00Z"
+      }
+    ]);
+
+    renderPage();
+    await screen.findByText("Медосмотр: Иванов И.И.");
+
+    getEventsMock.mockResolvedValueOnce({
+      ...sampleResponse,
+      items: [sampleResponse.items[0]]
+    });
+
+    const select = await screen.findByTestId("saved-views-select");
+    await user.selectOptions(select, "view-medical-sla");
+
+    await waitFor(() => {
+      expect(getEventsMock).toHaveBeenLastCalledWith({
+        source_types: ["medical_exam"],
+        person_id: "p-1",
+        site_id: undefined,
+        include_fact: undefined,
+        include_sla: true
+      });
+    });
+
+    // SLA + load toggles flipped on; "Удалить" button is now visible.
+    expect(screen.getByRole("button", { name: "Скрыть SLA" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Скрыть загрузку" })).toBeInTheDocument();
+    expect(screen.getByTestId("saved-views-delete")).toBeInTheDocument();
+  });
+
+  it("saves the current filter state as a new view via prompt", async () => {
+    const user = userEvent.setup();
+    getEventsMock.mockResolvedValue(sampleResponse);
+    listSavedViewsMock.mockResolvedValueOnce([]);
+    const promptSpy = vi.spyOn(window, "prompt").mockReturnValue("My filter");
+    createSavedViewMock.mockResolvedValueOnce({
+      id: "new-view",
+      name: "My filter",
+      payload: {
+        view: "month",
+        sources: [],
+        person_id: null,
+        site_id: null,
+        include_fact: false,
+        include_sla: false,
+        sla_bands: [],
+        include_load: false,
+        load_dim: null
+      },
+      created_at: "2026-05-17T10:00:00Z",
+      updated_at: "2026-05-17T10:00:00Z"
+    });
+
+    renderPage();
+    await screen.findByText("Медосмотр: Иванов И.И.");
+
+    await user.click(screen.getByTestId("saved-views-save"));
+
+    await waitFor(() => {
+      expect(createSavedViewMock).toHaveBeenCalledTimes(1);
+    });
+    expect(createSavedViewMock).toHaveBeenCalledWith({
+      name: "My filter",
+      payload: expect.objectContaining({
+        view: "month",
+        sources: [],
+        include_fact: false,
+        include_sla: false,
+        include_load: false
+      })
+    });
+    // New view appears in dropdown.
+    const select = screen.getByTestId("saved-views-select");
+    expect(within(select).getByRole("option", { name: "My filter" })).toBeInTheDocument();
+
+    promptSpy.mockRestore();
+  });
+
+  it("shows a conflict error message when name is already taken", async () => {
+    const user = userEvent.setup();
+    getEventsMock.mockResolvedValue(sampleResponse);
+    listSavedViewsMock.mockResolvedValueOnce([]);
+    const promptSpy = vi.spyOn(window, "prompt").mockReturnValue("Dup");
+    createSavedViewMock.mockRejectedValueOnce({
+      status: 409,
+      message: "exists",
+      field_errors: []
+    });
+
+    renderPage();
+    await screen.findByText("Медосмотр: Иванов И.И.");
+
+    await user.click(screen.getByTestId("saved-views-save"));
+
+    expect(await screen.findByTestId("saved-views-error")).toHaveTextContent(/Dup/);
+    promptSpy.mockRestore();
+  });
+
+  it("deletes a saved view after confirm and removes it from the dropdown", async () => {
+    const user = userEvent.setup();
+    getEventsMock.mockResolvedValue(sampleResponse);
+    listSavedViewsMock.mockResolvedValueOnce([
+      {
+        id: "view-to-delete",
+        name: "Удаляемый",
+        payload: {
+          view: "month",
+          sources: [],
+          person_id: null,
+          site_id: null,
+          include_fact: false,
+          include_sla: false,
+          sla_bands: [],
+          include_load: false,
+          load_dim: null
+        },
+        created_at: "2026-05-17T10:00:00Z",
+        updated_at: "2026-05-17T10:00:00Z"
+      }
+    ]);
+    deleteSavedViewMock.mockResolvedValueOnce(undefined);
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    renderPage();
+    await screen.findByText("Медосмотр: Иванов И.И.");
+
+    const select = await screen.findByTestId("saved-views-select");
+    await user.selectOptions(select, "view-to-delete");
+    await screen.findByTestId("saved-views-delete");
+
+    await user.click(screen.getByTestId("saved-views-delete"));
+
+    await waitFor(() => {
+      expect(deleteSavedViewMock).toHaveBeenCalledWith("view-to-delete");
+    });
+    expect(screen.queryByTestId("saved-views-delete")).not.toBeInTheDocument();
+    expect(
+      within(select).queryByRole("option", { name: "Удаляемый" })
+    ).not.toBeInTheDocument();
+
+    confirmSpy.mockRestore();
   });
 });

@@ -17,6 +17,7 @@ from app.api.routes import (
     billing,
     briefings,
     calendar,
+    calendar_views,
     client_portal,
     companies,
     compliance,
@@ -118,6 +119,7 @@ COMPLIANCE_AND_ADMIN_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
     (training_next.router, {}),
     (briefings.router, {}),
     (calendar.router, {}),
+    (calendar_views.router, {}),
     (compliance.router, {}),
     (billing.router, {}),
 )

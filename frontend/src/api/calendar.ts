@@ -1,7 +1,9 @@
 import { apiClient } from "@/api/client";
 import type {
   CalendarEventsQuery,
-  CalendarEventsResponseDto
+  CalendarEventsResponseDto,
+  CalendarSavedViewDto,
+  CalendarSavedViewWriteRequest
 } from "@/types/dto/calendar";
 
 const buildParams = (query: CalendarEventsQuery): Record<string, unknown> => {
@@ -40,5 +42,33 @@ export const calendarApi = {
       responseType: "blob"
     });
     return data;
+  },
+  async listSavedViews(): Promise<CalendarSavedViewDto[]> {
+    const { data } = await apiClient.get<CalendarSavedViewDto[]>(
+      "/calendar/saved-views"
+    );
+    return data;
+  },
+  async createSavedView(
+    payload: CalendarSavedViewWriteRequest
+  ): Promise<CalendarSavedViewDto> {
+    const { data } = await apiClient.post<CalendarSavedViewDto>(
+      "/calendar/saved-views",
+      payload
+    );
+    return data;
+  },
+  async updateSavedView(
+    id: string,
+    payload: CalendarSavedViewWriteRequest
+  ): Promise<CalendarSavedViewDto> {
+    const { data } = await apiClient.patch<CalendarSavedViewDto>(
+      `/calendar/saved-views/${encodeURIComponent(id)}`,
+      payload
+    );
+    return data;
+  },
+  async deleteSavedView(id: string): Promise<void> {
+    await apiClient.delete(`/calendar/saved-views/${encodeURIComponent(id)}`);
   }
 };

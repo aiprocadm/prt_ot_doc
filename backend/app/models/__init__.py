@@ -1,5 +1,6 @@
 """Convenient re-exports for ORM models used across the service."""
 
+from app.models.calendar_views import SavedCalendarView
 from app.models.document import (
     Document,
     DocumentBatchItem,
@@ -273,4 +274,5 @@ __all__ = [
     "ReminderRule",
     "CalendarPlanTask",
     "CalendarPlanTaskStatus",
+    "SavedCalendarView",
 ]

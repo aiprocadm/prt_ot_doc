@@ -79,3 +79,40 @@ export interface CalendarEventsQuery {
   include_fact?: boolean;
   include_sla?: boolean;
 }
+
+// --- Saved Smart Calendar views (vNext-CAL-01 / Phase 4.1) ---
+// Mirrors backend/app/schemas/calendar_views.py
+//
+// `payload` snapshots the calendar URL filter state so the dropdown can
+// re-apply it with one click. Adding a new toggle is additive: extend
+// CalendarSavedViewPayloadDto and the backend pydantic model; no
+// migration needed (the column stores opaque JSON).
+
+export type CalendarViewKind = "day" | "week" | "month" | "year" | "list";
+
+export type CalendarLoadDimension = "person" | "site";
+
+export interface CalendarSavedViewPayloadDto {
+  view?: CalendarViewKind | null;
+  sources: CalendarSourceType[];
+  person_id?: string | null;
+  site_id?: string | null;
+  include_fact: boolean;
+  include_sla: boolean;
+  sla_bands: CalendarSlaBand[];
+  include_load: boolean;
+  load_dim?: CalendarLoadDimension | null;
+}
+
+export interface CalendarSavedViewDto {
+  id: string;
+  name: string;
+  payload: CalendarSavedViewPayloadDto;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CalendarSavedViewWriteRequest {
+  name: string;
+  payload: CalendarSavedViewPayloadDto;
+}
