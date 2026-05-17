@@ -25,6 +25,9 @@ import {
   CALENDAR_SOURCE_TYPES,
   type CalendarEventItemDto,
   type CalendarEventsResponseDto,
+  type CalendarSavedViewDto,
+  type CalendarSavedViewPayloadDto,
+  type CalendarSavedViewWriteRequest,
   type CalendarSlaBand,
   type CalendarSourceCountDto,
   type CalendarSourceType
@@ -69,6 +72,13 @@ const SLA_BAND_LABELS: Record<CalendarSlaBand, string> = {
   ok: "В норме"
 };
 
+type LoadDimension = "person" | "site";
+
+const LOAD_DIM_LABELS: Record<LoadDimension, string> = {
+  person: "По людям",
+  site: "По объектам"
+};
+
 const isCalendarSource = (value: string): value is CalendarSourceType =>
   (CALENDAR_SOURCE_TYPES as readonly string[]).includes(value);
 
@@ -77,6 +87,20 @@ const isSlaBand = (value: string): value is CalendarSlaBand =>
 
 const isView = (value: string | null): value is CalendarView =>
   value === "day" || value === "week" || value === "month" || value === "year" || value === "list";
+
+const isLoadDim = (value: string | null): value is LoadDimension =>
+  value === "person" || value === "site";
+
+const loadCellClass = (count: number): string => {
+  if (count === 0) return "bg-transparent text-muted-foreground";
+  if (count === 1) return "bg-blue-100 text-blue-900";
+  if (count <= 3) return "bg-blue-300 text-blue-950";
+  if (count <= 6) return "bg-blue-500 text-white";
+  return "bg-blue-700 text-white";
+};
+
+const truncateId = (value: string): string =>
+  value.length > 10 ? `${value.slice(0, 8)}…` : value;
 
 const parseSources = (raw: string | null): CalendarSourceType[] => {
   if (!raw) return [];
@@ -246,6 +270,149 @@ const DaysToDueChip = ({ days }: { days: number }) => (
   </Badge>
 );
 
+type HeatmapCell = { count: number; overdue: number };
+type HeatmapRow = { entityId: string; cells: HeatmapCell[]; total: number; overdueTotal: number };
+type HeatmapData = { rows: HeatmapRow[]; bucketKeys: string[]; bucketLabels: string[] };
+
+const buildHeatmap = (
+  items: CalendarEventItemDto[],
+  view: CalendarView,
+  dimension: LoadDimension
+): HeatmapData => {
+  const rowMap = new Map<string, Map<string, HeatmapCell>>();
+  const bucketSet = new Set<string>();
+  items.forEach((item) => {
+    const entityId = dimension === "person" ? item.person_id : item.site_id;
+    if (!entityId) return;
+    const bucketKey = bucketKeyFor(view, item.starts_at);
+    bucketSet.add(bucketKey);
+    const row = rowMap.get(entityId) ?? new Map<string, HeatmapCell>();
+    const cell = row.get(bucketKey) ?? { count: 0, overdue: 0 };
+    cell.count += 1;
+    if (item.is_overdue) cell.overdue += 1;
+    row.set(bucketKey, cell);
+    rowMap.set(entityId, row);
+  });
+  const bucketKeys = [...bucketSet].sort();
+  const bucketLabels = bucketKeys.map((key) => formatBucketLabel(view, key));
+  const rows: HeatmapRow[] = [...rowMap.entries()]
+    .map(([entityId, cellMap]) => {
+      const cells = bucketKeys.map((key) => cellMap.get(key) ?? { count: 0, overdue: 0 });
+      const total = cells.reduce((sum, c) => sum + c.count, 0);
+      const overdueTotal = cells.reduce((sum, c) => sum + c.overdue, 0);
+      return { entityId, cells, total, overdueTotal };
+    })
+    .sort((a, b) => b.total - a.total || a.entityId.localeCompare(b.entityId));
+  return { rows, bucketKeys, bucketLabels };
+};
+
+const ResourceLoadHeatmap = ({
+  items,
+  view,
+  dimension,
+  onChangeDimension
+}: {
+  items: CalendarEventItemDto[];
+  view: CalendarView;
+  dimension: LoadDimension;
+  onChangeDimension: (dim: LoadDimension) => void;
+}) => {
+  const data = useMemo(() => buildHeatmap(items, view, dimension), [items, view, dimension]);
+
+  return (
+    <section className="space-y-2" data-testid="resource-load-section">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-1">
+        <h3 className="text-sm font-semibold">Загрузка ресурсов</h3>
+        <div className="flex items-center gap-2">
+          <span className="text-xs uppercase text-muted-foreground">Группировка:</span>
+          {(["person", "site"] as LoadDimension[]).map((dim) => (
+            <Button
+              key={dim}
+              type="button"
+              size="sm"
+              variant={dimension === dim ? "default" : "outline"}
+              onClick={() => onChangeDimension(dim)}
+              aria-pressed={dimension === dim}
+            >
+              {LOAD_DIM_LABELS[dim]}
+            </Button>
+          ))}
+        </div>
+      </div>
+      {data.rows.length === 0 ? (
+        <div
+          data-testid="resource-load-empty"
+          className="rounded border border-dashed p-4 text-sm text-muted-foreground"
+        >
+          Нет данных для тепловой карты загрузки. У событий должен быть заполнен{" "}
+          {dimension === "person" ? "person_id" : "site_id"}.
+        </div>
+      ) : (
+        <div className="overflow-x-auto" data-testid="resource-load-heatmap">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[180px]">
+                  {dimension === "person" ? "Сотрудник" : "Объект"}
+                </TableHead>
+                {data.bucketLabels.map((label, idx) => (
+                  <TableHead
+                    key={data.bucketKeys[idx]}
+                    className="text-center whitespace-nowrap"
+                  >
+                    {label}
+                  </TableHead>
+                ))}
+                <TableHead className="w-[80px] text-center">Всего</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.rows.map((row) => (
+                <TableRow
+                  key={row.entityId}
+                  data-load-entity={row.entityId}
+                  data-load-total={row.total}
+                  data-load-overdue-total={row.overdueTotal}
+                >
+                  <TableCell
+                    className="font-mono text-xs text-muted-foreground"
+                    title={row.entityId}
+                  >
+                    {truncateId(row.entityId)}
+                  </TableCell>
+                  {row.cells.map((cell, idx) => (
+                    <TableCell
+                      key={data.bucketKeys[idx]}
+                      className={`text-center ${loadCellClass(cell.count)}`}
+                      data-load-count={cell.count}
+                      data-load-overdue={cell.overdue}
+                      title={
+                        cell.count === 0
+                          ? "Нет событий"
+                          : `События: ${cell.count}${cell.overdue > 0 ? `, просрочек: ${cell.overdue}` : ""}`
+                      }
+                    >
+                      {cell.count === 0 ? "·" : cell.count}
+                    </TableCell>
+                  ))}
+                  <TableCell className="text-center font-semibold">
+                    {row.total}
+                    {row.overdueTotal > 0 ? (
+                      <span className="ml-1 text-xs text-destructive">
+                        ({row.overdueTotal})
+                      </span>
+                    ) : null}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </section>
+  );
+};
+
 const EventRow = ({
   item,
   includeFact,
@@ -317,6 +484,10 @@ const CalendarPage = () => {
   const initialIncludeFact = searchParams.get("include_fact") === "1";
   const initialIncludeSla = searchParams.get("include_sla") === "1";
   const initialSlaBands = parseSlaBands(searchParams.get("sla_bands"));
+  const initialIncludeLoad = searchParams.get("include_load") === "1";
+  const initialLoadDim: LoadDimension = isLoadDim(searchParams.get("load_dim"))
+    ? (searchParams.get("load_dim") as LoadDimension)
+    : "person";
 
   const [view, setView] = useState<CalendarView>(initialView);
   const [selectedSources, setSelectedSources] = useState<CalendarSourceType[]>(initialSources);
@@ -327,12 +498,20 @@ const CalendarPage = () => {
   const [includeFact, setIncludeFact] = useState(initialIncludeFact);
   const [includeSla, setIncludeSla] = useState(initialIncludeSla || initialSlaBands.length > 0);
   const [selectedBands, setSelectedBands] = useState<CalendarSlaBand[]>(initialSlaBands);
+  const [includeLoad, setIncludeLoad] = useState(initialIncludeLoad);
+  const [loadDim, setLoadDim] = useState<LoadDimension>(initialLoadDim);
 
   const [response, setResponse] = useState<CalendarEventsResponseDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
   const [icsLoading, setIcsLoading] = useState(false);
   const [icsError, setIcsError] = useState<string | null>(null);
+
+  const [savedViews, setSavedViews] = useState<CalendarSavedViewDto[]>([]);
+  const [savedViewsLoaded, setSavedViewsLoaded] = useState(false);
+  const [savedViewsError, setSavedViewsError] = useState<string | null>(null);
+  const [appliedViewId, setAppliedViewId] = useState<string | null>(null);
+  const [savingView, setSavingView] = useState(false);
 
   const updateQueryParams = useCallback(
     (patch: {
@@ -343,6 +522,8 @@ const CalendarPage = () => {
       include_fact?: boolean;
       include_sla?: boolean;
       sla_bands?: CalendarSlaBand[];
+      include_load?: boolean;
+      load_dim?: LoadDimension;
     }) => {
       const next = new URLSearchParams(searchParams);
       if (patch.view !== undefined) {
@@ -372,6 +553,14 @@ const CalendarPage = () => {
       if (patch.sla_bands !== undefined) {
         if (patch.sla_bands.length === 0) next.delete("sla_bands");
         else next.set("sla_bands", patch.sla_bands.join(","));
+      }
+      if (patch.include_load !== undefined) {
+        if (patch.include_load) next.set("include_load", "1");
+        else next.delete("include_load");
+      }
+      if (patch.load_dim !== undefined) {
+        if (patch.load_dim === "person") next.delete("load_dim");
+        else next.set("load_dim", patch.load_dim);
       }
       setSearchParams(next, { replace: true });
     },
@@ -446,13 +635,17 @@ const CalendarPage = () => {
     setIncludeFact(false);
     setIncludeSla(false);
     setSelectedBands([]);
+    setIncludeLoad(false);
+    setLoadDim("person");
     updateQueryParams({
       sources: [],
       person_id: "",
       site_id: "",
       include_fact: false,
       include_sla: false,
-      sla_bands: []
+      sla_bands: [],
+      include_load: false,
+      load_dim: "person"
     });
   }, [updateQueryParams]);
 
@@ -489,6 +682,22 @@ const CalendarPage = () => {
     [updateQueryParams]
   );
 
+  const toggleLoad = useCallback(() => {
+    setIncludeLoad((current) => {
+      const next = !current;
+      updateQueryParams({ include_load: next });
+      return next;
+    });
+  }, [updateQueryParams]);
+
+  const changeLoadDim = useCallback(
+    (dim: LoadDimension) => {
+      setLoadDim(dim);
+      updateQueryParams({ load_dim: dim });
+    },
+    [updateQueryParams]
+  );
+
   const handleDownloadIcs = useCallback(async () => {
     setIcsLoading(true);
     setIcsError(null);
@@ -510,6 +719,151 @@ const CalendarPage = () => {
       setIcsLoading(false);
     }
   }, [selectedSources, appliedPersonId, appliedSiteId, includeFact, includeSla]);
+
+  // --- Saved views (vNext-CAL-01 / Phase 4.1 — saved filters) ---
+
+  const currentViewPayload = useMemo<CalendarSavedViewPayloadDto>(
+    () => ({
+      view,
+      sources: selectedSources,
+      person_id: appliedPersonId || null,
+      site_id: appliedSiteId || null,
+      include_fact: includeFact,
+      include_sla: includeSla,
+      sla_bands: selectedBands,
+      include_load: includeLoad,
+      load_dim: includeLoad ? loadDim : null
+    }),
+    [
+      view,
+      selectedSources,
+      appliedPersonId,
+      appliedSiteId,
+      includeFact,
+      includeSla,
+      selectedBands,
+      includeLoad,
+      loadDim
+    ]
+  );
+
+  const loadSavedViews = useCallback(async () => {
+    try {
+      const list = await calendarApi.listSavedViews();
+      setSavedViews(list);
+      setSavedViewsError(null);
+    } catch (nextError) {
+      const message =
+        (nextError as ApiError | undefined)?.message ??
+        "Не удалось загрузить сохранённые фильтры";
+      setSavedViewsError(message);
+    } finally {
+      setSavedViewsLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadSavedViews();
+  }, [loadSavedViews]);
+
+  const applySavedView = useCallback(
+    (saved: CalendarSavedViewDto) => {
+      const payload = saved.payload;
+      const nextView: CalendarView =
+        payload.view && isView(payload.view) ? (payload.view as CalendarView) : "month";
+      const nextSources = (payload.sources ?? []).filter((source) =>
+        (CALENDAR_SOURCE_TYPES as readonly string[]).includes(source)
+      ) as CalendarSourceType[];
+      const nextBands = (payload.sla_bands ?? []).filter((band) =>
+        (CALENDAR_SLA_BANDS as readonly string[]).includes(band)
+      ) as CalendarSlaBand[];
+      const nextLoadDim: LoadDimension =
+        payload.load_dim && isLoadDim(payload.load_dim)
+          ? (payload.load_dim as LoadDimension)
+          : "person";
+      const nextPersonId = payload.person_id ?? "";
+      const nextSiteId = payload.site_id ?? "";
+
+      setView(nextView);
+      setSelectedSources(nextSources);
+      setPersonId(nextPersonId);
+      setSiteId(nextSiteId);
+      setAppliedPersonId(nextPersonId);
+      setAppliedSiteId(nextSiteId);
+      setIncludeFact(Boolean(payload.include_fact));
+      setIncludeSla(Boolean(payload.include_sla) || nextBands.length > 0);
+      setSelectedBands(nextBands);
+      setIncludeLoad(Boolean(payload.include_load));
+      setLoadDim(nextLoadDim);
+      setAppliedViewId(saved.id);
+
+      updateQueryParams({
+        view: nextView,
+        sources: nextSources,
+        person_id: nextPersonId,
+        site_id: nextSiteId,
+        include_fact: Boolean(payload.include_fact),
+        include_sla: Boolean(payload.include_sla) || nextBands.length > 0,
+        sla_bands: nextBands,
+        include_load: Boolean(payload.include_load),
+        load_dim: nextLoadDim
+      });
+    },
+    [updateQueryParams]
+  );
+
+  const handleSaveCurrentView = useCallback(async () => {
+    if (typeof window === "undefined") return;
+    const name = window.prompt("Название фильтра");
+    const trimmed = name?.trim() ?? "";
+    if (!trimmed) return;
+
+    setSavingView(true);
+    setSavedViewsError(null);
+    try {
+      const request: CalendarSavedViewWriteRequest = {
+        name: trimmed,
+        payload: currentViewPayload
+      };
+      const created = await calendarApi.createSavedView(request);
+      setSavedViews((current) => {
+        const next = [...current, created];
+        next.sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
+        return next;
+      });
+      setAppliedViewId(created.id);
+    } catch (nextError) {
+      const apiError = nextError as ApiError | undefined;
+      const message =
+        apiError?.status === 409
+          ? `Фильтр с именем «${trimmed}» уже существует`
+          : apiError?.message ?? "Не удалось сохранить фильтр";
+      setSavedViewsError(message);
+    } finally {
+      setSavingView(false);
+    }
+  }, [currentViewPayload]);
+
+  const handleDeleteSavedView = useCallback(
+    async (id: string) => {
+      if (typeof window !== "undefined") {
+        const ok = window.confirm("Удалить сохранённый фильтр?");
+        if (!ok) return;
+      }
+      setSavedViewsError(null);
+      try {
+        await calendarApi.deleteSavedView(id);
+        setSavedViews((current) => current.filter((entry) => entry.id !== id));
+        setAppliedViewId((current) => (current === id ? null : current));
+      } catch (nextError) {
+        const message =
+          (nextError as ApiError | undefined)?.message ??
+          "Не удалось удалить фильтр";
+        setSavedViewsError(message);
+      }
+    },
+    []
+  );
 
   const items = useMemo(() => {
     const all = response?.items ?? [];
@@ -576,7 +930,8 @@ const CalendarPage = () => {
     appliedSiteId.length > 0 ||
     includeFact ||
     includeSla ||
-    selectedBands.length > 0;
+    selectedBands.length > 0 ||
+    includeLoad;
 
   return (
     <div className="space-y-4">
@@ -607,6 +962,15 @@ const CalendarPage = () => {
               aria-pressed={includeSla}
             >
               {includeSla ? "Скрыть SLA" : "Показать SLA"}
+            </Button>
+            <Button
+              type="button"
+              variant={includeLoad ? "default" : "outline"}
+              size="sm"
+              onClick={toggleLoad}
+              aria-pressed={includeLoad}
+            >
+              {includeLoad ? "Скрыть загрузку" : "Показать загрузку"}
             </Button>
             <Button
               type="button"
@@ -642,6 +1006,71 @@ const CalendarPage = () => {
                 {option.label}
               </Button>
             ))}
+          </div>
+          <div
+            className="flex flex-wrap items-center gap-2"
+            data-testid="saved-views-toolbar"
+          >
+            <span className="text-xs uppercase text-muted-foreground">Мои фильтры:</span>
+            <select
+              className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+              value={appliedViewId ?? ""}
+              onChange={(event) => {
+                const id = event.target.value;
+                if (!id) {
+                  setAppliedViewId(null);
+                  return;
+                }
+                const target = savedViews.find((entry) => entry.id === id);
+                if (target) applySavedView(target);
+              }}
+              disabled={!savedViewsLoaded}
+              aria-label="Мои фильтры"
+              data-testid="saved-views-select"
+            >
+              <option value="">
+                {savedViewsLoaded
+                  ? savedViews.length === 0
+                    ? "— нет сохранённых —"
+                    : "— выбрать —"
+                  : "Загрузка…"}
+              </option>
+              {savedViews.map((entry) => (
+                <option key={entry.id} value={entry.id}>
+                  {entry.name}
+                </option>
+              ))}
+            </select>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void handleSaveCurrentView()}
+              disabled={savingView}
+              data-testid="saved-views-save"
+            >
+              {savingView ? "Сохранение…" : "Сохранить как…"}
+            </Button>
+            {appliedViewId ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => void handleDeleteSavedView(appliedViewId)}
+                data-testid="saved-views-delete"
+              >
+                Удалить
+              </Button>
+            ) : null}
+            {savedViewsError ? (
+              <span
+                role="alert"
+                className="text-sm text-destructive"
+                data-testid="saved-views-error"
+              >
+                {savedViewsError}
+              </span>
+            ) : null}
           </div>
           <div className="flex flex-wrap gap-2">
             {CALENDAR_SOURCE_TYPES.map((sourceType) => {
@@ -760,6 +1189,14 @@ const CalendarPage = () => {
             <EmptyState
               title="Событий в календаре нет"
               description="Появятся при создании назначений по медосмотрам, СИЗ, обучению, проверкам, инструктажам и срокам."
+            />
+          ) : null}
+          {!loading && !error && includeLoad ? (
+            <ResourceLoadHeatmap
+              items={items}
+              view={view}
+              dimension={loadDim}
+              onChangeDimension={changeLoadDim}
             />
           ) : null}
           {!loading && !error && items.length > 0
