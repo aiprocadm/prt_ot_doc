@@ -29,7 +29,7 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 | Phase 2: Operational Dashboard | P1 | Command Center (backend ✅, 2.1a done), health checks ✅, operational visibility | 2-3 sessions | 🟡 IN PROGRESS (2.2 done, 2.1 partial, pending frontend) |
 | Phase 3: Data Quality & Master Data | P1 | Data Quality Layer, unified employee/site cards, deduplication | 2-3 sessions | 📋 Planned |
 | Phase 4: Calendar & Search | P2 | Smart Calendar improvements, universal search + command bar | 2-3 sessions | ✅ COMPLETE — 4.1 Smart Calendar 100% done (Sessions 22-30); 4.2 all 6 acceptance criteria done: backend FTS + CMD+K palette with entity results + 7 type-to-execute commands + ARIA listbox keyboard nav (↑↓/Enter/Home/End) + saved searches in palette (S34) + recent entities tracking (S35) + backend search index accuracy tests (S33 — 35 cases / 6 classes). Optional polish open (non-blocking, non-acceptance): score-based unified ranking, per-tenant relevance tuning, i18n executable commands, saved-search cache invalidation |
-| Phase 5: Document Factory Hardening | P2 | Template engine, header/footer, replace engine improvements | 2-3 sessions | 🟡 IN PROGRESS (5.1 COMPLETE — Sessions 36-38: linter hardening + variable inspector + 53 tests / migration audit + 14 tests + CLI / preview parity proof + 11 tests; 5.2 next) |
+| Phase 5: Document Factory Hardening | P2 | Template engine, header/footer, replace engine improvements | 2-3 sessions | 🟡 IN PROGRESS (5.1 COMPLETE Sessions 36-38; 5.2 replace-engine pin done Session 39 — 50 tests; remaining: header/footer layouts + branding presets) |
 | Phase 6: Integration & Webhooks | P2 | API improvements, webhook delivery, system integrations | 2-3 sessions | 📋 Planned |
 | Phase 7: Mobile & Field-Ready Work | P2 | Offline sync, mobile UX, field-specific workflows | 2-3 sessions | 📋 Planned |
 | Phase 8: Analytics & Reporting | P3 | Dashboards, reports, business intelligence, audit analytics | 2-3 sessions | 📋 Planned |
@@ -377,11 +377,11 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 **User impact:** Documents look professional; replacements are reliable  
 
 **Acceptance criteria:**
-- [ ] Header/Footer: Support complex layouts (logo, requisites, QR code, watermark, page number, custom footer text)
-- [ ] Branding presets: Store and reuse header/footer combinations
-- [ ] Replace engine: Correctly replace in all document sections (body, tables, headers, footers, textboxes)
-- [ ] Tests: 40+ replace engine tests for edge cases (partial matches, case sensitivity, escaping)
-- [ ] No data loss: Replacements are logged and reversible
+- [ ] Header/Footer: Support complex layouts (logo, requisites, QR code, watermark, page number, custom footer text) — *engine in `backend/app/modules/headers/` exists; full layout coverage deferred to follow-up session*
+- [ ] Branding presets: Store and reuse header/footer combinations — *deferred to follow-up session*
+- [x] Replace engine: Correctly replace in all document sections (body, tables, headers, footers, textboxes) — Session 39 pinned the contract: `app.modules.replace.engine.replace_docx_bytes` (Phase 1+ work) iterates body paragraphs, table cells (incl. tables inside headers/footers), header paragraphs, footer paragraphs, and runs a separate XML pass (`_replace_shapes`) over every `word/*.xml` that contains `txbxContent` or `<v:textbox`, producing `ReplaceHit` records with `from_text`/`to_text`/`part ∈ {body,header,footer,shape}`/`location`/`before`/`after`/`match_count`. All five sections verified by tests below.
+- [x] Tests: 40+ replace engine tests for edge cases — Session 39 added `tests/test_replace_engine_hardening.py` with 50 cases (above the 40+ threshold) covering: section coverage (body / multi-paragraph body / single-cell table / multi-row table / table-inside-header / header / footer / body+header+footer simultaneously / textbox via shape pass), match modes (default case-insensitive, case-sensitive, whole-word ASCII, whole-word Cyrillic, regex digits, regex lookahead, special-char escape when regex=False, special-char pass-through when regex=True), rule semantics (empty source skipped, empty target deletes, multi-rule ordered application, identity rule, substring `a → aa` does not loop, full-substring replacement, Unicode source/target), hit metadata (`from_text`/`to_text`/`part`/`location`/`before`/`after`/`match_count`/no-match → empty / cross-paragraph aggregation), `apply_changes=False` reports without mutation, ignore_regex single/all paragraphs, ignore_styles `Title*` pattern + no-match passthrough, normalize_runs merge-for-split-placeholder + off-mode-functional-parity, idempotency on second run, parametrized 7-row table for case/whole-word/regex sweep, and direct `_pattern` helper checks for regex-escape / regex-passthrough / Cyrillic boundary.
+- [x] No data loss: Replacements are logged and reversible — already satisfied by `app.modules.replace.service.execute_replace` which (a) persists a JSON report `documents/{doc_id}/replace_report_{run_id}.json` with hits/examples/metrics/duration_ms/rules_count and registers it as a `File` row, and (b) creates a new `DocumentVersion` for the modified output so the original `DocumentVersion` (and its file_key) remain intact. Rollback is "restore previous DocumentVersion".
 
 **What it does:** Admin creates "Standard Letterhead" with company logo, requisites, and page numbers. When document is generated, letterhead is applied consistently. Text replacements work everywhere: "John Doe" → "Jane Smith" across all tables and headers.
 
@@ -391,7 +391,9 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 - Add replace tests: `tests/replace/test_replace_edge_cases.py`
 - Add header/footer tests: `tests/headers/test_complex_headers.py`
 
-**Estimated:** 1 session
+**Incremental note (2026-05-18, Session 39 — Phase 5.2 replace engine pinning):** Replace-engine acceptance (sections / tests / no-data-loss) closed in one session by pinning the existing implementation with a 50-case hardening suite. No engine code change required — `app.modules.replace.engine` was already feature-complete with `ReplaceOptions(case_sensitive, whole_word, regex, normalize_runs, ignore_styles, ignore_regex)` and three cooperating engines (`engine.py` for body/header/footer/tables, `engine_docx.py` simpler variant, `engine_xml.py` for textbox-only XML pass). Wider header/footer layout features (QR code, watermark, branding presets) live in `app.modules.headers` and remain a follow-up.
+
+**Estimated:** 1 session — replace engine fully tested (Session 39); header/footer layout + branding presets remain (≈1 more session)
 
 ---
 
