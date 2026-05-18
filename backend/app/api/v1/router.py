@@ -54,6 +54,7 @@ from app.models.document_core import (
 )
 from app.models.tenanting import Tenant
 from app.modules.templates import (
+    audit_template_versions,
     build_passport,
     inspect_docx_template,
     lint_docx_template,
@@ -69,6 +70,7 @@ from app.modules.templates.schemas import (
     PreviewResponse,
     RenderPreviewRequest,
     RenderPreviewResponse,
+    TemplateAuditReportDTO,
     TemplateCreateRequest,
     TemplateDTO,
     TemplatePatchRequest,
@@ -849,6 +851,30 @@ async def inspect_template_version(
         required_fields=payload.required_fields,
     )
     return InspectorReportDTO.model_validate(report)
+
+
+@router.get(
+    "/templates:audit",
+    response_model=TemplateAuditReportDTO,
+    summary="Bulk audit of every template version in the tenant",
+)
+async def audit_tenant_templates(
+    session: SessionDep,
+    tenant: TenantDep,
+    access: ManagerAccess,
+    template_id: str | None = Query(default=None),
+) -> TemplateAuditReportDTO:
+    """Run the hardened linter against every non-deleted template version
+    in the current tenant and return a structured report. Admin-only.
+    """
+    storage = FileStorageService.default()
+    report = await audit_template_versions(
+        session,
+        tenant_id=str(tenant.id),
+        loader=storage.get,
+        template_id=template_id,
+    )
+    return TemplateAuditReportDTO.model_validate(report.to_dict())
 
 
 @router.post("/templates/{template_id}/versions/{version_id}:preview", response_model=PreviewResponse)

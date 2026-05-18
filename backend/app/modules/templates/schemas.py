@@ -118,6 +118,29 @@ class InspectorReportDTO(BaseModel):
     summary: dict[str, int]
 
 
+class TemplateAuditItemDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    template_id: str
+    template_code: str | None = None
+    template_name: str
+    tenant_id: str
+    version_id: str
+    version_number: int
+    status: str
+    file_key: str | None = None
+    errors: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    summary: dict[str, int] = Field(default_factory=dict)
+    load_error: str | None = None
+    severity: str
+
+
+class TemplateAuditReportDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    summary: dict[str, int]
+    items: list[TemplateAuditItemDTO] = Field(default_factory=list)
+
+
 class PreviewRequest(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
     data: dict[str, Any]
