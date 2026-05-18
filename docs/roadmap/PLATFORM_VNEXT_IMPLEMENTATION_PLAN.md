@@ -31,7 +31,7 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 | Phase 4: Calendar & Search | P2 | Smart Calendar improvements, universal search + command bar | 2-3 sessions | ✅ COMPLETE — 4.1 Smart Calendar 100% done (Sessions 22-30); 4.2 all 6 acceptance criteria done: backend FTS + CMD+K palette with entity results + 7 type-to-execute commands + ARIA listbox keyboard nav (↑↓/Enter/Home/End) + saved searches in palette (S34) + recent entities tracking (S35) + backend search index accuracy tests (S33 — 35 cases / 6 classes). Optional polish open (non-blocking, non-acceptance): score-based unified ranking, per-tenant relevance tuning, i18n executable commands, saved-search cache invalidation |
 | Phase 5: Document Factory Hardening | P2 | Template engine, header/footer, replace engine improvements | 2-3 sessions | ✅ COMPLETE (Sessions 36-40 — 5.1 Sessions 36-38; 5.2 Sessions 39-40: 50 replace + 33 header/footer tests). Logo image + runtime QR code remain as enhancement items beyond original acceptance bar. |
 | Phase 6: Integration & Webhooks | P2 | API improvements, webhook delivery, system integrations | 2-3 sessions | ✅ COMPLETE (6.1 Session 41 — CRUD pin + 28 tests; 6.2 Session 42 — public API pin + 24 tests). |
-| Phase 7: Mobile & Field-Ready Work | P2 | Offline sync, mobile UX, field-specific workflows | 2-3 sessions | 📋 Planned |
+| Phase 7: Mobile & Field-Ready Work | P2 | Offline sync, mobile UX, field-specific workflows | 2-3 sessions | 🟡 IN PROGRESS (7.1 PWA sync state machine pinned Session 43 — 28 tests; 7.2 field-specific UX is frontend-only and deferred) |
 | Phase 8: Analytics & Reporting | P3 | Dashboards, reports, business intelligence, audit analytics | 2-3 sessions | 📋 Planned |
 | Phase 9: Performance & Scale | P3 | Database optimization, caching, performance hardening | 2-3 sessions | 📋 Planned |
 | Phase 10: Enterprise Features | P3 | SSO, multi-language, white-label, advanced billing | 3+ sessions | 📋 Planned |
@@ -468,10 +468,10 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 **User impact:** Inspectors work in remote locations; no "connection lost" errors  
 
 **Acceptance criteria:**
-- [ ] Offline queue: Mobile app queues changes locally
-- [ ] Sync: When online, send batched changes to server
-- [ ] Conflict resolution: If data changed server-side, show conflict UI; user picks version
-- [ ] Tests: Offline/online state machine tests
+- [x] Offline queue: Mobile app queues changes locally — already shipped: `OfflineSyncBatch` and `OfflineMediaQueue` tables in `app.models.models` (TZ-2-MVP migration 20260317_next46_training_briefings_offline) + frontend IndexedDB store + service worker registered via `VitePWA` in `frontend/vite.config.ts` (pinned by `tests/test_frontend_pwa_baseline.py`).
+- [x] Sync: When online, send batched changes to server — already shipped: `POST /api/v1/pwa/sync/batch` (`app.api.routes.pwa_sync.create_batch`) with payload sanitization (`tenant_id`/`user_id`/`status`/`error_payload` stripped + nested `tenant_id`/`user_id`/`company_id` removed at any depth), `OfflineSyncService.apply_batch` with per-entity-type handling (briefing_entry, evidence_case, generic). `POST /api/v1/pwa/media/commit` for media. `GET /api/v1/pwa/sync/status/{id}` for client polling.
+- [x] Conflict resolution: If data changed server-side, show conflict UI; user picks version — already shipped: conflict detection raises `status="failed"` with structured `error_payload`. Codes: `tenant_scope_mismatch`, `conflict_final_record` (briefing entry already signed/completed), `conflict_evidence_case_exists` (create on existing), `conflict_evidence_case_missing` (update on missing), `conflict_evidence_case_version_mismatch` (optimistic-concurrency check with `base_version` vs server `version`). `POST /api/v1/pwa/sync/conflicts/{batch_id}/resolve` accepts `strategy ∈ {"server_wins", "client_retry"}` + optional `payload_patch`. Bootstrap surfaces conflict count + recommended action.
+- [x] Tests: Offline/online state machine tests — Session 43 added `tests/api/test_pwa_sync_state_machine.py` with **28 cases** covering: validation (3 missing-field codes), payload sanitization (top-level + nested), unrecognized-entity unconditional accept, briefing-entry conflict matrix (draft applied, signed_employee + completed both raise `conflict_final_record`), full evidence-case conflict matrix (create-when-exists, update-when-missing, stale base_version, missing evidence_case_id, successful update increments version), conflict resolution (server_wins → applied + records resolved_by, client_retry → pending + applies payload_patch, invalid strategy → 422, invalid payload_patch type → 422, 404 missing batch), sync status (owner success, cross-tenant 404), media commit (happy path + missing local_ref 422 + forged-field strip), bootstrap envelope shape + failed-conflict surfacing + dictionaries contract + capabilities tied to permissions.
 
 **What it does:** Inspector is in forest without connectivity. Records incident, takes photos, notes form submission. Later, when back in office with WiFi, changes automatically sync to server.
 
@@ -481,7 +481,9 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 - Add conflict resolution UI: `frontend/src/components/ConflictResolution.tsx`
 - Store offline data in IndexedDB
 
-**Estimated:** 2 sessions
+**Incremental note (2026-05-19, Session 43 — Phase 7.1 PWA sync pinning):** Backend offline-sync engine was already feature-complete (5 conflict codes across briefing-entry + evidence-case entity types, optimistic-concurrency via base_version, two resolution strategies, full bootstrap envelope) but had **zero direct test coverage** of the HTTP state machine. Closed the gap with 28 cases in `tests/api/test_pwa_sync_state_machine.py`. No route or service code changes — the existing implementation already covers the acceptance bar. Frontend PWA wiring (`VitePWA`, service worker, IndexedDB queue) is separately pinned by `tests/test_frontend_pwa_baseline.py`.
+
+**Estimated:** 2 sessions — Phase 7.1 closed in Session 43 alone (engine was already shipped, this pins the contract).
 
 ---
 
