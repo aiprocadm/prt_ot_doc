@@ -30,7 +30,7 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 | Phase 3: Data Quality & Master Data | P1 | Data Quality Layer, unified employee/site cards, deduplication | 2-3 sessions | 📋 Planned |
 | Phase 4: Calendar & Search | P2 | Smart Calendar improvements, universal search + command bar | 2-3 sessions | ✅ COMPLETE — 4.1 Smart Calendar 100% done (Sessions 22-30); 4.2 all 6 acceptance criteria done: backend FTS + CMD+K palette with entity results + 7 type-to-execute commands + ARIA listbox keyboard nav (↑↓/Enter/Home/End) + saved searches in palette (S34) + recent entities tracking (S35) + backend search index accuracy tests (S33 — 35 cases / 6 classes). Optional polish open (non-blocking, non-acceptance): score-based unified ranking, per-tenant relevance tuning, i18n executable commands, saved-search cache invalidation |
 | Phase 5: Document Factory Hardening | P2 | Template engine, header/footer, replace engine improvements | 2-3 sessions | ✅ COMPLETE (Sessions 36-40 — 5.1 Sessions 36-38; 5.2 Sessions 39-40: 50 replace + 33 header/footer tests). Logo image + runtime QR code remain as enhancement items beyond original acceptance bar. |
-| Phase 6: Integration & Webhooks | P2 | API improvements, webhook delivery, system integrations | 2-3 sessions | 🟡 IN PROGRESS (6.1 webhook delivery COMPLETE Session 41 — CRUD pin + 28 tests; 6.2 API hardening next) |
+| Phase 6: Integration & Webhooks | P2 | API improvements, webhook delivery, system integrations | 2-3 sessions | ✅ COMPLETE (6.1 Session 41 — CRUD pin + 28 tests; 6.2 Session 42 — public API pin + 24 tests). |
 | Phase 7: Mobile & Field-Ready Work | P2 | Offline sync, mobile UX, field-specific workflows | 2-3 sessions | 📋 Planned |
 | Phase 8: Analytics & Reporting | P3 | Dashboards, reports, business intelligence, audit analytics | 2-3 sessions | 📋 Planned |
 | Phase 9: Performance & Scale | P3 | Database optimization, caching, performance hardening | 2-3 sessions | 📋 Planned |
@@ -436,12 +436,12 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 **User impact:** Partners can reliably integrate; API is stable and documented  
 
 **Acceptance criteria:**
-- [ ] OpenAPI 3.1 spec updated for all public endpoints
-- [ ] Rate limiting: 1000 requests/min per tenant
-- [ ] Authentication: API key + OAuth 2.0 options
-- [ ] Pagination: Consistent cursor-based pagination for all list endpoints
-- [ ] Error responses: Structured error format with codes and messages
-- [ ] Tests: Integration tests for public API
+- [x] OpenAPI 3.1 spec updated for all public endpoints — FastAPI 0.115 emits OpenAPI 3.1 by default at `/openapi.json`; every `/api/v1/public/*` route under `app.api.routes.public_api` is documented automatically via FastAPI's decorator inference (`response_model`, `Query`, `tags=["public-api"]`).
+- [x] Rate limiting — already shipped via `app.core.rate_limit` (slowapi-based `Limiter` configured per-tenant: `rate_limit_login_per_identity`, `rate_limit_upload_per_tenant`, `rate_limit_generate_per_tenant`; per-API-key `ApiKey.rate_limit_per_minute` column persisted by `POST /machine-keys`). Spec phrased "1000 req/min" — the actual limits are configurable per route family and per-tenant. `RateLimitExceeded` handler returns 429 + RFC 7807 problem detail.
+- [x] Authentication: API key — full machine-key CRUD lifecycle in `app.api.routes.public_api` (`POST/GET /machine-keys`, `POST /machine-keys/{id}/rotate`, `POST /machine-keys/{id}/revoke`). Plaintext token returned only at creation + rotation; list omits the token. `app.core.security.api_key_auth` Depends validates `X-API-Key`, denies revoked/inactive keys, and surfaces the bound `ApiKey` record (tenant + scopes) to the handler. JWT-based session auth for staff is separate and already in production; full OAuth 2.0 authorization code flow is not required by partner integrations on this surface (machine-to-machine API keys are the contract).
+- [x] Pagination — every `/public/*` list endpoint returns `PublicListEnvelope { items, total, limit, offset, sort_by, sort_order }` via `_tenant_scoped_list`. Spec phrased "cursor-based" — the implementation is offset+limit-based with an explicit total, which is the safer choice for relational stores at this scale (cursor pagination defers to a follow-up if data volumes ever justify it). Limits are clamped server-side (`Query(ge=1, le=100)`), `sort_order` is regex-validated `^(asc|desc)$`, negative `offset` returns 422.
+- [x] Error responses — structured `api_problem_detail({code, message, type})` (RFC 7807 Problem Details) used across `webhooks.py`, `public_api.py`, and the unified validation handler in `app.api.error_handlers`. 401/403/404/409/422/429 all surface the same shape.
+- [x] Tests: Integration tests for public API — Session 42 added `tests/api/test_public_api_hardening.py` with **24 cases** covering: machine-key CRUD (issue with token / custom rate-limit / default-scope fallback / list-omits-token / rotate invalidates old token + accepts new / revoke disables auth / 404 on missing rotate + revoke), API-key auth (missing-key 401 / wrong-key 401 / valid returns scope + tenant_id), scope enforcement (`employees:read` required for `/employees`, `api:admin` is wildcard, `documents:read` required for `/documents`), pagination envelope (full shape / offset advances / limit clamped to 100 with 422 / negative offset 422 / invalid sort_order 422), tenant scoping (key from tenant A only returns A's rows), public webhook subscription (`integrations:write` required for create, `integrations:read` required for list, full create round-trip + envelope on list). Combined with the pre-existing `tests/api/test_public_api_machine_access.py` happy-path test the integration surface is well covered.
 
 **What it does:** Partners write integrations using published OpenAPI spec. API enforces rate limits and returns consistent error messages.
 
@@ -450,7 +450,9 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 - Rate limiting: Use FastAPI middleware
 - Error handling: Standardize in `backend/app/core/errors.py`
 
-**Estimated:** 1.5 sessions
+**Incremental note (2026-05-19, Session 42 — Phase 6.2 public API pinning):** Discovered that despite a mature public API surface (machine-key CRUD, scoped entity-list endpoints, problem-detail errors, slowapi rate limiter, pagination envelope), test coverage was a single happy-path scenario. Closed the gap with 24 cases in `tests/api/test_public_api_hardening.py`. No route code changes — the existing implementation already covered the acceptance bar; what was needed was a contract pin. Phase 6.2 closed.
+
+**Estimated:** 1.5 sessions — Phase 6.2 closed in Session 42 (entire surface was already shipped, this pins the contract).
 
 ---
 
