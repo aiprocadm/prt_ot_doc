@@ -4,11 +4,12 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.core.utils.canonical_hash import compute_sha256_input
+from app.domains.templating.renderer import render_docx as _render_docx_production
 from app.modules.templates.linter import (
     inspect_template_context as _inspect_template_context,
     lint_template,
 )
-from app.modules.templates.render import render_docx
+from app.modules.templates.passport import inject_passport
 
 
 def build_passport(
@@ -71,5 +72,21 @@ def inspect_docx_template(
     )
 
 
-def render_preview_docx(*, template_bytes: bytes, data: dict[str, Any], passport: dict[str, Any], visible_passport: bool = False) -> bytes:
-    return render_docx(template_bytes, data, passport, visible_passport=visible_passport)
+def render_preview_docx(
+    *,
+    template_bytes: bytes,
+    data: dict[str, Any],
+    passport: dict[str, Any],
+    visible_passport: bool = False,
+) -> bytes:
+    """Render a template for preview using the same pipeline as final document
+    generation.
+
+    Delegates to :func:`app.domains.templating.renderer.render_docx` (docxtpl
+    based) followed by :func:`inject_passport`, mirroring the production
+    document pipeline in ``app.tasks._core``. Keeping both paths on the same
+    renderer is what makes the "preview matches final" acceptance contract
+    true by construction — see ``tests/test_templates_preview_parity.py``.
+    """
+    rendered = _render_docx_production(template_bytes, data)
+    return inject_passport(rendered, passport, visible=visible_passport)
