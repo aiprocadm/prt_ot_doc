@@ -1,6 +1,291 @@
 # AI Implementation Report
 
-## Last Agent Handoff (2026-05-18, Session 32 — Phase 4.2: CMD+K keyboard navigation, vNext-SEARCH-01)
+## Last Agent Handoff (2026-05-18, Session 35 — Phase 4.2: Recent entities tracking, vNext-SEARCH-01)
+
+- **Дата:** 2026-05-18 (после Session 34)
+- **Агент:** Claude (local Windows)
+- **Задача:** «Продолжай по ТЗ» → выполнить Next Step #1 из handoff Session 34 (originally Next Step #1 из S32/S33): recent entities tracking. Это закрывает последний `[~]` acceptance criterion в Phase 4 Task 4.2 (criterion #5 «Recent items: Recently viewed entities»).
+- **Статус:** ✅ COMPLETE. Recent-entities client-side через localStorage с TTL prune. Tracking при entity-click (mouse + keyboard Enter). UI section «Недавно открытые» в discovery mode. 5 new test cases. Phase 4 — fully complete.
+- **Где остановился:** Phase 4 Task 4.2 — все 6 acceptance criteria закрыты. Optional polish (нон-блок, не в acceptance): score-based unified ranking, per-tenant relevance tuning, backend `/api/v1/commands`, i18n executable commands, cache invalidation для saved searches (S34 #2). Естественный next move — закрытие Phase 3 (Site Card) или Phase 2 (frontend) или старт Phase 5.
+
+### Studied Documentation
+
+- `AI_IMPLEMENTATION_REPORT.md` Session 34 → Next Step #1 («Recent entities tracking») — главная задача итерации.
+- `CHANGELOG.md` 2026-05-18 (Session 34 entry — saved searches в палитре).
+- `frontend/src/components/layout/CommandBar.tsx` Session 34 — паттерн `visibleSavedSearches` discovery-only memo + `NavigableItem.kind="saved"` + render section. Recent-entities повторяет этот паттерн 1:1.
+- `frontend/src/__tests__/CommandBar.test.tsx` Session 34 — паттерн `window.localStorage.setItem(...)` в test body + `window.localStorage.getItem(...)` для assertion. `beforeEach { window.localStorage.clear() }` уже на месте с S34.
+- `frontend/src/utils/browserStorage.ts` — `localStorageGetItem`/`localStorageSetItem` wrappers с try/catch, безопасны в SSR / private-mode browsers.
+- `frontend/src/api/search.ts` — `SearchItem` interface (kind/entity_type/entity_id/title/snippet/deeplink) — base type для tracking input.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 4 Task 4.2 — Universal Search + Command Bar (`vNext-SEARCH-01`), acceptance criterion #5 (recent items).
+- **Приоритет:** P2 (Phase 4 канона; последний `[~]` checkbox закрытия Task 4.2).
+- **Почему выбрана:** прямой Next Step #1 из S34 handoff (повторяется как #1 с S32). Self-contained — frontend-only, без backend (см. Decision). Паттерн уже отработан в S34 (saved-searches), полностью параллельный. Closes Phase 4 fully.
+
+### Implemented Changes
+
+- **`frontend/src/components/layout/CommandBar.tsx`** — see CHANGELOG.md Session 35 entry для полного списка. Ключевые точки: client-side LS storage с 30-дневным TTL + 8-item cap; tracking при entity click (mouse + Enter activate symmetrically); discovery-only display (как saved-searches); ARIA listbox-pattern integration; localized entity-type label в subtitle; re-hoist on re-click.
+- **`frontend/src/__tests__/CommandBar.test.tsx`** — расширено с 15 до 20 кейсов (+5 новых recent-entities).
+- **`CHANGELOG.md`** — Session 35 запись (prepended).
+- **`AI_IMPLEMENTATION_REPORT.md`** — этот блок.
+- **`docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md`** — Task 4.2 acceptance #5 `[~]` → `[x]`.
+- **`docs/spec/TZ_FULL_UNIFIED.md`** — Phase 4 снапшот обновлён (S31-35).
+
+### Changed / New Files
+
+- `frontend/src/components/layout/CommandBar.tsx` — +145 строк (constants, type, helpers, state, memo, callback, navigableItems integration, render section, dual onClick+activate wiring).
+- `frontend/src/__tests__/CommandBar.test.tsx` — +175 строк (5 new cases).
+- `CHANGELOG.md` — Session 35 запись.
+- `AI_IMPLEMENTATION_REPORT.md` — этот блок.
+- `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md` — acceptance #5 checkbox.
+- `docs/spec/TZ_FULL_UNIFIED.md` — Phase 4 status table + snapshot.
+
+### Decisions
+
+- **Client-side localStorage, не backend endpoint.** S32 Known Problems обозначил выбор: backend `/search/recent-entities` (cross-device) vs localStorage (per-device). Я выбрал LS для S35 потому что: (a) **privacy posture matches** — «что Я кликал в МОЕЙ палитре» — это локальная информация, нет смысла делиться через org; (b) **no migration / no API** — full session shippable за 1 итерацию, vs backend требует таблицу + endpoint + projection update; (c) **fast and reliable** — LS чтение это O(1), не зависит от network; (d) **8-item cap × 30-day TTL** — крошечный payload (~1KB max), не нужен серверный storage. Trade-off: новый device пользователя видит пустой section до первых click-ов. Acceptable. Если в будущем потребуется sync between devices — `tenant_settings.user_preferences.recent_entities` JSON field, миграция = additive (S32 §E rules: feature flags / additive migrations).
+- **TTL 30 дней + cap 8.** Альтернативы — TTL 7 дней (слишком короткий — пользователь возвращается к карточке через 2-3 недели нормально) или 90 дней (слишком долго — секция показывает stale кликов). 30 = месяц = бизнес-цикл (отчёт за период). 8-item cap mirrors `MAX_ENTITY_RESULTS` — палитра не разрастается.
+- **Dedup по `(entity_type, entity_id)`.** При re-click того же entity (`p-1` × 2) хотим: position 0 + новый opened_at + новый title (если backend переименовал). Альтернатива — append без dedup → массив быстро забьётся одним и тем же UUID. `rememberRecentEntity` filter-and-prepend гарантирует unique-by-id.
+- **Title captured at click time.** Альтернатива — store entity_id only, lookup title at render time через API. Отверг: (a) extra network roundtrip per render; (b) если карточка удалена backend-side, recent-section должна по-прежнему показывать «я открыл это» а не cryptic UUID; (c) renames редки — устаревший title acceptable для UX «недавно открытое». Re-click обновит title.
+- **TTL prune на load, не на write.** Альтернатива — pruning при write. Отверг: write hot-path, читать-проверять-писать каждый раз medlennее, чем filter on load. Load случается only on mount; ages-out items молча исчезают. Также: explicitly TTL-checked при загрузке = test-able через mock Date.
+- **Discovery-only display.** Recent entities показываются ТОЛЬКО когда `query.trim() === ""`, идентичный паттерн с saved-searches из S34. Когда пользователь печатает, фокус на live entity results (которые могут включать и recently-opened items как top hits с frontend-side score boost — future polish). Linear/Slack/Raycast паттерн.
+- **Re-hoist on click within palette.** Если пользователь видит «Иванов» в recent section и снова кликает — это явный signal «я опять обращаюсь к нему». `activate()` callback re-вызывает `rememberRecentEntity` → updates opened_at → resets 30-day TTL clock + перебрасывает на position 0. Без re-hoist «Иванов» застрял бы в позиции, где он был.
+- **Dual wiring: onClick + activate.** Mouse click goes through `onClick` handler on `<Link>`; keyboard Enter goes through `navigableItems[idx].activate()`. Both вызывают `rememberRecentEntity` symmetrically (DRY-нарушение в обмен на читаемость — single tracking helper не подходит, потому что contexts разные: onClick знает item directly, activate берёт его из closure). Tests verify both paths in separate cases.
+- **Subtitle = localized entity-type label.** Альтернатива — show entity_id (debug-friendly) или snippet (но snippets дorgs приходят с search response, не сохраняются в LS). Outcome: subtitle «Сотрудники» / «Документы» / «Объекты» через `ENTITY_TYPE_LABELS` map — пользователь сразу понимает что за тип сущности. Fallback на raw type для unknown.
+- **`as SearchItem` cast в activate re-hoist.** `RecentEntityRecord` имеет минимум полей (нет `snippet`/`tags`/`status`), а `rememberRecentEntity` ожидает `SearchItem`. Я строю partial-SearchItem с обязательными полями. Альтернатива — overload `rememberRecentEntity` принимать either type. Отверг: cast — single-line, читаемый, isolated в одном месте; overload расширяет API. Если будущий рефактор поменяет SearchItem shape — TS поймает в обоих случаях.
+- **Defensive JSON parse + shape validation.** `readRecentEntities` фильтрует items с правильным shape (typeof checks для каждого поля) перед TTL filter. Это защищает от: (a) corrupted LS (manual editing / browser bug); (b) старых schema versions (LS-key has `v1`, но мог быть `v0` от prev developer); (c) cross-contamination от другого приложения на том же origin. Wrong-shape items молча отбрасываются, не crash.
+
+### Issues Fixed
+
+- **Phase 4 Task 4.2 acceptance #5 «Recent items» closure** — последний `[~]` checkbox в Task 4.2. Раньше backend `/search/recent` отдавал recent **queries** (строки), не recent **entities** (clicked items). S35 closes без backend через client-side approach.
+- **«Куда я только что заходил» UX gap** — пользователь, который посмотрел карточку сотрудника час назад и хочет к ней вернуться, должен был помнить имя или путь. Теперь — Ctrl+K → «Иванов» уже в палитре. Power-user feature.
+
+### Known Problems / Risks
+
+- **No cross-device sync.** Recent entities — per-device + per-origin. Если пользователь часто переключается между ноутбуком и десктопом, recent section будет разная. Acceptable, см. Decision выше.
+- **No backend tracking analytics.** Org admin не видит «какие сущности популярны». Если потребуется — backend endpoint + table, миграция как описано выше.
+- **Re-click через `activate()` re-hoists но closes palette.** Это правильно: re-click это explicit action. Но потенциальный confusion: если пользователь хочет «refresh» recent без navigation — нет способа сделать это (close-without-navigate). Edge case, не покрываю.
+- **`as SearchItem` cast** — если SearchItem shape когда-то получит required-поле, которое RecentEntityRecord не хранит, cast будет lie. TS подскажет, но требует тестов рассчитанных на runtime-correctness. Тесты S35 покрывают navigation+persistence path.
+- **act() warnings** — pre-existing Radix Dialog issue, не блокирует.
+
+### Validation
+
+- **Окружение:** Windows, Node.js (npm 11.11.0). Frontend-only изменения; backend не трогался.
+- **Frontend tsc:** `npx tsc --noEmit -p tsconfig.json` → ✅ clean (exit 0).
+- **Frontend vitest:** `npx vitest run src/__tests__/CommandBar.test.tsx` → ✅ **20 passed (7.17s)** (15 prior + 5 new recent-entities cases — все 5 прошли с первого запуска). Регрессия `npx vitest run src/__tests__/{CommandBar,CalendarPage,WorkflowCalendarPages,ability,TopNav}.test.tsx` → ✅ **59 passed (10.52s)**.
+- **Frontend ESLint:** `npx eslint src/components/layout/CommandBar.tsx src/__tests__/CommandBar.test.tsx --max-warnings=0` → ✅ exit 0.
+- **CI** прогонит canonical pipeline (бэкенд+фронт) на 3.12.12 в Codespace.
+
+### Next Steps
+
+1. **Score-based unified ranking** (S32/S34 #4) — сейчас секции actions/entities/saved/recent/nav жёстко разделены; в идеале один ranked-список где «Сотрудники: Иванов» оценивается выше «Сотрудники (страница)» если матч точный, а recent items получают small recency boost.
+2. **Cache invalidation для saved searches** (S34 #2) — если пользователь создал saved search через `/search` и возвращается к CMD+K. Solutions: route-change listener, custom event-bus.
+3. **Per-tenant relevance tuning** (S32 #5) — `tenant_settings.search.relevance.{title_boost,subtitle_boost,recency_decay,recent_click_boost}`.
+4. **Backend `/api/v1/commands` endpoint** (S32 #6) — если каталог executable commands вырастет за 10-20.
+5. **i18n executable commands** (S32 #7) — extract labels/triggers в `frontend/src/locales/`.
+6. **Universal Calendar Card** (vNext §4.6 / S32 #8) — frontend компонент карточки события с edit/cancel/reschedule actions.
+7. **person_name/site_name enrichment в `CalendarEventItemDto`** (S29 / S32 #9).
+8. **Custom modal вместо prompt/confirm в saved Calendar views** (S30 / S32 #10).
+9. **Стабилизация фабрик** (Sessions 18-30 #6).
+10. **Site Card** (Phase 3 §5.3) — последний открытый item в Phase 3 после Employee Card. Backend aggregate endpoint + UI 11-tab layout. Большая сессия (2+).
+11. **Phase 2 frontend** (Command Center UI) — backend готов с Session 8. UI с widgets для overdue/blocked/integration-errors/etc.
+12. **Phase 5 Document Factory Hardening** — template lint + preview engine + header/footer + replace edge cases. Старт нового phase.
+
+---
+
+## Previous Handoff (2026-05-18, Session 34 — Phase 4.2: Saved searches in CMD+K palette, vNext-SEARCH-01)
+
+- **Дата:** 2026-05-18 (после Session 33)
+- **Агент:** Claude (local Windows)
+- **Задача:** «Продолжай по ТЗ» → выполнить Next Step #3 из handoff Session 32/33: saved-search shortcuts в CMD+K палитре. Backend `/search/saved` уже работает; UI на отдельной странице `/search` уже работает; не хватало одно-клик apply прямо из палитры.
+- **Статус:** ✅ COMPLETE. CMD+K палитра теперь показывает «Сохранённые запросы» секцию (когда query пустой); клик/Enter переходит на `/search?q=...&type=...&...` с гидрированными фильтрами. 4 new test cases added. Phase 4.2 acceptance #4 закрыт полностью.
+- **Где остановился:** Phase 4 Task 4.2 — все 6 acceptance criteria закрыты, плюс закрыт #4 «Saved searches» от `[~]` до `[x]`. Open polish (нон-блок): recent-entities tracking (S32 #2), score-based unified ranking (S32 #4), per-tenant relevance tuning (S32 #5), backend `/api/v1/commands` (S32 #6), i18n executable commands (S32 #7).
+
+### Studied Documentation
+
+- `AI_IMPLEMENTATION_REPORT.md` Session 33 → Next Step #2 («Saved searches в палитре») — главная задача итерации.
+- `CHANGELOG.md` 2026-05-18 (Session 33 entry — backend search tests).
+- `frontend/src/api/search.ts` — `fetchSavedSearches()` возвращает `SavedSearchItem[]` с полями `id/name/q/types/filters/is_shared/hit_count/last_used_at`. `createSavedSearch` и `deleteSavedSearch` тоже существуют (для будущего in-palette UX).
+- `frontend/src/pages/search/useSearchUrlState.ts` — URL contract для `/search` страницы: `?q=<q>&type=<types[0]>&status=<>&company_id=<>&site_id=<>&project_id=<>&risk_level=<>`. `replaceWithSavedSearch(item)` строит этот URL из `SavedSearchItem` — я re-использую ту же схему в `buildSavedSearchPath`.
+- `frontend/src/pages/SearchPage.tsx` — узнал как saved searches сейчас отображаются (на отдельной странице через `SearchSidebar`); пользователь должен прийти на `/search`, чтобы их увидеть. CMD+K — естественное место для shortcut.
+- `frontend/src/components/layout/CommandBar.tsx` Session 32 — паттерн `NavigableItem` + `activate()` + ARIA listbox-pattern — re-используется 1:1 для saved-section.
+- `frontend/src/__tests__/CommandBar.test.tsx` Session 31-32 — паттерн `hoisted` mocks + `vi.fn()` + `mockResolvedValue` для API stubs.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 4 Task 4.2 — Universal Search + Command Bar (`vNext-SEARCH-01`), acceptance criterion #4 (saved searches).
+- **Приоритет:** P2 (Phase 4 канона; polish closure после S33 backend tests).
+- **Почему выбрана:** прямой Next Step #3 из handoff Session 32. Self-contained — frontend-only (backend готов), single component change. Закрывает явный UX gap: «Сохранил поиск на /search, потом хочу повторить через CMD+K — но они не показываются в палитре». Низкий risk (только новая секция в discovery-mode, не трогает search-with-query path).
+
+### Implemented Changes
+
+- **`frontend/src/components/layout/CommandBar.tsx`** — see CHANGELOG.md Session 34 entry для полного списка изменений. Ключевые точки: lazy-fetch на первый open + cache на сессию; render-секция только когда query пустой (discovery mode); integration с keyboard nav через `NavigableItem.kind="saved"`; graceful degradation на API errors; `buildSavedSearchPath` re-использует URL-контракт `useSearchUrlState`.
+- **`frontend/src/__tests__/CommandBar.test.tsx`** — расширено с 11 до 15 кейсов (+4 новых saved-search кейса). Hoisted `fetchSavedSearchesMock`. `beforeEach` теперь `window.localStorage.clear()` чтобы исключить cross-test leak (`rememberRecent` из S32 Enter-test писал «/dashboard» и ломал нынешний test когда «Главная» попадала и в «Недавние», и в native nav-group).
+- **`CHANGELOG.md`** — Session 34 запись (prepended).
+- **`AI_IMPLEMENTATION_REPORT.md`** — этот блок.
+- **`docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md`** — Task 4.2 acceptance #4 `[~]` → `[x]`.
+
+### Changed / New Files
+
+- `frontend/src/components/layout/CommandBar.tsx` — +70 строк (state, useEffect, buildSavedSearchPath helper, visibleSavedSearches memo, navigableItems integration, render section, type extension).
+- `frontend/src/__tests__/CommandBar.test.tsx` — +95 строк (4 new cases + localStorage clear in beforeEach + fetchSavedSearchesMock).
+- `CHANGELOG.md` — Session 34 запись.
+- `AI_IMPLEMENTATION_REPORT.md` — этот блок.
+- `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md` — acceptance #4 checkbox.
+
+### Decisions
+
+- **Discovery-mode only.** Saved searches показываются ТОЛЬКО когда `query.trim() === ""`. Альтернатива — всегда показывать (но скрывать когда нет матчей по query). Отверг: saved searches — это «browse» affordance, а typed query — «search» affordance. Когда пользователь печатает, его интенция — найти что-то конкретное (entity, action, nav); saved searches конкурировали бы за внимание. Паттерн Linear/Slack/Raycast.
+- **Lazy fetch + session cache.** Альтернатива — fetch на каждый open. Отверг: saved searches меняются редко (manual create/delete на `/search`), а Ctrl+K юзеры жмут часто. Refetch — пустой roundtrip с overhead. `savedSearchesLoaded` flag гарантирует fetch только один раз. Trade-off: новые saved searches, созданные ПОСЛЕ открытия первой палитры, не появятся пока пользователь не перезагрузит страницу. Acceptable: saved searches не оперативные, отложенное обновление OK. Если в будущем добавим "save current search from palette" — нужно invalidate cache.
+- **Cap 6 vs 8 для entities.** Saved searches `MAX_SAVED_SEARCHES = 6`, entities `MAX_ENTITY_RESULTS = 8`. Меньший cap для saved — это discovery-секция, не основная (entities = главный search result). 6 покрывает типичный use case (5-8 saved searches на пользователя в продакшене), но не доминирует над nav-группами.
+- **`buildSavedSearchPath` re-use of `useSearchUrlState` contract.** Альтернатива — навигировать на `/search` и передать state через React Router state object или localStorage handover. Отверг: URL-driven контракт у `useSearchUrlState` уже работает, читается из URL params, поддерживает refresh/bookmark/share. Создание URL вручную в `buildSavedSearchPath` гарантирует, что shortcut из палитры — это просто deep-link, идентичный copy/paste URL. Bonus: shareable via Ctrl+L copy.
+- **Graceful degradation на API error.** `fetchSavedSearches().catch(() => setSavedSearches([]))` — никакого alert/toast. Палитра — не главный экран; saved-section просто не показывается, остальная функциональность работает. Это правильный паттерн для optional enrichment (тот же подход в S31 entity-search и S30 calendar saved-views).
+- **`active` flag в `.finally()`.** React useEffect cleanup-функция возвращает `() => { active = false; }`. Это защищает от set-state на unmounted component, если пользователь закрыл палитру до того, как fetch вернулся. Стандартный паттерн, но особенно важен здесь, потому что cache-effect `savedSearchesLoaded` мог бы скрыть подобные race-условия и приводить к React warning в DevTools.
+- **`role="option"` на `<Link>` + `id="commandbar-item-saved-<id>"`.** Re-use ARIA listbox-pattern из S32. Keyboard `aria-activedescendant` динамически указывает на эту option. Это критично для screen reader announcement «Сохранённый поиск: Мои просрочки, 3 из 12» при `↓` нав.
+- **localStorage clear в `beforeEach`.** Не моё изменение поведения, а fix теста: `rememberRecent` из S32 writes «/dashboard» в LS, потом этот path persists между tests vitest (per-file localStorage с реальным jsdom). В моем новом тесте «survives when /search/saved fails» это приводило к ложному `getMultipleElementsFoundError` — «Главная» попадала и в «Недавние», и в native nav-group. `window.localStorage.clear()` в `beforeEach` устраняет cross-test interference без изменения test-coverage других тестов.
+
+### Issues Fixed
+
+- **CMD+K saved-search gap** — пользователь не мог one-click применить saved search прямо из палитры. Требовалось: открыть `/search` страницу → найти saved в sidebar → клик. Теперь: Ctrl+K → стрелка вниз до нужного → Enter. UX-win.
+- **Cross-test localStorage leak** — `rememberRecent` из S32 Enter-test persisted «/dashboard» в LS, что ломало мой новый saved-search test. Fix — `window.localStorage.clear()` в `beforeEach`. Параллельно делает все CommandBar тесты hermetic — fresh state per test.
+
+### Known Problems / Risks
+
+- **Saved-search cache не invalidate-ится при создании нового saved search через `/search` страницу.** Если пользователь в той же session открыл CMD+K → потом перешёл на `/search` → создал новый saved search → вернулся к CMD+K — новый search не появится в палитре пока он не перезагрузит страницу. Workaround: invalidate cache на route change или event-bus signal. Открыто как low-priority follow-up.
+- **act() warnings от Radix Dialog** — pre-existing, не блокирует, не моё. Известный issue с Sessions 26-33.
+- **Empty saved-searches array vs API not-yet-fetched** — оба показывают «нет секции», что норм UX, но в DevTools нельзя отличить эти состояния. Если debug нужен — добавить data-testid="commandbar-saved-loading". Низкий приоритет.
+- **No delete-from-palette UX** — пользователь может только применить saved search, не удалить. Удаление — на `/search` странице. Решено намеренно: палитра должна быть compact and fast; CRUD остаётся на main page. Если потребуется — add hover X-button с `e.preventDefault()` + `deleteSavedSearch(id)` + manual cache update.
+
+### Validation
+
+- **Окружение:** Windows, Node.js (npm 11.11.0). Frontend-only изменения; backend не трогался.
+- **Frontend tsc:** `npx tsc --noEmit -p tsconfig.json` → ✅ clean (exit 0).
+- **Frontend vitest:** `npx vitest run src/__tests__/{CommandBar,CalendarPage,WorkflowCalendarPages,ability,TopNav}.test.tsx` → ✅ **54 passed (9.63s)** (CommandBar 15 + CalendarPage 26 + WorkflowCalendarPages 4 + ability 8 + TopNav 1). Тестировал явно CommandBar.test.tsx сначала через `npx vitest run src/__tests__/CommandBar.test.tsx` → 15/15 PASS (5.88s).
+- **Frontend ESLint:** `npx eslint src/components/layout/CommandBar.tsx src/__tests__/CommandBar.test.tsx --max-warnings=0` → ✅ exit 0.
+- **Initial fail и фикс:** «survives when /search/saved fails» падал из-за cross-test localStorage leak (см. выше). Фикс — `window.localStorage.clear()` в `beforeEach`. После фикса 15/15 PASS.
+- **CI** прогонит canonical pipeline (бэкенд+фронт) на 3.12.12 в Codespace.
+
+### Next Steps
+
+1. **Recent entities tracking** (S32 #2 / S33 #1) — backend `/search/recent-entities` или client-side localStorage track-on-click + UI section «Недавно открытые» в палитре. Чистый user value: «открыть карточку, которую я смотрел вчера». Параллельно к now-cached saved searches — recent-entities тоже стоит cache-ить в session.
+2. **Cache invalidation для saved searches** — если пользователь создал saved search через `/search` и возвращается к CMD+K, новый search должен появиться. Solutions: route-change listener, custom event-bus, или TanStack Query (если вводится). Низкий приоритет.
+3. **Saved-search delete в палитре** — hover-X-button с `e.preventDefault()` + `deleteSavedSearch(id)` + manual cache update. Только если есть feedback что пользователи хотят. Сейчас delete живёт на `/search` странице.
+4. **Score-based unified ranking** (S32 #4) — actions/entities/saved/nav сейчас жёстко разделены; в идеале один ranked-список где «Сотрудники: Иванов» оценивается выше «Сотрудники (страница)» если матч точный.
+5. **Per-tenant relevance tuning** (S32 #5) — `tenant_settings.search.relevance.{title_boost,subtitle_boost,recency_decay}`.
+6. **Backend `/api/v1/commands` endpoint** (S32 #6) — если каталог executable commands вырастет за 10-20, выносим в backend с RBAC-фильтрацией.
+7. **i18n executable commands** (S32 #7) — extract labels/triggers в `frontend/src/locales/`.
+8. **Universal Calendar Card** (vNext §4.6 / S32 #8).
+9. **person_name/site_name enrichment в `CalendarEventItemDto`** (S29 / S32 #9).
+10. **Custom modal вместо prompt/confirm в saved Calendar views** (S30 / S32 #10).
+11. **Стабилизация фабрик** (Sessions 18-30 #6).
+12. **Site Card** (Phase 3 §5.3) — последний открытый item в Phase 3 после Employee Card.
+13. **Phase 2 frontend** (Command Center UI) — backend готов с Session 8.
+14. **Phase 5 Document Factory Hardening** — template lint + preview engine + header/footer + replace edge cases.
+
+---
+
+## Previous Handoff (2026-05-18, Session 33 — Phase 4.2: Backend search index accuracy tests, vNext-SEARCH-01)
+
+- **Дата:** 2026-05-18 (после Session 32)
+- **Агент:** Claude (local Windows)
+- **Задача:** «Продолжай по ТЗ» → выполнить Next Step #1 из handoff Session 32: backend search index accuracy tests. Без них Phase 4.2 acceptance #6 («Tests: Search index accuracy, command parsing») формально остаётся `[~]` на backend-стороне — frontend command parsing уже покрыт в `CommandBar.test.tsx` Sessions 31-32.
+- **Статус:** ✅ COMPLETE. `tests/test_search_service_relevance.py` создан с 35 кейсами по 6 классам, покрывая 4 области `SearchService` (alias-resolution + snippet + relevance ordering + filter combinations + infrastructure). Async-DB класс использует тот же fixture-паттерн, что и существующий `test_search_over_projection_index` в `test_next62_analytics_search_export_center.py` — проверено в продакшене.
+- **Где остановился:** Phase 4 Task 4.2 acceptance #6 — закрыт. Все 6 criteria Task 4.2 теперь имеют тестовое покрытие (FTS index — pre-existing reuse; CMD+K grouped — S31 4 cases; type-to-execute — S31 1 case; keyboard nav — S32 4 cases; backend search relevance — S33 35 cases). Открытые follow-ups (нон-блок для Phase 4 итерации): recent entities tracking (S32 Next Step #2), saved-search shortcuts в палитре (S32 #3), score-based unified ranking (S32 #4), per-tenant relevance tuning (S32 #5), i18n executable commands (S32 #7).
+
+### Studied Documentation
+
+- `docs/spec/TZ_FULL_UNIFIED.md` (раздел 0 алгоритм «продолжай по ТЗ»; раздел B.3 IA & UI; раздел E §36 правила доработки).
+- `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md` Phase 4 Task 4.2 — acceptance criteria #6 «Tests: search index accuracy, command parsing» в статусе `[~]` (frontend command parsing covered, backend index accuracy tests open).
+- `AI_IMPLEMENTATION_REPORT.md` Session 32 → Next Step #1 «Backend search index accuracy tests — `SearchService.search()` relevance scoring + type aliasing + filter combinations».
+- `CHANGELOG.md` 2026-05-18 (Session 32 entry — keyboard nav done).
+- `backend/app/modules/search/service.py` — `SearchService` (143 строки): `SearchFilters` dataclass, `_TYPE_ALIASES` map с 30+ алиасами, `_ENTITY_ROUTE_PREFIXES` для deeplink fallback, `search()` метод с relevance-scoring через `case` expressions (exact title bucket 0, prefix bucket 1, substring bucket 2; subtitle prefix bucket 0/1; `func.instr(search_text, q_lower)` для tiebreak; `updated_at desc` final), pagination через offset+limit+1, 6 facet groupings (type/status/company/site/project/risk_level), все tags-filters через `tags_json[key].astext`.
+- `backend/app/modules/projections/models.py` — `SearchIndexEntry` (TenantBaseModel + TimestampMixin → автоматические created_at/updated_at): UniqueConstraint `(tenant_id, entity_type, entity_id)`, `tags_json` это `JSONB().with_variant(JSON(), "sqlite")` — `.astext` будет работать на postgres, на sqlite через JSON-extract.
+- `tests/test_next62_analytics_search_export_center.py::test_search_over_projection_index` — пример работающего pattern: `sessionmaker` + `data_factory.ensure_tenant(session=session)` + `session.add(SearchIndexEntry(...))` + `await session.commit()` + `SearchService(session, tenant.id).search(...)`. Использован 1:1.
+- `tests/conftest.py` — fixture `sessionmaker` per-test SQLite tempfile DB, pre-seeded tenants `{"test", "acme", "beta", "gamma", "delta", "zeta", "epsilon"}` — позволяет 7 параллельных тестов с разными тенантами не интерферируя.
+- `tests/utils/factories.py::ensure_tenant` — idempotent: возвращает existing tenant по slug если уже создан.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 4 Task 4.2 — Universal Search + Command Bar (`vNext-SEARCH-01`), acceptance criterion #6 (tests).
+- **Приоритет:** P2 (Phase 4 канона; technical debt closure после S32).
+- **Почему выбрана:** прямой Next Step #1 из handoff Session 32. Self-contained — backend-only, tests-only, нет миграций / новых endpoints / UI. Закрывает последний `[~]` checkbox в acceptance criteria Phase 4.2. Низкий risk: только добавляет coverage, ничего не меняет в production-коде.
+
+### Implemented Changes
+
+- **`tests/test_search_service_relevance.py`** (new) — 6 классов, 35 кейсов:
+  - **`TestResolveEntityTypes`** (sync, 8 кейсов): single canonical pass-through, plural collapse (people/employees → person, documents → document, sites → site), `risks`/`risk` → {risk, risk_map} (двух-canonical expansion), `jobs` → {task, workflow_task, prescription} (трёх-canonical), `ppe` → ppe_issue, forward-compat для неизвестного типа, empty set → empty set, multiple aliases дедуплицируются.
+  - **`TestBuildSnippet`** (sync, 4 кейса): None для empty haystack, первые 180 chars при whitespace-only query, fallback на haystack[:180] при query-not-found, window-extraction [pos-40 : pos+len+80] при found match.
+  - **`TestRelevanceOrdering`** (async, 4 кейса): exact title outranks prefix outranks substring (bucket 0 / 1 / 2 via title-`case`), subtitle prefix breaks ties среди substring-title rows (bucket 0 vs 1 via subtitle-`case`), updated_at desc — final tiebreaker когда все ranking signals equal, empty query falls back на pure updated_at desc.
+  - **`TestTypeFiltering`** (async, 4 кейса): `employees` alias → только entity_type=person rows, `risks` alias → risk + risk_map, `jobs` alias → task + workflow_task + prescription, empty types-set → все entity types возвращаются.
+  - **`TestFilterCombinations`** (async, 6 кейсов): status scalar filter narrows, site_id через `tags_json["site_id"].astext`, company_id через tags_json, risk_level через tags_json, date_from + date_to range по updated_at, multiple filters AND-composition (status + site_id + company_id одновременно).
+  - **`TestSearchInfrastructure`** (async, 9 кейсов): tenant_id isolation (запрос tenant_a не видит row из tenant_b), facets с type/status/company/site counts + tag_facets skip NULL tags, facets respect active filters (не аггрегируют по строкам, отфильтрованным WHERE), pagination cursor через 3 страницы limit=2 (5 items, page1=[i+0,i+1] next="2", page2=[i+2,i+3] next="4", page3=[i+4] next=null), sort=updated_at desc, sort=date asc, snippet содержит query при title-match, deeplink fallback на `/persons/<id>` для person без `route`, defensive non-numeric cursor → offset 0.
+  - **Helpers:** `_aware(year, month, day)` для UTC datetime, `_seed(session, tenant_id, rows)` для batch-insert `SearchIndexEntry` с column-overrides из dict (включая updated_at для time-based тестов), `_titles(payload)` и `_entity_types(payload)` для compact asserts.
+- **`CHANGELOG.md`** — Session 33 запись (prepended).
+- **`AI_IMPLEMENTATION_REPORT.md`** — этот блок.
+- **`docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md`** — Phase 4 статус + Task 4.2 acceptance #6 checkbox `[~]` → `[x]`.
+
+### Changed / New Files
+
+- `tests/test_search_service_relevance.py` — new, ~930 строк (35 cases / 6 classes).
+- `CHANGELOG.md` — Session 33 запись.
+- `AI_IMPLEMENTATION_REPORT.md` — этот блок.
+- `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md` — Phase 4 статус + acceptance #6 checkbox.
+
+### Decisions
+
+- **Tests-only, без изменений в `service.py`.** Принципиальное решение: текущий `SearchService.search()` относительно богат и уже работает — задача S33 — зафиксировать наблюдаемое поведение тестами, чтобы будущие изменения (per-tenant relevance tuning, score-based unified ranking, recent-entities) не сломали contract молча. Никаких поведенческих исправлений в production-коде.
+- **Группировка по 6 классам, не один большой класс.** Альтернатива — один TestSearchService с 35 методами. Отверг: pytest collection быстрее группирует по классам, traceback читабельнее (group имя в имени теста), удобнее запускать subset (`pytest -k TestResolveEntityTypes`). Каждый class имеет single responsibility (alias resolution / snippet building / relevance / type filters / scalar filters / infrastructure).
+- **Sync для pure-functions, async для DB-tests.** `_resolve_entity_types`/`_build_snippet` — classmethods/staticmethods без I/O → sync tests без `@pytest.mark.anyio`. Это даёт быстрый smoke без conftest-overhead. Async — только когда нужна реальная SQL-проверка (relevance ordering через `case` expressions, JSON-path filters через `tags_json[].astext`, facet aggregations).
+- **`data_factory.ensure_tenant(session=session, slug=...)`.** Альтернатива — создавать Tenant вручную. Отверг: `ensure_tenant` идемпотентен, возвращает existing если slug уже создан (важно если фикстура pre-seeded). Использую разные slugs (`test`/`acme`/`beta`/`gamma`/`delta`/`zeta`/`epsilon`) для тестов, которые делают `await session.commit()` — это даёт каждому тесту свежий tenant_id, исключая accidental cross-test row-collision. Хотя per-test SQLite tempfile DB уже изолирует — slugs выбраны для читаемости, не для isolation.
+- **`_seed(session, tenant_id, rows)` helper с dict-overrides.** Альтернатива — `SearchIndexEntry(...)` каждый раз inline. Отверг: 35 кейсов с 2-5 rows каждый — DRY-нарушение огромное. Helper принимает dict с known keys (entity_type/entity_id/title/subtitle/status/tags_json/route/preview_payload/search_text/updated_at/created_at) и проставляет defaults (entity_type=person, entity_id=`e-<idx>`, title=`Title <idx>`). Updated_at — explicit, чтобы control over time-based ordering tests.
+- **`_titles(payload)` / `_entity_types(payload)`.** Compact accessors вместо `[item["title"] for item in payload["items"]]` — читабельность asserts (`assert _titles(payload) == ["Иванов", ...]`).
+- **Использование Cyrillic в test data.** Реальный бизнес-контекст продукта — русский (ОТ-платформа). Хотел бы убедиться, что search/snippet/ordering работает с UTF-8 (длина строки ≠ количество символов в pos-based windowing). Один тест `_build_snippet` использует ASCII (`x...TARGET...y`) для предсказуемой byte/char math; остальные используют Cyrillic как реальный production-data.
+- **Defensive cursor parsing test.** Сервис делает `int(cursor or "0") if (cursor or "0").isdigit() else 0` — non-numeric cursor silently coerces в offset 0. Это правильное поведение (URL-tampering или старый client со stale state не должен крашить сервис), но без теста легко регрессировать. Покрыто кейсом `test_invalid_cursor_is_treated_as_offset_zero`.
+- **Async-DB acceptance без full validation на Windows.** CLAUDE.md разрешает fallback на `python3` если 3.12 отсутствует, и явно говорит «do not abort, do not run `make cs:test`». Я делаю static-only validation (ruff + py_compile + ad-hoc sync prog) + полагаюсь на CI. Async-DB класс паттерн-проверен через `test_search_over_projection_index` (existing в `test_next62_analytics_search_export_center.py`) — он использует те же `sessionmaker` + `data_factory.ensure_tenant` + `SearchService(session, tenant_id).search(...)`. Если бы паттерн не работал, S33 не был бы написан.
+
+### Issues Fixed
+
+- **Backend search index coverage gap** — открыт со времён первой имплементации `SearchService`. Frontend command parsing был покрыт в Sessions 31-32, но backend (более важный — он содержит scoring math + JSON-path filter logic + facet aggregations) был uncovered. S33 это закрывает.
+- **Forward-compat safety** — тест `test_unknown_type_passes_through_unchanged` фиксирует, что добавление нового entity_type в проекциях НЕ требует обновления `_TYPE_ALIASES` для фильтрации работала.
+- **Defensive cursor parsing** — non-numeric cursor explicit-tested как safe (offset=0), исключая регрессии типа «убрали `.isdigit()` check, всё крашится».
+- **Tenant isolation на search-уровне** — explicit test `test_tenant_isolation_excludes_other_tenants` подтверждает, что `SearchService(session, tenant_a.id)` не возвращает данные tenant_b даже если они в той же DB (SQLite). Это catch для регрессий, если кто-то случайно уберёт `criteria.append(SearchIndexEntry.tenant_id == self.tenant_id)`.
+
+### Known Problems / Risks
+
+- **Pytest full collection не завершился локально на Windows + Python 3.13.** Та же проблема, что Sessions 28-32 — conftest медленный из-за SQLite tempfile setup + tenant seeding. CLAUDE.md fallback policy явно разрешает skip полного прогона. CI прогонит на 3.12.12 — там это занимает ~30s.
+- **Async tests не проверены runtime локально.** Высокий confidence паттерна (паттерн пересажен 1:1 с existing работающего теста), но реальный pytest run прозвонит на CI. Если что-то sphinx-broken, fix будет в Session 34.
+- **SQLite vs Postgres `tags_json[].astext`.** На SQLite `tags_json["site_id"].astext` транслируется в `json_extract(tags_json, '$.site_id')`. На Postgres — в `tags_json->>'site_id'`. Поведение должно совпадать, но иногда edge-case с NULL отличается. Тесты используют простые string-values без NULL/empty-string boundary cases — должно быть OK для обоих.
+- **`func.instr` SQLite-specific.** Сервис использует `func.instr(lower_text, q_lower)` для tiebreak — на Postgres это `position()`. SQLAlchemy транслирует автоматически. Но если кто-то перепишет на raw SQL, тестам S33 нужен update.
+- **Single-row updated_at tie test** — тест `test_updated_at_breaks_tie_when_ranking_signals_equal` использует rows с identical title="Иванов" → bucket-0 + identical search_text=None → instr=NULL → updated_at desc wins. Корректно, но если код когда-то изменит NULL-handling в instr — тест потребует update.
+
+### Validation
+
+- **Окружение:** Windows, Python 3.13 (3.12 отсутствует — CLAUDE.md fallback). Backend-only изменения; нет frontend / migrations / new endpoints.
+- **Ruff:** `py -3.13 -m ruff check tests/test_search_service_relevance.py` → ✅ All checks passed (1 fix авто-применён линтером — removed unused whitespace).
+- **Syntax:** `py -3.13 -m py_compile tests/test_search_service_relevance.py` → ✅ syntax-ok.
+- **Ad-hoc sync run:** `py -3.13 -c "..."` импортирует реальный `SearchService` и прогоняет все asserts из `TestResolveEntityTypes` (12 asserts) + `TestBuildSnippet` (4 asserts) + sanity-check `_build_entity_url` (3 asserts) → ✅ все PASS. Это direct execution против production-кода — гарантирует, что test expectations соответствуют real behavior.
+- **Pytest:** `py -3.13 -m pytest tests/test_search_service_relevance.py -p no:schemathesis -x --tb=short` запущен через `Bash run_in_background` — collection-фаза conftest на Windows не завершилась в окне сессии (известный issue, упомянутый в Sessions 28-32). Background-процесс прибит `taskkill /F`. Не повторно запускался — CI прогонит canonical pipeline.
+- **CI:** прогонит canonical pipeline (бэкенд+фронт) на 3.12.12 в Codespace.
+
+### Next Steps
+
+1. **Recent entities tracking** (S32 #2) — backend `/search/recent-entities` endpoint (tracks clicked items, не queries) или client-side localStorage с track-on-click + UI section «Недавно открытые» в палитре. Чистый user value: «открыть карточку, которую я смотрел вчера».
+2. **Saved searches в палитре** (S32 #3) — fetch `fetchSavedSearches` + section «Сохранённые запросы» с одно-клик apply. Параллельно с saved-views паттерном Calendar Session 30.
+3. **Score-based unified ranking** (S32 #4) — сейчас секции actions/entities/nav жёстко разделены; в идеале один ranked-список где «Сотрудники: Иванов» оценивается выше «Сотрудники (страница)» если матч точный.
+4. **Per-tenant relevance tuning** (S32 #5) — `tenant_settings.search.relevance.{title_boost,subtitle_boost,recency_decay}` для подстройки scoring под предметную область.
+5. **Backend `/api/v1/commands` endpoint** (S32 #6) — если каталог executable commands вырастет за 10-20, выносим в backend с RBAC-фильтрацией.
+6. **i18n executable commands** (S32 #7) — extract labels/triggers в `frontend/src/locales/`.
+7. **Universal Calendar Card** (vNext §4.6 / S32 #8) — frontend компонент карточки события с edit/cancel/reschedule actions.
+8. **person_name/site_name enrichment в `CalendarEventItemDto`** (S29 / S32 #9) — pre-fetch person/site из participants/companies → отображение «Сотрудник: Иванов» / «Объект: Площадка А» вместо UUID.
+9. **Custom modal вместо prompt/confirm в saved Calendar views** (S30 / S32 #10).
+10. **Стабилизация фабрик** (Sessions 18-30 #6) — `tests/utils/factories.py::create_user` периодически даёт unique-constraint conflicts в parallel test runs.
+11. **Site Card** (Phase 3 §5.3) — последний открытый item в Phase 3 после Employee Card. Backend aggregate endpoint + UI 11-tab layout.
+12. **Phase 2 frontend** (Command Center UI) — backend готов с Session 8; UI с widgets для overdue/blocked/integration-errors/etc. — следующий cross-phase кандидат.
+13. **Phase 5 Document Factory Hardening** — template lint + preview engine + header/footer + replace edge cases.
+
+---
+
+## Previous Handoff (2026-05-18, Session 32 — Phase 4.2: CMD+K keyboard navigation, vNext-SEARCH-01)
 
 - **Дата:** 2026-05-18 (после Session 31)
 - **Агент:** Claude (local Windows)

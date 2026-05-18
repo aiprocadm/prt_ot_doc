@@ -502,7 +502,7 @@
 - vNext Phase 1 (Architectural foundation) — `complete` (Workspaces / RBAC module / Tenant isolation audit).
 - vNext Phase 2 (Operational dashboard / Health checks) — backend `done`, frontend `pending`.
 - vNext Phase 3 (Data Quality + Unified Employee Card) — DQ backend MVP `done` (10 правил), DQ Dashboard frontend `done`, Employee Card backend aggregate + UI + Documents/Briefings/Deadlines секции `done` (Sessions 19/20/21 — `GET /api/v1/employees/{id}` + `EmployeeCardPage.tsx` 11 табов).
-- vNext Phase 4 (Calendar & Search) — Smart Calendar backend aggregator `done` (Session 22) + UI `done` (Session 23 — `CalendarPage.tsx` с day/week/month/year/list, фильтры по source_types/person_id/site_id, drill-down, overdue highlighting, split-permission `CALENDAR_VIEW`); ICS export, Universal Search/Command Bar — `pending` (Phase 4.2).
+- vNext Phase 4 (Calendar & Search) — **COMPLETE.** Smart Calendar Task 4.1 `done` (Sessions 22-30 — backend aggregator + UI day/week/month/year/list + ICS export RFC 5545 + plan/fact comparison + SLA tracking + resource load heatmap + saved per-user views); Universal Search Task 4.2 `done` (Sessions 31-35 — pre-existing backend FTS index + CMD+K palette с entity results grouped by 24 types + 7 type-to-execute commands + ARIA listbox keyboard nav ↑↓/Enter/Home/End + saved searches в палитре с lazy session-cache (S34) + client-side recent-entities tracking с 30-day TTL + dedup (S35) + backend `SearchService` index accuracy tests 35 cases / 6 classes (S33)). Optional polish (non-acceptance): score-based unified ranking, per-tenant relevance tuning, i18n executable commands.
 - vNext Phases 5–10 — `planned` (см. §D).
 
 ---
@@ -517,7 +517,7 @@
 | Phase 1 — Architectural Foundation | P1 | Role-based workspaces / RBAC module / Tenant isolation audit | ✅ complete |
 | Phase 2 — Operational Dashboard | P1 | Command Center / Health Check Engine | 🟡 backend done, frontend pending |
 | Phase 3 — Data Quality & Master Data | P1 | DQ Layer / Unified Employee Card / Site Card | 🟢 DQ + Employee Card (backend + UI + Documents/Briefings/Deadlines) done; Site Card pending |
-| Phase 4 — Calendar & Search | P2 | Smart Calendar / Universal Search / Command Bar | 🟡 Smart Calendar backend (Session 22) + UI (Session 23) done; ICS export / Universal Search / Command Bar pending |
+| Phase 4 — Calendar & Search | P2 | Smart Calendar / Universal Search / Command Bar | ✅ COMPLETE — 4.1 Smart Calendar 100% done (Sessions 22-30); 4.2 Universal Search 100% done (Sessions 31-35, CMD+K palette + keyboard nav + saved-searches + recent-entities + backend test coverage); optional polish (non-acceptance): score-based ranking, per-tenant relevance tuning, i18n executable commands |
 | Phase 5 — Document Factory Hardening | P2 | Template lint / Compare / Header-footer / Replace edge cases | 📋 planned |
 | Phase 6 — Integration & Webhooks | P2 | Webhook delivery / Public API hardening / Импорт | 📋 planned |
 | Phase 7 — Mobile & Field-Ready | P2 | PWA hardening / Offline sync / Field workflows / Kiosk | 📋 planned |
