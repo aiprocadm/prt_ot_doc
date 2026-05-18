@@ -1,7 +1,15 @@
-"""Helpers for rendering DOCX templates using :mod:`docxtpl`."""
+"""Helpers for rendering DOCX templates using :mod:`docxtpl`.
+
+This is the single rendering path used both for final document generation
+(``app.tasks._core`` pipeline step ``render_docx``) and for the preview
+endpoints (``app.modules.templates.service.render_preview_docx``). Keeping
+one renderer is what makes the "preview matches final" guarantee true by
+construction — see ``tests/test_templates_preview_parity.py``.
+"""
 
 from __future__ import annotations
 
+import datetime as _dt
 import hashlib
 import json
 from dataclasses import dataclass
@@ -10,11 +18,68 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from docxtpl import DocxTemplate
-from jinja2 import Environment, StrictUndefined, UndefinedError
+from jinja2 import Environment, StrictUndefined, Undefined, UndefinedError
 
-__all__ = ["RenderedTemplate", "TemplateRenderer", "render_docx", "render_docx_with_metadata"]
+__all__ = [
+    "RenderedTemplate",
+    "TemplateRenderer",
+    "build_jinja_env",
+    "render_docx",
+    "render_docx_with_metadata",
+]
 
 _RENDERER_VERSION = "templating.renderer.v2"
+
+
+def _f_upper(value: Any) -> str:
+    return str(value).upper()
+
+
+def _f_lower(value: Any) -> str:
+    return str(value).lower()
+
+
+def _f_date(value: Any, fmt: str = "%Y-%m-%d") -> str:
+    if value is None:
+        return ""
+    if isinstance(value, _dt.datetime):
+        return value.strftime(fmt)
+    if isinstance(value, str):
+        try:
+            parsed = _dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return parsed.strftime(fmt)
+        except ValueError:
+            return value
+    return str(value)
+
+
+# Custom filters registered on every Jinja2 env the renderer hands to docxtpl.
+# Kept in sync with ``app.modules.templates.render._env()`` so templates that
+# used these filters under the legacy preview renderer keep working through
+# the unified path. ``upper``/``lower`` shadow Jinja2's builtins with
+# non-strict ``str(value)`` casts so passing a non-string value (e.g. an int)
+# does not raise.
+_CUSTOM_FILTERS: dict[str, Any] = {
+    "upper": _f_upper,
+    "lower": _f_lower,
+    "date": _f_date,
+}
+
+
+def build_jinja_env(*, strict: bool) -> Environment:
+    """Construct the Jinja2 environment fed into ``docxtpl``.
+
+    Args:
+        strict: When ``True`` (default for the first render pass), an
+            ``UndefinedError`` is raised on a missing context key so the
+            renderer can fall back to empty-string substitution. When
+            ``False`` (the fallback pass and preview-with-incomplete-data
+            scenarios), missing keys silently resolve to empty strings.
+    """
+
+    env = Environment(undefined=StrictUndefined if strict else Undefined)
+    env.filters.update(_CUSTOM_FILTERS)
+    return env
 
 
 def _coerce_mapping(value: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -83,7 +148,7 @@ def render_docx_with_metadata(template_bytes: bytes, context: Mapping[str, Any] 
         warnings.append("rendered with empty context")
 
     tpl = DocxTemplate(BytesIO(template_bytes))
-    strict_env = Environment(undefined=StrictUndefined)
+    strict_env = build_jinja_env(strict=True)
     strict_mode_ok = True
     missing_keys: list[str] = []
     try:
@@ -93,7 +158,7 @@ def render_docx_with_metadata(template_bytes: bytes, context: Mapping[str, Any] 
         warnings.append(f"strict render failed: {exc}")
         fallback = _fallback_context(render_context, warnings)
         tpl = DocxTemplate(BytesIO(template_bytes))
-        tpl.render(fallback)
+        tpl.render(fallback, jinja_env=build_jinja_env(strict=False))
         missing_keys = sorted({warning.removeprefix("missing context key: ") for warning in warnings if warning.startswith("missing context key:")})
         warnings.append("strict render failed; empty-string fallback applied")
     buffer = BytesIO()
