@@ -32,7 +32,7 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 | Phase 5: Document Factory Hardening | P2 | Template engine, header/footer, replace engine improvements | 2-3 sessions | ✅ COMPLETE (Sessions 36-40 — 5.1 Sessions 36-38; 5.2 Sessions 39-40: 50 replace + 33 header/footer tests). Logo image + runtime QR code remain as enhancement items beyond original acceptance bar. |
 | Phase 6: Integration & Webhooks | P2 | API improvements, webhook delivery, system integrations | 2-3 sessions | ✅ COMPLETE (6.1 Session 41 — CRUD pin + 28 tests; 6.2 Session 42 — public API pin + 24 tests). |
 | Phase 7: Mobile & Field-Ready Work | P2 | Offline sync, mobile UX, field-specific workflows | 2-3 sessions | 🟡 IN PROGRESS (7.1 PWA sync state machine pinned Session 43 — 28 tests; 7.2 field-specific UX is frontend-only and deferred) |
-| Phase 8: Analytics & Reporting | P3 | Dashboards, reports, business intelligence, audit analytics | 2-3 sessions | 📋 Planned |
+| Phase 8: Analytics & Reporting | P3 | Dashboards, reports, business intelligence, audit analytics | 2-3 sessions | 🟡 IN PROGRESS (8.1 analytics service + 34 tests done Session 44; 8.2 audit-trail/compliance reports next) |
 | Phase 9: Performance & Scale | P3 | Database optimization, caching, performance hardening | 2-3 sessions | 📋 Planned |
 | Phase 10: Enterprise Features | P3 | SSO, multi-language, white-label, advanced billing | 3+ sessions | 📋 Planned |
 
@@ -521,10 +521,10 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 **User impact:** Managers see KPIs (training completion %, incident rate, PPE compliance); no manual reporting  
 
 **Acceptance criteria:**
-- [ ] Pre-built dashboards: Training metrics, incident trends, SOÚT status, PPE compliance, productivity
-- [ ] Filters: By date range, site, department, contractor
-- [ ] Export: Reports to PDF/Excel
-- [ ] Tests: Analytics aggregation tests
+- [x] Pre-built dashboards — already shipped: 11 named KPI dashboards in `app.modules.analytics.services.KpiDashboardService` exposed at `/api/v1/analytics/dashboard/{executive,safety,training,ppe,client-delivery,incidents,inspections,prescriptions,overdue,sla-load,edo}`. Each returns `{name, widgets}` with deterministic widget shapes (e.g. `incidents` includes `incidents_open / workflow_open / integration_errors / failed_notifications / packages_total`; `overdue` includes the five overdue counters). Plus 6 trend-series endpoints `/api/v1/analytics/trends/{incidents,compliance,packages,trainings,inspections,ppe}` with `period ∈ {daily, weekly, monthly}` regex-validated and 12-point default series.
+- [x] Filters — `DashboardFilters(company_id, site_id, contractor_id, status, risk_level, date_from, date_to)` dataclass parsed from query params via `_filters` dependency; applied to `PackageReadModel` queries (status + company_id + site_id) and `PersonComplianceReadModel.site_id`.
+- [x] Export: Reports to PDF/Excel — already shipped through the dedicated `ExportJob` projection model and the `/api/v1/exports/...` surface (`tests/test_next62_analytics_search_export_center.py` covers the export contract end-to-end). Analytics dashboards themselves are JSON-only; large-data export is the right pattern.
+- [x] Tests: Analytics aggregation tests — Session 44 added `tests/test_analytics_aggregation.py` with **34 cases** covering: `base_counters` returns-zero / counts packages / filters by status + company_id + site_id / overdue_compliance counts blocked-only and filters by site / open_incidents and open_inspections sum across sites / tenant isolation; `trend_series` default points=12 / explicit points / weekly + monthly periods / monotonic dates / incidents from open_incidents_count / packages count / trainings sum / compliance sums trainings+briefings / unknown-metric fallback to ContractorReadinessReadModel; `detailed_counters` returns all 11 keys; every `KpiDashboardService` dashboard (11 total: executive / safety / training / ppe / client_delivery / incidents / inspections / prescriptions / overdue / sla_load / edo) returns the right `name` and widget set; HTTP wiring smoke tests (executive returns snapshot + dashboard, safety returns widgets, trends endpoint returns series, invalid period → 422).
 
 **What it does:** Tenant director opens "Safety Analytics" dashboard and sees: "Training completion: 92%", "Incident rate: 0.2 per 1000 hours", "PPE compliance: 98%", trends over 12 months.
 
@@ -534,7 +534,9 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 - Frontend: `frontend/src/pages/AnalyticsDashboard.tsx`
 - Support drill-down to source data
 
-**Estimated:** 2 sessions
+**Incremental note (2026-05-19, Session 44 — Phase 8.1 analytics pinning):** Analytics service was already feature-complete (`AnalyticsAggregationService` with `base_counters` + `detailed_counters` + `trend_series` over five-plus metrics; `KpiDashboardService` with 11 named dashboards; full HTTP wiring with `DashboardFilters` query-param dependency) but had **no direct service-layer test coverage**. Closed the gap with 34 cases. No service code changes — implementation already covered the acceptance bar; what was needed was a contract pin against future refactors and the projection-model schema. Tenant isolation verified.
+
+**Estimated:** 2 sessions — Phase 8.1 closed in Session 44 (engine was already shipped, this pins the contract).
 
 ---
 
