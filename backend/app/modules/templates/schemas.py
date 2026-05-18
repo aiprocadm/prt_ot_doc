@@ -91,6 +91,31 @@ class LintReportDTO(BaseModel):
     errors: list[str]
     warnings: list[str]
     summary: dict[str, int]
+    filters: list[dict[str, Any]] = Field(default_factory=list)
+    duplicates: list[dict[str, Any]] = Field(default_factory=list)
+    empty_placeholders: list[dict[str, Any]] = Field(default_factory=list)
+    undefined_variables: list[str] = Field(default_factory=list)
+    unused_variables: list[str] = Field(default_factory=list)
+
+
+class InspectorRequest(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    available_variables: dict[str, Any] | None = None
+    required_fields: list[str] | None = None
+
+
+class InspectorReportDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    available: list[str]
+    used: list[str]
+    undefined: list[str]
+    unused: list[str]
+    required_missing: list[str]
+    filters: list[dict[str, Any]]
+    unknown_filters: list[str]
+    loops: list[dict[str, Any]]
+    conditions: list[dict[str, Any]]
+    summary: dict[str, int]
 
 
 class PreviewRequest(BaseModel):

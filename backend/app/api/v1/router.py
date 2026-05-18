@@ -53,9 +53,16 @@ from app.models.document_core import (
     TemplateVersionStatus,
 )
 from app.models.tenanting import Tenant
-from app.modules.templates import build_passport, lint_docx_template, render_preview_docx
+from app.modules.templates import (
+    build_passport,
+    inspect_docx_template,
+    lint_docx_template,
+    render_preview_docx,
+)
 from app.modules.templates.repo import get_template_version_by_code
 from app.modules.templates.schemas import (
+    InspectorReportDTO,
+    InspectorRequest,
     LintReportDTO,
     LintRequest,
     PreviewRequest,
@@ -802,12 +809,46 @@ async def lint_template_version(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Template version not found")
     storage = FileStorageService.default()
     source = storage.get(version.file_id or version.payload_key)
-    report = lint_docx_template(source, required_fields=payload.required_fields)
+    report = lint_docx_template(
+        source,
+        required_fields=payload.required_fields,
+        sample_schema=payload.sample_schema,
+    )
     version.placeholder_index = report.get("placeholders_json")
     version.linter_report_json = report
     version.status = TemplateVersionStatus.READY if not report.get("errors") else TemplateVersionStatus.LINTED
     await session.commit()
     return LintReportDTO.model_validate(report)
+
+
+@router.post(
+    "/templates/{template_id}/versions/{version_id}:inspect",
+    response_model=InspectorReportDTO,
+)
+async def inspect_template_version(
+    template_id: str,
+    version_id: str,
+    payload: InspectorRequest,
+    session: SessionDep,
+    tenant: TenantDep,
+    access: EditorAccess,
+) -> InspectorReportDTO:
+    version = await session.get(TemplateVersion, version_id)
+    if (
+        version is None
+        or version.template_id != template_id
+        or version.tenant_id not in _tenant_scope(tenant)
+        or version.deleted_at is not None
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Template version not found")
+    storage = FileStorageService.default()
+    source = storage.get(version.file_id or version.payload_key)
+    report = inspect_docx_template(
+        source,
+        available_variables=payload.available_variables,
+        required_fields=payload.required_fields,
+    )
+    return InspectorReportDTO.model_validate(report)
 
 
 @router.post("/templates/{template_id}/versions/{version_id}:preview", response_model=PreviewResponse)

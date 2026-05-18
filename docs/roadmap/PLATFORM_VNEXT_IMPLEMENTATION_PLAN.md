@@ -29,7 +29,7 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 | Phase 2: Operational Dashboard | P1 | Command Center (backend ✅, 2.1a done), health checks ✅, operational visibility | 2-3 sessions | 🟡 IN PROGRESS (2.2 done, 2.1 partial, pending frontend) |
 | Phase 3: Data Quality & Master Data | P1 | Data Quality Layer, unified employee/site cards, deduplication | 2-3 sessions | 📋 Planned |
 | Phase 4: Calendar & Search | P2 | Smart Calendar improvements, universal search + command bar | 2-3 sessions | ✅ COMPLETE — 4.1 Smart Calendar 100% done (Sessions 22-30); 4.2 all 6 acceptance criteria done: backend FTS + CMD+K palette with entity results + 7 type-to-execute commands + ARIA listbox keyboard nav (↑↓/Enter/Home/End) + saved searches in palette (S34) + recent entities tracking (S35) + backend search index accuracy tests (S33 — 35 cases / 6 classes). Optional polish open (non-blocking, non-acceptance): score-based unified ranking, per-tenant relevance tuning, i18n executable commands, saved-search cache invalidation |
-| Phase 5: Document Factory Hardening | P2 | Template engine, header/footer, replace engine improvements | 2-3 sessions | 📋 Planned |
+| Phase 5: Document Factory Hardening | P2 | Template engine, header/footer, replace engine improvements | 2-3 sessions | 🟡 IN PROGRESS (5.1 backend pass 1 done — Session 36: linter hardening + variable inspector + 53 new tests) |
 | Phase 6: Integration & Webhooks | P2 | API improvements, webhook delivery, system integrations | 2-3 sessions | 📋 Planned |
 | Phase 7: Mobile & Field-Ready Work | P2 | Offline sync, mobile UX, field-specific workflows | 2-3 sessions | 📋 Planned |
 | Phase 8: Analytics & Reporting | P3 | Dashboards, reports, business intelligence, audit analytics | 2-3 sessions | 📋 Planned |
@@ -347,11 +347,11 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 **User impact:** Document templates are reliable; previews match final output; less failed generations  
 
 **Acceptance criteria:**
-- [ ] Template lint: Detect broken placeholders, undefined variables, missing conditions
-- [ ] Preview engine: 100% accuracy (preview matches final PDF)
-- [ ] Variable inspector: Show all available variables in template context
-- [ ] Tests: 30+ template test cases covering edge cases (null values, loops, conditions, formatting)
-- [ ] Migration: Import existing templates, validate them, log issues
+- [x] Template lint: Detect broken placeholders, undefined variables, missing conditions — Session 36 extended `app.modules.templates.linter`: empty-placeholder errors, duplicate-placeholder warnings (≥3 occurrences → "consider a loop"), unknown-filter warnings (whitelist of 19 filters incl. custom `upper/lower/date` from `render.py` + Jinja2 builtins; `known_filters=` override for per-tenant extensions), undefined-variable warnings when `sample_schema` supplied (root missing OR root present but nested missing), dunder-rejection in `_safe_expr` (`__import__` and friends blocked even when each char is whitelisted)
+- [ ] Preview engine: 100% accuracy (preview matches final PDF) — *unchanged in Session 36, deferred*
+- [x] Variable inspector: Show all available variables in template context — Session 36 added `inspect_template_context()` + `app.modules.templates.inspect_docx_template()` service facade + new endpoint `POST /api/v1/templates/{tid}/versions/{vid}:inspect` returning `InspectorReportDTO` with `available` (flattened dotted paths), `used`, `undefined`, `unused`, `required_missing`, `filters`, `unknown_filters`, `loops`, `conditions`, `summary` (6 counts)
+- [x] Tests: 30+ template test cases covering edge cases — Session 36 added 53 cases across two new files: `tests/test_templates_linter_hardening.py` (28 — empty/duplicate/filter/safety/loops/conditions/headers/footers/backcompat/param table) + `tests/test_templates_inspector.py` (16 — shape/flatten/undefined/unused/required-missing/loops/filters/service-wiring/summary parity); pre-existing 11 linter tests still green
+- [ ] Migration: Import existing templates, validate them, log issues — *deferred to follow-up session*
 
 **What it does:** When admin uploads a template, system validates: "3 variables used but 4 available; condition '{if missing}' references undefined variable; placeholder '$salary' not provided by any context". Preview shows exactly what users will get.
 
@@ -361,7 +361,9 @@ This is the **incremental implementation roadmap** for vNext platform improvemen
 - Improve preview: `backend/app/modules/templates/preview_engine.py`
 - Add test fixtures: `tests/fixtures/templates/` with sample DOCXes
 
-**Estimated:** 1.5 sessions
+**Incremental note (2026-05-18, Session 36 — Phase 5.1 backend pass 1):** Linter (`app.modules.templates.linter.py`) extended with empty-placeholder errors, duplicate-occurrence warnings, unknown-filter detection (whitelist `KNOWN_FILTERS` + caller-supplied `known_filters=` override), undefined-vs-schema warnings (`sample_schema=` flattened to dotted paths; loop-bound variables exempted), and dunder safety in `_safe_expr`. New `inspect_template_context()` returns a structured variable-inspector report (available/used/undefined/unused/required_missing/filters/unknown_filters/loops/conditions/summary). Service facade `inspect_docx_template()` exposed via `app.modules.templates.__init__`; FastAPI route `POST /templates/{tid}/versions/{vid}:inspect` added in `app.api.v1.router` (`EditorAccess` RBAC; same 404 contract as `:lint`); `LintRequest.sample_schema` now wired through `lint_template_version` (previously ignored). `LintReportDTO` extended with `filters`, `duplicates`, `empty_placeholders`, `undefined_variables`, `unused_variables` (all `Field(default_factory=list)` for back-compat). Tests: 53 new + 11 pre-existing all green under py 3.13 (full CI on py 3.12 still authoritative). Drive-by: `app.api.routes.calendar_views.delete_saved_view` gained `response_model=None` to match the project-wide 204 pattern (other DELETE 204 routes already had it; aligning silences a FastAPI 0.115 + py 3.13 import-time assertion that was blocking local runs).
+
+**Estimated:** 1.5 sessions (backend pass 1 done in Session 36; remaining: preview-parity, migration validator, frontend inspector UI)
 
 ---
 

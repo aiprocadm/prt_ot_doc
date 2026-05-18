@@ -177,6 +177,7 @@ async def update_saved_view(
 @router.delete(
     "/{view_id}",
     status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
     summary="Delete a saved Smart Calendar view",
 )
 async def delete_saved_view(
