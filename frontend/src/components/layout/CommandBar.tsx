@@ -2,7 +2,7 @@ import { Command, Search } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
-import { searchGlobal, type SearchItem } from "@/api/search";
+import { fetchSavedSearches, searchGlobal, type SavedSearchItem, type SearchItem } from "@/api/search";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -13,8 +13,45 @@ import { trackUxMetric } from "@/utils/uxMetrics";
 
 const FAVORITE_PATHS_STORAGE_KEY = "ux.commandbar.favoritePaths.v1";
 const RECENT_PATHS_STORAGE_KEY = "ux.commandbar.recentPaths.v1";
+const RECENT_ENTITIES_STORAGE_KEY = "ux.commandbar.recentEntities.v1";
 const MAX_RECENT = 8;
 const MAX_ENTITY_RESULTS = 8;
+const MAX_SAVED_SEARCHES = 6;
+const MAX_RECENT_ENTITIES = 8;
+// 30 days. Older items get pruned on load — keeps the section relevant to
+// the user's current work and prevents the storage payload from growing
+// unbounded over a long-lived session.
+const RECENT_ENTITY_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+interface RecentEntityRecord {
+  entity_type: string;
+  entity_id: string;
+  title: string;
+  path: string;
+  opened_at: number; // Unix ms
+}
+
+// Saved searches reuse the same URL contract as the dedicated search page
+// (`useSearchUrlState`): `?q=<q>&type=<types[0]>&status=...&company_id=...&site_id=...`.
+// Apply a saved search by navigating with these params; the /search page
+// will hydrate from URL and re-run its query with the saved filter state.
+const buildSavedSearchPath = (item: SavedSearchItem): string => {
+  const params = new URLSearchParams();
+  if (item.q) params.set("q", item.q);
+  const firstType = Array.isArray(item.types) ? item.types[0] : undefined;
+  if (firstType) params.set("type", firstType);
+  const filters = (item.filters ?? {}) as Record<string, unknown>;
+  if (typeof filters.status === "string" && filters.status) params.set("status", filters.status);
+  if (typeof filters.company_id === "string" && filters.company_id)
+    params.set("company_id", filters.company_id);
+  if (typeof filters.site_id === "string" && filters.site_id) params.set("site_id", filters.site_id);
+  if (typeof filters.project_id === "string" && filters.project_id)
+    params.set("project_id", filters.project_id);
+  if (typeof filters.risk_level === "string" && filters.risk_level)
+    params.set("risk_level", filters.risk_level);
+  const qs = params.toString();
+  return qs ? `/search?${qs}` : "/search";
+};
 
 const ENTITY_TYPE_LABELS: Record<string, string> = {
   person: "Сотрудники",
@@ -126,6 +163,46 @@ const readPaths = (key: string): string[] => {
   }
 };
 
+// Recent entities are stored client-side: there is no `/search/recent-entities`
+// backend endpoint, and the privacy posture is "what I clicked from MY
+// palette" rather than "what my org clicked." Storage shape is the bare
+// minimum needed to render the row + navigate: entity_type + entity_id +
+// title + path + opened_at. Old entries (> TTL) are pruned on load so the
+// section stays relevant without growing unbounded.
+const readRecentEntities = (now: number = Date.now()): RecentEntityRecord[] => {
+  const raw = localStorageGetItem(RECENT_ENTITIES_STORAGE_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as RecentEntityRecord[];
+    if (!Array.isArray(parsed)) return [];
+    // Validate shape, then prune by TTL.
+    return parsed
+      .filter(
+        (item): item is RecentEntityRecord =>
+          typeof item === "object" &&
+          item !== null &&
+          typeof item.entity_type === "string" &&
+          typeof item.entity_id === "string" &&
+          typeof item.title === "string" &&
+          typeof item.path === "string" &&
+          typeof item.opened_at === "number"
+      )
+      .filter((item) => now - item.opened_at <= RECENT_ENTITY_TTL_MS)
+      .slice(0, MAX_RECENT_ENTITIES);
+  } catch {
+    return [];
+  }
+};
+
+const writeRecentEntities = (items: RecentEntityRecord[]): void => {
+  try {
+    localStorageSetItem(RECENT_ENTITIES_STORAGE_KEY, JSON.stringify(items));
+  } catch {
+    // Quota exceeded / disabled storage — silently degrade, recent-entities
+    // section just won't update. Not worth surfacing to the user.
+  }
+};
+
 export const CommandBar = () => {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -133,6 +210,9 @@ export const CommandBar = () => {
   const [recentPaths, setRecentPaths] = useState<string[]>([]);
   const [entityResults, setEntityResults] = useState<SearchItem[]>([]);
   const [entitySearchLoading, setEntitySearchLoading] = useState(false);
+  const [savedSearches, setSavedSearches] = useState<SavedSearchItem[]>([]);
+  const [savedSearchesLoaded, setSavedSearchesLoaded] = useState(false);
+  const [recentEntities, setRecentEntities] = useState<RecentEntityRecord[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const itemRefs = useRef<Array<HTMLAnchorElement | null>>([]);
   const debouncedQuery = useDebounce(query, 300);
@@ -144,7 +224,33 @@ export const CommandBar = () => {
   useEffect(() => {
     setFavoritePaths(readPaths(FAVORITE_PATHS_STORAGE_KEY));
     setRecentPaths(readPaths(RECENT_PATHS_STORAGE_KEY));
+    setRecentEntities(readRecentEntities());
   }, []);
+
+  // Lazy-load saved searches on the first palette open. Saved searches change
+  // rarely (manual create/delete on /search page), so we keep them in memory
+  // for the rest of the session rather than refetching on every Ctrl+K.
+  // Unauthenticated/error responses degrade silently — saved-search section
+  // just renders empty and the rest of the palette is unaffected.
+  useEffect(() => {
+    if (!open || savedSearchesLoaded) return;
+    let active = true;
+    fetchSavedSearches()
+      .then((items) => {
+        if (!active) return;
+        setSavedSearches(Array.isArray(items) ? items : []);
+      })
+      .catch(() => {
+        if (!active) return;
+        setSavedSearches([]);
+      })
+      .finally(() => {
+        if (active) setSavedSearchesLoaded(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [open, savedSearchesLoaded]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -196,6 +302,24 @@ export const CommandBar = () => {
     if (!trimmed) return [];
     return EXECUTABLE_COMMANDS.filter((command) => matchesCommand(command, trimmed)).slice(0, 4);
   }, [query]);
+
+  // Saved searches are a discovery affordance: they're shown only when the
+  // query is empty (palette is in "browse" mode). When the user starts
+  // typing, the focus shifts to live results and actions — saved searches
+  // would just compete for attention.
+  const visibleSavedSearches = useMemo(() => {
+    if (query.trim()) return [];
+    return savedSearches.slice(0, MAX_SAVED_SEARCHES);
+  }, [query, savedSearches]);
+
+  // Recently opened entities follow the same discovery-only pattern: shown
+  // when the palette is in browse mode (empty query), hidden once the user
+  // starts typing. Ordered newest-first since `rememberRecentEntity` always
+  // hoists the clicked item to position 0.
+  const visibleRecentEntities = useMemo(() => {
+    if (query.trim()) return [];
+    return recentEntities.slice(0, MAX_RECENT_ENTITIES);
+  }, [query, recentEntities]);
 
   const entityGroups = useMemo(() => {
     if (entityResults.length === 0) return [];
@@ -259,6 +383,32 @@ export const CommandBar = () => {
     });
   };
 
+  // Hoists the entity to position 0 (newest-first), dedups against the same
+  // entity_type+entity_id (re-clicking the same row should not produce
+  // duplicates — instead it refreshes the title and timestamp), and caps at
+  // MAX_RECENT_ENTITIES. Title is captured at click time so it reflects what
+  // the user actually saw rather than what the entity is later renamed to.
+  const rememberRecentEntity = (item: SearchItem, path: string) => {
+    const record: RecentEntityRecord = {
+      entity_type: item.entity_type,
+      entity_id: item.entity_id,
+      title: item.title,
+      path,
+      opened_at: Date.now()
+    };
+    setRecentEntities((prev) => {
+      const next = [
+        record,
+        ...prev.filter(
+          (existing) =>
+            !(existing.entity_type === record.entity_type && existing.entity_id === record.entity_id)
+        )
+      ].slice(0, MAX_RECENT_ENTITIES);
+      writeRecentEntities(next);
+      return next;
+    });
+  };
+
   // Flat ordered list of all keyboard-navigable items in the same order
   // they appear on screen (actions → entities → nav). The arrow keys walk
   // this list; Enter triggers `activate()`. Keeping render and navigation
@@ -267,7 +417,7 @@ export const CommandBar = () => {
   type NavigableItem = {
     key: string;
     path: string;
-    kind: "action" | "entity" | "nav";
+    kind: "action" | "entity" | "saved" | "recent-entity" | "nav";
     activate: () => void;
   };
 
@@ -300,10 +450,53 @@ export const CommandBar = () => {
               source: "commandbar-entity",
               entity_type: item.entity_type
             });
+            rememberRecentEntity(item, path);
             navigate(path);
             setOpen(false);
           }
         });
+      });
+    });
+    visibleSavedSearches.forEach((saved) => {
+      const path = buildSavedSearchPath(saved);
+      items.push({
+        key: `saved-${saved.id}`,
+        path,
+        kind: "saved",
+        activate: () => {
+          trackUxMetric("navigation_click", {
+            source: "commandbar-saved",
+            path
+          });
+          navigate(path);
+          setOpen(false);
+        }
+      });
+    });
+    visibleRecentEntities.forEach((recent) => {
+      items.push({
+        key: `recent-entity-${recent.entity_type}-${recent.entity_id}`,
+        path: recent.path,
+        kind: "recent-entity",
+        activate: () => {
+          trackUxMetric("navigation_click", {
+            source: "commandbar-recent-entity",
+            entity_type: recent.entity_type
+          });
+          // Re-hoist (refreshes opened_at so a re-opened entity stays at
+          // position 0 and doesn't age out as quickly).
+          rememberRecentEntity(
+            {
+              kind: "entity",
+              entity_type: recent.entity_type,
+              entity_id: recent.entity_id,
+              title: recent.title
+            } as SearchItem,
+            recent.path
+          );
+          navigate(recent.path);
+          setOpen(false);
+        }
       });
     });
     groupedForDisplay.forEach((section) => {
@@ -326,7 +519,15 @@ export const CommandBar = () => {
       });
     });
     return items;
-  }, [entityGroups, groupedForDisplay, matchedCommands, navigate, query]);
+  }, [
+    entityGroups,
+    groupedForDisplay,
+    matchedCommands,
+    navigate,
+    query,
+    visibleRecentEntities,
+    visibleSavedSearches
+  ]);
 
   const indexByKey = useMemo(() => {
     const map = new Map<string, number>();
@@ -499,6 +700,7 @@ export const CommandBar = () => {
                                   source: "commandbar-entity",
                                   entity_type: item.entity_type
                                 });
+                                rememberRecentEntity(item, path);
                                 setOpen(false);
                               }}
                               className={`block rounded px-2 py-2 text-sm hover:bg-muted ${
@@ -517,6 +719,112 @@ export const CommandBar = () => {
                       </div>
                     </div>
                   ))}
+                </div>
+              ) : null}
+              {visibleSavedSearches.length > 0 ? (
+                <div data-testid="commandbar-saved">
+                  <div className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Сохранённые запросы
+                  </div>
+                  <div className="space-y-1">
+                    {visibleSavedSearches.map((saved) => {
+                      const path = buildSavedSearchPath(saved);
+                      const navKey = `saved-${saved.id}`;
+                      const index = indexByKey.get(navKey) ?? -1;
+                      const selected = index === selectedIndex;
+                      return (
+                        <Link
+                          key={saved.id}
+                          to={path}
+                          ref={(node) => {
+                            if (index >= 0) itemRefs.current[index] = node;
+                          }}
+                          id={`commandbar-item-${navKey}`}
+                          role="option"
+                          aria-selected={selected}
+                          data-saved-id={saved.id}
+                          data-selected={selected || undefined}
+                          onClick={() => {
+                            trackUxMetric("navigation_click", {
+                              source: "commandbar-saved",
+                              path
+                            });
+                            setOpen(false);
+                          }}
+                          className={`block rounded px-2 py-2 text-sm hover:bg-muted ${
+                            selected ? "bg-muted ring-1 ring-primary" : ""
+                          }`}
+                        >
+                          <span className="font-medium">{saved.name || saved.q || "Сохранённый поиск"}</span>
+                          {saved.q ? (
+                            <span className="mt-0.5 block text-xs text-muted-foreground">
+                              Запрос: {saved.q}
+                              {Array.isArray(saved.types) && saved.types.length > 0
+                                ? ` · ${saved.types.join(", ")}`
+                                : ""}
+                            </span>
+                          ) : null}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+              {visibleRecentEntities.length > 0 ? (
+                <div data-testid="commandbar-recent-entities">
+                  <div className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Недавно открытые
+                  </div>
+                  <div className="space-y-1">
+                    {visibleRecentEntities.map((recent) => {
+                      const navKey = `recent-entity-${recent.entity_type}-${recent.entity_id}`;
+                      const index = indexByKey.get(navKey) ?? -1;
+                      const selected = index === selectedIndex;
+                      const typeLabel =
+                        ENTITY_TYPE_LABELS[recent.entity_type] ?? recent.entity_type;
+                      return (
+                        <Link
+                          key={navKey}
+                          to={recent.path}
+                          ref={(node) => {
+                            if (index >= 0) itemRefs.current[index] = node;
+                          }}
+                          id={`commandbar-item-${navKey}`}
+                          role="option"
+                          aria-selected={selected}
+                          data-entity-type={recent.entity_type}
+                          data-entity-id={recent.entity_id}
+                          data-selected={selected || undefined}
+                          onClick={() => {
+                            trackUxMetric("navigation_click", {
+                              source: "commandbar-recent-entity",
+                              entity_type: recent.entity_type
+                            });
+                            // Re-hoist on click — re-opened items should stay
+                            // fresh at position 0 (and refresh their TTL).
+                            rememberRecentEntity(
+                              {
+                                kind: "entity",
+                                entity_type: recent.entity_type,
+                                entity_id: recent.entity_id,
+                                title: recent.title
+                              } as SearchItem,
+                              recent.path
+                            );
+                            setOpen(false);
+                          }}
+                          className={`block rounded px-2 py-2 text-sm hover:bg-muted ${
+                            selected ? "bg-muted ring-1 ring-primary" : ""
+                          }`}
+                        >
+                          <span className="font-medium">{recent.title}</span>
+                          <span className="mt-0.5 block text-xs text-muted-foreground">
+                            {typeLabel}
+                          </span>
+                        </Link>
+                      );
+                    })}
+                  </div>
                 </div>
               ) : null}
               {groupedForDisplay.map((section) => (
