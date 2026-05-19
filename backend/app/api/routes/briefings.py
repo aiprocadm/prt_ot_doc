@@ -3,12 +3,13 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.api.helpers.etag import compute_list_etag
 from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
 from app.core.security import rbac
@@ -138,8 +139,16 @@ def _entry_read(entry: BriefingEntry, signatures: list[BriefingSignature] | None
 
 
 @router.get("/templates", response_model=BriefingCollection)
-async def list_templates(tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _PermReadDep):
-    items = (await session.execute(select(BriefingTemplate).where(BriefingTemplate.tenant_id == tenant.id, BriefingTemplate.deleted_at.is_(None)))).scalars().all()
+async def list_templates(request: Request, response: Response, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _PermReadDep):
+    items = list((await session.execute(select(BriefingTemplate).where(BriefingTemplate.tenant_id == tenant.id, BriefingTemplate.deleted_at.is_(None)))).scalars().all())
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=items,
+        scalars=[("total", len(items)), ("kind", "templates")],
+    )
+    response.headers["ETag"] = etag
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
     return BriefingCollection(items=[BriefingTemplateRead.model_validate(item) for item in items], total=len(items))
 
 
@@ -166,8 +175,16 @@ async def patch_template(item_id: str, payload: BriefingTemplatePayload, request
 
 
 @router.get("/journals", response_model=BriefingCollection)
-async def list_journals(tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _PermReadDep):
-    items = (await session.execute(select(BriefingJournal).where(BriefingJournal.tenant_id == tenant.id, BriefingJournal.deleted_at.is_(None)))).scalars().all()
+async def list_journals(request: Request, response: Response, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _PermReadDep):
+    items = list((await session.execute(select(BriefingJournal).where(BriefingJournal.tenant_id == tenant.id, BriefingJournal.deleted_at.is_(None)))).scalars().all())
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=items,
+        scalars=[("total", len(items)), ("kind", "journals")],
+    )
+    response.headers["ETag"] = etag
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
     return BriefingCollection(items=[BriefingJournalRead.model_validate(item) for item in items], total=len(items))
 
 
@@ -182,8 +199,16 @@ async def create_journal(payload: BriefingJournalPayload, request: Request, tena
 
 
 @router.get("/entries", response_model=BriefingCollection)
-async def list_entries(tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _PermReadDep):
-    items = (await session.execute(select(BriefingEntry).where(BriefingEntry.tenant_id == tenant.id, BriefingEntry.deleted_at.is_(None)).order_by(BriefingEntry.briefing_date.desc()))).scalars().all()
+async def list_entries(request: Request, response: Response, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _PermReadDep):
+    items = list((await session.execute(select(BriefingEntry).where(BriefingEntry.tenant_id == tenant.id, BriefingEntry.deleted_at.is_(None)).order_by(BriefingEntry.briefing_date.desc()))).scalars().all())
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=items,
+        scalars=[("total", len(items)), ("kind", "entries")],
+    )
+    response.headers["ETag"] = etag
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
     signatures = (await session.execute(select(BriefingSignature).where(BriefingSignature.tenant_id == tenant.id))).scalars().all()
     grouped: dict[str, list[BriefingSignature]] = {}
     for signature in signatures:

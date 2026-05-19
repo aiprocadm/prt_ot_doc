@@ -5,11 +5,12 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.api.helpers.etag import compute_list_etag
 from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
@@ -139,12 +140,14 @@ async def _get_plan(session: AsyncSession, tenant: Tenant, plan_id: str) -> Trai
 
 @router.get("/courses", response_model=TrainingCoursePage)
 async def list_courses(
+    request: Request,
+    response: Response,
     tenant: TenantDep,
     session: SessionDep,
     access: ManagerAccess,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-) -> TrainingCoursePage:
+) -> TrainingCoursePage | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     stmt = (
@@ -154,11 +157,19 @@ async def list_courses(
         .limit(limit)
         .offset(offset)
     )
-    items = (await session.execute(stmt)).scalars().all()
+    items = list((await session.execute(stmt)).scalars().all())
     total_stmt = select(func.count()).select_from(TrainingCourse).where(
         TrainingCourse.tenant_id == tenant.id, TrainingCourse.deleted_at.is_(None)
     )
     total = (await session.execute(total_stmt)).scalar_one()
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=items,
+        scalars=[("total", int(total or 0)), ("limit", limit), ("offset", offset)],
+    )
+    response.headers["ETag"] = etag
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
     return TrainingCoursePage(items=[_course_to_schema(item) for item in items], total=total)
 
 

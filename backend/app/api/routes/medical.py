@@ -5,11 +5,12 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.api.helpers.etag import compute_list_etag
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
@@ -45,6 +46,8 @@ MedicalReadAccess = Annotated[
 
 @router.get("/medical/exams", response_model=MedicalExamPage)
 async def list_medical_exams(
+    request: Request,
+    response: Response,
     tenant: TenantDep,
     session: SessionDep,
     access: MedicalReadAccess,
@@ -52,7 +55,7 @@ async def list_medical_exams(
     status_filter: str | None = Query(default=None, alias="status"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
-) -> MedicalExamPage:
+) -> MedicalExamPage | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     _ = access
@@ -65,12 +68,26 @@ async def list_medical_exams(
         stmt = stmt.where(MedicalExam.valid_until >= func.current_date())
 
     total_stmt = select(func.count()).select_from(stmt.subquery())
-    rows = (
+    rows = list((
         await session.execute(
             stmt.order_by(MedicalExam.valid_until.asc(), MedicalExam.exam_date.desc()).offset(offset).limit(limit)
         )
-    ).scalars().all()
+    ).scalars().all())
     total = await session.scalar(total_stmt)
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=rows,
+        scalars=[
+            ("total", int(total or 0)),
+            ("limit", limit),
+            ("offset", offset),
+            ("person", person_id or ""),
+            ("status", status_filter or ""),
+        ],
+    )
+    response.headers["ETag"] = etag
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
     return MedicalExamPage(items=[MedicalExamRead.model_validate(item) for item in rows], total=int(total or 0))
 
 

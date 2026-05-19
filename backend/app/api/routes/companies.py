@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from datetime import datetime, timezone
 from typing import Annotated
 
@@ -12,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.api.helpers.etag import compute_list_etag
 from app.core.errors import api_problem_detail
 from app.core.rbac_abac import actor_from_claims, policy_forbidden
 from app.core.security import AccessContext, abac
@@ -147,28 +147,6 @@ def _apply_company_updates(company: Company, payload: CompanyUpdate) -> None:
         company.branding_payload = data["branding_payload"]
 
 
-def _companies_etag(
-    *,
-    tenant_id: str,
-    companies: list[Company],
-    total: int,
-    limit: int,
-    offset: int,
-) -> str:
-    payload = [
-        f"tenant:{tenant_id}",
-        f"total:{total}",
-        f"limit:{limit}",
-        f"offset:{offset}",
-        "|".join(
-            f"{company.id}:{company.updated_at.isoformat() if company.updated_at else ''}"
-            for company in companies
-        ),
-    ]
-    digest = hashlib.sha256("::".join(payload).encode("utf-8")).hexdigest()
-    return f'"{digest}"'
-
-
 @router.get("", response_model=CompanyPage)
 async def list_companies_endpoint(
     request: Request,
@@ -189,12 +167,10 @@ async def list_companies_endpoint(
         claims=dict(access.claims),
         roles=access.to_auth_context().roles,
     )
-    etag = _companies_etag(
+    etag = compute_list_etag(
         tenant_id=str(tenant.id),
-        companies=list(companies),
-        total=total,
-        limit=limit,
-        offset=offset,
+        items=companies,
+        scalars=[("total", total), ("limit", limit), ("offset", offset)],
     )
     response.headers["ETag"] = etag
     if request.headers.get("if-none-match") == etag:

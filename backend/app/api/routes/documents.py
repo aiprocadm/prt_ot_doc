@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_file_storage_service, get_session, get_tenant_record
+from app.api.helpers.etag import compute_list_etag
 from app.core.audit_decorator import audit_operation
 from app.core.config import get_settings
 from app.core.errors import api_problem_detail
@@ -421,25 +422,6 @@ def _build_document_ui_read(document: Document) -> DocumentUiRead:
     )
 
 
-def _documents_list_etag(
-    *,
-    tenant_id: str,
-    page: int,
-    page_size: int,
-    total: int,
-    items: list[DocumentUiRead],
-) -> str:
-    parts = [
-        f"tenant:{tenant_id}",
-        f"page:{page}",
-        f"page_size:{page_size}",
-        f"total:{total}",
-        "|".join(f"{item.id}:{item.updated_at.isoformat()}" for item in items),
-    ]
-    digest = hashlib.sha256("::".join(parts).encode("utf-8")).hexdigest()
-    return f'"{digest}"'
-
-
 def _document_read_query(tenant_id: str):
     return (
         select(Document)
@@ -558,12 +540,10 @@ async def list_documents(
         )
         items.append(_build_document_ui_read(document))
 
-    etag = _documents_list_etag(
+    etag = compute_list_etag(
         tenant_id=str(tenant.id),
-        page=page,
-        page_size=page_size,
-        total=total,
         items=items,
+        scalars=[("page", page), ("page_size", page_size), ("total", total)],
     )
     response.headers["ETag"] = etag
     if request.headers.get("if-none-match") == etag:

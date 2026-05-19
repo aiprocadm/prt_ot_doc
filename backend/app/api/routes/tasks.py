@@ -1,7 +1,6 @@
 """Task endpoints for pipeline status and obligations."""
 from __future__ import annotations
 
-import hashlib
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -11,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.api.helpers.etag import compute_list_etag
 from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
@@ -203,25 +203,6 @@ def _task_read(task: Task, now: datetime) -> TaskRead:
     )
 
 
-def _tasks_etag(
-    *,
-    tenant_id: str,
-    page: int,
-    page_size: int,
-    total: int,
-    items: list[TaskRead],
-) -> str:
-    payload = [
-        f"tenant:{tenant_id}",
-        f"page:{page}",
-        f"page_size:{page_size}",
-        f"total:{total}",
-        "|".join(f"{item.id}:{item.updated_at.isoformat()}" for item in items),
-    ]
-    digest = hashlib.sha256("::".join(payload).encode("utf-8")).hexdigest()
-    return f'"{digest}"'
-
-
 @router.get("", response_model=TaskListResponse)
 async def list_tasks(
     request: Request,
@@ -270,12 +251,10 @@ async def list_tasks(
     tasks = list((await session.execute(stmt)).scalars().all())
     total = await session.scalar(total_stmt)
     items = [_task_read(task, now) for task in tasks]
-    etag = _tasks_etag(
+    etag = compute_list_etag(
         tenant_id=str(tenant.id),
-        page=page,
-        page_size=page_size,
-        total=int(total or 0),
         items=items,
+        scalars=[("page", page), ("page_size", page_size), ("total", int(total or 0))],
     )
     response.headers["ETag"] = etag
     if request.headers.get("if-none-match") == etag:

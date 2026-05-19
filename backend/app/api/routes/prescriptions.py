@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.api.helpers.etag import compute_list_etag
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.models.models import Incident, Inspection, Prescription, PrescriptionStatus, User
@@ -108,6 +109,8 @@ async def _get_prescription(
 
 @router.get("/prescriptions", response_model=PrescriptionPage)
 async def list_prescriptions(
+    request: Request,
+    response: Response,
     tenant: TenantDep,
     session: SessionDep,
     _: ManagerAccess,
@@ -117,7 +120,7 @@ async def list_prescriptions(
     assignee_id: str | None = Query(default=None, min_length=1, max_length=36),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-) -> PrescriptionPage:
+) -> PrescriptionPage | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     stmt = select(Prescription).where(
@@ -137,6 +140,22 @@ async def list_prescriptions(
     stmt = stmt.offset(offset).limit(limit)
     items = list((await session.execute(stmt)).scalars().all())
     total = await session.scalar(total_stmt)
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=items,
+        scalars=[
+            ("total", int(total or 0)),
+            ("limit", limit),
+            ("offset", offset),
+            ("inspection", inspection_id or ""),
+            ("incident", incident_id or ""),
+            ("status", status_filter.value if status_filter else ""),
+            ("assignee", assignee_id or ""),
+        ],
+    )
+    response.headers["ETag"] = etag
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
     return PrescriptionPage(
         items=[PrescriptionRead.model_validate(item) for item in items],
         total=int(total or 0),

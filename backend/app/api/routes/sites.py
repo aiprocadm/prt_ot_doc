@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 from datetime import datetime, timezone
 from typing import Annotated
 
@@ -9,6 +8,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
+from app.api.helpers.etag import compute_list_etag
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
@@ -105,25 +105,6 @@ async def _ensure_hazards(
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Hazards not found: {', '.join(missing)}")
 
 
-def _sites_etag(
-    *,
-    tenant_id: str,
-    items: list[Site],
-    total: int,
-    limit: int,
-    offset: int,
-) -> str:
-    parts = [
-        f"tenant:{tenant_id}",
-        f"total:{total}",
-        f"limit:{limit}",
-        f"offset:{offset}",
-        "|".join(f"{site.id}:{site.updated_at.isoformat() if site.updated_at else ''}" for site in items),
-    ]
-    digest = hashlib.sha256("::".join(parts).encode("utf-8")).hexdigest()
-    return f'"{digest}"'
-
-
 @router.get("/sites", response_model=SitePage)
 async def list_sites(
     request: Request,
@@ -144,12 +125,10 @@ async def list_sites(
     stmt = stmt.order_by(Site.created_at.desc()).offset(offset).limit(limit)
     items = list((await session.execute(stmt)).scalars().all())
     total = await session.scalar(total_stmt)
-    etag = _sites_etag(
+    etag = compute_list_etag(
         tenant_id=str(tenant.id),
         items=items,
-        total=int(total or 0),
-        limit=limit,
-        offset=offset,
+        scalars=[("total", int(total or 0)), ("limit", limit), ("offset", offset)],
     )
     response.headers["ETag"] = etag
     if request.headers.get("if-none-match") == etag:
