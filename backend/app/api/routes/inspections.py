@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.api.helpers.etag import compute_list_etag
 from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
@@ -102,6 +103,8 @@ async def _get_inspection(session: AsyncSession, tenant: Tenant, inspection_id: 
 
 @router.get("/inspections", response_model=InspectionPage)
 async def list_inspections(
+    request: Request,
+    response: Response,
     tenant: TenantDep,
     session: SessionDep,
     _: ManagerAccess,
@@ -112,7 +115,7 @@ async def list_inspections(
     responsible_id: str | None = Query(default=None, min_length=1, max_length=36),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-) -> InspectionPage:
+) -> InspectionPage | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     stmt = select(Inspection).options(selectinload(Inspection.results)).where(
@@ -131,8 +134,25 @@ async def list_inspections(
 
     total_stmt = select(func.count()).select_from(stmt.subquery())
     stmt = stmt.order_by(Inspection.scheduled_at.desc().nullslast(), Inspection.created_at.desc()).offset(offset).limit(limit)
-    items = (await session.execute(stmt)).scalars().unique().all()
+    items = list((await session.execute(stmt)).scalars().unique().all())
     total = await session.scalar(total_stmt)
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=items,
+        scalars=[
+            ("total", int(total or 0)),
+            ("limit", limit),
+            ("offset", offset),
+            ("company", company_id or ""),
+            ("site", site_id or ""),
+            ("status", status_filter.value if status_filter else ""),
+            ("type", inspection_type.value if inspection_type else ""),
+            ("responsible", responsible_id or ""),
+        ],
+    )
+    response.headers["ETag"] = etag
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
     return InspectionPage(items=[_serialize_inspection(item) for item in items], total=int(total or 0))
 
 

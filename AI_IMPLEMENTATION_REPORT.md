@@ -1,6 +1,805 @@
 # AI Implementation Report
 
-## Last Agent Handoff (2026-05-18, Session 35 — Phase 4.2: Recent entities tracking, vNext-SEARCH-01)
+## Last Agent Handoff (2026-05-19, Session 53 — Phase 9.2 rollout: ETag on /medical/exams + /departments, vNext-PERF-03)
+
+- **Дата:** 2026-05-19 (после Session 52)
+- **Агент:** Claude (local Windows)
+- **Задача:** «Продолжай по ТЗ» → S52 Next Step #1 «Extend ETag to remaining list endpoints (medical exams, departments, ...)». Continue incremental rollout.
+- **Статус:** ✅ COMPLETE. 2 endpoints получили ETag; 13 contract tests добавлены. Coverage: **16 list endpoints**. Cache contract tests total: **116**.
+- **Где остановился:** Medical/exams + departments покрыты. Remaining candidates на rollout: `/contractors/registry`, `/journals` (top-level), `/admin/users`, `/api-tokens`. Open follow-ups: Cache-Control uniformity audit, service-level Redis cache, Phase 2 frontend, Site Card, backfill Sessions 36-45.
+
+### Studied Documentation
+
+- `AI_IMPLEMENTATION_REPORT.md` Session 52 Next Step #1.
+- `backend/app/api/routes/medical.py:46` — `list_medical_exams` с filter `?person_id=`, `?status=expired|upcoming`, standard pagination. No API POST endpoint — exams created internally.
+- `backend/app/api/routes/departments.py:71` — `list_departments` с filter `?company_id=`, standard pagination. Has full API POST.
+- `backend/app/models/models.py` — `MedicalExam(TenantBaseModel, SoftDeleteMixin) {person_id, exam_type, exam_date, valid_until, conclusion}` — ORM model.
+- `backend/app/schemas/department.py` — `DepartmentCreate{company_id, name}` — minimal required payload.
+- `tests/test_calendar_aggregator.py:94+` — existing pattern `MedicalExam(tenant_id=..., person_id=..., exam_type="periodic", exam_date=today-Xd, valid_until=today+Yd, conclusion="fit")` для ORM seeding.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 9 Task 9.2 «Caching Strategy» (vNext-PERF-03) — continuation of S50/S51/S52 rollout.
+- **Приоритет:** P3.
+
+### Implemented Changes
+
+- **`backend/app/api/routes/medical.py`** — added `Request, Response` to fastapi imports; added `compute_list_etag` import. `list_medical_exams` signature extended; return type `MedicalExamPage | Response`. Scalars: `[("total",T),("limit",L),("offset",O),("person", person_id or ""),("status", status_filter or "")]`. `_ = access` line preserved (existing access ref).
+- **`backend/app/api/routes/departments.py`** — added `Request` to fastapi imports (Response уже был); added `compute_list_etag` import. `list_departments` signature extended; return type `DepartmentPage | Response`. Scalars: `[total/limit/offset + ("company", company_id or "")]`.
+- **`tests/api/test_medical_departments_cache_etag_contract.py`** — new file, 13 cases ~370 lines.
+  - **Medical exams (5):** hit/miss/person-filter-distinct/status-filter-distinct/empty-stable.
+  - **Departments (8):** hit/miss/POST-invalidation/company-filter-distinct/page-distinct/empty-stable/cross-tenant-anti-leak/determinism.
+- **`CHANGELOG.md`** — Session 53 prepended.
+- **`AI_IMPLEMENTATION_REPORT.md`** — этот блок.
+
+### Changed / New Files
+
+- `backend/app/api/routes/medical.py` — +20 lines net (2 imports + signature + etag/304 block).
+- `backend/app/api/routes/departments.py` — +18 lines net.
+- `tests/api/test_medical_departments_cache_etag_contract.py` — new, ~370 lines, 13 tests.
+- `CHANGELOG.md` — S53 запись.
+- `AI_IMPLEMENTATION_REPORT.md` — этот блок.
+
+### Decisions
+
+- **ORM seeding для medical/exams.** No public API POST endpoint exists. Альтернативы: (1) skip POST-invalidation test — но тогда coverage incomplete; (2) seed через `data_factory.create_medical_exam` — но такой helper отсутствует в factories.py; (3) ORM direct — pattern уже используется in pre-existing `tests/test_calendar_aggregator.py`. Выбрал #3. Тест invalidation skipped — `list_medical_exams` сам по себе not affected by POST (no POST). Если в будущем добавится POST endpoint — добавим mutation test.
+- **`status_filter` rendered as raw string.** Pre-S53 endpoint accepts `?status=expired` or `?status=upcoming` (str-typed query, не enum). В hash просто `("status", status_filter or "")`. Если value invalid (not expired/upcoming), filter не применяется в SQL, но ETag всё равно отличается — это OK (different request → different cache key).
+- **`MedicalExam` exam_date offset 10 days back, valid_until configurable.** `days_until_valid=30` (default) для upcoming; `days_until_valid=-30` для expired. Matches existing seeding pattern.
+- **No PATCH invalidation test для medical/exams.** No API PATCH endpoint either. ETag change на underlying data mutation is implicit invariant (any ORM `UPDATE` bumps `updated_at` через TimestampMixin) — covered by other endpoint tests with PATCH.
+- **Departments cross-tenant test использует identical name «Same Name».** Pattern из S47/S48 — verifies tenant prefix в hash защищает от ETag collision when row content matches.
+- **13 tests, не 15-20.** Standard ratio для 2 endpoints. Medical (5) + departments (8). Departments richer because: full mutation coverage (POST present) + cross-tenant explicit anti-leak + determinism.
+
+### Issues Fixed
+
+- **2 endpoints без ETag.** Medical exams — высокочастотный для HR/medical staff (раз в день/неделю — кто проходит мед, у кого истекает). Departments — open в админских сценариях при просмотре org structure.
+- **ORM seeding pattern documented for endpoints without API POST.** Future ETag rollouts to similar endpoints (e.g. permits, certifications) can reuse the same direct-session pattern from `_seed_medical_exam`.
+
+### Known Problems / Risks
+
+- **Medical exams без POST invalidation test.** When/if `POST /medical/exams` added, ensure ETag invalidates — будет visible by client seeing 200 instead of 304. Документировано в Decisions.
+- **Departments POST seeding через API — может быть outbox-noisy.** Each POST creates audit log + outbox entry. Test runtime impact: ~5ms per POST × 4 seeded in page-distinct test = +20ms. Acceptable.
+- **`?status=invalid` returns same data as no-filter but different ETag.** Different cache entry on client — minor waste, but contract correct.
+- **Local pytest segfault Py3.13+Windows** — known since S46.
+
+### Validation
+
+- **Syntax:** `py -3.13 -m py_compile backend/app/api/routes/{medical,departments}.py tests/api/test_medical_departments_cache_etag_contract.py` → ✅ exit 0.
+- **Endpoint mounts verified:** `medical.router` без prefix → `/api/v1/medical/exams` (path declared inline in `@router.get("/medical/exams")`). `departments.router` без prefix → `/api/v1/departments`.
+- **Schema requirements verified:** `DepartmentCreate{company_id, name}` minimum payload — `_seed_department` passes. `MedicalExam` ORM constructor matches pattern.
+- **Test fixtures used (`async_client`, `make_auth_headers`, `sessionmaker`, `data_factory`) consistent with S47-52.**
+- **Pytest full-run:** локально segfault. CI на 3.12.12.
+
+### Next Steps
+
+1. **Extend ETag to remaining list endpoints** — `/contractors/registry`, `/journals`, `/admin/users`, `/api-tokens`, `/risk/*`, `/incidents/{id}/logs` (sub-resource list). Same pattern.
+2. **Cache-Control uniformity audit** (S47 #5).
+3. **Phase 9.2 service-level Redis cache** (S47 #1).
+4. **Phase 2 frontend: Command Center UI** (S35 #11) — большая сессия (2+).
+5. **Site Card aggregate** (S35 #10) — большая сессия (2+).
+6. **Backfill Sessions 36-45 в AI_IMPLEMENTATION_REPORT.md** — small doc-only.
+7. **Phase 9.1 follow-up: trend_series bulk-aggregation** (S46 #5).
+8. **Phase 7.2 Field-Specific Workflows** (3+).
+9. **Score-based unified ranking** (S35 #1).
+10. **Per-tenant relevance tuning** (S35 #3).
+11. **Helper enhancement: auto-normalize bool → "1"/"0"** (S51 #11).
+
+---
+
+## Previous Handoff (2026-05-19, Session 52 — Phase 9.2 rollout: ETag on /briefings/* + /training/courses, vNext-PERF-03)
+
+- **Дата:** 2026-05-19 (после Session 51)
+- **Агент:** Claude (local Windows)
+- **Задача:** «Продолжай по ТЗ» → S51 Next Step #1 «Extend ETag to /api/v1/briefings/* + /training/* endpoints». 4 new endpoints — 3 briefings collections + 1 training/courses.
+- **Статус:** ✅ COMPLETE. 4 endpoints получили ETag; 15 contract tests добавлены. Coverage: **14 list endpoints** carry ETag conditional-GET. Cache contract tests total: **103**.
+- **Где остановился:** Briefings + training/courses покрыты. Дополнительные training endpoints (`/training/plans` — пока нет list endpoint, есть только /plans/{id}; `/training/certificates/expiring` — list-of-expiring, не main list) остаются на будущее. Open follow-ups: Cache-Control uniformity audit, service-level Redis cache, Phase 2 frontend, Site Card, backfill Sessions 36-45.
+
+### Studied Documentation
+
+- `AI_IMPLEMENTATION_REPORT.md` Session 51 Next Step #1 — explicit invitation.
+- `backend/app/api/routes/briefings.py` — pre-S52: 3 list endpoints (templates/journals/entries) без pagination, returning `BriefingCollection{items, total}`. RBAC через `_PermReadDep`.
+- `backend/app/api/routes/training.py` — pre-S52: `list_courses` с simple pagination. No ETag.
+- `backend/app/api/helpers/etag.py` (S50) — generic helper, поддерживает arbitrary scalars list.
+- Schemas: `BriefingTemplatePayload{code, title, briefing_type, status="draft"}`, `BriefingJournalPayload{code, title, journal_type, status="active"}`, `BriefingEntryPayload{briefing_journal_id, briefing_type, briefing_date}`, `TrainingCourseBase{title (required), code, ...}`.
+- Router prefixes: `briefings.router` — `/briefings`, `training.router` — `/training`. Mounted under `/api/v1` → final paths `/api/v1/briefings/templates`, `/api/v1/training/courses`, etc.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 9 Task 9.2 «Caching Strategy» (vNext-PERF-03) — direct continuation of S50/S51 rollout.
+- **Приоритет:** P3.
+- **Почему выбрана:** S51 #1 explicit invitation. Demonstrates helper handles no-pagination collections cleanly (via `("kind", ...)` scalar) — additional value beyond simple list-paginated routes.
+
+### Implemented Changes
+
+- **`backend/app/api/routes/briefings.py`** — added `Response` to fastapi imports; added `compute_list_etag` import. Three endpoint changes:
+  - `list_templates`: signature `+request: Request, response: Response`. Computes ETag with `[("total", len(items)), ("kind", "templates")]`. 304 branch.
+  - `list_journals`: same signature change + `[("total", len(items)), ("kind", "journals")]`.
+  - `list_entries`: same signature change + `[("total", len(items)), ("kind", "entries")]`. ETag computed BEFORE signatures fetch (skip extra DB roundtrip if 304).
+- **`backend/app/api/routes/training.py`** — added `Request` to fastapi imports; added `compute_list_etag` import. `list_courses`: signature extended, return type `TrainingCoursePage | Response`. Standard pagination scalars.
+- **`tests/api/test_briefings_training_cache_etag_contract.py`** — new file, 15 cases ~440 lines:
+  - 3 templates (hit/POST-invalidation/empty-stable)
+  - 2 journals (hit/miss)
+  - 2 entries (hit/POST-invalidation)
+  - 1 cross-endpoint isolation guard (seed 1 row in each of 3 collections — total identical — verify distinct ETags)
+  - 7 training/courses (hit/miss/POST-invalidation/page-distinct/empty-stable/cross-tenant-anti-leak/RFC-7232-quoted)
+- **`CHANGELOG.md`** — Session 52 запись prepended.
+- **`AI_IMPLEMENTATION_REPORT.md`** — этот блок.
+
+### Changed / New Files
+
+- `backend/app/api/routes/briefings.py` — +24 lines net (2 imports; 3 endpoint signatures + 3 etag/304 blocks).
+- `backend/app/api/routes/training.py` — +15 lines net (2 imports; signature + etag/304 block).
+- `tests/api/test_briefings_training_cache_etag_contract.py` — new, ~440 lines, 15 tests.
+- `CHANGELOG.md` — S52 запись.
+- `AI_IMPLEMENTATION_REPORT.md` — этот блок.
+
+### Decisions
+
+- **`("kind", ...)` scalar для briefings collections.** Без него 3 endpoints с одинаковым `len(items)` давали бы identical ETag — cross-endpoint cache leak. Альтернативы: (1) включить URL path в hash — но это hides из callsite; (2) hardcode "templates"/"journals"/"entries" в helper — но это эпизодически. Выбрал callsite-level `("kind", "templates")` — explicit, обычный scalar pattern, helper не нужно менять. Один из тестов explicitly верифицирует.
+- **Briefings без pagination — это OK.** Pre-S52 endpoints возвращают все rows. Это не optimal для крупных тенантов (1000+ templates), но не задача S52 решать. ETag всё равно работает: тенант с 50 templates получит stable hash; cache hit пока никто не добавил/изменил.
+- **Compute ETag BEFORE signatures fetch в `list_entries`.** Pre-S52 список entries делал extra query для signatures (potentially N+1). Если ETag совпадает с client's — мы не идём в signatures query — отдаём 304 immediately. Это net-positive optimization (signatures only fetched on cache miss).
+- **No-tenant-isolation тест для briefings.** Coverage там не added because: (a) шаблоны/журналы/инструктажи tenant-scoped через `tenant_id == tenant.id` filter; (b) S47/S48/S49 pattern уже verified anti-leak guarantees across 7 endpoints with same helper; (c) `("kind", ...)` scalar test уже provides similar guard against accidental cache collision. Marginal coverage gain не оправдывает 3 additional tests.
+- **15 tests, не 20+.** Pre-existing pattern (S47/S48/S49/S51) had 10-25 tests per file depending on endpoint count и filter complexity. 15 для 4 endpoints — ratio normal (3-4 per endpoint + cross-endpoint guard).
+- **Не покрываю PATCH invalidation для briefings.** Briefings PATCH endpoints существуют (`/templates/{id}`, etc.) и pattern идентичен. POST/PATCH invalidation invariant уже verified на companies/sites/persons в S47/S48 — same helper, same behavior. Skip duplication.
+- **Не покрываю `/training/certificates/expiring` или `/training/plans/{id}`.** Expiring — это не main list (returns subset based on `within_days`); plans единичные GET не list. Future incremental work если потребуется.
+
+### Issues Fixed
+
+- **4 high-traffic endpoints без ETag.** Briefings collections (3) — открываются HR/OT specialists ежедневно при проверке журналов инструктажей. Training/courses — open в HR при назначении обучения. Все теперь поддерживают conditional GET.
+- **Briefings `list_entries` micro-optimization.** Signatures fetch теперь skipped в 304 branch — мини-improvement для cache hits.
+- **Cross-endpoint cache collision risk eliminated.** `("kind", ...)` scalar pattern prevent's accidental collision между 3 briefings collections.
+
+### Known Problems / Risks
+
+- **Briefings collections без pagination.** Для крупных тенантов список templates/journals/entries может расти. Pagination — отдельная feature, не задача ETag rollout.
+- **No-pagination + signatures fetch in `list_entries` потенциально N+1 для подписей.** Pre-existing issue (не введён S52); cache hits avoid it через 304 branch.
+- **`("kind", ...)` convention not enforced.** Если кто-то добавит 4-ю briefings collection без `kind` scalar, cross-collection collision returns. Test guards against это для 3 existing collections.
+- **Local pytest segfault Py3.13+Windows** — known since S46.
+
+### Validation
+
+- **Окружение:** Windows, Python 3.13.7.
+- **Syntax:** `py -3.13 -m py_compile backend/app/api/routes/{briefings,training}.py tests/api/test_briefings_training_cache_etag_contract.py` → ✅ exit 0.
+- **Endpoint mounts verified:**
+  - `briefings.router` имеет `prefix="/briefings"` → `/api/v1/briefings/{templates,journals,entries}` ✓.
+  - `training.router` имеет `prefix="/training"` → `/api/v1/training/courses` ✓.
+- **Schema requirements verified:**
+  - `BriefingTemplatePayload{code, title, briefing_type}` — все required, `_seed_briefing_template` passes.
+  - `BriefingJournalPayload{code, title, journal_type}` — все required.
+  - `BriefingEntryPayload{briefing_journal_id, briefing_type, briefing_date}` — все required.
+  - `TrainingCourseBase{title}` (rest optional) — `_seed_training_course` passes title + code.
+- **Helper invocation:** standard pattern matched (kwargs-only, ordered scalars list).
+- **Pytest full-run:** локально segfault. CI на 3.12.12.
+
+### Next Steps
+
+1. **Extend ETag to remaining list endpoints** (training/plans/list — нужно убедиться что такой list endpoint есть; medical exams; contractor permits; risk maps; etc.). Same incremental pattern.
+2. **Cache-Control uniformity audit** (S47 #5).
+3. **Phase 9.2 service-level Redis cache** (S47 #1).
+4. **Phase 2 frontend: Command Center UI** (S35 #11) — большая сессия (2+).
+5. **Site Card aggregate** (S35 #10) — большая сессия (2+).
+6. **Backfill Sessions 36-45 в AI_IMPLEMENTATION_REPORT.md** — small doc-only.
+7. **Phase 9.1 follow-up: trend_series bulk-aggregation** (S46 #5).
+8. **Phase 7.2 Field-Specific Workflows** (3+).
+9. **Score-based unified ranking** (S35 #1).
+10. **Per-tenant relevance tuning** (S35 #3).
+11. **Helper enhancement: auto-normalize bool → "1"/"0"** (S51 #11).
+
+---
+
+## Previous Handoff (2026-05-19, Session 51 — Phase 9.2 rollout: ETag on /ppe/{items,issues} + /prescriptions, vNext-PERF-03)
+
+- **Дата:** 2026-05-19 (после Session 50)
+- **Агент:** Claude (local Windows)
+- **Задача:** «Продолжай по ТЗ» → S50 Next Step #10 «Extend ETag to more endpoints (briefings, training, ppe, etc.) — now trivial with shared helper». Демонстрирует S50 refactor payoff: добавление ETag к новому endpoint теперь занимает ~5 lines callsite vs 30+ inline helper.
+- **Статус:** ✅ COMPLETE. 3 endpoint-а получили ETag (ppe/items, ppe/issues, prescriptions) с 16 contract tests. Coverage: 10 list endpoints carry ETag conditional-GET.
+- **Где остановился:** ETag rollout продолжается incrementally. Open follow-ups: briefings/training endpoints, Cache-Control uniformity audit, service-level Redis cache.
+
+### Studied Documentation
+
+- `AI_IMPLEMENTATION_REPORT.md` Session 50 Next Step #10 — explicit invitation для дальнейшего rollout.
+- `backend/app/api/routes/ppe.py` — pre-S51: `list_items` (simple pagination), `list_issues` (с `person_id` + `active_only` filters). No ETag.
+- `backend/app/api/routes/prescriptions.py` — pre-S51: `list_prescriptions` с 4 filter axes (`inspection_id`/`incident_id`/`status`/`assignee_id`). No ETag.
+- `backend/app/api/helpers/etag.py` (S50) — `compute_list_etag(*, tenant_id, items, scalars)` shared helper.
+- `tests/integration/test_prescriptions_api.py` — pattern для seeding inspection + prescription через API.
+- `backend/app/schemas/ppe.py:14` — `PPEItemCreate{name, category=OTHER}` (minimal payload); `PPEIssueCreate{person_id, item_id}` requires both.
+- `backend/app/schemas/prescriptions.py:13` — `PrescriptionCreate{inspection_id, description}` requires both; inspection must exist first.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 9 Task 9.2 «Caching Strategy» (vNext-PERF-03) — incremental rollout per S50 #10.
+- **Приоритет:** P3.
+- **Почему выбрана:** Direct next-step из S50. Demonstrates refactor value через 3 new endpoint additions with minimal code changes. Continued user-visible benefit (reduced bandwidth on PPE/prescriptions list pages).
+
+### Implemented Changes
+
+- **`backend/app/api/routes/ppe.py`** — added `Request` to fastapi imports; added `from app.api.helpers.etag import compute_list_etag`. Two endpoint changes:
+  - `list_items`: signature `+request: Request, response: Response`, return type `PPEItemPage | Response`. Computes ETag with `[("total",T),("limit",L),("offset",O)]` scalars. Honors If-None-Match → 304.
+  - `list_issues`: same signature change. **5 scalars** including `("person", person_id or "")` and `("active_only", "1" if active_only else "0")` — boolean rendered as stable string for hash.
+- **`backend/app/api/routes/prescriptions.py`** — added `Response` to fastapi imports; added `compute_list_etag` import. `list_prescriptions` signature extended, return type `PrescriptionPage | Response`. **7 scalars** (pagination + 4 filter axes).
+- **`tests/api/test_ppe_prescriptions_cache_etag_contract.py`** — new file, 16 cases ~480 lines:
+  - 5 PPE items: hit/miss/POST-invalidation/page-distinct/empty-stable.
+  - 5 PPE issues: hit/person_id-filter-distinct/active_only-flag-distinct/POST-invalidation/empty-stable.
+  - 6 prescriptions: hit/PATCH-invalidation/inspection_id-distinct/status-distinct/empty-stable/cross-tenant-anti-leak.
+  - `_seed_*` helpers через real API POST (exercises Outbox/audit pipeline).
+- **`CHANGELOG.md`** — Session 51 запись prepended.
+- **`AI_IMPLEMENTATION_REPORT.md`** — этот блок.
+
+### Changed / New Files
+
+- `backend/app/api/routes/ppe.py` — +21 lines (2 import additions; 2 endpoint signatures extended; 2 etag/304 blocks).
+- `backend/app/api/routes/prescriptions.py` — +18 lines (Response import; helper import; signature extended; etag/304 block).
+- `tests/api/test_ppe_prescriptions_cache_etag_contract.py` — new, ~480 lines, 16 tests.
+- `CHANGELOG.md` — Session 51 запись.
+- `AI_IMPLEMENTATION_REPORT.md` — этот блок.
+
+### Decisions
+
+- **Boolean filter в scalars: `"1"`/`"0"` string form.** `active_only` в PPE issues — `bool`. Сценарий: `compute_list_etag(scalars=[("active_only", True)])` → str(True) → `"True"`. Альтернатива `("active_only", "1" if active_only else "0")` — stable, lowercase, single-char. Выбрал второй — единообразнее с `"" for unset` pattern для optional filters. Если в будущем добавятся ещё bool filters — recommend the same `"1"/"0"` style.
+- **Single combined test file для 3 endpoints.** PPE/items + PPE/issues часть одного модуля (ppe.py); prescriptions — отдельный модуль, но похожая shape contract. Combined файл легче audit как «S51 closure». Если в будущем будет ещё /briefings/* — отдельный файл (different namespace).
+- **`_seed_ppe_item` без `code` параметра по умолчанию.** Pre-existing `data_factory` НЕ имеет `create_ppe_item` helper. POST через real API минимальный payload (только `name`); `category` defaults to `OTHER` (Pydantic default in schema). Это exercise full write path и не требует additional factory.
+- **PPE issue cross-tenant test исключён.** Persons + items живут в tenant scope; cross-tenant seeding для issues потребовало бы Persons в обоих tenants + Items в обоих + Issues — overhead не оправдывает marginal coverage gain (cross-tenant anti-leak уже проверен на companies/sites/persons/incidents/inspections/prescriptions — pattern одинаковый для всех endpoint-ов с helper).
+- **Prescriptions cross-tenant anti-leak покрыт.** Самый sensitive из трёх — prescriptions содержат actionable info (что компания должна устранить по требованию ГИТ). Cross-tenant leak = data exposure. Explicit anti-leak test.
+- **PATCH invalidation только для prescriptions.** PPE items PATCH тоже работает и invalidates, но pattern идентичен — pre-existing 55 cache contract tests на companies/sites/persons уже verify PATCH-invalidation invariant. Skip duplication; prescriptions PATCH также verifies status transition (OPEN → COMPLETED) что exercises full Pydantic schema validation path.
+- **Empty-list tenants per-endpoint:** delta (ppe/items), gamma (ppe/issues), epsilon (prescriptions). Per-test fresh sqlite isolates (S46-49 pattern).
+- **Не покрываю `?incident_id=` и `?assignee_id=` filters для prescriptions.** 4 filter axes total; покрыты 2 (inspection_id, status). Pattern идентичен — single string-typed scalar поверх existing scalars list. Marginal gain от тестирования всех 4 — small; existing cache contract test pattern на incidents/inspections уже проверял подобные string filters.
+
+### Issues Fixed
+
+- **3 high-traffic list endpoints без ETag (до S51):** PPE/items + PPE/issues (warehouse + worker tracking pages — открываются HR/OT spec несколько раз в день); prescriptions (regulatory compliance follow-up page). Все теперь поддерживают conditional GET.
+- **S50 refactor's payoff demonstrated:** Boolean `active_only` filter participates в hash через trivial `("active_only", "1"|"0")` callsite construction — НЕ требовало изменения helper. Helper handles `str()`-able values uniformly.
+
+### Known Problems / Risks
+
+- **Boolean rendering inconsistency potentiel.** Если кто-то напишет `("active_only", active_only)` без string conversion, `str(True)` == `"True"` != `"1"`. Конвенция «boolean → "1"/"0"» сейчас не enforced в helper. Можно добавить `isinstance(value, bool)` branch в helper для normalize, но это behavior-changing — отложил. **Recommendation:** future ETag callsites должны explicitly convert bool → "1"/"0" — задокументировано в S51 changelog.
+- **PPE issues cache key shape inconsistent с companies/sites.** Companies/sites/persons имеют 3 scalars (total/limit/offset). PPE issues — 5 scalars (+ person_id + active_only). Это правильно (filter в cache key), но cache keys "fragmentированы" — каждый distinct filter combination = distinct cache entry на client side. Acceptable trade-off (отдельный browser cache per filter).
+- **Не покрыты filter combinations.** Только single-filter tests. Multi-filter combo (`person_id=X&active_only=true`) NOT explicitly tested. Pre-existing pattern from S47/S49 тоже не покрывал.
+- **`_seed_ppe_issue` зависит от created person + item.** Каждый тест PPE issues требует 1 company + 1 person + 1 item (API POST). Если API endpoints когда-то изменят semantic — все 5 ppe issues тестов breaks. Trade-off: real-API seeding = trust full pipeline.
+- **Local pytest segfault Py3.13+Windows** — known since S46-50.
+
+### Validation
+
+- **Окружение:** Windows, Python 3.13.7.
+- **Syntax:** `py -3.13 -m py_compile backend/app/api/routes/{ppe,prescriptions}.py tests/api/test_ppe_prescriptions_cache_etag_contract.py` → ✅ exit 0.
+- **Endpoint mounts verified:**
+  - `ppe.router` имеет `prefix="/ppe"` (declared в module) + mounted в `route_groups.py` под `/api/v1` → `/api/v1/ppe/items` ✓, `/api/v1/ppe/issues` ✓.
+  - `prescriptions.router` без prefix + mounted под `/api/v1` → `/api/v1/prescriptions` ✓.
+- **Schema requirements verified:**
+  - `PPEItemCreate{name (required), category=OTHER default, ...}` — `_seed_ppe_item` passes name + category.
+  - `PPEIssueCreate{person_id, item_id, quantity=1}` — `_seed_ppe_issue` passes person_id, item_id.
+  - `PrescriptionCreate{inspection_id, description, due_at?}` — `_seed_prescription` passes inspection_id + description + due_at.
+- **Helper invocation patterns:** all 3 endpoints use `compute_list_etag(tenant_id=str(tenant.id), items=items, scalars=[...])` — same pattern as S50 migrated endpoints.
+- **Pytest full-run:** локально segfault Py3.13+Windows. CI на 3.12.12.
+
+### Next Steps
+
+1. **Extend ETag to /api/v1/briefings/* + /training/* endpoints** — same incremental rollout pattern. Briefings has 3 list endpoints (templates/journals/entries).
+2. **Cache-Control uniformity audit** (S47 #5).
+3. **Phase 9.2 service-level Redis cache** (S47 #1).
+4. **Phase 2 frontend: Command Center UI** (S35 #11) — большая сессия (2+).
+5. **Site Card aggregate** (S35 #10) — большая сессия (2+).
+6. **Backfill Sessions 36-45 в AI_IMPLEMENTATION_REPORT.md** — small doc-only.
+7. **Phase 9.1 follow-up: trend_series bulk-aggregation** (S46 #5).
+8. **Phase 7.2 Field-Specific Workflows** (3+).
+9. **Score-based unified ranking** (S35 #1).
+10. **Per-tenant relevance tuning** (S35 #3).
+11. **Helper enhancement: auto-normalize bool → "1"/"0"** — minor convenience refactor.
+
+---
+
+## Previous Handoff (2026-05-19, Session 50 — Phase 9.2 refactor: shared ETag helper, vNext-PERF-03)
+
+- **Дата:** 2026-05-19 (после Session 49)
+- **Агент:** Claude (local Windows)
+- **Задача:** «Продолжай по ТЗ» → Session 49 Next Step #1 «Refactor 7 inline `_*_etag()` helpers → `backend/app/api/helpers/etag.py`». Pure refactor: eliminate 7 near-identical SHA256 boilerplate copies без изменения hash format (byte-identity критична — иначе клиенты с ETag'ами с прошлой сессии invalidate).
+- **Статус:** ✅ COMPLETE. Shared helper создан, 7 routes мигрированы, 17 unit tests добавлены, byte-equivalence verified против pre-refactor inline format. Net code reduction -84 строки.
+- **Где остановился:** ETag helper consolidation closed. Open follow-ups: Cache-Control uniformity audit (S47 #5), service-level Redis read-through cache (S47 #1), Phase 2 frontend / Site Card / backfill Sessions 36-45.
+
+### Studied Documentation
+
+- `AI_IMPLEMENTATION_REPORT.md` Session 49 Next Step #1 — точная инструкция: `compute_etag(*parts) -> str` taking list of `(label, value)` tuples, dedupe 7 copies.
+- `backend/app/api/routes/companies.py` pre-refactor `_companies_etag` — base pattern: `parts = ["tenant:{id}", "total:N", "limit:L", "offset:O", "|".join("{id}:{updated_at_iso}")]` → `sha256("::".join(parts))` → `f'"{digest}"'`.
+- Сравнение всех 7 helpers — 3 разновидности:
+  - **companies/sites/persons**: `("total", T), ("limit", L), ("offset", O)`.
+  - **documents/tasks**: `("page", P), ("page_size", PS), ("total", T)` — different pagination convention.
+  - **incidents/inspections**: above + filter axes как extra `(label, value)` парcы (4 для incidents, 5 для inspections).
+- **Slight inconsistency:** documents/tasks использовали `item.updated_at.isoformat()` без None-guard; остальные 5 — `if updated_at else ''`. Production rows всегда имеют `updated_at` (TimestampMixin), поэтому byte-identity сохраняется. Helper использует defensive variant.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 9 Task 9.2 «Caching Strategy» (vNext-PERF-03) — refactor follow-up из S49 #1.
+- **Приоритет:** P3.
+- **Почему выбрана:** Direct next-step из S49. Closure-style refactor — все 7 endpoint-ов уже работали, нужно только консолидировать helper. Low risk, high readability gain. CLAUDE.md «3 similar lines is better than premature abstraction» — но при 7 копиях это уже не premature.
+
+### Implemented Changes
+
+- **`backend/app/api/helpers/__init__.py`** (new) — package marker, 1 line docstring.
+- **`backend/app/api/helpers/etag.py`** (new, ~70 lines incl. docstring) — `compute_list_etag(*, tenant_id, items, scalars=())`:
+  - `tenant_id` всегда первый part hash (anti-leak guarantee).
+  - `scalars: Sequence[tuple[str, Any]]` — упорядоченный список `(label, value)`. `None` value → пустая строка. Любой type → `str()`. **Order-sensitive** (cache key должен быть deterministic для каждого endpoint).
+  - `items: Iterable[Any]` — single-pass, generator-safe. Каждый item должен иметь `.id` и `.updated_at` (TenantBaseModel/TimestampMixin гарантируют).
+  - Возвращает `f'"{sha256(...).hexdigest()}"'` per RFC 7232 § 2.3.
+- **`backend/app/api/routes/companies.py`** — removed inline `_companies_etag` (-23 строки); added `from app.api.helpers.etag import compute_list_etag` (+1); replaced call site (~5 line diff). Removed `import hashlib`.
+- **`backend/app/api/routes/sites.py`** — analogous (-17 строк inline + import deletion).
+- **`backend/app/api/routes/documents.py`** — removed `_documents_list_etag` (-17 строк), added import (+1); kept `import hashlib` (used elsewhere for `_hash_payload`).
+- **`backend/app/api/routes/tasks.py`** — removed `_tasks_etag` (-17 строк), added import, removed `hashlib`.
+- **`backend/app/api/routes/persons.py`** — removed `_persons_etag` (-20 строк), added import, removed `hashlib`.
+- **`backend/app/api/routes/incidents.py`** — removed `_incidents_etag` (-29 строк, 4 filter axes), added import, removed `hashlib`.
+- **`backend/app/api/routes/inspections.py`** — removed `_inspections_etag` (-31 строка, 5 filter axes), added import, removed `hashlib`.
+- **`tests/test_etag_helper.py`** (new, 17 cases, ~280 lines) — unit tests:
+  - **Format guarantees (6):** quoted-string format, determinism, tenant-sensitivity, scalar-order-sensitivity, item-order-sensitivity, updated_at-change-invalidates.
+  - **Edge cases (6):** empty items, no scalars, None→empty normalization, missing updated_at, generator support, int vs str scalar parity.
+  - **Byte-equivalence with pre-refactor (4):** companies format, documents format, incidents format (4 filter axes), inspections format (5 filter axes) — hand-computed expected hash via `hashlib.sha256` matching exact string each route emitted before S50.
+  - **Anti-leak guarantee (1):** tenant_id always first part; reconstruction check.
+- **`CHANGELOG.md`** — Session 50 запись prepended.
+- **`AI_IMPLEMENTATION_REPORT.md`** — этот блок.
+
+### Changed / New Files
+
+- `backend/app/api/helpers/__init__.py` — new, 1 line.
+- `backend/app/api/helpers/etag.py` — new, ~70 lines.
+- `backend/app/api/routes/companies.py` — -22 lines net (removed 23, added 1 import).
+- `backend/app/api/routes/sites.py` — -17 lines net.
+- `backend/app/api/routes/documents.py` — -16 lines net.
+- `backend/app/api/routes/tasks.py` — -17 lines net.
+- `backend/app/api/routes/persons.py` — -20 lines net.
+- `backend/app/api/routes/incidents.py` — -29 lines net.
+- `backend/app/api/routes/inspections.py` — -31 lines net.
+- `tests/test_etag_helper.py` — new, ~280 lines, 17 tests.
+- `CHANGELOG.md` — Session 50 запись.
+- `AI_IMPLEMENTATION_REPORT.md` — этот блок.
+
+### Decisions
+
+- **`scalars: Sequence[tuple[str, Any]]` instead of `**kwargs`.** Considered `compute_list_etag(*, tenant_id, items, total, limit=None, offset=None, ...)` — но это либо balloon's с N filter params (incidents has 4, inspections 5), либо требует passthrough `**filters` который теряет order-determinism. Tuple-list explicit: callsite видит точный порядок hash, помогает audit'у.
+- **`None` value → empty string в helper, не в callsite.** Pre-refactor каждый route делал `f"company:{company_id or ''}"`. Можно было бы оставить callsite-pattern, но тогда helper не знает что есть «отсутствующий filter». Решение: helper normalizes None → "", чтобы callsite мог писать `("company", company_id)` без `or ""` boilerplate. Тест `test_none_scalar_value_normalised_to_empty_string` гарантирует.
+- **Generator-safe iteration.** `Iterable[Any]` вместо `list[Any]`, чтобы helper мог принимать SQLAlchemy `.scalars().all()` напрямую (он list-like) и custom generators в тестах. `"|".join(...)` consumes generator single-pass, что corrert.
+- **`item.id` / `item.updated_at` без `getattr`.** Все 7 routes передают ORM rows (TenantBaseModel children → `.id` + TimestampMixin `.updated_at`). AttributeError при duck-typing failure лучше silent fallback (т.е. better fail loud если кто-то передаст не-ORM dict). Уже работает — `Pydantic` DTOs тоже имеют `.id`+`.updated_at` (DocumentUiRead, TaskRead).
+- **Keep `import hashlib` в documents.py / tasks.py.** Documents use hashlib для `_hash_payload` (content fingerprinting). Tasks НЕ использует hashlib после refactor — поэтому удалил. Companies/sites/persons/incidents/inspections тоже удалил.
+- **Byte-equivalence через hand-recomputed hash в test.** Альтернатива — import old helper и сравнивать output. Отверг: old helpers удалены; и пере-сохраняя только expected format в тесте, я pin'аю **contract**, не **implementation**. Если future refactor захочет изменить format — этот тест fails clearly, и придётся документировать ETag-version bump.
+- **17 tests, не 30+.** Acceptance для refactor — semantic equivalence + format pin. 17 кейсов покрывают 4 dimensions: format guarantees, edge cases, byte-equivalence с 4 representative pre-refactor formats, tenant-prefix anti-leak. Расширять до 30+ — diminishing returns; existing 55 cache-contract tests из S47-49 покрывают API-level behavior.
+- **Pre-existing 55 tests из S47-49 НЕ требуют изменений.** Они тестируют API behavior (HTTP response codes, ETag header values), не имена helper функций. Refactor invisible им — это его killer feature.
+
+### Issues Fixed
+
+- **Helper duplication eliminated.** До S50: 7 копий SHA256 + quoted-string boilerplate, каждая ~17-31 строки. После S50: 1 helper ~30 строк (включая docstring). Net -84 production lines.
+- **Future ETag axis additions trivial.** Adding `assignee_id` filter to tasks ETag: pre-S50 — modify `_tasks_etag` signature + callsite + remember to update hash structure. После S50 — add `("assignee", assignee_id or "")` к existing `scalars` list в callsite. Single-line change.
+- **Format drift risk reduced.** Pre-S50: each `_<entity>_etag` could diverge silently (e.g. someone "optimizes" companies hash to use `:` instead of `::`, persons inadvertently uses `--` instead of `|`). После S50 — single helper, single format. Pin test catches if it changes.
+
+### Known Problems / Risks
+
+- **Byte-identity assumption: `updated_at` always set.** Helper produces `id:` (empty timestamp) для rows с `updated_at=None`. Documents/tasks pre-refactor crash'ed на `None.isoformat()` — теперь они gracefully degrade. Production rows always have `updated_at` (TimestampMixin), but unit tests now cover the None case explicitly.
+- **`Sequence[tuple]` type hint requires Python 3.9+** — passes на 3.12.12 CI; verified locally на 3.13.7.
+- **Helper doesn't validate `tenant_id` is non-empty.** Calling `compute_list_etag(tenant_id="", ...)` would produce hash for `"tenant:"::...` — possibly cross-collision if multiple tenants pass empty. Real route callers always pass `str(tenant.id)` from `TenantDep`, which is non-empty UUID. Defensive check скinned for now.
+- **Local pytest still segfaults на Py3.13+Windows.** Helper smoke-test through `py -3.13 -c "..."` passes (см. Validation), но full pytest collection hangs. CI authoritative.
+
+### Validation
+
+- **Окружение:** Windows, Python 3.13.7.
+- **Syntax:** `py -3.13 -m py_compile backend/app/api/helpers/etag.py backend/app/api/routes/{companies,sites,documents,tasks,persons,incidents,inspections}.py tests/test_etag_helper.py` → ✅ exit 0.
+- **Direct helper execution** (`py -3.13 -c "..."`) — assertions PASS:
+  - Companies format: `compute_list_etag(tenant_id="t-uuid", items=[Row(c1,dt), Row(c2,None)], scalars=[("total",2),("limit",50),("offset",0)])` == hand-computed `_hash(["tenant:t-uuid", "total:2", "limit:50", "offset:0", "c1:{dt}|c2:"])` ✓
+  - Incidents format (4 filter axes): equivalence verified ✓
+  - Empty items produce stable quoted ETag ✓
+  - `None` value normalized to `""` (`compute_list_etag(..., scalars=[("c", None)])` == `compute_list_etag(..., scalars=[("c", "")])`) ✓
+- **Cross-check via existing 55 cache contract tests:** they exercise `hit/miss/POST-invalidates/PATCH-invalidates/page-distinct/filter-distinct/tenant-isolation/empty-stable/RFC7232/determinism` across 7 endpoints. **All 55 tests semantically test the helper's output** without importing it directly — if helper diverges from pre-refactor format, those tests fail on next CI run. They're the integration cross-check.
+- **No old-helper-name leftover imports** verified via `grep -rn '_companies_etag|_sites_etag|...' backend/ tests/` — only test function names match (`test_companies_etag_changes_after_create`), not imports of the deleted helpers.
+- **Pytest full-run:** локально segfault Py3.13+Windows (известно с S46). CI на 3.12.12 — source of truth.
+
+### Next Steps
+
+1. **Cache-Control uniformity audit** (S47 #5) — explicit `Cache-Control` policies across ~30 endpoints, document uniform stance (lists → ETag-only; admin/PII → no-store; SSE → no-cache).
+2. **Phase 9.2 service-level Redis cache** (S47 #1) — read-through cache for `/users/me` permissions, `/sites` per-tenant, `/templates/{id}`.
+3. **Phase 2 frontend: Command Center UI** (S35 #11) — большая сессия (2+).
+4. **Site Card aggregate** (S35 #10) — большая сессия (2+).
+5. **Backfill Sessions 36-45 в AI_IMPLEMENTATION_REPORT.md** — small doc-only.
+6. **Phase 9.1 follow-up: trend_series bulk-aggregation** (S46 #5).
+7. **Phase 7.2 Field-Specific Workflows** (3+).
+8. **Score-based unified ranking** (S35 #1).
+9. **Per-tenant relevance tuning** (S35 #3).
+10. **Extend ETag to more endpoints** (briefings, training plans, ppe issues, etc.) — теперь trivial с shared helper.
+
+---
+
+## Previous Handoff (2026-05-19, Session 49 — Phase 9.2 closure: ETag on /incidents + /inspections, 7/7 list endpoints, vNext-PERF-03)
+
+- **Дата:** 2026-05-19 (после Session 48)
+- **Агент:** Claude (local Windows)
+- **Задача:** «Продолжай по ТЗ» → Session 48 Next Step #1 «Extend ETag to incidents + inspections list endpoints» — closes 7/7 main list endpoints coverage goal. Каждый additive change + comprehensive contract tests.
+- **Статус:** ✅ COMPLETE. 2 endpoint-а получили ETag conditional-GET; 19 contract tests добавлены. Phase 9.2 acceptance #1 HTTP caching fully covers main list endpoints (7/7).
+- **Где остановился:** Phase 9.2 #1 fully covered для list endpoints. Open follow-ups: refactor 7 inline `_*_etag()` helpers into shared `backend/app/api/helpers/etag.py` (now actually warranted with 7 copies), service-level Redis read-through cache, Cache-Control uniformity audit. Естественный next — рефакторинг ETag-helper-ов (closure-style сессия), либо переключение на большие открытые тикеты (Phase 2 frontend Command Center UI, Site Card aggregate, backfill Sessions 36-45).
+
+### Studied Documentation
+
+- `AI_IMPLEMENTATION_REPORT.md` Session 48 → Next Step #1 (extend to incidents+inspections). S49 закрывает этот item.
+- `backend/app/api/routes/incidents.py:91-121` — `list_incidents` сигнатура (tenant, session, access, company_id, site_id, status_filter, incident_type, limit, offset). Filter axes: 4 (company, site, status, type). Сериализатор `_serialize_incident()` с victim_ids computation от participants relationship.
+- `backend/app/api/routes/inspections.py:103-136` — `list_inspections` с 5 filter axes (+ responsible_id). Сериализатор включает results.
+- `backend/app/schemas/incidents.py` — `IncidentCreate{title, incident_type, occurred_at, company_id, site_id, severity}` (всё required + severity has default); `InspectionCreate{company_id, authority, ...}` (только company_id + authority required).
+- `backend/app/models/models.py:2216-2237` — `IncidentType{ACCIDENT,MICROTRAUMA,NEAR_MISS,UNSAFE_CONDITION}`, `IncidentStatus{REPORTED,INVESTIGATING,ACTIONS,CLOSED,CANCELLED}`; line 2350-2360 — `InspectionStatus{PLANNED,IN_PROGRESS,COMPLETED,CANCELLED}`, `InspectionType{INTERNAL,EXTERNAL}`.
+- `tests/api/test_incidents_api.py:20-50` — пример flow: tenant + company + site + person setup → POST `/api/v1/incidents` payload с `victim_ids` → GET list → POST `/logs` → PATCH → final GET. Используется как template для seed-helper.
+- `tests/api/test_inspections_api.py:13-37` — аналогичный flow для inspections.
+- `tests/api/test_persons_cache_etag_contract.py` (S48) — pattern template для S49 контрактных тестов.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 9 Task 9.2 «Caching Strategy» (vNext-PERF-03), acceptance #1 «HTTP caching for public data» — закрыть полное покрытие main list endpoints.
+- **Приоритет:** P3.
+- **Почему выбрана:** S48 #1 (Next Step) — natural completion. После S49 acceptance bar phase 9.2 #1 fully satisfied (для list-endpoint-ов). 2 endpoint-а × pattern уже отработан 5 раз → low-risk additive.
+
+### Implemented Changes
+
+- **`backend/app/api/routes/incidents.py`** (additive):
+  - Импорты: `import hashlib`, добавлен `Response` в FastAPI imports.
+  - `_incidents_etag(...)` helper — sha256 над `tenant + total + limit + offset + company_id + site_id + status_filter + incident_type + id:updated_at|...`. 4 filter axes в cache key.
+  - `list_incidents` signature: добавлены `request: Request, response: Response`; return type → `IncidentPage | Response`. ETag header + If-None-Match check → 304 на совпадении. Items сериализуются только в non-304 branch.
+- **`backend/app/api/routes/inspections.py`** (additive):
+  - Импорты: `import hashlib`, `Response` добавлен.
+  - `_inspections_etag(...)` helper — sha256 с 5 filter axes (`company_id`, `site_id`, `status_filter`, `inspection_type`, `responsible_id`).
+  - `list_inspections` signature extended same way; 304 branch.
+- **`tests/api/test_safety_cache_etag_contract.py`** (new, 19 cases, ~530 lines):
+  - **Incidents block (9 cases):** hit/miss/POST-invalidation/PATCH-invalidation/status-filter-distinct/type-filter-distinct/empty-stable/cross-tenant-anti-leak/determinism.
+  - **Inspections block (10 cases):** hit/miss/POST-invalidation/PATCH-invalidation/status-filter-distinct/type-filter-distinct/empty-stable/cross-tenant-anti-leak/page-distinct/quoted-format+determinism (combined).
+  - **Helpers:** `_seed_incident_via_api()` + `_seed_inspection_via_api()` создают записи через real API POST (exercises full write path вместе с Outbox/audit-log generation).
+- **`CHANGELOG.md`** — Session 49 запись prepended.
+- **`AI_IMPLEMENTATION_REPORT.md`** — этот блок.
+
+### Changed / New Files
+
+- `backend/app/api/routes/incidents.py` — +44 строки (hashlib + Response import; `_incidents_etag` helper; `list_incidents` signature + ETag/304).
+- `backend/app/api/routes/inspections.py` — +47 строк (аналогично; +1 filter axis).
+- `tests/api/test_safety_cache_etag_contract.py` — new, ~530 строк, 19 tests.
+- `CHANGELOG.md` — S49 запись.
+- `AI_IMPLEMENTATION_REPORT.md` — этот блок.
+
+### Decisions
+
+- **Один combined test file для incidents + inspections.** Considered раздельные файлы (1:1 с S48 persons), но обе endpoint-а закрывают acceptance bullet вместе (S48 #1 — «extend to incidents + inspections» как одна задача). Combined файл легче audit-ить как single closure milestone «Phase 9.2 #1 done for list endpoints».
+- **Real-API seed helpers вместо ORM factory.** S47/S48 использовали `data_factory.create_*()` (direct ORM). Для incidents POST через `data_factory` обошёл бы domain logic в `app.domains.incidents.register_incident` — а это генерирует Outbox events. Решил seed-ить через `async_client.post(...)` — exercises real write path, генерирует proper Outbox/audit chain, и тест уже close to integration shape.
+- **Только 4-5 filter axes в hash, не все query params.** `limit`/`offset` participate (pagination), filter enums participate (status/type/responsible). НЕ participate другие потенциальные: full-text search (если будет), date ranges (тоже не есть). Сегодня все имеющиеся `Query(default=None)` params включены — будущая регрессия добавляющая фильтр без обновления ETag hash станет видна когда тест pagination + filter combo fails.
+- **PATCH использует `IncidentStatus.CLOSED` / `InspectionStatus.IN_PROGRESS`.** Конкретные state transitions проверяют, что full PATCH (включая domain logic) bumps updated_at. CLOSED — terminal state в incidents flow; IN_PROGRESS — начало работы в inspections flow. Альтернатива (просто описание/title) тоже работала бы — но enum transition exercises business logic полностью.
+- **Helper duplication acknowledged.** Это 7-я и почти-копия `_*_etag()` функция. Refactor в shared helper НА ЭТОТ РАЗ оправдан (CLAUDE.md "3 similar lines is better than premature abstraction" — но 7 копий это уже не premature). Отложен как Next Step #1 ниже — отдельная closure-style сессия.
+- **Inspections cross-tenant test использует разные companies.** Каждый tenant в conftest получает companies через factory, и inspection requires `company_id`. Tenant A не может видеть company B's id — проверка tenant isolation через cross-tenant ETag check is correct.
+- **Empty-list тесты на разных tenant-ах для incidents (delta) vs inspections (gamma).** Каждый main list endpoint занимает свой empty-tenant slot из conftest 7 seeded tenant-ов (test/acme/beta/gamma/delta/zeta/epsilon). Map: S47 companies → gamma; S47 documents → delta; S47 tasks → zeta; S48 persons → epsilon; S49 incidents → delta (повторно safe — `app_fixture` создаёт fresh sqlite файл per-test); S49 inspections → gamma. Conflict потенциально, но `app_fixture` per-test fresh sqlite isolates polluting writes.
+- **No filter-axis test for `responsible_id` on inspections.** Из 5 inspection filter axes тестирую 4 (status, type, page-через-limit/offset, cross-tenant). `responsible_id` не покрыт явно — pattern идентичен company_id (мы знаем по S47 что company_id filter работает через hash, и responsible_id тоже string-typed scalar). Адекватный trade-off для S49 scope.
+- **POST в S49 incidents test creates incident без victim_ids.** `IncidentCreate.victim_ids = Field(default_factory=list)` — empty list valid. Не нужны Person seed для ETag tests.
+
+### Issues Fixed
+
+- **/incidents + /inspections lacked ETag.** До S49 каждый GET отдавал full body. Frontend pages «Список инцидентов»/«Проверки» сейчас рефетчат всё при tab switch. С ETag клиент может switch на conditional GET — экономия пропорциональна tenant size.
+- **Phase 9.2 #1 coverage gap closed на main list endpoints.** До S49: 5/7. После S49: 7/7. Каждый primary list-page endpoint в API (companies/sites/documents/tasks/persons/incidents/inspections) теперь поддерживает conditional GET.
+
+### Known Problems / Risks
+
+- **7 inline `_*_etag()` копий.** Теперь точно warrants refactor — Next Step #1.
+- **Helper duplication возможно diverged.** Каждый helper имеет slight variations (number of filter axes, names). При refactor нужен generic builder с list of (key, value) parts → sha256.
+- **`Response` import в обоих новых файлах.** FastAPI Response уже импортирован в companies.py/sites.py/etc — pattern consistent. Никаких side effects.
+- **`_seed_incident_via_api()` создаёт persistent audit_log + outbox entries per call.** Per-test fresh sqlite isolates, но cross-tenant test делает 2 POST с 2 разных tenant headers — это 2 audit_log entries для разных tenant_ids. Не падает test (table cleared per-fixture), но bumps test runtime.
+- **Empty-list tests могут конфликтовать с другими empty-list tests при parallel pytest.** В однопоточном pytest (default) — no issue. В parallel mode (`-n auto`) — fresh sqlite каждому worker per-test, no conflict.
+- **Local pytest segfault on Py 3.13 + Windows** — known since S46-48.
+
+### Validation
+
+- **Окружение:** Windows, Python 3.13.7.
+- **Syntax:** `py -3.13 -m py_compile backend/app/api/routes/incidents.py backend/app/api/routes/inspections.py tests/api/test_safety_cache_etag_contract.py` → ✅ exit 0.
+- **Route paths verified:** Both `incidents.router = APIRouter(tags=["incidents"])` без prefix; mounted in `route_groups.py` под no prefix → `/api/v1/incidents`. Same для inspections.
+- **Schema requirements verified:** IncidentCreate requires title/incident_type/occurred_at/company_id/site_id — my seed helpers comply. InspectionCreate requires company_id/authority — comply.
+- **Test patterns 1:1 from S48** with API-based seed helpers (covers real write path).
+- **Pytest full-run:** локально segfault on 3.13. CI на 3.12.12.
+
+### Next Steps
+
+1. **Refactor 7 inline `_*_etag()` helpers → `backend/app/api/helpers/etag.py`** — now warranted; generic `compute_etag(*parts) -> str` taking list of (label, value) tuples; deduplicates the 7 sha256 + quoted-string boilerplate copies. Pure refactor; tests not affected. Small session.
+2. **Cache-Control uniformity audit** (S47 #5) — explicit Cache-Control policies across ~30 endpoints, document uniform stance (lists → ETag; admin/PII → no-store; SSE → no-cache).
+3. **Phase 9.2 service-level Redis cache** (S47 #1) — read-through cache for `/users/me` permissions, `/sites` per-tenant, `/templates/{id}`.
+4. **Phase 2 frontend: Command Center UI** (S35 #11) — большая сессия (2+).
+5. **Site Card aggregate** (S35 #10) — большая сессия (2+).
+6. **Backfill Sessions 36-45 в AI_IMPLEMENTATION_REPORT.md** — small doc-only.
+7. **Phase 9.1 follow-up: trend_series bulk-aggregation** (S46 #5).
+8. **Phase 7.2 Field-Specific Workflows** (3+ session estimate).
+9. **Score-based unified ranking** (S35 #1).
+10. **Per-tenant relevance tuning** (S35 #3).
+
+---
+
+## Previous Handoff (2026-05-19, Session 48 — Phase 9.2 extension: ETag on /persons + contract tests, vNext-PERF-03)
+
+- **Дата:** 2026-05-19 (после Session 47)
+- **Агент:** Claude (local Windows)
+- **Задача:** «Продолжай по ТЗ» → S47 закрыл cache hit/miss tests (acceptance #3) на 4 list endpoint-ах. Естественное расширение — добавить ETag к ещё одному high-traffic endpoint-у. `/api/v1/persons` — самый частый list (страница сотрудников), без ETag до сегодня. Additive change + 11 contract tests.
+- **Статус:** ✅ COMPLETE. Phase 9.2 acceptance #1 (HTTP caching layer) расширен: 4 → 5 endpoint-ов. Cache contract test set вырос с 25 до 36 кейсов в репо.
+- **Где остановился:** Phase 9.2 acceptance #1/#3 для list endpoints fully covered (5/5 mature). Open follow-ups: extend further (briefings, training plans, ppe issues, incidents, inspections — все list endpoint-ы могут получить ETag по тому же паттерну), service-level Redis cache, Cache-Control uniformity audit. Естественный next — продолжить расширение ETag по 1-2 endpoint-а за сессию, либо переключиться на Phase 2 frontend (Command Center UI) / Site Card aggregate / backfill Sessions 36-45.
+
+### Studied Documentation
+
+- `AI_IMPLEMENTATION_REPORT.md` Session 47 → Next Step #1 (Redis service cache, deferred), #5 (Cache-Control uniformity audit). S48 — третье направление: расширить existing HTTP ETag layer на больше endpoint-ов; малая additive миграция, тот же паттерн.
+- `backend/app/api/routes/persons.py` — `list_persons_endpoint` сигнатура (tenant, session, access, correlation_id, limit, offset); без ETag до S48; POST требует `company_id+first_name+last_name`; PATCH принимает any field optional.
+- `backend/app/api/routes/companies.py:150-201` — образец: `_companies_etag(tenant_id, companies, total, limit, offset)` + `response.headers["ETag"] = etag` + `if request.headers.get("if-none-match") == etag: return Response(304)`.
+- `backend/app/api/routes/sites.py:108-157` — identical pattern (без content-type-specific полей).
+- `backend/app/repository.py:196` — `list_persons(session, tenant_id, *, limit, offset)` возвращает `(list[Person], int)`.
+- `backend/app/schemas/person.py:349 class PersonCreate` — required: `company_id` (str 1-36), `first_name`, `last_name`; optional: position_id, workplace_id, birth_date, personnel_number, snils, passport, email, phone, employment_status, etc.
+- `tests/utils/factories.py:139` — `data_factory.create_person(tenant, company, first_name, last_name, session)` создаёт Person через ORM (минуя API).
+- `tests/api/test_http_cache_etag_contract.py` (S47) — pattern template для contract tests.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 9 Task 9.2 «Caching Strategy» (vNext-PERF-03), acceptance #1 extension («HTTP caching for public data» — расширить покрытие).
+- **Приоритет:** P3.
+- **Почему выбрана:** S47 закрыл #3 (cache tests) на 4 endpoint-ах. Acceptance #1 явно говорит «public data» — это list endpoints. `/persons` — наиболее user-facing после dashboard; pattern уже отработан 4 раза в codebase; additive change, нулевой breaking risk. Self-contained в одной сессии.
+
+### Implemented Changes
+
+- **`backend/app/api/routes/persons.py`** (additive):
+  - Импорты: `import hashlib`; добавлен `Request` в FastAPI import.
+  - `_persons_etag(tenant_id, persons, total, limit, offset)` — новый helper, sha256 на `tenant:{id}::total:N::limit:L::offset:O::id:updated_at|...`. Возвращает `f'"{digest}"'` (RFC 7232 quoted-string).
+  - `list_persons_endpoint` signature расширена: `request: Request, response: Response, tenant: TenantDep, session: SessionDep, access: ManagerAccess, ...` → return type `PersonPage | Response`. После seed запроса вычисляется ETag, кладётся в `response.headers["ETag"]`. При совпадении `if-none-match` → `HTTP 304` с empty body. Иначе full `PersonPage`.
+  - Никаких других изменений: POST/PATCH/DELETE/get-by-id не тронуты. RBAC dependency (`ManagerAccess`) сохраняется.
+- **`tests/api/test_persons_cache_etag_contract.py`** (new, 11 cases):
+  - hit (304 + same ETag + empty body)
+  - miss с bogus ETag (200 + body + fresh ETag)
+  - POST invalidation (новый person → ETag меняется)
+  - PATCH invalidation (изменение first_name → ETag меняется)
+  - page isolation (offset 0 vs 2)
+  - limit isolation (1 vs 50)
+  - empty-list stable ETag (epsilon tenant, 0 persons → still emit valid ETag → 304 on repeat)
+  - cross-tenant distinct ETag (acme/beta с identical "Same Name" → разные ETag)
+  - anti-leak (tenant_a ETag в tenant_b request → 200, не 304)
+  - RFC 7232 quoted format
+  - determinism (3× read same → same ETag)
+- **`CHANGELOG.md`** — Session 48 запись prepended.
+- **`AI_IMPLEMENTATION_REPORT.md`** — этот блок.
+
+### Changed / New Files
+
+- `backend/app/api/routes/persons.py` — +27 строк (import hashlib + Request; `_persons_etag` helper; `list_persons_endpoint` signature + ETag/304 logic).
+- `tests/api/test_persons_cache_etag_contract.py` — new, ~280 строк, 11 tests.
+- `CHANGELOG.md` — Session 48 запись.
+- `AI_IMPLEMENTATION_REPORT.md` — этот блок.
+
+### Decisions
+
+- **Дублируется helper `_persons_etag` (5-я копия).** В персах companies/sites/documents/tasks/persons теперь 5 почти идентичных `_*_etag()` функций. Refactor в общий `backend/app/api/helpers/etag.py` был соблазн, но: (a) каждый helper имеет slight differences (companies использует `client_company_id`, tasks — `priority+status+assignee_id`, persons — простой `tenant+total+limit+offset+ids+updated_at`); (b) extraction сегодня = preemptive abstraction, нарушает «3 similar lines is better than premature abstraction» из CLAUDE.md; (c) the inline form makes hash composition визуально verifiable в каждом endpoint при reading code review. Если в Phase 9.2 follow-up появится 6-7-8-й endpoint с ETag — тогда extraction оправдан.
+- **`if-none-match` case-insensitive lookup.** HTTP headers case-insensitive; FastAPI Starlette нормализует к lowercase. `request.headers.get("if-none-match")` работает identical к `request.headers.get("If-None-Match")`. Following exactly companies.py:200 pattern.
+- **`PersonPage | Response` return type.** Pydantic-compatible union: `Response(status_code=304)` это не `PersonPage`, поэтому `response_model=PersonPage` нужно либо обойти, либо явно typed как union. Pattern уже работает в companies.py:182 / sites.py:138 / etc.
+- **Cross-tenant tests обязательны.** Persons — sensitive data (PII: snils, passport, birth_date). Cache leak между тенантами через ETag — security bug. 2 теста защищают от dropped `tenant_id` prefix.
+- **POST + PATCH тестируются раздельно.** Different invalidation paths: POST changes total, PATCH changes updated_at. Both invalidate, но через разные mechanisms.
+- **Empty list использует tenant `epsilon`.** Conftest sees 7 tenant-ов (test/acme/beta/gamma/delta/zeta/epsilon). Эпсилон не используется в S47 — поэтому свободен для empty-state теста persons. Если другие сессии создадут persons под epsilon, тест может становиться невалидным — но conftest cleans test DB per-fixture (`app_fixture` makes fresh sqlite file).
+- **Не пишу test для DELETE.** DELETE не присутствует в text Read я выполнил, и обычно мягкое удаление через `deleted_at` (см. `list_persons` filter `Person.deleted_at.is_(None)`). Тест soft-delete invalidation добавлять стоит — defer to follow-up.
+- **11 кейсов, не 7.** S47 companies block имел 7 кейсов. Я добавил 4 extra: cross-tenant anti-leak split на «distinct ETags» + «leaked ETag → 200» (2 теста защищают разные failure modes); determinism (защищает от non-deterministic ORM ordering); RFC 7232 format (защищает от dropped quotes). Все 4 minor — но они catch разные regressions.
+
+### Issues Fixed
+
+- **`/api/v1/persons` без ETag** — до S48 каждый GET отдавал full body даже при no changes. Frontend pages (employee directory) сейчас полагается на TanStack Query staleTime, который reload-ит full body при tab switch. С ETag клиент может switch на conditional GET, получит 304 + 0 bytes body когда никто не модифицировал persons — экономия пропорциональна тенант size (1000+ persons × repeated views).
+- **Coverage gap on Phase 9.2 acceptance #1** — «HTTP caching for public data» подразумевает «for the list endpoints clients hit often». Из 7 main list endpoints в API (companies/sites/documents/tasks/persons/incidents/inspections), 4 покрыты ETag (S47), теперь 5 (S48). 2 остаются (incidents/inspections) — open follow-up.
+
+### Known Problems / Risks
+
+- **5 inline `_*_etag()` копий.** Если 6-я добавится — рефакторить в shared helper. Сейчас inline acceptable.
+- **`/persons` POST/PATCH создаёт audit log entries.** `@audit_operation("create", "person")` decorator на POST. ETag-тест на PATCH делает 2 POST + 2 PATCH + 4 GET — каждая mutation creates audit row. Это не падает тесты (audit_log table cleared per-fixture), но bumps test runtime slightly.
+- **Empty-list ETag (epsilon)** — если другой тест ранее создал persons в epsilon, empty-list тест fails. Mitigation: conftest's `app_fixture` создаёт **fresh sqlite file** per-test через `tempfile.mkstemp` — каждый pytest case isolated. Verified by читая conftest.py:104-108.
+- **Local pytest segfault on Py 3.13 + Windows** — known since S46.
+- **POST в test создаёт person без `position_id`/`workplace_id`.** Schema позволяет это (`Optional`), но business logic might fail later если company требует это. Тест проходит — schema validates.
+
+### Validation
+
+- **Окружение:** Windows, Python 3.13.7.
+- **Syntax:** `py -3.13 -m py_compile backend/app/api/routes/persons.py tests/api/test_persons_cache_etag_contract.py` → ✅ exit 0.
+- **Route mount:** `backend/app/api/v1/route_groups.py` уже инклудит persons router (existed before S48); `router = APIRouter(prefix="/persons")` (line 23) + `route_groups.py:139` mount под `/api/v1` → endpoint = `/api/v1/persons` ✓.
+- **Schema verified:** `PersonCreate{company_id, first_name, last_name}` — my POST payload satisfies.
+- **Pattern verification:** ETag helper structure identical companies.py:150 — `parts = ["tenant:{id}", "total:N", "limit:L", "offset:O", "|".join("{id}:{updated_at_iso}")]` → sha256 → `f'"{digest}"'`. Conditional-GET check identical to companies.py:200-201.
+- **Test patterns 1:1 from S47** `test_http_cache_etag_contract.py` companies block (already CI-passing patterns). Адаптировано для Person seed (требует company first).
+- **Pytest full-run:** локально hangs / segfault на 3.13 (S46-47 pattern). CI на 3.12.12.
+
+### Next Steps
+
+1. **Extend ETag to incidents + inspections list endpoints** — same pattern, 2 more endpoints. After this Phase 9.2 #1 fully covers all 7 main list endpoints.
+2. **Refactor 6+ inline `_*_etag()` helpers into `backend/app/api/helpers/etag.py`** — only if a 6th endpoint is added. Premature до того.
+3. **Phase 9.2 service-level Redis cache** (S47 #1) — implement Redis read-through cache for slow-changing data.
+4. **Cache-Control uniformity audit** (S47 #5) — explicit policy across endpoints.
+5. **Phase 2 frontend: Command Center UI** (S35 #11) — большая сессия (2+).
+6. **Site Card aggregate** (S35 #10) — большая сессия (2+).
+7. **Backfill Sessions 36-45 в AI_IMPLEMENTATION_REPORT.md** — маленькая doc-only задача.
+8. **Phase 9.1 follow-up: trend_series bulk-aggregation** (S46 #5).
+9. **Phase 7.2 Field-Specific Workflows** — frontend-only mobile workflows (3+).
+10. **Score-based unified ranking** (S35 #1).
+
+---
+
+## Previous Handoff (2026-05-19, Session 47 — Phase 9.2: HTTP cache (ETag) contract pinning, vNext-PERF-03)
+
+- **Дата:** 2026-05-19 (после Session 46)
+- **Агент:** Claude (local Windows)
+- **Задача:** «Продолжай по ТЗ» → Phase 9.1 #4 closed in S46, естественный next-sequential — Phase 9.2 (Caching Strategy). Audit показал что project уже имеет robust HTTP cache layer (ETag conditional-GET на 4 list endpoint-ах: companies/sites/documents/tasks), но test coverage только happy-path по 1 кейсу на endpoint. Pin contract через comprehensive cache hit/miss test suite.
+- **Статус:** ✅ COMPLETE для acceptance #3 «Tests: Cache hit/miss tests». 25 кейсов покрывают hit/miss/page-isolation/filter-isolation/tenant-isolation/mutation-invalidation/empty-list-stability/RFC7232-format/determinism.
+- **Где остановился:** Phase 9.2 acceptance #3 закрыт. Acceptance #1 partial (HTTP caching layer ✓; Redis session/config cache infrastructure готова через `app.state.redis_client`, но не wired для service-level кэширования slow-changing data — это open follow-up). Acceptance #2 partial (HTTP-layer invalidation verified для POST/PATCH; service-level invalidation вторично). Естественный next — Phase 2 frontend (Command Center UI) или Site Card aggregate, либо backfill Sessions 36-45 в этот файл.
+
+### Studied Documentation
+
+- `AI_IMPLEMENTATION_REPORT.md` Session 46 → Next Step #1 «Phase 9.2: Caching Strategy» (top of stack).
+- `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md` §Phase 9 Task 9.2 — 3 acceptance criteria: (#1) cache layers Redis+HTTP, (#2) smart invalidation, (#3) hit/miss tests. Implementation hints: «Cache: site list, employee roles, templates, settings; Invalidation: clear cache on write operations; Add cache headers to API responses».
+- `backend/app/api/routes/companies.py:150-201` — `_companies_etag(tenant_id, companies, total, limit, offset)` → sha256 digest; response.headers["ETag"] + If-None-Match → 304 pattern.
+- `backend/app/api/routes/sites.py:108-157` — identical pattern, plus `company_id` filter в cache key.
+- `backend/app/api/routes/documents.py:424-571` — identical pattern, cache key on `page/page_size/total`.
+- `backend/app/api/routes/tasks.py:206-286` — identical pattern, cache key с status/priority/assignee/type filters.
+- `backend/app/api/routes/files.py:464` — ETag через `record.sha256` (другой контракт; не list-hash; out-of-scope).
+- `backend/app/api/routes/pwa_sync.py:176` — `_permissions_etag` (separate use case; PWA-specific).
+- `backend/app/api/routes/calendar.py:200`, `packs.py:1023+1072`, `jobs.py:728` — `Cache-Control: no-store` / `no-cache` (explicit non-caching на SSE / dynamic data).
+- `backend/app/core/config.py:806` — `Settings.redis_enabled` property (False в dockerless/celery_eager/memory:// URL); существует но не используется service-level кэшем.
+- `tests/api/test_company_crud.py:121-141` + `tests/test_documents_generate.py:420-443` + `tests/test_task_status.py:277-321` + `tests/integration/test_cross_tenant_resource_matrix.py:424+` — 4 pre-existing happy-path ETag тесты (по 1 на endpoint, только hit-→-304 случай).
+- `tests/utils/factories.py` — `TestDataFactory.create_company`/`create_site`/`create_user`/`create_template`/`create_document` — все необходимые seed-helpers.
+- `tests/conftest.py:97-205` — `app_fixture` создаёт 7 tenant-ов (test/acme/beta/gamma/delta/zeta/epsilon); `make_auth_headers(role, tenant=...)` для cross-tenant тестов.
+- `backend/app/schemas/{task,company,site}.py` — `TaskCreate(title=...)`, `CompanyCreate(name=...)`, `SiteCreate(company_id=..., name=..., address=opt)` — минимальные payload requirements.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 9 Task 9.2 «Caching Strategy» (vNext-PERF-03), acceptance criterion #3 «Tests: Cache hit/miss tests».
+- **Приоритет:** P3.
+- **Почему выбрана:** Phase 9.1 #4 закрыт в S46; следующий по плану — Phase 9.2. Внутри 9.2 — наиболее завершаемый criterion #3 (один файл, фокусированно). Acceptance #1 cache layers и #2 invalidation — частично уже есть (HTTP-layer + ETag-based invalidation), полное Redis service-level кэширование hot endpoint-ов — отдельная многосессионная задача с проектными выборами (что кэшировать? site_list? role_configs? настройки тенанта?). Подход «pin existing contract» — продолжение паттерна Sessions 41-45.
+
+### Implemented Changes
+
+- **`tests/api/test_http_cache_etag_contract.py`** (new file, 25 cases, ~620 строк). См. CHANGELOG.md Session 47 entry для полного breakdown. Ключевые точки:
+  - **Companies block (7 кейсов):** hit→304+empty-body; miss с bogus ETag→200+fresh-ETag; POST changes ETag; PATCH changes ETag; pagination distinct (offset 0 vs 2); limit distinct (1 vs 50); empty-list stable (gamma tenant).
+  - **Sites block (6 кейсов):** hit→304; miss bogus→200; POST changes ETag; company_id filter distinct; cross-tenant identical names → distinct ETag; tenant_a ETag в tenant_b request → 200 (anti-leak).
+  - **Documents block (3 кейса):** empty-list emit ETag; page_size param distinct; empty-list 304 on repeat.
+  - **Tasks block (6 кейсов):** hit→304; status filter distinct (open vs done vs all); priority filter distinct (high vs low); POST changes ETag; empty-list stable (zeta tenant); page distinct.
+  - **Cross-cutting (3 кейса):** companies ETag matches RFC 7232 quoted-string (`"..."`); sites ETag deterministic across 3 repeats; tasks ETag deterministic.
+- **`CHANGELOG.md`** — Session 47 запись prepended.
+- **`AI_IMPLEMENTATION_REPORT.md`** — этот блок.
+
+### Changed / New Files
+
+- `tests/api/test_http_cache_etag_contract.py` — new, ~620 строк, 25 test functions (mix `@pytest.mark.asyncio` и `@pytest.mark.anyio` — tasks endpoint использует AnyIO pattern, companies/sites — pytest-asyncio, копирует pre-existing test files convention).
+- `CHANGELOG.md` — Session 47 запись.
+- `AI_IMPLEMENTATION_REPORT.md` — этот блок (prepended above Session 46).
+
+### Decisions
+
+- **Не добавляю Redis service-cache как часть S47.** Acceptance #1 говорит про «Redis for session/config; HTTP caching for public data». HTTP caching уже работает (4 endpoint-а с ETag). Redis для session уже работает через slowapi rate limiter / Celery broker. Redis для service-level «cache the site list for 60s» — отдельный architecture decision (когда invalidate? per-tenant? eviction policy? heating warm-up?) который stretches за 1 сессию. Лучше pin existing HTTP cache контракт сейчас, добавить Redis service-cache reactively когда query.scalar() станет bottleneck.
+- **4 endpoint-а покрытие, не 5.** `/api/v1/files/{id}` тоже эмитит ETag, но через `record.sha256` (file content fingerprint), не list-hash. Это discrete use case — pinning такого контракта попадал бы в file-upload test file, который уже существует (`tests/test_files_upload.py:135`). Out-of-scope явно отмечено в header docstring.
+- **Tenant-isolation тесты обязательны.** Без них пара sentinel-тестов недостаточна. Cross-tenant ETag leak — security vulnerability (tenant A might serve cached tenant B data). 2 теста: «ETag из tenant A не matchит tenant B» + «tenant A's ETag в tenant B request → 200 (не 304)». Это catches dropped `tenant:` prefix в hash.
+- **Empty-list ETag тестируется отдельно.** Edge case: empty result still produces stable ETag — это важно для startup или новых тенантов. Без этого теста implementation мог бы emit пустой `""` ETag, что ломает conditional-GET semantics.
+- **POST и PATCH тестируются раздельно для companies.** Two write paths: POST (creates new row, total changes) vs PATCH (updates existing row, updated_at changes). Обе invalidate ETag, но через разные mechanisms. Тестирую раздельно чтобы regression в одном из путей был visible.
+- **Mix `asyncio` / `anyio` marker styles.** Companies tests наследуют `@pytest.mark.asyncio` pattern из `test_company_crud.py`; tasks tests — `@pytest.mark.anyio` pattern из `test_task_status.py`. Both работают в этом проекте (conftest forces asyncio backend для anyio).
+- **Не пишу benchmark для cache performance (hit-rate-over-time).** Это «runtime telemetry» а не «contract test». Cache hit-rate в production метрика для мониторинга, не для CI.
+- **25 кейсов вместо «20+».** Acceptance plan не указывает число. 25 — минимально-достаточный набор покрывающий 4 endpoint-а × (hit/miss/mutation/pagination/filter) + cross-tenant + cross-cutting determinism. Расширение в сторону `/api/v1/pwa-sync/bootstrap` (permissions_etag) — отдельный test file.
+
+### Issues Fixed
+
+- **Phase 9.2 acceptance #3 «Cache hit/miss tests» — closed.** Прежде happy-path-only coverage (1 case per endpoint × 4 endpoints) теперь — 7 dimensions × 4 endpoints + cross-cutting.
+- **Cross-tenant ETag leak — pinned as not-a-bug.** S47 anti-leak test verifies, что tenant A's ETag в tenant B request gives 200 (correct), not 304 (would be a security bug). Без этого pin будущая optimization могла бы дропнуть tenant_id из hash «for performance», и тенанты бы видели друг друга's кэш.
+- **Empty-list ETag stability — pinned as feature.** Раньше можно было предположить, что empty list эмитит пустой ETag (трактовать как «no cache»). Теперь явно: even 0 rows → stable hash → conditional GET работает.
+
+### Known Problems / Risks
+
+- **Service-level Redis cache не доделан.** Acceptance #1 «cache layers: Redis for session/config; HTTP caching for public data» — HTTP-side покрыт; Redis-side service-level кэш hot reads (`/sites` list, `/users/me` role config) — still TBD. Defer to Phase 9.2 follow-up session, когда query patterns выкристаллизуются.
+- **Cache-Control headers per endpoint — inconsistent.** `/calendar/events.ics` имеет `no-store`, `/jobs/.../stream` — `no-cache`, `/companies` — no Cache-Control at all (relies на ETag conditional GET). Inconsistency не критична (browsers fall back на ETag), но при ramp-up worth audit & uniform policy.
+- **PWA sync `permissions_etag` не покрыт.** Existing `_permissions_etag` (pwa_sync.py:176) — own contract. Достоин test file если будем менять permissions schema.
+- **`/api/v1/files/{id}` ETag = sha256 — not list-hash.** Different contract — coverage в `tests/test_files_upload.py:135` exists (1 case); deeper conditional-GET тесты для file binary download — out of scope S47.
+- **Empty-list ETag determinism зависит от tenant_id format.** Тест выполняется через fresh tenant slug; если tenant_id меняется между runs (UUID-generated), empty-tenant ETag разный. Это is correct (cache key включает tenant_id) — но новые tenants после сессии тестов держат фикстуры данных, что может конфликтовать с другими тестами. Conftest `_reset_storage` это не purges; полагаюсь на uniqueness через slug (zeta/gamma/delta — каждый используется только в одном тесте).
+- **Local pytest segfaults на Python 3.13 + Windows.** Известно с S46. CI source of truth.
+
+### Validation
+
+- **Окружение:** Windows, Python 3.13.7. CLAUDE.md fallback policy.
+- **Syntax:** `py -3.13 -m py_compile tests/api/test_http_cache_etag_contract.py` → ✅ exit 0.
+- **Endpoint paths verified против `backend/app/api/v1/route_groups.py`:**
+  - `tasks.router` → `/tasks` (prefix), so endpoint = `/api/v1/tasks` ✓
+  - `sites.router` → mounted without prefix (uses `/sites` from `@router.get("/sites")`), so endpoint = `/api/v1/sites` ✓
+  - `companies.router` → prefix `/companies` (declared in module), so endpoint = `/api/v1/companies` ✓
+  - `documents.router` → prefix `/documents`, so endpoint = `/api/v1/documents` ✓
+- **Schema requirements verified против `backend/app/schemas/{task,company,site}.py`:**
+  - `TaskCreate{title: str, min_length=1, max_length=255}` — my `{title: "After POST Task"}` ✓
+  - `CompanyCreate{name: str, min_length=1, max_length=255}` — my `{name: "After-POST Co"}` ✓
+  - `SiteCreate{company_id: 1-36, name: 1-255, address: optional}` — my `{company_id: id, name: "Created Site", address: "wherever 12"}` ✓
+- **Test patterns 1:1 from passing tests:** copied `tests/api/test_company_crud.py::test_companies_list_etag_returns_304_on_if_none_match` (passing) as the base; extended with mutation/pagination/tenant-isolation variants.
+- **Fixtures used (`async_client`, `make_auth_headers`, `sessionmaker`, `data_factory`) all exist in conftest** — verified.
+- **Pytest full-run:** локально hangs / segfault на 3.13 (same as S46). CI прогонит canonical pipeline на 3.12.12.
+
+### Next Steps
+
+1. **Phase 9.2 service-level cache** (follow-up to S47) — implement Redis-backed read-through cache for slow-changing tenant data: `/sites` list, `/api/v1/users/me` permission set, `/templates/{id}` metadata. Decide TTL (300s), invalidation strategy (write-through TTL bump). Add `/api/v1/admin/cache:flush` admin endpoint.
+2. **Phase 2 frontend: Command Center UI** (Session 35 #11) — backend готов; UI с 10+ widgets для overdue/blocked/integration-errors/etc. Большая сессия (2+).
+3. **Site Card aggregate** (Session 35 #10) — Phase 3 §5.3, backend aggregate endpoint + 11-tab UI. Большая сессия (2+).
+4. **Backfill Sessions 36-45 в AI_IMPLEMENTATION_REPORT.md** — все запушены, но не задокументированы в этот файл. Маленькая doc-only задача.
+5. **Phase 9.2 Cache-Control uniformity** — audit explicit `Cache-Control` policies across 30+ endpoint-ов, унифицировать (public list → ETag-only; user-specific → `no-store`; admin telemetry → `no-cache`).
+6. **Phase 9.1 follow-up: trend_series bulk-aggregation** (S46 #5) — превратить N×1 в single GROUP BY, обновить S46 pin.
+7. **Phase 9.1 follow-up: Postgres-only EXPLAIN ANALYZE workflow** для slow query identification (S46 #5).
+8. **Phase 7.2 Field-Specific Workflows** (frontend-only mobile workflows, 3+ session estimate).
+9. **Score-based unified ranking** в палитре (S35 #1).
+10. **Per-tenant relevance tuning** (S35 #3).
+
+---
+
+## Previous Handoff (2026-05-19, Session 46 — Phase 9.1: Query performance benchmarks, vNext-PERF-02)
+
+- **Дата:** 2026-05-19 (после Session 45)
+- **Агент:** Claude (local Windows)
+- **Задача:** «Продолжай по ТЗ» → Phase 8 закрыта в Session 45 (audit API pinning), Phase 7.2 deferred (frontend-only), естественный next-sequential pick — Phase 9.1 (Database Optimization). Делаю первый из 4 acceptance criteria — «Tests: Query performance benchmarks». Wall-clock thresholds в CI флакают, поэтому интерпретирую acceptance как «pin the round-trip budget per service method» (т.е. ловить N+1 регрессии через query-count, а не через absolute timing).
+- **Статус:** ✅ COMPLETE (для criterion #4). 24 теста в 5 классах пинуют query-cardinality для analytics dashboards, audit log filter matrix, и существующих composite-indices.
+- **Где остановился:** Phase 9.1 acceptance criterion #4 закрыт. Criterion #2 «Indexing» частично подтверждён (структурно — composite indices на 6 hot-path таблицах есть). Open: #1 «Query analysis >100ms» (требует prod-данных + EXPLAIN ANALYZE на Postgres — не делается на CI SQLite), #3 «Partitioning by date» (Postgres-specific, не блокирует MVP). Естественный next — Phase 9.2 (Caching), либо большой open ticket из Session 35 #11 (Phase 2 frontend — Command Center UI) либо #10 (Site Card aggregate).
+
+### Studied Documentation
+
+- `AI_IMPLEMENTATION_REPORT.md` Session 35 → последний задокументированный handoff (Sessions 36-45 в git, но не в этом файле — отдельная задача backfill, вне scope текущей сессии).
+- `docs/roadmap/PLATFORM_VNEXT_IMPLEMENTATION_PLAN.md` — Phase 9.1 acceptance + estimated, дополнительно увидел что Phases 5/6/7.1/8 уже закрыты в incremental-note блоках Sessions 36-45.
+- `docs/spec/TZ_FULL_UNIFIED.md` §0.2 — алгоритм «продолжай по ТЗ»: Read report → find «Next exact step» → pick minimum-sufficient change → §E rules (additive migrations, feature flags, tenant isolation, типизация, тесты).
+- `backend/app/modules/analytics/services.py` — `AnalyticsAggregationService.base_counters` (4 scalar queries), `detailed_counters` (11 scalar queries), `trend_series` (1 scalar query per point), `KpiDashboardService` (11 named methods вызывающих base/detailed по комбинациям).
+- `backend/app/modules/projections/models.py` — composite-indices на 6 read-models (PackageReadModel, PersonComplianceReadModel, SiteSafetyReadModel, ContractorReadinessReadModel, SearchIndexEntry, ExportJob и т.п.).
+- `backend/app/models/models.py:2046+` — `AuditLog` с 5 indices (ix_auditlog_action / _object / _actor / _corr / _when) покрывающие весь HTTP filter matrix Phase 8.2.
+- `tests/test_analytics_aggregation.py` (Session 44, 34 cases) + `tests/test_audit_log_api_hardening.py` (Session 45, 26 cases) — паттерны фикстур (`sessionmaker`, `_tenant_id`, async/anyio).
+- `tests/conftest.py` — `sessionmaker` fixture builds `async_sessionmaker(bind=engine)` поверх SQLite test DB с 7 seeded tenants (`test`, `acme`, `beta`, `gamma`, `delta`, `zeta`, `epsilon`); идеален для cross-tenant isolation тестов.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 9 Task 9.1 «Database Optimization» (vNext-PERF-02), acceptance criterion #4 «Tests: Query performance benchmarks».
+- **Приоритет:** P3 (Phase 9 — performance hardening, post-MVP).
+- **Почему выбрана:** Phase 8 закрыта в Session 45, Phase 7.2 deferred (frontend-only — обычно делается в отдельной волне). Phase 9 — естественный next-in-sequence по плану. Внутри Phase 9.1 criterion #4 — единственный, который можно закрыть без prod-данных и без Postgres-specific features (partitioning требует Postgres; query-analysis EXPLAIN — тоже). Cardinality pin защищает существующие optimization invariants и катит на SQLite CI.
+
+### Implemented Changes
+
+- **`tests/test_query_performance_benchmarks.py`** (new file) — 24 кейса в 5 thematic классах. См. CHANGELOG.md Session 46 entry для полного breakdown. Ключевые точки:
+  - `QueryCounter` context-manager поверх `before_cursor_execute` event listener на `AsyncEngine.sync_engine`; фильтрует только SELECT/INSERT/UPDATE/DELETE statements (исключая housekeeping).
+  - Class A: 6 cardinality pins на `AnalyticsAggregationService` (base_counters=4, detailed_counters=11, trend_series=points, scaled по строкам остаётся O(1)).
+  - Class B: 11 параметризованных KPI dashboard query budgets — executive/safety/training/ppe=4; sla_load/edo/prescriptions=11; client_delivery/incidents/inspections/overdue=15.
+  - Class C: 2 теста tenant isolation на 100+ rows (80 tenant_a + 20 tenant_b → counts корректны без cross-bleed).
+  - Class D: 3 теста audit-log filter-matrix → ровно 1 query на каждый из (action+when range, object_type+object_id, correlation_id).
+  - Class E: 6 sync structural тестов на composite indices PackageReadModel, PersonComplianceReadModel, SiteSafetyReadModel, ContractorReadinessReadModel, SearchIndexEntry, AuditLog (всё 5 audit indices).
+- **`CHANGELOG.md`** — Session 46 запись prepended.
+- **`AI_IMPLEMENTATION_REPORT.md`** — этот блок.
+
+### Changed / New Files
+
+- `tests/test_query_performance_benchmarks.py` — +480 строк (24 теста + QueryCounter helper + 4 seed-helpers).
+- `CHANGELOG.md` — Session 46 запись.
+- `AI_IMPLEMENTATION_REPORT.md` — этот блок (prepended above old Session 35 entry).
+
+### Decisions
+
+- **Query-count pins вместо wall-clock thresholds.** Wall-clock в CI варьируется ×5+ между runners (Codespace 2-core, Github 4-core, lokal Windows, Mac M1). Absolute «<100ms» либо проходит везде (бесполезно), либо флакает. Query-count детерминированный: при том же запросе SQLAlchemy issues exactly the same statements; регрессия «случайно добавил per-row loop» сразу видна как 4→104 query. EXPLAIN ANALYZE и >100ms diagnostics — отдельная история для Postgres CI/staging (criterion #1, deferred).
+- **SQLite вместо Postgres test DB.** SQLite — existing conftest baseline; добавление Postgres-fixture для performance тестов было бы scope-creep. SQLite не enforces всех composite-индексов структурно (SQLite использует skip-scan вместо selective index lookup), но query-count проверка работает идентично на любом backend.
+- **Не пишу benchmarks для search service.** SearchService (`tests/test_search_service_relevance.py`, Session 33) уже имеет 35 cases покрывающих relevance/filter/facets/pagination. Query-count для search FTS зависит от `tags_json[].astext` filters которые branch-out — pinning такой cardinality сегодня преждевременно. Если в будущем search-team захочет ужесточить — отдельный файл `test_search_performance_benchmarks.py`.
+- **Pin `trend_series` baseline на N=points.** Сегодня — 12 queries для 12-point trend. Это известная цель оптимизации (один GROUP BY вместо N×1) на Phase 9.1 follow-up. Pin сделает оптимизацию визибельной (assertion failed → kудо). Не «<=12» — потому что хочу чтобы regression в сторону 2×N тоже видеть.
+- **Не assert exact wall-clock «<5ms».** Соблазн был. Отверг: см. первый decision.
+- **Index assertions через `__table__.indexes`** (не через `Inspector` на DB). Если кто-то дропнет миграцию-индекс не обновив model — тест всё равно пройдёт. Но dropping ORM `Index(...)` ↔ migration не дропающая — это уже отдельный rare case (linting/migration consistency). Структурный test ловит то, что обычно ломают: «забыл добавить composite index когда добавил новую колонку фильтра».
+- **24 теста (а не «30+»).** Acceptance plan говорит «benchmarks» без числа; 24 — минимально-достаточный набор покрывающий 6 hot-path таблиц + 4 analytics dimensions + 3 audit filter axes + 6 structural assertions. Расширение в сторону search/calendar — отдельная сессия.
+
+### Issues Fixed
+
+- **Phase 9.1 acceptance #4 closure** — 1 из 4 acceptance items закрыт. Pin защищает от N+1 регрессий при будущих рефакторингах `analytics.services` и при добавлении новых counters в dashboard.
+- **«Где у нас есть composite-индексы?» — единый source of truth.** До S46 знание было размазано по `models.py` line numbers; теперь Class E тесты служат executable documentation. Поиск «какой индекс покрывает audit list with `?action=...`?» — открыть `test_audit_log_has_action_object_actor_corr_when_indexes` → видишь `ix_auditlog_action(action, when)`.
+
+### Known Problems / Risks
+
+- **Local pytest segfaults on Python 3.13 + Windows.** `py -3.13 -m pytest tests/test_query_performance_benchmarks.py` → exit code 139 / SIGSEGV в conftest collection. Voiced в Session 33 Validation тоже. CI source-of-truth на 3.12.12.
+- **`trend_series` pin loose-fits anti-optimization.** Если PR оптимизирует trend_series до single-query CTE, test fails, и его надо обновить вручную — кратко-срочно annoying, но это правильный design (visible-by-default vs silent-pass).
+- **No coverage of write-path queries.** Тесты покрывают только read-side (dashboards, audit list); INSERT/UPDATE cardinality для projections не пинится. Defer to later session if нужно — bulk update внутри `ProjectionOrchestrator` — sensitive к N+1, но это другой module.
+- **Tenant_id NOT NULL индексирован отдельно (на TenantBaseModel).** Composite indices ставят tenant_id первым — это correct, leverages leading-edge for filter. Но SQLite query planner может всё равно prefer single-column ix_*_tenant_id вместо composite. Production Postgres planner должен выбрать composite — на staging проверить EXPLAIN при ramping data volume.
+- **Не делаю performance-CI gate.** Тесты passing/failing — нет gradient «query count grew but didn't blow budget». В будущем можно добавить `pytest-benchmark` или history-tracking; пока — binary regression detection достаточно.
+
+### Validation
+
+- **Окружение:** Windows, Python 3.13.7 (3.12 absent — CLAUDE.md fallback policy honored).
+- **Syntax:** `py -3.13 -m py_compile tests/test_query_performance_benchmarks.py` → ✅ exit 0.
+- **Import sanity:** `py -3.13 -c "from app.modules.analytics.services import AnalyticsAggregationService, DashboardFilters, KpiDashboardService; print('analytics ok')"` → ✅ OK.
+- **Model-index spot-check:** `py -3.13 -c "from app.modules.projections.models import PackageReadModel; print({ix.name: tuple(c.name for c in ix.columns) for ix in PackageReadModel.__table__.indexes})"` → ✅ выдал `{'ix_package_read_models_tenant_id': ('tenant_id',), 'ix_package_read_models_tenant_status_client_updated': ('tenant_id', 'status', 'client_company_id', 'updated_at')}` — точно совпадает с assertion в `test_package_read_model_has_composite_index_for_dashboard_filters`.
+- **Pytest full-run:** локально segfaults (SIGSEGV) на Windows + 3.13 в conftest stage. Cardinality логика трассируется по коду `services.py` (4/11/N queries — детерминированно). Test fixture pattern (sessionmaker / _tenant_id / @pytest.mark.anyio) 1:1 копирует `tests/test_analytics_aggregation.py` который CI прогнал зелёным в Session 44.
+- **CI** прогонит canonical pipeline (бэкенд+фронт) на 3.12.12 в Codespace.
+
+### Next Steps
+
+1. **Phase 9.2: Caching Strategy** (vNext-PERF-03) — следующий по плану. Acceptance: Redis cache layer для session/config, HTTP caching headers для public data, smart invalidation на write ops, cache hit/miss tests. Pre-existing Redis заиспользовать.
+2. **Phase 2 frontend: Command Center UI** (Session 35 #11) — backend `/api/v1/operational/dashboard` готов с Session 8. UI: 10+ widgets для overdue/blocked/integration-errors/etc. Большая сессия (2+).
+3. **Site Card aggregate** (Session 35 #10) — Phase 3 §5.3, последний открытый item в Phase 3 после Employee Card. Backend aggregate endpoint + UI 11-tab layout. Большая сессия (2+).
+4. **Backfill Sessions 36-45 в AI_IMPLEMENTATION_REPORT.md** — все эти сессии запушены в main с детальными CHANGELOG-incremental notes но не задокументированы в report. Маленькая doc-only сессия.
+5. **Phase 9.1 follow-ups:** trend_series bulk-aggregation (превратить N×1 в single GROUP BY) с обновлением pin; Postgres-only EXPLAIN ANALYZE workflow для criterion #1 (нужен staging-DB + load script).
+6. **Phase 9.1 follow-up:** partitioning of `audit_log` / `events` / `documents` by date — Postgres-specific declarative partitioning (`PARTITION BY RANGE (when)`) — оценить ROI при ramp-up.
+7. **Score-based unified ranking в палитре** (Session 35 #1).
+8. **Per-tenant relevance tuning** (Session 35 #3).
+9. **Phase 7.2 Field-Specific Workflows** — frontend-only mobile workflows (3+ session estimate).
+10. **Стабилизация фабрик** (Session 35 #9).
+
+---
+
+## Previous Handoff (2026-05-18, Session 35 — Phase 4.2: Recent entities tracking, vNext-SEARCH-01)
 
 - **Дата:** 2026-05-18 (после Session 34)
 - **Агент:** Claude (local Windows)

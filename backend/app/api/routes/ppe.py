@@ -5,11 +5,12 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
+from app.api.helpers.etag import compute_list_etag
 from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
@@ -93,12 +94,14 @@ def _issue_schema(issue: PPEIssue) -> PPEIssueRead:
 
 @router.get("/items", response_model=PPEItemPage)
 async def list_items(
+    request: Request,
+    response: Response,
     tenant: TenantDep,
     session: SessionDep,
     access: ManagerAccess,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-) -> PPEItemPage:
+) -> PPEItemPage | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     stmt = (
@@ -108,7 +111,7 @@ async def list_items(
         .limit(limit)
         .offset(offset)
     )
-    items = (await session.execute(stmt)).scalars().all()
+    items = list((await session.execute(stmt)).scalars().all())
     total = (
         await session.execute(
             select(func.count()).where(
@@ -116,6 +119,14 @@ async def list_items(
             )
         )
     ).scalar_one()
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=items,
+        scalars=[("total", int(total or 0)), ("limit", limit), ("offset", offset)],
+    )
+    response.headers["ETag"] = etag
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
     return PPEItemPage(items=[_item_schema(item) for item in items], total=total)
 
 
@@ -188,6 +199,8 @@ async def delete_item(
 
 @router.get("/issues", response_model=PPEIssuePage)
 async def list_issues(
+    request: Request,
+    response: Response,
     tenant: TenantDep,
     session: SessionDep,
     access: ManagerAccess,
@@ -195,7 +208,7 @@ async def list_issues(
     active_only: bool = False,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-) -> PPEIssuePage:
+) -> PPEIssuePage | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     stmt = select(PPEIssue).where(PPEIssue.tenant_id == tenant.id, PPEIssue.deleted_at.is_(None))
@@ -204,7 +217,7 @@ async def list_issues(
     if active_only:
         stmt = stmt.where(PPEIssue.status == PPEIssueStatus.ISSUED)
     stmt = stmt.order_by(PPEIssue.issued_at.desc()).limit(limit).offset(offset)
-    issues = (await session.execute(stmt)).scalars().all()
+    issues = list((await session.execute(stmt)).scalars().all())
     count_stmt = select(func.count()).where(
         PPEIssue.tenant_id == tenant.id,
         PPEIssue.deleted_at.is_(None),
@@ -214,6 +227,20 @@ async def list_issues(
     if active_only:
         count_stmt = count_stmt.where(PPEIssue.status == PPEIssueStatus.ISSUED)
     total = (await session.execute(count_stmt)).scalar_one()
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=issues,
+        scalars=[
+            ("total", int(total or 0)),
+            ("limit", limit),
+            ("offset", offset),
+            ("person", person_id or ""),
+            ("active_only", "1" if active_only else "0"),
+        ],
+    )
+    response.headers["ETag"] = etag
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
     return PPEIssuePage(items=[_issue_schema(item) for item in issues], total=total)
 
 
