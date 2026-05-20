@@ -242,6 +242,34 @@ def aws() -> None:
 async def make_auth_headers(
     sessionmaker, data_factory: TestDataFactory
 ) -> Callable[[RoleEnum], Awaitable[dict[str, str]]]:
+    """Build Authorization headers for an authenticated test request.
+
+    Cross-tenant gotcha (documented S55 / S57 / S58 cache-ETag rollouts):
+        The user lookup below (``select(User).where(User.email == ...)``)
+        is **not** tenant-scoped. The default email is derived from the
+        role (``f"{role.value}-api@example.com"``) — so two cross-tenant
+        callers asking for the same role share the same default email
+        and the SELECT returns whichever user was created first. The
+        second caller then gets a JWT whose ``tenant_id`` claim points
+        at the requested tenant, but ``user.tenant_id`` (from the row
+        in the DB) points at the first tenant — request handlers reject
+        with 403 "Tenant assignment mismatch".
+
+        **Workaround for multi-tenant tests:** pass distinct ``email=``
+        per tenant, e.g. ``make_auth_headers(RoleEnum.ADMIN,
+        tenant="acme", email="admin-acme@example.com")`` and
+        ``make_auth_headers(RoleEnum.ADMIN, tenant="beta",
+        email="admin-beta@example.com")``. Single-tenant callers can
+        keep the default email — the gotcha only bites when the same
+        role+email tuple is reused across tenants.
+
+        A proper fix would add ``User.tenant_id == tenant.id`` to the
+        SELECT or change the lookup key — that is intentionally
+        deferred (it would silently change existing tests' user-row
+        reuse semantics, and S55-S58 contract tests already work
+        around it explicitly).
+    """
+
     async def factory(
         role: RoleEnum = RoleEnum.ADMIN,
         *,

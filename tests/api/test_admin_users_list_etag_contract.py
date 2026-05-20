@@ -48,11 +48,43 @@ async def test_admin_users_list_returns_caller(
     assert any(item["role"] == "admin" for item in body["items"])
 
 
+_USER_LIST_ITEM_FIELDS: frozenset[str] = frozenset(
+    {
+        "id",
+        "email",
+        "full_name",
+        "role",
+        "is_active",
+        "last_login_at",
+        "company_id",
+        "created_at",
+        "updated_at",
+    }
+)
+"""Allowlist mirrors UserListItem schema (backend/app/schemas/admin_user.py).
+
+Any field added to / removed from the schema must be reflected here — that
+is the point. A pure substring check (e.g. ``"hashed_password" not in item``)
+catches the historical security issue but is silent on **any** other field
+that a future schema change might leak. The set-equality assertion below
+fails loudly the moment a new field appears in the API response, forcing a
+human to make an explicit yes/no decision on its public-safety. (S58 #4.)
+"""
+
+
 @pytest.mark.asyncio
 async def test_admin_users_list_omits_hashed_password(
     async_client: AsyncClient, make_auth_headers, sessionmaker, data_factory: TestDataFactory
 ) -> None:
-    """Security: hashed_password must NEVER appear in the API response."""
+    """Security: hashed_password must NEVER appear in the API response.
+
+    Two layers (defense-in-depth):
+        1. **Negative substring pin** — fast, byte-level guard against the
+           specific historical leak (`hashed_password` / `password`).
+        2. **Positive allowlist pin** — flags ANY new field that drifts
+           into the response, not just secrets we already know about.
+           See ``_USER_LIST_ITEM_FIELDS`` above.
+    """
     async with sessionmaker() as session:
         await data_factory.ensure_tenant(session=session)
         await session.commit()
@@ -60,9 +92,19 @@ async def test_admin_users_list_omits_hashed_password(
     headers = await make_auth_headers(RoleEnum.ADMIN)
     response = await async_client.get("/api/v1/admin/users", headers=headers)
     assert response.status_code == status.HTTP_200_OK
-    for item in response.json()["items"]:
+    items = response.json()["items"]
+    assert items, "caller (admin) must appear in the list — empty result blinds this pin"
+    for item in items:
+        # Layer 1 — historical leak guard.
         assert "hashed_password" not in item
         assert "password" not in item
+        # Layer 2 — drift guard.
+        assert set(item.keys()) == _USER_LIST_ITEM_FIELDS, (
+            f"UserListItem schema drift: response keys {sorted(item.keys())} "
+            f"do not match allowlist {sorted(_USER_LIST_ITEM_FIELDS)}. "
+            f"If you intentionally added a public-safe field, update "
+            f"_USER_LIST_ITEM_FIELDS in this test."
+        )
 
 
 @pytest.mark.asyncio
