@@ -1,6 +1,102 @@
 # AI Implementation Report
 
-## Last Agent Handoff (2026-05-20, Session 58 — Phase 9.3: ETag on first sub-resource list `/incidents/{id}/logs`, vNext-PERF-03)
+## Last Agent Handoff (2026-05-21, Session 59 — Phase 9.3 closure: Cache-Control uniformity across 25 ETag list endpoints, vNext-PERF-03)
+
+- **Дата:** 2026-05-21 (новая сессия на ветке `perf/etag-rollout-contractors-journals-admin`, поверх закоммиченного `9fda49b` "S58 Phase 9.3 sub-resource ETag"). Code-портион работы автоматически закоммичен как `9e9b850` во время сессии; этот handoff фиксирует научный/архитектурный контекст и docs.
+- **Агент:** Claude Opus 4.7 (local Windows).
+- **Задача:** «Продолжай по ТЗ» → S58 Next Step #3 «Cache-Control uniformity audit (S47 #5) — теперь 25 endpoints, стоит проверить consistency». Закрывает Phase 9 ETag rollout добавлением missing layer (Cache-Control directives) поверх существующего conditional-GET.
+- **Статус:** ✅ COMPLETE. Helper расширен 2 новыми функциями + публичной константой, 18 routes файлов отрефакторены (25 callsites), 11 новых contract tests + docstring update. Coverage: **25 list endpoints** теперь несут **uniform Cache-Control** + ETag. Cache contract tests total: 166 → **177**.
+- **Где остановился:** Phase 9 (ETag + Cache-Control layers) полностью закрыт. Все 25 list endpoints из Phase 9.2-9.3 rollout несут byte-identical pair `(ETag, Cache-Control: private, max-age=0, must-revalidate)` на 200 OK и 304 Not Modified. Single-source-of-truth конфигурация — будущая правка default'а тривиальна.
+
+### Studied Documentation
+
+- `AI_IMPLEMENTATION_REPORT.md` S58 Next Steps — explicit invitation (#3 Cache-Control uniformity).
+- `backend/app/api/helpers/etag.py` — current state перед S59 (только `compute_list_etag`, без Cache-Control awareness).
+- `tests/api/test_http_cache_etag_contract.py:30` — historical pin **«Cache-Control varies by endpoint»**: явное acknowledgement gap'а в S47 docstring, теперь закрыт.
+- **RFC 7234 § 5.2 (Cache-Control в revalidation responses)** — 304 reply должен echo caching directives original'а; mismatch может confuse intermediate caches.
+- **RFC 7234 § 4.2.2 (Heuristic Freshness)** — без Cache-Control HTTP/1.1 клиент может применять эвристическое кэширование (типично 10% от Last-Modified); для tenant data это значит ETag-цикл может вообще не запуститься, потому что клиент считает локальный cache свежим.
+- Grep по всем 25 callsite'ам в `backend/app/api/routes/*.py` — подтвердил **identical 3-line shape** во всех, что позволило `replace_all=true` per file сработать без побочных эффектов.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 9.3 closure / vNext-PERF-03 — completes ETag layer работу Sessions 46-58.
+- **Приоритет:** P2 (audit closing — устраняет implicit behaviour gap, не блокер production, но critical для cache infrastructure consistency).
+- **Почему выбрана:** S58 #3 explicit. Audit показал uniform missing layer (0 of 25 endpoints выставляют Cache-Control), не разнобой — что превратило expected «medium» работу в **scope-bounded refactor**. Без unified Cache-Control ETag-механизм частично обесценивается (heuristic caching skip's If-None-Match).
+
+### Implemented Changes
+
+- **`backend/app/api/helpers/etag.py`** (+99 lines):
+  - **`DEFAULT_LIST_CACHE_CONTROL: str = "private, max-age=0, must-revalidate"`** — public module-level constant. Docstring объясняет: `private` (запрет shared-cache), `max-age=0` (no fresh window), `must-revalidate` (force revalidation cycle через ETag). НЕ `no-store` — defeated бы Phase 9 conditional-GET (no-store = client refuse to remember response = If-None-Match никогда не отправится).
+  - **`apply_etag_response_headers(response, etag, *, cache_control=DEFAULT)`** — side-effecting helper для 200 OK path. Mutates `response.headers` в-place. Имя `apply_*` явно отражает side-effect (vs pure `build_*`).
+  - **`build_not_modified_headers(etag, *, cache_control=DEFAULT)`** — pure helper для manually-constructed 304 `Response(headers=...)`. Возвращает dict `{ETag, Cache-Control}`. Чистая (no side-effect).
+  - **`cache_control=` keyword-only** в обоих helpers — `*,` separator. Предотвращает accident'ы вида `apply_etag_response_headers(response, etag, "private, no-store")` где string в позиции cache_control могла бы быть etag. Pin'нено `test_*_cache_control_is_keyword_only`.
+- **18 route файлов рефакторены** (admin_users, api_tokens, briefings, companies, contractors, departments, documents, incidents, inspections, journals, medical, persons, ppe, prescriptions, risk, sites, tasks, training):
+  - Import: `from app.api.helpers.etag import compute_list_etag` → `from app.api.helpers.etag import (apply_etag_response_headers, build_not_modified_headers, compute_list_etag)`.
+  - 25 callsites: `response.headers["ETag"] = etag` → `apply_etag_response_headers(response, etag)`; `Response(status_code=304, headers={"ETag": etag})` → `Response(status_code=304, headers=build_not_modified_headers(etag))` (line-wrapped для читаемости).
+  - **Identical shape across all 25 callsites** — каждый файл получил `replace_all=true` правку с 0 риском побочных matches.
+- **`tests/api/test_etag_cache_control_uniformity.py`** (new, ~270 lines, 11 tests):
+  - **Helper unit contracts (8):** константа byte-equals; default headers ставятся; override через keyword; positional rejection (`TypeError`); symmetric для `build_*`; sanity что default содержит `must-revalidate` + `private` и НЕ содержит `no-store`.
+  - **E2E integration (3):** `/companies` 200 emits header; `/companies` 304 emits identical header (RFC 7234 § 5.2 — same caching directives); `/sites` confirms uniformity holds across distinct route modules.
+  - **Regression guard (1):** `test_etag_value_unaffected_by_cache_control_addition` — `compute_list_etag` output byte-identical для одинаковых inputs (deterministic); real-endpoint sanity для shape (`"..."` quoted sha256 = 66 chars).
+- **`tests/api/test_http_cache_etag_contract.py`** — docstring 4-line update: историческое «Cache-Control varies by endpoint» убрано, заменено ссылкой на новый uniformity-файл.
+- **`CHANGELOG.md`** — Session 59 prepended (этот блок документации).
+- **`AI_IMPLEMENTATION_REPORT.md`** — этот handoff.
+
+### Changed / New Files
+
+- `backend/app/api/helpers/etag.py` — +99 lines (1 constant + 2 helpers + module docstring extension).
+- 18 routes (admin_users, api_tokens, briefings, companies, contractors, departments, documents, incidents, inspections, journals, medical, persons, ppe, prescriptions, risk, sites, tasks, training) — +13 lines net each для single-callsite файлов, больше для multi-callsite (briefings:3, incidents:2, ppe:2, risk:4 — same shape × N).
+- `tests/api/test_etag_cache_control_uniformity.py` — new, ~270 lines, 11 tests.
+- `tests/api/test_http_cache_etag_contract.py` — 4-line docstring update.
+- `CHANGELOG.md` — S59 entry prepended.
+- `AI_IMPLEMENTATION_REPORT.md` — этот блок.
+
+### Decisions
+
+- **Подход B (helpers) выбран пользователем перед началом code-портиона.** Альтернатива A (inline в 25 callsites) была бы лёгкой, но превратила бы Cache-Control значение в 25-местный duplication — будущая правка default'а потребовала бы touch'ить 25 файлов. B сводит variance к одной строке.
+- **Default `private, max-age=0, must-revalidate` для всех 25 endpoints (uniform tier).** Альтернатива — tier'инг (`no-store` для admin/security endpoints `/admin/users`, `/api-tokens`) рассмотрен и отклонён: `no-store` disabled бы ETag, обнулив только что построенный Phase 9 conditional-GET. `private` + `must-revalidate` уже даёт защиту threat-model'а admin endpoints (no shared-cache leak, no stale credentials).
+- **`cache_control` как keyword-only параметр.** `*,` separator в signature предотвращает positional misuse. Если когда-то понадобится override (например, дальняя future-проблема с public endpoint без tenant context), API уже готов; но строгая дисциплина запретит «случайно подставить etag в slot cache_control».
+- **Separate helpers для 200 и 304 paths (mutating vs pure).** Я мог бы сделать один helper `set_cache_headers(response_or_dict, etag)` с runtime branching, но это смешивало бы side-effects с returns — anti-pattern. Два явных имени (`apply_*` mutates, `build_*` returns) делают callsite-intent очевидным; reviewer'у не нужно открывать helper чтобы понять что произойдёт.
+- **Integration тесты на 2 endpoints (companies + sites), не на всех 25.** Helper — single point of variance; 25-endpoint coverage был бы 25x duplication без proportional value. Если в будущем кто-то введёт per-endpoint override, helper unit-тесты держат API surface, а domain-specific contract files (`test_<domain>_cache_etag_contract.py`) получат свои assertions.
+- **Не удалил «Cache-Control varies by endpoint» строку, а заменил ссылкой на uniformity-файл.** Historical pinning важен — будущий reviewer видит «было известно как gap → закрыто в S59», вместо «всегда было».
+- **Auto-committed как `9e9b850` во время сессии.** Code-портион работы был автоматически закоммичен (вероятно local hook) с подробным conventional message; CHANGELOG + AI_IMPLEMENTATION_REPORT updates (этот блок) идут follow-up коммитом `docs(cache): S59 handoff + CHANGELOG` — соблюдает project policy «create new commits rather than amending».
+
+### Issues Fixed
+
+- **Uniform missing layer закрыт.** 0 of 25 → 25 of 25 endpoints emit unified Cache-Control. Heuristic caching (RFC 7234 § 4.2.2) на этих surfaces больше не возможно — клиент обязан revalidate через If-None-Match.
+- **Historical pin «Cache-Control varies by endpoint» закрыт.** Test docstring явно acknowledged этот gap в S47 — теперь он gone, заменён ссылкой на uniformity-файл.
+- **Future override path открыт.** Если admin/security endpoints когда-нибудь потребуют `no-store`, путь готов: `cache_control=` keyword + per-callsite override без рефактора helper'а.
+
+### Known Problems / Risks
+
+- **`Vary` header не аудитирован.** Phase 9 endpoints routing'уются через `X-Tenant-Id` header — FastAPI/Starlette не auto-Vary на custom headers. Если перед сервером появится shared cache, который не уважает наш `private` directive (например misconfigured corporate proxy), tenant-data могла бы leak'нуть. Это S47 #5 follow-up, отложен (требует отдельного audit'а — `Vary: Authorization, X-Tenant-Id` потенциально на response level или middleware).
+- **`no-store` paths уже существуют не-Phase-9.** `calendar.py` (ICS feed), `jobs.py` (SSE), `packs.py` (file download), `pipelines/api.py` — все ставят `no-store`/`no-cache` намеренно (нет ETag-цикла). S59 не трогает их — out of scope. Аудит этих не-Phase-9 surfaces — отдельная инициатива.
+- **Local pytest Py3.13+Windows env drift.** Pre-existing segfault при init conftest fixture (документировано S46-S58). CI на 3.12.12 — source of truth. S59 unit-тесты можно запускать изолированно (без full conftest), integration — только CI.
+
+### Validation
+
+- **Syntax:** `py -3 -m py_compile backend/app/api/helpers/etag.py backend/app/api/routes/{18 files} tests/api/test_etag_cache_control_uniformity.py tests/api/test_http_cache_etag_contract.py` → ✅ exit 0.
+- **Pattern coverage:** `grep -c 'apply_etag_response_headers(response, etag)' backend/app/api/routes` → **25** в 18 файлах (точно matches inventory). `grep -c 'response.headers\["ETag"\] = etag' backend/app/api/routes` → **0** (полная миграция, no stragglers).
+- **Helper invariant preserved:** `compute_list_etag` не модифицирован — 25 endpoints используют byte-identical hash contract как до S59. Pre-existing client ETags продолжают resolve в 304.
+- **Test count:** 11 new (8 unit + 3 e2e). Total cache contract: 166 → 177.
+- **Pytest local Py3.13+Windows:** см. session log; integration тесты требуют full conftest — pre-existing environment drift. CI на 3.12.12 — source of truth.
+
+### Next Steps
+
+1. **Commit S59 docs follow-up** (`CHANGELOG.md` + `AI_IMPLEMENTATION_REPORT.md`) selective `git add` — НЕ включать `.claude/settings.local.json`, `.claude/scheduled_tasks.lock`, `.remember/`, untracked `tests/api/test_operational_dashboard_contract.py` (S54, чужая сессия).
+2. **Push + open PR** (or report existing). `gh` сейчас не аутентифицирован — может потребоваться `gh auth login` перед `gh pr create`.
+3. **`Vary` header audit** (S47 #5 follow-up) — `Vary: Authorization, X-Tenant-Id` на всех 25 ETag endpoints (через middleware или per-route). Защита от shared-cache misconfiguration где `private` directive не уважается.
+4. **`/admin/users` CRUD endpoints** (S57 #3 — POST/PATCH/DELETE) если roadmap UI потребует full user management.
+5. **Phase 9.2 service-level Redis cache** (S47 #1) — следующий уровень кэширования после ETag/Cache-Control layer (`app.state.redis_client` integration для config/session cache).
+6. **Per-endpoint Cache-Control override audit** — если admin или security endpoints со временем потребуют `no-store`/более-строгих директив, использовать `cache_control=` keyword через новый API.
+7. **Root-fix `make_auth_headers` SELECT** (S58 #5).
+8. **Phase 2 frontend: Command Center UI** (S35 #11).
+9. **Site Card aggregate** (S35 #10).
+10. **Investigate local Py3.13+Windows test environment drift.**
+
+---
+
+## Previous Handoff (2026-05-20, Session 58 — Phase 9.3: ETag on first sub-resource list `/incidents/{id}/logs`, vNext-PERF-03)
 
 - **Дата:** 2026-05-20 (новая сессия на ветке `perf/etag-rollout-contractors-journals-admin`, поверх закоммиченного `117c1ec` "Phase 9.2 — Sessions 55-57").
 - **Агент:** Claude Opus 4.7 (local Windows).
