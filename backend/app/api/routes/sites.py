@@ -8,7 +8,11 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
-from app.api.helpers.etag import compute_list_etag
+from app.api.helpers.etag import (
+    apply_etag_response_headers,
+    build_not_modified_headers,
+    compute_list_etag,
+)
 from app.core.audit_decorator import audit_operation
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
@@ -130,9 +134,12 @@ async def list_sites(
         items=items,
         scalars=[("total", int(total or 0)), ("limit", limit), ("offset", offset)],
     )
-    response.headers["ETag"] = etag
+    apply_etag_response_headers(response, etag)
     if request.headers.get("if-none-match") == etag:
-        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
     return SitePage(items=items, total=int(total or 0))
 
 

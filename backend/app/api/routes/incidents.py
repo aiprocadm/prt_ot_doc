@@ -8,7 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_session, get_tenant_record
-from app.api.helpers.etag import compute_list_etag
+from app.api.helpers.etag import (
+    apply_etag_response_headers,
+    build_not_modified_headers,
+    compute_list_etag,
+)
 from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
@@ -134,9 +138,12 @@ async def list_incidents(
             ("type", incident_type.value if incident_type else ""),
         ],
     )
-    response.headers["ETag"] = etag
+    apply_etag_response_headers(response, etag)
     if request.headers.get("if-none-match") == etag:
-        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
     return IncidentPage(items=[_serialize_incident(item) for item in items], total=int(total or 0))
 
 
@@ -288,7 +295,10 @@ async def list_incident_logs(
         items=records,
         scalars=[("incident", str(incident.id))],
     )
-    response.headers["ETag"] = etag
+    apply_etag_response_headers(response, etag)
     if request.headers.get("if-none-match") == etag:
-        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
     return [IncidentLogRead.model_validate(record) for record in records]

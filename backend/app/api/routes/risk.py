@@ -15,7 +15,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_session, get_tenant_record
-from app.api.helpers.etag import compute_list_etag
+from app.api.helpers.etag import (
+    apply_etag_response_headers,
+    build_not_modified_headers,
+    compute_list_etag,
+)
 from app.core.errors import api_problem_detail
 from app.core.idempotency import compute_request_hash
 from app.core.metrics import get_metrics
@@ -481,9 +485,12 @@ async def list_methodologies(
         items=records,
         scalars=[("total", len(records)), ("kind", "methodologies")],
     )
-    response.headers["ETag"] = etag
+    apply_etag_response_headers(response, etag)
     if request.headers.get("if-none-match") == etag:
-        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
     result: list[MethodologyOut] = []
     for record in records:
         definition = record.definition or {}
@@ -810,9 +817,12 @@ async def list_risk_maps(
             ("methodology", methodology_id or ""),
         ],
     )
-    response.headers["ETag"] = etag
+    apply_etag_response_headers(response, etag)
     if request.headers.get("if-none-match") == etag:
-        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
     return [
         RiskMapOut(
             id=record.id,
@@ -1345,9 +1355,12 @@ async def list_risk_cards(
             ("employee", employee_id or ""),
         ],
     )
-    response.headers["ETag"] = etag
+    apply_etag_response_headers(response, etag)
     if request.headers.get("if-none-match") == etag:
-        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
     return [
         RiskCardOut(
             id=record.id,
@@ -1413,9 +1426,12 @@ async def list_action_plans(
             ("employee", employee_id or ""),
         ],
     )
-    response.headers["ETag"] = etag
+    apply_etag_response_headers(response, etag)
     if request.headers.get("if-none-match") == etag:
-        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
     result: list[ActionPlanOut] = []
     for record in records:
         items = sorted(record.items, key=lambda item: (item.due_date or date.min, item.id))
