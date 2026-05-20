@@ -2,7 +2,7 @@ import { Command, Search } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
-import { searchGlobal, type SearchItem } from "@/api/search";
+import { fetchSavedSearches, searchGlobal, type SavedSearchItem, type SearchItem } from "@/api/search";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -13,8 +13,44 @@ import { trackUxMetric } from "@/utils/uxMetrics";
 
 const FAVORITE_PATHS_STORAGE_KEY = "ux.commandbar.favoritePaths.v1";
 const RECENT_PATHS_STORAGE_KEY = "ux.commandbar.recentPaths.v1";
+const RECENT_ENTITIES_STORAGE_KEY = "ux.commandbar.recentEntities.v1";
 const MAX_RECENT = 8;
 const MAX_ENTITY_RESULTS = 8;
+const MAX_SAVED_SEARCHES = 5;
+const MAX_RECENT_ENTITIES = 6;
+
+interface RecentEntity {
+  entity_type: string;
+  entity_id: string;
+  title: string;
+  deeplink: string;
+}
+
+const buildSavedSearchPath = (item: SavedSearchItem): string => {
+  const params = new URLSearchParams();
+  if (item.q) params.set("q", item.q);
+  if (item.types?.length) params.set("types", item.types.join(","));
+  const qs = params.toString();
+  return qs ? `/search?${qs}` : "/search";
+};
+
+const readRecentEntities = (): RecentEntity[] => {
+  const raw = localStorageGetItem(RECENT_ENTITIES_STORAGE_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as RecentEntity[];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (item): item is RecentEntity =>
+        typeof item?.entity_type === "string" &&
+        typeof item?.entity_id === "string" &&
+        typeof item?.title === "string" &&
+        typeof item?.deeplink === "string"
+    );
+  } catch {
+    return [];
+  }
+};
 
 const ENTITY_TYPE_LABELS: Record<string, string> = {
   person: "Сотрудники",
@@ -133,6 +169,8 @@ export const CommandBar = () => {
   const [recentPaths, setRecentPaths] = useState<string[]>([]);
   const [entityResults, setEntityResults] = useState<SearchItem[]>([]);
   const [entitySearchLoading, setEntitySearchLoading] = useState(false);
+  const [savedSearches, setSavedSearches] = useState<SavedSearchItem[]>([]);
+  const [recentEntities, setRecentEntities] = useState<RecentEntity[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const itemRefs = useRef<Array<HTMLAnchorElement | null>>([]);
   const debouncedQuery = useDebounce(query, 300);
@@ -144,7 +182,25 @@ export const CommandBar = () => {
   useEffect(() => {
     setFavoritePaths(readPaths(FAVORITE_PATHS_STORAGE_KEY));
     setRecentPaths(readPaths(RECENT_PATHS_STORAGE_KEY));
+    setRecentEntities(readRecentEntities());
   }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    fetchSavedSearches()
+      .then((items) => {
+        if (cancelled) return;
+        setSavedSearches(Array.isArray(items) ? items : []);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSavedSearches([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -196,6 +252,26 @@ export const CommandBar = () => {
     if (!trimmed) return [];
     return EXECUTABLE_COMMANDS.filter((command) => matchesCommand(command, trimmed)).slice(0, 4);
   }, [query]);
+
+  const filteredSavedSearches = useMemo(() => {
+    if (savedSearches.length === 0) return [];
+    const trimmed = query.trim().toLowerCase();
+    if (!trimmed) return savedSearches.slice(0, MAX_SAVED_SEARCHES);
+    return savedSearches
+      .filter((item) =>
+        item.name.toLowerCase().includes(trimmed) ||
+        (item.q ?? "").toLowerCase().includes(trimmed)
+      )
+      .slice(0, MAX_SAVED_SEARCHES);
+  }, [query, savedSearches]);
+
+  // Recent entities are pinned shortcuts to entities the user opened from the
+  // palette before — only shown for an empty query so they don't crowd
+  // out live search results.
+  const visibleRecentEntities = useMemo(() => {
+    if (query.trim()) return [];
+    return recentEntities.slice(0, MAX_RECENT_ENTITIES);
+  }, [query, recentEntities]);
 
   const entityGroups = useMemo(() => {
     if (entityResults.length === 0) return [];
@@ -259,6 +335,18 @@ export const CommandBar = () => {
     });
   };
 
+  const rememberRecentEntity = (entity: RecentEntity) => {
+    setRecentEntities((prev) => {
+      const filtered = prev.filter(
+        (item) =>
+          !(item.entity_type === entity.entity_type && item.entity_id === entity.entity_id)
+      );
+      const next = [entity, ...filtered].slice(0, MAX_RECENT_ENTITIES);
+      localStorageSetItem(RECENT_ENTITIES_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+  };
+
   // Flat ordered list of all keyboard-navigable items in the same order
   // they appear on screen (actions → entities → nav). The arrow keys walk
   // this list; Enter triggers `activate()`. Keeping render and navigation
@@ -267,7 +355,7 @@ export const CommandBar = () => {
   type NavigableItem = {
     key: string;
     path: string;
-    kind: "action" | "entity" | "nav";
+    kind: "action" | "saved" | "recent-entity" | "entity" | "nav";
     activate: () => void;
   };
 
@@ -288,6 +376,38 @@ export const CommandBar = () => {
         }
       });
     });
+    filteredSavedSearches.forEach((item) => {
+      const path = buildSavedSearchPath(item);
+      items.push({
+        key: `saved-${item.id}`,
+        path,
+        kind: "saved",
+        activate: () => {
+          trackUxMetric("navigation_click", {
+            source: "commandbar-saved-search",
+            saved_id: item.id
+          });
+          navigate(path);
+          setOpen(false);
+        }
+      });
+    });
+    visibleRecentEntities.forEach((entity) => {
+      items.push({
+        key: `recent-entity-${entity.entity_type}-${entity.entity_id}`,
+        path: entity.deeplink,
+        kind: "recent-entity",
+        activate: () => {
+          rememberRecentEntity(entity);
+          trackUxMetric("navigation_click", {
+            source: "commandbar-recent-entity",
+            entity_type: entity.entity_type
+          });
+          navigate(entity.deeplink);
+          setOpen(false);
+        }
+      });
+    });
     entityGroups.forEach((group) => {
       group.items.forEach((item) => {
         const path = item.deeplink ?? `/search?q=${encodeURIComponent(query.trim())}`;
@@ -296,6 +416,12 @@ export const CommandBar = () => {
           path,
           kind: "entity",
           activate: () => {
+            rememberRecentEntity({
+              entity_type: item.entity_type,
+              entity_id: item.entity_id,
+              title: item.title,
+              deeplink: path
+            });
             trackUxMetric("navigation_click", {
               source: "commandbar-entity",
               entity_type: item.entity_type
@@ -326,7 +452,15 @@ export const CommandBar = () => {
       });
     });
     return items;
-  }, [entityGroups, groupedForDisplay, matchedCommands, navigate, query]);
+  }, [
+    entityGroups,
+    filteredSavedSearches,
+    groupedForDisplay,
+    matchedCommands,
+    navigate,
+    query,
+    visibleRecentEntities
+  ]);
 
   const indexByKey = useMemo(() => {
     const map = new Map<string, number>();
@@ -457,6 +591,99 @@ export const CommandBar = () => {
                   </div>
                 </div>
               ) : null}
+              {filteredSavedSearches.length > 0 ? (
+                <div data-testid="commandbar-saved-searches">
+                  <div className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Сохранённые запросы
+                  </div>
+                  <div className="space-y-1">
+                    {filteredSavedSearches.map((item) => {
+                      const path = buildSavedSearchPath(item);
+                      const navKey = `saved-${item.id}`;
+                      const index = indexByKey.get(navKey) ?? -1;
+                      const selected = index === selectedIndex;
+                      return (
+                        <Link
+                          key={item.id}
+                          to={path}
+                          ref={(node) => {
+                            if (index >= 0) itemRefs.current[index] = node;
+                          }}
+                          id={`commandbar-item-${navKey}`}
+                          role="option"
+                          aria-selected={selected}
+                          data-saved-id={item.id}
+                          data-selected={selected || undefined}
+                          onClick={() => {
+                            trackUxMetric("navigation_click", {
+                              source: "commandbar-saved-search",
+                              saved_id: item.id
+                            });
+                            setOpen(false);
+                          }}
+                          className={`block rounded border border-dashed px-2 py-2 text-sm hover:bg-muted ${
+                            selected ? "bg-muted ring-1 ring-primary" : ""
+                          }`}
+                        >
+                          <span className="font-medium">{item.name}</span>
+                          {item.q || (item.types?.length ?? 0) > 0 ? (
+                            <span className="mt-0.5 block text-xs text-muted-foreground">
+                              {item.q ? `«${item.q}»` : null}
+                              {item.types?.length ? ` · ${item.types.join(", ")}` : null}
+                            </span>
+                          ) : null}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+              {visibleRecentEntities.length > 0 ? (
+                <div data-testid="commandbar-recent-entities">
+                  <div className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Недавно открытые
+                  </div>
+                  <div className="space-y-1">
+                    {visibleRecentEntities.map((entity) => {
+                      const navKey = `recent-entity-${entity.entity_type}-${entity.entity_id}`;
+                      const index = indexByKey.get(navKey) ?? -1;
+                      const selected = index === selectedIndex;
+                      const groupLabel = ENTITY_TYPE_LABELS[entity.entity_type] ?? entity.entity_type;
+                      return (
+                        <Link
+                          key={navKey}
+                          to={entity.deeplink}
+                          ref={(node) => {
+                            if (index >= 0) itemRefs.current[index] = node;
+                          }}
+                          id={`commandbar-item-${navKey}`}
+                          role="option"
+                          aria-selected={selected}
+                          data-entity-type={entity.entity_type}
+                          data-entity-id={entity.entity_id}
+                          data-selected={selected || undefined}
+                          onClick={() => {
+                            rememberRecentEntity(entity);
+                            trackUxMetric("navigation_click", {
+                              source: "commandbar-recent-entity",
+                              entity_type: entity.entity_type
+                            });
+                            setOpen(false);
+                          }}
+                          className={`block rounded px-2 py-2 text-sm hover:bg-muted ${
+                            selected ? "bg-muted ring-1 ring-primary" : ""
+                          }`}
+                        >
+                          <span className="font-medium">{entity.title}</span>
+                          <span className="mt-0.5 block text-xs text-muted-foreground">
+                            {groupLabel}
+                          </span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
               {query.trim() && entitySearchLoading && entityResults.length === 0 ? (
                 <p
                   className="px-2 py-1 text-xs text-muted-foreground"
@@ -495,6 +722,12 @@ export const CommandBar = () => {
                               data-entity-id={item.entity_id}
                               data-selected={selected || undefined}
                               onClick={() => {
+                                rememberRecentEntity({
+                                  entity_type: item.entity_type,
+                                  entity_id: item.entity_id,
+                                  title: item.title,
+                                  deeplink: path
+                                });
                                 trackUxMetric("navigation_click", {
                                   source: "commandbar-entity",
                                   entity_type: item.entity_type
@@ -573,6 +806,8 @@ export const CommandBar = () => {
               {!filtered.length &&
               matchedCommands.length === 0 &&
               entityGroups.length === 0 &&
+              filteredSavedSearches.length === 0 &&
+              visibleRecentEntities.length === 0 &&
               !entitySearchLoading ? (
                 <p className="px-2 py-3 text-sm text-muted-foreground">Ничего не найдено</p>
               ) : null}

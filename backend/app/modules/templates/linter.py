@@ -48,9 +48,17 @@ def parse_docx_placeholders(docx_bytes: bytes) -> dict[str, Any]:
     field_locations: dict[str, list[dict[str, int]]] = {}
     loops: list[dict[str, Any]] = []
     conditions: list[dict[str, Any]] = []
+    delim_open_placeholder = 0
+    delim_close_placeholder = 0
+    delim_open_block = 0
+    delim_close_block = 0
 
     for source, xml in _iter_docx_xml(docx_bytes):
         text = _extract_text(xml)
+        delim_open_placeholder += text.count("{{")
+        delim_close_placeholder += text.count("}}")
+        delim_open_block += text.count("{%")
+        delim_close_block += text.count("%}")
         for match in PLACEHOLDER_RE.finditer(text):
             expr = match.group(1).strip()
             tokens.append({"type": "placeholder", "expr": expr, "source": source, "offset": match.start()})
@@ -90,14 +98,41 @@ def parse_docx_placeholders(docx_bytes: bytes) -> dict[str, Any]:
         "loops": loops,
         "conditions": conditions,
         "raw_tokens": tokens,
+        "delimiters": {
+            "placeholder_open": delim_open_placeholder,
+            "placeholder_close": delim_close_placeholder,
+            "block_open": delim_open_block,
+            "block_close": delim_close_block,
+        },
     }
 
 
-def lint_template(docx_bytes: bytes, *, required_fields: list[str] | None = None) -> dict[str, Any]:
+def lint_template(
+    docx_bytes: bytes,
+    *,
+    required_fields: list[str] | None = None,
+    available_fields: list[str] | None = None,
+) -> dict[str, Any]:
     parsed = parse_docx_placeholders(docx_bytes)
     errors: list[str] = []
     warnings: list[str] = []
     stack: list[str] = []
+
+    # Brace-balance pre-check catches orphan {{ / }} or {% / %} that escape
+    # the regex (e.g. unclosed `{{ name`). The regex-based field extraction
+    # silently skips broken placeholders, so without this check a typo would
+    # turn into a missing field at render time.
+    delims = parsed.get("delimiters", {})
+    if delims.get("placeholder_open", 0) != delims.get("placeholder_close", 0):
+        errors.append(
+            "Unbalanced placeholder delimiters: "
+            f"{{ {{ count={delims.get('placeholder_open', 0)}, }} }} count={delims.get('placeholder_close', 0)}"
+        )
+    if delims.get("block_open", 0) != delims.get("block_close", 0):
+        errors.append(
+            "Unbalanced block delimiters: "
+            f"{{% count={delims.get('block_open', 0)}, %}} count={delims.get('block_close', 0)}"
+        )
 
     for token in parsed["raw_tokens"]:
         if token["type"] != "block":
@@ -112,6 +147,14 @@ def lint_template(docx_bytes: bytes, *, required_fields: list[str] | None = None
                 errors.append("Unexpected endif")
             else:
                 stack.pop()
+        elif expr == "else":
+            if not stack or stack[-1] != "if":
+                errors.append("Unexpected else")
+        elif expr.startswith("elif "):
+            if not stack or stack[-1] != "if":
+                errors.append("Unexpected elif")
+            if not _safe_expr(expr[5:].strip()):
+                errors.append(f"Unsafe elif expression: {expr}")
         elif expr.startswith("for ") and " in " in expr:
             stack.append("for")
             body = expr[4:]
@@ -146,6 +189,20 @@ def lint_template(docx_bytes: bytes, *, required_fields: list[str] | None = None
         for name in required_fields:
             if name not in found_fields:
                 warnings.append(f"Required field is not used in template: {name}")
+
+    if available_fields is not None:
+        # Compare root-level identifiers: `person.name.first` ↦ `person`.
+        # Loop variables (e.g. {% for x in items %} … {{ x.name }}) are
+        # locally scoped, so they are not measured against the declared
+        # available fields — only `items` (the iterable root) is.
+        loop_vars = {loop["var"] for loop in parsed["loops"]}
+        declared_roots = {name.split(".")[0] for name in available_fields if name}
+        used_roots = {path.split(".")[0] for path in legacy_field_paths}
+        unknown_roots = (used_roots - declared_roots) - loop_vars
+        for name in sorted(unknown_roots):
+            warnings.append(
+                f"Field is used but not declared in available_fields: {name}"
+            )
 
     return {
         "found_fields": found_fields,

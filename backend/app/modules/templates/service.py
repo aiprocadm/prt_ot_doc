@@ -42,9 +42,85 @@ def build_passport(
     }
 
 
-def lint_docx_template(docx_bytes: bytes, *, required_fields: list[str] | None = None) -> dict[str, Any]:
-    return lint_template(docx_bytes, required_fields=required_fields)
+def lint_docx_template(
+    docx_bytes: bytes,
+    *,
+    required_fields: list[str] | None = None,
+    available_fields: list[str] | None = None,
+) -> dict[str, Any]:
+    return lint_template(
+        docx_bytes,
+        required_fields=required_fields,
+        available_fields=available_fields,
+    )
 
 
 def render_preview_docx(*, template_bytes: bytes, data: dict[str, Any], passport: dict[str, Any], visible_passport: bool = False) -> bytes:
     return render_docx(template_bytes, data, passport, visible_passport=visible_passport)
+
+
+def inspect_template_variables(
+    *,
+    placeholder_index: dict[str, Any] | None,
+    required_fields_schema: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Compute a Variable Inspector report from a stored placeholder index.
+
+    The caller (API layer) keeps the parse result in ``template_versions.placeholder_index``
+    when the template is uploaded or re-linted, so this function intentionally
+    does not touch storage — it operates on already-parsed metadata and the
+    template version's JSON schema (``required_fields_schema``).
+    """
+
+    placeholders = placeholder_index or {}
+    fields = list(placeholders.get("fields") or [])
+    loops = list(placeholders.get("loops") or [])
+    conditions = list(placeholders.get("conditions") or [])
+
+    used_roots: set[str] = set()
+    for field in fields:
+        name = (field.get("name") or "").strip()
+        if name:
+            used_roots.add(name.split(".")[0])
+    loop_vars = {(loop.get("var") or "").strip() for loop in loops if loop.get("var")}
+    used_roots -= loop_vars
+
+    schema = required_fields_schema or {}
+    declared_required = [
+        str(name)
+        for name in (schema.get("required") or [])
+        if isinstance(name, str) and name
+    ]
+    properties = schema.get("properties")
+    declared_available = (
+        sorted(str(name) for name in properties.keys() if isinstance(name, str) and name)
+        if isinstance(properties, dict)
+        else []
+    )
+
+    declared_available_set = set(declared_available)
+    declared_required_set = set(declared_required)
+
+    # `used_undeclared` only makes sense when the template version actually
+    # advertises a schema with `properties`. If no schema is bound, the
+    # template can use anything the rendering context provides.
+    used_undeclared = (
+        sorted(used_roots - declared_available_set)
+        if declared_available
+        else []
+    )
+    declared_unused = sorted(declared_required_set - used_roots)
+
+    return {
+        "used": fields,
+        "loops": loops,
+        "conditions": conditions,
+        "declared_required": declared_required,
+        "declared_available": declared_available,
+        "coverage": {
+            "used_undeclared": used_undeclared,
+            "declared_unused": declared_unused,
+            "used_count": len(used_roots),
+            "declared_count": len(declared_available),
+        },
+    }
