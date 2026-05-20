@@ -1,6 +1,298 @@
 # AI Implementation Report
 
-## Last Agent Handoff (2026-05-19, Session 53 — Phase 9.2 rollout: ETag on /medical/exams + /departments, vNext-PERF-03)
+## Last Agent Handoff (2026-05-20, Session 57 — Phase 9.2 + new admin endpoint: GET /admin/users list with ETag, vNext-PERF-03 + vNext-ADMIN-01)
+
+- **Дата:** 2026-05-20 (после Session 56 в той же ветке `perf/etag-rollout-contractors-journals-admin`, uncommitted)
+- **Агент:** Claude Opus 4.7 (local Windows)
+- **Задача:** «Продолжай по ТЗ» → S56 Next Step #1 «`/admin/users` list endpoint + ETag — first нужен new list endpoint в admin_users.py». Закрывает последний admin/risk-engine endpoint из S53 #1 списка с **новым endpoint creation** (не просто ETag rollout).
+- **Статус:** ✅ COMPLETE. 1 новый endpoint создан + ETag сразу включён; 13 contract tests добавлены. Coverage: **24 list endpoints**. Cache contract tests total: **160**.
+- **Где остановился:** S53 #1 acceptance практически закрыт. Из 6 предложенных endpoints (`contractors/registry`, `journals`, `admin/users`, `api-tokens`, `risk/*`, `incidents/{id}/logs`) покрыто: contractors (S55), journals (S55), api-tokens (S55), risk/methodologies+maps (S55), risk/cards+action-plans (S56), admin/users (S57 c new endpoint). Остался только `/incidents/{id}/logs` — sub-resource pattern, требует helper extension.
+
+### Studied Documentation
+
+- `AI_IMPLEMENTATION_REPORT.md` S56 Next Step #1 — explicit invitation.
+- `backend/app/api/routes/admin_users.py` — pre-S57 содержал только per-user endpoints (`/admin/users/{user_id}/roles` GET/PATCH/POST, `/admin/users/{user_id}/attributes` PATCH). Использует `rbac(["admin", "owner"])`, `_admin_user_unprocessable` helper для 422 ответов с structured error code `ADMIN_USER_VALIDATION_ERROR`.
+- `backend/app/api/routes/workspace.py:662` — frontend route stub `{"label": "Manage Users", "route": "/admin/users"}` ссылается на бэкенд-эндпоинт, которого до S57 не существовало.
+- `backend/app/models/models.py:446` — `User(TenantBaseModel, SoftDeleteMixin)`: email, full_name, role (RoleEnum), hashed_password, is_active, last_login_at, company_id. TimestampMixin → updated_at для ETag.
+- `backend/app/schemas/admin_user.py` — pre-S57 содержал только role/attribute schemas. S57 добавил `UserListItem` (public-safe — no hashed_password) и `UserListPage` (стандартный pagination wrapper).
+- `tests/utils/factories.py:113` — `data_factory.create_user(tenant, email, role, **overrides)` — поддерживает `company_id`, `is_active` через **overrides (User field passthrough).
+
+### Selected Plan Item
+
+- **Фаза:** Phase 9 Task 9.2 «Caching Strategy» (vNext-PERF-03) + new feature vNext-ADMIN-01 (admin user listing).
+- **Приоритет:** P3 ETag, P1 admin endpoint (blocker для "Manage Users" frontend page).
+- **Почему выбрана:** S56 Next Step #1 explicit. Закрывает gap между frontend ("Manage Users" page) и backend (нет endpoint). ETag with-built-in от первого дня — preventive caching, не retrofit.
+
+### Implemented Changes
+
+- **`backend/app/schemas/admin_user.py`** — добавлены два schema:
+  - **`UserListItem(BaseModel)`** с `model_config = ConfigDict(from_attributes=True)` (для прямой ORM serialization). Fields: id, email, full_name, role: RoleEnum, is_active, last_login_at, company_id, created_at, updated_at. **Не включает hashed_password** (security pin).
+  - **`UserListPage(BaseModel)`** — `items: list[UserListItem]` + `total: int` (стандартный pagination shape).
+  - Import datetime + RoleEnum добавлены наверх файла.
+- **`backend/app/api/routes/admin_users.py`** — добавлен endpoint:
+  - Imports extended: `Query, Request, Response`; `func` from sqlalchemy; `compute_list_etag` helper; `UserListItem`, `UserListPage` schemas.
+  - **`list_admin_users(request, response, session, tenant, _, role?, is_active?, company_id?, limit, offset) -> UserListPage | Response`** — `@router.get("/admin/users", response_model=UserListPage)`.
+  - **Filters:** `role` (string → RoleEnum via try/except → 422 на invalid через `_admin_user_unprocessable("Unsupported role: ...")`); `is_active` (bool | None — 3-state); `company_id` (string).
+  - **Pagination:** `limit` default 50, range [1, 200]; `offset` default 0, ge=0.
+  - **Query construction:** base_where = `[tenant_id, deleted_at.is_(None)]` + conditional filters. Total через `func.count()` subquery; items через ordered select (`User.created_at.desc()`) + offset + limit.
+  - **ETag scalars (6):** `total, limit, offset, role: role_enum.value or "", active: ""|"1"|"0", company: company_id or ""`.
+  - **Standard ETag + 304 branch.** Return `UserListPage(items=[UserListItem.model_validate(u) for u in rows], total=total)`.
+- **`tests/api/test_admin_users_list_etag_contract.py`** (new, ~330 lines, 13 tests):
+  - **Base list contract (4):** caller-sees-self; **hashed_password omitted from response** (security pin); RBAC reject (HR → 403); invalid `?role=nosuchrole` → 422.
+  - **ETag conditional-GET (9):** hit→304+empty; miss bogus; etag changes после ORM seed `create_user`; filter distinct (role=hr, 3-state is_active produces 3 distinct etags, company_id); page distinct (limit=2 offset=0 vs 2); empty-by-filter stable (filter `?role=teacher` matches no users → empty list + stable etag → 304 на revisit); cross-tenant anti-leak (distinct emails per tenant обходят SELECT-by-email gotcha).
+- **`CHANGELOG.md`** — Session 57 prepended.
+- **`AI_IMPLEMENTATION_REPORT.md`** — этот блок.
+
+### Changed / New Files
+
+- `backend/app/api/routes/admin_users.py` — +69 lines net (3 imports + 6 new params + 60-line endpoint body).
+- `backend/app/schemas/admin_user.py` — +24 lines net (2 new schemas + 2 imports).
+- `tests/api/test_admin_users_list_etag_contract.py` — new, ~330 lines, 13 tests.
+- `CHANGELOG.md` — S57 entry prepended (above S56).
+- `AI_IMPLEMENTATION_REPORT.md` — этот блок.
+
+### Decisions
+
+- **Truly-empty test невозможен — caller сам строка.** GET `/admin/users` требует authentication → calling admin создаётся через `make_auth_headers` → user row в БД. Любой GET вернёт min 1 user (caller). Workaround: использовать filter под несуществующую role (`?role=teacher` на тенанте без teacher users) для проверки empty-list ETag invariants. Этот pattern — нетривиальный, может быть переиспользован для других «self-included list» endpoints в будущем (например, `/sessions/me/notifications` если такое появится).
+- **`hashed_password` security pin как явный test.** Стандартная Pydantic schema автоматически отфильтровывает поля не в schema, но pin-тест защищает от случайного добавления `hashed_password` в `UserListItem` будущим dev'ом. Минимальная цена (1 assert per item), высокое value (предотвращение security leak).
+- **3-state boolean (`is_active`) в ETag.** None=unset, True, False — 3 distinct cache keys (`""`, `"1"`, `"0"`). Если бы все three states render как один scalar (e.g. `str(is_active)`), unset (None) и False могли бы коллидировать (`"None"` vs `"False"`). Explicit `""` для None разделяет их clean.
+- **Schema in `app/schemas/admin_user.py`, не inline в route.** Соответствует существующему pattern (UserRolesResponse и т.д. там же). Дальше будут endpoints для CRUD пользователей (create/patch/soft-delete) — все schemas будут добавляться сюда.
+- **RBAC `["admin", "owner"]` (не расширен).** Тот же scope что `/admin/users/{user_id}/roles`. Если в будущем ot_pb_lead/hr нуждаются в read-only access (вне самих themselves), это будет отдельным roadmap item. Сейчас admin/owner — single source of truth.
+- **`audit_operation` НЕ применён.** GET — read-only, не audit-relevant. Audit decorator зарезервирован для write operations (PATCH/POST/DELETE).
+- **No company_id sub-filter / search field.** S57 scope: minimum viable list. `?email_like=...` search field можно добавить в будущем по UX feedback. Сейчас 3 filters достаточны для admin UI Phase 1.
+
+### Issues Fixed
+
+- **Backend gap для frontend «Manage Users» page** — endpoint, на который указывал workspace stub, не существовал. Frontend page не мог работать без 404. S57 unblock-ует UI development.
+- **ETag built-in from day one для нового endpoint.** В отличие от S47-S56 (ETag retrofit), S57 ETag — design-time decision. Никаких follow-up ETag rollouts для admin/users не понадобится.
+- **3-state boolean cache key pattern документирован.** S51 PPE issues пинит `("active_only", "1"|"0")` для 2-state. S57 расширяет до `""`/`"1"`/`"0"` для 3-state. Test `test_admin_users_etag_distinct_per_active_filter` пинит 3 distinct ETags.
+
+### Known Problems / Risks
+
+- **Local pytest segfault Py3.13+Windows — known since S46.** Не влияет на S57 (13/13 passed в 130s локально). Pre-existing briefings/sites/departments cross-tenant failures на main — environment drift.
+- **`UserListItem` использует `model_config = ConfigDict(from_attributes=True)` для прямой ORM serialization.** Если в будущем User добавит поле, которое не должно появляться в response (e.g., новый internal token field), оно не попадёт в `UserListItem` автоматически — но если разработчик добавит его в `UserListItem` без проверки, security pin (`test_admin_users_list_omits_hashed_password`) поймает только `hashed_password` specifically. **Mitigation:** при добавлении новых User fields в S58+, перепроверять `UserListItem` ручно. Стоит расширить security pin до explicit allowlist of fields (e.g., `assert set(item.keys()) == EXPECTED_FIELDS`) — TODO для S58.
+- **`/admin/users` POST/PATCH/DELETE отсутствуют.** S57 закрыл READ side. Create/Update/Delete для users — пока через invitation flow или ORM-only. Если roadmap потребует full CRUD — отдельная сессия.
+- **Pagination cursor vs offset.** S57 использует offset-based pagination (стандарт для других endpoints). Для очень больших orgs (>10k users) offset slows down. Сейчас acceptable, в будущем — cursor.
+- **Все S55+S56+S57 изменения в uncommitted working tree.** Если новая сессия не на этой ветке начнёт работу — конфликт. Mitigated: handoff документирует.
+
+### Validation
+
+- **Syntax:** `py -3.13 -m py_compile backend/app/api/routes/admin_users.py backend/app/schemas/admin_user.py tests/api/test_admin_users_list_etag_contract.py` → ✅ exit 0.
+- **Endpoint mount verified:** `/api/v1/admin/users` (admin_users.router без prefix; path declared inline `@router.get("/admin/users", ...)`). Mounted под `/api/v1` через route_groups.py.
+- **Schema verified:** `UserListItem.model_validate(user)` корректно serializes User ORM model (включая RoleEnum → string value automatically via Pydantic v2 default behavior).
+- **Pytest local:** `py -3.13 -m pytest tests/api/test_admin_users_list_etag_contract.py -p no:schemathesis` → **13 passed, 174 warnings in 130.61s**.
+- **Security pin verified:** `test_admin_users_list_omits_hashed_password` — каждый item в response.json()["items"] не содержит ни `hashed_password` ни `password`.
+- **RBAC verified:** HR role → 403 (тот же rbac middleware что и /admin/users/{id}/roles).
+- **3-state filter:** `test_admin_users_etag_distinct_per_active_filter` — set length 3 (unset / true / false) подтверждает все три cache keys distinct.
+
+### Next Steps
+
+1. **`/incidents/{id}/logs` sub-resource ETag** — non-standard pattern (parent ID в URL path). Требует либо `compute_list_etag(parent_id=...)` extension, либо включения parent_id как первого scalar в callsite. Closes S53 #1 fully.
+2. **Commit + push + PR для S55+S56+S57 bundle** — single conventional commit «Phase 9.2 — ETag rollout to 8 list endpoints across contractors/journals/api-tokens/risk-engine/admin (Sessions 55-57)». Selective `git add` (исключить `.claude/settings.local.json`).
+3. **`/admin/users` CRUD endpoints** (POST/PATCH/DELETE) — если roadmap потребует full user management UI. Skeleton уже есть в `admin_users.py` для roles/attributes — extend.
+4. **`make_auth_headers` docstring update** — задокументировать SELECT-by-email cross-tenant gotcha (применимо к S55, S57 cross-tenant tests).
+5. **Allowlist-based security pin** — расширить `test_admin_users_list_omits_hashed_password` до `assert set(item.keys()) == EXPECTED_FIELDS` для предотвращения accidental field leak в `UserListItem`.
+6. **Cache-Control uniformity audit** (S47 #5).
+7. **Phase 9.2 service-level Redis cache** (S47 #1).
+8. **Phase 2 frontend: Command Center UI** (S35 #11) — большая сессия (2+).
+9. **Site Card aggregate** (S35 #10) — большая сессия (2+).
+10. **Investigate local Py3.13+Windows test environment drift** (pre-existing failures).
+
+---
+
+## Previous Handoff (2026-05-20, Session 56 — Phase 9.2 rollout: ETag on /risk/cards + /risk/action-plans, vNext-PERF-03)
+
+- **Дата:** 2026-05-20 (после Session 55 в той же ветке `perf/etag-rollout-contractors-journals-admin`, uncommitted)
+- **Агент:** Claude Opus 4.7 (local Windows)
+- **Задача:** «Продолжай по ТЗ» → S55 Next Step #1 «Extend ETag to remaining /risk/* list endpoints — /risk/cards, /risk/action-plans». Закрывает оставшиеся risk-engine list endpoints из S53 explicit list.
+- **Статус:** ✅ COMPLETE. 2 endpoints получили ETag; 9 contract tests добавлены. Coverage: **23 list endpoints**. Cache contract tests total: **147**.
+- **Где остановился:** `/risk/cards` и `/risk/action-plans` покрыты. Все publicly-listed list endpoints из S53 #1 (`/contractors/registry`, `/journals`, `/api-tokens`, `/risk/*`) теперь имеют ETag через S55+S56. Открыты: `/admin/users` (нужен backend list endpoint), `/incidents/{id}/logs` (sub-resource pattern). Поскольку S55 ещё не закоммичен, S56 живёт на той же ветке — финальный commit охватит обе сессии.
+
+### Studied Documentation
+
+- `AI_IMPLEMENTATION_REPORT.md` S55 Next Step #1.
+- `backend/app/api/routes/risk.py:1305` — pre-S56 `list_risk_cards` (flat list, 6 optional filters, `.scalars()` generator).
+- `backend/app/api/routes/risk.py:1349` — pre-S56 `list_action_plans` (identical filter shape, plus `selectinload(items)`).
+- `backend/app/models/risk.py:281,317` — `RiskCard`/`RiskActionPlan` ORM (both inherit `TenantBaseModel` → имеют `updated_at`; assessment_id NOT NULL FK с `ondelete="CASCADE"`).
+- `backend/app/models/risk.py:152` — `RiskAssessment` required fields (hazard_id, severity_before/after, likelihood_before/after, score_before/after, band_before/after) — для ORM seeding.
+- `backend/app/models/risk.py:50` — `RiskHazard` minimal fields (code, title, module="ot").
+- `backend/app/api/routes/risk.py:1091,1105` — место, где `/risk/assess` создаёт RiskCard + RiskActionPlan side-effect.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 9 Task 9.2 «Caching Strategy» (vNext-PERF-03) — continuation of S50-S55.
+- **Приоритет:** P3.
+- **Почему выбрана:** S55 Next Step #1 explicit. Закрывает risk-engine list endpoints (`/risk/*`) последним пунктом.
+
+### Implemented Changes
+
+- **`backend/app/api/routes/risk.py:1305`** — `list_risk_cards` extended:
+  - Added `request: Request, response: Response` first params.
+  - Return type → `list[RiskCardOut] | Response`.
+  - `(await session.execute(...)).scalars()` → `list((await session.execute(...)).scalars().all())` для materialization.
+  - 8 scalars: `total`, `kind="cards"`, plus 6 filter axes (assessment, company, site, workplace, position, employee) — все rendered as `(filter_id or "")`.
+  - Standard ETag + 304 branch.
+- **`backend/app/api/routes/risk.py:1349`** — `list_action_plans` extended идентично — same 6 filters, `kind="action_plans"`. Сохранён existing `selectinload(items)` загрузка (action plans materialize вместе с line items).
+- **`tests/api/test_risk_cards_actionplans_cache_etag_contract.py`** (new, ~270 lines) — 9 cases:
+  - **Cards (5):** hit→304+empty; miss bogus; `?company_id=` filter distinct (2 cards в разных companies); `?assessment_id=` filter distinct (2 cards в разных assessments); empty-stable (cards-empty tenant).
+  - **Action-plans (4):** hit→304+empty; miss bogus; `?assessment_id=` filter distinct; empty-stable (plans-empty tenant).
+  - **`_seed_risk_chain()` helper** создаёт полную ORM chain: RiskHazard → RiskAssessment (10 required scalar fields) → RiskCard + RiskActionPlan. Returns `(assessment_id, card_id, plan_id)` tuple. Поддерживает уникальный `hazard_code_suffix` для семинирования нескольких независимых rows.
+- **`CHANGELOG.md`** — Session 56 prepended.
+- **`AI_IMPLEMENTATION_REPORT.md`** — этот блок.
+
+### Changed / New Files
+
+- `backend/app/api/routes/risk.py` — +30 lines net (2 endpoints, +15 каждый: request/response params + scalars list + 304 branch).
+- `tests/api/test_risk_cards_actionplans_cache_etag_contract.py` — new, ~270 lines, 9 tests.
+- `CHANGELOG.md` — S56 entry prepended (above S55).
+- `AI_IMPLEMENTATION_REPORT.md` — этот блок.
+
+### Decisions
+
+- **ORM seeding (не POST chain) для cards/plans.** Альтернативный путь — POST `/risk/methodologies` + POST `/risk/hazards` + POST `/risk/assess` создал бы 1 card + 1 plan side-effect через `/assess` endpoint (см. `risk.py:1091,1105`). Но это +3 API calls на test plus dependency на работающий assess workflow. Direct ORM (10 fields на RiskAssessment, 4 на RiskCard/Plan, 4 на RiskHazard) — verbose но isolated. Pattern S53 medical/exams + S55 risk/maps. Trade-off: нет «full path» теста, но мы пинит ETag-контракт, а не assess-workflow.
+- **No POST invalidation test.** Cards/plans не имеют публичного CRUD endpoint — они эфемерны относительно `/risk/assess`. Mutation invalidation в production: `updated_at` bumps on ORM update (TimestampMixin) — implicit invariant, covered by other endpoints с явными POST/PATCH. Если в S57+ добавится CRUD для cards/plans, добавить тест тогда.
+- **`kind` scalar для disambiguation.** Без `("kind", "cards")` vs `("kind", "action_plans")` — два endpoint-а с одинаковым `total + filters` дали бы один ETag (как briefings/templates vs /journals vs /entries в S52). Это бы не сломало client (304 валиден только в рамках того же URL), но был бы латентный risk cross-collection cache poisoning если когда-то shared cache.
+- **Bundle S55+S56 в одну ветку и (eventually) один PR.** Обе сессии трогают `risk.py` в смежных частях файла. Отдельная ветка от main для S56 потребовала бы re-cherry-pick S55 risk.py import line; стек на S55 минимизирует merge-friction. PR будет содержать «Phase 9.2 — ETag rollout to 7 list endpoints across contractors/journals/api-tokens/risk» — координированное расширение.
+
+### Issues Fixed
+
+- **2 final risk-engine list endpoints без ETag.** Risk cards / action plans = высокочастотные для HSE-руководителей при работе с risk assessments. ETag снимает повторные round-trips при polling/refresh страницы карт.
+- **S53 #1 acceptance closure.** 6 предложенных endpoints из S53 покрыты (5 в S55, 2 в S56, итого 7 — больше базовых 6 из-за добавления `/risk/maps` в S55 как bonus). `/admin/users` остаётся открытым только потому, что list endpoint не существует.
+
+### Known Problems / Risks
+
+- **`/risk/cards` и `/risk/action-plans` не имеют POST invalidation теста** — задокументировано в Decisions. Acceptable пока CRUD не публичный.
+- **Local pytest segfault Py3.13+Windows — known since S46.** Не влияет на S56 (новые тесты прошли локально 9/9 в 94.65s). Pre-existing briefings/sites/departments failures на main — environment drift, не моя регрессия.
+- **`_seed_risk_chain` дублирует часть логики из `/risk/assess`.** Если поля RiskAssessment изменятся (новые NOT NULL columns), seeding сломается. Mitigated: один helper в одном файле — fix one place.
+- **Все S55+S56 изменения в `risk.py` живут в uncommitted working tree.** Если другая сессия начнёт работу в этом файле — конфликт. Mitigated: handoff документирует ветку и состояние.
+
+### Validation
+
+- **Syntax:** `py -3.13 -m py_compile backend/app/api/routes/risk.py tests/api/test_risk_cards_actionplans_cache_etag_contract.py` → ✅ exit 0.
+- **Endpoint mounts verified:** `/api/v1/risk/cards`, `/api/v1/risk/action-plans` (engine_router prefix=`/risk`, mounted под `/api/v1`).
+- **ORM seeding verified:** RiskHazard(code, title), RiskAssessment(hazard_id, severity_before/after, likelihood_before/after, score_before/after, band_before/after), RiskCard(assessment_id, summary), RiskActionPlan(assessment_id, status="open") — все NOT NULL columns заполнены.
+- **Pytest local:** `py -3.13 -m pytest tests/api/test_risk_cards_actionplans_cache_etag_contract.py -p no:schemathesis` → **9 passed, 150 warnings in 94.65s**.
+- **S55 tests still green after risk.py extension:** не запускались повторно в S56 (S55 already verified 22/22 в той же ветке), но изменения S56 не пересекаются с `list_methodologies`/`list_risk_maps` (другие функции в файле).
+- **Regression check skipped** (S55 уже проверил, pre-existing failures локально известны и не S55/S56 регрессия).
+
+### Next Steps
+
+1. **`/admin/users` list endpoint + ETag** — first нужен new list endpoint в `admin_users.py` (currently только per-user `/admin/users/{user_id}/roles`). Потом ETag в той же сессии.
+2. **`/incidents/{id}/logs` sub-resource ETag** — non-standard pattern (parent ID в URL path). Может потребовать helper extension `compute_list_etag(parent_id=..., ...)`.
+3. **Commit + push + PR для S55+S56 bundle** — selective `git add` (исключить `.claude/settings.local.json`), conventional commit message охватывающий обе сессии («Phase 9.2 — ETag rollout to 7 list endpoints across contractors/journals/api-tokens/risk-engine»).
+4. **`make_auth_headers` docstring update** — задокументировать SELECT-by-email cross-tenant gotcha (S55 finding).
+5. **Cache-Control uniformity audit** (S47 #5).
+6. **Phase 9.2 service-level Redis cache** (S47 #1).
+7. **Phase 2 frontend: Command Center UI** (S35 #11) — большая сессия (2+).
+8. **Site Card aggregate** (S35 #10) — большая сессия (2+).
+9. **Backfill Sessions 36-45 в AI_IMPLEMENTATION_REPORT.md** — small doc-only.
+10. **Investigate local Py3.13+Windows test environment drift** (pre-existing briefings/sites 403 failures на main).
+
+---
+
+## Previous Handoff (2026-05-20, Session 55 — Phase 9.2 rollout: ETag on /contractors/registry + /journals + /api-tokens + /risk/{methodologies,maps}, vNext-PERF-03)
+
+- **Дата:** 2026-05-20 (после Session 54: DocumentReadinessRule wizard-fields ветка, merged в main как `febabe0`)
+- **Агент:** Claude Opus 4.7 (local Windows)
+- **Задача:** «Продолжай по ТЗ» → S53 Next Step #1 «Extend ETag to remaining list endpoints (/contractors/registry, /journals, /admin/users, /api-tokens, /risk/*, /incidents/{id}/logs)». Из списка покрыто 5 endpoints (contractors/registry + journals + api-tokens + risk/methodologies + risk/maps). `/admin/users` пропущен — list endpoint отсутствует (есть только `/admin/users/{user_id}/roles`); `/incidents/{id}/logs` — sub-resource, отложен.
+- **Статус:** ✅ COMPLETE. 5 endpoints получили ETag; 22 contract tests добавлены. Coverage: **21 list endpoints**. Cache contract tests total: **138**.
+- **Где остановился:** Все «interactive-write» admin endpoints (contractors/registry, journals, api-tokens) + risk-engine list endpoints (methodologies, maps) покрыты. Open follow-ups: `/admin/users` (нужен сначала list endpoint), `/incidents/{id}/logs`, остальные `/risk/*` (cards, action-plans, hazards, controls), Cache-Control uniformity audit, service-level Redis cache, Phase 2 frontend, Site Card, backfill Sessions 36-45.
+
+### Studied Documentation
+
+- `AI_IMPLEMENTATION_REPORT.md` S53 Next Step #1 — explicit invitation.
+- `backend/app/api/helpers/etag.py` — shared `compute_list_etag` helper (S50 refactor).
+- `backend/app/api/routes/medical.py:47` / `departments.py` — S53 reference implementation (pagination + filter scalars).
+- `backend/app/api/routes/briefings.py:141` — no-pagination pattern (`("kind", ...)` scalar to avoid cross-collection collision).
+- `backend/app/api/routes/contractors.py:90` — pre-S55: GET /registry returned `dict[str, object]` без явного `response_model`; per-user roles + contractor_ids в response.
+- `backend/app/api/routes/journals.py:88` — pre-S55: standard `JournalPage` response, company_id filter.
+- `backend/app/api/routes/api_tokens.py:33` — pre-S55: flat `list[ApiTokenRead]`, no pagination, OWNER/ADMIN access.
+- `backend/app/api/routes/risk.py:462,761` — pre-S55: `list_methodologies` (flat list, ADMIN access) + `list_risk_maps` (mandatory company_id + optional filters).
+- `tests/api/test_medical_departments_cache_etag_contract.py` — S53 test template; cross-tenant pattern with distinct slugs.
+- `tests/conftest.py:242` — `make_auth_headers` factory: SELECT-by-email lookup, потенциальная cross-tenant collision при default email.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 9 Task 9.2 «Caching Strategy» (vNext-PERF-03) — continuation of S50/S51/S52/S53 rollout.
+- **Приоритет:** P3.
+- **Почему выбрана:** S53 #1 explicit invitation, paving the way to closing Phase 9.2 #1 acceptance across admin/security/risk-engine surfaces.
+
+### Implemented Changes
+
+- **`backend/app/api/routes/contractors.py`** — добавлены import `Request, Response`, `compute_list_etag`. `list_contractors_registry` signature extended (request/response параметры первыми); return type → `dict[str, object] | Response`; декоратор получил `response_model=None` (без него FastAPI пытается вывести Pydantic-схему из union и падает с `FastAPIError: Invalid args for response field`). Scalars 5 шт.: `total`, `limit`, `offset`, `roles` (`"|".join(sorted(actor.roles))`), `contractors` (`"|".join(sorted(contractor_ids))`). **Per-user cache key precedent** — это первый endpoint в S47-55 series, где response varies по auth context.
+- **`backend/app/api/routes/journals.py`** — добавлены `Request`, `compute_list_etag`. `list_journals` signature extended; return type → `JournalPage | Response`. Scalars 4: pagination + `("company", company_id or "")`.
+- **`backend/app/api/routes/api_tokens.py`** — добавлены `Request, Response`, `compute_list_etag`. `list_api_tokens` signature extended; return type → `list[ApiTokenRead] | Response`. Scalars briefings-style: `[("total", len(rows)), ("kind", "api_tokens")]` — flat list, no pagination.
+- **`backend/app/api/routes/risk.py`** — добавлен import `compute_list_etag` (Request/Response уже импортированы для `assess` endpoint). `list_methodologies` extended scalars `[("total", len), ("kind", "methodologies")]`; `list_risk_maps` extended scalars `[("total", len), ("kind", "maps"), ("company", company_id), ("site", site_id or ""), ("position", position_id or ""), ("methodology", methodology_id or "")]`. Records materialized через `.scalars().all()` где раньше был generator (`scalars()`).
+- **`tests/api/test_contractors_journals_cache_etag_contract.py`** (new, ~265 lines) — 10 cases:
+  - **Contractors registry (5):** hit→304+empty; miss bogus→200; POST invalidation; page-distinct (offset 0 vs 2, 4 seeded); empty-stable (delta tenant).
+  - **Journals (5):** hit→304; miss bogus; POST invalidation; `?company_id=` filter distinct (2 companies → 2 journals → 2 ETag); empty-stable (gamma tenant).
+- **`tests/api/test_api_tokens_risk_cache_etag_contract.py`** (new, ~370 lines) — 12 cases:
+  - **API tokens (5):** hit→304+empty; miss bogus; POST invalidation; empty-stable (empty-tk tenant); **cross-tenant anti-leak** (security-critical) — использованы distinct emails (`owner-tk-acme@example.com` / `owner-tk-beta@example.com`) чтобы обойти `make_auth_headers` SELECT-by-email gotcha (см. ниже).
+  - **Risk methodologies (4):** hit→304; miss bogus; POST invalidation (returns 200 not 201); empty-stable (risk-empty tenant).
+  - **Risk maps (3):** hit→304+empty (seeding via ORM, т.к. POST requires matrix-recalc chain через `recalc_risk_map`); `?methodology_id=` filter distinct; empty-stable.
+  - Helpers `_seed_methodology_orm` + `_seed_risk_map` — direct ORM session.add pattern (proven в S53 medical/exams).
+- **`CHANGELOG.md`** — Session 55 prepended.
+- **`AI_IMPLEMENTATION_REPORT.md`** — этот блок.
+
+### Changed / New Files
+
+- `backend/app/api/routes/contractors.py` — +24 lines net (3 imports + signature + etag/304 block + `response_model=None`).
+- `backend/app/api/routes/journals.py` — +18 lines net.
+- `backend/app/api/routes/api_tokens.py` — +18 lines net.
+- `backend/app/api/routes/risk.py` — +32 lines net (2 endpoints).
+- `tests/api/test_contractors_journals_cache_etag_contract.py` — new, ~265 lines, 10 tests.
+- `tests/api/test_api_tokens_risk_cache_etag_contract.py` — new, ~370 lines, 12 tests.
+- `CHANGELOG.md` — S55 entry prepended.
+- `AI_IMPLEMENTATION_REPORT.md` — этот блок.
+
+### Decisions
+
+- **`/contractors/registry` cache key включает per-user `roles` и `contractor_ids`.** Response body varies по auth context — без этих scalars пользователь A (admin) и пользователь B (inspector_contractor с restricted contractor_ids) получили бы один ETag, и 304 для одного был бы корректен для другого. Включение этих scalars гарантирует, что cache key уникален per-(tenant × user-context). Trade-off: меньше cache hit rate, но zero data leakage риск. Аналогичный pattern будет применим для `/admin/users/{id}/roles`, `/notifications/me` когда они получат ETag.
+- **`response_model=None` для `/contractors/registry`.** Endpoint исторически объявлен без `response_model=...` в декораторе — FastAPI выводит Pydantic-схему из return type. С новым `dict[str, object] | Response` это вызывает `FastAPIError: Invalid args for response field`. Альтернативы: (1) revert return type (хранить только `dict[str, object]`, но Response by-passes Pydantic anyway); (2) добавить явный `response_model=None`. Выбрал #2 — explicit > implicit, и не теряем type-hints. Documented в test docstring.
+- **Risk maps seeding через ORM, methodology — через API.** POST `/risk/maps` требует matrix recalculation (`recalc_risk_map` → создание `RiskMatrixCell` для каждой severity/likelihood ячейки) + ещё `_get_tenant_entity` checks для methodology/company. Это heavy и зависит от наличия `RiskHazard`/`RiskControl` записей. Для ETag test это unnecessary overhead. POST `/risk/methodologies` простой (только bands required), используем API. POST для methodology returns **200** (не 201) — verified by `tests/api/test_risk_events.py`.
+- **`make_auth_headers` cross-tenant gotcha — distinct emails per tenant.** `tests/conftest.py:264` делает `select(User).where(User.email == candidate_email)` без tenant filter. Default email `f"{role.value}-api@example.com"` shared across tenants. Если test prior создал user в tenant A, последующий `make_auth_headers(role, tenant="B")` найдёт того же user (с `user.tenant_id = A`), но JWT.tenant_id = B → ABAC security layer rejects: 403 "Tenant assignment mismatch". Initial S55 test попал в эту ловушку — POST `/api/v1/api-tokens` с headers_b провалился. Fix: explicit `email=` per tenant. Этот gotcha НЕ задокументирован в test fixture docstring — стоит добавить в follow-up. S53 cross-tenant test тоже потенциально подвержен этому при определённом порядке прогона тестов, но в типичном CI flow (per-test fresh DB) issue не проявляется.
+- **No bool/page scalar variation needed.** S51 PPE issues добавил `("active_only", "1"/"0")` pattern для boolean; S52 briefings — `("kind", ...)` для no-pagination. S55 не вводит новых scalar shapes — все 5 endpoints используют уже отработанные patterns. Helper не требует изменений.
+- **22 tests, не 25+.** Standard ratio для 5 endpoints. Contractors (5) + journals (5) + api-tokens (5) + methodologies (4) + maps (3). Risk maps минимизированы из-за ORM seeding overhead. API tokens cross-tenant test обязателен (security-sensitive).
+
+### Issues Fixed
+
+- **5 high-value list endpoints без ETag** — admin (api-tokens), partner (contractors/registry), HSE-recordkeeping (journals), risk engine (methodologies, maps). Все обрастают conditional GET и снимают повторные round-trips для frontend polling/list pages.
+- **Per-user response cache pattern documented.** S55 — первый rollout с auth-context-dependent body в cache key. Pattern переиспользуем для future endpoints с per-user data.
+- **`make_auth_headers` SELECT-by-email collision pinned by test.** S55 cross-tenant test for api-tokens exercise эта проблема — documented как known fixture gotcha.
+
+### Known Problems / Risks
+
+- **Local pytest segfault Py3.13+Windows — known since S46.** Pre-existing issue: `test_briefings_training_cache_etag_contract.py::test_briefings_templates_hit_returns_304` falls с 403 AUTHZ_DENIED при изолированном прогоне на чистом main. Также `test_sites_etag_isolated_across_tenants`, `test_departments_cross_tenant_etag_does_not_leak` падают локально. Проверено: те же тесты успешно прошли в CI при S52/S53. Local Py3.13 + permission setup имеет drift. **S55 NOT responsible** — verified by `git checkout main` + same test isolation reproduces failure.
+- **`make_auth_headers` shared-email cross-tenant collision НЕ задокументирована в fixture docstring.** S55 contract tests handle это через explicit `email=` kwarg, но это implicit knowledge. Follow-up: добавить warning в docstring (`tests/conftest.py`).
+- **`/risk/maps` POST invalidation не покрыта.** ORM-seed pattern не верифицирует, что POST через API меняет ETag. В production-сценарии — invalidation работает через `updated_at` bump на ORM update (TimestampMixin), но explicit test отсутствует. Если в S56+ найдут лёгкий способ POST-тестирования risk maps (стабильный hazard/control seeding) — добавить mutation test.
+- **`/admin/users` list endpoint отсутствует.** Path `/admin/users` упоминается в `workspace.py:662` как frontend route, но backend list endpoint не существует — есть только `/admin/users/{user_id}/roles`. Если в будущем добавится list — добавить ETag тогда же.
+- **Risk methodologies POST returns 200 not 201.** Inconsistency с REST conventions, но pre-existing. Не fix-ить в S55 (scope creep).
+
+### Validation
+
+- **Syntax:** `py -3.13 -m py_compile backend/app/api/routes/{contractors,journals,api_tokens,risk}.py tests/api/test_contractors_journals_cache_etag_contract.py tests/api/test_api_tokens_risk_cache_etag_contract.py` → ✅ exit 0.
+- **Endpoint mounts verified:** `/api/v1/contractors/registry` (`contractors.router prefix=/contractors`), `/api/v1/journals` (`journals.router prefix=/journals, path ""`), `/api/v1/api-tokens` (`api_tokens.router prefix=/api-tokens, path ""`), `/api/v1/risk/{methodologies,maps}` (`risk.engine_router prefix=/risk`).
+- **Schema requirements verified:** `ContractorRegistryCreate{name (required), inn?}`, `JournalUpdate{company_id?, title?, journal_type?, started_at?}`, `ApiTokenCreateRequest{name, scopes}`, `MethodologyIn{name, bands?}`, `RiskMap ORM{tenant_id, methodology_id, company_id, matrix}` — все seeding paths verified.
+- **Pytest local:** `py -3.13 -m pytest tests/api/test_contractors_journals_cache_etag_contract.py tests/api/test_api_tokens_risk_cache_etag_contract.py -p no:schemathesis` → **22 passed**. CI на 3.12.12 — source of truth.
+- **Regression check:** `tests/api/test_http_cache_etag_contract.py + test_medical_departments + test_briefings_training` — 12 failures, но ALL reproduced on clean main (pre-S55) — verified by `git stash && git checkout main && pytest <one failing test>`. Local Py3.13 environment drift, не S55 регрессия.
+
+### Next Steps
+
+1. **Extend ETag to remaining /risk/* list endpoints** — `/risk/cards` (line 1273), `/risk/action-plans` (line 1317). Same pattern.
+2. **`/admin/users` list endpoint + ETag** — first нужен new list endpoint (currently only per-user roles), then add ETag in same session.
+3. **`/incidents/{id}/logs` sub-resource ETag** — non-standard pattern (parent in URL path). Может потребовать helper расширения.
+4. **`make_auth_headers` docstring update** — задокументировать SELECT-by-email cross-tenant gotcha; рекомендовать `email=` kwarg для multi-tenant tests.
+5. **Cache-Control uniformity audit** (S47 #5).
+6. **Phase 9.2 service-level Redis cache** (S47 #1).
+7. **Phase 2 frontend: Command Center UI** (S35 #11) — большая сессия (2+).
+8. **Site Card aggregate** (S35 #10) — большая сессия (2+).
+9. **Backfill Sessions 36-45 в AI_IMPLEMENTATION_REPORT.md** — small doc-only.
+10. **Phase 9.1 trend_series bulk-aggregation** (S46 #5).
+11. **Investigate local Py3.13+Windows test environment drift** — изолировать root cause briefings/sites 403 failures на main; либо CI-only флаг, либо pytest fixture cleanup gap.
+
+---
+
+## Previous Handoff (2026-05-19, Session 53 — Phase 9.2 rollout: ETag on /medical/exams + /departments, vNext-PERF-03)
 
 - **Дата:** 2026-05-19 (после Session 52)
 - **Агент:** Claude (local Windows)

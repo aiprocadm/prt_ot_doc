@@ -3,12 +3,13 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.api.helpers.etag import compute_list_etag
 from app.core.security import AccessContext, abac
 from app.models.models import Tenant
 from app.modules.contractors.models import (
@@ -87,14 +88,16 @@ class ContractorIncidentCreate(BaseModel):
     description: str | None = None
 
 
-@router.get("/registry")
+@router.get("/registry", response_model=None)
 async def list_contractors_registry(
+    request: Request,
+    response: Response,
     tenant: TenantDep,
     session: SessionDep,
     access: ReaderAccess,
     limit: int = Query(100, ge=1, le=200),
     offset: int = Query(0, ge=0),
-) -> dict[str, object]:
+) -> dict[str, object] | Response:
     stmt = select(ContractorRegistry).where(
         ContractorRegistry.tenant_id == str(tenant.id),
         ContractorRegistry.deleted_at.is_(None),
@@ -106,6 +109,20 @@ async def list_contractors_registry(
         stmt = stmt.where(ContractorRegistry.id.in_(contractor_ids))
     total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
     items = list((await session.execute(stmt.order_by(ContractorRegistry.created_at.desc()).offset(offset).limit(limit))).scalars().all())
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=items,
+        scalars=[
+            ("total", total),
+            ("limit", limit),
+            ("offset", offset),
+            ("roles", "|".join(sorted(actor.roles or []))),
+            ("contractors", "|".join(sorted(contractor_ids))),
+        ],
+    )
+    response.headers["ETag"] = etag
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
     return {"items": items, "total": total, "roles": actor.roles}
 
 
