@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_session, get_tenant_record
+from app.api.helpers.etag import compute_list_etag
 from app.core.errors import api_problem_detail
 from app.core.idempotency import compute_request_hash
 from app.core.metrics import get_metrics
@@ -461,14 +462,28 @@ async def create_methodology(
 
 @engine_router.get("/methodologies", response_model=list[MethodologyOut])
 async def list_methodologies(
-    session: SessionDep, tenant: TenantDep, _: EditorAccess
-) -> list[MethodologyOut]:
+    request: Request,
+    response: Response,
+    session: SessionDep,
+    tenant: TenantDep,
+    _: EditorAccess,
+) -> list[MethodologyOut] | Response:
     tenant_id = str(tenant.id)
-    records = (
-        await session.execute(
-            select(RiskMethodology).where(RiskMethodology.tenant_id == tenant_id)
-        )
-    ).scalars()
+    records = list(
+        (
+            await session.execute(
+                select(RiskMethodology).where(RiskMethodology.tenant_id == tenant_id)
+            )
+        ).scalars().all()
+    )
+    etag = compute_list_etag(
+        tenant_id=tenant_id,
+        items=records,
+        scalars=[("total", len(records)), ("kind", "methodologies")],
+    )
+    response.headers["ETag"] = etag
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
     result: list[MethodologyOut] = []
     for record in records:
         definition = record.definition or {}
@@ -760,6 +775,8 @@ async def save_risk_map(
 
 @engine_router.get("/maps", response_model=list[RiskMapOut])
 async def list_risk_maps(
+    request: Request,
+    response: Response,
     session: SessionDep,
     tenant: TenantDep,
     _: EditorAccess,
@@ -767,7 +784,7 @@ async def list_risk_maps(
     site_id: str | None = Query(default=None, alias="site_id"),
     position_id: str | None = Query(default=None, alias="position_id"),
     methodology_id: str | None = Query(default=None, alias="methodology_id"),
-) -> list[RiskMapOut]:
+) -> list[RiskMapOut] | Response:
     tenant_id = str(tenant.id)
     await _get_tenant_entity(session, Company, tenant_id, company_id)
     stmt = select(RiskMap).where(
@@ -780,7 +797,22 @@ async def list_risk_maps(
     if methodology_id:
         stmt = stmt.where(RiskMap.methodology_id == methodology_id)
 
-    records = (await session.execute(stmt)).scalars().all()
+    records = list((await session.execute(stmt)).scalars().all())
+    etag = compute_list_etag(
+        tenant_id=tenant_id,
+        items=records,
+        scalars=[
+            ("total", len(records)),
+            ("kind", "maps"),
+            ("company", company_id),
+            ("site", site_id or ""),
+            ("position", position_id or ""),
+            ("methodology", methodology_id or ""),
+        ],
+    )
+    response.headers["ETag"] = etag
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
     return [
         RiskMapOut(
             id=record.id,
@@ -1272,6 +1304,8 @@ async def get_assessment(
 
 @engine_router.get("/cards", response_model=list[RiskCardOut])
 async def list_risk_cards(
+    request: Request,
+    response: Response,
     session: SessionDep,
     tenant: TenantDep,
     _: EditorAccess,
@@ -1281,7 +1315,7 @@ async def list_risk_cards(
     workplace_id: str | None = Query(default=None, alias="workplace_id"),
     position_id: str | None = Query(default=None, alias="position_id"),
     employee_id: str | None = Query(default=None, alias="employee_id"),
-) -> list[RiskCardOut]:
+) -> list[RiskCardOut] | Response:
     tenant_id = str(tenant.id)
     stmt = select(RiskCard).where(RiskCard.tenant_id == tenant_id)
     if assessment_id:
@@ -1296,7 +1330,24 @@ async def list_risk_cards(
         stmt = stmt.where(RiskCard.position_id == position_id)
     if employee_id:
         stmt = stmt.where(RiskCard.employee_id == employee_id)
-    records = (await session.execute(stmt.order_by(RiskCard.created_at.desc()))).scalars()
+    records = list((await session.execute(stmt.order_by(RiskCard.created_at.desc()))).scalars().all())
+    etag = compute_list_etag(
+        tenant_id=tenant_id,
+        items=records,
+        scalars=[
+            ("total", len(records)),
+            ("kind", "cards"),
+            ("assessment", assessment_id or ""),
+            ("company", company_id or ""),
+            ("site", site_id or ""),
+            ("workplace", workplace_id or ""),
+            ("position", position_id or ""),
+            ("employee", employee_id or ""),
+        ],
+    )
+    response.headers["ETag"] = etag
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
     return [
         RiskCardOut(
             id=record.id,
@@ -1316,6 +1367,8 @@ async def list_risk_cards(
 
 @engine_router.get("/action-plans", response_model=list[ActionPlanOut])
 async def list_action_plans(
+    request: Request,
+    response: Response,
     session: SessionDep,
     tenant: TenantDep,
     _: EditorAccess,
@@ -1325,7 +1378,7 @@ async def list_action_plans(
     workplace_id: str | None = Query(default=None, alias="workplace_id"),
     position_id: str | None = Query(default=None, alias="position_id"),
     employee_id: str | None = Query(default=None, alias="employee_id"),
-) -> list[ActionPlanOut]:
+) -> list[ActionPlanOut] | Response:
     tenant_id = str(tenant.id)
     stmt = (
         select(RiskActionPlan)
@@ -1345,7 +1398,24 @@ async def list_action_plans(
     if employee_id:
         stmt = stmt.where(RiskActionPlan.employee_id == employee_id)
 
-    records = (await session.execute(stmt.order_by(RiskActionPlan.created_at.desc()))).scalars()
+    records = list((await session.execute(stmt.order_by(RiskActionPlan.created_at.desc()))).scalars().all())
+    etag = compute_list_etag(
+        tenant_id=tenant_id,
+        items=records,
+        scalars=[
+            ("total", len(records)),
+            ("kind", "action_plans"),
+            ("assessment", assessment_id or ""),
+            ("company", company_id or ""),
+            ("site", site_id or ""),
+            ("workplace", workplace_id or ""),
+            ("position", position_id or ""),
+            ("employee", employee_id or ""),
+        ],
+    )
+    response.headers["ETag"] = etag
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
     result: list[ActionPlanOut] = []
     for record in records:
         items = sorted(record.items, key=lambda item: (item.due_date or date.min, item.id))
