@@ -268,10 +268,12 @@ async def add_incident_log(
 @router.get("/incidents/{incident_id}/logs", response_model=list[IncidentLogRead])
 async def list_incident_logs(
     incident_id: str,
+    request: Request,
+    response: Response,
     tenant: TenantDep,
     session: SessionDep,
     _: ManagerAccess,
-) -> list[IncidentLogRead]:
+) -> list[IncidentLogRead] | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     incident = await _get_incident(session, tenant, incident_id)
@@ -281,4 +283,12 @@ async def list_incident_logs(
         .order_by(IncidentLog.created_at.asc())
     )
     records = list((await session.execute(stmt)).scalars().all())
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=records,
+        scalars=[("incident", str(incident.id))],
+    )
+    response.headers["ETag"] = etag
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
     return [IncidentLogRead.model_validate(record) for record in records]

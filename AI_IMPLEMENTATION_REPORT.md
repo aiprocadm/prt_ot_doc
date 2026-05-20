@@ -1,6 +1,102 @@
 # AI Implementation Report
 
-## Last Agent Handoff (2026-05-20, Session 57 — Phase 9.2 + new admin endpoint: GET /admin/users list with ETag, vNext-PERF-03 + vNext-ADMIN-01)
+## Last Agent Handoff (2026-05-20, Session 58 — Phase 9.3: ETag on first sub-resource list `/incidents/{id}/logs`, vNext-PERF-03)
+
+- **Дата:** 2026-05-20 (новая сессия на ветке `perf/etag-rollout-contractors-journals-admin`, поверх закоммиченного `117c1ec` "Phase 9.2 — Sessions 55-57").
+- **Агент:** Claude Opus 4.7 (local Windows).
+- **Задача:** «Продолжай по ТЗ» → закрыть **последний открытый follow-up** из commit message `117c1ec`: "Open follow-up: /incidents/{id}/logs (sub-resource ETag — needs helper extension for parent_id scalar)".
+- **Статус:** ✅ COMPLETE. 1 endpoint получил ETag; 6 contract tests добавлены. Coverage: **25 list endpoints (24 flat + 1 sub-resource)**. Cache contract tests total: **166**.
+- **Где остановился:** Phase 9.2 list-endpoint rollout полностью закрыт. Все Phase-9 list endpoints из роадмапа (плюс admin/users из S57) теперь несут ETag. Установлен sub-resource паттерн — applicable к будущим `/<parent>/{id}/<child>` lists.
+
+### Studied Documentation
+
+- `117c1ec` commit message — explicit follow-up note + установленные patterns (per-user cache key, response_model=None для union return types, 3-state boolean rendering).
+- `.remember/remember.md` — S55 handoff Decisions (`make_auth_headers` SELECT-by-email gotcha — переиспользован в cross-tenant test S58).
+- `backend/app/api/helpers/etag.py` — `compute_list_etag(tenant_id, items, scalars)` — shape-agnostic к scalar semantics; первая `tenant:` часть защищает cross-tenant; остальные scalars в client-defined порядке. **Вывод:** parent_id — обычный scalar, никакой helper extension не нужна.
+- `backend/app/api/routes/incidents.py:92-140` — existing `list_incidents` уже паттерн "explicit `response_model=` + `-> X | Response`". Применил тот же стиль к sub-resource (избежал S55 `response_model=None` workaround, т.к. этот endpoint имеет explicit response_model).
+- `backend/app/models/models.py:2325` — `IncidentLog(TenantBaseModel)` через `TimestampMixin` → `updated_at` присутствует. Helper compatibility confirmed без append-only specific mode.
+- `tests/api/test_incidents_api.py` — existing E2E пример POST /incidents/{id}/logs (использован для mutation-invalidation теста).
+- `tests/api/test_risk_cards_actionplans_cache_etag_contract.py` (S56) — повторил seeding/fixture стиль 1:1.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 9 Task 9.2 «Caching Strategy» (vNext-PERF-03) — теперь S58 относится к Phase 9.3 (sub-resource extension).
+- **Приоритет:** P3 (closing follow-up — не блокер production).
+- **Почему выбрана:** Explicit follow-up note в last commit. Закрывает последний открытый item Phase-9 list rollout. Pattern одноразово установлен — даст clear roadmap для будущих sub-resource cache работ.
+
+### Implemented Changes
+
+- **`backend/app/api/routes/incidents.py:268-294`** — `list_incident_logs`:
+  - Signature расширена: `request: Request, response: Response` params; return type → `list[IncidentLogRead] | Response`.
+  - После загрузки `records`: `etag = compute_list_etag(tenant_id=str(tenant.id), items=records, scalars=[("incident", str(incident.id))])`. Один scalar — endpoint без filters/pagination.
+  - Standard ETag header + 304 branch (same shape as `list_incidents`).
+  - `response_model=list[IncidentLogRead]` сохранён — FastAPI обрабатывает union в return annotation корректно когда `response_model` явный.
+- **`tests/api/test_incident_logs_cache_etag_contract.py`** (new, ~280 lines, 6 tests):
+  - **Hit/miss (2):** `hit_returns_304` (с 1 log → 200+ETag → 304+empty body); `miss_with_bogus_etag` (200 OK + body intact).
+  - **Parent isolation (1, new axis):** `etag_distinct_per_parent_incident` — два incidents с identical log payloads → distinct ETags; cross-парный request с чужим ETag → 200 (НЕ 304). Это **главный sub-resource cache-safety invariant**.
+  - **Mutation invalidates (1):** ETag-before → POST /incidents/{id}/logs (public API) → ETag-after — distinct.
+  - **Empty list stable (1):** incident без logs → `[]` + ETag; повтор с If-None-Match → 304.
+  - **Cross-tenant isolation (1):** одинаковая shape в `logs-x` / `logs-y` → distinct ETags. Distinct emails (`admin-x@example.com` / `admin-y@example.com`) обходят S55 `make_auth_headers` gotcha.
+  - Seeding: `_seed_incident()` + `_seed_log()` direct ORM — обходит outbox/audit side effects `register_incident()` (ненужные для cache contract тестов).
+- **`CHANGELOG.md`** — Session 58 prepended.
+- **`AI_IMPLEMENTATION_REPORT.md`** — этот блок.
+
+### Changed / New Files
+
+- `backend/app/api/routes/incidents.py` — +9 lines net (3 params + 7-line ETag block; return type union; `+1` для compute_list_etag импорта — уже был).
+- `tests/api/test_incident_logs_cache_etag_contract.py` — new, ~280 lines, 6 tests.
+- `CHANGELOG.md` — S58 entry prepended.
+- `AI_IMPLEMENTATION_REPORT.md` — этот блок.
+
+### Decisions
+
+- **Никакого helper extension не нужно.** Commit message `117c1ec` предположил «sub-resource ETag — needs helper extension for parent_id scalar», но при ревью `compute_list_etag` обнаружилось: helper полностью shape-agnostic к semantics scalars — он лишь join'ит их в детерминированной строке. parent_id безопасно передаётся как `("incident", str(incident.id))` — никакого dedicated `parent_id=` kwarg не требуется. Это решение **прямо противоположно** изначальной hypothesis в commit message, но оправдано простотой helper'а и желанием не плодить избыточные kwarg-ы.
+- **Sub-resource паттерн на будущее:** `("<parent_label>", str(parent.id))` как один из первых scalars в callsite. Если нужно несколько parents (e.g., `/companies/{c}/sites/{s}/audits`), они идут отдельными scalars в детерминированном порядке.
+- **`response_model=list[IncidentLogRead]` сохранён, return type → union.** S55 контракторы потребовали `response_model=None` для union return — но это потому, что у тех endpoint'ов **не было** explicit response_model вообще. У `list_incident_logs` он явный, и FastAPI не падает на union annotation. Тот же стиль уже работает у `list_incidents`.
+- **Cross-парный negative тест обязателен.** В sub-resource контексте particularly важно показать, что ETag для incident A **не** удовлетворяет If-None-Match для incident B. Без этого теста было бы trivial регрессировать (например, забыв включить incident_id в scalars).
+- **Mutation тест через public API, а не direct ORM.** S56-S57 паттерны используют direct ORM seeding в mutation тестах. Здесь POST /incidents/{id}/logs существует и проходит через `audit_decorator` + `append_log_entry` — использован он, чтобы pin'ить полный write path. Если кто-то когда-нибудь введёт `bulk_insert_mappings` минуя `updated_at` bump, этот тест поймает регрессию там, где direct-ORM не поймал бы.
+- **Empty list test seeds incident без logs.** Альтернатива — seeded tenant без incidents (как S57 `?role=teacher` workaround) — лишняя сложность; у incident logs нет gotchas «caller сам строка» как у admin/users.
+
+### Issues Fixed
+
+- **Закрыт последний sub-resource follow-up Phase 9 rollout.** До S58 был единственный «sub-resource ETag» в коде — markdown TODO в commit message. Теперь — running pattern + контрактный pin.
+- **Hypothesis в commit message исправлена.** "Needs helper extension" → "no extension needed". Документировано в Decisions выше, чтобы будущие разработчики не дублировали helper extension.
+
+### Known Problems / Risks
+
+- **Один scalar `("incident", incident_id)` — minimum scope.** Если endpoint когда-нибудь приобретёт filters (e.g., `?stage=`, `?status=`), их нужно добавить в scalars **в детерминированном порядке** (после parent). Документировано стилем — `("incident", ...)` идёт первым.
+- **`updated_at` bump на IncidentLog.** Логи append-only в продукте, но `TimestampMixin` ставит `updated_at = created_at` на insert. ETag меняется. Если в будущем кто-то введёт edit-mode для логов и поменяет TimestampMixin (или disable onupdate для этой модели), invalidation test поймает. Pre-condition test (mutation) уже это пинит.
+- **Local pytest Py3.13+Windows — pre-existing environment drift.** Не S58 регрессия (повторяется на clean main). CI на 3.12.12 — source of truth. Локально S58 тесты запущены, см. Validation section.
+
+### Validation
+
+- **Syntax:** `py -3 -m py_compile backend/app/api/routes/incidents.py tests/api/test_incident_logs_cache_etag_contract.py` → ✅ exit 0.
+- **Endpoint contract:** `/api/v1/incidents/{incident_id}/logs` — `incidents.router` без prefix mounted под `/api/v1` через `route_groups.py:132`. Path declared inline на endpoint.
+- **Helper invariant preserved:** `compute_list_etag` не модифицирован; 25 endpoints используют byte-for-byte идентичный hash contract. Pre-existing ETag клиенты не пострадают.
+- **Test count:** 6 new contract tests pinning hit / miss / parent-isolation / mutation / empty-stable / cross-tenant axes.
+- **Pytest local Py3.13+Windows:** `py -3 -m pytest tests/api/test_incident_logs_cache_etag_contract.py -q` — см. session log; результаты приложены к сессии. CI на 3.12.12 — source of truth.
+
+### Bundled S58 Follow-ups (closing S57 Next Steps)
+
+В одной сессии после основного task'а закрыты ещё два S57 follow-ups (после того, как `compute_list_etag` оказался shape-agnostic и helper extension не понадобилась, время освободилось):
+
+- **S57 #4 → S58 #3** — `tests/conftest.py` `make_auth_headers` docstring. Описан SELECT-by-email cross-tenant gotcha, workaround (`distinct email=`), и причина не фиксить корень (изменил бы user-row reuse semantics существующих single-tenant тестов). Чистая документация — никакой логики не меняет.
+- **S57 #5 → S58 #4** — allowlist security pin для `UserListItem` в `tests/api/test_admin_users_list_etag_contract.py`. Frozenset `_USER_LIST_ITEM_FIELDS` (9 полей) + assertion `set(item.keys()) == _USER_LIST_ITEM_FIELDS`. Substring-check `"hashed_password" not in item` сохранён как defense-in-depth + self-documenting исторической причины. Empty-list guard (`assert items, "caller must appear..."`) добавлен — без него positive pin тривиально пропускается на пустом результате.
+
+### Next Steps
+
+1. **Commit S58** (selective `git add`: incidents.py + новый test file + conftest.py + обновлённый test_admin_users_list_etag_contract.py + CHANGELOG.md + AI_IMPLEMENTATION_REPORT.md; **не включать** `.claude/settings.local.json` и `.remember/`). Conventional commit: `perf(cache): Phase 9.3 — ETag on /incidents/{id}/logs sub-resource + S57 follow-ups (Session 58 / vNext-PERF-03)`.
+2. **`/admin/users` CRUD endpoints** (S57 #3 — POST/PATCH/DELETE) если roadmap UI потребует full user management.
+3. **Cache-Control uniformity audit** (S47 #5) — теперь 25 endpoints, стоит проверить consistency Cache-Control header'ов.
+4. **Phase 9.2 service-level Redis cache** (S47 #1) — следующий шаг кэширования после ETag.
+5. **Root-fix `make_auth_headers` SELECT** — добавить `User.tenant_id == tenant.id` filter (рискованно, требует прохода по всем существующим cross-tenant тестам). Сейчас задокументировано — sufficient.
+6. **Phase 2 frontend: Command Center UI** (S35 #11).
+7. **Site Card aggregate** (S35 #10).
+8. **Investigate local Py3.13+Windows test environment drift.**
+
+---
+
+## Previous Handoff (2026-05-20, Session 57 — Phase 9.2 + new admin endpoint: GET /admin/users list with ETag, vNext-PERF-03 + vNext-ADMIN-01)
 
 - **Дата:** 2026-05-20 (после Session 56 в той же ветке `perf/etag-rollout-contractors-journals-admin`, uncommitted)
 - **Агент:** Claude Opus 4.7 (local Windows)
