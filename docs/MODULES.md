@@ -47,7 +47,7 @@
 | Модуль | Назначение | Канон / vNext |
 |--------|-----------|---------------|
 | `org_structure` | tenant → company → site → department → person | vNext §5.1 |
-| `data_quality` | rules engine (7 правил), DQ report API | vNext §5.4, Phase 3.1 backend done |
+| `data_quality` | rules engine (10 правил), DQ report API | vNext §5.4, Phase 3.1 backend done |
 | `operational_dashboard` | command-center backend (alerts aggregator) | vNext §4.3, Phase 2.1 backend done |
 | `calendar` | smart calendar aggregator | vNext §4.4 |
 | `search` | universal search index | vNext §4.5 |
