@@ -10,7 +10,11 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
-from app.api.helpers.etag import compute_list_etag
+from app.api.helpers.etag import (
+    apply_etag_response_headers,
+    build_not_modified_headers,
+    compute_list_etag,
+)
 from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
@@ -167,9 +171,12 @@ async def list_courses(
         items=items,
         scalars=[("total", int(total or 0)), ("limit", limit), ("offset", offset)],
     )
-    response.headers["ETag"] = etag
+    apply_etag_response_headers(response, etag)
     if request.headers.get("if-none-match") == etag:
-        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
     return TrainingCoursePage(items=[_course_to_schema(item) for item in items], total=total)
 
 

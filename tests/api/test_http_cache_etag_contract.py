@@ -27,7 +27,9 @@ Out of scope (deliberately, to keep this file focused on the HTTP contract):
 - File-content ETag (`/api/v1/files/{id}` uses sha256 as ETag, not the
   list-hash pattern) — different contract, would warrant its own file.
 - Server-side response caching beyond conditional GET (no such layer
-  exists today; Cache-Control varies by endpoint).
+  exists today). Cache-Control header uniformity across all 25 ETag
+  list endpoints is pinned in
+  ``tests/api/test_etag_cache_control_uniformity.py`` (Session 59).
 """
 
 from __future__ import annotations

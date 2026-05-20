@@ -9,7 +9,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
-from app.api.helpers.etag import compute_list_etag
+from app.api.helpers.etag import (
+    apply_etag_response_headers,
+    build_not_modified_headers,
+    compute_list_etag,
+)
 from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
 from app.core.security import rbac
@@ -146,9 +150,12 @@ async def list_templates(request: Request, response: Response, tenant: Tenant = 
         items=items,
         scalars=[("total", len(items)), ("kind", "templates")],
     )
-    response.headers["ETag"] = etag
+    apply_etag_response_headers(response, etag)
     if request.headers.get("if-none-match") == etag:
-        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
     return BriefingCollection(items=[BriefingTemplateRead.model_validate(item) for item in items], total=len(items))
 
 
@@ -182,9 +189,12 @@ async def list_journals(request: Request, response: Response, tenant: Tenant = D
         items=items,
         scalars=[("total", len(items)), ("kind", "journals")],
     )
-    response.headers["ETag"] = etag
+    apply_etag_response_headers(response, etag)
     if request.headers.get("if-none-match") == etag:
-        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
     return BriefingCollection(items=[BriefingJournalRead.model_validate(item) for item in items], total=len(items))
 
 
@@ -206,9 +216,12 @@ async def list_entries(request: Request, response: Response, tenant: Tenant = De
         items=items,
         scalars=[("total", len(items)), ("kind", "entries")],
     )
-    response.headers["ETag"] = etag
+    apply_etag_response_headers(response, etag)
     if request.headers.get("if-none-match") == etag:
-        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
     signatures = (await session.execute(select(BriefingSignature).where(BriefingSignature.tenant_id == tenant.id))).scalars().all()
     grouped: dict[str, list[BriefingSignature]] = {}
     for signature in signatures:

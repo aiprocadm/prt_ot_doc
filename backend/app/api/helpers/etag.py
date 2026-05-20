@@ -16,6 +16,29 @@ inline ``_<entity>_etag`` function — existing client-side ETags continue
 to resolve to 304 after the refactor. Callers stay responsible for ordering
 scalars deterministically (the hash depends on order).
 
+Cache-Control uniformity (Session 59 / vNext-PERF-03 Phase 9.3 closure):
+
+The ``apply_etag_response_headers`` / ``build_not_modified_headers`` pair
+sets both ``ETag`` and ``Cache-Control`` atomically. Default Cache-Control
+is ``private, max-age=0, must-revalidate`` — the canonical pattern for
+tenant-scoped data behind a conditional-GET (ETag) layer:
+
+- ``private``: shared proxies / CDNs MUST NOT cache (tenant data is
+  per-tenant — leaking across customers via a corporate proxy is a hard
+  defect class to detect).
+- ``max-age=0``: no fresh window; client MUST revalidate immediately.
+- ``must-revalidate``: clients MUST NOT serve stale entries without
+  revalidation through ``If-None-Match``. Combined with the ETag, every
+  repeat read is a cheap 304 (empty body, same hash) unless data
+  actually changed.
+
+This is intentionally not ``no-store``: that directive disables ETag
+revalidation entirely (clients refuse to remember any response), which
+would defeat Phase 9.2/9.3 conditional-GET savings. Admin endpoints
+(``/admin/users``, ``/api-tokens``) inherit the same pattern because
+``private`` + always-revalidate-via-ETag already satisfies their
+threat model (no shared-cache leak, no stale credential surfaces).
+
 Usage::
 
     etag = compute_list_etag(
@@ -27,10 +50,12 @@ Usage::
             ("offset", offset),
         ],
     )
-    response.headers["ETag"] = etag
+    apply_etag_response_headers(response, etag)
     if request.headers.get("if-none-match") == etag:
-        return Response(status_code=status.HTTP_304_NOT_MODIFIED,
-                        headers={"ETag": etag})
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
 """
 
 from __future__ import annotations
@@ -39,7 +64,20 @@ import hashlib
 from collections.abc import Iterable, Sequence
 from typing import Any
 
-__all__ = ["compute_list_etag"]
+from fastapi import Response
+
+__all__ = [
+    "DEFAULT_LIST_CACHE_CONTROL",
+    "apply_etag_response_headers",
+    "build_not_modified_headers",
+    "compute_list_etag",
+]
+
+#: Canonical ``Cache-Control`` for tenant-scoped list endpoints behind ETag.
+#: See module docstring for the full rationale. Override per callsite only
+#: when a stronger (e.g. ``no-store``) or weaker (e.g. ``public, max-age=N``)
+#: policy is required — this string is the safe default for Phase 9 surfaces.
+DEFAULT_LIST_CACHE_CONTROL: str = "private, max-age=0, must-revalidate"
 
 
 def compute_list_etag(
@@ -80,3 +118,56 @@ def compute_list_etag(
     )
     digest = hashlib.sha256("::".join(parts).encode("utf-8")).hexdigest()
     return f'"{digest}"'
+
+
+def apply_etag_response_headers(
+    response: Response,
+    etag: str,
+    *,
+    cache_control: str = DEFAULT_LIST_CACHE_CONTROL,
+) -> None:
+    """Set ``ETag`` and ``Cache-Control`` on the 200 OK response, atomically.
+
+    Mutates ``response.headers`` in place. Use on the success branch of a
+    conditional-GET endpoint — the 304 branch should build its own headers
+    via :func:`build_not_modified_headers` (FastAPI's injected ``response``
+    is not what gets returned in a manually-constructed 304 ``Response``).
+
+    Args:
+        response: The FastAPI-injected ``Response`` for the success path.
+        etag: A quoted ETag string as returned by :func:`compute_list_etag`.
+        cache_control: Override the module-default
+            ``"private, max-age=0, must-revalidate"``. Use sparingly — the
+            default is the safe pattern for tenant-scoped data behind ETag.
+    """
+    response.headers["ETag"] = etag
+    response.headers["Cache-Control"] = cache_control
+
+
+def build_not_modified_headers(
+    etag: str,
+    *,
+    cache_control: str = DEFAULT_LIST_CACHE_CONTROL,
+) -> dict[str, str]:
+    """Return the headers dict for a manually-constructed 304 ``Response``.
+
+    The 304 path returns ``Response(status_code=304, headers=...)`` — that
+    response is a NEW object, distinct from the FastAPI-injected one used
+    on the 200 path, so we cannot rely on
+    :func:`apply_etag_response_headers` (which mutated the injected
+    response). This helper builds the corresponding dict.
+
+    Args:
+        etag: A quoted ETag string. The same value the client sent in
+            ``If-None-Match`` — RFC 7232 § 4.1 requires echoing it back so
+            shared caches can revalidate against the same validator.
+        cache_control: Override the module default. Must match the value
+            sent on the 200 path — clients use Cache-Control to decide
+            *whether* to revalidate; a mismatch between 200 and 304
+            confuses heuristics.
+
+    Returns:
+        A ``{"ETag": ..., "Cache-Control": ...}`` dict suitable for
+        ``Response(headers=...)``.
+    """
+    return {"ETag": etag, "Cache-Control": cache_control}
