@@ -15,8 +15,16 @@ branch_labels = None
 depends_on = None
 
 
-subscription_status = sa.Enum("active", "trial", "past_due", "suspended", "canceled", name="billingsubscriptionstatus")
-invoice_status = sa.Enum("draft", "issued", "paid", "overdue", "void", name="billinginvoicestatus")
+subscription_status = postgresql.ENUM(
+    "active", "trial", "past_due", "suspended", "canceled",
+    name="billingsubscriptionstatus",
+    create_type=False,
+)
+invoice_status = postgresql.ENUM(
+    "draft", "issued", "paid", "overdue", "void",
+    name="billinginvoicestatus",
+    create_type=False,
+)
 
 
 def upgrade() -> None:

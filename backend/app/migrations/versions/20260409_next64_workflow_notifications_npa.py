@@ -9,6 +9,7 @@ from typing import Union
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision = "20260409_next64"
 down_revision: Union[str, None] = "20260408_next63_expand_alembic_version_num"
@@ -37,7 +38,11 @@ def upgrade() -> None:
     op.create_index("ix_workflow_definition_tenant_entity", "workflow_definitions", ["tenant_id", "entity_type"], unique=False)
     op.create_index(op.f("ix_workflow_definitions_tenant_id"), "workflow_definitions", ["tenant_id"], unique=False)
 
-    workflow_definition_status = sa.Enum("draft", "published", "archived", name="workflowdefinitionstatus")
+    workflow_definition_status = postgresql.ENUM(
+        "draft", "published", "archived",
+        name="workflowdefinitionstatus",
+        create_type=False,
+    )
     workflow_definition_status.create(op.get_bind(), checkfirst=True)
     op.create_table(
         "workflow_definition_versions",
@@ -63,7 +68,11 @@ def upgrade() -> None:
     op.create_index(op.f("ix_workflow_definition_versions_definition_id"), "workflow_definition_versions", ["definition_id"], unique=False)
     op.create_index(op.f("ix_workflow_definition_versions_tenant_id"), "workflow_definition_versions", ["tenant_id"], unique=False)
 
-    workflow_instance_status = sa.Enum("running", "waiting", "completed", "failed", "canceled", name="workflowinstancestatus")
+    workflow_instance_status = postgresql.ENUM(
+        "running", "waiting", "completed", "failed", "canceled",
+        name="workflowinstancestatus",
+        create_type=False,
+    )
     workflow_instance_status.create(op.get_bind(), checkfirst=True)
     op.create_table(
         "workflow_instances",
@@ -94,7 +103,11 @@ def upgrade() -> None:
     op.create_index(op.f("ix_workflow_instances_definition_version_id"), "workflow_instances", ["definition_version_id"], unique=False)
     op.create_index(op.f("ix_workflow_instances_tenant_id"), "workflow_instances", ["tenant_id"], unique=False)
 
-    workflow_task_status = sa.Enum("open", "completed", "reassigned", "delegated", "escalated", "canceled", name="workflowtaskstatus")
+    workflow_task_status = postgresql.ENUM(
+        "open", "completed", "reassigned", "delegated", "escalated", "canceled",
+        name="workflowtaskstatus",
+        create_type=False,
+    )
     workflow_task_status.create(op.get_bind(), checkfirst=True)
     op.create_table(
         "workflow_tasks",
@@ -143,7 +156,11 @@ def upgrade() -> None:
     op.create_index(op.f("ix_workflow_timeline_events_instance_id"), "workflow_timeline_events", ["instance_id"], unique=False)
     op.create_index(op.f("ix_workflow_timeline_events_tenant_id"), "workflow_timeline_events", ["tenant_id"], unique=False)
 
-    notification_priority = sa.Enum("low", "medium", "high", "critical", name="notificationpriority")
+    notification_priority = postgresql.ENUM(
+        "low", "medium", "high", "critical",
+        name="notificationpriority",
+        create_type=False,
+    )
     notification_priority.create(op.get_bind(), checkfirst=True)
     with op.batch_alter_table("notification_channel_settings") as batch:
         batch.add_column(sa.Column("digest_mode", sa.String(length=32), nullable=True))
