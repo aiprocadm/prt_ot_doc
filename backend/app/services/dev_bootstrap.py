@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.db import ensure_tenant_schema, session_scope
@@ -12,6 +13,36 @@ from app.models.models import RoleEnum, Tenant, User
 from app.services.auth import hash_password
 
 logger = logging.getLogger(__name__)
+
+
+async def create_test_user(
+    *,
+    session: AsyncSession,
+    tenant_id: str,
+    email: str,
+    role: RoleEnum,
+    full_name: str | None = None,
+    password: str = "test-password",
+    is_active: bool = True,
+) -> User:
+    """Test-only helper: create a User with the given role in the given tenant.
+
+    Used by integration tests under ``tests/`` to seed role-fixtures. Not
+    intended for production code paths — callers are expected to commit
+    the session themselves so multiple fixtures can be batched.
+    """
+
+    user = User(
+        tenant_id=tenant_id,
+        email=email.lower(),
+        full_name=full_name or f"Test user {email}",
+        role=role,
+        hashed_password=hash_password(password),
+        is_active=is_active,
+    )
+    session.add(user)
+    await session.flush()
+    return user
 
 
 async def bootstrap_admin_user(settings: Settings) -> None:
