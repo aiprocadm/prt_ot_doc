@@ -125,6 +125,9 @@ describe("TrainingPage", () => {
 
     expect(screen.getAllByRole("tab")).toHaveLength(2);
     expect(screen.getByRole("link", { name: /назначить обучение/i })).toHaveAttribute("href", "/tasks?type=training_plan");
-    expect(screen.getByText("Видео")).toBeInTheDocument();
+    // analytics state propagation is async — wait for the rendered material label.
+    await waitFor(() => {
+      expect(screen.getByText("Видео")).toBeInTheDocument();
+    });
   });
 });

@@ -10,7 +10,7 @@ celery==5.4.0
 click==8.1.8
 docxtpl==0.17.0
 email-validator==2.2.0
-fastapi==0.115.0
+fastapi==0.115.4
 httpx==0.27.2
 minio==7.2.10
 openpyxl==3.1.5
@@ -22,10 +22,17 @@ python-docx==1.1.2
 python-dotenv==1.0.1
 python-jose[cryptography]==3.4.0
 python-magic==0.4.27
+# pyasn1: direct pin to override transitive (pulled by python-jose/cryptography).
+# CVE-2026-30922 (HIGH, unbounded recursion DoS) fixed at 0.6.3.
+pyasn1>=0.6.3
 python-multipart==0.0.27
 redis==5.0.3
 slowapi==0.1.9
 sqlalchemy==2.0.36
+# starlette: direct pin to override transitive (pulled by fastapi).
+# CVE-2024-47874 (HIGH, multipart/form-data DoS) fixed at 0.40.0.
+# fastapi 0.115.4 permits starlette in [0.40.0, 0.42.0).
+starlette>=0.40.0,<0.42.0
 greenlet==3.4.0
 typer==0.12.3
 uvicorn[standard]==0.30.5

@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.models.document_core import DocumentStatus, PipelineRun, PipelineRunStatus
 from app.models.models import Incident, IncidentStatus
-from app.models.obligations import Task, TaskPriority, TaskStatus, TaskStatusEnum
+from app.models.obligations import Task, TaskPriority, TaskStatus
 from app.modules.operational_dashboard.schemas import (
     AlertItem,
     OperationalDashboardMetrics,
