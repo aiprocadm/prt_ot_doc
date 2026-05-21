@@ -32,9 +32,10 @@ Out of scope:
 - Per-endpoint Cache-Control assertions for all 25 endpoints — that would
   bloat 166 existing ETag tests without proportional value. The helper
   is the single point of variance; testing it once covers all callers.
-- ``Vary`` header behaviour — Phase 9 endpoints rely on tenant header
-  (``X-Tenant-Id``) for routing, which FastAPI / Starlette do not
-  auto-Vary on. That's a separate audit (S47 #5 follow-up).
+- ``Vary`` header behaviour — pinned separately in
+  ``test_etag_vary_uniformity.py`` (S61 / Phase 9.4 closure). Same
+  helper, distinct contract surface, same single-point-of-variance
+  argument applies.
 """
 
 from __future__ import annotations
