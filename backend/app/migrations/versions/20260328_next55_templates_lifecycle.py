@@ -7,6 +7,7 @@ Create Date: 2026-03-28
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision = "20260328_next55"
 down_revision = "20260327_next54"
@@ -15,9 +16,15 @@ depends_on = None
 
 
 def upgrade() -> None:
-    template_status = sa.Enum("DRAFT", "ACTIVE", "ARCHIVED", name="templatestatus")
-    template_version_status = sa.Enum(
-        "DRAFT", "ACTIVE", "ARCHIVED", "UPLOADED", "LINTED", "READY", "DEPRECATED", name="templateversionstatus"
+    template_status = postgresql.ENUM(
+        "DRAFT", "ACTIVE", "ARCHIVED",
+        name="templatestatus",
+        create_type=False,
+    )
+    template_version_status = postgresql.ENUM(
+        "DRAFT", "ACTIVE", "ARCHIVED", "UPLOADED", "LINTED", "READY", "DEPRECATED",
+        name="templateversionstatus",
+        create_type=False,
     )
     template_status.create(op.get_bind(), checkfirst=True)
     template_version_status.drop(op.get_bind(), checkfirst=True)

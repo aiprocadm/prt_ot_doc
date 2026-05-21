@@ -14,7 +14,7 @@ down_revision = "20260320_next49"
 branch_labels = None
 depends_on = None
 
-billing_event_type = sa.Enum(
+billing_event_type = postgresql.ENUM(
     "generation_completed",
     "edo_sent",
     "file_uploaded",
@@ -23,6 +23,7 @@ billing_event_type = sa.Enum(
     "payment_failed",
     "payment_succeeded",
     name="billingeventtype",
+    create_type=False,
 )
 
 
