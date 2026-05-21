@@ -1,35 +1,55 @@
-"""Pin-test (regression guard): Alembic migrations must not double-create Postgres
-ENUM types.
+"""Pin-tests (regression guards): Alembic migrations must follow Postgres ENUM
+safety rules.
 
-Background
-----------
-SQLAlchemy 2.x op-serialization (``op.create_table`` / ``op.add_column`` with a
-``sa.Enum(...)`` or ``postgresql.ENUM(...)`` column) loses the ``create_type``
-attribute and re-emits ``CREATE TYPE`` without ``IF NOT EXISTS`` on Postgres.
-When the migration ALSO calls ``<enum>.create(bind, checkfirst=True)``
-explicitly, the second emission collides:
+Two classes of bug are pinned here. Both classes derive from one shared fact:
+SQLAlchemy 2.x op-serialization treats ENUM creation inconsistently across
+``op.create_table`` (auto-emits ``CREATE TYPE``) vs. ``op.add_column`` /
+``batch.add_column`` (does NOT auto-emit). This asymmetry has been the source
+of every Postgres alembic-upgrade failure since billing was restored on
+2026-05-21.
 
+Class 1 — enum double-create
+----------------------------
+Symptom:
     asyncpg.exceptions.DuplicateObjectError: type "<name>" already exists
     [SQL: CREATE TYPE <name> AS ENUM (...)]
 
-History of the fix
-------------------
-* iter-7 (PRs #553/#554): first fix on one migration.
-* iter-8 (PR #555): extended the ``postgresql.ENUM(..., create_type=False)``
-  pattern to 7 migrations that used ``.create(bind, checkfirst=True)``.
-* iter-9 (this commit): closes the remaining migrations and pins the rule.
+Cause: migration calls ``<enum>.create(bind, checkfirst=True)`` AND also uses
+``sa.Enum(name=X)`` (without ``create_type=False``) in a downstream
+``op.create_table``/``op.add_column``. Auto-emission collides with the
+explicit ``.create()``.
 
-What this test enforces
------------------------
-For every migration under ``backend/app/migrations/versions/`` that contains at
-least one ``X.create(..., checkfirst=True)`` call, every ``sa.Enum(name=...)``
-or ``postgresql.ENUM(name=...)`` declaration *outside* the ``downgrade()``
-function must have ``create_type=False`` set explicitly.
+Fix: switch declaration to ``postgresql.ENUM(..., name=X, create_type=False)``.
 
-``downgrade()`` is excluded because the drop path uses
-``sa.Enum(name=X).drop(bind, checkfirst=True)`` which does not need the value
-list and is fine on the destructive path (PR #555 commit message documents
-this exclusion explicitly).
+Pin: ``test_no_migration_double_creates_enum_type``.
+
+Class 3 — add_column without explicit create
+--------------------------------------------
+Symptom:
+    asyncpg.exceptions.UndefinedObjectError: type "<name>" does not exist
+
+Cause: migration uses ``sa.Enum(name=X)`` (or ``postgresql.ENUM``) inside an
+``op.add_column``/``batch.add_column`` call but never calls ``.create()`` on
+the type. ``op.add_column`` does NOT auto-emit CREATE TYPE — so the type is
+never materialized in the database.
+
+Fix: declare the enum as a variable (``postgresql.ENUM(..., create_type=False)``),
+call ``var.create(op.get_bind(), checkfirst=True)`` BEFORE the first
+``op.add_column``, and mirror with ``var.drop(...)`` in ``downgrade()``.
+
+Pin: ``test_no_op_add_column_with_uncreated_enum``.
+
+History
+-------
+* iter-7 (PRs #553/#554): first class-1 fix (one migration).
+* iter-8 (PR #555): class-1 fix extended to 7 migrations.
+* iter-9 (this PR #557): class-1 closed for 4 more migrations; class-1 pin
+  added; class-2 (cross-branch dep) targeted fix for 20250501; class-3 pin
+  added and corresponding fix for 20250601 (tenantkind).
+
+Class 2 (cross-branch dependencies) is NOT pinned here — it would require an
+Alembic DAG walker (`down_revision` chain + `depends_on` analysis). Deferred to
+iter-10 if/when similar regressions surface.
 
 Running locally without pytest (Windows+Py3.13 conftest hang workaround)
 ------------------------------------------------------------------------
@@ -189,12 +209,146 @@ def test_migrations_dir_exists() -> None:
     assert any(MIGRATIONS_DIR.glob("*.py")), "no *.py migrations found"
 
 
+# ---------------------------------------------------------------------------
+# Class 3: ENUM type used in op.add_column / batch.add_column without explicit
+# .create() — op.add_column does NOT auto-emit CREATE TYPE, so the type is
+# never materialized → UndefinedObjectError on first column access.
+# ---------------------------------------------------------------------------
+
+
+def _enum_names_in_add_column(tree: ast.Module) -> dict[str, int]:
+    """Map of enum ``name`` → first lineno of usage inside any ``*.add_column(...)``
+    call in upgrade scope. Covers both ``op.add_column`` and ``batch.add_column``."""
+    downgrade_range = _func_lineno_range(tree, "downgrade")
+    result: dict[str, int] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not (isinstance(func, ast.Attribute) and func.attr == "add_column"):
+            continue
+        if downgrade_range is not None and downgrade_range[0] <= node.lineno <= downgrade_range[1]:
+            continue
+        for sub in ast.walk(node):
+            if isinstance(sub, ast.Call):
+                match = _enum_call_kind(sub)
+                if match is None:
+                    continue
+                _, enum_name = match
+                result.setdefault(enum_name, sub.lineno)
+    return result
+
+
+def _enum_names_with_explicit_create(tree: ast.Module) -> set[str]:
+    """Return set of enum ``name`` values for which an explicit ``<expr>.create(...)``
+    call exists in upgrade scope.
+
+    Handles two forms:
+      1. inline: ``sa.Enum(name="X").create(bind, ...)``
+      2. via variable: ``x = sa.Enum(name="X"); x.create(bind, ...)``
+
+    Module-level assignments are included (var → name mapping holds anywhere in file).
+    """
+    downgrade_range = _func_lineno_range(tree, "downgrade")
+
+    var_to_enum: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Assign) and isinstance(node.value, ast.Call)):
+            continue
+        match = _enum_call_kind(node.value)
+        if match is None:
+            continue
+        _, enum_name = match
+        for target in node.targets:
+            if isinstance(target, ast.Name):
+                var_to_enum[target.id] = enum_name
+
+    created: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not (isinstance(func, ast.Attribute) and func.attr == "create"):
+            continue
+        if downgrade_range is not None and downgrade_range[0] <= node.lineno <= downgrade_range[1]:
+            continue
+        # inline form: sa.Enum(...).create(...)
+        if isinstance(func.value, ast.Call):
+            match = _enum_call_kind(func.value)
+            if match:
+                _, enum_name = match
+                created.add(enum_name)
+        # variable form: var.create(...)
+        elif isinstance(func.value, ast.Name) and func.value.id in var_to_enum:
+            created.add(var_to_enum[func.value.id])
+    return created
+
+
+def _audit_one_class3(path: Path) -> list[Violation]:
+    src = path.read_text(encoding="utf-8")
+    try:
+        tree = ast.parse(src)
+    except SyntaxError:
+        return []
+    used_in_add = _enum_names_in_add_column(tree)
+    if not used_in_add:
+        return []
+    created = _enum_names_with_explicit_create(tree)
+    violations: list[Violation] = []
+    for enum_name, lineno in sorted(used_in_add.items()):
+        if enum_name in created:
+            continue
+        violations.append(
+            Violation(
+                file=str(path.relative_to(REPO_ROOT)),
+                lineno=lineno,
+                enum_name=enum_name,
+                call="op.add_column without .create()",
+            )
+        )
+    return violations
+
+
+def _audit_migrations_class3() -> list[Violation]:
+    out: list[Violation] = []
+    for path in sorted(MIGRATIONS_DIR.glob("*.py")):
+        out.extend(_audit_one_class3(path))
+    return out
+
+
+def test_no_op_add_column_with_uncreated_enum() -> None:
+    """Pin (class 3): any sa.Enum / postgresql.ENUM(name=X) used inside
+    op.add_column(...) or batch.add_column(...) must have a corresponding
+    <expr>.create(...) call in the same migration."""
+    violations = _audit_migrations_class3()
+    if violations:
+        lines = [
+            f"  {v.file}:{v.lineno}  type={v.enum_name!r}  used in op.add_column without <var>.create()"
+            for v in violations
+        ]
+        raise AssertionError(
+            f"Found {len(violations)} ENUM type(s) used in op.add_column without "
+            "explicit .create(). op.add_column does NOT auto-emit CREATE TYPE on "
+            "Postgres → UndefinedObjectError. Fix: declare as "
+            "postgresql.ENUM(name=X, create_type=False) variable, call "
+            "var.create(op.get_bind(), checkfirst=True) before op.add_column, "
+            "mirror with var.drop(...) in downgrade.\n"
+            + "\n".join(lines)
+        )
+
+
 if __name__ == "__main__":
-    vs = _audit_migrations()
-    if vs:
-        print(f"VIOLATIONS ({len(vs)}):")
-        for v in vs:
+    class1 = _audit_migrations()
+    class3 = _audit_migrations_class3()
+    if class1:
+        print(f"VIOLATIONS (class 1: enum double-create), {len(class1)}:")
+        for v in class1:
             print(f"  {v.file}:{v.lineno}  {v.call}(name={v.enum_name!r})")
+    if class3:
+        print(f"VIOLATIONS (class 3: op.add_column without .create()), {len(class3)}:")
+        for v in class3:
+            print(f"  {v.file}:{v.lineno}  type={v.enum_name!r}")
+    if class1 or class3:
         sys.exit(1)
-    print("OK — no enum double-create violations found.")
+    print("OK — no enum migration safety violations found.")
     sys.exit(0)
