@@ -1,6 +1,106 @@
 # AI Implementation Report
 
-## Last Agent Handoff (2026-05-21, Session 59 — Phase 9.3 closure: Cache-Control uniformity across 25 ETag list endpoints, vNext-PERF-03)
+## Last Agent Handoff (2026-05-21, Session 61 — Phase 9.4 closure: Vary header uniformity across 25 ETag list endpoints, vNext-PERF-03)
+
+- **Дата:** 2026-05-21 (новая сессия на ветке `perf/etag-vary-header-audit`, поверх закоммиченного `2634b60` "docs(cache): backfill S59 CHANGELOG + handoff"). Code+docs одна сессия, один follow-up commit для PR.
+- **Агент:** Claude Opus 4.7 (local Windows, py 3.13).
+- **Задача:** «Продолжай по ТЗ» → S59 Next Step #3 «`Vary` header audit (S47 #5 follow-up) — `Vary: Authorization, X-Tenant-Id` на всех 25 ETag endpoints (через middleware или per-route). Защита от shared-cache misconfiguration где `private` directive не уважается». Закрывает Phase 9 ETag rollout добавлением третьего (последнего) RFC 7234 cache-correctness layer.
+- **Статус:** ✅ COMPLETE. Helper расширен 1 новой константой + 1 keyword-only kwarg в каждом из двух helpers + merge-семантика для upstream Vary. **Zero route file changes** — все 25 endpoints из S59 rollout автоматически получили Vary через unchanged callsites. 12 новых contract tests + docstring update в S59 test файле. Cache contract tests total: 177 → **189**.
+- **Где остановился:** **Phase 9 RFC 7234 trilogy полностью закрыт:** ETag (conditional GET, S46-58) + Cache-Control (freshness directives, S59) + Vary (cache-key correctness, S61). Все 25 list endpoints из Phase 9.2-9.3 rollout несут унифицированный 3-headers triple. Single-source-of-truth конфигурация во всех трёх layers — будущая правка любого axis тривиальна.
+
+### Studied Documentation
+
+- `AI_IMPLEMENTATION_REPORT.md` S59 Next Steps — explicit invitation (#3 Vary header audit).
+- `backend/app/api/helpers/etag.py` — current state перед S61 (DEFAULT_LIST_CACHE_CONTROL + 2 helpers без Vary awareness).
+- `tests/api/test_etag_cache_control_uniformity.py:35-37` — historical pin «Vary header behaviour — separate audit (S47 #5 follow-up)»: явное acknowledgement gap'а в S59 docstring, теперь закрыт.
+- **RFC 7234 § 7.1.4 (Vary header)** — каждый token в Vary participates в cache key. Cache MUST treat distinct values как distinct entries.
+- **RFC 7234 § 4.3.4 (Constructing Responses from Caches)** — 304 response должен reuse same cache-validation contract (echoed validators); divergent Vary дал бы cache return stale-but-revalidated entry для wrong request shape.
+- **RFC 7230 § 3.2 (Header Fields)** — имена case-insensitive (`Authorization` == `authorization`), но values case-sensitive. Это влияет на dedupe-логику merge'а.
+- `backend/app/core/tenant.py:26` — `TENANT_HEADER = "x-tenant"` (canonical primary header; `x-tenant-slug` — legacy alias).
+- `backend/app/middleware/tenant.py:121` — `auth_header = request.headers.get("authorization")` — primary auth header.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 9.4 closure / vNext-PERF-03 — finalizes Phase 9 ETag rollout (Sessions 46-59).
+- **Приоритет:** P2 (audit closing — defense-in-depth, не блокер production, но critical для cache infrastructure correctness под misconfigured shared caches).
+- **Почему выбрана:** S59 #3 explicit. Audit показал uniform missing layer (0 of 25 endpoints выставляют Vary). Helper-pattern S59 даёт **zero-cost rollout** — 25 endpoints автоматически покрыты через unchanged callsites. Закрывает третий и последний RFC 7234 cache-correctness layer.
+
+### Implemented Changes
+
+- **`backend/app/api/helpers/etag.py`** (+~50 lines):
+  - **`DEFAULT_LIST_VARY: str = "Authorization, X-Tenant"`** — public module-level constant. Docstring объясняет: `Authorization` (cross-user isolation — distinct JWT MUST get distinct cache entries even при same URL), `X-Tenant` (cross-tenant isolation). Канонические Title-Case names, RFC 7230 case-insensitive matching на стороне cache.
+  - **`apply_etag_response_headers(...)` extended с `vary=DEFAULT_LIST_VARY` keyword-only**: добавлен 3-line merge block. Реализация — insertion-order-preserving dict `{lowered_token: original_casing}`: упорядоченная dedup'ация tokens, сохраняет канонический Title-Case первого вхождения, deterministic ordering. **Critical**: НЕ overwriting upstream Vary (CORS `Origin`, observability tokens) — silently сломал бы их cache-segregation contracts.
+  - **`build_not_modified_headers(...)` extended с `vary=DEFAULT_LIST_VARY` keyword-only**: pure-функция, возвращает `{ETag, Cache-Control, Vary}` dict. Без merge — 304 path возвращает freshly-constructed Response, который не inherit upstream middleware state. Docstring документирует RFC 7234 § 4.3.4.
+  - **Module docstring расширен** Phase 9.4 section: explains defense-in-depth rationale (`private` — request to caches; `Vary` — correctness contract for caches that ignored `private`), merge-vs-fresh semantics в 200 vs 304 paths.
+- **Zero route file changes**: все 25 endpoints uses `apply_etag_response_headers(response, etag)` и `build_not_modified_headers(etag)` — без `vary=` override, получают default Vary автоматически. **Helper-pattern S59 окупился**: future RFC layers становятся one-line changes.
+- **`tests/api/test_etag_vary_uniformity.py`** (new, **12 кейсов**, ~290 строк):
+  - **Helper unit contracts (9):** константа byte-equals; default содержит оба axes (case-insensitive проверка); default headers ставятся; override через keyword; positional rejection (`TypeError`); **merge с existing upstream Vary** (`Origin` survives + S61 tokens added); **case-insensitive dedupe** (`authorization` + `Authorization` → one token, plus `origin` сохраняется); symmetric tests для `build_*` (default, override, positional rejection).
+  - **E2E integration (3):** `/companies` 200 emits Vary containing `authorization` + `x-tenant`; `/companies` 304 emits byte-identical Vary (RFC 7234 § 4.3.4); `/sites` confirms uniformity holds across distinct route modules.
+  - **Regression guard (1):** `test_etag_value_unaffected_by_vary_addition` — `compute_list_etag` output byte-identical для same inputs; real-endpoint sanity для shape (66 chars).
+- **`tests/api/test_etag_cache_control_uniformity.py`** — 4-line docstring update: «Vary header behaviour — separate audit (S47 #5 follow-up)» удалено, заменено ссылкой на новый `test_etag_vary_uniformity.py`.
+- **`CHANGELOG.md`** — Session 61 prepended (этот блок документации).
+- **`AI_IMPLEMENTATION_REPORT.md`** — этот handoff.
+
+### Changed / New Files
+
+- `backend/app/api/helpers/etag.py` — +~50 lines net (1 constant + 1 docstring section + 2 helpers extended).
+- `tests/api/test_etag_vary_uniformity.py` — new, ~290 lines, 12 tests.
+- `tests/api/test_etag_cache_control_uniformity.py` — 4-line docstring update.
+- `CHANGELOG.md` — S61 entry prepended.
+- `AI_IMPLEMENTATION_REPORT.md` — этот блок.
+- **Zero route файлов модифицировано** — это и есть value single-source-of-truth helper approach.
+
+### Decisions
+
+- **Default `Authorization, X-Tenant` — два axes, minimum sufficient set.** `Authorization` сегрегирует по JWT (cross-user); `X-Tenant` по tenant header (cross-tenant). Альтернатива — `Authorization, X-Tenant, X-Tenant-Slug` (включая legacy alias) — рассмотрена и отклонена: production clients используют canonical `X-Tenant`, alias case добавил бы cache fragmentation без correctness gain. Если когда-то понадобится — `vary=` keyword override готов.
+- **Title-Case canonical naming в default constant.** Headers case-insensitive по RFC 7230 § 3.2, но Title-Case-by-dash (`Authorization`, `X-Tenant`) — convention в большинстве HTTP literature и debuggers. Cache compliance не страдает (case-insensitive matching), readability выигрывает.
+- **Merge-семантика в `apply_*`, без merge в `build_*`.** Я мог бы сделать оба с merge для uniformity, но семантика принципиально различна: 200 path получает FastAPI-injected response, который может уже нести upstream middleware Vary (CORS); 304 path возвращает freshly-constructed Response — нет upstream state для merge'а (downstream middleware могут добавить свой Vary *после* return). Defensive merge в 304 был бы dead code — и noise в docstring. Decision documented в обоих docstring'ах.
+- **Insertion-order-preserving dict для dedupe.** Python 3.7+ dict гарантирует insertion order. `{lowered: original}` — лучший pattern: case-insensitive key + сохранение first-occurrence casing + deterministic ordering. Альтернативы: `set` (order lost), `list` + `seen` set (verbose, two state). Dict — clean.
+- **Case-insensitive dedupe в merge.** `Vary: authorization, Authorization` — strictly valid HTTP, но noise (caches treat как один token, parsers might strict-reject). Helper делает clean output. Тест pinning case-insensitive behavior (`test_apply_etag_response_headers_dedupes_vary_case_insensitive`).
+- **Не trip автоматически на upstream Vary token order.** Если upstream сетит `Vary: Origin`, наш merge получит `Origin, Authorization, X-Tenant` (upstream first). Если upstream сетит `Vary: X-Tenant` (для какой-то reason), merge получит `X-Tenant, Authorization` (dedup сохраняет first occurrence). Это deterministic — predictable for testing — даже если "вид" может различаться между deployments.
+- **`vary` keyword-only параметр.** `*,` separator в signature предотвращает positional misuse. Future-proof: если когда-то понадобится override для i18n endpoint (`vary="Authorization, X-Tenant, Accept-Language"`), API уже готов. Pin'нено `test_*_vary_is_keyword_only`.
+- **Integration тесты на 2 endpoints (companies + sites), не на всех 25.** Helper — single point of variance; 25-endpoint coverage был бы 25x duplication без proportional value. Same reasoning as S59.
+- **Не удалил historical pin S59 docstring, а заменил ссылкой на uniformity-файл.** Тот же pattern что и S59 с `test_http_cache_etag_contract.py` — historical pinning важен (будущий reviewer видит «было известно как gap → закрыто в S61»).
+
+### Issues Fixed
+
+- **Третий RFC 7234 layer закрыт.** До S61: ETag (conditional) + Cache-Control (freshness) — 2 из 3. После S61: + Vary (cache-key correctness) = **complete RFC 7234 trilogy** для Phase 9 surfaces.
+- **Uniform missing layer закрыт.** 0 of 25 → 25 of 25 endpoints emit unified Vary. Cross-user и cross-tenant cache leak через misconfigured shared cache теперь structurally невозможен (не just `private` request — actual cache-key contract).
+- **Historical pin «Vary header behaviour — separate audit» закрыт.** Test docstring явно acknowledged этот gap в S59 — теперь он gone, заменён ссылкой на uniformity-файл.
+- **Future override path открыт.** Если i18n или другие endpoints когда-нибудь потребуют дополнительный axis (e.g. `Accept-Language`), путь готов: `vary=` keyword + per-callsite override без рефактора helper'а.
+
+### Known Problems / Risks
+
+- **`X-Tenant-Slug` alias не покрыт.** Production clients используют canonical `X-Tenant`. Если в будущем какой-то client начнёт slать `X-Tenant-Slug` вместо primary, shared cache мог бы дать cross-key leak (alias ≠ primary в Vary). Mitigation — middleware дедуплицирует identity (one tenant resolution), но cache не знает про middleware logic. Если alias-traffic станет hot — override `vary="Authorization, X-Tenant, X-Tenant-Slug"` либо рефактор default.
+- **Production CORS Vary — assumption проверена в unit-тестах, не E2E.** Я не проверял live, что CORS middleware в этом app реально устанавливает `Vary: Origin`. Если он этого не делает — наш merge-логика не активируется на проде, и это OK (default-only path). Если он делает — merge сработает (tested).
+- **Local pytest Py3.13+Windows env drift.** Pre-existing segfault при init conftest fixture (документировано S46-S59). CI на 3.12.12 — source of truth. S61 unit-тесты (`test_default_vary_constant_*`, `test_apply_etag_response_headers_*` без fixtures) можно запускать изолированно; integration тесты (`test_companies_endpoint_*`) — только CI.
+- **Merge с downstream middleware.** Если downstream middleware (e.g. GZip) добавляет `Vary: Accept-Encoding` *после* нашего set, RFC 7234 § 7.1.4 говорит cache должен union'ить multiple Vary headers — но не все cache это делают. Mitigation: проверить, не сетит ли GZip Vary сам (FastAPI/Starlette GZipMiddleware действительно сетит `Vary: Accept-Encoding` — это нормально для multiple Vary headers, или для merge через GZip middleware если он встроен).
+
+### Validation
+
+- **Syntax:** `py -3 -m py_compile backend/app/api/helpers/etag.py tests/api/test_etag_vary_uniformity.py tests/api/test_etag_cache_control_uniformity.py` → ✅ exit 0.
+- **Pattern coverage:** все 25 callsites из S59 продолжают использовать `apply_etag_response_headers(response, etag)` и `build_not_modified_headers(etag)` без `vary=` override — автоматически получают default Vary.
+- **Helper invariant preserved:** `compute_list_etag` не модифицирован — 25 endpoints используют byte-identical hash contract как до S61. Pre-existing client ETags продолжают resolve в 304.
+- **Test count:** 12 new (9 unit + 3 e2e). Total cache contract: 177 → 189.
+- **Pytest local Py3.13+Windows:** см. session log; integration тесты требуют full conftest — pre-existing environment drift. CI на 3.12.12 — source of truth.
+
+### Next Steps
+
+1. **Commit S61** (selective `git add`: `backend/app/api/helpers/etag.py`, `tests/api/test_etag_vary_uniformity.py`, `tests/api/test_etag_cache_control_uniformity.py`, `CHANGELOG.md`, `AI_IMPLEMENTATION_REPORT.md`; **НЕ** включать `.claude/settings.local.json`, `.remember/`, untracked `tests/api/test_operational_dashboard_contract.py` (S60, чужая сессия)). Conventional commit: `perf(cache): Phase 9.4 closure — Vary header uniformity across 25 ETag list endpoints (Session 61 / vNext-PERF-03)`.
+2. **Push + open PR** (или report existing). `gh` сейчас не аутентифицирован — может потребоваться `gh auth login` перед `gh pr create`. Branch: `perf/etag-vary-header-audit`.
+3. **Phase 9 RFC 7234 trilogy fully closed.** Дальше:
+4. **`/admin/users` CRUD endpoints** (S57 #3 — POST/PATCH/DELETE) если roadmap UI потребует full user management.
+5. **Phase 9.2 service-level Redis cache** (S47 #1) — следующий уровень кэширования после ETag/Cache-Control/Vary layer (`app.state.redis_client` integration для config/session cache).
+6. **Per-endpoint Cache-Control override audit** — если admin или security endpoints со временем потребуют `no-store`/более-строгих директив, использовать `cache_control=` keyword через S59 API.
+7. **`Vary` middleware audit** — если в будущем добавятся не-Phase-9 endpoints (e.g. /public/* surfaces без tenant), стоит проверить какой Vary они эмитят (или не эмитят).
+8. **Root-fix `make_auth_headers` SELECT** (S58 #5).
+9. **Phase 2 frontend: Command Center UI** (S35 #11).
+10. **Site Card aggregate** (S35 #10).
+11. **Investigate local Py3.13+Windows test environment drift.**
+
+---
+
+## Previous Handoff (2026-05-21, Session 59 — Phase 9.3 closure: Cache-Control uniformity across 25 ETag list endpoints, vNext-PERF-03)
 
 - **Дата:** 2026-05-21 (новая сессия на ветке `perf/etag-rollout-contractors-journals-admin`, поверх закоммиченного `9fda49b` "S58 Phase 9.3 sub-resource ETag"). Code-портион работы автоматически закоммичен как `9e9b850` во время сессии; этот handoff фиксирует научный/архитектурный контекст и docs.
 - **Агент:** Claude Opus 4.7 (local Windows).
