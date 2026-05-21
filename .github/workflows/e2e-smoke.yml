@@ -43,8 +43,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        credential_source: [bootstrap_local, repo_secrets]
-    if: ${{ matrix.credential_source != 'repo_secrets' || (secrets.E2E_USER_EMAIL != '' && secrets.E2E_USER_PASSWORD != '' && secrets.E2E_LIMITED_USER_EMAIL != '' && secrets.E2E_LIMITED_USER_PASSWORD != '') }}
+        credential_source: ${{ (secrets.E2E_USER_EMAIL != '' && secrets.E2E_USER_PASSWORD != '' && secrets.E2E_LIMITED_USER_EMAIL != '' && secrets.E2E_LIMITED_USER_PASSWORD != '') && fromJSON('["bootstrap_local","repo_secrets"]') || fromJSON('["bootstrap_local"]') }}
     env:
       DATABASE_URL: sqlite+aiosqlite:///./dev.db
       E2E_TENANT: demo
