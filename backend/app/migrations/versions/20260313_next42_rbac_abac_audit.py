@@ -17,6 +17,27 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # iter-10: add tenant_id + FK that the rest of this migration relies on.
+    # The authz tables were created in 20260221_next9_authz_tables without
+    # tenant_id; this migration's tenant-aware unique constraints assume it
+    # exists. Safe on a fresh DB (empty tables); a populated upgrade requires
+    # a backfill of tenant_id before this point.
+    with op.batch_alter_table("authz_roles") as batch:
+        batch.add_column(sa.Column("tenant_id", sa.String(length=36), nullable=False))
+        batch.create_foreign_key("fk_authz_roles_tenant", "tenant", ["tenant_id"], ["id"], ondelete="CASCADE")
+
+    with op.batch_alter_table("authz_permissions") as batch:
+        batch.add_column(sa.Column("tenant_id", sa.String(length=36), nullable=False))
+        batch.create_foreign_key("fk_authz_permissions_tenant", "tenant", ["tenant_id"], ["id"], ondelete="CASCADE")
+
+    with op.batch_alter_table("authz_role_permissions") as batch:
+        batch.add_column(sa.Column("tenant_id", sa.String(length=36), nullable=False))
+        batch.create_foreign_key("fk_authz_role_permissions_tenant", "tenant", ["tenant_id"], ["id"], ondelete="CASCADE")
+
+    with op.batch_alter_table("authz_user_roles") as batch:
+        batch.add_column(sa.Column("tenant_id", sa.String(length=36), nullable=False))
+        batch.create_foreign_key("fk_authz_user_roles_tenant", "tenant", ["tenant_id"], ["id"], ondelete="CASCADE")
+
     with op.batch_alter_table("authz_roles") as batch:
         batch.add_column(sa.Column("is_system", sa.Boolean(), nullable=False, server_default=sa.text("false")))
         batch.add_column(sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True))
@@ -101,3 +122,20 @@ def downgrade() -> None:
         batch.drop_constraint("uq_authz_roles_tenant_code", type_="unique")
         batch.drop_column("deleted_at")
         batch.drop_column("is_system")
+
+    # iter-10: reverse tenant_id additions
+    with op.batch_alter_table("authz_user_roles") as batch:
+        batch.drop_constraint("fk_authz_user_roles_tenant", type_="foreignkey")
+        batch.drop_column("tenant_id")
+
+    with op.batch_alter_table("authz_role_permissions") as batch:
+        batch.drop_constraint("fk_authz_role_permissions_tenant", type_="foreignkey")
+        batch.drop_column("tenant_id")
+
+    with op.batch_alter_table("authz_permissions") as batch:
+        batch.drop_constraint("fk_authz_permissions_tenant", type_="foreignkey")
+        batch.drop_column("tenant_id")
+
+    with op.batch_alter_table("authz_roles") as batch:
+        batch.drop_constraint("fk_authz_roles_tenant", type_="foreignkey")
+        batch.drop_column("tenant_id")
