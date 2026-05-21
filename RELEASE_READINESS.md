@@ -9,7 +9,7 @@
 3. **Root `README.md`:** links to `RELEASE_READINESS.md` and `RELEASE_BLOCKERS_STATUS.md` stay valid; **no README edit** is required for a verdict-only change.
 4. **CI:** frontend merge gate already runs `npm --prefix frontend run ci` in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (`frontend-tests` job). For changes under `frontend/**`, run the same locally before release windows when possible.
 
-- **Updated on (UTC):** 2026-04-30
+- **Updated on (UTC):** 2026-05-21
 - **Owner:** Release Manager + Platform + QA + SRE
 - **Canonical status vocabulary:** `done` / `partial` / `missing` / `blocked`
 - **Canonical blocker/status source:** `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`
@@ -27,11 +27,12 @@
 
 ## Launch readiness verdict
 
-- **Verdict date (UTC):** 2026-04-30
+- **Verdict date (UTC):** 2026-05-21
 - **Verdict:** **NOT READY** (3 of 6 blockers closed; 3 remain)
 - **Release decision checklist:** see `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` → “Release blockers checklist (artifact/workflow mapped)”.
-- **Why NOT READY now:** RB-001 (restore drill), RB-002 (perf baseline), RB-005 (e2e diagnostics) are not closed.
+- **Why NOT READY now:** RB-001 (restore drill), RB-002 (perf baseline), RB-005 (e2e diagnostics) are not closed. As of 2026-05-21 verdict refresh, **no green workflow artifact exists for any of the three against post-iter-8 `main`**; see "Recent stabilization activity" section of `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` for the iter-1..8 timeline and current red-state on `main` CI (3 jobs still failing — `perf-smoke`, `alembic-postgres-upgrade`, `container-image-scan`).
 - **Progress:** RB-003 (final acceptance partial), RB-004 (security gates **DONE as of 2026-04-30**), RB-006 (coverage **DONE**).
+- **Path to closure:** iter-9 to address remaining `alembic-postgres-upgrade` failures (additional migrations likely need `postgresql.ENUM(create_type=False)` per pattern established in PR #555), then trigger and verify `restore-drill.yml` / `perf-baseline.yml` / `e2e-smoke.yml` against green `main`.
 
 ## Cross-links
 
