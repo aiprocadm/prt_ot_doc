@@ -337,7 +337,10 @@ class PackRunService:
                     tenant_id=tenant_id,
                     pack_run_id=run.id,
                     row_no=row_no,
-                    source_record_hash=hashlib.sha1(json.dumps(rows[row_no - 1], sort_keys=True).encode("utf-8")).hexdigest(),
+                    source_record_hash=hashlib.sha1(  # nosec B324 - content-addressing hash, not security; FIPS-safe via usedforsecurity=False
+                        json.dumps(rows[row_no - 1], sort_keys=True).encode("utf-8"),
+                        usedforsecurity=False,
+                    ).hexdigest(),
                     status=PackRunItemStatus.SUCCESS,
                     filename=filename,
                 )

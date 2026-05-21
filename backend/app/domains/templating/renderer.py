@@ -77,7 +77,12 @@ def build_jinja_env(*, strict: bool) -> Environment:
             scenarios), missing keys silently resolve to empty strings.
     """
 
-    env = Environment(undefined=StrictUndefined if strict else Undefined)
+    # nosec B701 - this Environment feeds docxtpl, which renders into Office Open
+    # XML (.docx) — NOT HTML. docxtpl handles XML escaping internally during its
+    # own rendering pass; enabling Jinja autoescape would double-escape entities
+    # ('&' -> '&amp;' -> '&amp;amp;') and corrupt the generated documents. There
+    # is no HTML/XSS attack surface on this code path.
+    env = Environment(undefined=StrictUndefined if strict else Undefined, autoescape=False)  # nosec B701
     env.filters.update(_CUSTOM_FILTERS)
     return env
 
