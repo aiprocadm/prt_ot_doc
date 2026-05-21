@@ -18,6 +18,8 @@ mypy --config-file pyproject.toml \
   backend/app/api/routes/tasks.py \
   backend/app/api/routes/files.py \
   backend/app/api/routes/admin_authz.py \
+  --follow-imports=skip
+
 echo "== mypy staged (wave 1: API + middleware + task paths + file/authz-sensitive modules, follow_imports=skip) =="
 mypy --config-file pyproject.toml \
   backend/app/db/tenant_row_guard.py \

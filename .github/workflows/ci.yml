@@ -118,7 +118,7 @@ jobs:
         run: python scripts/ci/render_trivyignore.py --exceptions-file .github/security-exceptions.yml --output .trivyignore.generated
 
       - name: Dependency vulnerability gate (High/Critical)
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -139,6 +139,9 @@ jobs:
       - name: Secret scanning gate
         uses: gitleaks/gitleaks-action@v2
         env:
+          # gitleaks-action@v2 requires GITHUB_TOKEN for PR-scoped scans
+          # (breaking change announced 2024-05).
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
           GITLEAKS_ENABLE_SUMMARY: true
           GITLEAKS_EXTRA_ARGS: --redact --verbose --no-git
@@ -192,7 +195,7 @@ jobs:
         run: docker build -f Dockerfile -t ptd-api:ci .
 
       - name: Container image vulnerability gate (High/Critical)
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ptd-api:ci
           scanners: vuln
