@@ -70,7 +70,7 @@ Total: 5 files, +1107 / -3 lines.
 ### Known Problems / Risks
 
 - **Local pytest hangs** (Windows+Py3.13, conftest race). Pin-test self-contained — обходит через `python tests/...`. CI на 3.12.12 — source of truth.
-- **PR #559 не merged yet** — CI checks running. Если CI зелёный, merge через `gh pr merge 559 --admin` (если иначе нужно).
+- **PR #559 не merged yet** — CI checks завершились частично: `alembic-postgres-upgrade` всё ещё RED, но **на новом failure point** (см. Next Steps iter-11). `container-image-scan` RED под known exception (CVE-2025-62727 starlette до 2026-08-31). Все остальные CI checks (frontend-tests, smoke-compose, lint, openapi, sast, sbom, secret-scan, security-exceptions, dependency-vulnerability-scan, all Startup Preflights) — **PASS**. Merge через `gh pr merge 559 --admin` (iter-9 pattern для unblocking RB workflow ramp).
 - **`ix_outbox_events_status_next_attempt` drop в 20260314** — анализатор не детектит missing-index refs (за скоупом). После iter-10 fix этот drop работает (мы создали index в 20260222), но другие missing-index refs может остаться. Это не блокер релиза (alembic-postgres-upgrade прогрессирует), но потенциальный iter-11 scope.
 - **Raw `op.execute("SQL...")` references вне scope** анализатора. Документировано в module docstring. Если миграция с raw SQL ссылается на отсутствующую таблицу/колонку — это не будет пойман pin-test'ом, упадёт на runtime alembic upgrade. Conservative: false negatives acceptable, false positives — нет.
 - **`container-image-scan` остаётся red** под exception (CVE-2025-62727 starlette DoS, expires 2026-08-31). Не блокер релиза.
@@ -85,15 +85,33 @@ Total: 5 files, +1107 / -3 lines.
 
 ### Next Steps
 
-**После iter-10 merge:**
+**iter-11 scope (confirmed by CI run `26257876272` on PR #559):**
 
-1. **Verify alembic-postgres-upgrade green on main** — first CI run после merge должен пройти дальше предыдущего failure point (76-я миграция).
-2. **Re-trigger RB workflows** для validation:
+iter-10 fixes продвинули `alembic-postgres-upgrade` дальше прежнего failure point (76-я миграция, tenant_id) — теперь падает на ~80-й миграции `20260318_next47_files_metadata_archive.py:25` со следующей ошибкой:
+
+```
+ERROR: data type json has no default operator class for access method "gin"
+HINT:  You must specify an operator class for the index or define a default
+       operator class for the data type.
+STATEMENT: CREATE INDEX ix_files_tags_gin ON files USING GIN (tags)
+```
+
+**Это другой bug-класс** (Postgres type compatibility, не migration DAG) — вне scope iter-10 pin-test'а. iter-11 должен:
+
+1. Изменить `files.tags` column type с `sa.JSON()` на `postgresql.JSONB()` в `20260318_next47_files_metadata_archive.py:21` (jsonb имеет default GIN op class). Альтернатива: cast в выражении индекса `CREATE INDEX ... USING GIN ((tags::jsonb))` — менее чистое.
+2. Скорее всего такой же fix нужен в других миграциях с `CREATE INDEX ... USING GIN (<json col>)` без op-class. Grep:
+   - `20260315_next44_search_archive_index.py:43` (`content_text`)
+   - `20260317_next46_content_search_archive.py:43-44` (`fts`, `meta`)
+3. Запустить alembic upgrade head локально (Docker postgres) или через CI чтобы поймать следующий failure point после GIN fix.
+4. Возможно потребуется iter-12 для дальнейших barriers.
+
+**После iter-10 merge + iter-11 fixes (когда alembic-postgres-upgrade зелёный):**
+
+1. **Re-trigger RB workflows** для validation:
    - `restore-drill.yml` против main → RB-001
    - `perf-baseline.yml` против main → RB-002
    - `e2e-smoke.yml` против main → RB-005
-3. **Если workflow'ы вошли в green** → закрыть RB-001/002/005 в `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`. MVP unblock возможен.
-4. **Если workflow'ы red на runtime issues (не migration)** → новая итерация iter-11 на разблокировку.
+2. **Если workflow'ы зелёные** → закрыть RB-001/002/005 в `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`. MVP unblock возможен.
 
 **Optional polish (не блокер):**
 
@@ -101,7 +119,7 @@ Total: 5 files, +1107 / -3 lines.
 - Extend analyzer для `op.execute("SQL")` parsing (regex-based, conservative) если выявится next missing-table case в этой форме.
 - Extend для index-existence checks (паттерн в 20260314: drop_index без предшествующего create_index в DAG).
 
-**Branch suggestion для iter-11 (если нужен):** `fix/iter-11-<concern>` от main свежий после iter-10 merge.
+**Branch suggestion для iter-11:** `fix/iter-11-gin-jsonb-op-class` от main свежий после iter-10 merge.
 
 **Стартовая команда для следующей сессии:**
 ```
