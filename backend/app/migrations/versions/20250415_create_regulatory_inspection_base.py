@@ -35,26 +35,7 @@ branch_labels: str | None = None
 depends_on: str | None = None
 
 
-_INSPECTION_STATUS = sa.Enum(
-    "PLANNED",
-    "IN_PROGRESS",
-    "COMPLETED",
-    "CANCELLED",
-    name="regulatoryinspectionstatus",
-    # We create/drop the type explicitly in upgrade/downgrade. Default
-    # ``create_type=True`` would make ``op.create_table`` also try to
-    # create the type during column emission — a second CREATE TYPE
-    # without checkfirst that fails on PostgreSQL with
-    # ``DuplicateObjectError: type already exists``.
-    create_type=False,
-)
-
-
 def upgrade() -> None:
-    bind = op.get_bind()
-    if bind.dialect.name == "postgresql":
-        _INSPECTION_STATUS.create(bind, checkfirst=True)
-
     op.create_table(
         "regulatory_inspection",
         # TenantBaseModel base columns
@@ -75,7 +56,13 @@ def upgrade() -> None:
         sa.Column("finished_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
             "status",
-            _INSPECTION_STATUS,
+            sa.Enum(
+                "PLANNED",
+                "IN_PROGRESS",
+                "COMPLETED",
+                "CANCELLED",
+                name="regulatoryinspectionstatus",
+            ),
             nullable=False,
             server_default="PLANNED",
         ),
@@ -123,7 +110,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    bind = op.get_bind()
     op.drop_index("ix_regulatory_inspection_status", table_name="regulatory_inspection")
     op.drop_index("ix_regulatory_inspection_site", table_name="regulatory_inspection")
     op.drop_index("ix_regulatory_inspection_company", table_name="regulatory_inspection")
@@ -131,5 +117,6 @@ def downgrade() -> None:
     op.drop_index("ix_regulatory_inspection_company_id", table_name="regulatory_inspection")
     op.drop_index("ix_regulatory_inspection_tenant_id", table_name="regulatory_inspection")
     op.drop_table("regulatory_inspection")
+    bind = op.get_bind()
     if bind.dialect.name == "postgresql":
-        _INSPECTION_STATUS.drop(bind, checkfirst=True)
+        sa.Enum(name="regulatoryinspectionstatus").drop(bind, checkfirst=True)

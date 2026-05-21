@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.main import app
+from app.main import app
 from app.core.config import Settings
 from app.modules.health_checks.schemas import (
     HealthCheckComprehensiveResponse,

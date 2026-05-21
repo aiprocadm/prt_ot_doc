@@ -234,6 +234,9 @@ jobs:
       - name: Build API image for SBOM
         run: docker build -f Dockerfile -t ptd-api:sbom .
 
+      - name: Prepare artifacts directory
+        run: mkdir -p artifacts/security
+
       - name: Generate CycloneDX SBOM
         uses: anchore/sbom-action@v0
         with:
