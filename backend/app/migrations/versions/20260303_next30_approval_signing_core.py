@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision = "20260303_next30_approval_signing_core"
 down_revision = "20260302_next29"
@@ -21,10 +22,22 @@ def upgrade() -> None:
     op.add_column("approval_routes", sa.Column("steps", sa.JSON(), nullable=False, server_default=sa.text("'[]'")))
     op.add_column("approval_routes", sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True))
 
-    process_status = sa.Enum("pending", "in_progress", "approved", "rejected", "canceled", "expired", name="approvalprocessstatus")
-    task_status = sa.Enum("open", "done", "canceled", "expired", name="approvaltaskstatus")
-    signature_request_status = sa.Enum("created", "requested", "signed", "failed", name="signaturerequeststatus")
-    edo_envelope_status = sa.Enum("queued", "sent", "delivered", "signed", "rejected", "failed", name="edoenvelopestatus")
+    process_status = postgresql.ENUM(
+        "pending", "in_progress", "approved", "rejected", "canceled", "expired",
+        name="approvalprocessstatus", create_type=False,
+    )
+    task_status = postgresql.ENUM(
+        "open", "done", "canceled", "expired",
+        name="approvaltaskstatus", create_type=False,
+    )
+    signature_request_status = postgresql.ENUM(
+        "created", "requested", "signed", "failed",
+        name="signaturerequeststatus", create_type=False,
+    )
+    edo_envelope_status = postgresql.ENUM(
+        "queued", "sent", "delivered", "signed", "rejected", "failed",
+        name="edoenvelopestatus", create_type=False,
+    )
     bind = op.get_bind()
     process_status.create(bind, checkfirst=True)
     task_status.create(bind, checkfirst=True)

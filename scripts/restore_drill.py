@@ -580,11 +580,18 @@ def _write_evidence(
 ) -> Path:
     verify_counts = seeded["document_count"] == restored["document_count"] and seeded["object_count"] == restored["object_count"]
     verify_checksum = seeded["documents_checksum"] == restored["documents_checksum"]
+
+    def _canon_meta(meta: dict[str, object] | None) -> dict[str, object]:
+        # S3 user-metadata is HTTP-header-derived: keys are case-insensitive and
+        # may be returned with different casing by minio across releases.
+        # Compare canonical lowercase form so the verifier is image-version stable.
+        return {str(k).lower(): v for k, v in (meta or {}).items()}
+
     metadata_mismatch = [
         item["key"]
         for item in restored["objects"]
         if item["sha256"] != item["actual_sha256"]
-        or item["metadata"] != item["expected_metadata"]
+        or _canon_meta(item["metadata"]) != _canon_meta(item["expected_metadata"])
         or not item.get("content_type_match", True)
     ]
     verify_objects = len(metadata_mismatch) == 0

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision = "20250420_p1_obligations_inspections_attestations"
 down_revision = "20250415_create_regulatory_inspection_base"
@@ -13,13 +14,13 @@ depends_on = None
 
 def upgrade() -> None:
     bind = op.get_bind()
-    inspection_type = sa.Enum(
+    inspection_type = postgresql.ENUM(
         "internal", "external", name="inspectiontype", create_type=False
     )
-    attestation_status = sa.Enum(
+    attestation_status = postgresql.ENUM(
         "active", "expired", "revoked", name="attestationstatus", create_type=False
     )
-    prescription_status = sa.Enum(
+    prescription_status = postgresql.ENUM(
         "open",
         "in_progress",
         "completed",

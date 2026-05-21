@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision: str = "20250325_outbox_outbound_traffic"
 down_revision: str | tuple[str, ...] = "20250321_outbox_dedupe_key"
@@ -15,13 +16,14 @@ branch_labels: str | None = None
 depends_on: str | None = None
 
 
-_OUTBOX_STATUS = sa.Enum(
+_OUTBOX_STATUS = postgresql.ENUM(
     "PENDING",
     "IN_PROGRESS",
     "SENT",
     "FAILED",
     "DEAD",
     name="outboxstatus",
+    create_type=False,
 )
 
 
