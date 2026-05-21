@@ -11,7 +11,9 @@ from alembic import op
 revision = "20260318_next67"
 down_revision = "20260418_next66_notifications_templates_foundation"
 branch_labels = None
-depends_on = None
+# Cross-branch dependency: alters export_schedules created on a parallel
+# branch in 20260411_next66_lms_exports_machine_marketplace.
+depends_on = "20260411_next66"
 
 
 def upgrade() -> None:

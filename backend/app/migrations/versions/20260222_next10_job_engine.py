@@ -78,6 +78,11 @@ def upgrade() -> None:
         sa.Column("payload", sa.JSON(), nullable=False),
         sa.Column("status", sa.String(length=16), nullable=False),
         sa.Column("attempts", sa.Integer(), nullable=False, server_default="0"),
+        # iter-10: next_attempt_at is required by 20260314_next43 which drops
+        # ix_outbox_events_status_next_attempt (created below) and references
+        # the column in its replacement index. Created here at table-birth so
+        # the chain forward from 20260222 stays consistent.
+        sa.Column("next_attempt_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("id", sa.String(length=36), nullable=False),
         sa.Column("tenant_id", sa.String(length=36), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
@@ -86,9 +91,16 @@ def upgrade() -> None:
         sa.UniqueConstraint("tenant_id", "event_id", name="uq_outbox_event_tenant_event"),
     )
     op.create_index("ix_outbox_events_status", "outbox_events", ["status"])
+    op.create_index(
+        "ix_outbox_events_status_next_attempt",
+        "outbox_events",
+        ["status", "next_attempt_at"],
+        unique=False,
+    )
 
 
 def downgrade() -> None:
+    op.drop_index("ix_outbox_events_status_next_attempt", table_name="outbox_events")
     op.drop_index("ix_outbox_events_status", table_name="outbox_events")
     op.drop_table("outbox_events")
     op.drop_table("document_artifacts")
