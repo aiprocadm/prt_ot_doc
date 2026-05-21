@@ -6,7 +6,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "20250420_p1_obligations_inspections_attestations"
-down_revision = "20250410_p1_entities_tasks_roles"
+down_revision = "20250415_create_regulatory_inspection_base"
 branch_labels = None
 depends_on = None
 

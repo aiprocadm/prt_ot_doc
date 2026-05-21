@@ -135,7 +135,7 @@ class _MemoryAdapter:
             updated_at=now,
             quarantined=quarantined,
             adapter=self.name,
-            etag=hashlib.md5(data).hexdigest(),  # noqa: S324 - eTag compatibility only
+            etag=hashlib.md5(data, usedforsecurity=False).hexdigest(),  # noqa: S324  # nosec B324 - S3-compatible eTag, content fingerprint only
             scan_status="quarantined" if quarantined else "clean",
             tags=dict(existing.tags) if existing is not None else {},
             last_validated_mime=content_type,
@@ -215,7 +215,7 @@ class _LocalAdapter:
                 updated_at=now,
                 quarantined=quarantined,
                 adapter=self.name,
-                etag=hashlib.md5(data).hexdigest(),  # noqa: S324
+                etag=hashlib.md5(data, usedforsecurity=False).hexdigest(),  # noqa: S324  # nosec B324 - S3-compatible eTag
                 scan_status="quarantined" if quarantined else "clean",
                 tags=dict(existing.tags) if existing else {},
                 last_validated_mime=content_type,
@@ -240,7 +240,7 @@ class _LocalAdapter:
                     created_at=now,
                     updated_at=now,
                     adapter=self.name,
-                    etag=hashlib.md5(payload).hexdigest(),  # noqa: S324
+                    etag=hashlib.md5(payload, usedforsecurity=False).hexdigest(),  # noqa: S324  # nosec B324 - S3-compatible eTag
                     scan_status="clean",
                 )
                 self._meta[key] = meta

@@ -126,15 +126,29 @@ jobs:
           vuln-type: library
           severity: HIGH,CRITICAL
           ignore-unfixed: true
-          ignore-file: .trivyignore.generated
+          trivyignores: .trivyignore.generated
           format: table
           exit-code: 1
 
   secret-scan:
     runs-on: ubuntu-latest
     needs: security-exceptions
+    # gitleaks-action@v2 needs to read the PR commit range AND post a summary
+    # comment; the default GITHUB_TOKEN scope (contents: read, metadata: read,
+    # packages: read) returns "Resource not accessible by integration" on the
+    # PR endpoint. Grant the minimum extra scope explicitly.
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
+        # gitleaks-action@v2 runs ``gitleaks detect --log-opts='... <base>^..<head>'``
+        # on pull_request events; with the default shallow checkout
+        # (``fetch-depth: 1``) the parent of <base> is unreachable and gitleaks
+        # exits with ``failed to scan Git repository error="stderr is not empty"``.
+        # Full history is required for the diff-based scan to walk commits.
+        with:
+          fetch-depth: 0
 
       - name: Secret scanning gate
         uses: gitleaks/gitleaks-action@v2
@@ -144,7 +158,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
           GITLEAKS_ENABLE_SUMMARY: true
-          GITLEAKS_EXTRA_ARGS: --redact --verbose --no-git
+          # NOTE: previously had ``--no-git`` here, but gitleaks-action@v2 invokes
+          # ``gitleaks detect`` on pull_request events (which is git-mode by
+          # design); --no-git triggers ``failed to scan Git repository
+          # error="stderr is not empty"``. The action's own logic picks the
+          # right mode based on the event — keep EXTRA_ARGS to formatting flags
+          # only.
+          GITLEAKS_EXTRA_ARGS: --redact --verbose
 
   sast-static-analysis:
     runs-on: ubuntu-latest
@@ -201,7 +221,7 @@ jobs:
           scanners: vuln
           severity: HIGH,CRITICAL
           ignore-unfixed: true
-          ignore-file: .trivyignore.generated
+          trivyignores: .trivyignore.generated
           format: table
           exit-code: 1
 
