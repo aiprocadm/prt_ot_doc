@@ -41,6 +41,12 @@ _INSPECTION_STATUS = sa.Enum(
     "COMPLETED",
     "CANCELLED",
     name="regulatoryinspectionstatus",
+    # We create/drop the type explicitly in upgrade/downgrade. Default
+    # ``create_type=True`` would make ``op.create_table`` also try to
+    # create the type during column emission — a second CREATE TYPE
+    # without checkfirst that fails on PostgreSQL with
+    # ``DuplicateObjectError: type already exists``.
+    create_type=False,
 )
 
 

@@ -142,6 +142,13 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v4
+        # gitleaks-action@v2 runs ``gitleaks detect --log-opts='... <base>^..<head>'``
+        # on pull_request events; with the default shallow checkout
+        # (``fetch-depth: 1``) the parent of <base> is unreachable and gitleaks
+        # exits with ``failed to scan Git repository error="stderr is not empty"``.
+        # Full history is required for the diff-based scan to walk commits.
+        with:
+          fetch-depth: 0
 
       - name: Secret scanning gate
         uses: gitleaks/gitleaks-action@v2
