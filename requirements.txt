@@ -20,10 +20,12 @@ pydantic-settings==2.5.2
 pydantic==2.9.2
 python-docx==1.1.2
 python-dotenv==1.0.1
-python-jose[cryptography]==3.4.0
+python-jose[cryptography]==3.5.0
 python-magic==0.4.27
 # pyasn1: direct pin to override transitive (pulled by python-jose/cryptography).
 # CVE-2026-30922 (HIGH, unbounded recursion DoS) fixed at 0.6.3.
+# python-jose 3.5.0 loosened its constraint to pyasn1>=0.5.0 (3.4.0 required <0.5.0),
+# so the 0.6.3 pin is resolvable together with python-jose>=3.5.0.
 pyasn1>=0.6.3
 python-multipart==0.0.27
 redis==5.0.3
