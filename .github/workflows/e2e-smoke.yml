@@ -36,14 +36,34 @@ jobs:
         run: |
           npm run e2e -- --grep "mandatory \(no external creds\)"
 
+  resolve-credential-matrix:
+    name: Resolve credential matrix
+    needs: playwright-smoke-minimal
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.gen.outputs.matrix }}
+    steps:
+      - id: gen
+        env:
+          E2E_USER_EMAIL: ${{ secrets.E2E_USER_EMAIL }}
+          E2E_USER_PASSWORD: ${{ secrets.E2E_USER_PASSWORD }}
+          E2E_LIMITED_USER_EMAIL: ${{ secrets.E2E_LIMITED_USER_EMAIL }}
+          E2E_LIMITED_USER_PASSWORD: ${{ secrets.E2E_LIMITED_USER_PASSWORD }}
+        run: |
+          if [ -n "$E2E_USER_EMAIL" ] && [ -n "$E2E_USER_PASSWORD" ] && [ -n "$E2E_LIMITED_USER_EMAIL" ] && [ -n "$E2E_LIMITED_USER_PASSWORD" ]; then
+            echo 'matrix=["bootstrap_local","repo_secrets"]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'matrix=["bootstrap_local"]' >> "$GITHUB_OUTPUT"
+          fi
+
   playwright-smoke-credential:
     name: Credential smoke (${{ matrix.credential_source }})
-    needs: playwright-smoke-minimal
+    needs: [playwright-smoke-minimal, resolve-credential-matrix]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        credential_source: ${{ (secrets.E2E_USER_EMAIL != '' && secrets.E2E_USER_PASSWORD != '' && secrets.E2E_LIMITED_USER_EMAIL != '' && secrets.E2E_LIMITED_USER_PASSWORD != '') && fromJSON('["bootstrap_local","repo_secrets"]') || fromJSON('["bootstrap_local"]') }}
+        credential_source: ${{ fromJSON(needs.resolve-credential-matrix.outputs.matrix) }}
     env:
       DATABASE_URL: sqlite+aiosqlite:///./dev.db
       E2E_TENANT: demo
