@@ -1,6 +1,6 @@
 # Stabilization Plan Tracker (Canonical)
 
-- **Updated on (UTC):** 2026-04-22
+- **Updated on (UTC):** 2026-05-21
 - **Owner:** Stabilization Program (Platform + QA + SRE)
 - **Canonical status vocabulary:** `done` / `partial` / `missing` / `blocked`
 - **Canonical blocker/status source:** `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`
@@ -19,13 +19,12 @@ Release-critical status values are mirrored from `docs/stabilization/RELEASE_BLO
   - **doc:** `docs/stabilization/security-gates.md`
 
 ### A.2 Gate ownership and escalation SLA codification (`RC-005`)
-- **status:** `blocked`
+- **status:** `done` (closed 2026-04-30 as RB-004 — synced from canonical source 2026-05-21)
 - **owner:** Platform / Security
-- **blocker detail:** ownership map approval/versioning is not yet finalized.
-- **evidence target:**
+- **evidence:**
   - **workflow:** `.github/workflows/ci.yml`
-  - **doc:** `docs/stabilization/security-gates.md`
-  - **ownership:** `.github/CODEOWNERS`
+  - **doc:** `docs/stabilization/security-gates.md` (§ "Escalation policy": T+0, T+4h, T+1d, break-glass)
+  - **ownership:** `.github/CODEOWNERS` (5 reviewer groups: auth, rbac-abac, files, data-platform, platform-infra)
 
 ## Block B — Test coverage visibility
 
@@ -55,6 +54,7 @@ Release-critical status values are mirrored from `docs/stabilization/RELEASE_BLO
   - **workflow:** `.github/workflows/restore-drill.yml`
   - **artifact:** `artifacts/restore-drill/latest-postgres-minio.json`
   - **doc:** `docs/runbooks/RESTORE_TENANT.md`, `docs/stabilization/restore-drill.md`
+- **post-iter-8 note (2026-05-21):** sqlite-mode green ([run 26215954984](https://github.com/aiprocadm/prt_ot_doc/actions/runs/26215954984)) on pre-iter-8 branch; postgres-minio mode pending re-trigger against post-iter-8 main once `alembic-postgres-upgrade` CI job is green (iter-9 candidate). See `KNOWN_LIMITATIONS.md` § "CI stabilization limitations" for the full picture.
 
 ### C.2 Rollback window and go/no-go criteria formalization (`RC-012`)
 - **status:** `missing`

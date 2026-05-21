@@ -1,9 +1,10 @@
 # ACCEPTANCE_TEST_MATRIX
 
-- **Updated on (UTC):** 2026-04-30
+- **Updated on (UTC):** 2026-05-21
 - **Owner:** QA + Platform + Backend + Frontend
 - **Canonical status vocabulary:** `done` / `partial` / `missing` / `blocked`
 - **Canonical blocker/status source:** `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`
+- **Re-validation note (2026-05-21):** post-billing-restore, the `final-acceptance` bundle has not been re-run on a green `main`. RC-004 stays `partial`; criteria with `done` status above were closed on 2026-04-30 against pre-billing-gap evidence and do not require re-validation, but `final_acceptance/summary.json` will need a refresh once iter-9 lands and main CI goes green.
 
 ## Acceptance release-critical criteria (normalized)
 

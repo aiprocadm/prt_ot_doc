@@ -1,6 +1,6 @@
 # RELEASE_BLOCKERS_STATUS
 
-- **Updated on (UTC):** 2026-04-30
+- **Updated on (UTC):** 2026-05-21
 - **Owner:** Release Manager + Platform + QA + SRE
 - **Canonical status vocabulary:** `done` / `partial` / `missing` / `blocked`
 - **Single source of truth for release-critical statuses and evidence links.**
@@ -13,6 +13,24 @@ Cross-links:
 - `KNOWN_LIMITATIONS.md`
 - `GAP_REPORT.md`
 - `docs/stabilization/PLAN.md`
+
+## Recent stabilization activity (post-billing-restore, 2026-05-21)
+
+GitHub Actions billing was restored on 2026-05-21 after a ~9-week block (from 2026-03-21). The first CI runs surfaced multiple layers of latent rot. Eight iterations of fixes have been merged to `main` over the day:
+
+| PR | Iteration | Scope |
+|---|---|---|
+| [#549](https://github.com/aiprocadm/prt_ot_doc/pull/549) | iter-1 | Initial workflow plumbing: image tag, readiness wait, first attempt at matrix-in-if fix |
+| [#550](https://github.com/aiprocadm/prt_ot_doc/pull/550) | iter-2 | bitnamilegacy minio, `resolve-credential-matrix` job pattern, 6 ci.yml fixes (trivy v0.36.0, gitleaks GITHUB_TOKEN, bandit dep, static_gates.sh backslash, templateversionstatus 'ACTIVE' enum) |
+| [#551](https://github.com/aiprocadm/prt_ot_doc/pull/551) | iter-3..4 | Missing regulatory_inspection migration, gitleaks `--no-git`, enum `create_type=False`, fetch-depth, frontend axios/react-router CVE upgrades |
+| [#552](https://github.com/aiprocadm/prt_ot_doc/pull/552) | iter-5 | 6 CI failures: enum revert + async tests + import paths + sbom dir + base image patches |
+| [#553](https://github.com/aiprocadm/prt_ot_doc/pull/553) | iter-6 | 5 CI failures after PR #552 merge |
+| [#554](https://github.com/aiprocadm/prt_ot_doc/pull/554) | iter-7 | 2 regressions introduced by iter-6 |
+| [#555](https://github.com/aiprocadm/prt_ot_doc/pull/555) | iter-8 | 3 main CI jobs + 3 post-billing app defects (RB-001/002/005 paths); `postgresql.ENUM` fix extended to 7 migrations total |
+
+**Post-iter-8 main CI state (as of 2026-05-21T15:17Z):** [run 26235153179](https://github.com/aiprocadm/prt_ot_doc/actions/runs/26235153179) is in progress; **3 jobs already failed** — `perf-smoke`, `alembic-postgres-upgrade`, `container-image-scan`. Root cause for `alembic-postgres-upgrade` (pre-iter-8 log): `DuplicateObjectError: type "attestationstatus" already exists` — same class of bug iter-8 targeted, suggesting additional migrations may still need the same `postgresql.ENUM(create_type=False)` treatment (iter-9 candidate).
+
+**RB-001/002/005 re-validation status:** the three release-blocker workflows (`restore-drill.yml`, `perf-baseline.yml`, `e2e-smoke.yml`) have **not yet been re-triggered against post-iter-8 main**. Most recent runs were on `fix/ci-workflows-billing-restore` (pre-iter-8) and almost all are `failure` except a single sqlite-mode restore-drill green ([run 26215954984](https://github.com/aiprocadm/prt_ot_doc/actions/runs/26215954984)). The blocker checkboxes therefore stay `[ ]` until fresh post-iter-8 green artifacts exist.
 
 ## Unified release-critical criteria matrix
 
