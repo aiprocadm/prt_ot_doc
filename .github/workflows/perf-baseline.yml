@@ -31,6 +31,19 @@ jobs:
       - name: Build and up
         run: docker compose up -d --build
 
+      - name: Wait for API readiness
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8000/health >/dev/null 2>&1; then
+              echo "API ready after ${i} attempts"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "API did not become ready within 600s"
+          docker compose logs --tail=200 api
+          exit 1
+
       - name: Run nightly baseline profile
         run: |
           mkdir -p artifacts/perf/nightly
