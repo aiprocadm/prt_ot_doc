@@ -40,20 +40,25 @@ def upgrade() -> None:
     json_default = _json_object_default(bind)
     npa_binding_table = _resolve_npa_binding_table(bind)
 
-    employment_status = sa.Enum(
-        "active", "on_leave", "suspended", "terminated", name="employmentstatus"
+    employment_status = postgresql.ENUM(
+        "active", "on_leave", "suspended", "terminated",
+        name="employmentstatus", create_type=False,
     )
-    document_pack_module = sa.Enum(
-        "ot", "fire_safety", "health", "custom", name="documentpackmodule"
+    document_pack_module = postgresql.ENUM(
+        "ot", "fire_safety", "health", "custom",
+        name="documentpackmodule", create_type=False,
     )
-    document_pack_scenario = sa.Enum(
-        "document_batch", "report", "workflow", name="documentpackscenario"
+    document_pack_scenario = postgresql.ENUM(
+        "document_batch", "report", "workflow",
+        name="documentpackscenario", create_type=False,
     )
-    document_version_status = sa.Enum(
-        "draft", "locked", "published", "archived", name="documentversionstatus"
+    document_version_status = postgresql.ENUM(
+        "draft", "locked", "published", "archived",
+        name="documentversionstatus", create_type=False,
     )
-    npa_binding_target = sa.Enum(
-        "template_version", "document", "pack", name="npabindingtarget"
+    npa_binding_target = postgresql.ENUM(
+        "template_version", "document", "pack",
+        name="npabindingtarget", create_type=False,
     )
 
     employment_status.create(bind, checkfirst=True)

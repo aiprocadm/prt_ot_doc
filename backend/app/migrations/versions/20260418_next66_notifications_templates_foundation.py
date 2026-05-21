@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision = "20260418_next66_notifications_templates_foundation"
 down_revision = "20260410_next65"
@@ -17,8 +18,11 @@ depends_on = None
 
 
 def upgrade() -> None:
-    channel_enum = sa.Enum("email", "telegram", "inapp", "webhook", name="notificationtemplatechannel")
-    type_enum = sa.Enum(
+    channel_enum = postgresql.ENUM(
+        "email", "telegram", "inapp", "webhook",
+        name="notificationtemplatechannel", create_type=False,
+    )
+    type_enum = postgresql.ENUM(
         "JobStatusChanged",
         "DocumentGenerated",
         "DocumentExported",
@@ -46,6 +50,7 @@ def upgrade() -> None:
         "EdoStatusChanged",
         "BillingLimitWarning",
         name="notificationtemplatetype",
+        create_type=False,
     )
     bind = op.get_bind()
     channel_enum.create(bind, checkfirst=True)

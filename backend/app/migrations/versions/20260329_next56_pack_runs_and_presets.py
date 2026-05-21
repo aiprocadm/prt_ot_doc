@@ -7,6 +7,7 @@ Create Date: 2026-03-29
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision = "20260329_next56"
 down_revision = "20260328_next55"
@@ -15,17 +16,18 @@ depends_on = None
 
 
 def upgrade() -> None:
-    package_entity_status = sa.Enum("draft", "active", "archived", name="package_entity_status")
-    package_source_type = sa.Enum("csv", "xlsx", "json", "mixed", name="package_source_type")
-    package_preset_status = sa.Enum("draft", "active", "archived", name="package_preset_status")
-    replace_mode = sa.Enum("none", "preview", "apply", name="replace_mode")
-    package_output_format = sa.Enum("docx", "pdf", "both", name="package_output_format")
-    pack_run_source_type = sa.Enum("csv", "xlsx", "json", "mixed", name="pack_run_source_type")
-    pack_run_lifecycle_status = sa.Enum(
-        "queued", "running", "success", "failed", "canceled", "partial_success", name="pack_run_lifecycle_status"
+    package_entity_status = postgresql.ENUM("draft", "active", "archived", name="package_entity_status", create_type=False)
+    package_source_type = postgresql.ENUM("csv", "xlsx", "json", "mixed", name="package_source_type", create_type=False)
+    package_preset_status = postgresql.ENUM("draft", "active", "archived", name="package_preset_status", create_type=False)
+    replace_mode = postgresql.ENUM("none", "preview", "apply", name="replace_mode", create_type=False)
+    package_output_format = postgresql.ENUM("docx", "pdf", "both", name="package_output_format", create_type=False)
+    pack_run_source_type = postgresql.ENUM("csv", "xlsx", "json", "mixed", name="pack_run_source_type", create_type=False)
+    pack_run_lifecycle_status = postgresql.ENUM(
+        "queued", "running", "success", "failed", "canceled", "partial_success",
+        name="pack_run_lifecycle_status", create_type=False,
     )
-    pack_run_item_status = sa.Enum("queued", "running", "success", "failed", "skipped", name="pack_run_item_status")
-    pack_log_level = sa.Enum("info", "warning", "error", name="pack_log_level")
+    pack_run_item_status = postgresql.ENUM("queued", "running", "success", "failed", "skipped", name="pack_run_item_status", create_type=False)
+    pack_log_level = postgresql.ENUM("info", "warning", "error", name="pack_log_level", create_type=False)
 
     bind = op.get_bind()
     for enum_ in [

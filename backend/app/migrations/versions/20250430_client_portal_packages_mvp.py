@@ -8,16 +8,29 @@ from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision: str = "20250430_client_portal_packages_mvp"
 down_revision: str | tuple[str, ...] = "20250425_edo_approval_signature_mvp"
 branch_labels: str | None = None
 depends_on: str | None = None
 
-package_run_status = sa.Enum("draft", "running", "success", "failed", "canceled", name="packagerunstatus")
-package_requirement_type = sa.Enum("file", "text", "table", name="packagerequirementtype")
-package_requirement_status = sa.Enum("missing", "provided", "approved", "rejected", name="packagerequirementstatus")
-client_request_ticket_status = sa.Enum("open", "in_progress", "resolved", "closed", name="clientrequestticketstatus")
+package_run_status = postgresql.ENUM(
+    "draft", "running", "success", "failed", "canceled",
+    name="packagerunstatus", create_type=False,
+)
+package_requirement_type = postgresql.ENUM(
+    "file", "text", "table",
+    name="packagerequirementtype", create_type=False,
+)
+package_requirement_status = postgresql.ENUM(
+    "missing", "provided", "approved", "rejected",
+    name="packagerequirementstatus", create_type=False,
+)
+client_request_ticket_status = postgresql.ENUM(
+    "open", "in_progress", "resolved", "closed",
+    name="clientrequestticketstatus", create_type=False,
+)
 
 
 def upgrade() -> None:
