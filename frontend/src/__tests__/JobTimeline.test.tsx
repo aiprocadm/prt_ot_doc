@@ -131,8 +131,9 @@ describe("JobTimeline", () => {
 
     render(<JobTimeline steps={steps} />);
 
-    expect(screen.getByText("pending")).toBeInTheDocument();
-    expect(screen.getByText(/—/)).toBeInTheDocument(); // Duration should be —
+    // "pending" appears twice — as step_code and as status badge.
+    expect(screen.getAllByText("pending").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText(/—/).length).toBeGreaterThanOrEqual(1); // Duration should be —
   });
 
   it("renders step with artifacts in output", () => {
@@ -158,8 +159,9 @@ describe("JobTimeline", () => {
     render(<JobTimeline steps={steps} />);
 
     expect(screen.getByText("Артефакты")).toBeInTheDocument();
-    expect(screen.getByText("document_url")).toBeInTheDocument();
-    expect(screen.getByText("receipt_url")).toBeInTheDocument();
+    // Component renders `{key}: <a>{value}</a>` so text node is "document_url:" (trailing colon).
+    expect(screen.getByText(/document_url/)).toBeInTheDocument();
+    expect(screen.getByText(/receipt_url/)).toBeInTheDocument();
   });
 
   it("renders cancelled status badge", () => {

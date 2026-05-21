@@ -13,10 +13,19 @@ depends_on = None
 
 def upgrade() -> None:
     bind = op.get_bind()
-    inspection_type = sa.Enum("internal", "external", name="inspectiontype")
-    attestation_status = sa.Enum("active", "expired", "revoked", name="attestationstatus")
+    inspection_type = sa.Enum(
+        "internal", "external", name="inspectiontype", create_type=False
+    )
+    attestation_status = sa.Enum(
+        "active", "expired", "revoked", name="attestationstatus", create_type=False
+    )
     prescription_status = sa.Enum(
-        "open", "in_progress", "completed", "cancelled", name="prescriptionstatus"
+        "open",
+        "in_progress",
+        "completed",
+        "cancelled",
+        name="prescriptionstatus",
+        create_type=False,
     )
     if bind.dialect.name == "postgresql":
         inspection_type.create(bind, checkfirst=True)
