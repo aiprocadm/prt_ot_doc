@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, it, expect } from "vitest";
 
 import { JobTimeline } from "@/components/JobTimeline";
@@ -158,10 +158,14 @@ describe("JobTimeline", () => {
 
     render(<JobTimeline steps={steps} />);
 
-    expect(screen.getByText("Артефакты")).toBeInTheDocument();
-    // Component renders `{key}: <a>{value}</a>` so text node is "document_url:" (trailing colon).
-    expect(screen.getByText(/document_url/)).toBeInTheDocument();
-    expect(screen.getByText(/receipt_url/)).toBeInTheDocument();
+    const artifactsHeading = screen.getByText("Артефакты");
+    expect(artifactsHeading).toBeInTheDocument();
+    // The component also renders the raw output JSON in a sibling <pre>, which contains
+    // the same key names. Scope the lookup to the artifacts panel so /document_url/
+    // matches only the artifact label, not the JSON dump.
+    const artifactsPanel = artifactsHeading.parentElement as HTMLElement;
+    expect(within(artifactsPanel).getByText(/document_url/)).toBeInTheDocument();
+    expect(within(artifactsPanel).getByText(/receipt_url/)).toBeInTheDocument();
   });
 
   it("renders cancelled status badge", () => {
