@@ -1,5 +1,125 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-22, Session 62 — iter-9 closure: 3 classes of migration safety bugs + 2 regression pin-tests, PR #557 merged)
+
+- **Дата:** 2026-05-22 (продолжалось через 2026-05-21 evening UTC). Ветка `docs/sync-release-status-2026-05-21` поверх iter-8 merge `dbe93a2`. Single session, 3 commits + admin-merge.
+- **Агент:** Claude Opus 4.7 (local Windows, py 3.13).
+- **Задача:** «Продолжай по ТЗ» → RB-001/002/005 prerequisite: разблокировать `alembic-postgres-upgrade` на main, который оставался красным после iter-8 (3 main CI jobs failing per docs/stabilization/RELEASE_BLOCKERS_STATUS.md).
+- **Статус:** 🟡 PARTIAL — iter-9 закрыл 3 классов distinct migration bugs и пропустил CI через ~70 миграций (vs 16 до iter-9). 4-й класс (cross-branch column dep) обнаружен и **намеренно** не фиксен — превышает порог 3-fix-attempts systematic-debugging skill, deferred в iter-10 как proper Alembic DAG analyzer.
+- **Где остановился:** PR #557 MERGED через admin override (`gh pr merge 557 --admin --merge`, merge-commit `6e2a4bb`, 2026-05-21T21:13:15Z). На main теперь:
+  - 4 миграции с class-1 fix (enum double-create при `.create(checkfirst=True)`)
+  - 1 миграция с class-2 fix (cross-branch table dep `20250501` → `20250322`)
+  - 1 миграция с class-3 fix (op.add_column без explicit `.create()` для `tenantkind`)
+  - 2 AST-based regression pin-tests в `tests/test_migrations_enum_create_type_safety.py`
+- **Alembic-postgres-upgrade всё ещё RED на main** — теперь падает на 4-м классе (`20260313_next42_rbac_abac_audit`: `UndefinedColumnError: column "tenant_id" named in key does not exist`). RB-001/002/005 workflow re-trigger по-прежнему заблокирован до закрытия class-4 паттерна.
+
+### Studied Documentation
+
+- `docs/spec/TZ_FULL_UNIFIED.md §0.2` — алгоритм «продолжай по ТЗ»: открытый MVP-пункт partial/missing первичен.
+- `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` — 3 RB закрыто, 3 открыто; alembic-postgres-upgrade prerequisite для RB-001/002/005 re-validation.
+- `KNOWN_LIMITATIONS.md` — class-1 enum double-create описан, container-image-scan exception до 2026-08-31.
+- PR #555 commit `2507723` — точный паттерн class-1 fix: `postgresql.ENUM(..., create_type=False)` для всех `sa.Enum`-decls в файле с `.create(checkfirst=True)`, downgrade `.drop()` НЕ трогается.
+- Alembic docs: cross-branch dependencies — https://alembic.sqlalchemy.org/en/latest/branches.html#dependencies-on-other-branches
+- `superpowers:test-driven-development` skill — Iron Law (failing test first); применён в обоих pin-test'ах.
+- `superpowers:systematic-debugging` skill — 4-attempt threshold правило строго соблюдено.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 0 release-blocker chase (P0). Prerequisite для re-trigger RB-001/002/005.
+- **Приоритет:** P0 — без зелёного alembic-postgres-upgrade backend не бутится, release-blocker workflows не могут validate.
+- **Почему выбрана:** ТЗ §0.2 диктует partial/missing MVP-пункт первым. iter-8 закрыл часть class-1, оставив open. Sessions 61 (Phase 9.4 Vary header) и более ранние ушли в P2 кэш-работу — это нарушало правило priority, перефокусировка обязательна.
+
+### Implemented Changes
+
+**Commit `9e20af2` (iter-9 class-1):**
+- 4 миграции переведены на `postgresql.ENUM(..., create_type=False)`:
+  - `20260319_next48_billing_core` (2 enums: billingsubscriptionstatus, billinginvoicestatus)
+  - `20260321_next50_tenant_limits_billing_events` (1 enum: billingeventtype)
+  - `20260328_next55_templates_lifecycle` (2 enums: templatestatus, templateversionstatus) — добавлен import `postgresql`
+  - `20260409_next64_workflow_notifications_npa` (4 enums: workflow*-status, notificationpriority) — добавлен import `postgresql`
+- **NEW:** `tests/test_migrations_enum_create_type_safety.py` — AST-based pin-test для class-1.
+
+**Commit `ab0679c` (iter-9 class-2 targeted):**
+- `20250501_reliability_outbox_webhook_delivery.py`: `depends_on = "20250322_add_webhook_subscriptions"` + inline комментарий root-cause.
+- Closed: `UndefinedTableError: relation "webhook_subscription" does not exist` на cross-branch ALTER.
+
+**Commit `3271ce3` (iter-9 class-3 + pin-test расширение):**
+- `20250601_tenant_quotas_and_counters.py`: module-level `tenant_kind = postgresql.ENUM(..., create_type=False)`, `tenant_kind.create(op.get_bind(), checkfirst=True)` в начале upgrade, замены inline `sa.Enum` на `tenant_kind`.
+- `tests/test_migrations_enum_create_type_safety.py` расширен функцией `test_no_op_add_column_with_uncreated_enum` (class 3). Module-docstring переструктурирован под 3 классов.
+- Closed: `UndefinedObjectError: type "tenantkind" does not exist` на `op.add_column` без auto-emit.
+
+### Changed / New Files
+
+- `backend/app/migrations/versions/20260319_next48_billing_core.py` (+12 lines net)
+- `backend/app/migrations/versions/20260321_next50_tenant_limits_billing_events.py` (+3 lines)
+- `backend/app/migrations/versions/20260328_next55_templates_lifecycle.py` (+13 lines)
+- `backend/app/migrations/versions/20260409_next64_workflow_notifications_npa.py` (+25 lines)
+- `backend/app/migrations/versions/20250501_reliability_outbox_webhook_delivery.py` (+7 lines — `depends_on` + comment)
+- `backend/app/migrations/versions/20250601_tenant_quotas_and_counters.py` (+17 lines)
+- `tests/test_migrations_enum_create_type_safety.py` — NEW, ~380 lines, 4 tests (class-1 + class-3 + 2 sanity)
+
+### Decisions
+
+- **Self-contained pin-test (no pytest fixtures)** — обходит known Windows+Py3.13 conftest hang через `python tests/...` direct invocation; в CI на 3.12.12 picked up via pytest collection.
+- **AST analysis вместо regex** — устойчиво к multi-line форматированию ENUM declarations, не ловит ENUM-references внутри docstrings.
+- **Class 2 (cross-branch dep) НЕ запиннен** — detection требует proper Alembic DAG walker (down_revision chain + depends_on resolution). Significant scope, deferred в iter-10. Targeted fix для одного случая (20250501) — pragmatic trade-off.
+- **Downgrade paths НЕ тронуты** во всех class-1 фиксах — consistent с PR #555 commit message ("drop doesn't need value list").
+- **systematic-debugging 3-attempt threshold соблюдён** — в commit `3271ce3` body явно зафиксировано: «Hard stop for discussion before any further targeted fix» на 4-м классе. 4-й класс обнаружен → остановка → architectural discussion с user → выбран D+E plan → merge iter-9 → iter-10 как separate scope.
+- **Admin merge через override** — alembic-postgres-upgrade был red ДО iter-9 too, iter-9 не ухудшил, а продвинул CI на 50+ миграций. Merge даёт pin-tests защитить main + 3 classes closed.
+
+### Issues Fixed
+
+- **Class 1 (enum double-create) extended to 4 more migrations.** iter-8 PR #555 закрыл 7 миграций, iter-9 — оставшиеся 4 с `.create(checkfirst=True)` паттерном. Pin-test структурно предотвращает регрессию.
+- **Class 2 (cross-branch table dep)** for `20250501_reliability_outbox_webhook_delivery` → `20250322_add_webhook_subscriptions`. Один targeted fix.
+- **Class 3 (op.add_column without create)** for `20250601_tenant_quotas_and_counters` (tenantkind). Repo-wide grep подтвердил уникальность паттерна в этом файле. Pin-test предотвращает регрессию.
+- **Прогресс CI**: alembic упирался в 16-ю миграцию (`20250420`) до iter-9, теперь — в ~70-ю (`20260313`). Это ~50 миграций реального forward motion.
+
+### Known Problems / Risks
+
+- **Class 4 (cross-branch column dep) open**: `20260313_next42_rbac_abac_audit` падает на `UndefinedColumnError: column "tenant_id" named in key does not exist`. Не закрыт намеренно — за порогом 3-attempts.
+- **Скорее всего class-4 не единственный**: граф alembic-migrations имеет 11+ ветвей (см. `20260416_next69_merge_heads.py` revises list), сливающихся только в апреле 2026. Каждая ветвь — potential source of implicit cross-branch deps.
+- **`container-image-scan` остаётся red** под exception в `.github/security-exceptions.yml` (CVE-2025-62727 starlette DoS, expires 2026-08-31). Не блокер релиза, RC-005/RB-004 уже DONE.
+- **`perf-smoke` падает транзитивно** от alembic — будет восстановлен только когда alembic green.
+- **Pin-test gap**: class 2 + class 4 (cross-branch deps) НЕ покрыты pin-test. Любая будущая миграция с этим паттерном проскочит RED step.
+- **Local pytest env drift** (Py3.13+Windows): conftest hang. CI на 3.12.12 — source of truth. Pin-test self-contained — обходит через direct python.
+
+### Validation
+
+- `python tests/test_migrations_enum_create_type_safety.py` → `OK — no enum migration safety violations found` (after each commit)
+- `py -3 -m py_compile` на всех touched migration files + pin-test → exit 0
+- CI runs: `26229962584` (pre-iter-9, ~16 migrations) → `26252746335` (post-iter-9, ~70 migrations). Forward motion measurable.
+- PR #557 merged at `6e2a4bb` via admin override.
+
+### Next Steps (iter-10 scope)
+
+**Iter-10 Pin-test #3 — Alembic DAG cross-branch dependency analyzer.**
+
+1. **Build Alembic graph walker** в `tests/test_migrations_enum_create_type_safety.py` (либо новый файл `tests/test_migrations_cross_branch_deps.py`):
+   - Парсить `revision`, `down_revision` (single str / tuple), `depends_on` из всех миграций
+   - Построить DAG из revision → set of predecessors (transitive closure)
+   - Для каждой миграции, найти всё, что она ALTER'ит / references (table names в `op.add_column`, `op.create_foreign_key`, `op.create_index`, `op.batch_alter_table`, `op.alter_column`, `op.execute`-with-table-or-column-ref)
+   - Найти, в какой миграции это создано (`op.create_table(...)` или `<enum>.create(...)`)
+   - Проверить: creator должен быть в predecessor set текущей миграции, ИЛИ перечислен в `depends_on`
+2. **Run pin-test → expect violations.** Один уже известный: `20260313_next42_rbac_abac_audit` на `tenant_id`. Скорее всего ещё 5-15.
+3. **Fix each violation** через `depends_on` (как `20250501` в iter-9).
+4. **Optional polish:** добавить `alembic check` integration в `.github/workflows/ci.yml` как pre-merge gate, если хотим CI-уровневый regression guard.
+5. **После iter-10 green main:** re-trigger `restore-drill.yml`, `perf-baseline.yml`, `e2e-smoke.yml` против main для RB-001/002/005.
+
+Estimated iter-10 size: ~150-300 LOC pin-test + 5-15 migration fixes + 1 PR. Probably 1-2 hours focused work.
+
+**Branch suggestion:** `fix/iter-10-alembic-dag-analyzer` от main свежий.
+
+**Стартовая команда для следующей сессии:**
+```
+git checkout main && git pull && git checkout -b fix/iter-10-alembic-dag-analyzer
+# Read this handoff section
+# Read tests/test_migrations_enum_create_type_safety.py (current state for extension)
+# Read backend/app/migrations/versions/20260416_next69_merge_heads.py (heads inventory)
+# Start TDD: write failing pin-test for cross-branch deps → fail on tenant_id → fix → green
+```
+
+---
+
 ## Last Agent Handoff (2026-05-21, Session 61 — Phase 9.4 closure: Vary header uniformity across 25 ETag list endpoints, vNext-PERF-03)
 
 - **Дата:** 2026-05-21 (новая сессия на ветке `perf/etag-vary-header-audit`, поверх закоммиченного `2634b60` "docs(cache): backfill S59 CHANGELOG + handoff"). Code+docs одна сессия, один follow-up commit для PR.
