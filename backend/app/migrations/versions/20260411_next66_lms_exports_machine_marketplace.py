@@ -11,7 +11,12 @@ from alembic import op
 revision = "20260411_next66"
 down_revision = "20260410_next65"
 branch_labels = None
-depends_on = None
+# Cross-branch dependency: this migration alters training_attempts /
+# training_enrollments / training_modules, which are created on a parallel
+# branch in 20260317_next46_training_briefings_offline. Without this
+# declaration, alembic upgrade head can pick an ordering where the ALTER
+# precedes the CREATE and fails with UndefinedTableError.
+depends_on = "20260317_next46"
 
 
 def upgrade() -> None:
