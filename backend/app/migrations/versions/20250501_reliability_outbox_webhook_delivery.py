@@ -16,7 +16,13 @@ from alembic import op
 revision: str = "20250501_reliability_outbox_webhook_delivery"
 down_revision: Union[str, None] = "20250430_client_portal_packages_mvp"
 branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+# Cross-branch dependency: upgrade() runs `op.batch_alter_table("webhook_subscription")`
+# which requires the table created by 20250322_add_webhook_subscriptions. That migration
+# lives on a separate Alembic branch that only merges with this branch at
+# 20260416_next69_merge_heads (≈11 months later). Without an explicit depends_on,
+# Alembic's topological ordering can run this migration before 20250322, producing
+# `UndefinedTableError: relation "webhook_subscription" does not exist` on Postgres.
+depends_on: Union[str, Sequence[str], None] = "20250322_add_webhook_subscriptions"
 
 
 def upgrade() -> None:
