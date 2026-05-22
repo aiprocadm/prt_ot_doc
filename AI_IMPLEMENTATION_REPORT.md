@@ -68,27 +68,66 @@ Total: 1 file, +10 / -1 lines. Minimum viable fix.
 
 ### Next Steps
 
-**iter-12 scope (TBD until CI feedback от PR #561):**
+**iter-12 scope (confirmed by CI run [26272795332](https://github.com/aiprocadm/prt_ot_doc/actions/runs/26272795332) on PR #561):**
 
-1. **Wait for CI result on PR #561.** Watch `alembic-postgres-upgrade` job specifically.
+PR #561 iter-11 fix **confirmed working** — alembic upgrade успешно прошло `20260318_next47` (timestamp 06:45:41.6823) и продвинулось ещё на 7 migrations. Новое падение — на `20260328_next55_templates_lifecycle` (timestamp 06:45:41.8135) с ошибкой:
+
+```
+asyncpg.exceptions.DependentObjectsStillExistError:
+  cannot drop type templateversionstatus because other objects depend on it
+DETAIL:  column status of table templateversion depends on type templateversionstatus
+HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+```
+
+**Root cause:** `20260328_next55_templates_lifecycle.py:30-31` делает drop-and-recreate:
+```python
+template_version_status.drop(op.get_bind(), checkfirst=True)
+template_version_status.create(op.get_bind(), checkfirst=True)
+```
+Намерение очевидно — обновить enum с 3 values (`DRAFT, ACTIVE, ARCHIVED`) на 7 values (`+ UPLOADED, LINTED, READY, DEPRECATED`). Но к этому моменту `templateversion.status` column уже использует тип → DROP не может пройти.
+
+**Iter-12 предлагаемый fix:**
+
+Заменить drop-and-recreate (lines 30-31) на `ALTER TYPE templateversionstatus ADD VALUE IF NOT EXISTS '<value>'` для каждого нового значения (UPLOADED, LINTED, READY, DEPRECATED):
+
+```python
+op.execute("ALTER TYPE templateversionstatus ADD VALUE IF NOT EXISTS 'UPLOADED'")
+op.execute("ALTER TYPE templateversionstatus ADD VALUE IF NOT EXISTS 'LINTED'")
+op.execute("ALTER TYPE templateversionstatus ADD VALUE IF NOT EXISTS 'READY'")
+op.execute("ALTER TYPE templateversionstatus ADD VALUE IF NOT EXISTS 'DEPRECATED'")
+```
+
+**Внимание:** `ALTER TYPE ADD VALUE` в Postgres ≥12 нельзя выполнять внутри transaction block, если новое значение используется в той же транзакции. Поскольку alembic по умолчанию использует transactional DDL (`Will assume transactional DDL` в логе), нужно либо:
+- Disable transactional DDL для этой migration (`is_transactional_ddl = False`),
+- Использовать autocommit block (`with op.get_context().autocommit_block():`),
+- Раздробить на отдельные revisions (одна добавляет values, следующая использует их).
+
+Альтернативный подход: создать temporary type, ALTER COLUMN TYPE на новый, DROP старый — multi-step но transaction-safe.
+
+**Iter-12 starter:**
+```
+git checkout main && git pull
+# Wait for PR #561 merge first
+git checkout -b fix/iter-12-templateversionstatus-alter-add-value
+# Edit 20260328_next55_templates_lifecycle.py:30-31
+# Test locally with alembic if Docker postgres available
+# Or push and watch CI
+```
+
+**После iter-12 (или серии iter-12+iter-N) когда alembic-postgres-upgrade зелёный:**
+
+1. **Re-trigger RB workflows для validation:**
    ```
-   gh pr checks 561
-   gh run list --workflow=ci.yml --branch=fix/iter-11-gin-jsonb-op-class --limit=3
+   gh workflow run restore-drill.yml --ref=main
+   gh workflow run perf-baseline.yml --ref=main
+   gh workflow run e2e-smoke.yml --ref=main
    ```
-2. **If alembic-postgres-upgrade GREEN → merge PR #561.** Используй `gh pr merge 561 --admin --merge` если other-checks fail under documented exceptions (`container-image-scan` CVE-2025-62727).
-3. **If RED at new migration N>80:**
-   - Identify exact migration + error class.
-   - Categorize: PG type compat? Missing FK target? Index type mismatch? Different bug class than seen so far?
-   - Apply minimal fix, document в iter-12 handoff.
-   - Repeat iterative unblock pattern.
-4. **If alembic-postgres-upgrade fully GREEN after merge:**
-   - **Re-trigger RB workflows:**
-     ```
-     gh workflow run restore-drill.yml --ref=main
-     gh workflow run perf-baseline.yml --ref=main
-     gh workflow run e2e-smoke.yml --ref=main
-     ```
-   - Validate caждый — закрыть RB-001/RB-002/RB-005 в `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` если evidence supports.
+2. **Закрыть RB-001/002/005 в `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`** если evidence supports.
+
+**Optional polish (не блокер):**
+
+- AST pin-test `tests/test_migrations_enum_drop_recreate.py` — детектирует `enum.drop(...)` followed by `enum.create(...)` pattern, suggests ALTER TYPE ADD VALUE вместо. ~80 LOC.
+- Original `templateversionstatus` creation site (history check): надо найти что создаёт enum изначально с 3 values. Возможно migration `20260225_next19` или earlier. Если original migration уже использует все 7 values напрямую, тогда drop-and-recreate в next55 — мёртвый код и можно просто удалить блок.
 
 **Optional polish (не блокер):**
 
