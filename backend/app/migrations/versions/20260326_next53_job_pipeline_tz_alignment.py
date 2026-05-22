@@ -28,7 +28,17 @@ def upgrade() -> None:
     op.execute("UPDATE document_job_steps SET attempt = COALESCE(attempts, 0) WHERE attempt = 0")
 
     op.create_index("ix_document_job_steps_job_seq", "document_job_steps", ["job_id", "seq"])
-    op.create_index("ix_document_job_steps_job_status", "document_job_steps", ["job_id", "status"])
+    # iter-15c: `ix_document_job_steps_job_status` is also created by
+    # 20260314_next40_pipeline_locks_and_indexes:36 (sibling branch in the
+    # DAG). At alembic upgrade-head time the next40 branch lands first and
+    # the unconditional op.create_index here fails with DuplicateTableError.
+    # Use CREATE INDEX IF NOT EXISTS via raw SQL so this revision is
+    # idempotent regardless of which branch wins the race. Postgres ≥9.5
+    # supports IF NOT EXISTS on CREATE INDEX; SQLite 3.8+ also supports it.
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_document_job_steps_job_status "
+        "ON document_job_steps (job_id, status)"
+    )
 
     op.add_column("pipeline_profiles", sa.Column("concurrency_limit_per_tenant", sa.Integer(), nullable=True))
 
