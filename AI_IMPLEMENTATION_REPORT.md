@@ -1,5 +1,115 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-22, Session 64 — iter-11: files.tags JSONB conversion for GIN op class, PR #561 open)
+
+- **Дата:** 2026-05-22 (продолжение Session 63 после iter-10 merge `88b7dd4` + docs sync `306dca2`). Ветка `fix/iter-11-gin-jsonb-op-class` от свежего main. Single session, 1 commit `529301f`.
+- **Агент:** Claude Opus 4.7 (local Windows, py 3.13 fallback; pytest hangs локально, pin-tests self-contained via direct python invocation).
+- **Задача:** «Продолжай по ТЗ» → iter-10 handoff Next Steps: разблокировать `alembic-postgres-upgrade` на следующем failure point — GIN-on-json в `20260318_next47_files_metadata_archive.py`.
+- **Статус:** 🟡 PARTIAL → PR #561 OPEN, awaiting CI + merge. Iter-9/iter-10 pin-tests локально GREEN (no regression).
+- **Где остановился:** PR #561 pushed at commit `529301f`. Single-line semantic change. Ждёт CI checks → если зелёный, merge → проверить новый failure point (iter-12 scope если есть).
+
+### Studied Documentation
+
+- `AI_IMPLEMENTATION_REPORT.md` Session 63 handoff (commit `acb14c2` + follow-up `b397c92`) — iter-11 scope явно определён: GIN-on-json fix через JSONB conversion. Стартовая команда и branch suggestion заданы.
+- `20260318_next47_files_metadata_archive.py` — actual failing migration, `files.tags` column declared `sa.JSON()` на line 21, GIN index attempt на line 25.
+- `20260317_next46_content_search_archive.py:30` — reference pattern для `postgresql.JSONB(astext_type=sa.Text())` declaration + `server_default=sa.text("'{}'::jsonb")` explicit cast.
+- `20260302_next29`, `20260306_next35`, `20260315_next44`, `20260317_next46` — все остальные `USING GIN (...)` migration sites — каждая проверена на column type, оказалось — все над `postgresql.TSVECTOR()` (has default GIN op class) или `postgresql.JSONB()` (also has). Только `next47` сломан.
+- PR #559 CI run [26257876272](https://github.com/aiprocadm/prt_ot_doc/actions/runs/26257876272) — точный failure log: `data type json has no default operator class for access method "gin"` at migration ~80.
+- Postgres docs: GIN built-in opclasses — https://www.postgresql.org/docs/16/gin-builtin-opclasses.html. `jsonb_ops` is default for JSONB, none for JSON.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 0 release-blocker chase (P0), prerequisite для re-trigger RB-001/002/005. Continuation iter-8→9→10→11 series.
+- **Приоритет:** P0 — без зелёного alembic backend не бутится в CI, release-blocker workflows blocked.
+- **Почему выбрана:** iter-10 handoff явно определил iter-11 scope: "Изменить `files.tags` column type с `sa.JSON()` на `postgresql.JSONB()` в `20260318_next47_files_metadata_archive.py:21`". Прямая instruction execution, не open-ended exploration.
+
+### Implemented Changes
+
+**Commit `529301f` (iter-11 GIN-JSONB fix):**
+
+- `20260318_next47_files_metadata_archive.py`:
+  - Added `from sqlalchemy.dialects import postgresql` import.
+  - Line 21: `sa.Column("tags", sa.JSON(), nullable=False, server_default=sa.text("'{}'"))` → `postgresql.JSONB(astext_type=sa.Text())` with `server_default=sa.text("'{}'::jsonb")` (explicit cast, matching pattern в `20260317_next46:30`).
+  - GIN index statement on line 25 (now line 33) unchanged — теперь работает поверх JSONB column.
+
+### Changed / New Files
+
+- `backend/app/migrations/versions/20260318_next47_files_metadata_archive.py` (+10 / -1 lines)
+
+Total: 1 file, +10 / -1 lines. Minimum viable fix.
+
+### Decisions
+
+- **Scope discipline — отклонение от handoff prediction.** Iter-10 handoff suggested four migration sites might need similar fix (`next44:43`, `next46:43-44`, `next47:25`). Verification против actual code revealed handoff was based on grep over `USING GIN` signatures, без column-type check. Реальная проверка: только `next47:25` сломан, остальные — над TSVECTOR/JSONB (native GIN-compatible types). Минимальный fix preferred — speculative `sa.JSON()` → `postgresql.JSONB()` sweep — scope creep с risk surface.
+- **Explicit `'{}'::jsonb` server_default cast.** Matching pattern in `next46:30`. Без cast Postgres неявно coerces, но explicit better — uniformity + Alembic autogenerate friendly.
+- **`astext_type=sa.Text()` parameter.** Same pattern as `next46:30`. Defines что `column.astext` SQLAlchemy expression returns (Text vs String). Not load-bearing для index, но consistency.
+- **Single commit, no pin-test.** Iter-10 handoff explicitly classed GIN-on-non-JSONB pin-test as "Optional polish (не блокер)". One-line semantic fix не требует AST analyzer. Если новый failure case в iter-12 — пересмотреть scope.
+- **Branch from fresh main.** Iter-10 merge (`88b7dd4`) + docs sync (`306dca2`) уже в main; checkout main → pull → checkout -b. Standard pattern.
+- **Селективный `git add`.** `.claude/settings.local.json` модифицирован session-side, НЕ commit'нут (per `[[prodolzhay-po-tz-workflow]]` правило).
+
+### Issues Fixed
+
+- **CI alembic-postgres-upgrade GIN-on-json failure** — fixed structurally. `files.tags` теперь JSONB → `CREATE INDEX ix_files_tags_gin ... USING GIN (tags)` valid (default `jsonb_ops` op class).
+
+### Known Problems / Risks
+
+- **PR #561 не merged yet** — awaiting CI. Если `alembic-postgres-upgrade` green до конца → backend boots → RB workflow re-trigger возможен. Если RED at новой миграции N>80 → это iter-12 scope (документировать failure там же).
+- **Iter-10 cross-branch deps pin-test НЕ ловит GIN-on-json класс.** Это другая природа bug (PG type compatibility, не migration DAG structure). Если хочется prevent regression — нужен отдельный AST-based pin-test: «для каждого `op.execute("CREATE INDEX ... USING GIN(col)")` или `op.create_index(..., postgresql_using='gin')` — column в той же или transitive predecessor migration должна быть JSONB / TSVECTOR / ARRAY». Estimated ~100-150 LOC. Deferred per handoff Optional polish.
+- **Repo-wide `sa.JSON()` usage**: grep показал 30+ файлов с `sa.JSON()` columns (см. e.g. `20250320_risk_assessment_action_plan.py`, `20250312_add_audit_log_metadata.py`, etc.). Большинство — не indexed columns, так что PG это съест. Но performance suboptimal — `jsonb` faster lookup, smaller storage. Не блокер MVP, потенциальный future tech-debt sweep.
+- **Local pytest hangs** (Windows+Py3.13, conftest race). Pin-tests self-contained — обходят через `python tests/...`. CI на 3.12.12 — source of truth.
+- **`container-image-scan` остаётся red** под exception (CVE-2025-62727 starlette DoS, expires 2026-08-31). Не блокер релиза.
+
+### Validation
+
+- `py -3.13 -m py_compile backend/app/migrations/versions/20260318_next47_files_metadata_archive.py` → exit 0
+- `py -3.13 tests/test_migrations_cross_branch_deps.py` → `Parsed 75 migrations. OK — no cross-branch / missing dependency violations found.` (iter-10 pin green)
+- `py -3.13 tests/test_migrations_enum_create_type_safety.py` → `OK — no enum migration safety violations found.` (iter-9 pin green)
+- PR opened: https://github.com/aiprocadm/prt_ot_doc/pull/561
+
+### Next Steps
+
+**iter-12 scope (TBD until CI feedback от PR #561):**
+
+1. **Wait for CI result on PR #561.** Watch `alembic-postgres-upgrade` job specifically.
+   ```
+   gh pr checks 561
+   gh run list --workflow=ci.yml --branch=fix/iter-11-gin-jsonb-op-class --limit=3
+   ```
+2. **If alembic-postgres-upgrade GREEN → merge PR #561.** Используй `gh pr merge 561 --admin --merge` если other-checks fail under documented exceptions (`container-image-scan` CVE-2025-62727).
+3. **If RED at new migration N>80:**
+   - Identify exact migration + error class.
+   - Categorize: PG type compat? Missing FK target? Index type mismatch? Different bug class than seen so far?
+   - Apply minimal fix, document в iter-12 handoff.
+   - Repeat iterative unblock pattern.
+4. **If alembic-postgres-upgrade fully GREEN after merge:**
+   - **Re-trigger RB workflows:**
+     ```
+     gh workflow run restore-drill.yml --ref=main
+     gh workflow run perf-baseline.yml --ref=main
+     gh workflow run e2e-smoke.yml --ref=main
+     ```
+   - Validate caждый — закрыть RB-001/RB-002/RB-005 в `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` если evidence supports.
+
+**Optional polish (не блокер):**
+
+- AST-based pin-test `tests/test_migrations_gin_index_op_class.py` — enforces "GIN index column must be JSONB/TSVECTOR/ARRAY in same or predecessor migration". Prevents future regression того же класса. ~100-150 LOC.
+- Repo-wide `sa.JSON()` → `postgresql.JSONB()` migration tech-debt sweep (~30+ files). Performance win, не блокер.
+- Extend iter-10 cross-branch deps analyzer для `op.execute("CREATE INDEX ...")` parsing (regex-based, conservative). Currently `op.execute` outside analyzer scope per module docstring.
+
+**Branch suggestion для iter-12:** `fix/iter-12-<topic>` от main свежий после iter-11 merge. Topic зависит от CI feedback.
+
+**Стартовая команда для следующей сессии:**
+```
+git checkout main && git pull
+gh pr checks 561
+gh run list --workflow=ci.yml --limit=5
+# Read this handoff section
+# If alembic-postgres-upgrade green → re-trigger RB workflows
+# If red → identify next failure class, design iter-12 fix
+```
+
+---
+
 ## Last Agent Handoff (2026-05-22, Session 63 — iter-10: Alembic DAG cross-branch dependency analyzer + 8 violation fixes, PR #559 open)
 
 - **Дата:** 2026-05-22 (продолжение сессии 62 после iter-9 merge). Ветка `fix/iter-10-alembic-dag-analyzer` от свежего `cf8abdd` main. Single session, 3 logical commits.
