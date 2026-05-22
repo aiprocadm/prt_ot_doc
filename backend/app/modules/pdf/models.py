@@ -20,25 +20,6 @@ class PdfRunStatus(str, enum.Enum):
     CANCELED = "canceled"
 
 
-class FileVersion(TenantBaseModel):
-    __tablename__ = "file_versions"
-
-    object_key: Mapped[str] = mapped_column(String(512), nullable=False)
-    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
-    size: Mapped[int] = mapped_column(Integer, nullable=False)
-    mime: Mapped[str] = mapped_column(String(128), nullable=False)
-    file_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("file.id", ondelete="SET NULL"), nullable=True
-    )
-    app_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-
-    __table_args__ = (
-        Index("ix_file_versions_tenant_sha256", "tenant_id", "sha256"),
-        Index("ix_file_versions_tenant_updated", "tenant_id", "updated_at"),
-        {"extend_existing": True},
-    )
-
-
 class PdfConversionRun(TenantBaseModel):
     __tablename__ = "pdf_conversion_runs"
 
