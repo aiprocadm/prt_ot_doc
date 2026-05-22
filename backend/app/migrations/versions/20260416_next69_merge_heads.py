@@ -34,18 +34,24 @@ from collections.abc import Sequence
 
 # revision identifiers, used by Alembic.
 revision: str = "20260416_next69_merge_heads"
+# iter-15f/g: the following revisions are intentionally OMITTED from the
+# merge tuple. They were previously listed but became unreachable as heads
+# after iter-15g promoted iter-10's depends_on shims to true down_revision
+# tuple parents. Including them now would re-trigger
+# ``KeyError: <rev>`` in head_maintainer because each is already consumed
+# by a downstream merge revision.
+# - 20250322_add_webhook_subscriptions  -> now parent of 20250501_reliability...
+# - 20260317_next46                     -> now parent of 20260411_next66
+# - 20260411_next66                     -> now parent of 20260318_next67
+# Each is still applied via its new down_revision edge.
 down_revision: str | Sequence[str] | None = (
-    # iter-15f: "20250322_add_webhook_subscriptions" intentionally omitted;
-    # see module docstring. It still applies via 20250501.depends_on.
     "20250322_risk_cards_action_plans",
     "20260222_next21",
     "20260306_tenant_core_registry",
     "20260314_next40",
-    "20260317_next46",
     "20260319_next_branding_profiles",
     "20260321_next50_tenant_limits_billing_events",
     "20260407_hotfix_templateversionstatus_active",
-    "20260411_next66",
     "20260416_next68_template_scope_normalization",
 )
 branch_labels: str | Sequence[str] | None = None
