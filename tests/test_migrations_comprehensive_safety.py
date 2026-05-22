@@ -966,6 +966,30 @@ def _a3_audit_one(
 
 
 # ---------------------------------------------------------------------------
+# A4 — cross-branch dependencies (delegate to existing test)
+# ---------------------------------------------------------------------------
+
+
+def _a4_audit() -> list[str]:
+    """Delegate to the narrow-guard analyzer in
+    ``test_migrations_cross_branch_deps``.
+
+    That implementation has ~1k lines of tuned FP-filtering for the local
+    helper-inlining, batch-alter-table, for-loop create-table, and rename
+    propagation patterns in this codebase. Re-porting it would invite drift.
+    """
+    migrations = _xbranch_collect_all()
+    raw = _xbranch_audit(migrations)
+    out: list[str] = []
+    for v in raw:
+        target = v.table if v.column is None else f"{v.table}.{v.column}"
+        out.append(
+            f"{v.file}  rev={v.migration}  ref={target} — {v.why}"
+        )
+    return out
+
+
+# ---------------------------------------------------------------------------
 # A5 — unsafe use of newly-added enum value (iter-14)
 # ---------------------------------------------------------------------------
 #
@@ -1247,30 +1271,6 @@ def _a5_audit_one(
 
 
 # ---------------------------------------------------------------------------
-# A4 — cross-branch dependencies (delegate to existing test)
-# ---------------------------------------------------------------------------
-
-
-def _a4_audit() -> list[str]:
-    """Delegate to the narrow-guard analyzer in
-    ``test_migrations_cross_branch_deps``.
-
-    That implementation has ~1k lines of tuned FP-filtering for the local
-    helper-inlining, batch-alter-table, for-loop create-table, and rename
-    propagation patterns in this codebase. Re-porting it would invite drift.
-    """
-    migrations = _xbranch_collect_all()
-    raw = _xbranch_audit(migrations)
-    out: list[str] = []
-    for v in raw:
-        target = v.table if v.column is None else f"{v.table}.{v.column}"
-        out.append(
-            f"{v.file}  rev={v.migration}  ref={target} — {v.why}"
-        )
-    return out
-
-
-# ---------------------------------------------------------------------------
 # Top-level orchestration
 # ---------------------------------------------------------------------------
 
@@ -1433,6 +1433,27 @@ def downgrade() -> None:
 '''
 
 
+SYNTHETIC_A2_UNKNOWN = '''
+import sqlalchemy as sa
+from alembic import op
+
+revision = "synthetic_a2_unknown"
+down_revision = None
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    # Column not declared in any predecessor; type unknown -> sweep must skip,
+    # not flag as JSON.
+    op.create_index("ix_t_unknown_gin", "unknown_table", ["unknown_col"], postgresql_using="gin")
+
+
+def downgrade() -> None:
+    pass
+'''
+
+
 SYNTHETIC_A3_PREDECESSOR = '''
 import sqlalchemy as sa
 from alembic import op
@@ -1511,12 +1532,32 @@ def downgrade() -> None:
 '''
 
 
+SYNTHETIC_A5_ADDER = '''
+import sqlalchemy as sa
+from alembic import op
+
+revision = "synthetic_a5_adder"
+down_revision = "synthetic_a5_pred"
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    # Adds value 'NEWVAL' but does not use it — that's safe.
+    op.execute("ALTER TYPE some_enum ADD VALUE IF NOT EXISTS 'NEWVAL'")
+
+
+def downgrade() -> None:
+    pass
+'''
+
+
 SYNTHETIC_A5 = '''
 import sqlalchemy as sa
 from alembic import op
 
 revision = "synthetic_a5"
-down_revision = "synthetic_a5_pred"
+down_revision = "synthetic_a5_adder"
 branch_labels = None
 depends_on = None
 
@@ -1558,6 +1599,35 @@ def test_a2_visitor_fires_on_synthetic(tmp_path) -> None:
     assert violations, "A2 visitor should fire on SYNTHETIC_A2 — none returned"
     assert any("GIN" in v or "gin" in v for v in violations), (
         f"A2 message should mention 'GIN'; got: {violations}"
+    )
+
+
+def test_a2_visitor_skips_unknown_type_column(tmp_path) -> None:
+    """A2 visitor must SKIP columns whose type cannot be resolved (``"?"``),
+    rather than reporting them as JSON.
+
+    Regression test for Change 3 (iter-14): ``_a2_audit_one`` performs an
+    ``if actual == "?": continue`` skip after ``_lookup_column_type``. If a
+    future engineer reverts that skip — re-introducing the false-positive
+    class — ``SYNTHETIC_A2`` would still pass (its ``tags`` column resolves
+    to ``JSON``, never ``"?"``), so it cannot guard this code path.
+
+    This test builds an empty cross-migration column-type index, so the
+    lookup for ``(unknown_table, unknown_col)`` is forced to return
+    ``"?"``. The visitor must then return an empty violation list — no
+    reporting of unknown columns as suspect.
+    """
+    p = tmp_path / "synth_a2_unknown.py"
+    p.write_text(SYNTHETIC_A2_UNKNOWN, encoding="utf-8")
+    rev = "synthetic_a2_unknown"
+    # Deliberately empty per_migration: no migration declares
+    # (unknown_table, unknown_col), so _lookup_column_type returns "?".
+    per_migration: dict[str, dict[tuple[str, str], str]] = {rev: {}}
+    scope = {rev}
+    violations = _a2_audit_one(p, rev, scope, per_migration)
+    assert violations == [], (
+        "A2 visitor must skip unknown-type columns to avoid false "
+        f"positives; got: {violations}"
     )
 
 
@@ -1633,6 +1703,81 @@ def test_a5_visitor_fires_on_synthetic_with_predecessor(tmp_path) -> None:
     assert any("UnsafeNewEnumValueUsageError" in v or "outer transaction" in v
                for v in violations), (
         f"A5 message should reference the outer-tx mechanism; got: {violations}"
+    )
+
+
+def test_a5_visitor_fires_cross_revision(tmp_path) -> None:
+    """A5 visitor must detect the cross-revision regression class — the
+    iter-14 production case where ``ALTER TYPE <e> ADD VALUE 'X'`` lives in
+    one revision and ``UPDATE ... SET col = 'X'`` lives in a *different,
+    descendant* revision sharing the same env.py outer transaction.
+
+    Why this matters: ``SYNTHETIC_A5`` happens to add NEWVAL AND use NEWVAL
+    in the same revision, so a stubbed-out visitor that only checked
+    ``r == rev`` (no predecessor-closure walk) would still fire on it. This
+    test exercises the closure walk specifically by introducing
+    ``synthetic_a5_adder`` as a SEPARATE revision in the predecessor chain
+    (predecessor → adder → user) and asserting the violation message names
+    that adder revision in its ``[adders...]`` list. If a future refactor
+    silently strips the predecessor-closure walk, this assertion fails.
+
+    Wiring choice: builds per_migration / added_values_by_rev / scope by
+    hand across all three synthetic files (same shape as the existing
+    A3 multi-file harness at ``test_a3_visitor_fires_on_synthetic_with_predecessor``).
+    The MIGRATIONS_DIR monkeypatch alternative documented in the spec is
+    not needed — ``_a5_audit_one`` accepts its indexes via kwargs, so
+    direct invocation is cleaner.
+    """
+    pred_path = tmp_path / "synth_a5_pred.py"
+    pred_path.write_text(SYNTHETIC_A5_PREDECESSOR, encoding="utf-8")
+    adder_path = tmp_path / "synth_a5_adder.py"
+    adder_path.write_text(SYNTHETIC_A5_ADDER, encoding="utf-8")
+    child_path = tmp_path / "synth_a5.py"
+    child_path.write_text(SYNTHETIC_A5, encoding="utf-8")
+
+    pred_rev = "synthetic_a5_pred"
+    adder_rev = "synthetic_a5_adder"
+    child_rev = "synthetic_a5"
+
+    per_migration = {
+        pred_rev: _columns_created_by_migration(_parse(SYNTHETIC_A5_PREDECESSOR)),
+        adder_rev: _columns_created_by_migration(_parse(SYNTHETIC_A5_ADDER)),
+        child_rev: _columns_created_by_migration(_parse(SYNTHETIC_A5)),
+    }
+    added_values_by_rev = {
+        pred_rev: _a5_collect_added_values(_parse(SYNTHETIC_A5_PREDECESSOR)),
+        adder_rev: _a5_collect_added_values(_parse(SYNTHETIC_A5_ADDER)),
+        child_rev: _a5_collect_added_values(_parse(SYNTHETIC_A5)),
+    }
+    # Sanity: adder revision must actually have added the value (else the
+    # cross-revision aspect of this test would be vacuous).
+    assert ("some_enum", "NEWVAL") in added_values_by_rev[adder_rev], (
+        "SYNTHETIC_A5_ADDER must contribute ('some_enum', 'NEWVAL'); "
+        f"got: {added_values_by_rev[adder_rev]}"
+    )
+
+    # Predecessor closure of child rev: {pred, adder}; scope = pred-closure ∪ {child}.
+    scope = {pred_rev, adder_rev, child_rev}
+    violations = _a5_audit_one(
+        child_path, child_rev, scope, per_migration, added_values_by_rev
+    )
+    assert violations, (
+        "A5 visitor should fire when an ALTER TYPE adder is in the "
+        "predecessor closure and the user UPDATE references the added "
+        "value cross-revision"
+    )
+    # Critical assertion: the adder revision name must appear in the message.
+    # _a5_audit_one builds in_scope_added by walking the full ``scope`` and
+    # listing every contributing revision in the violation's "[adders...]"
+    # segment. If a future refactor strips the closure walk and only checks
+    # the current revision, ``synthetic_a5_adder`` would not appear — only
+    # ``synthetic_a5`` would (because SYNTHETIC_A5 still has its own
+    # ALTER TYPE so same-rev detection still fires) — and this assertion
+    # would fail.
+    assert any("synthetic_a5_adder" in v for v in violations), (
+        "A5 violation message must name 'synthetic_a5_adder' as a "
+        "contributing adder revision (proves predecessor-closure walk "
+        f"fired); got: {violations}"
     )
 
 
