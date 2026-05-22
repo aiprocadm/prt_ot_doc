@@ -1,5 +1,265 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-22, Session 64 follow-up — iter-12: templateversionstatus ALTER TYPE ADD VALUE, PR #563 open)
+
+- **Дата:** 2026-05-22 (продолжение Session 64 после iter-11 closure). Ветка `fix/iter-12-templateversionstatus-alter-add-value` от свежего main. Single commit `bc3a54f`.
+- **Агент:** Claude Opus 4.7 (local Windows, py 3.13 fallback).
+- **Задача:** «Продолжай по ТЗ» continuation после iter-11 — следующий failure point на CI run [26272795332](https://github.com/aiprocadm/prt_ot_doc/actions/runs/26272795332): `20260328_next55_templates_lifecycle` падает с `DependentObjectsStillExistError: cannot drop type templateversionstatus`.
+- **Статус:** 🟡 PARTIAL → PR #563 OPEN, awaiting CI + merge. Pin-tests iter-9/10 локально GREEN (no regression).
+- **Где остановился:** PR #563 pushed at commit `bc3a54f`. 16-line semantic change в `20260328_next55:30-31`. Ждёт CI checks → если зелёный, merge → проверить новый failure point (iter-13 scope если есть). Sequencing: PR #561 (iter-11) → этот PR (iter-12) → re-run alembic.
+
+### Studied Documentation
+
+- `AI_IMPLEMENTATION_REPORT.md` Session 64 iter-11 entry (этот же файл, ниже) — concrete iter-12 scope с ALTER TYPE ADD VALUE proposal и transactional-DDL caveat.
+- `20260328_next55_templates_lifecycle.py:30-31` — actual failing line, drop-and-recreate enum pattern.
+- `6b6dee7c951f_initial_schema.py:519` — `sa.Column('status', sa.Enum('DRAFT', 'ACTIVE', 'ARCHIVED', name='templateversionstatus'), nullable=False)`. Это origin point — type создаётся с 3 значениями и сразу же используется колонкой.
+- `20260407_hotfix_templateversionstatus_active.py:18` — **precedent в этом repo** для ALTER TYPE ADD VALUE pattern (без autocommit_block, но не использует новое value в той же транзакции). Подтверждает, что подход применим к этому codebase.
+- Postgres docs: `ALTER TYPE ADD VALUE` — https://www.postgresql.org/docs/16/sql-altertype.html. PG12+ catalog visibility ограничение задокументировано.
+- Alembic docs: `autocommit_block` — https://alembic.sqlalchemy.org/en/latest/api/runtime.html#alembic.runtime.migration.MigrationContext.autocommit_block.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 0 release-blocker chase (P0), prerequisite для re-trigger RB-001/002/005.
+- **Приоритет:** P0 — `alembic-postgres-upgrade` всё ещё блокирует backend boot в CI.
+- **Почему выбрана:** CI run на iter-11 PR подтвердил, что iter-11 fix работает (next47 теперь passes), но появился NEW failure на next55. Это конкретный, scoped follow-up — execution, не exploration.
+
+### Implemented Changes
+
+**Commit `bc3a54f` (iter-12 ALTER TYPE fix):**
+
+- `20260328_next55_templates_lifecycle.py:29-44` (lines after edit):
+  - Removed: `template_version_status.drop(op.get_bind(), checkfirst=True)` + `template_version_status.create(op.get_bind(), checkfirst=True)` (lines 30-31 old).
+  - Added: dialect check `if bind.dialect.name == "postgresql":` + `op.get_context().autocommit_block():` wrapper + loop `ALTER TYPE templateversionstatus ADD VALUE IF NOT EXISTS '<value>'` для 4 новых values (UPLOADED, LINTED, READY, DEPRECATED).
+  - Multi-line explanatory comment describing root cause + PG12+ caveat + SQLite no-op rationale.
+
+### Changed / New Files
+
+- `backend/app/migrations/versions/20260328_next55_templates_lifecycle.py` (+16 / -2 lines)
+
+Total: 1 file, +16 / -2 lines.
+
+### Decisions
+
+- **Following hotfix precedent.** `20260407_hotfix_templateversionstatus_active.py:18` already use `ALTER TYPE templateversionstatus ADD VALUE IF NOT EXISTS 'active'` — confirms pattern works in this codebase. Не нужно reinventing wheel.
+- **`autocommit_block()` wrapper.** PG12+ rejects use of new enum value в same transaction. `next55:47` имеет `op.execute("UPDATE templateversion SET status = 'UPLOADED'")` — без autocommit_block эта строка упала бы с "unsafe use of new value". Hotfix не нуждается в этом потому что он самостоятельный (не использует 'active' дальше).
+- **Dialect gate** (`if bind.dialect.name == "postgresql":`). SQLite не имеет `ALTER TYPE` syntax — raw SQL execute упал бы. Прежний `template_version_status.drop()/create()` через SQLAlchemy enum object были no-op'ами на SQLite, мой fix сохраняет это behavior. backend-tests workflow на SQLite не сломается.
+- **Downgrade unchanged.** PG не поддерживает `ALTER TYPE DROP VALUE` safely (docstring `20260407_hotfix` это явно говорит). Prior downgrade тоже был no-op на этой части. Trade-off: downgrade неполный, но это уже invariant.
+- **Минимальный fix scope.** Не трогаю `template_status` (3 значения, нет drop-recreate). Не трогаю остальную часть `next55`. Только проблемная часть.
+- **Single commit.** Один semantic concern.
+
+### Issues Fixed
+
+- **CI alembic-postgres-upgrade `DependentObjectsStillExistError` на `next55`** — fixed structurally. ALTER TYPE ADD VALUE не требует dropping type, остаётся compatibility с dependent column.
+
+### Known Problems / Risks
+
+- **PR #563 не merged yet** — awaiting CI. **NB:** CI на этой branch alone всё ещё упадёт на `next47` (GIN-on-json), потому что iter-11 fix не в этой ветке. Реальная validation iter-12 — либо merge PR #561 первым, либо запустить alembic-postgres-upgrade на ветке с обоими fixes.
+- **Sequencing matters:** PR #561 (iter-11) должен merge до этой PR, ИЛИ обе должны cherry-pick'нуться в одну ветку для combined CI test. Иначе CI на PR #563 будет показывать те же next47 errors.
+- **PG12+ catalog visibility caveat** — fix tested theoretically (autocommit_block, ALTER TYPE ADD VALUE). Не verified локально (нет PG Docker). CI на main с merged iter-11+iter-12 — source of truth.
+- **`backend-tests` (SQLite) path** — dialect gate должен корректно обработать. SQLite получит no-op для ALTER TYPE block. Existing column type sql Schema трансформируется в TEXT, все 7 string values принимаются. Pre-existing рows с UPDATE 'UPLOADED' тоже работают (TEXT принимает любую строку).
+- **Если CI после merge всё ещё RED** — это будет iter-13 (NEW failure class). Pattern: каждая iteration снимает один barrier, expected.
+- **Local pytest hangs** (Windows+Py3.13). Pin-tests self-contained.
+
+### Validation
+
+- `py -3.13 -m py_compile backend/app/migrations/versions/20260328_next55_templates_lifecycle.py` → exit 0
+- `py -3.13 tests/test_migrations_cross_branch_deps.py` → `Parsed 75 migrations. OK — no cross-branch / missing dependency violations found.` (iter-10 pin green)
+- `py -3.13 tests/test_migrations_enum_create_type_safety.py` → `OK — no enum migration safety violations found.` (iter-9 pin green)
+- PR opened: https://github.com/aiprocadm/prt_ot_doc/pull/563
+
+### Next Steps
+
+**iter-13 scope (TBD until CI feedback от combined PR #561 + #563 merge):**
+
+1. **Merge sequence:**
+   - PR [#561](https://github.com/aiprocadm/prt_ot_doc/pull/561) (iter-11 GIN-JSONB)
+   - PR [#562](https://github.com/aiprocadm/prt_ot_doc/pull/562) (handoff docs Session 64)
+   - PR [#563](https://github.com/aiprocadm/prt_ot_doc/pull/563) (iter-12 ALTER TYPE)
+   - Используй `gh pr merge <N> --admin --merge` если `container-image-scan` блокирует (CVE-2025-62727 starlette known exception).
+
+2. **Wait for next alembic-postgres-upgrade CI run on main.** Watch failure point:
+   - **Если GREEN до конца:** ✨ alembic фиксирован. Re-trigger RB workflows:
+     ```
+     gh workflow run restore-drill.yml --ref=main
+     gh workflow run perf-baseline.yml --ref=main
+     gh workflow run e2e-smoke.yml --ref=main
+     ```
+   - **Если RED at migration M>55:** identify failure class. Если new bug pattern — iter-13 scope.
+
+3. **Возможные предсказуемые iter-13+ scopes** (на основе patterns iter-8...12):
+   - Другие миграции с drop-and-recreate enum extension (grep по `_status.drop(`).
+   - `templatestatus` (3 values) тоже может нуждаться в extension в будущих миграциях.
+   - Cross-branch FK refs (iter-10 covered table+column references, но не FK invariants).
+   - Index-existence checks (iter-10 docstring отмечал as out-of-scope).
+
+**Optional polish (не блокер):**
+
+- AST pin-test `tests/test_migrations_enum_drop_recreate.py` — детектирует pattern `<enum>.drop()` + `<enum>.create()` подряд в одной migration, suggests ALTER TYPE ADD VALUE. ~80-100 LOC.
+- Grep по `\.drop\(op\.get_bind` для других enum extension sites.
+
+**Branch suggestion для iter-13:** TBD из CI feedback. Pattern: `fix/iter-13-<topic>` от свежего main после iter-12 merge.
+
+**Стартовая команда для следующей сессии:**
+```
+git checkout main && git pull
+gh pr list --state open --label '' --limit 10
+gh run list --workflow=ci.yml --limit=5
+# Если все 3 PR merged, watch latest alembic-postgres-upgrade run
+# Если зелёный → re-trigger RB workflows
+# Если красный → identify next failure class, iter-13 scope
+```
+
+---
+
+## Last Agent Handoff (2026-05-22, Session 64 — iter-11: files.tags JSONB conversion for GIN op class, PR #561 open)
+
+- **Дата:** 2026-05-22 (продолжение Session 63 после iter-10 merge `88b7dd4` + docs sync `306dca2`). Ветка `fix/iter-11-gin-jsonb-op-class` от свежего main. Single session, 1 commit `529301f`.
+- **Агент:** Claude Opus 4.7 (local Windows, py 3.13 fallback; pytest hangs локально, pin-tests self-contained via direct python invocation).
+- **Задача:** «Продолжай по ТЗ» → iter-10 handoff Next Steps: разблокировать `alembic-postgres-upgrade` на следующем failure point — GIN-on-json в `20260318_next47_files_metadata_archive.py`.
+- **Статус:** 🟡 PARTIAL → PR #561 OPEN, awaiting CI + merge. Iter-9/iter-10 pin-tests локально GREEN (no regression).
+- **Где остановился:** PR #561 pushed at commit `529301f`. Single-line semantic change. Ждёт CI checks → если зелёный, merge → проверить новый failure point (iter-12 scope если есть).
+
+### Studied Documentation
+
+- `AI_IMPLEMENTATION_REPORT.md` Session 63 handoff (commit `acb14c2` + follow-up `b397c92`) — iter-11 scope явно определён: GIN-on-json fix через JSONB conversion. Стартовая команда и branch suggestion заданы.
+- `20260318_next47_files_metadata_archive.py` — actual failing migration, `files.tags` column declared `sa.JSON()` на line 21, GIN index attempt на line 25.
+- `20260317_next46_content_search_archive.py:30` — reference pattern для `postgresql.JSONB(astext_type=sa.Text())` declaration + `server_default=sa.text("'{}'::jsonb")` explicit cast.
+- `20260302_next29`, `20260306_next35`, `20260315_next44`, `20260317_next46` — все остальные `USING GIN (...)` migration sites — каждая проверена на column type, оказалось — все над `postgresql.TSVECTOR()` (has default GIN op class) или `postgresql.JSONB()` (also has). Только `next47` сломан.
+- PR #559 CI run [26257876272](https://github.com/aiprocadm/prt_ot_doc/actions/runs/26257876272) — точный failure log: `data type json has no default operator class for access method "gin"` at migration ~80.
+- Postgres docs: GIN built-in opclasses — https://www.postgresql.org/docs/16/gin-builtin-opclasses.html. `jsonb_ops` is default for JSONB, none for JSON.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 0 release-blocker chase (P0), prerequisite для re-trigger RB-001/002/005. Continuation iter-8→9→10→11 series.
+- **Приоритет:** P0 — без зелёного alembic backend не бутится в CI, release-blocker workflows blocked.
+- **Почему выбрана:** iter-10 handoff явно определил iter-11 scope: "Изменить `files.tags` column type с `sa.JSON()` на `postgresql.JSONB()` в `20260318_next47_files_metadata_archive.py:21`". Прямая instruction execution, не open-ended exploration.
+
+### Implemented Changes
+
+**Commit `529301f` (iter-11 GIN-JSONB fix):**
+
+- `20260318_next47_files_metadata_archive.py`:
+  - Added `from sqlalchemy.dialects import postgresql` import.
+  - Line 21: `sa.Column("tags", sa.JSON(), nullable=False, server_default=sa.text("'{}'"))` → `postgresql.JSONB(astext_type=sa.Text())` with `server_default=sa.text("'{}'::jsonb")` (explicit cast, matching pattern в `20260317_next46:30`).
+  - GIN index statement on line 25 (now line 33) unchanged — теперь работает поверх JSONB column.
+
+### Changed / New Files
+
+- `backend/app/migrations/versions/20260318_next47_files_metadata_archive.py` (+10 / -1 lines)
+
+Total: 1 file, +10 / -1 lines. Minimum viable fix.
+
+### Decisions
+
+- **Scope discipline — отклонение от handoff prediction.** Iter-10 handoff suggested four migration sites might need similar fix (`next44:43`, `next46:43-44`, `next47:25`). Verification против actual code revealed handoff was based on grep over `USING GIN` signatures, без column-type check. Реальная проверка: только `next47:25` сломан, остальные — над TSVECTOR/JSONB (native GIN-compatible types). Минимальный fix preferred — speculative `sa.JSON()` → `postgresql.JSONB()` sweep — scope creep с risk surface.
+- **Explicit `'{}'::jsonb` server_default cast.** Matching pattern in `next46:30`. Без cast Postgres неявно coerces, но explicit better — uniformity + Alembic autogenerate friendly.
+- **`astext_type=sa.Text()` parameter.** Same pattern as `next46:30`. Defines что `column.astext` SQLAlchemy expression returns (Text vs String). Not load-bearing для index, но consistency.
+- **Single commit, no pin-test.** Iter-10 handoff explicitly classed GIN-on-non-JSONB pin-test as "Optional polish (не блокер)". One-line semantic fix не требует AST analyzer. Если новый failure case в iter-12 — пересмотреть scope.
+- **Branch from fresh main.** Iter-10 merge (`88b7dd4`) + docs sync (`306dca2`) уже в main; checkout main → pull → checkout -b. Standard pattern.
+- **Селективный `git add`.** `.claude/settings.local.json` модифицирован session-side, НЕ commit'нут (per `[[prodolzhay-po-tz-workflow]]` правило).
+
+### Issues Fixed
+
+- **CI alembic-postgres-upgrade GIN-on-json failure** — fixed structurally. `files.tags` теперь JSONB → `CREATE INDEX ix_files_tags_gin ... USING GIN (tags)` valid (default `jsonb_ops` op class).
+
+### Known Problems / Risks
+
+- **PR #561 не merged yet** — awaiting CI. Если `alembic-postgres-upgrade` green до конца → backend boots → RB workflow re-trigger возможен. Если RED at новой миграции N>80 → это iter-12 scope (документировать failure там же).
+- **Iter-10 cross-branch deps pin-test НЕ ловит GIN-on-json класс.** Это другая природа bug (PG type compatibility, не migration DAG structure). Если хочется prevent regression — нужен отдельный AST-based pin-test: «для каждого `op.execute("CREATE INDEX ... USING GIN(col)")` или `op.create_index(..., postgresql_using='gin')` — column в той же или transitive predecessor migration должна быть JSONB / TSVECTOR / ARRAY». Estimated ~100-150 LOC. Deferred per handoff Optional polish.
+- **Repo-wide `sa.JSON()` usage**: grep показал 30+ файлов с `sa.JSON()` columns (см. e.g. `20250320_risk_assessment_action_plan.py`, `20250312_add_audit_log_metadata.py`, etc.). Большинство — не indexed columns, так что PG это съест. Но performance suboptimal — `jsonb` faster lookup, smaller storage. Не блокер MVP, потенциальный future tech-debt sweep.
+- **Local pytest hangs** (Windows+Py3.13, conftest race). Pin-tests self-contained — обходят через `python tests/...`. CI на 3.12.12 — source of truth.
+- **`container-image-scan` остаётся red** под exception (CVE-2025-62727 starlette DoS, expires 2026-08-31). Не блокер релиза.
+
+### Validation
+
+- `py -3.13 -m py_compile backend/app/migrations/versions/20260318_next47_files_metadata_archive.py` → exit 0
+- `py -3.13 tests/test_migrations_cross_branch_deps.py` → `Parsed 75 migrations. OK — no cross-branch / missing dependency violations found.` (iter-10 pin green)
+- `py -3.13 tests/test_migrations_enum_create_type_safety.py` → `OK — no enum migration safety violations found.` (iter-9 pin green)
+- PR opened: https://github.com/aiprocadm/prt_ot_doc/pull/561
+
+### Next Steps
+
+**iter-12 scope (confirmed by CI run [26272795332](https://github.com/aiprocadm/prt_ot_doc/actions/runs/26272795332) on PR #561):**
+
+PR #561 iter-11 fix **confirmed working** — alembic upgrade успешно прошло `20260318_next47` (timestamp 06:45:41.6823) и продвинулось ещё на 7 migrations. Новое падение — на `20260328_next55_templates_lifecycle` (timestamp 06:45:41.8135) с ошибкой:
+
+```
+asyncpg.exceptions.DependentObjectsStillExistError:
+  cannot drop type templateversionstatus because other objects depend on it
+DETAIL:  column status of table templateversion depends on type templateversionstatus
+HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+```
+
+**Root cause:** `20260328_next55_templates_lifecycle.py:30-31` делает drop-and-recreate:
+```python
+template_version_status.drop(op.get_bind(), checkfirst=True)
+template_version_status.create(op.get_bind(), checkfirst=True)
+```
+Намерение очевидно — обновить enum с 3 values (`DRAFT, ACTIVE, ARCHIVED`) на 7 values (`+ UPLOADED, LINTED, READY, DEPRECATED`). Но к этому моменту `templateversion.status` column уже использует тип → DROP не может пройти.
+
+**Iter-12 предлагаемый fix:**
+
+Заменить drop-and-recreate (lines 30-31) на `ALTER TYPE templateversionstatus ADD VALUE IF NOT EXISTS '<value>'` для каждого нового значения (UPLOADED, LINTED, READY, DEPRECATED):
+
+```python
+op.execute("ALTER TYPE templateversionstatus ADD VALUE IF NOT EXISTS 'UPLOADED'")
+op.execute("ALTER TYPE templateversionstatus ADD VALUE IF NOT EXISTS 'LINTED'")
+op.execute("ALTER TYPE templateversionstatus ADD VALUE IF NOT EXISTS 'READY'")
+op.execute("ALTER TYPE templateversionstatus ADD VALUE IF NOT EXISTS 'DEPRECATED'")
+```
+
+**Внимание:** `ALTER TYPE ADD VALUE` в Postgres ≥12 нельзя выполнять внутри transaction block, если новое значение используется в той же транзакции. Поскольку alembic по умолчанию использует transactional DDL (`Will assume transactional DDL` в логе), нужно либо:
+- Disable transactional DDL для этой migration (`is_transactional_ddl = False`),
+- Использовать autocommit block (`with op.get_context().autocommit_block():`),
+- Раздробить на отдельные revisions (одна добавляет values, следующая использует их).
+
+Альтернативный подход: создать temporary type, ALTER COLUMN TYPE на новый, DROP старый — multi-step но transaction-safe.
+
+**Iter-12 starter:**
+```
+git checkout main && git pull
+# Wait for PR #561 merge first
+git checkout -b fix/iter-12-templateversionstatus-alter-add-value
+# Edit 20260328_next55_templates_lifecycle.py:30-31
+# Test locally with alembic if Docker postgres available
+# Or push and watch CI
+```
+
+**После iter-12 (или серии iter-12+iter-N) когда alembic-postgres-upgrade зелёный:**
+
+1. **Re-trigger RB workflows для validation:**
+   ```
+   gh workflow run restore-drill.yml --ref=main
+   gh workflow run perf-baseline.yml --ref=main
+   gh workflow run e2e-smoke.yml --ref=main
+   ```
+2. **Закрыть RB-001/002/005 в `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`** если evidence supports.
+
+**Optional polish (не блокер):**
+
+- AST pin-test `tests/test_migrations_enum_drop_recreate.py` — детектирует `enum.drop(...)` followed by `enum.create(...)` pattern, suggests ALTER TYPE ADD VALUE вместо. ~80 LOC.
+- Original `templateversionstatus` creation site (history check): надо найти что создаёт enum изначально с 3 values. Возможно migration `20260225_next19` или earlier. Если original migration уже использует все 7 values напрямую, тогда drop-and-recreate в next55 — мёртвый код и можно просто удалить блок.
+
+**Optional polish (не блокер):**
+
+- AST-based pin-test `tests/test_migrations_gin_index_op_class.py` — enforces "GIN index column must be JSONB/TSVECTOR/ARRAY in same or predecessor migration". Prevents future regression того же класса. ~100-150 LOC.
+- Repo-wide `sa.JSON()` → `postgresql.JSONB()` migration tech-debt sweep (~30+ files). Performance win, не блокер.
+- Extend iter-10 cross-branch deps analyzer для `op.execute("CREATE INDEX ...")` parsing (regex-based, conservative). Currently `op.execute` outside analyzer scope per module docstring.
+
+**Branch suggestion для iter-12:** `fix/iter-12-<topic>` от main свежий после iter-11 merge. Topic зависит от CI feedback.
+
+**Стартовая команда для следующей сессии:**
+```
+git checkout main && git pull
+gh pr checks 561
+gh run list --workflow=ci.yml --limit=5
+# Read this handoff section
+# If alembic-postgres-upgrade green → re-trigger RB workflows
+# If red → identify next failure class, design iter-12 fix
+```
+
+---
+
 ## Last Agent Handoff (2026-05-22, Session 63 — iter-10: Alembic DAG cross-branch dependency analyzer + 8 violation fixes, PR #559 open)
 
 - **Дата:** 2026-05-22 (продолжение сессии 62 после iter-9 merge). Ветка `fix/iter-10-alembic-dag-analyzer` от свежего `cf8abdd` main. Single session, 3 logical commits.
