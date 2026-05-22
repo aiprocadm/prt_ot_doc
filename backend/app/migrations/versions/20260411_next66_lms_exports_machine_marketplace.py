@@ -1,22 +1,31 @@
 """next66 lms export machine marketplace foundation
 
 Revision ID: 20260411_next66
-Revises: 20260410_next65
+Revises: (20260410_next65, 20260317_next46)
 Create Date: 2026-04-11
+
+History:
+* iter-10 (PR #559) added ``depends_on = "20260317_next46"`` to fix a
+  cross-branch UndefinedTableError on Postgres (training_attempts /
+  enrollments / modules were created on a parallel branch in next46).
+* iter-15g promoted this depends_on to a true ``down_revision`` parent
+  (tuple form). Combining ``depends_on`` with explicit merge in
+  ``next69_merge_heads`` produced ``KeyError`` in head_maintainer
+  because both mechanisms tried to consume the same head. Single
+  DAG-edge mechanism is the clean resolution.
 """
 
 import sqlalchemy as sa
 from alembic import op
 
 revision = "20260411_next66"
-down_revision = "20260410_next65"
+# iter-15g: tuple form makes 20260317_next46 a real parent in the DAG
+# (was previously a depends_on shim added in iter-10). 20260317_next46
+# is also removed from next69_merge_heads' merge tuple — see that
+# revision's docstring for why two-mechanism overlap broke head tracking.
+down_revision = ("20260410_next65", "20260317_next46")
 branch_labels = None
-# Cross-branch dependency: this migration alters training_attempts /
-# training_enrollments / training_modules, which are created on a parallel
-# branch in 20260317_next46_training_briefings_offline. Without this
-# declaration, alembic upgrade head can pick an ordering where the ALTER
-# precedes the CREATE and fails with UndefinedTableError.
-depends_on = "20260317_next46"
+depends_on = None
 
 
 def upgrade() -> None:

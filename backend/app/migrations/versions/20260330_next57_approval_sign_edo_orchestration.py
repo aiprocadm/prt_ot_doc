@@ -123,12 +123,14 @@ def upgrade() -> None:
         sa.UniqueConstraint("dedupe_key", name="uq_edo_webhook_inbox_dedupe_key"),
     )
 
-    op.create_index("ix_approval_instances_entity", "approval_instances", ["tenant_id", "entity_type", "entity_id"])
-    op.create_index("ix_approval_instance_steps_lookup", "approval_instance_steps", ["approval_instance_id", "status", "order_no"])
-    op.create_index("ix_signature_requests_entity_status", "signature_requests", ["tenant_id", "object_type", "object_id", "status"])
-    op.create_index("ix_edo_messages_entity_status_created", "edo_messages", ["tenant_id", "entity_type", "entity_id", "status", "created_at"])
-    op.create_index("ix_edo_status_events_message_received", "edo_status_events", ["edo_message_id", "received_at"])
-
+    # iter-15: add_columns MUST precede create_indexes — Postgres rejects
+    # CREATE INDEX referencing a column that does not yet exist, even though
+    # SQLite's looser model tolerated the original order. ix_edo_messages_
+    # entity_status_created below depends on entity_type/entity_id which are
+    # added to edo_messages a few lines down. Moving all add_columns above
+    # all create_indexes keeps the schema-change vs index-rebuild phases
+    # clearly separated and avoids re-introducing the same class of bug for
+    # later columns added to the same tables.
     op.add_column("approval_routes", sa.Column("description", sa.Text(), nullable=True))
     op.add_column("approval_routes", sa.Column("applies_to", sa.String(length=16), nullable=False, server_default="document"))
     op.add_column("approval_routes", sa.Column("conditions_json", sa.JSON(), nullable=False, server_default="{}"))
@@ -157,6 +159,12 @@ def upgrade() -> None:
     op.add_column("edo_messages", sa.Column("response_payload_json", sa.JSON(), nullable=True))
     op.add_column("edo_messages", sa.Column("protocol_file_id", sa.String(length=36), nullable=True))
     op.add_column("edo_messages", sa.Column("created_by", sa.String(length=36), nullable=True))
+
+    op.create_index("ix_approval_instances_entity", "approval_instances", ["tenant_id", "entity_type", "entity_id"])
+    op.create_index("ix_approval_instance_steps_lookup", "approval_instance_steps", ["approval_instance_id", "status", "order_no"])
+    op.create_index("ix_signature_requests_entity_status", "signature_requests", ["tenant_id", "object_type", "object_id", "status"])
+    op.create_index("ix_edo_messages_entity_status_created", "edo_messages", ["tenant_id", "entity_type", "entity_id", "status", "created_at"])
+    op.create_index("ix_edo_status_events_message_received", "edo_status_events", ["edo_message_id", "received_at"])
 
 
 def downgrade() -> None:
