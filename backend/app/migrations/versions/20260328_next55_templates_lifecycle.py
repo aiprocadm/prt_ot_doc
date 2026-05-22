@@ -27,8 +27,22 @@ def upgrade() -> None:
         create_type=False,
     )
     template_status.create(op.get_bind(), checkfirst=True)
-    template_version_status.drop(op.get_bind(), checkfirst=True)
-    template_version_status.create(op.get_bind(), checkfirst=True)
+
+    # templateversionstatus was created in 6b6dee7c951f_initial_schema with
+    # 3 values (DRAFT/ACTIVE/ARCHIVED) and is already referenced by column
+    # templateversion.status, so DROP TYPE would fail with
+    # DependentObjectsStillExistError. Extend in-place via ALTER TYPE ADD
+    # VALUE for each new value. PG12+ catalog visibility requires the ALTER
+    # to commit before the values can be used in the same transaction
+    # (UPDATE on line below uses 'UPLOADED'), so wrap in autocommit_block.
+    # SQLite has no enum type — column behaves as TEXT, no schema op needed.
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        with op.get_context().autocommit_block():
+            for new_value in ("UPLOADED", "LINTED", "READY", "DEPRECATED"):
+                op.execute(
+                    f"ALTER TYPE templateversionstatus ADD VALUE IF NOT EXISTS '{new_value}'"
+                )
 
     op.add_column("template", sa.Column("status", template_status, nullable=True))
     op.add_column("template", sa.Column("current_version_id", sa.String(length=36), nullable=True))
