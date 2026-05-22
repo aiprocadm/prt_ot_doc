@@ -32,17 +32,17 @@ def upgrade() -> None:
     # 3 values (DRAFT/ACTIVE/ARCHIVED) and is already referenced by column
     # templateversion.status, so DROP TYPE would fail with
     # DependentObjectsStillExistError. Extend in-place via ALTER TYPE ADD
-    # VALUE for each new value. PG12+ catalog visibility requires the ALTER
-    # to commit before the values can be used in the same transaction
-    # (UPDATE on line below uses 'UPLOADED'), so wrap in autocommit_block.
+    # VALUE for each new value. PG12+ forbids using a newly-added enum
+    # value in the same transaction; the dependent
+    # `UPDATE templateversion SET status = 'UPLOADED'` therefore lives in
+    # the follow-up revision 20260328_next55b which runs in its own tx.
     # SQLite has no enum type — column behaves as TEXT, no schema op needed.
     bind = op.get_bind()
     if bind.dialect.name == "postgresql":
-        with op.get_context().autocommit_block():
-            for new_value in ("UPLOADED", "LINTED", "READY", "DEPRECATED"):
-                op.execute(
-                    f"ALTER TYPE templateversionstatus ADD VALUE IF NOT EXISTS '{new_value}'"
-                )
+        for new_value in ("UPLOADED", "LINTED", "READY", "DEPRECATED"):
+            op.execute(
+                f"ALTER TYPE templateversionstatus ADD VALUE IF NOT EXISTS '{new_value}'"
+            )
 
     op.add_column("template", sa.Column("status", template_status, nullable=True))
     op.add_column("template", sa.Column("current_version_id", sa.String(length=36), nullable=True))
@@ -58,7 +58,6 @@ def upgrade() -> None:
     op.add_column("templateversion", sa.Column("size_bytes", sa.Integer(), nullable=True))
     op.add_column("templateversion", sa.Column("linter_report_json", sa.JSON(), nullable=True))
     op.add_column("templateversion", sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True))
-    op.execute("UPDATE templateversion SET status = 'UPLOADED'")
     op.create_index("ix_template_version_status", "templateversion", ["tenant_id", "status"], unique=False)
     op.create_index("ix_template_version_updated", "templateversion", ["tenant_id", "updated_at"], unique=False)
 
