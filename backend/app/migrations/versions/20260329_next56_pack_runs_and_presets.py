@@ -1,7 +1,7 @@
 """NEXT-56 package presets/profiles/runs v2
 
 Revision ID: 20260329_next56
-Revises: 20260328_next55
+Revises: 20260328_next55b
 Create Date: 2026-03-29
 """
 
@@ -10,7 +10,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "20260329_next56"
-down_revision = "20260328_next55"
+down_revision = "20260328_next55b"
 branch_labels = None
 depends_on = None
 
