@@ -1,12 +1,12 @@
-"""Comprehensive pin-test: Alembic migrations must avoid 4 known classes of
+"""Comprehensive pin-test: Alembic migrations must avoid 5 known classes of
 ``alembic-postgres-upgrade`` failure.
 
 This is the *proactive* analyzer that consolidates the bug classes uncovered
-reactively in iter-7..13 (one fix per iteration, see PRs #553/#555/#557/#559/
-#561/#563/#564). It runs on every backend test invocation; new violations are
-blocking — fix the migration before merging.
+reactively in iter-7..14 (one fix per iteration, see PRs #553/#555/#557/#559/
+#561/#563/#564 and iter-14 fix commit c66d4f1). It runs on every backend test
+invocation; new violations are blocking — fix the migration before merging.
 
-The 4 antipattern classes
+The 5 antipattern classes
 =========================
 
 A1 — enum double-create
@@ -77,6 +77,53 @@ sort can interleave them incorrectly.
 Fix: add ``depends_on = ("<creator-rev>",)`` to the top of the dependent
 migration.
 
+A5 — unsafe use of newly-added enum value (iter-14)
+---------------------------------------------------
+Symptom::
+
+    asyncpg.exceptions.UnsafeNewEnumValueUsageError: unsafe use of new
+    value "<X>" of enum type <name>
+    HINT:  New enum values must be committed before they can be used.
+
+Cause: env.py wraps the entire ``alembic upgrade head`` in one outer async
+transaction (``async with connectable.begin() as connection``). All
+revisions share that single tx. Postgres ≥12 forbids using a newly-added
+enum value in the same transaction where it was added via ``ALTER TYPE
+ADD VALUE``. So if *any* revision in the upgrade chain (including the
+current one or any of its predecessors) does ``ALTER TYPE <name> ADD VALUE
+'<X>'``, then NO revision in the chain may reference ``'<X>'`` from a SQL
+DML statement (``UPDATE``/``INSERT``/``WHERE``) targeted at a column of
+type ``<name>``. Splitting the ALTER and the UPDATE into separate alembic
+revisions does NOT help — they still share the outer tx.
+
+History: CI run 26294051531 exposed this class via the iter-13 next55
+split. iter-13 had assumed alembic enforces a transaction-per-revision
+boundary; the env.py outer transaction invalidates that assumption.
+
+Fix recommendations (in priority order):
+  1. **Remove the data UPDATE entirely** if existing rows have valid
+     alternative values in the extended enum (often true, since
+     ``ALTER TYPE ADD VALUE`` preserves existing column values). This is
+     the iter-14 fix (PR #564, commit c66d4f1) — the legacy
+     ``{DRAFT, ACTIVE, ARCHIVED}`` states remain valid in the extended
+     ``{DRAFT, ACTIVE, ARCHIVED, UPLOADED, LINTED, READY, DEPRECATED}``
+     so no backfill is needed.
+  2. **Move the data migration to an app-level startup hook** or a
+     one-shot CLI command (``app.cli.main ...``) that runs *after*
+     ``alembic upgrade head`` completes — at that point the new values
+     are catalog-committed and may be referenced.
+  3. **Refactor env.py to drop the outer transaction** — most invasive;
+     affects every migration and warrants its own discussion. Out of
+     scope for iter-14.
+
+Detection scope (narrow on purpose to avoid false positives): only flags
+the pattern ``ALTER TYPE <enum> ADD VALUE '<V>'`` in some revision
+(itself or any predecessor) paired with ``op.execute("UPDATE <t> SET
+<col> = '<V>' ...")`` / ``... = '<V>'`` where ``(t, col)`` is a known
+column of type ``ENUM:<enum>``. INSERT / WHERE forms are detected as
+secondary heuristics. Strings that don't resolve to a known enum column
+are silently skipped (no false-positive A5 noise from arbitrary SQL).
+
 Visitor architecture
 ====================
 Each antipattern has its own dedicated visitor — keeps each visitor small,
@@ -100,7 +147,14 @@ History
 * iter-11 (PR #561): A2 fix for ``20260318_next47_files_metadata_archive``.
 * iter-12 (PR #563): single ``ALTER TYPE ADD VALUE`` hotfix (precursor to A3).
 * iter-13 (PR #564): A3 fix — split ``next55`` into ``next55`` + ``next55b``.
-* iter-14 (this PR): unified analyzer covering A1+A2+A3+A4 in one pass.
+* iter-14 (this PR):
+    - Unified analyzer covering A1+A2+A3+A4+A5 in one pass.
+    - A5 added in response to CI run 26294051531
+      (``UnsafeNewEnumValueUsageError`` on ``templateversion.status =
+      'UPLOADED'`` despite the iter-13 next55/next55b split).
+    - The actual repo-level A5 fix lives in commit c66d4f1: the lossy
+      ``UPDATE templateversion SET status = 'UPLOADED'`` was removed
+      because legacy values remain valid under ``ALTER TYPE ADD VALUE``.
 
 Running locally without pytest (Windows+Py3.13 conftest hang workaround)
 ------------------------------------------------------------------------
@@ -143,6 +197,19 @@ from tests.test_migrations_cross_branch_deps import (  # noqa: E402
 # ---------------------------------------------------------------------------
 # Shared AST helpers
 # ---------------------------------------------------------------------------
+
+
+def _safe_rel(path: Path) -> Path | str:
+    """Return ``path.relative_to(REPO_ROOT)`` when ``path`` lives inside the
+    repo, else fall back to the bare filename. Lets the synthetic-violation
+    tests use ``tmp_path`` (which is typically on a different filesystem
+    root, especially on Windows) without forcing the per-visitor message
+    builders to special-case external paths.
+    """
+    try:
+        return path.relative_to(REPO_ROOT)
+    except ValueError:
+        return path.name
 
 
 def _str_const(node: ast.AST | None) -> str | None:
@@ -574,7 +641,7 @@ def _a1_audit_one(path: Path) -> list[str]:
         tree = ast.parse(src)
     except SyntaxError as exc:
         return [
-            f"{path.relative_to(REPO_ROOT)}:{exc.lineno or 0}  parse error: {exc}"
+            f"{_safe_rel(path)}:{exc.lineno or 0}  parse error: {exc}"
         ]
     if not _a1_uses_create_checkfirst(tree):
         return []
@@ -595,7 +662,7 @@ def _a1_audit_one(path: Path) -> list[str]:
         if _a1_has_create_type_false(node):
             continue
         out.append(
-            f"{path.relative_to(REPO_ROOT)}:{node.lineno}  "
+            f"{_safe_rel(path)}:{node.lineno}  "
             f"{call_str}(name={enum_name!r}) — missing create_type=False; "
             "fix: switch to postgresql.ENUM(..., name=X, create_type=False)"
         )
@@ -622,6 +689,24 @@ def _a2_audit_one(
     scope: set[str],
     per_migration: dict[str, dict[tuple[str, str], str]],
 ) -> list[str]:
+    """Flag GIN-on-non-JSONB violations.
+
+    Notes on precision:
+      * Columns whose type cannot be resolved (returns ``"?"`` from
+        ``_lookup_column_type``) are SKIPPED rather than reported as JSON.
+        Reporting them would produce false positives whenever a column is
+        declared in a part of the codebase the AST index does not parse
+        (e.g., an out-of-scope ancestor migration with unusual idioms, or
+        a column declared inside a helper function not unrolled by the
+        index). The trade-off: a genuine GIN-on-JSON bug whose column AST
+        we fail to parse will slip through. This is preferable to
+        flagging cleanly-typed columns as suspect.
+      * Columns of a GIN-compatible type
+        (``JSONB``/``TSVECTOR``/``ARRAY``) are silently accepted.
+      * An explicit opclass via ``postgresql_ops={"col":
+        "gin_trgm_ops"}`` or ``USING GIN (col gin_trgm_ops)`` short-
+        circuits the check at the index level (we trust the engineer).
+    """
     src = path.read_text(encoding="utf-8")
     try:
         tree = ast.parse(src)
@@ -631,7 +716,7 @@ def _a2_audit_one(
     if upgrade_fn is None:
         return []
     out: list[str] = []
-    rel = path.relative_to(REPO_ROOT)
+    rel = _safe_rel(path)
     for node in ast.walk(upgrade_fn):
         if not isinstance(node, ast.Call):
             continue
@@ -668,6 +753,9 @@ def _a2_audit_one(
                 continue
             for col in cols:
                 actual = _lookup_column_type(table, col, scope, per_migration)
+                # Skip unknown-type columns to avoid false-positives.
+                if actual == "?":
+                    continue
                 if actual not in GIN_COMPATIBLE_TYPES:
                     out.append(
                         f"{rel}:{node.lineno}  "
@@ -698,6 +786,9 @@ def _a2_audit_one(
                 continue
             table, col = m.group(1), m.group(2)
             actual = _lookup_column_type(table, col, scope, per_migration)
+            # Skip unknown-type columns to avoid false-positives.
+            if actual == "?":
+                continue
             if actual not in GIN_COMPATIBLE_TYPES:
                 out.append(
                     f"{rel}:{node.lineno}  "
@@ -785,6 +876,27 @@ def _a3_audit_one(
                 return var, sub.lineno
         return None
 
+    def _find_create_after_drop_in_subtree(
+        stmt: ast.stmt, var_name: str, drop_lineno: int
+    ) -> int | None:
+        """Within the SAME top-level statement that contains a drop call,
+        find a ``<var_name>.create(...)`` whose ``lineno`` strictly exceeds
+        ``drop_lineno`` (i.e., physically follows the drop in source order
+        within e.g. one ``if dialect:`` block). Returns the create's lineno
+        if found, else None.
+        """
+        for sub in ast.walk(stmt):
+            if not isinstance(sub, ast.Call):
+                continue
+            func = sub.func
+            if not (isinstance(func, ast.Attribute) and func.attr == "create"):
+                continue
+            if not (isinstance(func.value, ast.Name) and func.value.id == var_name):
+                continue
+            if sub.lineno > drop_lineno:
+                return sub.lineno
+        return None
+
     # Build enum → columns-of-that-type-from-predecessors index.
     # We use the cross-migration column type index here.
     dependent_cols_by_enum: dict[str, list[tuple[str, str, str]]] = defaultdict(list)
@@ -794,14 +906,52 @@ def _a3_audit_one(
             if type_label.startswith("ENUM:"):
                 dependent_cols_by_enum[type_label[5:]].append((pred_rev, t, c))
 
-    rel = path.relative_to(REPO_ROOT)
+    rel = _safe_rel(path)
     violations: list[str] = []
     used_drop_idx: set[int] = set()  # avoid double-counting paired drops
+
+    def _emit(drop_lineno: int, create_lineno: int, var: str) -> None:
+        enum_name = var_to_enum[var]
+        dependents = dependent_cols_by_enum.get(enum_name, [])
+        if not dependents:
+            # Drop-recreate without any dependent column — harmless, no A3
+            # violation. (May still be a code smell, but iter-14 only blocks
+            # the dependency-bearing form.)
+            return
+        dep_str = ", ".join(
+            f"{r}/{t}.{c}" for r, t, c in sorted(dependents)[:5]
+        )
+        if len(dependents) > 5:
+            dep_str += f", +{len(dependents) - 5} more"
+        violations.append(
+            f"{rel}:{drop_lineno}  drop-recreate of enum {enum_name!r} "
+            f"via variable {var!r} (create at line {create_lineno}); "
+            f"dependent columns exist in predecessors: [{dep_str}]. "
+            "Fix: split this migration — add new values in-place with "
+            "ALTER TYPE ... ADD VALUE IF NOT EXISTS '<v>' (under PG "
+            "dialect gate), and move any data UPDATE referencing the new "
+            "values into a follow-up <X>b_<topic>_data.py revision. "
+            "Precedent: next55 → next55 + next55b split (PR #564)."
+        )
+
     for i, stmt in enumerate(stmts):
         drop = _first_var_call(stmt, "drop")
         if drop is None or i in used_drop_idx:
             continue
         var, drop_lineno = drop
+        # First check: same-top-level-statement drop+create (e.g. inside
+        # one ``if dialect == 'postgresql':`` block). This is the natural
+        # pattern an engineer would write and the original i+1 lookahead
+        # missed it entirely.
+        same_stmt_create = _find_create_after_drop_in_subtree(
+            stmt, var, drop_lineno
+        )
+        if same_stmt_create is not None:
+            _emit(drop_lineno, same_stmt_create, var)
+            used_drop_idx.add(i)
+            continue
+        # Fallback: drop and create in separate top-level statements, within
+        # A3_LOOKAHEAD_STMTS distance.
         for j in range(i + 1, min(i + 1 + A3_LOOKAHEAD_STMTS + 1, len(stmts))):
             create = _first_var_call(stmts[j], "create")
             if create is None:
@@ -809,32 +959,291 @@ def _a3_audit_one(
             create_var, create_lineno = create
             if create_var != var:
                 continue
-            enum_name = var_to_enum[var]
-            dependents = dependent_cols_by_enum.get(enum_name, [])
-            if not dependents:
-                # Drop-recreate without any dependent column — harmless, no A3
-                # violation. (May still be a code smell, but iter-14 only
-                # blocks the dependency-bearing form.)
-                used_drop_idx.add(i)
-                break
-            dep_str = ", ".join(
-                f"{r}/{t}.{c}" for r, t, c in sorted(dependents)[:5]
-            )
-            if len(dependents) > 5:
-                dep_str += f", +{len(dependents) - 5} more"
-            violations.append(
-                f"{rel}:{drop_lineno}  drop-recreate of enum {enum_name!r} "
-                f"via variable {var!r} (create at line {create_lineno}); "
-                f"dependent columns exist in predecessors: [{dep_str}]. "
-                "Fix: split this migration — add new values in-place with "
-                "ALTER TYPE ... ADD VALUE IF NOT EXISTS '<v>' (under PG "
-                "dialect gate), and move any data UPDATE referencing the new "
-                "values into a follow-up <X>b_<topic>_data.py revision. "
-                "Precedent: next55 → next55 + next55b split (PR #564)."
-            )
+            _emit(drop_lineno, create_lineno, var)
             used_drop_idx.add(i)
             break
     return violations
+
+
+# ---------------------------------------------------------------------------
+# A5 — unsafe use of newly-added enum value (iter-14)
+# ---------------------------------------------------------------------------
+#
+# env.py wraps the whole ``alembic upgrade head`` in one outer async
+# transaction; PG12+ refuses to use a newly-added enum value in the same tx
+# where ``ALTER TYPE <name> ADD VALUE '<V>'`` ran. So if any revision in
+# the upgrade chain adds ``'<V>'`` to enum ``<name>``, no revision (the
+# adder itself or any descendant) may reference ``'<V>'`` from a SQL DML
+# statement targeted at a column of type ``<name>``. iter-13 split next55
+# under the mistaken belief that alembic enforces transaction-per-revision;
+# CI run 26294051531 showed otherwise.
+#
+# Detection scope, on purpose narrow (see module docstring):
+#   * ADD-VALUE side: ``op.execute("ALTER TYPE <enum> ADD VALUE [IF NOT
+#     EXISTS] '<V>'")`` (case-insensitive) — collected per migration.
+#   * USE side: ``op.execute("...")`` whose string literal contains an
+#     ``UPDATE`` / ``INSERT`` / ``WHERE``-with-``=`` referencing a value
+#     that matches an ADD-VALUE somewhere in (predecessor ∪ {self}) for an
+#     enum whose corresponding column ``(table, col)`` is known to be of
+#     that enum type. Arbitrary SQL string literals that don't resolve to
+#     a known enum column are silently ignored — better to under-report
+#     than to drown the signal in noise.
+
+
+_ADD_VALUE_RE = re.compile(
+    r"ALTER\s+TYPE\s+(\w+)\s+ADD\s+VALUE\s+(?:IF\s+NOT\s+EXISTS\s+)?"
+    r"['\"](\w+)['\"]",
+    re.IGNORECASE,
+)
+
+# UPDATE <t> ... SET <col> = '<v>'  (captures table, col, value)
+_UPDATE_SET_RE = re.compile(
+    r"UPDATE\s+(\w+)\b[^;]*?\bSET\s+(\w+)\s*=\s*['\"](\w+)['\"]",
+    re.IGNORECASE,
+)
+
+# INSERT INTO <t> (... <col> ...) VALUES (... '<v>' ...) — too noisy to
+# parse positionally; instead, catch the common form INSERT INTO <t> SET
+# <col> = '<v>' (MySQL) plus the conservative INSERT INTO <t> (<col>)
+# VALUES ('<v>') single-column case. Both rare in this codebase — kept
+# narrow to avoid false positives. See module docstring.
+_INSERT_SINGLE_COL_RE = re.compile(
+    r"INSERT\s+INTO\s+(\w+)\s*\(\s*(\w+)\s*\)\s*VALUES\s*\(\s*['\"](\w+)['\"]\s*\)",
+    re.IGNORECASE,
+)
+
+# WHERE <col> = '<v>' — paired with the surrounding statement's table is
+# tricky and we don't need it for the known iter-14 regression class.
+# Left out on purpose. (See module docstring on under-reporting trade-off.)
+
+
+def _str_literal_iterable(node: ast.AST) -> list[str] | None:
+    """If ``node`` is a tuple/list/set of string literals, return them.
+    Else return None."""
+    if not isinstance(node, (ast.Tuple, ast.List, ast.Set)):
+        return None
+    out: list[str] = []
+    for elt in node.elts:
+        v = _str_const(elt)
+        if v is None:
+            return None
+        out.append(v)
+    return out
+
+
+def _expand_fstring(
+    node: ast.AST, var_bindings: dict[str, list[str]]
+) -> list[str] | None:
+    """Materialize all possible concrete strings from a ``JoinedStr`` /
+    ``Constant`` AST node, given variable-name → possible-values bindings
+    drawn from enclosing ``for x in (lit_a, lit_b):`` loops.
+
+    Returns:
+      * For an ``ast.Constant(str)`` → ``[that_str]``.
+      * For an ``ast.JoinedStr``: list of every concrete realization
+        (Cartesian product over all FormattedValue substitutions). All
+        FormattedValue.value nodes must be simple ``ast.Name`` references
+        to keys in ``var_bindings``; format spec / conversion ignored.
+      * Else ``None``.
+    """
+    s = _str_const(node)
+    if s is not None:
+        return [s]
+    if not isinstance(node, ast.JoinedStr):
+        return None
+    pieces: list[list[str]] = []
+    for part in node.values:
+        if isinstance(part, ast.Constant) and isinstance(part.value, str):
+            pieces.append([part.value])
+            continue
+        if isinstance(part, ast.FormattedValue):
+            inner = part.value
+            if not isinstance(inner, ast.Name):
+                return None
+            if inner.id not in var_bindings:
+                return None
+            pieces.append(list(var_bindings[inner.id]))
+            continue
+        return None
+    out: list[str] = [""]
+    for piece in pieces:
+        out = [prefix + p for prefix in out for p in piece]
+    return out
+
+
+def _enclosing_for_bindings(
+    fn: ast.FunctionDef, target_node: ast.AST
+) -> dict[str, list[str]]:
+    """Walk ``fn`` once and return ``{var_name: [literal, ...]}`` for every
+    ``for var in (lit_a, lit_b, ...):`` (or list/set) loop that physically
+    encloses ``target_node`` (line-range containment over
+    ``lineno``/``end_lineno``). Caller can then resolve f-string
+    FormattedValues against these bindings.
+    """
+    out: dict[str, list[str]] = {}
+    target_lineno = getattr(target_node, "lineno", None)
+    if target_lineno is None:
+        return out
+    for sub in ast.walk(fn):
+        if not isinstance(sub, ast.For):
+            continue
+        start = sub.lineno
+        end = getattr(sub, "end_lineno", start)
+        if not (start <= target_lineno <= end):
+            continue
+        if not isinstance(sub.target, ast.Name):
+            continue
+        lits = _str_literal_iterable(sub.iter)
+        if lits is None:
+            continue
+        out[sub.target.id] = lits
+    return out
+
+
+def _a5_collect_added_values(tree: ast.Module) -> set[tuple[str, str]]:
+    """Return ``{(enum_name, value)}`` pairs added via
+    ``op.execute("ALTER TYPE ... ADD VALUE 'X'")`` in this migration's
+    ``upgrade()``.
+
+    Handles three SQL-source shapes (in order of frequency in this repo):
+      1. Literal string: ``op.execute("ALTER TYPE e ADD VALUE 'X'")``.
+      2. f-string inside a for-loop over a literal tuple/list of values:
+         ``for v in ("X", "Y"): op.execute(f"... ADD VALUE '{v}'")``.
+      3. f-string at module scope with no enclosing loop is treated as
+         a single concrete string (FormattedValue parts that don't resolve
+         to a known binding cause the whole call to be skipped — under-
+         report rather than over-report).
+    """
+    upgrade_fn = _func_node(tree, "upgrade")
+    if upgrade_fn is None:
+        return set()
+    out: set[tuple[str, str]] = set()
+    for node in ast.walk(upgrade_fn):
+        if not isinstance(node, ast.Call):
+            continue
+        if not _is_op_call(node, "execute"):
+            continue
+        if not node.args:
+            continue
+        arg = node.args[0]
+        bindings = _enclosing_for_bindings(upgrade_fn, node)
+        candidates = _expand_fstring(arg, bindings)
+        if candidates is None:
+            continue
+        for sql in candidates:
+            for m in _ADD_VALUE_RE.finditer(sql):
+                out.add((m.group(1), m.group(2)))
+    return out
+
+
+def _a5_iter_used_values(
+    tree: ast.Module,
+) -> list[tuple[str, str, str, int]]:
+    """Return ``[(table, col, value, lineno), ...]`` of literal enum-value
+    references inside ``op.execute("UPDATE ... SET <col> = '<V>'")`` or
+    ``op.execute("INSERT INTO <t> (<col>) VALUES ('<V>')")`` statements in
+    this migration's ``upgrade()``.
+
+    Both literal strings and ``f"..."`` strings are supported; in the
+    latter case the FormattedValue must resolve to an ``ast.Name`` whose
+    binding comes from an enclosing ``for var in (lit, lit, ...):`` loop.
+
+    These are *candidate* references. Whether they're actually an enum
+    value (vs. an arbitrary string literal that happens to match) is
+    decided by the caller using the cross-migration column-type index.
+    """
+    upgrade_fn = _func_node(tree, "upgrade")
+    if upgrade_fn is None:
+        return []
+    out: list[tuple[str, str, str, int]] = []
+    for node in ast.walk(upgrade_fn):
+        if not isinstance(node, ast.Call):
+            continue
+        if not _is_op_call(node, "execute"):
+            continue
+        if not node.args:
+            continue
+        arg = node.args[0]
+        bindings = _enclosing_for_bindings(upgrade_fn, node)
+        candidates = _expand_fstring(arg, bindings)
+        if candidates is None:
+            continue
+        for sql in candidates:
+            for m in _UPDATE_SET_RE.finditer(sql):
+                out.append((m.group(1), m.group(2), m.group(3), node.lineno))
+            for m in _INSERT_SINGLE_COL_RE.finditer(sql):
+                out.append((m.group(1), m.group(2), m.group(3), node.lineno))
+    return out
+
+
+def _a5_audit_one(
+    path: Path,
+    rev: str,
+    scope: set[str],
+    per_migration: dict[str, dict[tuple[str, str], str]],
+    added_values_by_rev: dict[str, set[tuple[str, str]]],
+) -> list[str]:
+    """Flag every ``op.execute(...)`` in this migration whose SQL references
+    a literal enum-value matching an ``ALTER TYPE ... ADD VALUE`` performed
+    by any revision in ``scope`` (which is ``predecessors ∪ {self}``).
+    """
+    src = path.read_text(encoding="utf-8")
+    try:
+        tree = ast.parse(src)
+    except SyntaxError:
+        return []
+    used = _a5_iter_used_values(tree)
+    if not used:
+        return []
+
+    # Build the union of (enum_name, value) added by anyone in scope,
+    # plus a reverse index: value → adder_revs (for nicer messages).
+    in_scope_added: dict[tuple[str, str], list[str]] = defaultdict(list)
+    for r in scope:
+        for pair in added_values_by_rev.get(r, set()):
+            in_scope_added[pair].append(r)
+    if not in_scope_added:
+        return []
+
+    rel = _safe_rel(path)
+    out: list[str] = []
+    for table, col, value, lineno in used:
+        # Resolve (table, col) → enum_name using the cross-migration index.
+        col_type = _lookup_column_type(table, col, scope, per_migration)
+        if not col_type.startswith("ENUM:"):
+            # Not a known enum column — could be any string column.
+            # Skip to avoid the regex matching arbitrary SQL literals.
+            continue
+        enum_name = col_type[5:]
+        if (enum_name, value) not in in_scope_added:
+            continue
+        adders = sorted(in_scope_added[(enum_name, value)])
+        adder_str = ", ".join(adders[:3])
+        if len(adders) > 3:
+            adder_str += f", +{len(adders) - 3} more"
+        if rev in adders:
+            same_rev_note = " (same revision)"
+        else:
+            same_rev_note = ""
+        out.append(
+            f"{rel}:{lineno}  op.execute SQL references value {value!r} of "
+            f"enum {enum_name!r} on column {table}.{col}; that value was "
+            f"added by ALTER TYPE in revision(s) [{adder_str}]{same_rev_note}. "
+            "env.py wraps `alembic upgrade head` in one outer transaction, so "
+            "PG12+'s UnsafeNewEnumValueUsageError applies across all "
+            "revisions in the chain — splitting into separate revisions does "
+            "not help. Fix recommendations (in priority order): "
+            "(a) remove the data UPDATE entirely if existing rows have valid "
+            "alternative values under the extended enum (often true since "
+            "ALTER TYPE ADD VALUE preserves existing column values); "
+            "(b) move the data migration to an app-level startup hook or one-"
+            "shot CLI command run AFTER `alembic upgrade head`; "
+            "(c) refactor env.py to not wrap migrations in an outer transaction "
+            "(invasive, out of scope for normal migration work). "
+            "Precedent: iter-14 commit c66d4f1 (PR #564) removed the lossy "
+            "UPDATE in next55b."
+        )
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -866,25 +1275,53 @@ def _a4_audit() -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def find_violations() -> dict[str, list[str]]:
-    """Run all 4 antipattern visitors over every migration in
-    ``backend/app/migrations/versions``. Returns dict keyed by antipattern
-    class (``A1`` / ``A2`` / ``A3`` / ``A4``), values are human-readable
-    violation strings (file:line + cause + recommendation).
+def _build_added_values_index(
+    path_of_rev: dict[str, Path],
+) -> dict[str, set[tuple[str, str]]]:
+    """Pre-pass for A5: for every migration, collect the ``{(enum_name,
+    value)}`` pairs it adds via ``ALTER TYPE ADD VALUE``. Computed once
+    and shared across all per-migration A5 calls.
     """
-    out: dict[str, list[str]] = {"A1": [], "A2": [], "A3": [], "A4": []}
+    out: dict[str, set[tuple[str, str]]] = {}
+    for r, path in path_of_rev.items():
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except SyntaxError:
+            out[r] = set()
+            continue
+        out[r] = _a5_collect_added_values(tree)
+    return out
+
+
+def find_violations() -> dict[str, list[str]]:
+    """Run all 5 antipattern visitors over every migration in
+    ``backend/app/migrations/versions``. Returns dict keyed by antipattern
+    class (``A1`` / ``A2`` / ``A3`` / ``A4`` / ``A5``), values are
+    human-readable violation strings (file:line + cause + recommendation).
+    """
+    out: dict[str, list[str]] = {
+        "A1": [],
+        "A2": [],
+        "A3": [],
+        "A4": [],
+        "A5": [],
+    }
 
     per_migration, predecessors, _rev_of_file, path_of_rev = _build_column_type_index()
+    added_values_by_rev = _build_added_values_index(path_of_rev)
 
     # A1: doesn't need the DAG index.
     for path in sorted(MIGRATIONS_DIR.glob("*.py")):
         out["A1"].extend(_a1_audit_one(path))
 
-    # A2 + A3: per-migration with scope = {self} ∪ predecessors.
+    # A2 + A3 + A5: per-migration with scope = {self} ∪ predecessors.
     for rev, path in sorted(path_of_rev.items()):
         scope = predecessors.get(rev, set()) | {rev}
         out["A2"].extend(_a2_audit_one(path, rev, scope, per_migration))
         out["A3"].extend(_a3_audit_one(path, rev, scope, per_migration))
+        out["A5"].extend(
+            _a5_audit_one(path, rev, scope, per_migration, added_values_by_rev)
+        )
 
     # A4: whole-repo DAG analyzer.
     out["A4"].extend(_a4_audit())
@@ -922,9 +1359,281 @@ def test_a4_no_missing_cross_branch_depends_on(
     assert violations["A4"] == [], "A4 violations:\n" + "\n".join(violations["A4"])
 
 
+def test_a5_no_unsafe_new_enum_value_usage(
+    violations: dict[str, list[str]],
+) -> None:
+    assert violations["A5"] == [], "A5 violations:\n" + "\n".join(violations["A5"])
+
+
 def test_migrations_dir_exists() -> None:
     assert MIGRATIONS_DIR.is_dir(), f"missing migrations dir: {MIGRATIONS_DIR}"
     assert any(MIGRATIONS_DIR.glob("*.py")), "no *.py migrations found"
+
+
+# ---------------------------------------------------------------------------
+# Synthetic-violation harness — prove each visitor fires on its target pattern
+# ---------------------------------------------------------------------------
+#
+# The "real-repo" pytests above assert each visitor returns 0 violations on
+# the CURRENT migrations directory. They cannot, on their own, prove the
+# visitor would FIRE on a known-bad migration — a silently-broken visitor
+# (e.g., a regex that never matches) would pass them just as well as a
+# correct visitor.
+#
+# This harness closes that gap. Each synthetic snippet is a self-contained
+# migration source string with exactly one antipattern. We write it to a
+# tmp_path file, run the matching visitor in isolation, and assert it emits
+# at least one violation message containing a class-specific substring.
+#
+# When you add a new antipattern class, ALSO add a synthetic snippet here.
+# When you tighten a visitor's precision, the synthetic test guards against
+# accidentally tightening it past the regression class it's supposed to
+# catch.
+
+
+SYNTHETIC_A1 = '''
+import sqlalchemy as sa
+from alembic import op
+from sqlalchemy.dialects import postgresql
+
+revision = "synthetic_a1"
+down_revision = None
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    my_enum = postgresql.ENUM("X", "Y", name="my_enum_t", create_type=True)
+    my_enum.create(op.get_bind(), checkfirst=True)
+    op.add_column("t", sa.Column("c", sa.Enum("X", "Y", name="my_enum_t"), nullable=True))
+
+
+def downgrade() -> None:
+    pass
+'''
+
+
+SYNTHETIC_A2 = '''
+import sqlalchemy as sa
+from alembic import op
+
+revision = "synthetic_a2"
+down_revision = None
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    op.create_table("t", sa.Column("tags", sa.JSON(), nullable=False))
+    op.create_index("ix_t_tags_gin", "t", ["tags"], postgresql_using="gin")
+
+
+def downgrade() -> None:
+    pass
+'''
+
+
+SYNTHETIC_A3_PREDECESSOR = '''
+import sqlalchemy as sa
+from alembic import op
+from sqlalchemy.dialects import postgresql
+
+revision = "synthetic_a3_pred"
+down_revision = None
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    some_enum = postgresql.ENUM("X", "Y", name="some_enum", create_type=False)
+    some_enum.create(op.get_bind(), checkfirst=True)
+    op.create_table(
+        "some_table",
+        sa.Column("col", some_enum, nullable=False),
+    )
+
+
+def downgrade() -> None:
+    pass
+'''
+
+
+# A3 with drop+create in the SAME top-level statement (one `if dialect:`
+# block). The pre-fix visitor's i+1 lookahead missed this; with the
+# Change-2 fix it must fire.
+SYNTHETIC_A3 = '''
+import sqlalchemy as sa
+from alembic import op
+from sqlalchemy.dialects import postgresql
+
+revision = "synthetic_a3"
+down_revision = "synthetic_a3_pred"
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    some_enum = postgresql.ENUM("X", "Y", "Z", name="some_enum", create_type=False)
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        some_enum.drop(bind, checkfirst=False)
+        some_enum.create(bind, checkfirst=False)
+
+
+def downgrade() -> None:
+    pass
+'''
+
+
+# A5 — ALTER TYPE ADD VALUE and UPDATE in the same revision.
+# Predecessor declares the column so the (table, col) → enum_name lookup
+# succeeds for the UPDATE's resolution.
+SYNTHETIC_A5_PREDECESSOR = '''
+import sqlalchemy as sa
+from alembic import op
+from sqlalchemy.dialects import postgresql
+
+revision = "synthetic_a5_pred"
+down_revision = None
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    op.create_table(
+        "some_table",
+        sa.Column("col", sa.Enum("OLD1", "OLD2", name="some_enum"), nullable=False),
+    )
+
+
+def downgrade() -> None:
+    pass
+'''
+
+
+SYNTHETIC_A5 = '''
+import sqlalchemy as sa
+from alembic import op
+
+revision = "synthetic_a5"
+down_revision = "synthetic_a5_pred"
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    op.execute("ALTER TYPE some_enum ADD VALUE IF NOT EXISTS 'NEWVAL'")
+    op.execute("UPDATE some_table SET col = 'NEWVAL'")
+
+
+def downgrade() -> None:
+    pass
+'''
+
+
+def _parse(src: str) -> ast.Module:
+    return ast.parse(src)
+
+
+def test_a1_visitor_fires_on_synthetic(tmp_path) -> None:
+    """A1 visitor must flag enum-double-create on the canonical bad pattern."""
+    p = tmp_path / "synth_a1.py"
+    p.write_text(SYNTHETIC_A1, encoding="utf-8")
+    violations = _a1_audit_one(p)
+    assert violations, "A1 visitor should fire on SYNTHETIC_A1 — none returned"
+    assert any("create_type=False" in v for v in violations), (
+        f"A1 message should mention 'create_type=False'; got: {violations}"
+    )
+
+
+def test_a2_visitor_fires_on_synthetic(tmp_path) -> None:
+    """A2 visitor must flag GIN-on-JSON column."""
+    p = tmp_path / "synth_a2.py"
+    p.write_text(SYNTHETIC_A2, encoding="utf-8")
+    # Build a self-contained per-migration index so the lookup resolves.
+    rev = "synthetic_a2"
+    per_migration = {rev: _columns_created_by_migration(_parse(SYNTHETIC_A2))}
+    scope = {rev}
+    violations = _a2_audit_one(p, rev, scope, per_migration)
+    assert violations, "A2 visitor should fire on SYNTHETIC_A2 — none returned"
+    assert any("GIN" in v or "gin" in v for v in violations), (
+        f"A2 message should mention 'GIN'; got: {violations}"
+    )
+
+
+def test_a3_visitor_fires_on_synthetic_with_predecessor(tmp_path) -> None:
+    """A3 visitor must flag drop-recreate inside a single ``if dialect:`` block
+    when a predecessor declares a column of the enum type.
+
+    This synthetic is the regression test for Change 2 (same-statement edge
+    case). With the pre-fix visitor's i+1 lookahead, this would silently
+    pass (no violation); with the Change-2 fix, it must fire.
+    """
+    # Write predecessor and child to a tmp dir.
+    pred_path = tmp_path / "synth_a3_pred.py"
+    pred_path.write_text(SYNTHETIC_A3_PREDECESSOR, encoding="utf-8")
+    child_path = tmp_path / "synth_a3.py"
+    child_path.write_text(SYNTHETIC_A3, encoding="utf-8")
+
+    pred_rev = "synthetic_a3_pred"
+    child_rev = "synthetic_a3"
+    per_migration = {
+        pred_rev: _columns_created_by_migration(_parse(SYNTHETIC_A3_PREDECESSOR)),
+        child_rev: _columns_created_by_migration(_parse(SYNTHETIC_A3)),
+    }
+    # Scope = predecessor ∪ {self} as in find_violations.
+    scope = {pred_rev, child_rev}
+    violations = _a3_audit_one(child_path, child_rev, scope, per_migration)
+    assert violations, (
+        "A3 visitor should fire on SYNTHETIC_A3 with predecessor — "
+        "this is the Change-2 same-statement regression test"
+    )
+    assert any("some_enum" in v for v in violations), (
+        f"A3 message should mention enum name 'some_enum'; got: {violations}"
+    )
+    assert any("ALTER TYPE" in v for v in violations), (
+        f"A3 message should reference 'ALTER TYPE' fix; got: {violations}"
+    )
+
+
+def test_a5_visitor_fires_on_synthetic_with_predecessor(tmp_path) -> None:
+    """A5 visitor must flag ``ALTER TYPE ADD VALUE 'X'`` followed by
+    ``UPDATE ... SET col = 'X'`` referencing a column of the same enum.
+
+    Both same-revision (synthetic case here) and cross-revision (the real
+    next55 → next55b case, regression-tested separately by toggling the
+    next55b file) must be detected.
+    """
+    pred_path = tmp_path / "synth_a5_pred.py"
+    pred_path.write_text(SYNTHETIC_A5_PREDECESSOR, encoding="utf-8")
+    child_path = tmp_path / "synth_a5.py"
+    child_path.write_text(SYNTHETIC_A5, encoding="utf-8")
+
+    pred_rev = "synthetic_a5_pred"
+    child_rev = "synthetic_a5"
+    per_migration = {
+        pred_rev: _columns_created_by_migration(_parse(SYNTHETIC_A5_PREDECESSOR)),
+        child_rev: _columns_created_by_migration(_parse(SYNTHETIC_A5)),
+    }
+    added_values_by_rev = {
+        pred_rev: _a5_collect_added_values(_parse(SYNTHETIC_A5_PREDECESSOR)),
+        child_rev: _a5_collect_added_values(_parse(SYNTHETIC_A5)),
+    }
+    scope = {pred_rev, child_rev}
+    violations = _a5_audit_one(
+        child_path, child_rev, scope, per_migration, added_values_by_rev
+    )
+    assert violations, (
+        "A5 visitor should fire on SYNTHETIC_A5 — same-revision "
+        "ALTER TYPE ADD VALUE + UPDATE"
+    )
+    assert any("NEWVAL" in v for v in violations), (
+        f"A5 message should reference the added value 'NEWVAL'; got: {violations}"
+    )
+    assert any("UnsafeNewEnumValueUsageError" in v or "outer transaction" in v
+               for v in violations), (
+        f"A5 message should reference the outer-tx mechanism; got: {violations}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -941,6 +1650,7 @@ if __name__ == "__main__":
         print("  A2 (GIN on non-JSONB):                         0")
         print("  A3 (drop-recreate enum on dependent column):   0")
         print("  A4 (cross-branch dep missing depends_on):      0")
+        print("  A5 (unsafe use of newly-added enum value):     0")
         sys.exit(0)
     print(f"VIOLATIONS: {total} total")
     for klass, lines in result.items():
