@@ -33,6 +33,7 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
         if tenant is None:
             tenant = Tenant(
                 slug=tenant_slug,
+                code=tenant_slug,
                 name=f"{company_name} ({tenant_slug})",
                 contact_email="demo@example.local",
                 schema_name=f"tenant_{tenant_slug}",
