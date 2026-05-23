@@ -181,6 +181,16 @@ async def _hydrate_async_session_tenant_identity(
             )
         ).first()
     except Exception:
+        # If the hydration query failed (e.g. minimal/restored DB lacks
+        # Tenant.schema_name column, or table is missing), we must roll back
+        # so the session's transaction is not left in an aborted state.
+        # Otherwise the very next statement (typically _apply_search_path's
+        # ``SET LOCAL search_path``) fails with InFailedSQLTransactionError
+        # and bubbles out of __aenter__, poisoning all downstream callers.
+        try:
+            await session.rollback()
+        except Exception:
+            pass
         return tenant_id, tenant_slug, tenant_schema_name
 
     if row is None:

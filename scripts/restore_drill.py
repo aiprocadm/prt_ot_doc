@@ -321,7 +321,14 @@ async def _seed_source_postgres(cfg: PostgresMinioConfig, tenant_slug: str) -> d
 
         object_manifest: list[dict[str, Any]] = []
         for obj in objects:
-            metadata = {"cache-control": "max-age=60", "origin": "restore-drill"}
+            # NOTE: avoid HTTP-standard header names like ``cache-control`` in
+            # user metadata — newer minio releases (>= RELEASE.2023-09-23) treat
+            # them as the standard ``Cache-Control`` HTTP header and strip them
+            # from the ``x-amz-meta-*`` echo on GET/Stat. That breaks the
+            # postgres-minio restore-drill metadata-fidelity check while saying
+            # nothing about backup/restore integrity. Use clearly-test names so
+            # the verifier is image-version-stable.
+            metadata = {"purpose": "restore-drill-evidence", "origin": "restore-drill"}
             digest = _sha256_bytes(obj.content)
             client.put_object(
                 cfg.source_bucket,
