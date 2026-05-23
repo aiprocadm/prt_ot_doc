@@ -1,5 +1,120 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-23, Session 65 — iter-13..15h closure: alembic-postgres-upgrade GREEN, RB workflows re-triggered)
+
+- **Дата:** 2026-05-23 (продолжение Session 64). PR #564 (iter-13) merged `4c85167`, PR #565 (iter-14..15h) merged `3c3361b` at 2026-05-22T23:56:25Z. Текущая ветка для этого handoff: `docs/sync-iter-13-15h-handoff` от свежего main.
+- **Агент:** Claude Opus 4.7 (local Windows, py 3.13 fallback; explanatory style).
+- **Задача:** «Продолжай по ТЗ» — iter-12 handoff "после alembic green" ветка: задокументировать iter-13..15h closure + триггер RB workflows (`restore-drill`, `perf-baseline`, `e2e-smoke`) для валидации RB-001/002/005.
+- **Статус:** ✅ ALEMBIC-POSTGRES-UPGRADE GREEN на main (run [26317604470](https://github.com/aiprocadm/prt_ot_doc/actions/runs/26317604470)). 9-итерационный migration DAG repair sprint (iter-7→iter-15h) ЗАКРЫТ. RB workflows triggered (см. ниже). 🟡 PARTIAL — awaiting RB workflow results + this PR for handoff sync.
+- **Где остановился:** Branch pushed, handoff updated. Awaiting (a) RB workflow conclusions on main (in flight: runs 26330050030/051342/052346), (b) merge этого doc PR.
+
+### Studied Documentation
+
+- `AI_IMPLEMENTATION_REPORT.md` Session 64 iter-12 entry — "after alembic green" branch явно прописал: trigger RB workflows + close RB-001/002/005 в `RELEASE_BLOCKERS_STATUS.md` если evidence supports.
+- `git log` iter-13..15h chain (12 commits, all in `backend/app/migrations/versions/` + 1 in `backend/app/modules/pdf/models.py`): structured progression through 10 antipattern classes.
+- `tests/test_migrations_comprehensive_safety.py` (PR #565) — AST sweep covering 5 antipattern visitors (A1..A5), 12 synthetic-violation tests.
+- CI run [26317604470](https://github.com/aiprocadm/prt_ot_doc/actions/runs/26317604470) jobs matrix: alembic ✅, smoke-compose ✅, backend-tests ❌ (142 fails — app drift), frontend-tests ❌ (1/310 — label mismatch), perf-smoke ❌ (CI env vars), container-image-scan ❌ (known CVE exception).
+- Memory: `[[mvp-release-blockers]]`, `[[app-level-defects-post-billing]]`.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 0 release-blocker chase (P0) — "after alembic green" branch.
+- **Приоритет:** P0 — RB-001/002/005 still nominally blocking; need RB workflow re-runs against alembic-green main to gather evidence.
+- **Почему выбрана:** Iter-12 handoff prescribed it; user confirmed via `AskUserQuestion` ("RB workflows + handoff sync"). Backend-tests app drift (142 fails) is a separate scope, deferred to iter-16+.
+
+### Implemented Changes
+
+**Iter-13..15h chain (already merged via PR #564 + #565):**
+
+| Iter | Commit | Scope | Antipattern class |
+|------|--------|-------|------------------|
+| 13 | `6cd3a91` | Split next55 into next55+next55b (enum-add vs data-update) | (transitional, superseded by 14) |
+| 14 sweep | `10c2399` | AST pin-test for A1..A4 antipatterns | — |
+| 14 fix | `c66d4f1` | Remove lossy UPDATE in next55b | A5: unsafe new enum value usage |
+| 14 polish | `41e29dc`, `46569d1` | Code-review fixes + A5 visitor + cross-revision synthetic | — |
+| 15 | `8dd77cc` | Reorder next57 add_columns before create_indexes | A6: intra-mig ordering (deferred) |
+| 15b | `ad91374` | Guard ALTER TYPE next67 risk-custom-enum | A7: ALTER TYPE on missing type |
+| 15c | `056d7c2` | next53 idx idempotent (IF NOT EXISTS) | A8: dup idx across siblings |
+| 15d | `f6b28ae` | next40 idx idempotent (symmetric guard) | A8 (symmetric coverage) |
+| 15e | `3883263` | Remove stale file_versions duplicate from next21 | A9: schema conflict siblings |
+| 15f | `4e8516b` | Remove 20250322 from next69 merge tuple | A10: depends_on/merge overlap |
+| 15g | `1768fec` | Promote 20250501 depends_on → down_revision tuple | A10 (proper fix) |
+| 15h | `18229da` | Promote 2 remaining depends_on shims to DAG parents | A10 (generalization) |
+
+**This session (iter-16 doc sync):**
+- This handoff entry в `AI_IMPLEMENTATION_REPORT.md` (top of file).
+
+### Changed / New Files
+
+- `AI_IMPLEMENTATION_REPORT.md` (+~90 / 0 lines, new handoff entry at top).
+
+### Decisions
+
+- **Re-trigger RB workflows immediately, не дожидаясь backend-tests fix.** Backend-tests fails (RBAC, missing modules, health checks, staging hardening) — это app-level drift, не migrations. RB workflows (`restore-drill`, `perf-baseline`, `e2e-smoke`) тестируют specifically backend boot + S3 + frontend smoke — нам нужно понять, проходят ли они теперь, когда alembic зелёный. Если перфектно зелёные → RB-001/002/005 закрываются independent of backend-tests drift. Если красные → их failures дают next iteration scope.
+- **0 `depends_on` annotations remain в migration tree.** Iter-15g + 15h generalized lesson из iter-15f: cross-branch ordering требований выражаются через explicit DAG edges (`down_revision` tuple), а `depends_on` reserved для genuinely external dependencies. Финальный shape: `next69_merge_heads` tuple shrank 11 → 8 параметров, 3 ноды promoted в interior nodes.
+- **Defer A6..A10 pin-tests.** Каждая антипаттерн была обнаружена reactively через CI failure. AST visitors для них требуют 80-150 LOC каждый. Hodling до iter-16+ когда либо (a) class recurs, либо (b) проактивная инициатива заполнить gap.
+- **Doc-only PR scope.** Ни единого изменения backend/frontend кода. Минимизирует риск + matches `[[prodolzhay-po-tz-workflow]]` "auto-commit может произойти во время сессии, docs follow-up отдельным commit'ом" pattern.
+
+### Issues Fixed
+
+- **Iter-13..15h chain (already in main):** alembic-postgres-upgrade закрыт после 9 итераций. См. таблицу выше для 10 антипаттернов.
+- **This handoff entry** — sync documentation debt накопившийся за iter-13..15h period.
+
+### Known Problems / Risks
+
+- **RB workflows in flight, exit status not yet known.** Возможные results (по iter-12 + `[[app-level-defects-post-billing]]` predictions):
+  - `restore-drill`: sqlite mode already green. postgres-minio mode blocked by (i) `bitnamilegacy/minio` S3 metadata drift, (ii) missing LibreOffice in CI.
+  - `perf-baseline`: alembic-postgres-upgrade теперь зелёный, но frontend `/no-access` regression может блокировать. Или missing CI env vars (S3/SECRET_KEY) могут пакостить — perf-smoke в CI ci.yml уже это показал.
+  - `e2e-smoke`: still blocked by `/no-access` page rendering regression per `[[app-level-defects-post-billing]]`.
+- **Backend-tests 142 fails — app-level drift не covered этим closure.** Categories: RBAC `module_access_denied` vs `missing_permission` (~50 fails), missing `app.domains.{audit,workflows,integrations,notifications}` modules (~10), workspace role config 404s (~7), health checks `FrozenInstanceError` + missing `webhook_notification_url` field (~8), staging hardening "DID NOT RAISE" (~4), `DocumentTemplate` ImportError (1). Separate iter-16+ scope.
+- **Frontend test `ClientPortalHistoryAndRequests`** label mismatch (1 of 310) — cousin of `/no-access` regression. Same Russian-label-text-drift class. Possibly same iter-16 scope.
+- **Container-image-scan red под exception** (CVE-2025-62727 starlette DoS, expires 2026-08-31). Не блокер релиза.
+- **Local pytest hangs** (Windows+Py3.13). Pin-tests self-contained — обходят через `python tests/...`. CI на 3.12.12 — source of truth.
+
+### Validation
+
+- `git log origin/main -3` → confirms 3c3361b merge of PR #565.
+- `gh api .../runs/26317604470/jobs` → confirms `alembic-postgres-upgrade: success`.
+- This file: handoff entry prepended; format matches iter-11/12.
+- RB workflow triggers (issued in this session):
+  - `restore-drill.yml`: run [26330050030](https://github.com/aiprocadm/prt_ot_doc/actions/runs/26330050030)
+  - `perf-baseline.yml`: run [26330051342](https://github.com/aiprocadm/prt_ot_doc/actions/runs/26330051342)
+  - `e2e-smoke.yml`: run [26330052346](https://github.com/aiprocadm/prt_ot_doc/actions/runs/26330052346)
+
+### Next Steps
+
+**iter-16 scope (decision tree based on RB workflow exit codes):**
+
+1. **Commit + push** этого handoff PR.
+2. **Wait for RB workflow conclusions** (estimated 15-40 min total).
+3. **If `restore-drill` GREEN end-to-end (postgres-minio mode):**
+   - Update `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`: RB-001 → ✅ done. Cite run URL.
+   - Cascade doc sync (synchronization rule): RELEASE_READINESS.md, ACCEPTANCE_TEST_MATRIX.md, KNOWN_LIMITATIONS.md, GAP_REPORT.md, docs/stabilization/PLAN.md.
+4. **If `restore-drill` RED:** identify failure class:
+   - If minio metadata drift (3 object mismatch pattern from prior runs) → iter-16-minio scope.
+   - If LibreOffice missing → trivial CI fix (apt-get install libreoffice-core) → iter-16-libreoffice scope.
+   - If new class → document, iter-16+.
+5. **If `perf-baseline` GREEN:** RB-002 → ✅ done. Cite run URL.
+6. **If `perf-baseline` RED:** check whether CI env vars (S3_ACCESS_KEY/SECRET_KEY) are missing or app drift.
+7. **If `e2e-smoke` GREEN:** RB-005 → ✅ done. Cite run URL.
+8. **If `e2e-smoke` RED on `/no-access` page:** frontend regression scope — locate "Доступ ограничен" string drift in `frontend/src/pages/`, fix selector or restore heading.
+9. **Backend-tests app drift parallel scope** (separate from RB closure): 5+ categories listed in "Known Problems / Risks" above. Likely iter-17+ multi-PR series.
+10. **Optional polish:** A6..A10 AST visitors (defer until antipattern recurs).
+
+**Стартовая команда для следующей сессии:**
+```
+git checkout main && git pull
+# Check RB workflow results
+gh run view 26330050030 --json conclusion,status
+gh run view 26330051342 --json conclusion,status
+gh run view 26330052346 --json conclusion,status
+# Based on results, either close RBs in docs OR identify next failure class
+```
+
+**Branch suggestion для iter-16 dev work:** `fix/iter-16-<topic>` где `<topic>` зависит от RB workflow results (minio, libreoffice, no-access, rbac, etc.).
+
+---
+
 ## Last Agent Handoff (2026-05-22, Session 64 follow-up — iter-12: templateversionstatus ALTER TYPE ADD VALUE, PR #563 open)
 
 - **Дата:** 2026-05-22 (продолжение Session 64 после iter-11 closure). Ветка `fix/iter-12-templateversionstatus-alter-add-value` от свежего main. Single commit `bc3a54f`.
