@@ -32,7 +32,7 @@ describe("LoginPage smoke", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Вход в платформу" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Тенант")).toBeInTheDocument();
+    expect(screen.getByLabelText("Tenant")).toBeInTheDocument();
     expect(screen.getByLabelText("E-mail")).toBeInTheDocument();
     expect(screen.getByLabelText("Пароль")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Войти" })).toBeInTheDocument();
