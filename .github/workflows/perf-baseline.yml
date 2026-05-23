@@ -25,6 +25,18 @@ jobs:
       - name: Prepare env
         run: cp .env.example .env
 
+      - name: Fill required CI secrets (placeholders only)
+        # Staging-hardening (backend/app/core/config.py::bootstrap) rejects empty
+        # SECRET_KEY / S3_ACCESS_KEY / S3_SECRET_KEY. .env.example ships them
+        # blank by design — fill with CI-only placeholders so API can boot.
+        run: |
+          cat >> .env <<'EOF'
+          SECRET_KEY=ci-perf-baseline-not-for-production
+          POSTGRES_PASSWORD=ptd
+          S3_ACCESS_KEY=minioadmin
+          S3_SECRET_KEY=minioadmin
+          EOF
+
       - name: Enable Redis memory overcommit
         run: sudo sysctl -w vm.overcommit_memory=1
 
