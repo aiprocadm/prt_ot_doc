@@ -108,6 +108,14 @@ def _create_lifespan(settings: Settings) -> Callable[[FastAPI], AsyncIterator[No
             },
         )
         try:
+            # Register cross-base FK resolution so that string-form
+            # ForeignKey("tenant.id") on TenantBaseModel subclasses can resolve
+            # at flush time. Safe to call multiple times; must run before the
+            # first session.flush (bootstrap_demo_tenant below is the first
+            # flush in the lifespan).
+            from app.db.session import register_cross_base_fk_resolution
+
+            register_cross_base_fk_resolution()
             s3.ensure_bucket()
             await bootstrap_admin_user(settings)
             await bootstrap_demo_tenant(settings)
