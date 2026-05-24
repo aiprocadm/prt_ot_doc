@@ -405,6 +405,43 @@ def ensure_tenant_schema(
         _tenant_initialized.add(schema)
 
 
+async def aensure_tenant_schema(
+    slug: str,
+    *,
+    schema_name: str | None = None,
+    implicit: bool = False,
+) -> None:
+    """Async-native :func:`ensure_tenant_schema`.
+
+    The sync wrapper does the heavy lifting via ``_run_in_thread`` +
+    ``asyncio.run``, which spins up a brand-new event loop. The global
+    async engine's connection pool was created in the calling loop, so any
+    asyncpg connection it hands out has Futures bound to that loop —
+    touching them from the worker loop raises ``RuntimeError: Future ...
+    attached to a different loop`` and aborts ``CREATE TABLE`` mid-flight,
+    leaving the tenant schema empty (and the next ``SELECT`` failing with
+    ``UndefinedTableError``).
+
+    From an async context (e.g. FastAPI lifespan), call this helper
+    instead — it stays on the current loop, idempotent via the same
+    ``_tenant_initialized`` cache.
+    """
+
+    if implicit and not _settings.runtime_schema_bootstrap:
+        return
+    if not _SUPPORTS_SCHEMAS:
+        return
+    schema = str(schema_name or tenant_schema(slug)).strip()
+    if not schema:
+        return
+    if _settings.app_env == "production":
+        return
+    if schema in _tenant_initialized:
+        return
+    await _create_tenant_schema(schema)
+    _tenant_initialized.add(schema)
+
+
 def resolve_tenant_schema(tenant_id: str) -> str:
     """Build a deterministic per-tenant schema name from tenant UUID/string."""
 

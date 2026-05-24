@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db import ensure_tenant_schema
+from app.db import aensure_tenant_schema
 from app.models.models import (
     Company,
     PackagePreset,
@@ -87,7 +87,7 @@ class BootstrapTenantService:
     async def _ensure_tenant(self, *, tenant_slug: str, tenant_name: str, owner_email: str, dry_run: bool, summary: BootstrapTenantSummary) -> Tenant | None:
         existing = (await self.session.execute(select(Tenant).where(Tenant.slug == tenant_slug))).scalar_one_or_none()
         if existing:
-            ensure_tenant_schema(existing.slug, schema_name=existing.schema_name or f"tenant_{existing.slug}")
+            await aensure_tenant_schema(existing.slug, schema_name=existing.schema_name or f"tenant_{existing.slug}")
             summary.mark(entity="tenant", created=False)
             return existing
 
@@ -98,7 +98,7 @@ class BootstrapTenantService:
         tenant = Tenant(slug=tenant_slug, code=tenant_slug, name=tenant_name, contact_email=owner_email, schema_name=f"tenant_{tenant_slug}", s3_prefix=f"tenants/{tenant_slug}")
         self.session.add(tenant)
         await self.session.flush()
-        ensure_tenant_schema(tenant_slug, schema_name=tenant.schema_name)
+        await aensure_tenant_schema(tenant_slug, schema_name=tenant.schema_name)
         summary.mark(entity="tenant", created=True)
         return tenant
 
