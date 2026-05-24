@@ -252,6 +252,39 @@ def _mirror_shared_tables_for_creation() -> list[Table]:
     return mirrored
 
 
+def register_cross_base_fk_resolution() -> None:
+    """Mirror shared tables into TenantBase.metadata for cross-base FK resolution.
+
+    String-form ForeignKeys on TenantBaseModel subclasses (e.g. ``Company``'s
+    ``tenant_id`` referring to ``ForeignKey("tenant.id")``) are resolved by
+    SQLAlchemy at flush time by looking up the target name in the *source*
+    mapper's MetaData. For SQLite the existing :func:`_mirror_shared_tables_for_creation`
+    helper makes them visible (and is undone after create_all), but on Postgres
+    the mirror is intentionally skipped — so the FK is unresolvable at flush
+    time and ORM operations against tenant-scoped models raise
+    ``sqlalchemy.exc.NoReferencedTableError``.
+
+    Re-add the mirror permanently (idempotent) so that:
+
+    * cross-base FK strings resolve regardless of dialect;
+    * each mirrored table keeps its original schema (e.g. ``public`` for
+      Postgres), so ``checkfirst=True`` ``create_all`` does NOT re-emit
+      ``CREATE TABLE`` against the tenant schema — the table already exists
+      in the shared schema.
+
+    Safe to call multiple times. Must be invoked after all SharedBase models
+    are imported (typically from the FastAPI lifespan, before the first
+    ``session.flush``).
+    """
+
+    for table in SharedBase.metadata.tables.values():
+        if table.key in TenantBase.metadata.tables:
+            continue
+        # ``to_metadata`` preserves the table's schema attribute, so the
+        # mirrored copy still resolves to ``public.tenant`` on Postgres.
+        table.to_metadata(TenantBase.metadata)
+
+
 async def _create_shared_schema() -> None:
     """Create database objects stored in the shared schema."""
 
