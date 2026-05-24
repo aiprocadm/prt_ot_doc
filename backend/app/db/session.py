@@ -258,19 +258,22 @@ def register_cross_base_fk_resolution() -> None:
     String-form ForeignKeys on TenantBaseModel subclasses (e.g. ``Company``'s
     ``tenant_id`` referring to ``ForeignKey("tenant.id")``) are resolved by
     SQLAlchemy at flush time by looking up the target name in the *source*
-    mapper's MetaData. For SQLite the existing :func:`_mirror_shared_tables_for_creation`
-    helper makes them visible (and is undone after create_all), but on Postgres
-    the mirror is intentionally skipped — so the FK is unresolvable at flush
-    time and ORM operations against tenant-scoped models raise
+    mapper's MetaData under the unqualified key (the parent column's schema
+    is ``None`` for TenantBase models). For SQLite the existing
+    :func:`_mirror_shared_tables_for_creation` helper makes shared tables
+    visible (and is undone after create_all); on Postgres the mirror is
+    intentionally skipped — so the FK is unresolvable at flush time and ORM
+    operations against tenant-scoped models raise
     ``sqlalchemy.exc.NoReferencedTableError``.
 
-    Re-add the mirror permanently (idempotent) so that:
-
-    * cross-base FK strings resolve regardless of dialect;
-    * each mirrored table keeps its original schema (e.g. ``public`` for
-      Postgres), so ``checkfirst=True`` ``create_all`` does NOT re-emit
-      ``CREATE TABLE`` against the tenant schema — the table already exists
-      in the shared schema.
+    Re-add the mirror permanently (idempotent) with ``schema=None`` so the
+    mirrored copy is keyed by its bare table name (``"tenant"`` rather than
+    ``"public.tenant"``) — that is the key SQLAlchemy's FK string resolver
+    actually looks for. The original shared table keeps its real schema, so
+    DDL for the shared schema is unaffected. Each mirrored table is tagged
+    via ``info["cross_base_mirror"]`` so ``create_all`` against
+    ``TenantBase.metadata`` can skip it (the real table lives in
+    ``SharedBase.metadata``).
 
     Safe to call multiple times. Also wired to SQLAlchemy's ``after_configured``
     mapper event so it runs automatically before any flush, regardless of
@@ -278,11 +281,26 @@ def register_cross_base_fk_resolution() -> None:
     """
 
     for table in SharedBase.metadata.tables.values():
-        if table.key in TenantBase.metadata.tables:
+        if table.name in TenantBase.metadata.tables:
             continue
-        # ``to_metadata`` preserves the table's schema attribute, so the
-        # mirrored copy still resolves to ``public.tenant`` on Postgres.
-        table.to_metadata(TenantBase.metadata)
+        mirrored = table.to_metadata(TenantBase.metadata, schema=None)
+        mirrored.info["cross_base_mirror"] = True
+
+
+def _tenant_tables_for_creation() -> list[Table]:
+    """Return TenantBase tables that should participate in create_all.
+
+    Excludes cross-base FK-resolution mirrors registered by
+    :func:`register_cross_base_fk_resolution` — those exist only to satisfy
+    SQLAlchemy's string FK resolver; the real shared tables are created via
+    ``SharedBase.metadata.create_all``.
+    """
+
+    return [
+        table
+        for table in TenantBase.metadata.tables.values()
+        if not table.info.get("cross_base_mirror")
+    ]
 
 
 # Run the registration automatically as soon as all SQLAlchemy mappers are
@@ -308,7 +326,12 @@ async def _create_shared_schema() -> None:
 
         try:
             if not _SUPPORTS_SCHEMAS:
-                await conn.run_sync(TenantBase.metadata.create_all)
+                tables = _tenant_tables_for_creation()
+                await conn.run_sync(
+                    lambda sync_conn: TenantBase.metadata.create_all(
+                        sync_conn, tables=tables
+                    )
+                )
         finally:
             for table in mirrored:
                 TenantBase.metadata.remove(table)
@@ -323,7 +346,12 @@ async def _create_tenant_schema(schema: str) -> None:
         await conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema}"'))
         if _SEARCH_PATH_SUPPORTED:
             await conn.execute(text(f'SET search_path TO "{schema}"'))
-        await conn.run_sync(TenantBase.metadata.create_all)
+        tables = _tenant_tables_for_creation()
+        await conn.run_sync(
+            lambda sync_conn: TenantBase.metadata.create_all(
+                sync_conn, tables=tables
+            )
+        )
 
 
 def ensure_shared_schema(*, implicit: bool = False) -> None:
@@ -375,6 +403,43 @@ def ensure_tenant_schema(
 
         _run_in_thread(runner)
         _tenant_initialized.add(schema)
+
+
+async def aensure_tenant_schema(
+    slug: str,
+    *,
+    schema_name: str | None = None,
+    implicit: bool = False,
+) -> None:
+    """Async-native :func:`ensure_tenant_schema`.
+
+    The sync wrapper does the heavy lifting via ``_run_in_thread`` +
+    ``asyncio.run``, which spins up a brand-new event loop. The global
+    async engine's connection pool was created in the calling loop, so any
+    asyncpg connection it hands out has Futures bound to that loop —
+    touching them from the worker loop raises ``RuntimeError: Future ...
+    attached to a different loop`` and aborts ``CREATE TABLE`` mid-flight,
+    leaving the tenant schema empty (and the next ``SELECT`` failing with
+    ``UndefinedTableError``).
+
+    From an async context (e.g. FastAPI lifespan), call this helper
+    instead — it stays on the current loop, idempotent via the same
+    ``_tenant_initialized`` cache.
+    """
+
+    if implicit and not _settings.runtime_schema_bootstrap:
+        return
+    if not _SUPPORTS_SCHEMAS:
+        return
+    schema = str(schema_name or tenant_schema(slug)).strip()
+    if not schema:
+        return
+    if _settings.app_env == "production":
+        return
+    if schema in _tenant_initialized:
+        return
+    await _create_tenant_schema(schema)
+    _tenant_initialized.add(schema)
 
 
 def resolve_tenant_schema(tenant_id: str) -> str:

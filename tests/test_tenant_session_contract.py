@@ -262,9 +262,13 @@ async def test_tenant_bootstrap_service_uses_recorded_schema_name_for_existing_t
         await session.commit()
 
     ensured: list[tuple[str, str | None]] = []
+
+    async def _record_ensure(slug, *, schema_name=None):
+        ensured.append((slug, schema_name))
+
     monkeypatch.setattr(
-        "app.services.tenants.bootstrap.service.ensure_tenant_schema",
-        lambda slug, *, schema_name=None: ensured.append((slug, schema_name)),
+        "app.services.tenants.bootstrap.service.aensure_tenant_schema",
+        _record_ensure,
     )
 
     async def _noop(*args, **kwargs) -> None:

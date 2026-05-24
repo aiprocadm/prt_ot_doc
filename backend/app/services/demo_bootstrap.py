@@ -7,7 +7,7 @@ import logging
 from sqlalchemy import select
 
 from app.core.config import Settings
-from app.db import ensure_tenant_schema, session_scope
+from app.db import aensure_tenant_schema, session_scope
 from app.domains.packs.seeder import ensure_default_packs
 from app.models.finance import Department
 from app.models.models import Company, Person, Position, Site, Tenant, TrainingCourse
@@ -44,7 +44,7 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
         tenant_db_id = str(tenant.id)
         tenant_schema_name = str(tenant.schema_name or f"tenant_{tenant_slug}")
 
-    ensure_tenant_schema(tenant_slug, schema_name=tenant_schema_name)
+    await aensure_tenant_schema(tenant_slug, schema_name=tenant_schema_name)
 
     async with session_scope(tenant=tenant_slug) as session:
         company = (await session.execute(select(Company).where(Company.name == company_name))).scalar_one_or_none()

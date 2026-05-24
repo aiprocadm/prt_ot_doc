@@ -72,7 +72,10 @@ async def run() -> None:
     storage = FileStorageService.default()
     with tenant_context(SEED_TENANT):
         async with session_scope(tenant=SEED_TENANT) as session:
-            await seed_authz_catalog(session)
+            tenant_row_id = (
+                await session.execute(select(Tenant.id).where(Tenant.slug == SEED_TENANT))
+            ).scalar_one()
+            await seed_authz_catalog(session, tenant_id=str(tenant_row_id))
             for template_data in SEED_TEMPLATES:
                 content_bytes = build_docx(template_data["content"])
                 storage_key = f"{SEED_TENANT}/templates/{template_data['name']}.docx"
