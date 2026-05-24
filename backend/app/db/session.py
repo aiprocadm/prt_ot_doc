@@ -345,7 +345,12 @@ async def _create_tenant_schema(schema: str) -> None:
     async with engine.begin() as conn:
         await conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema}"'))
         if _SEARCH_PATH_SUPPORTED:
-            await conn.execute(text(f'SET search_path TO "{schema}"'))
+            # Include the shared schema so cross-schema FK targets
+            # (e.g. ``REFERENCES tenant (id)`` where ``tenant`` lives in
+            # ``public``) resolve during CREATE TABLE in the tenant schema.
+            await conn.execute(
+                text(f'SET search_path TO "{schema}", "{_SHARED_SCHEMA}"')
+            )
         tables = _tenant_tables_for_creation()
         await conn.run_sync(
             lambda sync_conn: TenantBase.metadata.create_all(
