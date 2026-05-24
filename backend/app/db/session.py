@@ -272,9 +272,9 @@ def register_cross_base_fk_resolution() -> None:
       ``CREATE TABLE`` against the tenant schema — the table already exists
       in the shared schema.
 
-    Safe to call multiple times. Must be invoked after all SharedBase models
-    are imported (typically from the FastAPI lifespan, before the first
-    ``session.flush``).
+    Safe to call multiple times. Also wired to SQLAlchemy's ``after_configured``
+    mapper event so it runs automatically before any flush, regardless of
+    which entry point (CLI, lifespan, tests) is used.
     """
 
     for table in SharedBase.metadata.tables.values():
@@ -283,6 +283,20 @@ def register_cross_base_fk_resolution() -> None:
         # ``to_metadata`` preserves the table's schema attribute, so the
         # mirrored copy still resolves to ``public.tenant`` on Postgres.
         table.to_metadata(TenantBase.metadata)
+
+
+# Run the registration automatically as soon as all SQLAlchemy mappers are
+# configured — that is the natural "post-import, pre-flush" point. The
+# explicit ``register_cross_base_fk_resolution()`` call kept in
+# ``app/api/app.py::lifespan`` remains as a belt-and-suspenders safeguard
+# for any flush that might happen before mapper auto-configure (e.g.
+# Alembic offline mode or test fixtures that touch sessions directly).
+from sqlalchemy.orm import Mapper as _Mapper  # noqa: E402  (intentional late import)
+
+
+@event.listens_for(_Mapper, "after_configured")
+def _auto_register_cross_base_fk_resolution() -> None:
+    register_cross_base_fk_resolution()
 
 
 async def _create_shared_schema() -> None:
