@@ -72,7 +72,8 @@ class BootstrapTenantService:
         )
         await self._ensure_quota(tenant_id=tenant_id, dry_run=dry_run, summary=summary)
         await self._ensure_owner(tenant_id=tenant_id, owner_email=owner_email, owner_password=owner_password, dry_run=dry_run, summary=summary)
-        await seed_authz_catalog(self.session)
+        if not dry_run:
+            await seed_authz_catalog(self.session, tenant_id=tenant_id)
         summary.mark(entity="authz_catalog", created=False)
         await self._ensure_company_profile(tenant_id=tenant_id, tenant_name=tenant_name, dry_run=dry_run, summary=summary)
         await self._seed_starter_pack(tenant_id=tenant_id, tenant_slug=tenant_slug, dry_run=dry_run, demo=demo, summary=summary)

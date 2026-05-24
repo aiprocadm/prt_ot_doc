@@ -258,19 +258,22 @@ def register_cross_base_fk_resolution() -> None:
     String-form ForeignKeys on TenantBaseModel subclasses (e.g. ``Company``'s
     ``tenant_id`` referring to ``ForeignKey("tenant.id")``) are resolved by
     SQLAlchemy at flush time by looking up the target name in the *source*
-    mapper's MetaData. For SQLite the existing :func:`_mirror_shared_tables_for_creation`
-    helper makes them visible (and is undone after create_all), but on Postgres
-    the mirror is intentionally skipped — so the FK is unresolvable at flush
-    time and ORM operations against tenant-scoped models raise
+    mapper's MetaData under the unqualified key (the parent column's schema
+    is ``None`` for TenantBase models). For SQLite the existing
+    :func:`_mirror_shared_tables_for_creation` helper makes shared tables
+    visible (and is undone after create_all); on Postgres the mirror is
+    intentionally skipped — so the FK is unresolvable at flush time and ORM
+    operations against tenant-scoped models raise
     ``sqlalchemy.exc.NoReferencedTableError``.
 
-    Re-add the mirror permanently (idempotent) so that:
-
-    * cross-base FK strings resolve regardless of dialect;
-    * each mirrored table keeps its original schema (e.g. ``public`` for
-      Postgres), so ``checkfirst=True`` ``create_all`` does NOT re-emit
-      ``CREATE TABLE`` against the tenant schema — the table already exists
-      in the shared schema.
+    Re-add the mirror permanently (idempotent) with ``schema=None`` so the
+    mirrored copy is keyed by its bare table name (``"tenant"`` rather than
+    ``"public.tenant"``) — that is the key SQLAlchemy's FK string resolver
+    actually looks for. The original shared table keeps its real schema, so
+    DDL for the shared schema is unaffected. Each mirrored table is tagged
+    via ``info["cross_base_mirror"]`` so ``create_all`` against
+    ``TenantBase.metadata`` can skip it (the real table lives in
+    ``SharedBase.metadata``).
 
     Safe to call multiple times. Also wired to SQLAlchemy's ``after_configured``
     mapper event so it runs automatically before any flush, regardless of
@@ -278,11 +281,26 @@ def register_cross_base_fk_resolution() -> None:
     """
 
     for table in SharedBase.metadata.tables.values():
-        if table.key in TenantBase.metadata.tables:
+        if table.name in TenantBase.metadata.tables:
             continue
-        # ``to_metadata`` preserves the table's schema attribute, so the
-        # mirrored copy still resolves to ``public.tenant`` on Postgres.
-        table.to_metadata(TenantBase.metadata)
+        mirrored = table.to_metadata(TenantBase.metadata, schema=None)
+        mirrored.info["cross_base_mirror"] = True
+
+
+def _tenant_tables_for_creation() -> list[Table]:
+    """Return TenantBase tables that should participate in create_all.
+
+    Excludes cross-base FK-resolution mirrors registered by
+    :func:`register_cross_base_fk_resolution` — those exist only to satisfy
+    SQLAlchemy's string FK resolver; the real shared tables are created via
+    ``SharedBase.metadata.create_all``.
+    """
+
+    return [
+        table
+        for table in TenantBase.metadata.tables.values()
+        if not table.info.get("cross_base_mirror")
+    ]
 
 
 # Run the registration automatically as soon as all SQLAlchemy mappers are
@@ -308,7 +326,12 @@ async def _create_shared_schema() -> None:
 
         try:
             if not _SUPPORTS_SCHEMAS:
-                await conn.run_sync(TenantBase.metadata.create_all)
+                tables = _tenant_tables_for_creation()
+                await conn.run_sync(
+                    lambda sync_conn: TenantBase.metadata.create_all(
+                        sync_conn, tables=tables
+                    )
+                )
         finally:
             for table in mirrored:
                 TenantBase.metadata.remove(table)
@@ -323,7 +346,12 @@ async def _create_tenant_schema(schema: str) -> None:
         await conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema}"'))
         if _SEARCH_PATH_SUPPORTED:
             await conn.execute(text(f'SET search_path TO "{schema}"'))
-        await conn.run_sync(TenantBase.metadata.create_all)
+        tables = _tenant_tables_for_creation()
+        await conn.run_sync(
+            lambda sync_conn: TenantBase.metadata.create_all(
+                sync_conn, tables=tables
+            )
+        )
 
 
 def ensure_shared_schema(*, implicit: bool = False) -> None:
