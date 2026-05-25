@@ -434,8 +434,6 @@ async def test_employees_multi_tenant(sessionmaker, data_factory: TestDataFactor
 @pytest.fixture()
 async def test_templates_multi_tenant(sessionmaker, data_factory: TestDataFactory):
     """Create test templates in multiple tenants."""
-    from app.models.models import DocumentTemplate
-    
     templates = {}
     for tenant_slug in ["tenant-a", "tenant-b"]:
         async with sessionmaker() as session:
