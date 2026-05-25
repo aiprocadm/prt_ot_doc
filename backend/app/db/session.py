@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import threading
 from collections.abc import AsyncIterator, Callable, Iterable
 from contextlib import asynccontextmanager
@@ -20,6 +21,8 @@ from sqlalchemy.orm import DeclarativeBase
 from app.core.config import get_settings
 from app.core.tenant import get_current_tenant, tenant_schema
 from app.modules.tenancy.context import get_tenant_context
+
+_logger = logging.getLogger(__name__)
 
 _settings = get_settings()
 _DEFAULT_TENANT_SLUG = _settings.default_tenant_slug
@@ -344,19 +347,33 @@ async def _create_tenant_schema(schema: str) -> None:
         return
     async with engine.begin() as conn:
         await conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema}"'))
+        search_path_sql = f'SET LOCAL search_path TO "{schema}", "{_SHARED_SCHEMA}"'
         if _SEARCH_PATH_SUPPORTED:
-            # Include the shared schema so cross-schema FK targets
-            # (e.g. ``REFERENCES tenant (id)`` where ``tenant`` lives in
-            # ``public``) resolve during CREATE TABLE in the tenant schema.
-            await conn.execute(
-                text(f'SET search_path TO "{schema}", "{_SHARED_SCHEMA}"')
+            # iter-16f part 4 set this on the async conn, but FK to unqualified
+            # ``tenant`` still failed in CI — the async→sync greenlet bridge
+            # used by run_sync may not propagate session-scoped SET reliably.
+            # Apply SET LOCAL on both sides of the bridge and verify.
+            await conn.execute(text(search_path_sql))
+            applied_async = (
+                await conn.execute(text("SHOW search_path"))
+            ).scalar_one()
+            _logger.info(
+                "tenant.schema.create.async.search_path",
+                extra={"schema": schema, "search_path": applied_async},
             )
         tables = _tenant_tables_for_creation()
-        await conn.run_sync(
-            lambda sync_conn: TenantBase.metadata.create_all(
-                sync_conn, tables=tables
-            )
-        )
+
+        def _create(sync_conn) -> None:
+            if _SEARCH_PATH_SUPPORTED:
+                sync_conn.execute(text(search_path_sql))
+                applied_sync = sync_conn.execute(text("SHOW search_path")).scalar_one()
+                _logger.info(
+                    "tenant.schema.create.sync.search_path",
+                    extra={"schema": schema, "search_path": applied_sync},
+                )
+            TenantBase.metadata.create_all(sync_conn, tables=tables)
+
+        await conn.run_sync(_create)
 
 
 def ensure_shared_schema(*, implicit: bool = False) -> None:
