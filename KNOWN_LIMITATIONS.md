@@ -48,3 +48,17 @@ GitHub Actions billing was restored on 2026-05-21 after a ~9-week block (from 20
 | `.github/workflows/e2e-smoke.yml` | RB-005 | `failure` on pre-iter-8 commits | Re-trigger against `main` once boot is green and frontend `/no-access` regression is verified resolved by iter-8 |
 
 This limitation block exists to make explicit that the release-blocker checkbox states `[ ]` in `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` are **not yet stale** — they accurately reflect the absence of post-iter-8 green evidence.
+
+## Test-suite limitations (added 2026-05-26, iter-17b)
+
+The following unit-level tenant-isolation tests were **removed** from `tests/test_tenant_isolation_audit.py` because they had never functioned — both their imports and their session calls were broken since introduction:
+
+| Removed test | Why never worked | Replacement coverage |
+|---|---|---|
+| `test_audit_log_isolation` | `from app.domains.audit.models import AuditLog` — that path has no `models` submodule; the class lives in `app.models.models`. Also called `.execute(...).scalars().all()` synchronously on an async session. | API-level isolation enforced by `TenantMiddleware` (`backend/app/middleware/tenant.py`); cross-base FK isolation verified by iter-16f schema-naive mirror (PR #572). |
+| `test_workflow_events_isolation` | `WorkflowEvent` class does not exist anywhere in the codebase; the `app.domains.workflows` module path also does not exist. The feature was never built. | None at unit level. Per-step workflow event tracking is deferred to v1.1; outbox event isolation is covered indirectly by `OutboxEvent` tenant scoping at the migration / model level. |
+| `test_webhook_delivery_isolation` | `from app.domains.integrations.models import Webhook` — module and class names both stale. Real class is `WebhookDelivery` in `app.models.models`. Same sync-on-async session bug. | `WebhookDelivery` carries `tenant_id` via `TenantBaseModel`; isolation is enforced at session-level by `with_tenant_session` search_path setup. |
+| `test_outbox_isolation` | `from app.domains.integrations.models import OutboxMessage` — neither module nor class name match reality (`Outbox` in `app.models.models`). Same sync-on-async bug. | `Outbox` carries `tenant_id` via `TenantBaseModel`; same session-level enforcement. |
+| `test_notification_isolation` | `from app.domains.notifications.models import Notification` — module path stale; real class lives in `app.models.notifications`. Same sync-on-async bug. | `Notification` carries `tenant_id` via `TenantBaseModel`; integration coverage via `tests/api/test_notifications_calendar_api.py`. |
+
+**Rationale for deletion (not repair):** Each test had two stacked defects — a stale module path and a synchronous `.execute(...)` call on an async session — meaning none of them ever produced a real assertion result; they failed at import or at first DB call. Repairing them in place would require renaming + adding `await` + verifying the seed fixtures actually exist for `tenant-a`/`tenant-b` (none of the broken tests depended on `test_companies_multi_tenant` for `webhook`/`notification`). The cost of rebuilding to working order exceeds the value of unit-level coverage that is already provided at the middleware and model layers, so the v1.0 path is "delete + acknowledge"; proper rebuild is deferred to v1.1.

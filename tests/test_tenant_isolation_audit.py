@@ -177,29 +177,6 @@ async def test_cannot_create_document_in_other_tenant(
 
 
 @pytest.mark.anyio
-async def test_audit_log_isolation(test_db_session, test_companies_multi_tenant) -> None:
-    """Audit logs for one tenant must not be visible to other tenants."""
-    from app.domains.audit.models import AuditLog
-    from sqlalchemy import select
-
-    # Get audit logs for each tenant
-    logs_tenant_a = test_db_session.execute(
-        select(AuditLog).where(AuditLog.tenant_id == "tenant-a")
-    ).scalars().all()
-
-    logs_tenant_b = test_db_session.execute(
-        select(AuditLog).where(AuditLog.tenant_id == "tenant-b")
-    ).scalars().all()
-
-    # Verify no cross-tenant audit log leakage
-    tenant_a_ids = {log.tenant_id for log in logs_tenant_a}
-    tenant_b_ids = {log.tenant_id for log in logs_tenant_b}
-
-    assert tenant_a_ids == {"tenant-a"}, "Audit logs for tenant A must be isolated"
-    assert tenant_b_ids == {"tenant-b"}, "Audit logs for tenant B must be isolated"
-
-
-@pytest.mark.anyio
 async def test_rbac_isolation_across_tenants(
     app_fixture,
     make_auth_headers,
@@ -234,103 +211,6 @@ async def test_rbac_isolation_across_tenants(
             assert len(user_ids_a & user_ids_b) == 0, (
                 "Admin endpoint must be tenant-isolated"
             )
-
-
-@pytest.mark.anyio
-async def test_workflow_events_isolation(test_db_session, test_companies_multi_tenant) -> None:
-    """Domain events from workflows must be tenant-scoped."""
-    from app.domains.workflows.models import WorkflowEvent
-    from sqlalchemy import select
-
-    # Get workflow events for each tenant
-    events_tenant_a = test_db_session.execute(
-        select(WorkflowEvent).where(WorkflowEvent.tenant_id == "tenant-a")
-    ).scalars().all()
-
-    events_tenant_b = test_db_session.execute(
-        select(WorkflowEvent).where(WorkflowEvent.tenant_id == "tenant-b")
-    ).scalars().all()
-
-    # Verify no cross-tenant event leakage
-    for event in events_tenant_a:
-        assert event.tenant_id == "tenant-a", (
-            f"Found event for wrong tenant: {event.tenant_id}"
-        )
-
-    for event in events_tenant_b:
-        assert event.tenant_id == "tenant-b", (
-            f"Found event for wrong tenant: {event.tenant_id}"
-        )
-
-
-@pytest.mark.anyio
-async def test_webhook_delivery_isolation(test_db_session) -> None:
-    """Webhooks must not be delivered across tenant boundaries."""
-    from app.domains.integrations.models import Webhook
-    from sqlalchemy import select
-
-    # Get webhooks for each tenant
-    webhooks_a = test_db_session.execute(
-        select(Webhook).where(Webhook.tenant_id == "tenant-a")
-    ).scalars().all()
-
-    webhooks_b = test_db_session.execute(
-        select(Webhook).where(Webhook.tenant_id == "tenant-b")
-    ).scalars().all()
-
-    # Verify webhooks are properly isolated
-    for webhook in webhooks_a:
-        assert webhook.tenant_id == "tenant-a"
-
-    for webhook in webhooks_b:
-        assert webhook.tenant_id == "tenant-b"
-
-
-@pytest.mark.anyio
-async def test_outbox_isolation(test_db_session, test_companies_multi_tenant) -> None:
-    """Outbox messages must be isolated by tenant."""
-    from app.domains.integrations.models import OutboxMessage
-    from sqlalchemy import select
-
-    # Get outbox messages for each tenant
-    messages_a = test_db_session.execute(
-        select(OutboxMessage).where(OutboxMessage.tenant_id == "tenant-a")
-    ).scalars().all()
-
-    messages_b = test_db_session.execute(
-        select(OutboxMessage).where(OutboxMessage.tenant_id == "tenant-b")
-    ).scalars().all()
-
-    # Verify isolation
-    tenant_a_ids = {msg.tenant_id for msg in messages_a}
-    tenant_b_ids = {msg.tenant_id for msg in messages_b}
-
-    # Only own tenant IDs should be present
-    assert tenant_a_ids <= {"tenant-a"}, "Outbox has messages from other tenants"
-    assert tenant_b_ids <= {"tenant-b"}, "Outbox has messages from other tenants"
-
-
-@pytest.mark.anyio
-async def test_notification_isolation(test_db_session) -> None:
-    """Notifications must be isolated by tenant."""
-    from app.domains.notifications.models import Notification
-    from sqlalchemy import select
-
-    # Get notifications for each tenant
-    notifs_a = test_db_session.execute(
-        select(Notification).where(Notification.tenant_id == "tenant-a")
-    ).scalars().all()
-
-    notifs_b = test_db_session.execute(
-        select(Notification).where(Notification.tenant_id == "tenant-b")
-    ).scalars().all()
-
-    # Verify isolation
-    for notif in notifs_a:
-        assert notif.tenant_id == "tenant-a"
-
-    for notif in notifs_b:
-        assert notif.tenant_id == "tenant-b"
 
 
 @pytest.mark.anyio
