@@ -1,5 +1,119 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-26, Session 67 — RB-002/005 diagnosed; RB-005 fix shipped (e2e login `.local` TLD))
+
+- **Дата:** 2026-05-26 (продолжение Session 66 в тот же день). Ветка `fix/rb-005-e2e-login-email-tld` от свежего main `ed2d48e` (merge of #579, Session 66 doc sync). Code+docs PR.
+- **Агент:** Claude Opus 4.7 (1M context, local Windows, py 3.13 fallback; explanatory style; Auto Mode).
+- **Задача:** «Продолжай» — после Session 66 doc closure взять technical step #4/#5 (RB-002/005 diagnosis) из handoff и продвинуть состояние. Выполнено: оба root-cause-а найдены, мелкий из двух — RB-005 — закрыт в этом PR; RB-002 оставлен для следующей сессии (требует design call).
+
+### Studied Documentation
+
+- `AI_IMPLEMENTATION_REPORT.md` Session 66 handoff (line 3): `### Next Steps` items #4 (`gh run view 26330051342 --log-failed` для RB-002) и #5 (`gh run view 26330052346 --log-failed` для RB-005).
+- Fresh CI evidence (не stale references из handoff):
+  - perf-baseline last run [26383435572](https://github.com/aiprocadm/prt_ot_doc/actions/runs/26383435572) (scheduled 2026-05-25T04:36Z, `main` HEAD `3acdb77`): job `baseline` → failure on step `Wait for API readiness`.
+  - e2e-smoke last run [26421376746](https://github.com/aiprocadm/prt_ot_doc/actions/runs/26421376746) (workflow_dispatch 2026-05-25T21:57Z, `main`): `Minimal smoke (mandatory)` ✅ **GREEN**, `Resolve credential matrix` ✅ green, `Credential smoke (bootstrap_local)` ❌ failure on step `Run credential smoke subset` (8 of 8 credential tests).
+- Downloaded artifacts:
+  - `perf-baseline-logs.txt` — docker-compose tail; surfaces api-1 startup crash.
+  - `e2e-backend-log-bootstrap_local` (`/tmp/e2e-backend.log`) — every `POST /api/v1/auth/login` returns 422 with explicit `request.validation_error` log line.
+- `.github/workflows/e2e-smoke.yml`, `backend/app/api/routes/auth.py:46` (`LoginRequest{email: EmailStr}`), `frontend/e2e/helpers/auth.ts` (login flow), `frontend/src/stores/auth.ts:108` (POST body shape).
+- Memory: `[[mvp-release-blockers]]`, `[[app-level-defects-post-billing]]`, `[[prodolzhay-po-tz-workflow]]`.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 0 release-blocker chase (P0) — RB-002/005 diagnosis + ship the trivial closure.
+- **Приоритет:** P0 — оба workflow остаются red post-Session-66, MVP-NOT-READY стоит на них.
+- **Почему выбрана:** прямо из Session 66 Next Steps #4/#5. Auto Mode → без `AskUserQuestion`: сначала параллельно поднял оба `--log-failed` (cheap, independent), потом по результатам выбрал shippable scope.
+
+### Implemented Changes
+
+**Diagnosis (no code):**
+
+1. **RB-005 root cause = pydantic EmailStr rejects `.local` TLD.** `e2e-smoke.yml:104,106` сетит deterministic `E2E_USER_EMAIL=e2e.owner.demo@example.local` / `E2E_LIMITED_USER_EMAIL=e2e.student.demo@example.local`. Прямой DB seed через `scripts/bootstrap_tenant.py` + инлайн ORM создаёт юзеров OK (no API validation). Но Playwright POST `/api/v1/auth/login` пропускает email через `LoginRequest.email: EmailStr` → `email-validator` per RFC 6761 reserved-TLD policy отклоняет `.local` → HTTP 422 с явным `"loc": ["body", "email"], "msg": "The part after the @-sign is a special-use or reserved name..."`. Все 8 credential-based tests упирались в 49× retry на `/auth/login`. **Не** `/no-access` regression как Session 66 предсказывал.
+
+2. **RB-002 root cause = Postgres `relation "tenant" does not exist` на startup demo_bootstrap.** Backend container поднимается, alembic мигрирует, потом `app.services.demo_bootstrap.demo.bootstrap.done` пытается query таблицу `tenant` в `public` schema и падает. Связано с iter-16f refactor (shared tables в `app_shared` schema + tenant search_path). SQLite tolerant (нет схем) → e2e-smoke prod-bootstrap проходит. PG strict → fail. `Wait for API readiness` step таймаут 600s.
+
+**Shipped fix (RB-005 only — RB-002 deferred):**
+
+3. **`.github/workflows/e2e-smoke.yml`** — `.local` → `.com` для `E2E_USER_EMAIL` и `E2E_LIMITED_USER_EMAIL` (lines 104/106) + один short-line comment рядом с change site.
+4. **Cascade doc sync** (3 файла, где прописаны те же deterministic creds):
+   - `docs/stabilization/e2e-access.md:50,52`
+   - `RB_BLOCKERS_EXECUTION_READY.md:179,180`
+   - `wave-37-rb-guide.md:182,183`
+
+### Changed / New Files
+
+- `.github/workflows/e2e-smoke.yml` — +2 / -2 lines (incl. 1-line comment).
+- `docs/stabilization/e2e-access.md` — +2 / -2 lines.
+- `RB_BLOCKERS_EXECUTION_READY.md` — +2 / -2 lines.
+- `wave-37-rb-guide.md` — +2 / -2 lines.
+- `AI_IMPLEMENTATION_REPORT.md` — +~95 / 0 lines (this handoff).
+
+### Decisions
+
+- **Fix RB-005 в этом PR, defer RB-002.** RB-005 — одна строка + cascade; closes release blocker немедленно после CI run-through. RB-002 — нужен design call по startup-time search_path: (a) `AsyncSessionLocal(tenant="public", include_public=True)` должен включать `app_shared` в search_path автоматически? (b) demo_bootstrap должен делать explicit `SET search_path` per call? (c) shared tables вернуть в `public`, оставив только tenant-specific в схемах? Это не one-liner, и неправильный выбор испортит iter-16f architecture. Отдельный PR с deliberate scope.
+- **Email TLD = `.com` (example.com), не `.test`/`.example`.** RFC 2606 §3 explicitly reserves `example.com/.org/.net` для документации и тестирования; email-validator пропускает. `.test`/`.example`/`.localhost`/`.invalid` (RFC 6761) частично/полностью отклоняются email-validator в разных версиях. `.com` — самый safe and conservative выбор.
+- **Не трогать остальные 15 `.local` references.** Они идут только в direct DB seeding (`backend/app/services/demo_bootstrap.py`, `tests/test_*`, `Makefile`, `scripts/smoke.sh`) — не проходят через pydantic API validation. Менять их = расширение скоупа без necessity; они работают и unit-тесты проходят. Возможный future cleanup, но не часть RB-005.
+- **`.claude/settings.local.json` НЕ коммитится.** Selective `git add` per `[[prodolzhay-po-tz-workflow]]` правило.
+
+### Issues Fixed
+
+- **RB-005 e2e-smoke `Credential smoke (bootstrap_local)`** — после merge все 8 credential-based tests должны зелёнеть. `Minimal smoke (mandatory)` уже было зелёным на main (в Session 66 это не было замечено в handoff — handoff утверждал блокер `/no-access`; на самом деле минимал-smoke уже работает).
+
+### Known Problems / Risks
+
+- **RB-002 perf-baseline остаётся red.** Root cause обнаружен (PG schema initialization для startup demo_bootstrap), но fix не shipped. Next session — focus #1.
+- **iter-17 backend-tests drift (4 категории, ~69 fails)** — RBAC/workspace/health/staging — unchanged since Session 66.
+- **`final-acceptance.yml` (PR #576)** ещё не dispatched — RB-003 evidence still uncaptured.
+- **Container-image-scan red под exception** (CVE-2025-62727 starlette DoS) — unchanged, не блокер.
+- **Local pytest hangs** (Windows+Py3.13). Unchanged — CI на Py3.12.12 authoritative.
+- **Risk: `.com` change ломает что-то downstream.** Маловероятно — email используется только как identifier в DB и token claim. Но если CI run обнаружит другой failure class — будет видно по next `e2e-smoke.yml` run.
+
+### Validation
+
+- `gh run view 26383435572 --json jobs` → `baseline: failure (Wait for API readiness)`.
+- `gh run view 26421376746 --json jobs` → `Minimal smoke (mandatory): success`, `Credential smoke (bootstrap_local): failure (Run credential smoke subset)`.
+- Артефакты загружены и проверены: e2e backend log имеет 13 идентичных `request.validation_error` записей с identical error message — 100% reproducibility root cause.
+- Manual code review: `backend/app/api/routes/auth.py:46` (`email: EmailStr`), `frontend/src/stores/auth.ts:108` (POST `{email, password}` shape), `frontend/e2e/helpers/auth.ts:5-12` (Playwright form fill) — все consistent с диагнозом.
+- Code change diff: 5 файлов (`.local` → `.com` × 6 sites + 1 comment + handoff entry). No backend/frontend code touched.
+- **Not validated locally:** RB-005 closure будет видна только после `e2e-smoke.yml` re-run на main. No way to run Playwright + backend stack on local Windows+Py3.13.
+
+### Next Steps
+
+**Operational (this PR):**
+
+1. Commit selective (skip `.claude/settings.local.json`).
+2. Push branch + open PR `fix(ci): RB-005 — change e2e deterministic email TLD from .local to .com (email-validator RFC 6761)`.
+3. After merge: dispatch `e2e-smoke.yml` to confirm green; if green → close RB-005 в `RELEASE_BLOCKERS_STATUS.md` + cascade doc sync.
+
+**Technical (next session — primary):**
+
+4. **RB-002 startup search_path fix** — главный blocker. Investigate `backend/app/services/demo_bootstrap.py` + `app/db/session.py` AsyncSessionLocal tenant=public mode. Need to decide: (a) auto-include `app_shared` в search_path для public session, (b) explicit `SET LOCAL search_path` в bootstrap call, (c) qualify table refs with `app_shared.tenant`. Read `iter-16f` PR #572 commits to understand original intent. Likely `fix/rb-002-pg-bootstrap-search-path` branch.
+
+**Technical (next session — secondary, pick after RB-002):**
+
+5. **Dispatch `final-acceptance.yml`** (PR #576 ready, not yet triggered) — RB-003 evidence.
+6. **iter-17 backend-tests drift** — 4 categories (~69 fails); pick smallest first (workspace 404 ~7 / staging ~4). Each fix likely standalone PR.
+
+**Optional polish (defer unless recurrence):**
+
+- A6..A10 AST pin-tests for migration antipatterns (Session 65 #10 — still unimplemented).
+- Migrate remaining 15 `.local` references in seed scripts/tests to `.com` for consistency (cosmetic; no functional change).
+
+**Стартовая команда для следующей сессии:**
+```
+git checkout main && git pull
+gh pr list --state open --limit 10
+# If RB-005 PR merged, re-trigger e2e-smoke to confirm:
+gh workflow run e2e-smoke.yml --ref main
+# Then start RB-002 fix:
+git checkout -b fix/rb-002-pg-bootstrap-search-path
+# Inspect: backend/app/services/demo_bootstrap.py, backend/app/db/session.py, iter-16f PR #572
+```
+
+**Branch suggestion для следующей сессии:** `fix/rb-002-pg-bootstrap-search-path`.
+
+---
+
 ## Last Agent Handoff (2026-05-26, Session 66 — iter-16e/16f/17b/17f closures + RB-001 GREEN, RB-002/005 still RED)
 
 - **Дата:** 2026-05-26 (продолжение Session 65 после 3-дневного промежутка). Ветка `docs/sync-session-66-iter-16-17-rb-001-closure` от свежего main `543692a`. Doc-only sync.

@@ -179,8 +179,8 @@ Tests that require credentials (runs if available):
 
 Credential sources:
 1. **bootstrap_local** (always): Deterministic users created in CI job
-   - Owner: `e2e.owner.demo@example.local` / `OwnerDemo123!`
-   - Limited: `e2e.student.demo@example.local` / `StudentDemo123!`
+   - Owner: `e2e.owner.demo@example.com` / `OwnerDemo123!`
+   - Limited: `e2e.student.demo@example.com` / `StudentDemo123!`
 
 2. **repo_secrets** (optional): External credentials from GitHub secrets
    - Requires: `E2E_USER_EMAIL`, `E2E_USER_PASSWORD`, `E2E_LIMITED_USER_EMAIL`, `E2E_LIMITED_USER_PASSWORD`
