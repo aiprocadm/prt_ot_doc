@@ -1,6 +1,6 @@
 # RELEASE_BLOCKERS_STATUS
 
-- **Updated on (UTC):** 2026-05-21
+- **Updated on (UTC):** 2026-05-26
 - **Owner:** Release Manager + Platform + QA + SRE
 - **Canonical status vocabulary:** `done` / `partial` / `missing` / `blocked`
 - **Single source of truth for release-critical statuses and evidence links.**
@@ -30,13 +30,21 @@ GitHub Actions billing was restored on 2026-05-21 after a ~9-week block (from 20
 
 **Post-iter-8 main CI state (as of 2026-05-21T15:17Z):** [run 26235153179](https://github.com/aiprocadm/prt_ot_doc/actions/runs/26235153179) is in progress; **3 jobs already failed** — `perf-smoke`, `alembic-postgres-upgrade`, `container-image-scan`. Root cause for `alembic-postgres-upgrade` (pre-iter-8 log): `DuplicateObjectError: type "attestationstatus" already exists` — same class of bug iter-8 targeted, suggesting additional migrations may still need the same `postgresql.ENUM(create_type=False)` treatment (iter-9 candidate).
 
-**RB-001/002/005 re-validation status:** the three release-blocker workflows (`restore-drill.yml`, `perf-baseline.yml`, `e2e-smoke.yml`) have **not yet been re-triggered against post-iter-8 main**. Most recent runs were on `fix/ci-workflows-billing-restore` (pre-iter-8) and almost all are `failure` except a single sqlite-mode restore-drill green ([run 26215954984](https://github.com/aiprocadm/prt_ot_doc/actions/runs/26215954984)). The blocker checkboxes therefore stay `[ ]` until fresh post-iter-8 green artifacts exist.
+**RB-001/002/005 re-validation status (updated 2026-05-26):** the three release-blocker workflows were re-triggered against post-iter-15h main on 2026-05-23 (after the 9-iteration alembic-postgres-upgrade repair sprint closed). Results:
+
+| Workflow | Run | Conclusion | Mapped RB |
+|---|---|---|---|
+| `restore-drill.yml` | [26330050030](https://github.com/aiprocadm/prt_ot_doc/actions/runs/26330050030) | ✅ `success` (both sqlite + postgres-minio modes) | **RB-001 → DONE** |
+| `perf-baseline.yml` | [26330051342](https://github.com/aiprocadm/prt_ot_doc/actions/runs/26330051342) | ❌ `failure` (job `baseline`) | RB-002 still `[ ]` |
+| `e2e-smoke.yml` | [26330052346](https://github.com/aiprocadm/prt_ot_doc/actions/runs/26330052346) | ❌ `failure` (job `Minimal smoke (mandatory)`; downstream credential-matrix jobs skipped) | RB-005 still `[ ]` |
+
+RB-002 / RB-005 failure-class diagnosis is pending — likely candidates: missing CI secrets (`S3_ACCESS_KEY` / `SECRET_KEY`) for the baseline workload, and the documented `/no-access` page rendering regression for the e2e smoke flow (per `[[app-level-defects-post-billing]]`). See `AI_IMPLEMENTATION_REPORT.md` Session 66 handoff for the per-step diagnostic plan.
 
 ## Unified release-critical criteria matrix
 
 | Criterion ID | Source doc | Criterion (release-critical) | Unified status | Evidence (test/workflow/artifact/doc section) |
 |---|---|---|---|---|
-| RC-001 | `RELEASE_READINESS.md` | Restore drill acceptance criteria pass in latest run | `partial` | Workflow: `.github/workflows/restore-drill.yml`; command: `python scripts/restore_drill.py --mode postgres-minio --output-dir artifacts/restore-drill`; artifact: `artifacts/restore-drill/latest-postgres-minio.json`; doc: `docs/stabilization/restore-drill.md` |
+| RC-001 | `RELEASE_READINESS.md` | Restore drill acceptance criteria pass in latest run | `done` | Workflow: `.github/workflows/restore-drill.yml`; command: `python scripts/restore_drill.py --mode postgres-minio --output-dir artifacts/restore-drill`; artifact: `artifacts/restore-drill/latest-postgres-minio.json`; doc: `docs/stabilization/restore-drill.md`; latest green: [run 26330050030](https://github.com/aiprocadm/prt_ot_doc/actions/runs/26330050030) (2026-05-23, post-iter-15h main) |
 | RC-002 | `RELEASE_READINESS.md` | Perf baseline manifest is published for release window | `partial` | Workflow: `.github/workflows/perf-baseline.yml`; artifact: `artifacts/perf/nightly/trend-manifest.json`; doc: `scripts/perf/README.md` |
 | RC-003 | `RELEASE_READINESS.md` | Coverage non-regression gate is green vs baseline | `done` | Workflow: `.github/workflows/ci.yml` (`backend-tests`); command: `python scripts/ci/check_backend_coverage_baseline.py --coverage-json artifacts/coverage.json --baseline docs/stabilization/backend_coverage_baseline.json`; artifact: `artifacts/coverage.json`; doc: `docs/stabilization/coverage.md` |
 | RC-004 | `RELEASE_READINESS.md` + `ACCEPTANCE_TEST_MATRIX.md` | Final acceptance bundle is fully passing (`overall_status=pass`) | `partial` | Command: `make final-acceptance` (`scripts/final_acceptance.sh`); workflows: `.github/workflows/ci.yml`, `.github/workflows/e2e-smoke.yml`; artifact: `artifacts/final_acceptance/summary.json` |
@@ -57,10 +65,11 @@ GitHub Actions billing was restored on 2026-05-21 after a ~9-week block (from 20
 
 Each checklist item maps to a concrete workflow/job/artifact and to one or more criteria above.
 
-- [ ] **RB-001 Restore drill closure** (`RC-001`, `RC-012`)
+- [x] **RB-001 Restore drill closure** (`RC-001`, `RC-012`)
   - Workflow/job: `.github/workflows/restore-drill.yml` / `restore-drill`
   - Artifact: `artifacts/restore-drill/latest-postgres-minio.json` (or uploaded `restore-drill-evidence`)
   - Pass condition: latest artifact confirms acceptance booleans + smoke success.
+  - **Status: DONE** (2026-05-23) — re-triggered against post-iter-15h main; both sqlite and postgres-minio modes green. Evidence: [run 26330050030](https://github.com/aiprocadm/prt_ot_doc/actions/runs/26330050030).
 
 - [ ] **RB-002 Perf baseline closure** (`RC-002`)
   - Workflow/job: `.github/workflows/perf-baseline.yml` / `baseline`

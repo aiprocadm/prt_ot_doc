@@ -1,5 +1,132 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-26, Session 66 — iter-16e/16f/17b/17f closures + RB-001 GREEN, RB-002/005 still RED)
+
+- **Дата:** 2026-05-26 (продолжение Session 65 после 3-дневного промежутка). Ветка `docs/sync-session-66-iter-16-17-rb-001-closure` от свежего main `543692a`. Doc-only sync.
+- **Агент:** Claude Opus 4.7 (1M context, local Windows, py 3.13 fallback; explanatory style).
+- **Задача:** «Продолжай» — sync documentation debt накопившийся за 8 PR-ов после Session 65 handoff (iter-16e/16f cross-base FK chain, iter-17b/17f backend-tests drift closure, RB workflow results, MVP-pilot-launch spec churn).
+- **Статус:** 🟡 PARTIAL — handoff entry написан, но cascade doc sync (RB-001 closure в `RELEASE_BLOCKERS_STATUS.md` + `RELEASE_READINESS.md`) выполняется в этом же PR. Latest CI runs (26420576288/533076/204431) still `in_progress` на момент написания.
+- **Где остановился:** Doc PR pushed. 3 in-flight CI runs на recent merges ждут завершения. Next iter-17 scope (RBAC ~50 / workspace ~7 / health ~8 / staging ~4) ждёт user pick.
+
+### Studied Documentation
+
+- `AI_IMPLEMENTATION_REPORT.md` Session 65 handoff (line 3): explicit cascade rule "If `restore-drill` GREEN end-to-end (postgres-minio mode): Update `RELEASE_BLOCKERS_STATUS.md`: RB-001 → ✅ done. Cite run URL."
+- `gh run view 26330050030/051342/052346`: RB workflow conclusions on post-iter-15h main:
+  - `restore-drill` → `success` ([run 26330050030](https://github.com/aiprocadm/prt_ot_doc/actions/runs/26330050030))
+  - `perf-baseline` → `failure` (job: `baseline`)
+  - `e2e-smoke` → `failure` (job: `Minimal smoke (mandatory)`, остальные skipped)
+- `git log` iter-16e..17b chain (8 merged PRs since Session 65): cross-base FK + tenant search_path repair, MVP spec churn, final-acceptance workflow, two backend-tests drift closures.
+- `tests/test_tenant_isolation_audit.py` (PR #578): 5 broken tests removed; rest of file (8 tests via `app_fixture` + `AsyncClient`) untouched.
+- `KNOWN_LIMITATIONS.md:52` — new "Test-suite limitations" section already merged; documents per-test rationale and replacement-coverage map.
+- Memory: `[[mvp-release-blockers]]`, `[[app-level-defects-post-billing]]`, `[[prodolzhay-po-tz-workflow]]`.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 0 release-blocker chase (P0) — closure-tracking + cascade doc sync after multi-PR cleanup.
+- **Приоритет:** P0 — RB-001 evidence-ready but not yet reflected in canonical status doc; iter-17 backend-tests drift partially closed but tracker silent on it.
+- **Почему выбрана:** Session 65 explicit instruction + workflow rule `[[prodolzhay-po-tz-workflow]]` ("docs follow-up идёт отдельным commit'ом"). Open scope question ("what next after C2/C6 closure?") deferred to `AskUserQuestion` at end of session — equally-good candidates (RBAC ~50 vs RB-002/005 diagnosis vs workspace 404 ~7).
+
+### Recent merged work since Session 65 (chronological)
+
+| PR | Date (UTC) | Iteration | Scope | Class |
+|---|---|---|---|---|
+| [#571](https://github.com/aiprocadm/prt_ot_doc/pull/571) | 2026-05-24T07:45Z | iter-16e | `register_cross_base_fk_resolution` for `tenant_id` ForeignKeys on Postgres (wired via SQLAlchemy `after_configured`) | DB / FK |
+| [#572](https://github.com/aiprocadm/prt_ot_doc/pull/572) | 2026-05-24T20:04Z | iter-16f | Schema-naive cross-base FK mirror + tenant-scoped authz seed + async-native `aensure_tenant_schema` + shared-schema in tenant `search_path` (4 commits) | DB / FK / authz |
+| [#573](https://github.com/aiprocadm/prt_ot_doc/pull/573) | 2026-05-25T19:42Z | docs | MVP final closure + friendly pilot launch design (approach A) | spec |
+| [#574](https://github.com/aiprocadm/prt_ot_doc/pull/574) | 2026-05-25T19:44Z | docs | Re-land of #573 (approach A) | spec |
+| [#575](https://github.com/aiprocadm/prt_ot_doc/pull/575) | 2026-05-25T20:18Z | revert | Revert #573 (superseded by #574) | revert |
+| [#576](https://github.com/aiprocadm/prt_ot_doc/pull/576) | 2026-05-25T20:18Z | ci | Add manual `final-acceptance.yml` workflow_dispatch for RB-003 evidence (with LibreOffice install step) | CI |
+| [#577](https://github.com/aiprocadm/prt_ot_doc/pull/577) | 2026-05-25T21:30Z | iter-17f | Drop orphan `DocumentTemplate` import in `tests/conftest.py` — closes drift class **C6** | tests |
+| [#578](https://github.com/aiprocadm/prt_ot_doc/pull/578) | 2026-05-25T21:31Z | iter-17b | Delete 5 never-functional tenant-isolation tests + `KNOWN_LIMITATIONS.md` "Test-suite limitations" section — closes drift class **C2** | tests / docs |
+
+### Implemented Changes (this session)
+
+**This handoff entry (doc-only):**
+- New `## Last Agent Handoff (2026-05-26, Session 66 ...)` block prepended to `AI_IMPLEMENTATION_REPORT.md`.
+- `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`:
+  - **RB-001** checklist row: `[ ]` → `[x]` with run URL `26330050030`.
+  - `RC-001` row: `partial` → `done`.
+  - "Recent stabilization activity" table extended with iter-9..17 rows (or appended as new "Post-Session-65 activity" sub-block).
+  - "RB-001/002/005 re-validation status" paragraph rewritten to reflect 2026-05-23 re-trigger results.
+- `RELEASE_READINESS.md` (cascade): verdict refresh acknowledging RB-001 closure, RB-002/005 still pending.
+
+### Changed / New Files
+
+- `AI_IMPLEMENTATION_REPORT.md` — +~95 / 0 lines (this handoff at top).
+- `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` — +~25 / -5 lines (RB-001 closure + activity rows).
+- `RELEASE_READINESS.md` — +~5 / -3 lines (verdict refresh).
+
+### Decisions
+
+- **Doc-only PR, branch `docs/*`.** Matches `[[prodolzhay-po-tz-workflow]]` pattern ("docs follow-up идёт отдельным commit'ом", "`docs/*` для documentation backfills"). Zero code changes — no risk to in-flight CI.
+- **RB-001 closed despite RB-002/005 still red.** Per `RELEASE_BLOCKERS_STATUS.md` canonical vocabulary, each RB is independent; restore-drill ran end-to-end including postgres-minio mode and produced acceptance evidence. RB-002/005 failures are unrelated (perf baseline + frontend regression respectively).
+- **Cascade scope limited to status-of-record docs.** Cascade rule from line 8 of `RELEASE_BLOCKERS_STATUS.md` mandates `RELEASE_BLOCKERS_STATUS.md` → `RELEASE_READINESS.md`. `ACCEPTANCE_TEST_MATRIX.md`, `KNOWN_LIMITATIONS.md`, `GAP_REPORT.md`, `docs/stabilization/PLAN.md` carry no RB-001-specific assertions that would now be stale, so they are left for a focused follow-up if needed.
+- **C2 class re-interpreted.** Session 65 risk note implied missing `app.domains.*` *modules*. Investigation (iter-17b) showed the issue was scoped to a single test file with stale import paths + sync-on-async session usage; 4 of 5 model classes do exist (under `app.models.*`), one (`WorkflowEvent`) was never built. v1.0 disposition: delete + KNOWN_LIMITATIONS.md acknowledge per WS2/C2 strict-scope policy; rebuild deferred to v1.1.
+- **No code surface touched.** RBAC / workspace role / health check / staging-hardening drift categories remain as next-iter candidates. Diagnostics for RB-002 (perf-baseline) and RB-005 (e2e-smoke) failures are not in this PR.
+
+### Issues Fixed
+
+- **Documentation debt** for 8 PRs merged since Session 65 (no entry in `AI_IMPLEMENTATION_REPORT.md`).
+- **RB-001 stale status** in `RELEASE_BLOCKERS_STATUS.md` (still showed `[ ]` despite green run from 2026-05-23).
+
+### Known Problems / Risks
+
+- **RB-002 (`perf-baseline`)** still red on post-iter-15h main. Job `baseline` failed; root cause likely either (a) missing CI env vars (`S3_ACCESS_KEY` / `SECRET_KEY`), as predicted in Session 65, or (b) frontend `/no-access` regression rendering the baseline endpoint unreachable. Next session should `gh run view 26330051342 --log` to identify.
+- **RB-005 (`e2e-smoke`)** still red. `Minimal smoke (mandatory)` failed first → downstream credential-matrix jobs skipped. Most-likely cause per `[[app-level-defects-post-billing]]`: `/no-access` page rendering regression. Frontend selector / Russian-label drift.
+- **3 CI runs in-flight on main** (26420576288 / 26420533076 / 26418204431) at session start — outcomes unknown. If `alembic-postgres-upgrade` or `backend-tests` red shifts, that becomes priority over current candidate list.
+- **iter-17 backend-tests drift — 4 categories still open:**
+  - RBAC `module_access_denied` vs `missing_permission` (~50 fails) — likely largest single fix.
+  - Workspace role config 404s (~7) — likely missing fixture or seed.
+  - Health checks `FrozenInstanceError` + missing `webhook_notification_url` field (~8) — schema drift between health probe and current model.
+  - Staging hardening "DID NOT RAISE" (~4) — assertion polarity flipped or hardening removed.
+- **`final-acceptance.yml`** (added by #576) has not yet been dispatched — RB-003 evidence still uncaptured.
+- **Container-image-scan red under exception** (CVE-2025-62727 starlette DoS, expires 2026-08-31). Unchanged from Session 65. Not a release blocker.
+- **Local pytest hangs** (Windows + Py3.13). Unchanged — CI on Py3.12.12 authoritative.
+
+### Validation
+
+- `gh run view 26330050030 --json conclusion` → `success` (RB-001 evidence).
+- `gh run view 26330051342 --json conclusion` → `failure` (RB-002 unresolved).
+- `gh run view 26330052346 --json conclusion` → `failure` (RB-005 unresolved).
+- `gh pr list --state merged --limit 8` confirms 8 PRs in the activity table above.
+- `git log origin/main..HEAD` on `docs/sync-session-66-iter-16-17-rb-001-closure` → 1 commit (this handoff).
+- Doc-only PR — no compile / no test surface to validate locally.
+
+### Next Steps
+
+**Operational (this PR):**
+
+1. Commit this handoff + RB-001 closure + RELEASE_READINESS verdict refresh.
+2. Push branch + open PR (`docs(spec): Session 66 — iter-16/17 closure + RB-001 done (cascade sync)`).
+3. Confirm in-flight main CI runs settle green; if red shifts, fold into next iter scope.
+
+**Technical (next session — pick one):**
+
+4. **Diagnose RB-002 `perf-baseline` failure** — `gh run view 26330051342 --log-failed`. If env-var class → CI secrets PR. If frontend regression class → folded into #6.
+5. **Diagnose RB-005 `e2e-smoke` failure** — `gh run view 26330052346 --log-failed`. Likely `/no-access` selector drift (per `[[app-level-defects-post-billing]]`). Locate "Доступ ограничен" string drift in `frontend/src/pages/`.
+6. **iter-17 RBAC scope** (~50 fails, largest). Investigate `module_access_denied` vs `missing_permission` taxonomy mismatch. Likely contract or test-data drift; one focused PR.
+7. **iter-17 workspace role 404 scope** (~7 fails). Likely fixture / seed missing.
+8. **iter-17 health checks scope** (~8 fails). `FrozenInstanceError` + missing `webhook_notification_url` — schema vs probe drift.
+9. **iter-17 staging hardening scope** (~4 fails). Assertion-polarity check.
+10. **Dispatch `final-acceptance.yml`** to capture RB-003 evidence; cascade to `RC-004` / `RB-003` checkbox if green.
+
+**Optional polish (defer unless recurrence):**
+
+- A6..A10 AST pin-tests for migration antipatterns (Session 65 #10 — still unimplemented).
+
+**Стартовая команда для следующей сессии:**
+```
+git checkout main && git pull
+gh pr list --state open --limit 10
+# pick from steps 4-10 above; if RB-002/005 diagnosis chosen:
+gh run view 26330051342 --log-failed | tail -200
+gh run view 26330052346 --log-failed | tail -200
+```
+
+**Branch suggestion для следующей сессии:** `fix/iter-17-<topic>` (rbac / workspace / health / staging) ИЛИ `fix/rb-002-perf-baseline-<class>` / `fix/rb-005-no-access-regression` в зависимости от выбора.
+
+---
+
 ## Last Agent Handoff (2026-05-23, Session 65 — iter-13..15h closure: alembic-postgres-upgrade GREEN, RB workflows re-triggered)
 
 - **Дата:** 2026-05-23 (продолжение Session 64). PR #564 (iter-13) merged `4c85167`, PR #565 (iter-14..15h) merged `3c3361b` at 2026-05-22T23:56:25Z. Текущая ветка для этого handoff: `docs/sync-iter-13-15h-handoff` от свежего main.
