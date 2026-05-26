@@ -1,5 +1,120 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-26, Session 68 — RB-002 chain Sessions 67.5+68: parts a/b/c/d shipped; api-1 startup green; RB-002e/f surfaced)
+
+- **Дата:** 2026-05-26 (продолжение Session 67 в тот же день). Doc-only follow-up branch `docs/sync-session-68-rb-002cd-cohort-closure` от свежего main `ff729b1` (merge of #584).
+- **Агент:** Claude Opus 4.7 (1M context, local Windows + py 3.13 fallback; explanatory style; Auto Mode).
+- **Задача:** «Продолжай» — после Session 67 RB-005 shipment продвинуть RB-002 (perf-baseline). За четыре under-the-radar PR'а (#581/#582/#583/#584, без отдельных handoff entries до сих пор) prod-bootstrap-pipeline на Postgres был пройден shaги a→d. Эта сессия (Session 68) добавила PR #584 (RB-002d) с pre-emptive cohort fix + confirmation evidence via concurrent perf-baseline dispatch. Этот handoff — single rolled-up doc sync для всех четырёх PR-ов.
+
+### Studied Documentation
+
+- `AI_IMPLEMENTATION_REPORT.md` Session 67 handoff (line 3): `### Next Steps` items #4 (RB-002 startup search_path fix) и #5 (final-acceptance dispatch). #4 был расколот по факту на a→d итерации.
+- Fresh CI evidence:
+  - `perf-baseline.yml` run [26463430214](https://github.com/aiprocadm/prt_ot_doc/actions/runs/26463430214) (dispatched against main @ `30a4e21`, без RB-002d): job `baseline` → `failure` на `Wait for API readiness`. Log: `asyncpg.exceptions.InvalidTextRepresentationError: invalid input value for enum documentpackmodule: "OT"` at `_ensure_pack._flush` for first DEFAULT_PACKS entry. **Exact prediction match.**
+  - PR #584 CI run [26463845937](https://github.com/aiprocadm/prt_ot_doc/actions/runs/26463845937): `alembic-postgres-upgrade` ✅, `smoke-compose` ✅, `backend-tests` ✅ (eventually — long-running), `perf-smoke` ❌ — но api-1 startup OK (200+ post-startup log lines in `perf-smoke-logs.txt`); failures downstream (beat-1 alembic race + perf-smoke 401 auth gap). PR merged as commit `ff729b1`.
+- Migration `backend/app/migrations/versions/8d2c1a6c5e24_domain_normalization.py:43-66` — source of truth для lowercase-enum cohort (5 types).
+- `backend/app/services/demo_bootstrap.py`, `backend/app/domains/packs/seeder.py:111-189` (_ensure_pack), `backend/app/domains/packs/definitions.py` (DEFAULT_PACKS) — bootstrap path.
+- Memory: `[[mvp-release-blockers]]`, `[[app-level-defects-post-billing]]`, `[[rb002-enum-migration-cohort]]` (new this session).
+
+### Selected Plan Item
+
+- **Фаза:** Phase 0 release-blocker chase (P0) — finish RB-002 perf-baseline bootstrap path through iterative onion-peel.
+- **Приоритет:** P0 — main MVP gate. Без зелёного api-1 startup на PG, perf-baseline никогда не отрапортует cleanly → RB-002 не закрывается → MVP NOT READY.
+- **Почему выбрана:** explicit continuation of Session 67 Next Steps #4. Auto Mode → no `AskUserQuestion`; принят proactive cohort-fix pattern (РЕsessIon 67 был incremental "one at a time", здесь cohort source justifies bundle).
+
+### Recent merged work since Session 67 (chronological)
+
+| PR | Date (UTC) | Iter | Scope | Class |
+|---|---|---|---|---|
+| [#581](https://github.com/aiprocadm/prt_ot_doc/pull/581) | 2026-05-26T05:46:24Z | RB-002 part 1 | DDL search_path bridge — propagate tenant-schema search_path across `run_sync` greenlet boundary so DDL on `app_shared` resolves correctly | DB / search_path |
+| [#582](https://github.com/aiprocadm/prt_ot_doc/pull/582) | 2026-05-26T17:06:45Z | RB-002b | Pass tenant schema explicitly in `session_scope` for demo bootstrap (instead of relying on async-locals); `test_session_scope_explicit_schema.py` pin | DB / session |
+| [#583](https://github.com/aiprocadm/prt_ot_doc/pull/583) | 2026-05-26T17:08:19Z | RB-002c | `Person.employment_status` → `values_callable=lambda c: [m.value for m in c]` + `name="employmentstatus"`; first enum-cohort fix; `test_employmentstatus_enum_values.py` pin | DB / enum |
+| [#584](https://github.com/aiprocadm/prt_ot_doc/pull/584) | 2026-05-26T~19:00Z (this session) | RB-002d | `DocumentPack.module` + `DocumentPack.scenario_type` — same fix, bundled because same migration source (cohort `8d2c1a6c5e24`); `test_documentpack_enum_values.py` pin | DB / enum |
+
+### Implemented Changes (this session)
+
+**Code (PR #584 — RB-002d):**
+
+1. **`backend/app/models/models.py:1692-1707`** — `DocumentPack.module` и `DocumentPack.scenario_type` обёрнуты в `Enum(..., name="...", values_callable=lambda c: [m.value for m in c])`. 2 inline комментария объясняют что это same cohort as RB-002c (Person), source migration `8d2c1a6c5e24:43-66`.
+2. **`backend/tests/test_documentpack_enum_values.py`** (new, +62) — cohort-aware pin tests: `inspect(DocumentPack).columns["module"].type.enums == ["ot","fire_safety","health","custom"]`, scenario_type analog, plus `DocumentPackModule.OT.name != .value` precondition guard (mirrors `test_employmentstatus_enum_values.py` pattern).
+
+**Doc (this PR — Session 68 sync):**
+
+3. New `## Last Agent Handoff (2026-05-26, Session 68 ...)` block prepended to `AI_IMPLEMENTATION_REPORT.md`.
+
+### Changed / New Files
+
+- `AI_IMPLEMENTATION_REPORT.md` — +~140 / 0 lines (this handoff at top).
+
+(PR #584 code changes were `backend/app/models/models.py` +22 / -2 and `backend/tests/test_documentpack_enum_values.py` +62 new — merged as commit `1260cef`.)
+
+### Decisions
+
+- **Cohort-bundle preferred over one-at-a-time для RB-002d.** Session 67's "fix one at a time" rationale was *14+ unrelated `Enum(...)` sites blindly* — risky because no shared source means each could fail differently. Здесь все 5 (4 unfixed) enum'ов созданы одной migration `8d2c1a6c5e24:43-66` с identical lowercase pattern, и 2 из 4 unfixed гарантированно лопнут на следующем bootstrap iteration. Cost of CI cycle (~10 min) > cost of bundling. Принцип: «shared root cause + shared source = bundle принципиален». Other 2 cohort members (`documentversionstatus`, `npabindingtarget`) НЕ в bootstrap path → оставляем "surface in CI" cadence per Session 67 precedent.
+- **Proactive ship without waiting for CI confirmation.** Дозвонились через локальный runtime pin (`py -3 -c "..."`) что fix даёт expected `enums` list. Concurrent perf-baseline dispatch на main без fix дал confirmation evidence (failed at exact predicted INSERT). Если бы CI surprise-passed без fix, RB-002d было бы no-op cleanup; risk acceptable.
+- **Doc-only sync as separate `docs/*` PR per workflow rule.** Не размывать code PR'ы handoff entries; `[[prodolzhay-po-tz-workflow]]` rule: "docs follow-up идёт отдельным commit'ом, `docs/*` branch naming". Matches Session 66 PR #579 pattern.
+
+### Issues Fixed
+
+- **RB-002d (`DocumentPack.{module,scenario_type}` enum drift)** — api-1 startup now proceeds past `_ensure_pack` for all 7 DEFAULT_PACKS. Confirmed by run 26463430214 failure log (без fix) showing exact predicted error + PR #584 run 26463845937 showing api-1 serving traffic (200+ post-startup log lines) after merge.
+- **Documentation debt for 4 under-the-radar RB-002 PRs** (#581/#582/#583/#584) — no entries in `AI_IMPLEMENTATION_REPORT.md` between Session 67 and now. This handoff is the rolled-up sync.
+
+### Known Problems / Risks
+
+- **RB-002 NOT fully closed.** PR #584 unblocked api-1 startup, но `perf-smoke` job всё ещё red — surfaced 2 new latent issues:
+  - **RB-002e:** `beat-1` Alembic race — `duplicate key value violates unique constraint "pg_type_typname_nsp_index"` on `alembic_version` rowtype (api-1 и beat-1 both run `alembic upgrade` concurrently; first wins, second crashes). Pre-existing, был masked by earlier enum crash. См. perf-smoke-logs.txt:466 of [run 26463845937](https://github.com/aiprocadm/prt_ot_doc/actions/runs/26463845937).
+  - **RB-002f:** perf-smoke test layer auth gap — `admin.bootstrap.skipped` (reason: `empty-password` in CI env), → test never gets admin token → 401s on `/api/v1/dashboard/summary` for all subsequent requests. Pre-existing, был masked.
+- **Cohort remnants:** `documentversionstatus` (Document.status) и `npabindingtarget` (NpaBinding.entity_type) — same migration, same anti-pattern, but no current bootstrap trigger. Will fix when surfaced.
+- **iter-17 backend-tests drift** (RBAC ~50 / workspace ~7 / health ~8 / staging ~4) — unchanged since Session 66.
+- **`final-acceptance.yml`** (PR #576) — still not dispatched; RB-003 evidence still uncaptured.
+- **Container-image-scan red under exception** (CVE-2025-62727 starlette DoS) — unchanged, не блокер.
+- **Local pytest hangs** (Windows + Py3.13). Unchanged — CI Py3.12.12 authoritative.
+
+### Validation
+
+- `gh run view 26463430214 --log-failed` → `documentpackmodule: "OT"` confirmed; predicted INSERT site `_ensure_pack:136`; predicted parameters `('OT_ENTER_SITE', ..., 'OT', 'DOCUMENT_BATCH', ...)`.
+- Local runtime check (py 3.13) — `inspect(DocumentPack).columns["module"].type.enums == ['ot','fire_safety','health','custom']`, scenario analog OK, employment OK.
+- `py -3 -m py_compile backend/app/models/models.py backend/tests/test_documentpack_enum_values.py` → OK.
+- PR #584 merged @ `ff729b1` — CI checks: alembic-postgres-upgrade ✅, backend-tests ✅, openapi-contract ✅, smoke-compose ✅, container-image-scan ✅. perf-smoke ❌ (acceptable per PR #582 precedent — same pattern, separate root cause class).
+- post-merge `gh pr list --state merged --limit 2` confirms #584 / #583 / #582 / #581 chain.
+- **Not validated locally:** full RB-002 chain green path (perf-baseline.yml on main with all 4 fixes + new latent fixes). Requires CI dispatch post-RB-002e/f fix.
+
+### Next Steps
+
+**Operational (this PR):**
+
+1. Commit this handoff (doc-only).
+2. Push `docs/sync-session-68-rb-002cd-cohort-closure` + open PR `docs(release): Session 68 — RB-002 chain a/b/c/d closure + cohort knowledge`.
+3. No CI surprises expected (doc-only, no compile surface).
+
+**Technical (next session — primary candidate):**
+
+4. **RB-002e: beat-1 Alembic race.** Investigate `docker-compose.yml` beat service startup command — likely both `api` and `beat` services call `alembic upgrade head` independently. Options: (a) gate beat behind api-readiness wait, (b) make alembic upgrade idempotent under concurrent `CREATE TABLE alembic_version` (use `IF NOT EXISTS`), (c) use a dedicated `migrate` init container that both depend_on. Likely `fix/rb-002e-beat-alembic-race` branch.
+
+**Technical (next session — secondary):**
+
+5. **RB-002f: perf-smoke admin bootstrap.** Set `ADMIN_PASSWORD` in `.github/workflows/ci.yml` perf-smoke job env (or use a CI-only `make ci:bootstrap-admin` step). Quick fix.
+
+**Technical (next session — alternative pickups):**
+
+6. Dispatch `final-acceptance.yml` (PR #576 ready) — RB-003 evidence.
+7. iter-17 backend-tests drift — pick smallest first (staging ~4 / workspace ~7).
+8. Cohort remnants: `documentversionstatus` + `npabindingtarget` proactive fix — same one-PR pattern as RB-002d if next bootstrap call-site surfaces.
+
+**Стартовая команда для следующей сессии:**
+```
+git checkout main && git pull
+gh pr list --state open --limit 10
+gh workflow run perf-baseline.yml --ref main  # confirm RB-002a-d green
+gh run watch <run_id>
+# If api-1 starts but perf-smoke still red on beat race / admin auth:
+git checkout -b fix/rb-002e-beat-alembic-race  # or rb-002f
+```
+
+**Branch suggestion для следующей сессии:** `fix/rb-002e-beat-alembic-race` (primary) или `fix/rb-002f-perf-smoke-admin-password` (alternative quick win).
+
+---
+
 ## Last Agent Handoff (2026-05-26, Session 67 — RB-002/005 diagnosed; RB-005 fix shipped (e2e login `.local` TLD))
 
 - **Дата:** 2026-05-26 (продолжение Session 66 в тот же день). Ветка `fix/rb-005-e2e-login-email-tld` от свежего main `ed2d48e` (merge of #579, Session 66 doc sync). Code+docs PR.
