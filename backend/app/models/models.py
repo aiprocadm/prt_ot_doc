@@ -734,8 +734,21 @@ class Person(TenantBaseModel, SoftDeleteMixin):
     current_ppe: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
     working_conditions_class: Mapped[str | None] = mapped_column(String(32))
     hazardous_factors: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    # values_callable: SQLAlchemy ``Enum`` defaults to sending the Python
+    # enum member *name* ("ACTIVE"), but the PG type ``employmentstatus``
+    # was created with lowercase *values* ("active") in migration
+    # 8d2c1a6c5e24. Override to send ``.value`` so INSERTs satisfy the
+    # enum's accepted-value set. Without this, demo bootstrap fails with
+    # ``InvalidTextRepresentationError: invalid input value for enum
+    # employmentstatus: "ACTIVE"``.
     employment_status: Mapped[EmploymentStatus] = mapped_column(
-        Enum(EmploymentStatus), nullable=False, default=EmploymentStatus.ACTIVE
+        Enum(
+            EmploymentStatus,
+            name="employmentstatus",
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
+        nullable=False,
+        default=EmploymentStatus.ACTIVE,
     )
 
     company: Mapped[Company] = relationship(backref="people")
