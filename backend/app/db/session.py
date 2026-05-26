@@ -546,10 +546,19 @@ def AsyncSessionLocal(
 
 
 @asynccontextmanager
-async def session_scope(*, tenant: str | None = None) -> AsyncIterator[AsyncSession]:
-    """Provide a transactional scope around operations executed per tenant."""
+async def session_scope(
+    *, tenant: str | None = None, schema_name: str | None = None
+) -> AsyncIterator[AsyncSession]:
+    """Provide a transactional scope around operations executed per tenant.
 
-    async with AsyncSessionLocal(tenant=tenant) as session:
+    ``schema_name`` overrides the default-tenant → shared-schema short-circuit
+    in :func:`AsyncSessionLocal`. Pass it when the tenant slug equals
+    ``DEFAULT_TENANT_SLUG`` but the data actually lives in a tenant-specific
+    schema (e.g. ``bootstrap_demo_tenant`` after ``aensure_tenant_schema``
+    creates ``tenant_demo.*``).
+    """
+
+    async with AsyncSessionLocal(tenant=tenant, schema_name=schema_name) as session:
         try:
             yield session
             await session.commit()
