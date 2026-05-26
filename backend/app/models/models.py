@@ -1689,11 +1689,29 @@ class DocumentPack(TenantBaseModel, SoftDeleteMixin):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # values_callable: PG enum ``documentpackmodule`` was created with
+    # lowercase values ("ot", "fire_safety", ...) in migration
+    # 8d2c1a6c5e24:43-66. SQLAlchemy's default sends the Python member
+    # *name* ("OT") for INSERT, which PG rejects. Same root cause and
+    # migration as ``Person.employment_status`` (iter-17 RB-002c).
     module: Mapped[DocumentPackModule] = mapped_column(
-        Enum(DocumentPackModule), nullable=False, default=DocumentPackModule.OT
+        Enum(
+            DocumentPackModule,
+            name="documentpackmodule",
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
+        nullable=False,
+        default=DocumentPackModule.OT,
     )
+    # Same lowercase-PG-enum drift as ``module`` above. PG type
+    # ``documentpackscenario`` accepts ("document_batch", "report",
+    # "workflow"); Python member names are uppercase.
     scenario_type: Mapped[DocumentPackScenario] = mapped_column(
-        Enum(DocumentPackScenario),
+        Enum(
+            DocumentPackScenario,
+            name="documentpackscenario",
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
         nullable=False,
         default=DocumentPackScenario.DOCUMENT_BATCH,
     )
