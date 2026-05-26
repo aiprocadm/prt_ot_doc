@@ -467,12 +467,19 @@ jobs:
         # Staging-hardening (backend/app/core/config.py::bootstrap) rejects empty
         # SECRET_KEY / S3_ACCESS_KEY / S3_SECRET_KEY. .env.example ships them
         # blank by design — fill with CI-only placeholders so API can boot.
+        # RB-002f: also seed admin-bootstrap env so dev_bootstrap creates the
+        # demo admin user; otherwise perf-smoke calls to /api/v1/dashboard/summary
+        # 401 because there is no user/token to authenticate.
         run: |
           cat >> .env <<'EOF'
           SECRET_KEY=ci-perf-smoke-not-for-production
           POSTGRES_PASSWORD=ptd
           S3_ACCESS_KEY=minioadmin
           S3_SECRET_KEY=minioadmin
+          APP_ENV=development
+          ADMIN_BOOTSTRAP=1
+          ADMIN_PASSWORD=PerfSmokeAdmin123!
+          ADMIN_TENANT=demo
           EOF
 
       - name: Enable Redis memory overcommit
