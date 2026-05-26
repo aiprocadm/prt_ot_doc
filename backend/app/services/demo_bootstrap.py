@@ -46,7 +46,10 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
 
     await aensure_tenant_schema(tenant_slug, schema_name=tenant_schema_name)
 
-    async with session_scope(tenant=tenant_slug) as session:
+    # Pass schema_name explicitly: when DEFAULT_TENANT_SLUG=demo (CI default),
+    # session_scope(tenant="demo") would otherwise short-circuit to the shared
+    # schema and read training_course from public instead of tenant_demo.
+    async with session_scope(tenant=tenant_slug, schema_name=tenant_schema_name) as session:
         company = (await session.execute(select(Company).where(Company.name == company_name))).scalar_one_or_none()
         if company is None:
             company = Company(tenant_id=tenant_db_id, name=company_name, legal_address="г. Москва")
