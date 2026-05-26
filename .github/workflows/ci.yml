@@ -518,7 +518,7 @@ jobs:
 
           python scripts/perf/api_load.py \
             --base-url http://localhost:8000 \
-            --path /api/v1/dashboard/summary \
+            --flow-json "$(cat scripts/perf/flows/dashboard_summary.json)" \
             --tenant demo \
             --requests 60 \
             --concurrency 12 \
