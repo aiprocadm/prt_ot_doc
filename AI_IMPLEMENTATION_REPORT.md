@@ -1,5 +1,150 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-27, Session 73 — iter-25 critical-cohort closure RB-002o/p/q: training_course + training_plan + training_session tables)
+
+- **Дата:** 2026-05-27 (тот же день что Session 72). Ветка `fix/iter-25-training-family-cohort` от свежего main `3d40b1a` (iter-24 PR #592 + doc-sync PR #593 merged). Proactive cohort closure — Session 72 handoff явно перечислил training-family как primary next-session candidate (Next Steps #4: «3 critical-таблицы `training_course`, `training_plan`, `training_session` share pattern, all TenantBaseModel + SoftDeleteMixin, single migration creating all three is feasible»).
+- **Агент:** Claude Opus 4.7 (1M context, local Windows + py 3.13 fallback; explanatory style; Auto Mode).
+- **Задача:** «добить iter-25 training-cohort» — пользователь дал прямую execution-команду после обзорного отчёта по проекту в начале сессии. Reasoning минимален: precedent iter-23/24 даёт точный шаблон (миграция + 3 pin-test-файла по таблице), `[[orm-migration-drift-classes]]` flavor (a) («table truly absent») — все три таблицы grep-confirmed отсутствуют в migration tree.
+
+### Studied Documentation
+
+- `AI_IMPLEMENTATION_REPORT.md` Session 72 handoff → Next Steps #4 явно описал training-family triplet.
+- `[[rb002-enum-migration-cohort]]` (cohort principle precedent), `[[alembic-heads-lesson]]` (head chain discipline), `[[orm-migration-drift-classes]]` (flavor diagnosis), `[[local-env-drift-windows]]` (CI authoritative).
+- `backend/app/models/models.py:823-925`:
+  - `Training` (line 829) — простая legacy-сущность с `TrainingStatus` enum. **НЕ в scope**, отдельный (potentially-deprecated) entity.
+  - `TrainingCourse` (line 840) — каталог; `TenantBaseModel + SoftDeleteMixin`.
+  - `TrainingPlan` (line 856) — назначение; FK на company/position/person/training_course.
+  - `TrainingSession` (line 901) — историческое событие; `TrainingSessionStatus` enum; **без** SoftDeleteMixin (по дизайну: сессия immutable).
+- `backend/app/models/base.py` — подтверждено наследование колонок: `id`, `tenant_id` (`index=True`), `created_at`, `updated_at`, `version` от `TenantBaseModel`; `deleted_at` от `SoftDeleteMixin`.
+- Discovery investigation:
+  - `grep create_table.*training_course|training_plan|training_session` через `backend/app/migrations/versions/` → **zero matches** — confirmed real drift, flavor (a).
+  - `grep down_revision.*20260527_iter24_journal_ppeitem` → **zero matches** — iter-24 is true head, no parallel branches.
+  - `grep "trainingsessionstatus"|name="trainingsessionstatus"` → **zero matches** — enum name fresh (A1 antipattern guard satisfied).
+
+### Selected Plan Item
+
+- **Фаза:** Phase 0 release-blocker chase (P0) — proactive cohort closure для drift class. New class RB-002o (training_course) + RB-002p (training_plan) + RB-002q (training_session).
+- **Приоритет:** P0 — training endpoints (`/api/v1/training-courses`, `/api/v1/training-plans`, `/api/v1/training-sessions`) являются частью MVP-функционала; runtime crash в Postgres = клиент не может назначить обучение.
+- **Почему выбрана:** Session 72 явно перечислила эту triplet как «single migration creating all three is feasible» благодаря (1) общему `TenantBaseModel` базису, (2) tight intra-cohort coupling (course → plan → session через FK), (3) shared discovery (одна и та же audit-run flags все три), (4) zero entanglement с messy `incident`-family (отложено).
+
+### Recent merged work since Session 72 (chronological)
+
+| PR | Date (UTC) | Iter | Scope | Class |
+|---|---|---|---|---|
+| [#592](https://github.com/aiprocadm/prt_ot_doc/pull/592) | 2026-05-27T18:41:04Z | iter-24 | RB-002l/m/n cohort — `audit_export_job` ORM-side `__tablename__` rename + creates `journal` + `ppeitem` tables (audit-discovered) | DB / ORM-rename |
+| [#593](https://github.com/aiprocadm/prt_ot_doc/pull/593) | 2026-05-27T18:56:45Z | iter-24-docs | Doc-sync Session 72 entry for iter-24 | docs |
+
+### Implemented Changes (this session)
+
+**Code (this PR — iter-25 RB-002o/p/q):**
+
+1. **`backend/app/migrations/versions/20260527_iter25_training_family.py`** (new, +233) — creates `training_course` (12 cols, 2 indexes, 1 unique constraint, 1 FK: tenant), `training_plan` (13 cols, 5 indexes, 1 5-col unique, 5 FKs: tenant + company-CASCADE + position-SET-NULL + person-SET-NULL + course-CASCADE), `training_session` (13 cols, 5 indexes, 4 FKs: tenant + person + course-CASCADE + plan-SET-NULL, `trainingsessionstatus` enum). `down_revision = "20260527_iter24_journal_ppeitem"` (true head confirmed). Downgrade reverses in FK-safe order (session → plan → course); enum drop gated by `bind.dialect.name == "postgresql"`.
+2. **`backend/tests/test_training_course_table_exists.py`** (new, +56) — 4 pin tests: required columns (12), unique-constraint `uq_training_course_title` on (tenant_id, title), `ix_training_course_code` lookup index, SoftDeleteMixin contract (`deleted_at` present).
+3. **`backend/tests/test_training_plan_table_exists.py`** (new, +83) — 5 pin tests: required columns (13), company FK CASCADE behavior, course FK CASCADE behavior, position+person FKs SET NULL (parameterized loop), 5-col `uq_training_plan_target` uniqueness.
+4. **`backend/tests/test_training_session_table_exists.py`** (new, +135) — 8 pin tests: required columns (13, explicit no-`deleted_at` assertion), `TrainingSessionStatus` enum class binding + value parity, course FK CASCADE, plan FK SET NULL, `ix_training_session_status` index, migration chain to iter-24 head, all-three-tables-in-one-migration scope guard, `trainingsessionstatus` enum-name spelled in migration source.
+
+**Doc (this PR — Session 73 sync):**
+
+5. New `## Last Agent Handoff (2026-05-27, Session 73 ...)` block prepended (this entry).
+
+### Changed / New Files
+
+- `backend/app/migrations/versions/20260527_iter25_training_family.py` — +233 new.
+- `backend/tests/test_training_course_table_exists.py` — +56 new.
+- `backend/tests/test_training_plan_table_exists.py` — +83 new.
+- `backend/tests/test_training_session_table_exists.py` — +135 new.
+- `AI_IMPLEMENTATION_REPORT.md` — +~110 / 0 lines (this handoff).
+
+### Decisions
+
+- **Cohort bundle (RB-002o + RB-002p + RB-002q) в одну PR.** Cohort discipline per [[rb002-enum-migration-cohort]]: shared root cause (model-without-migration, flavor (a)), shared discovery (single audit run), tight intra-cohort coupling (FK course→plan→session). Landing один без других сломает FK references mid-cohort. Cost ~510 LOC + 17 pin tests — оправдано.
+- **`training_session` без `deleted_at` намеренно.** Model не наследует `SoftDeleteMixin`. Reasoning: сессия — immutable historical event, soft-delete семантически неверна. Pin test explicitly asserts `"deleted_at" not in columns` (отдельная защита от случайного добавления mixin кем-то в будущем).
+- **`Training` (legacy, line 829) НЕ в scope.** Это отдельный простой entity (`person_id`, `course_name` как plain string, `TrainingStatus` enum). Аудит-инструмент тоже flags `training` как critical, но: (а) у класса нет explicit `__tablename__` → ORM-side name = `training`; (б) `TrainingStatus` enum может конфликтовать с другими name-collisions; (в) возможно entity подлежит deprecation в favor of `TrainingSession`. Отложено для отдельной итерации со scope-decision.
+- **`trainingsessionstatus` enum name выбран дефолтным lowercase.** SQLAlchemy дефолт = lowercase class name. Все pin tests + миграция используют именно это имя. Если в будущем кто-то захочет UPPERCASE — потребуется отдельная renaming migration.
+- **FK `person_id` без `ondelete` в `training_session`.** Model declares `ForeignKey("person.id"), nullable=False` без ondelete — миграция сохраняет default RESTRICT behavior. Reasoning: если удаляешь Person с историей сессий, должно явно сначала почистить сессии (защита от случайной потери historical evidence). Match с моделью.
+- **5-col unique `uq_training_plan_target` (tenant_id, course_id, company_id, position_id, person_id) сохранён как есть.** Это позволяет (1) одному person, (2) с одной position, (3) в одной company иметь один план по каждому course — что и нужно. Postgres NULL semantics: NULL ≠ NULL, поэтому два плана с (company=X, position=NULL, person=NULL) НЕ будут конфликтовать — это совпадает с business-логикой (общие планы могут быть несколько на одну компанию).
+- **PG-only enum drop в downgrade gated by `bind.dialect.name == "postgresql"`.** Same pattern что iter-19/24. SQLite использует inline CHECK constraints, очищаются с column drop'ом автоматически.
+
+### Issues Fixed
+
+- **RB-002o (`training_course` table missing from migrations, NEW class)** — eliminated runtime crash на любой `select(TrainingCourse)` в Postgres (catalog list, course detail, plan create flow).
+- **RB-002p (`training_plan` table missing from migrations, NEW class)** — eliminated crash на assignment endpoints + admin bootstrap path если когда-нибудь сидируют tenant-default plans.
+- **RB-002q (`training_session` table missing from migrations, NEW class)** — eliminated crash на session events (start/complete training) + TrainingCertificate.session_id reverse-FK lookups.
+
+### Known Problems / Risks
+
+- **Audit script remaining critical: 3 (down from 6).** Still: `incident_log`, `incident_person`, `inspection_result`. `incident_*` cohort требует enum-design pass для родительского `incident` (7 missing cols, including String→Enum migrations для `status`, `stage`, `person_role`) → A3 antipattern territory. `inspection_result` standalone, может пойти в iter-26 без entanglement.
+- **45 mixin-retrofit таблиц** (no `version` column) — отдельный mega-cohort iter (предложен в Session 72 как iter-26).
+- **13 business-drift tables** — ADD COLUMN migrations с backfill. Самый дорогой блок: `incident` itself (7 cols включая enum types) + `journalentry.journal_id`/`ppeissue.item_id` FK-добавление (логически дополняет iter-24).
+- **Risk: `trainingsessionstatus` enum collision с `TrainingStatus` (legacy `Training`).** Если будущий iter создаст миграцию для `Training` table и попытается создать `trainingstatus` enum (другое имя, OK) ИЛИ если кто-то решит унифицировать → нужен careful rename pass. Документировано в migration docstring.
+- **Risk: `Training` legacy class — audit will still flag `training` table.** Когда iter-26+ возьмётся за неё, нужно (а) решить keep/deprecate, (b) если keep — `trainingstatus` enum name. Не блокирует iter-25.
+- **iter-24 perf-smoke зелёный?** На момент сессии 73 не проверено (Session 72 handoff отметил CI backlog). После merge iter-25 stack будет: iter-21 (user.company_id) + iter-22 (async wrapper) + iter-23 (refresh_session/securityauditlog) + iter-24 (journal/ppeitem/audit_export_job rename) + iter-25 (training family). Любой из них может ещё спрятать onion-peel layer.
+- **iter-17 backend-tests drift** (~50/7/8/4 fails по staging/health/workspace/RBAC) — не тронуто.
+- **`final-acceptance.yml` (PR #576)** — всё ещё не запущен в dispatch; RB-003 ждёт.
+- **Local pytest hangs на Windows + Py3.13** — все 17 новых pin-тестов прошли через manual function invocation (`importlib.import_module` + iterate `test_*` callables); CI Py3.12.12 authoritative.
+- **Risk: iter-25 миграция не была применена против real Postgres локально** — `alembic-postgres-upgrade` CI job validation gate.
+- **Local audit script hangs (Windows+Py3.13)** — closed-loop drift-count validation deferred to CI.
+
+### Validation
+
+- `py -3 -m py_compile <4 new files>` → OK.
+- Local runtime check (py 3.13):
+  - `importlib.util.spec_from_file_location('iter25', ...)` loads cleanly; `revision == "20260527_iter25_training_family"`, `down_revision == "20260527_iter24_journal_ppeitem"`, `TRAINING_SESSION_STATUS_VALUES == ('scheduled', 'in_progress', 'completed', 'failed')` ✅.
+  - `inspect(TrainingCourse).columns` returns expected 12 cols ✅.
+  - `inspect(TrainingPlan).columns` returns expected 13 cols ✅.
+  - `inspect(TrainingSession).columns` returns expected 13 cols (no `deleted_at`, confirmed) ✅.
+  - `TrainingSessionStatus` values match migration constant tuple ✅.
+- **All 17 new pin tests pass when invoked directly** (manual loop calling each `test_*` function via `importlib.import_module` + `getattr`): 4 course + 5 plan + 8 session.
+- **Not validated locally:** `alembic upgrade head` против PG (no local PG); full backend-tests run (Windows+Py3.13 hang); perf-smoke flow с iter-25 applied; closed-loop audit re-run (script hangs locally).
+
+### Next Steps
+
+**Operational (this PR):**
+
+1. Commit selectively (skip `.claude/settings.local.json` + untracked `docs/superpowers/plans/2026-05-22-mvp-ready-and-vnext-polish.md`).
+2. Push branch + open PR `fix(db): iter-25 RB-002o/p/q cohort — training_course + training_plan + training_session tables`.
+3. After merge: `gh run watch <main CI run>`. Three scenarios:
+   - **(a) perf-smoke зелёное** → multi-iter RB-002 chain finally closed (iter-21→25) — primary next = `gh workflow run perf-baseline.yml --ref main` (RB-002 verdict evidence).
+   - **(b) perf-smoke red на новой error** → next onion-peel (iter-26).
+   - **(c) main CI всё ещё queued >hours** → wait или check Actions status page; alternate technical path (iter-26 inspection_result / mixin-retrofit cohort) still viable.
+
+**Technical (next session — primary, scenario-dependent):**
+
+4. **iter-26 inspection_result cohort:** single critical-таблица без `incident`-entanglement. Standalone migration, ~200 LOC.
+5. **iter-26-alt mixin-retrofit mega-cohort:** ~45 таблиц missing only `version` column. Single migration walks `inspect(model)` to add `version Integer NOT NULL DEFAULT 1` где `VersionedMixin` declared but migration omitted. Самый «механический» класс drift.
+6. **incident-family restoration (P1, multi-iter):** `incident` business cols + enum types (`incidentstatus`, `incidentstage`, `incidentpersonrole`) + `incident_log`/`incident_person` table creation. Requires careful sequence: enums → backfill `status` String→Enum migration → add missing FKs → create child tables. **3-4 iters of work**.
+
+**Technical (next session — secondary):**
+
+7. **business-drift fixups on `journalentry`/`ppeissue`** (iter-24 leftovers) — add `journal_id` and `item_id` FK columns + matching enum-typing for `journalentry.entry_type` (using existing `journaltype` enum from iter-24 via `create_type=False`).
+8. **`Training` legacy entity decision** — keep/deprecate ([currently uncreated `training` table]).
+9. Dispatch `perf-baseline.yml` (если iter-25 closes chain) для RB-002 closure verdict → 5-doc cascade sync.
+10. Dispatch `final-acceptance.yml` (PR #576) — RB-003 evidence still uncaptured.
+
+**Technical (next session — alternative):**
+
+11. iter-17 backend-tests drift — staging/health/workspace/RBAC.
+12. `app-level-defects-post-billing` items #2 (minio S3 metadata) / #3 (LibreOffice in restore-drill).
+
+**Стартовая команда для следующей сессии:**
+```
+git checkout main && git pull
+gh pr list --state open --limit 10
+gh run list --branch main --limit 6   # check post-iter-25 CI run conclusion
+# Re-run drift audit (CI Py3.12.12 may need this if local Windows hangs):
+py -3 scripts/audit/check_orm_migration_drift.py --summary 2>/dev/null
+# Critical count should now be 3 (was 6 before iter-25; closed: training_course/plan/session).
+# if perf-smoke ✅:
+gh workflow run perf-baseline.yml --ref main
+# else (perf-smoke ❌):
+gh api repos/aiprocadm/prt_ot_doc/actions/jobs/<job_id>/logs | tail -200
+git checkout -b fix/iter-26-<surface-slug>
+```
+
+**Branch suggestion для следующей сессии:** `fix/iter-26-inspection-result` (standalone critical), `fix/iter-26-version-retrofit-cohort` (mixin mega-cohort ~45 tables), `fix/iter-26-journalentry-ppeissue-business-drift` (iter-24 follow-ups), или `chore/dispatch-perf-baseline-after-iter25` (evidence-gathering если perf-smoke зелёное).
+
+---
+
 ## Last Agent Handoff (2026-05-27, Session 72 — iter-24 critical-cohort closure RB-002l/m/n: audit_export_job rename + journal + ppeitem tables)
 
 - **Дата:** 2026-05-27 (тот же день что Session 71). Ветка `fix/iter-24-critical-cohort-easy-targets` от свежего main `b2311ec` (iter-23 PR #591 squash-merge). Proactive cohort closure — Session 71 audit-tool обнаружил 9 `critical` drift tables; iter-24 закрывает 3 «easiest» по handoff suggestion (no FK deps on messy `incident`-family, no business-drift entanglements).
