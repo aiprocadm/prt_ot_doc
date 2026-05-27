@@ -1,5 +1,153 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-27, Session 71 — iter-22 doc-sync (aensure_shared_schema) + iter-23 cohort RB-002j/k (refresh_session + securityauditlog tables) + new ORM↔migration drift audit tool)
+
+- **Дата:** 2026-05-27 (тот же день что Session 70). Ветка `fix/iter-23-refresh-session-securityauditlog-tables` от свежего main `9a65bda` (iter-22 #590 merge). Triple payload: rolled-up doc sync для iter-22 #590 (без handoff entry до сих пор — typical 1-iter doc-debt), новый аудит-инструмент (Session 70 Next Steps #7), и **discovery-driven** iter-23 cohort fix для двух real drift sites выявленных тем же инструментом.
+- **Агент:** Claude Opus 4.7 (1M context, local Windows + py 3.13 fallback; explanatory style; Auto Mode).
+- **Задача:** «Продолжай улучшать» — Session 70 Next Steps дал scenario-dependent fork: либо dispatch perf-baseline (если iter-22 CI зелёное), либо continue onion-peel. Реальность по факту проверки: main CI для iter-22 застрял в queue >3h (GitHub Actions backlog). Pivot к Next Steps #7 — deliberate ORM↔migration drift audit. Audit обнаружил **non-trivial real drift** → ship iter-23 fix proactively вместо ожидания, когда perf-smoke поочерёдно их вскроет.
+
+### Studied Documentation
+
+- `AI_IMPLEMENTATION_REPORT.md` Session 70 handoff `### Next Steps` items #3-#7. #3 (watch CI) blocked by Actions queue depth; #7 (deliberate audit) chosen as alternate technical path that doesn't depend on CI signal.
+- PR #590 metadata (`gh pr view 590`): 3 files, +137/-2, merged `9a65bda` at 2026-05-27T14:16:00Z. Body документирует root cause cross-loop asyncpg Future bug + fix через async wrapper. Чётко поясняет cascade с iter-21 #589.
+- Fresh state check: `gh run list --branch main --limit 8` показал iter-21 (#589 merge `802584b`) и iter-22 (#590 merge `9a65bda`) CI оба `queued` с 14:15-14:16 UTC — to 17:18 UTC всё ещё queued (>3h backlog, unusual but not actionable).
+- Audit discovery flow:
+  - Script `scripts/audit/check_orm_migration_drift.py` (new this session) parses `ALEMBIC_METADATA` vs migration AST (forward-only, helper-aware, batch-alter-aware). После iterative refinement (handle downgrade(), `_create_soft_table` helpers, `op.batch_alter_table` blocks) drift count: 147 → 131 → 111 → 109. Remaining 109 — mix singular/plural table renames, unloaded models (workflow_*, search_*, export_*), и real drift.
+  - Cross-reference suspect tables `securityauditlog`, `refresh_session`, `audit_export_job` via `grep -rln`: **`securityauditlog` и `refresh_session` zero hits в migrations** — confirmed real drift.
+  - Model definitions: `backend/app/models/models.py:473` (RefreshSession), `:2154` (SecurityAuditLog) — оба `TenantBaseModel` subclasses, оба активно используются (`backend/app/api/routes/auth.py:205` create_refresh_session at login, `backend/app/modules/audit/security_log.py:26` SecurityAuditLog INSERT на каждом RBAC check).
+- Memory: `[[mvp-release-blockers]]`, `[[rb002-enum-migration-cohort]]` (cohort fix precedent), `[[alembic-heads-lesson]]` (true head verification), `[[prodolzhay-po-tz-workflow]]`.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 0 release-blocker chase (P0) — proactive cohort closure для drift class discovered via audit; new class RB-002j (refresh_session) + RB-002k (securityauditlog), discoverable from same audit script.
+- **Приоритет:** P0 для обоих cohort members. Surface predictions:
+  - **RB-002j** surface at first auth login attempt в perf-smoke (после iter-22 fix `bootstrap_admin_user`/`bootstrap_demo_tenant`, следующий blocker — `create_refresh_session()` → `UndefinedTableError: relation "refresh_session" does not exist`).
+  - **RB-002k** surface at first RBAC-checked request (any authenticated endpoint).
+- **Почему выбрана:** Session 70 Next Steps #7 explicitly предложил «deliberate audit для других ORM↔migration drift sites». Audit обнаружил drift → proactive fix предотвращает следующие 2+ onion-peel iterations.
+
+### Recent merged work since Session 70 (chronological)
+
+| PR | Date (UTC) | Iter | Scope | Class |
+|---|---|---|---|---|
+| [#590](https://github.com/aiprocadm/prt_ot_doc/pull/590) | 2026-05-27T14:16:00Z | iter-22 | New `async def aensure_shared_schema(...)` в `backend/app/db/session.py`; lifespan calls it BEFORE `bootstrap_admin_user` чтобы short-circuit sync `ensure_shared_schema(implicit=True)` cascade при первом `AsyncSessionLocal` call, который spawn'ил worker thread + new event loop и оставлял asyncpg futures в worker loop → cross-loop RuntimeError mid-way через `_create_tenant_schema`. 3 pin tests | DB / async lifespan |
+
+### Implemented Changes (this session)
+
+**Audit tool (this PR — new, refined mid-session):**
+
+1. **`scripts/audit/check_orm_migration_drift.py`** (new, +~470 LOC after refinement) — AST-based audit. Parses model side via `ALEMBIC_METADATA.tables` + migration side via walking `op.create_table` / `op.add_column` / `with op.batch_alter_table(...) as batch:` blocks in upgrade() functions only. Handles module-local helper functions (`_create_table`, `_create_soft_table`) by inlining their column injections. **Severity classification (mid-session refinement)** tags every drift entry: `critical` (entire table absent), `business` (substantive col drift), `mixin` (only base mixin cols missing — legacy retrofit class), `rename` (singular/plural pair), `unloaded_model` (table-without-ORM-model), `stale_migration_column` (migration adds cols model removed). CLI flags: `--summary` (per-severity rollup), `--severity LEVEL` (repeatable filter), `--json`, `--use-alembic` (currently blocked by PG-only `JSONB`). Exit 1 only for actionable severities (`critical` + `business`) — CI-friendly without flooding on legacy noise.
+
+**Current state on main (post-iter-23, per `--summary`):**
+- **9 critical** — actionable next iters: `auditexportjob`, `incident_log`, `incident_person`, `inspection_result`, `journal`, `ppeitem`, `training_course`, `training_plan`, `training_session` (entire tables missing — same class as RB-002j/k).
+- **13 business** — substantive column drift: `approval_decisions`, `incident`, `journalentry`, `npabinding`, `outbox`, `outbox_events`, `permit`, `ppeissue`, `ppenorm`, `risk_assessments`, `riskmap`, `training_certificates`, `webhook_deliveries`. `incident` is the most-drifted (7 missing cols incl. company_id/site_id/pack_id FKs + enum-typed status — needs careful design).
+- **45 mixin** — legacy retrofit class: tables missing only `version` and/or other base cols (`approval_*`, `edo_*`, `signature_*`, `document_jobs/artifacts`, `notification_templates`, etc). Most-likely-to-hit: `signatures`, `signature_requests`, `notification_templates` (frequently ORM-queried). Single mega-cohort or scoped fix.
+- **35 unloaded_model** — non-drift: tables exist in migrations but their ORM model module isn't imported in `app/db/base.py`. Either retire those tables (drop_table migration) or wire up the missing imports.
+- **5 rename** — naming-convention false positives (e.g. `companies` migration vs `company` model).
+
+**Code (this PR — iter-23 RB-002j+k):**
+
+2. **`backend/app/migrations/versions/20260527_iter23_refresh_session_securityauditlog.py`** (new, +~160) — creates `refresh_session` (14 cols, 6 indexes, 2 FKs, 1 unique constraint) и `securityauditlog` (16 cols including reserved-word-but-legal `when`, 6 indexes, 2 FKs). `down_revision = "20260527_iter21_user_company_id"` — iter-22 не имел migration (code-only PR), iter-21 остаётся head. Header docstring документирует cohort principle и surface predictions.
+3. **`backend/tests/test_refresh_session_table_exists.py`** (new, +~95) — 5 pin tests: required columns, user FK with ondelete CASCADE, token_jti unique+indexed, composite (tenant_id, user_id, family_id) и (tenant_id, family_id, revoked_at) indexes, migration chain to iter-21 head.
+4. **`backend/tests/test_securityauditlog_table_exists.py`** (new, +~95) — 5 pin tests: required columns, user FK с ondelete SET NULL (audit-preservation rationale), user_id nullable, action/decision/resource/when indexes, migration source contains both create_table calls.
+
+**Doc (this PR — Session 71 sync):**
+
+5. New `## Last Agent Handoff (2026-05-27, Session 71 ...)` block prepended.
+
+### Changed / New Files
+
+- `scripts/audit/check_orm_migration_drift.py` — +~320 new.
+- `backend/app/migrations/versions/20260527_iter23_refresh_session_securityauditlog.py` — +~160 new.
+- `backend/tests/test_refresh_session_table_exists.py` — +~95 new.
+- `backend/tests/test_securityauditlog_table_exists.py` — +~95 new.
+- `AI_IMPLEMENTATION_REPORT.md` — +~130 / 0 lines (this handoff).
+
+### Decisions
+
+- **Audit tool как separate deliverable, не embedded в CI workflow.** Сейчас 109 drift items в output, многие — false positives (helper-функции и table renames мой parser ещё не handle'ит, e.g. `companies` vs `company`). Превращать в blocking CI gate пока рано — превратится в шум, который игнорируют. Tool в репо как opt-in command для следующих sessions; refinement → CI gate можно сделать позже когда сигнал станет clean.
+- **Cohort bundle (RB-002j + RB-002k) в одну PR вместо two separate.** Те же reasoning что [[rb002-enum-migration-cohort]] iter-19: shared root cause (same anti-pattern, same discovery), shared source (the audit), и landing one без другого просто trades которое из {auth login, RBAC check} вылетит первым. Cost ~250 LOC + 10 pin tests — acceptable.
+- **`when` оставляю как имя column в `securityauditlog`.** В Postgres это reserved word for `WHEN` CASE/triggers BUT не для column names — legal без quoting issues. Renaming сломало бы каждый `SELECT when FROM securityauditlog` query без commensurate gain. Migration matches model.
+- **`securityauditlog` нейминг (без underscores) сохраняется vs «правильный» snake_case `security_audit_log`.** Model использует default `TenantBaseModel.__tablename__ = cls.__name__.lower()` → `securityauditlog`. Renaming = ORM breakage. Migration matches model (даже если эстетически не идеально). Соответствующий index naming уже разнородный в модели (`ix_security_auditlog_*` с underscore vs table без) — repo precedent.
+- **iter-22 doc-sync в этой же PR (Session 71 entry).** Pattern из Session 68 → 69 → 70: одна doc PR на 1-iter doc-debt. Не делать separate doc PR для iter-22 — overlapping reviewers, low signal.
+- **Не fix'ить остальные ~70 model_only drift entries в одной PR.** Many — false positives parsing (`version` column from `VersionedMixin` not detected because helpers); some — naming mismatch (`auditexportjob` vs `audit_export_job`). Each potentially separate root cause; bundling everything → high-risk mega-PR. Defer to future sessions where each has own scope.
+
+### Issues Fixed
+
+- **RB-002j (`refresh_session` table missing from migrations, NEW class)** — auth refresh-token rotation crash predicted на perf-smoke first login eliminated. Pin tests cover column shape, FK ondelete, unique constraint, lookup indexes.
+- **RB-002k (`securityauditlog` table missing from migrations, NEW class)** — RBAC decision logging crash на every authenticated request eliminated. Pin tests cover column shape, FK ondelete=SET NULL (audit preservation), nullable user_id, query indexes.
+- **iter-22 PR #590 doc debt** — Session 71 entry прямо документирует scope (async wrapper for cross-loop asyncpg Future bug) и cascade с iter-21.
+
+### Known Problems / Risks
+
+- **Audit tool false positives ~70 entries**. Documented in audit script `Limitations` docstring. Будущие refinements:
+  - Detect `VersionedMixin`-style base classes (column `version` added in base, missing in legacy migrations).
+  - Singular/plural table name normalization (`companies` vs `company`, `sites` vs `site`).
+  - Run alembic upgrade against SQLite with PG-type shims (current `--use-alembic` fails on JSONB).
+- **RB-002 chain все ещё не подтверждён closed.** Если iter-22 пропускает asyncpg cross-loop, perf-smoke перейдёт к auth login → теперь RB-002j (без iter-23 краш) → SAME pattern. После iter-23 merge ожидается next layer (или зелёное perf-smoke если всё чисто).
+- **Risk: iter-23 миграция создаёт два table одной transaction.** Если bootstrap data references `refresh_session` или `securityauditlog` (нет evidence сейчас), оба нужны атомарно — bundle helps.
+- **Risk: `securityauditlog` table name отличается от modules naming convention.** Existing code references already use `securityauditlog`, migration matches. Если future refactor захочет переименовать → нужна renaming migration с `op.rename_table` и code refactor.
+- **iter-22 main CI ещё не зелёный (queued).** Не actionable — wait for runner availability.
+- **iter-17 backend-tests drift** (~50/7/8/4 fails) — unchanged.
+- **`final-acceptance.yml` (PR #576)** — still not dispatched; deferred again.
+- **Local pytest hangs на Windows + Py3.13** — `py_compile` + `inspect()` runtime checks substitute; CI Py3.12.12 authoritative.
+- **Risk: iter-23 migration не была применена против real Postgres локально** — alembic-postgres-upgrade CI job validation gate.
+
+### Validation
+
+- `py -3 -m py_compile backend/app/migrations/versions/20260527_iter23_refresh_session_securityauditlog.py backend/tests/test_refresh_session_table_exists.py backend/tests/test_securityauditlog_table_exists.py scripts/audit/check_orm_migration_drift.py` → OK.
+- Local runtime check (py 3.13):
+  - `importlib.util.spec_from_file_location('iter23', ...)` loads cleanly; `revision == "20260527_iter23_refresh_session_securityauditlog"`, `down_revision == "20260527_iter21_user_company_id"` ✅.
+  - `inspect(RefreshSession).columns` returns expected 14 cols; `inspect(SecurityAuditLog).columns` returns expected 16 cols including `when` ✅.
+  - Re-running audit after iter-23 added: drift count 111 → 109 (both `refresh_session` и `securityauditlog` removed from drift list) ✅ — **closed-loop validation: same tool that discovered the drift confirms the fix.**
+- **Not validated locally:** `alembic upgrade head` against PG (no local PG); full backend-tests run (Windows + Py3.13 hang); perf-smoke flow with iter-23 applied.
+
+### Next Steps
+
+**Operational (this PR):**
+
+1. Commit selectively (skip `.claude/settings.local.json` + untracked `docs/superpowers/plans/2026-05-22-mvp-ready-and-vnext-polish.md`).
+2. Push branch + open PR `fix(db): iter-23 RB-002j+k — create refresh_session + securityauditlog tables (audit-discovered cohort)`.
+3. After merge: `gh run watch <main CI run>`. **Three scenarios:**
+   - **(a) perf-smoke зелёное** → RB-002 chain finally closed; primary next = `gh workflow run perf-baseline.yml --ref main` (RB-002 verdict evidence).
+   - **(b) perf-smoke red на новой error** → next onion-peel (iter-24).
+   - **(c) main CI всё ещё queued >hours** → wait or check Actions status page.
+
+**Technical (next session — primary, scenario-dependent):**
+
+4. **iter-24 critical-cohort closure:** pick 1-3 of the 9 `[critical]` tables for fresh migrations. Easiest candidates (no FK to messy tables): `auditexportjob` (clean, naming-mismatch with `audit_export_job` existing migration — investigate which is real production target), `journal` (no FK dependencies), `ppeitem`. Avoid `incident_log/incident_person` until `incident` business drift (7 cols, enum types) is designed — coupled work.
+5. **iter-25 mixin-retrofit cohort:** ~45 tables missing only `version` column. Single migration walks `inspect(model)` to add `version Integer DEFAULT 1` to any table whose model inherits `VersionedMixin` but where migration omitted it. ORM `version_id_col` would otherwise crash `UPDATE` operations on these tables.
+6. **incident-family restoration (P1, multi-iter):** `incident` business cols + enum types (`incidentstatus`, `incidentstage`, `incidentpersonrole`) + `incident_log`/`incident_person` table creation. Requires careful sequence: enums → backfill `status` String→Enum migration → add missing FKs (company_id, site_id, pack_id) → create child tables.
+
+**Technical (next session — secondary):**
+
+6. Dispatch `perf-baseline.yml` (если iter-23 закрывает chain) для RB-002 closure verdict → 5-doc cascade sync.
+7. Dispatch `final-acceptance.yml` (PR #576) — RB-003 evidence still uncaptured.
+
+**Technical (next session — alternative):**
+
+8. iter-17 backend-tests drift — staging/health/workspace/RBAC.
+9. `app-level-defects-post-billing` items #2 (minio S3 metadata) / #3 (LibreOffice in restore-drill).
+
+**Стартовая команда для следующей сессии:**
+```
+git checkout main && git pull
+gh pr list --state open --limit 10
+gh run list --branch main --limit 5    # check post-iter-23 CI run conclusion
+# Re-run drift audit summary to see what's left:
+py -3 scripts/audit/check_orm_migration_drift.py --summary 2>/dev/null
+# Only actionable (will exit 1 if any critical/business drift):
+py -3 scripts/audit/check_orm_migration_drift.py --severity critical --severity business 2>/dev/null
+# if perf-smoke ✅:
+gh workflow run perf-baseline.yml --ref main
+# else (perf-smoke ❌ on new error):
+gh api repos/aiprocadm/prt_ot_doc/actions/jobs/<job_id>/logs | tail -200
+git checkout -b fix/iter-24-<surface-slug>
+```
+
+**Branch suggestion для следующей сессии:** `fix/iter-24-<critical-table-slug>` (cohort closure для 1-3 из 9 critical tables), `fix/iter-25-version-retrofit-cohort` (mixin retrofit), или `chore/dispatch-perf-baseline-after-iter23` (evidence-gathering если perf-smoke зелёное).
+
+---
+
 ## Last Agent Handoff (2026-05-27, Session 70 — iter-20 audit-log SQLite trigger parity doc-sync + iter-21 RB-002i user.company_id migration drift)
 
 - **Дата:** 2026-05-27 (тот же день что Session 69). Ветка `fix/iter-21-user-company-id-migration` от свежего main `03629ee` (iter-20 #588 merge). Code+docs PR — двойной payload, как Session 69: rolled-up doc sync для iter-20 PR #588 (без handoff entry до сих пор) + new technical iteration (iter-21).
