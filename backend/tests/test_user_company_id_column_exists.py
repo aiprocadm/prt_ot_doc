@@ -65,7 +65,7 @@ def test_user_table_has_company_index_for_tenant_scoped_lookups() -> None:
     )
 
 
-def test_iter21_migration_chains_to_next69_merge_heads() -> None:
+def test_iter21_migration_chains_to_current_head() -> None:
     # Guard against rebase mishap dropping the migration file or its
     # down_revision link to the prior head. Migration module names start
     # with a digit, so they can't be `import`ed by statement — load via
@@ -88,4 +88,7 @@ def test_iter21_migration_chains_to_next69_merge_heads() -> None:
     spec.loader.exec_module(module)
 
     assert module.revision == "20260527_iter21_user_company_id"
-    assert module.down_revision == "20260416_next69_merge_heads"
+    # Chain to true alembic head as of 2026-05-27. Picking the wrong
+    # head produces the "Multiple head revisions" error on
+    # alembic-postgres-upgrade CI (see iter-21 PR #589 first attempt).
+    assert module.down_revision == "20260517_saved_calendar_views"

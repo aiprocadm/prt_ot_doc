@@ -39,7 +39,7 @@
 
 **Code (this PR — iter-21 RB-002i):**
 
-1. **`backend/app/migrations/versions/20260527_iter21_user_company_id.py`** (new, +60) — Alembic migration: `op.add_column("user", sa.Column("company_id", sa.String(36), nullable=True))`, `op.create_foreign_key("fk_user_company", "user", "company", ["company_id"], ["id"], ondelete="SET NULL")`, `op.create_index("ix_user_company", "user", ["tenant_id", "company_id"])`. `down_revision = "20260416_next69_merge_heads"` (linear DAG continuation). Header docstring documents root cause + commit pointing finger at `0d4d140`.
+1. **`backend/app/migrations/versions/20260527_iter21_user_company_id.py`** (new, +60) — Alembic migration: `op.add_column("user", sa.Column("company_id", sa.String(36), nullable=True))`, `op.create_foreign_key("fk_user_company", "user", "company", ["company_id"], ["id"], ondelete="SET NULL")`, `op.create_index("ix_user_company", "user", ["tenant_id", "company_id"])`. `down_revision = "20260517_saved_calendar_views"` — **true** alembic head at time of writing. First attempt pointed at `20260416_next69_merge_heads`, but `20260517_saved_calendar_views` already chained off next69 (added 2026-05-17), making my initial migration a fork → "Multiple head revisions" error on PR #589 CI. Fix-up commit repointed to actual head. Header docstring documents root cause + commit pointing finger at `0d4d140` + this lesson.
 2. **`backend/tests/test_user_company_id_column_exists.py`** (new, +83) — 4 pin tests:
    - `test_user_has_company_id_column_with_correct_type` — nullable + `String(36)` enforce model contract.
    - `test_user_company_id_foreign_key_targets_company_with_set_null` — FK target `company.id` + `ondelete="SET NULL"` enforce migration parity.

@@ -1,8 +1,19 @@
 """iter-21: add user.company_id column missing from initial schema.
 
 Revision ID: 20260527_iter21_user_company_id
-Revises: 20260416_next69_merge_heads
+Revises: 20260517_saved_calendar_views
 Create Date: 2026-05-27
+
+History:
+* iter-21 first attempt pointed ``down_revision`` at
+  ``20260416_next69_merge_heads`` (the merge revision documented in that
+  file's docstring as "the merge"). That was wrong: ``20260517_saved_
+  calendar_views`` had since been added chained off next69, making next69
+  no longer a head. Pointing iter-21 at next69 created a parallel branch
+  → ``Multiple head revisions are present`` on ``alembic upgrade head``
+  (PR #589 first CI run). Fixed by repointing to the actual head. Lesson:
+  always verify true head with ``alembic heads`` or ``grep -rl down_
+  revision.*<candidate>`` to confirm nothing else chains off it.
 
 Root cause: `User.company_id` was added to `backend/app/models/models.py`
 (commit 0d4d140 "Harden refresh token handling with cookie rotation and
@@ -32,7 +43,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "20260527_iter21_user_company_id"
-down_revision: str | Sequence[str] | None = "20260416_next69_merge_heads"
+down_revision: str | Sequence[str] | None = "20260517_saved_calendar_views"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
