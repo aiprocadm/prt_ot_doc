@@ -29,12 +29,20 @@ jobs:
         # Staging-hardening (backend/app/core/config.py::bootstrap) rejects empty
         # SECRET_KEY / S3_ACCESS_KEY / S3_SECRET_KEY. .env.example ships them
         # blank by design — fill with CI-only placeholders so API can boot.
+        #
+        # iter-27 (RB-002 perf-auth): ADMIN_PASSWORD enables bootstrap_admin_user
+        # (backend/app/services/dev_bootstrap.py) so api_load.py --login-email can
+        # exchange creds for a JWT. .env.example ships ADMIN_BOOTSTRAP=1 and
+        # ADMIN_EMAIL=admin@example.com but ADMIN_PASSWORD blank — without the
+        # password, no admin row is seeded, every /api/v1/* probe returns 401,
+        # and threshold_check=FAIL on the dashboard scenario.
         run: |
           cat >> .env <<'EOF'
           SECRET_KEY=ci-perf-baseline-not-for-production
           POSTGRES_PASSWORD=ptd
           S3_ACCESS_KEY=minioadmin
           S3_SECRET_KEY=minioadmin
+          ADMIN_PASSWORD=PerfBaseline123!
           EOF
 
       - name: Enable Redis memory overcommit
@@ -57,12 +65,25 @@ jobs:
           exit 1
 
       - name: Run nightly baseline profile
+        # iter-27 (RB-002 perf-auth): PERF_LOGIN_EMAIL / PERF_LOGIN_PASSWORD
+        # must match ADMIN_EMAIL / ADMIN_PASSWORD seeded into the API container
+        # via .env above. The orchestrator below appends --login-email /
+        # --login-password to every api_load.py call so the script can exchange
+        # creds for a JWT before the load loop and inject Authorization: Bearer
+        # into all probes.
+        env:
+          PERF_LOGIN_EMAIL: admin@example.com
+          PERF_LOGIN_PASSWORD: PerfBaseline123!
         run: |
           mkdir -p artifacts/perf/nightly
           python - <<'PY'
           import json
+          import os
           import subprocess
           from pathlib import Path
+
+          login_email = os.environ.get("PERF_LOGIN_EMAIL")
+          login_password = os.environ.get("PERF_LOGIN_PASSWORD")
 
           scenarios = json.loads(Path("scripts/perf/scenarios.json").read_text())
           profile = scenarios["profiles"]["nightly_baseline"]
@@ -94,8 +115,22 @@ jobs:
                   cmd.extend(["--body-json", json.dumps(scenario["body"])])
               if scenario.get("flow_steps"):
                   cmd.extend(["--flow-json", json.dumps(scenario["flow_steps"])])
+              # Inject auth ONLY when this profile run has credentials. /health
+              # ignores the Authorization header so adding it globally is safe.
+              if login_email and login_password:
+                  cmd.extend([
+                      "--login-email", login_email,
+                      "--login-password", login_password,
+                  ])
               print("::group::" + scenario["name"])
-              print(" ".join(cmd))
+              # Mask password in the echoed command line — argparse still parses
+              # the real value from cmd[].
+              printable_cmd = list(cmd)
+              if "--login-password" in printable_cmd:
+                  idx = printable_cmd.index("--login-password") + 1
+                  if idx < len(printable_cmd):
+                      printable_cmd[idx] = "***"
+              print(" ".join(printable_cmd))
               subprocess.run(cmd, check=True)
               print("::endgroup::")
           PY
