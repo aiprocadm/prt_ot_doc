@@ -24,7 +24,7 @@ from app.core.rate_limit import (
     configure_rate_limiter,
     limiter,
 )
-from app.db.session import dispose_engine
+from app.db.session import aensure_shared_schema, dispose_engine
 from app.domains.files import s3
 from app.middleware.billing_guard import BillingGuardMiddleware
 from app.middleware.global_error_handler import GlobalErrorHandlerMiddleware
@@ -117,6 +117,15 @@ def _create_lifespan(settings: Settings) -> Callable[[FastAPI], AsyncIterator[No
 
             register_cross_base_fk_resolution()
             s3.ensure_bucket()
+            # iter-22: provision the shared schema on this loop BEFORE any
+            # session_scope / AsyncSessionLocal call. Without this, the first
+            # implicit ensure_shared_schema(implicit=True) from AsyncSessionLocal
+            # spawns a worker thread + asyncio.run, which seeds the engine's
+            # connection pool with futures bound to that worker loop. When the
+            # worker thread exits and the next access comes from the lifespan
+            # loop, asyncpg raises "Future attached to a different loop" and
+            # bootstrap_demo_tenant fails at _create_tenant_schema.
+            await aensure_shared_schema()
             await bootstrap_admin_user(settings)
             await bootstrap_demo_tenant(settings)
         except Exception:  # pragma: no cover - infrastructure guard

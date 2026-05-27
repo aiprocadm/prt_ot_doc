@@ -377,7 +377,23 @@ async def _create_tenant_schema(schema: str) -> None:
 
 
 def ensure_shared_schema(*, implicit: bool = False) -> None:
-    """Ensure shared tables are present during local development."""
+    """Ensure shared tables are present during local development.
+
+    This is the **sync wrapper**. It uses ``_run_in_thread`` + ``asyncio.run``
+    to bridge into an async context, which spawns a brand-new event loop and
+    initialises the global ``engine``'s connection pool with connections
+    bound to that worker loop. When the worker thread exits, those
+    connections remain in the pool but their asyncpg futures are tied to a
+    now-dead loop — and the next access from a *different* loop raises
+    ``RuntimeError: Future ... attached to a different loop``. The exact
+    failure surface that previously broke ``perf-smoke`` at
+    ``_create_tenant_schema`` (see iter-22 PR fixing this).
+
+    From an **async** context (FastAPI lifespan, async test fixtures), call
+    :func:`aensure_shared_schema` FIRST — once it sets
+    ``_shared_initialized = True`` the implicit sync call from
+    :func:`AsyncSessionLocal` short-circuits and never spawns a worker loop.
+    """
 
     global _shared_initialized
     if implicit and not _settings.runtime_schema_bootstrap:
@@ -395,6 +411,29 @@ def ensure_shared_schema(*, implicit: bool = False) -> None:
 
         _run_in_thread(runner)
         _shared_initialized = True
+
+
+async def aensure_shared_schema(*, implicit: bool = False) -> None:
+    """Async-native :func:`ensure_shared_schema`.
+
+    Call this from the FastAPI lifespan (or any other async startup path)
+    BEFORE the first :func:`session_scope` / :func:`AsyncSessionLocal`. It
+    runs ``_create_shared_schema`` directly on the current loop, then sets
+    the same ``_shared_initialized`` flag the sync wrapper guards on — so
+    later implicit sync calls from ``AsyncSessionLocal`` short-circuit and
+    never spin up the worker-loop pattern that pollutes the engine pool
+    (see :func:`ensure_shared_schema` docstring).
+    """
+
+    global _shared_initialized
+    if implicit and not _settings.runtime_schema_bootstrap:
+        return
+    if _settings.app_env == "production":
+        return
+    if _shared_initialized:
+        return
+    await _create_shared_schema()
+    _shared_initialized = True
 
 
 def ensure_tenant_schema(
