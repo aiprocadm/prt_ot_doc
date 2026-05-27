@@ -1,5 +1,121 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-28, Session 76 — iter-28 RB-005 closure: `UserRole.code` attribute typo in `workflow/api.py` breaking navigation API)
+
+- **Дата:** 2026-05-28. Ветка `fix/iter-28-rb-005-workflow-userrole-code-attr` от свежего main `57bb375` (iter-26 PR #595 merged 2026-05-27). Параллельная итерация с iter-27 PR #596 (open, queued) — независимые файлы (perf vs. workflow), conflicts ноль.
+- **Агент:** Claude Opus 4.7 (1M context, local Windows + py 3.13 fallback; explanatory style; Auto Mode).
+- **Задача:** «продолжай работу с блокерами» — user продолжил после Session 75 (iter-27 perf-auth PR #596 открыт). Per Session 75 Next Steps #4 — RB-005 credential-smoke drill-down. Скачан артефакт `e2e-backend-log-bootstrap_local` из failed run [26444184689](https://github.com/aiprocadm/prt_ot_doc/actions/runs/26444184689), идентифицирован реальный root cause (НЕ email TLD как hypothesis в Session 67 — это уже было закрыто PR #580; это **следующий слой** failure-class).
+
+### Studied Documentation
+
+- Session 75 handoff Next Steps #4 (RB-005 drill-down primary) — Session 75 entry на ветке `fix/iter-27-perf-auth-bearer-token` (PR #596), не в main.
+- `gh run download 26444184689 -D /tmp/rb005-artifacts` → 719-line `e2e-backend.log` с явным error: `"Unexpected error: 'UserRole' object has no attribute 'code'"` + Python traceback указывающий на `backend/app/modules/workflow/api.py:227` функция `list_tasks`.
+- `backend/app/models/models.py:494-507` (`UserRole(TenantBaseModel)` — поля: `user_id`, `role: Mapped[RoleEnum]`, `user` relationship; ZERO `code` attribute).
+- `backend/app/models/models.py:182-194` (`RoleEnum(str, enum.Enum)` — values `"owner"`, `"admin"`, `"ot_pb_lead"`, ...).
+- Correct extraction pattern confirmed в **4 файлах** (cross-check): `backend/app/api/routes/auth.py:413`, `backend/app/core/policy_engine.py:32`, `backend/app/core/security.py:517`, `backend/app/api/routes/admin_users.py:62` — все используют `role.role.value for role in getattr(user, 'roles', [])`. Только `workflow/api.py` имеет typo'd `role.code` в 5 местах.
+- `frontend/src/api/navigation.ts:11` — `apiClient.get("/workflow/tasks", { params: { assignee: "me" } })` на каждой авторизованной странице → 500 от crash'а блокировал loading "Документы" heading в Playwright.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 0 release-blocker chase (P0) — direct closure для RB-005.
+- **Приоритет:** P0 — RB-005 credential-smoke gated MVP закрытие; PR #580 (email TLD) уже в main с 2026-05-26, но workflow всё ещё красный — Session 67 hypothesis был корректен но НЕ полный, был ещё один слой.
+- **Почему выбрана:** Альтернативы:
+  - **iter-27 ждать CI merge:** queue stalled (iter-25/26 пробыли queued >12 часов на момент session 76).
+  - **iter-29 mixin-retrofit:** preventative, не CI-блокер.
+  - **incident-family:** 3-4 итерации работы по enum design.
+  - **iter-28 RB-005:** trivial fix (1 файл, 5 lines + helper), unblocks credential-smoke validation, complementary к iter-27.
+
+### Recent merged work since Session 75 (chronological)
+
+| PR | Date (UTC) | Iter | Scope | Class |
+|---|---|---|---|---|
+| (none) | — | — | iter-27 PR [#596](https://github.com/aiprocadm/prt_ot_doc/pull/596) still QUEUED for CI | — |
+
+### Implemented Changes (this session)
+
+**Code (this PR — iter-28 RB-005):**
+
+1. **`backend/app/modules/workflow/api.py`** (+18 / -10) — добавлен helper `_extract_role_codes(access: AccessContext) -> list[str]` с docstring объясняющим ошибочную attribute path (`role.code`) и правильную (`role.role.value`) + cross-refs на 4 sibling-файла. Заменены 5 inline call-sites (lines 227, 238, 245, 252, 259) на helper-call — также убирает дублирование `getattr(access.user, 'roles', None) or []` паттерна.
+2. **`backend/tests/test_workflow_role_codes_extraction.py`** (new, +124) — 6 pin tests: basic shape, empty roles, missing attr, None-roles, regression guard (`not hasattr(UserRole(), "code")`), downstream string-format contract sanity.
+
+**Doc (this PR — Session 76 sync):**
+
+3. New `## Last Agent Handoff (2026-05-28, Session 76 ...)` block prepended (this entry).
+
+### Changed / New Files
+
+- `backend/app/modules/workflow/api.py` — +18 / -10 (helper + 5 call-site replacements).
+- `backend/tests/test_workflow_role_codes_extraction.py` — +124 new.
+- `AI_IMPLEMENTATION_REPORT.md` — +~70 / 0 (this handoff).
+
+### Decisions
+
+- **Extract helper vs inline fix in 5 sites.** Inline (`role.role.value`) был бы 5-char change × 5 sites = минимальный diff. Helper extraction добавил ~15 строк документации НО (a) делает ошибочный паттерн менее вероятным к копированию в новые routes, (b) docstring сразу объясняет root cause, (c) тестируется один раз а не 5. Trade-off — slightly larger diff, но better DX.
+- **`getattr(user, 'roles', None) or []` вместо `getattr(user, 'roles', [])`.** Защита от `roles=None` (selectinload miss оставит None, не пустой список). Старая inline-форма имела `getattr(...) if getattr(...) else []` — дважды вызывалось `getattr`, лишний overhead, эквивалентная семантика. Новая короче.
+- **Pin test регрессия-guard `not hasattr(UserRole(), "code")` ассерт.** Защищает от accidental добавления `code` колонки в UserRole model. Если кто-то добавит `code`, этот тест упадёт и заставит автора подумать о coherence.
+- **Test файл лежит в `backend/tests/`** (как iter-19/23/24/25/26) по конвенции для `app.*` модулей.
+- **No frontend-side change.** Frontend `navigation.ts` корректно ожидает 200; backend crash был причиной 500. После backend-fix frontend заработает без изменений.
+
+### Issues Fixed
+
+- **RB-005 credential-smoke "Документы" heading timeout root cause.** Backend `/api/v1/workflow/tasks` крашился с `AttributeError: 'UserRole' object has no attribute 'code'` при каждом авторизованном вызове из `frontend/src/api/navigation.ts`.
+- **5 call-sites typo'd attribute access** на `UserRole.code` (lines 227, 238, 245, 252, 259) превращены в 1 helper.
+
+### Known Problems / Risks
+
+- **iter-28 не запущена против реального backend локально.** Heavy import chain (app.api.dependencies через workflow/api.py) hangs на Win+Py3.13 per `[[local-env-drift-windows]]`. Validation gate — CI Py3.12.12. Isolated logic test (5 assertions через stub'ы) показал что новая форма ОК.
+- **Только 1 unique app frame в traceback** означает крах сразу же — но возможно есть ещё другие места где ABAC/RBAC dependencies возвращают сломанные user-shapes. Если CI после iter-28 покажет другой attribute error на UserRole — это будет ещё одна классовая проблема для отдельной итерации.
+- **iter-27 PR #596 ещё queued.** Если iter-27 будет review-requested и потребует значительные изменения, iter-28 (отдельный файл/scope) от этого не пострадает.
+- **Не покрыто playwright тестом локально.** Validation gate — следующий e2e-smoke prog после iter-28 merge.
+- **RB-002, RB-003 остаются open** — iter-27 ждёт merge; RB-003 (`final-acceptance.yml`) не dispatched.
+
+### Validation
+
+- `py -3 -m py_compile backend/app/modules/workflow/api.py` → OK.
+- `py -3 -m py_compile backend/tests/test_workflow_role_codes_extraction.py` → OK.
+- `grep "role\.code" backend/app/modules/workflow/api.py` → 0 matches (excluding docstring mention).
+- `grep "_extract_role_codes" backend/app/modules/workflow/api.py` → 6 matches (1 def + 5 call sites).
+- **Isolated logic-level validation** через inline-stub (без app imports): 5/5 assertions PASS — extraction shape, empty list, missing attr, None roles, no-`.code`-on-UserRole.
+- **Not validated locally:** full pytest run (Win+Py3.13 hang); credential-smoke playwright re-run; CI is source of truth.
+
+### Next Steps
+
+**Operational (this PR):**
+
+1. Commit selectively (skip `.claude/settings.local.json` + iter-27 untracked plan doc).
+2. Push branch + open PR `fix(workflow): iter-28 RB-005 — UserRole.code attribute typo (5 sites)`.
+
+**Technical (next session — primary):**
+
+3. **Monitor iter-27 PR #596 + iter-28 CI** — после merge обоих dispatch `e2e-smoke.yml` + `perf-baseline.yml`. Если оба green → flip RB-002 + RB-005 → DONE в `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` → 5-doc cascade sync → RB-003 dispatch.
+4. **RB-003 final-acceptance dispatch** (PR #576).
+
+**Technical (next session — secondary):**
+
+5. **iter-29 mixin-retrofit mega-cohort** (~45 таблиц без `version`).
+6. **incident-family multi-iter restoration** (parent business-drift design + 2 child tables).
+7. **iter-17 backend-tests drift** (~50/7/8/4 fails).
+
+**Стартовая команда для следующей сессии:**
+
+```
+git checkout main && git pull
+gh pr list --state open --limit 5
+gh run list --workflow=ci.yml --branch main --limit 3   # check iter-27+28 CI verdicts
+gh run list --workflow=e2e-smoke.yml --limit 3
+# If both green after merge: dispatch perf-baseline.yml + e2e-smoke.yml; verify RB-002/005 close.
+```
+
+**Branch suggestion для следующей сессии:** `docs/sync-rb-002-005-done-after-iter-27-28` (если оба зелёные) или `fix/iter-29-attribute-drift-followup` (если другие сломанные сайты).
+
+---
+
+## Last Agent Handoff (2026-05-27, Session 75 — iter-27 RB-002 perf-auth: global Bearer token in `scripts/perf/api_load.py`)
+
+**Это handoff из ветки `fix/iter-27-perf-auth-bearer-token` (PR #596, OPEN/QUEUED).** На текущей iter-28 ветке этот раздел отсутствует в main snapshot; полный текст см. на PR #596.
+
+---
+
 ## Last Agent Handoff (2026-05-27, Session 74 — iter-26 standalone-critical closure RB-002r: inspection_result table; stacked PR on iter-25)
 
 - **Дата:** 2026-05-27 (тот же день что Sessions 71-73). Ветка `fix/iter-26-inspection-result` от `fix/iter-25-training-family-cohort` HEAD `dd1bc8b` (iter-25 PR #594 не merged ещё; stacked dependent PR strategy). Это первый stacked PR в этом репо — iter-23/24/25 ждали merge перед началом следующего. Решение принято в результате user '`продолжай`' instruction + iter-25 CI ещё pending → продолжение без блокировки.

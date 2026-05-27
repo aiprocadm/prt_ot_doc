@@ -21,6 +21,23 @@ TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 AccessDep = Annotated[AccessContext, Depends(rbac())]
 
 
+def _extract_role_codes(access: AccessContext) -> list[str]:
+    """Return string role codes for the authenticated user.
+
+    `access.user.roles` is a relationship of :class:`UserRole` ORM rows (NOT
+    the :class:`RoleEnum` directly). The actual enum lives at ``role.role``
+    and its ``.value`` is the lowercase string that
+    :attr:`WorkflowTask.assignee_role_code` stores. Matches the existing
+    extraction in ``auth.py``/``policy_engine.py``/``security.py`` (see iter-28
+    RB-005 — five sites in this module previously called ``role.code`` which
+    raised ``AttributeError`` and surfaced as HTTP 500 from /api/v1/workflow/tasks
+    on every authenticated page load via ``frontend/src/api/navigation.ts``).
+    """
+
+    roles = getattr(access.user, "roles", None) or []
+    return [role.role.value for role in roles]
+
+
 class WorkflowDefinitionIn(BaseModel):
     code: str
     name: str
@@ -224,7 +241,7 @@ async def get_instance(instance_id: str, session: SessionDep, tenant: TenantDep,
 
 @router.get("/tasks", response_model=list[WorkflowTaskRead])
 async def list_tasks(session: SessionDep, tenant: TenantDep, access: AccessDep, assignee: str | None = Query(default="me")) -> list[WorkflowTaskRead]:
-    role_codes = [role.code for role in getattr(access.user, 'roles', [])] if getattr(access.user, 'roles', None) else []
+    role_codes = _extract_role_codes(access)
     try:
         tasks = await _service(session, tenant).list_tasks(user_id=access.user.id if assignee == 'me' else None, role_codes=role_codes)
     except OperationalError:
@@ -235,28 +252,28 @@ async def list_tasks(session: SessionDep, tenant: TenantDep, access: AccessDep, 
 
 @router.post("/tasks/{task_id}/complete", response_model=WorkflowTaskRead)
 async def complete_task(task_id: str, payload: WorkflowTaskActionIn, session: SessionDep, tenant: TenantDep, access: AccessDep) -> WorkflowTaskRead:
-    task = await _service(session, tenant).complete_task(task_id=task_id, actor_user_id=access.user.id, actor_role_codes=[role.code for role in getattr(access.user, 'roles', [])] if getattr(access.user, 'roles', None) else [], decision=payload.decision, payload=payload.payload)
+    task = await _service(session, tenant).complete_task(task_id=task_id, actor_user_id=access.user.id, actor_role_codes=_extract_role_codes(access), decision=payload.decision, payload=payload.payload)
     await session.commit()
     return _serialize_task(task)
 
 
 @router.post("/tasks/{task_id}/reassign", response_model=WorkflowTaskRead)
 async def reassign_task(task_id: str, payload: WorkflowTaskActionIn, session: SessionDep, tenant: TenantDep, access: AccessDep) -> WorkflowTaskRead:
-    task = await _service(session, tenant).reassign_task(task_id=task_id, actor_user_id=access.user.id, actor_role_codes=[role.code for role in getattr(access.user, 'roles', [])] if getattr(access.user, 'roles', None) else [], assignee_user_id=payload.assignee_user_id, assignee_role_code=payload.assignee_role_code, mode="reassigned")
+    task = await _service(session, tenant).reassign_task(task_id=task_id, actor_user_id=access.user.id, actor_role_codes=_extract_role_codes(access), assignee_user_id=payload.assignee_user_id, assignee_role_code=payload.assignee_role_code, mode="reassigned")
     await session.commit()
     return _serialize_task(task)
 
 
 @router.post("/tasks/{task_id}/delegate", response_model=WorkflowTaskRead)
 async def delegate_task(task_id: str, payload: WorkflowTaskActionIn, session: SessionDep, tenant: TenantDep, access: AccessDep) -> WorkflowTaskRead:
-    task = await _service(session, tenant).reassign_task(task_id=task_id, actor_user_id=access.user.id, actor_role_codes=[role.code for role in getattr(access.user, 'roles', [])] if getattr(access.user, 'roles', None) else [], assignee_user_id=payload.assignee_user_id, assignee_role_code=payload.assignee_role_code, mode="delegated")
+    task = await _service(session, tenant).reassign_task(task_id=task_id, actor_user_id=access.user.id, actor_role_codes=_extract_role_codes(access), assignee_user_id=payload.assignee_user_id, assignee_role_code=payload.assignee_role_code, mode="delegated")
     await session.commit()
     return _serialize_task(task)
 
 
 @router.post("/tasks/{task_id}/escalate", response_model=WorkflowTaskRead)
 async def escalate_task(task_id: str, payload: WorkflowTaskActionIn, session: SessionDep, tenant: TenantDep, access: AccessDep) -> WorkflowTaskRead:
-    task = await _service(session, tenant).reassign_task(task_id=task_id, actor_user_id=access.user.id, actor_role_codes=[role.code for role in getattr(access.user, 'roles', [])] if getattr(access.user, 'roles', None) else [], assignee_user_id=payload.assignee_user_id, assignee_role_code=payload.assignee_role_code, mode="escalated")
+    task = await _service(session, tenant).reassign_task(task_id=task_id, actor_user_id=access.user.id, actor_role_codes=_extract_role_codes(access), assignee_user_id=payload.assignee_user_id, assignee_role_code=payload.assignee_role_code, mode="escalated")
     await session.commit()
     return _serialize_task(task)
 
