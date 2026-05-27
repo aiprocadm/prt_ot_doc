@@ -467,12 +467,23 @@ jobs:
         # Staging-hardening (backend/app/core/config.py::bootstrap) rejects empty
         # SECRET_KEY / S3_ACCESS_KEY / S3_SECRET_KEY. .env.example ships them
         # blank by design — fill with CI-only placeholders so API can boot.
+        # RB-002f: also seed admin-bootstrap env so dev_bootstrap creates the
+        # demo admin user; otherwise perf-smoke calls to /api/v1/dashboard/summary
+        # 401 because there is no user/token to authenticate.
+        # Rate limit also disabled: login is rate-limited (5/min per identity)
+        # and api_load.py _hit_flow re-logins per worker. Without this,
+        # perf-smoke 60-request batch would 429 after 5 successes.
         run: |
           cat >> .env <<'EOF'
           SECRET_KEY=ci-perf-smoke-not-for-production
           POSTGRES_PASSWORD=ptd
           S3_ACCESS_KEY=minioadmin
           S3_SECRET_KEY=minioadmin
+          APP_ENV=development
+          ADMIN_BOOTSTRAP=1
+          ADMIN_PASSWORD=PerfSmokeAdmin123!
+          ADMIN_TENANT=demo
+          RATE_LIMIT_ENABLED=false
           EOF
 
       - name: Enable Redis memory overcommit
@@ -511,7 +522,7 @@ jobs:
 
           python scripts/perf/api_load.py \
             --base-url http://localhost:8000 \
-            --path /api/v1/dashboard/summary \
+            --flow-json "$(cat scripts/perf/flows/dashboard_summary.json)" \
             --tenant demo \
             --requests 60 \
             --concurrency 12 \

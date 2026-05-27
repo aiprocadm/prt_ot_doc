@@ -66,6 +66,7 @@ async def bootstrap_admin_user(settings: Settings) -> None:
         if tenant is None:
             tenant = Tenant(
                 slug=tenant_slug,
+                code=tenant_slug,  # RB-002g: tenant.code is NOT NULL in PG migration
                 name=f"{tenant_slug.title()} tenant",
                 contact_email=settings.admin_email,
                 schema_name=f"tenant_{tenant_slug}",
