@@ -33,9 +33,16 @@
 
 ### Implemented Changes (this session)
 
-**Audit tool (this PR — new):**
+**Audit tool (this PR — new, refined mid-session):**
 
-1. **`scripts/audit/check_orm_migration_drift.py`** (new, +~320 LOC) — AST-based audit. Parses model side via `ALEMBIC_METADATA.tables` + migration side via walking `op.create_table` / `op.add_column` / `with op.batch_alter_table(...) as batch:` blocks in upgrade() functions only. Handles module-local helper functions (`_create_table`, `_create_soft_table`) by inlining their column injections. Optional `--use-alembic` flag attempts SQLite-applied schema reflection (currently fails on PG-only `JSONB` types — known limitation, documented). Outputs text or JSON via `--json`. Exit code 1 if drift found (CI-friendly).
+1. **`scripts/audit/check_orm_migration_drift.py`** (new, +~470 LOC after refinement) — AST-based audit. Parses model side via `ALEMBIC_METADATA.tables` + migration side via walking `op.create_table` / `op.add_column` / `with op.batch_alter_table(...) as batch:` blocks in upgrade() functions only. Handles module-local helper functions (`_create_table`, `_create_soft_table`) by inlining their column injections. **Severity classification (mid-session refinement)** tags every drift entry: `critical` (entire table absent), `business` (substantive col drift), `mixin` (only base mixin cols missing — legacy retrofit class), `rename` (singular/plural pair), `unloaded_model` (table-without-ORM-model), `stale_migration_column` (migration adds cols model removed). CLI flags: `--summary` (per-severity rollup), `--severity LEVEL` (repeatable filter), `--json`, `--use-alembic` (currently blocked by PG-only `JSONB`). Exit 1 only for actionable severities (`critical` + `business`) — CI-friendly without flooding on legacy noise.
+
+**Current state on main (post-iter-23, per `--summary`):**
+- **9 critical** — actionable next iters: `auditexportjob`, `incident_log`, `incident_person`, `inspection_result`, `journal`, `ppeitem`, `training_course`, `training_plan`, `training_session` (entire tables missing — same class as RB-002j/k).
+- **13 business** — substantive column drift: `approval_decisions`, `incident`, `journalentry`, `npabinding`, `outbox`, `outbox_events`, `permit`, `ppeissue`, `ppenorm`, `risk_assessments`, `riskmap`, `training_certificates`, `webhook_deliveries`. `incident` is the most-drifted (7 missing cols incl. company_id/site_id/pack_id FKs + enum-typed status — needs careful design).
+- **45 mixin** — legacy retrofit class: tables missing only `version` and/or other base cols (`approval_*`, `edo_*`, `signature_*`, `document_jobs/artifacts`, `notification_templates`, etc). Most-likely-to-hit: `signatures`, `signature_requests`, `notification_templates` (frequently ORM-queried). Single mega-cohort or scoped fix.
+- **35 unloaded_model** — non-drift: tables exist in migrations but their ORM model module isn't imported in `app/db/base.py`. Either retire those tables (drop_table migration) or wire up the missing imports.
+- **5 rename** — naming-convention false positives (e.g. `companies` migration vs `company` model).
 
 **Code (this PR — iter-23 RB-002j+k):**
 
@@ -105,13 +112,11 @@
    - **(b) perf-smoke red на новой error** → next onion-peel (iter-24).
    - **(c) main CI всё ещё queued >hours** → wait or check Actions status page.
 
-**Technical (next session — primary):**
+**Technical (next session — primary, scenario-dependent):**
 
-4. **Triage remaining ~70 audit drift entries** — separate real drift (e.g. `incident_log`, `incident_person`, `inspection_result` — confirmed model exists, migration zero) from false positives (helper-injected `version`, singular/plural renames). Each real drift → its own iter (or another cohort if shared source).
-5. **Audit tool refinements** to reduce false positives:
-   - Detect `VersionedMixin` / `TimestampMixin` from `models/base.py` — auto-credit `version`, `created_at`, `updated_at` to tables that inherit.
-   - Singular/plural normalization (`tableName` → both `tableName` and `tableNames`).
-   - Make `--use-alembic` work via PG-type shims (JSONB → JSON).
+4. **iter-24 critical-cohort closure:** pick 1-3 of the 9 `[critical]` tables for fresh migrations. Easiest candidates (no FK to messy tables): `auditexportjob` (clean, naming-mismatch with `audit_export_job` existing migration — investigate which is real production target), `journal` (no FK dependencies), `ppeitem`. Avoid `incident_log/incident_person` until `incident` business drift (7 cols, enum types) is designed — coupled work.
+5. **iter-25 mixin-retrofit cohort:** ~45 tables missing only `version` column. Single migration walks `inspect(model)` to add `version Integer DEFAULT 1` to any table whose model inherits `VersionedMixin` but where migration omitted it. ORM `version_id_col` would otherwise crash `UPDATE` operations on these tables.
+6. **incident-family restoration (P1, multi-iter):** `incident` business cols + enum types (`incidentstatus`, `incidentstage`, `incidentpersonrole`) + `incident_log`/`incident_person` table creation. Requires careful sequence: enums → backfill `status` String→Enum migration → add missing FKs (company_id, site_id, pack_id) → create child tables.
 
 **Technical (next session — secondary):**
 
@@ -128,8 +133,10 @@
 git checkout main && git pull
 gh pr list --state open --limit 10
 gh run list --branch main --limit 5    # check post-iter-23 CI run conclusion
-# Re-run drift audit to see remaining work:
-py -3 scripts/audit/check_orm_migration_drift.py 2>/dev/null | head -50
+# Re-run drift audit summary to see what's left:
+py -3 scripts/audit/check_orm_migration_drift.py --summary 2>/dev/null
+# Only actionable (will exit 1 if any critical/business drift):
+py -3 scripts/audit/check_orm_migration_drift.py --severity critical --severity business 2>/dev/null
 # if perf-smoke ✅:
 gh workflow run perf-baseline.yml --ref main
 # else (perf-smoke ❌ on new error):
@@ -137,7 +144,7 @@ gh api repos/aiprocadm/prt_ot_doc/actions/jobs/<job_id>/logs | tail -200
 git checkout -b fix/iter-24-<surface-slug>
 ```
 
-**Branch suggestion для следующей сессии:** `fix/iter-24-<surface>` (если onion-peel продолжается), `chore/audit-tool-refinement` (если фокус на reducing false positives), или `chore/dispatch-perf-baseline-after-iter23` (если evidence-gathering).
+**Branch suggestion для следующей сессии:** `fix/iter-24-<critical-table-slug>` (cohort closure для 1-3 из 9 critical tables), `fix/iter-25-version-retrofit-cohort` (mixin retrofit), или `chore/dispatch-perf-baseline-after-iter23` (evidence-gathering если perf-smoke зелёное).
 
 ---
 
