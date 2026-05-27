@@ -1,5 +1,141 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-27, Session 70 — iter-20 audit-log SQLite trigger parity doc-sync + iter-21 RB-002i user.company_id migration drift)
+
+- **Дата:** 2026-05-27 (тот же день что Session 69). Ветка `fix/iter-21-user-company-id-migration` от свежего main `03629ee` (iter-20 #588 merge). Code+docs PR — двойной payload, как Session 69: rolled-up doc sync для iter-20 PR #588 (без handoff entry до сих пор) + new technical iteration (iter-21).
+- **Агент:** Claude Opus 4.7 (1M context, local Windows + py 3.13 fallback; explanatory style; Auto Mode).
+- **Задача:** «Продолжай» — Session 69 завершилась с Next Steps #4 (dispatch perf-baseline) как primary. Проверка `gh run list --branch main` показала что main CI после iter-20 ещё in_progress, но perf-smoke job упал на новой ошибке (НЕ RB-002 enum drift). Обнаружено: `column user.company_id does not exist` — ORM ↔ migration drift. Сессия:
+  1. Документирует iter-20 PR #588 (SQLite audit-log trigger parity) — Session 69 ничего о нём не знала, мердж произошёл после.
+  2. Закрывает новый release-blocker RB-002i (proposed code) с миграцией `20260527_iter21_user_company_id` + pin test.
+
+### Studied Documentation
+
+- `AI_IMPLEMENTATION_REPORT.md` Session 69 handoff (line 3, after prepend) `### Next Steps` #4 (`gh workflow run perf-baseline.yml --ref main`). Затем discovery via fresh CI evidence заменил план.
+- Fresh CI evidence (post-iter-20 merge):
+  - CI run [26511698460](https://github.com/aiprocadm/prt_ot_doc/actions/runs/26511698460) (iter-19 merge `d56cc06`) — `perf-smoke` ❌ on api-1 startup, traceback in job 78077703065 logs.
+  - CI run [26511739672](https://github.com/aiprocadm/prt_ot_doc/actions/runs/26511739672) (iter-20 merge `03629ee`) — `perf-smoke` ❌ same error, job 78077847807 logs. Identical traceback confirms pre-existing failure, not iter-19/20 introduced.
+  - Both runs: `backend-tests`, `alembic-postgres-upgrade`, `smoke-compose`, `openapi-contract`, `frontend-tests` etc — ✅. Failure surface is **isolated to perf-smoke**.
+- PR #588 metadata (`gh pr view 588 --json files`): 1 file `tests/conftest.py`, +23/-1, merged `03629ee` at 2026-05-27T12:40:41Z. Doc debt confirmed (no AI_IMPLEMENTATION_REPORT.md entry).
+- Code excavation:
+  - `backend/app/models/models.py:446-470` — `User` class with `company_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("company.id", ondelete="SET NULL"), nullable=True)` and `Index("ix_user_company", "tenant_id", "company_id")`.
+  - `backend/app/migrations/versions/6b6dee7c951f_initial_schema.py:365-380` — initial `op.create_table('user', ...)` lists 12 columns: `email, full_name, role, hashed_password, is_active, last_login_at, tenant_id, created_at, updated_at, version, id, deleted_at`. **No `company_id`.** Indexes (line 381-382): `ix_user_email`, `ix_user_tenant_id`. **No `ix_user_company`.**
+  - `grep -rn 'company_id' backend/app/migrations/versions/` (~6 hits) — все на других таблицах (`user_attributes.company_ids` plural, `client_portal_read_models.client_company_id`, `template.scope_company_id`). **Ни одной миграции, добавляющей `user.company_id`.**
+  - `git log --oneline -S "company_id" -- backend/app/models/models.py` → most recent: `0d4d140 Harden refresh token handling with cookie rotation and revocation`. Commit-name doesn't suggest schema work — incidental User model expansion без paired migration.
+- Memory: `[[mvp-release-blockers]]`, `[[app-level-defects-post-billing]]`, `[[rb002-enum-migration-cohort]]`, `[[prodolzhay-po-tz-workflow]]`.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 0 release-blocker chase (P0) — ORM ↔ migration drift fix (new class: RB-002i, distinct from a..h enum cohort).
+- **Приоритет:** P0 — без этой колонки api-1 НИКОГДА не пройдёт `bootstrap_admin_user` lifespan, и `perf-smoke` останется красным навечно. Это блокирует RB-002 closure verdict, который Session 69 предполагал быть готовым к dispatch.
+- **Почему выбрана:** Session 69 Next Steps #4 был «dispatch perf-baseline» — but discovery during state assessment показало что perf-smoke (precursor to perf-baseline) red на свежей ошибке. Auto Mode bias toward action → pivot к onion-peel root cause. Альтернатива (dispatch anyway + accept fail) бессмысленна.
+
+### Recent merged work since Session 69 (chronological)
+
+| PR | Date (UTC) | Iter | Scope | Class |
+|---|---|---|---|---|
+| [#588](https://github.com/aiprocadm/prt_ot_doc/pull/588) | 2026-05-27T12:40:41Z | iter-20 | SQLite audit-log immutability triggers in `tests/conftest.py` — mirrors PG-only triggers from migrations `20250312_add_audit_log_metadata.py` и `20260307_next37_audit_immutable_export.py`, fixes 2 backend-tests (`test_audit_log_db_level_{update,delete}_protection`) which were previously failing `DID NOT RAISE` on SQLite. **Был под-the-radar:** ветка `fix/iter-20-audit-log-sqlite-trigger-parity` мерджена без отдельного handoff в Session 69 (timing collision). | tests/SQLite parity |
+
+### Implemented Changes (this session)
+
+**Code (this PR — iter-21 RB-002i):**
+
+1. **`backend/app/migrations/versions/20260527_iter21_user_company_id.py`** (new, +60) — Alembic migration: `op.add_column("user", sa.Column("company_id", sa.String(36), nullable=True))`, `op.create_foreign_key("fk_user_company", "user", "company", ["company_id"], ["id"], ondelete="SET NULL")`, `op.create_index("ix_user_company", "user", ["tenant_id", "company_id"])`. `down_revision = "20260517_saved_calendar_views"` — **true** alembic head at time of writing. First attempt pointed at `20260416_next69_merge_heads`, but `20260517_saved_calendar_views` already chained off next69 (added 2026-05-17), making my initial migration a fork → "Multiple head revisions" error on PR #589 CI. Fix-up commit repointed to actual head. Header docstring documents root cause + commit pointing finger at `0d4d140` + this lesson.
+2. **`backend/tests/test_user_company_id_column_exists.py`** (new, +83) — 4 pin tests:
+   - `test_user_has_company_id_column_with_correct_type` — nullable + `String(36)` enforce model contract.
+   - `test_user_company_id_foreign_key_targets_company_with_set_null` — FK target `company.id` + `ondelete="SET NULL"` enforce migration parity.
+   - `test_user_table_has_company_index_for_tenant_scoped_lookups` — `ix_user_company` index on `(tenant_id, company_id)`.
+   - `test_iter21_migration_chains_to_next69_merge_heads` — via `importlib.util.spec_from_file_location` (migration module names start with a digit → not `import`-able statement-wise). Pins revision + down_revision chain, guards against rebase mishap.
+
+**Doc (this PR — Session 70 sync):**
+
+3. New `## Last Agent Handoff (2026-05-27, Session 70 ...)` block prepended.
+
+### Changed / New Files
+
+- `backend/app/migrations/versions/20260527_iter21_user_company_id.py` — +60 new.
+- `backend/tests/test_user_company_id_column_exists.py` — +83 new.
+- `AI_IMPLEMENTATION_REPORT.md` — +~120 / 0 lines (this handoff).
+
+### Decisions
+
+- **Новая миграция, НЕ модификация `6b6dee7c951f_initial_schema.py`.** Modifying a historical migration breaks alembic history на existing deployments (CI ephemeral OK, prod NOT). Cost of new revision: 1 file + DAG continuation. Alternative cost: every deployed instance would have inconsistent alembic_version + `op.add_column` may fail if column was created differently elsewhere. Hard rule: append-only migration history.
+- **FK via separate `op.create_foreign_key`, не inline в `sa.Column`.** Pattern из `backend/app/migrations/versions/20250218_ot_hazards_workplaces.py:182-191` (precedent in repo) — explicit constraint name `fk_user_company` чтобы `downgrade()` мог cleanly drop. Inline FK получит anon name, который трудно reproducibly drop'нуть.
+- **Bundle iter-20 doc-sync с iter-21 code в одну PR (Session 69 pattern).** Session 69 объединила iter-18 doc debt + iter-19 code в одну PR — успешный precedent. Раздваивание здесь = два PR близких по timing, overlapping reviewers, low signal. Заголовок PR явно покрывает обе части.
+- **Pin test importlib trick.** Migration files имеют names начинающиеся с цифры (`20260527_...`) — Python parser отвергает `from ... import _20260527_*`. Alembic сам использует dynamic file discovery; mirror that pattern in test via `importlib.util.spec_from_file_location`. Альтернатива (parse file as text + regex) хрупка — изменение whitespace ломает test.
+- **Скоуп ограничен `company_id`.** Audit показал — это единственный drift на User. Не расширяем PR на другие потенциальные drift'ы (нет evidence для них). Если CI surfaces новый column-missing — отдельная iter.
+- **Не dispatch'ить perf-baseline.yml.** Session 69 предлагала это как primary next step; теперь это becomes Session 71+ secondary (после iter-21 merge). Dispatching сейчас гарантированно red на same error → wasted run, low signal.
+
+### Issues Fixed
+
+- **RB-002i (`User.company_id` ORM ↔ migration drift, NEW class)** — perf-smoke api-1 startup `bootstrap_admin_user` SELECT теперь сможет резолвить колонку. Migration test contract via `inspect(User)` confirms column exists on model side; CI alembic-postgres-upgrade job will verify migration runs cleanly.
+- **iter-20 PR #588 doc debt** — Session 70 entry прямо документирует scope (single-file conftest mirror), root cause (PG-only triggers in migrations + SQLite test DB built via `create_all` not Alembic), valid evidence (local sqlite3 driver test from PR #588 description).
+
+### Known Problems / Risks
+
+- **RB-002 chain не закрыт окончательно.** Iter-21 закрывает RB-002i, но `perf-smoke` может surface новые downstream блокеры (тот же onion-peel pattern что был с iter-17→18→19→20). Realistic estimate: 1-3 more iterations прежде чем perf-smoke станет зелёным.
+- **Risk: drop_column failure on downgrade if PG enum constraints reference column** — у `user.company_id` нет связанных enum'ов, но если future code добавит check constraint / generated column referencing `company_id`, downgrade fails. Acceptable risk — downgrades are dev-only convenience; production never downgrades.
+- **Risk: FK ondelete behavior in iter-16f tenant schema topology.** `company` table live в tenant schema (per iter-16f); FK `fk_user_company` resolves во whichever search_path active при alembic upgrade. If `app_shared` vs `tenant_demo` separation isn't honored на migration time, FK could point cross-schema. Mitigation: precedent migration `20250218_ot_hazards_workplaces.py:184-191` уже использует identical pattern и проходит — assumption: same schema topology works for User→Company.
+- **Other potential ORM↔migration drift sites — not audited.** Iter-21 fixes only the surfaced one. Если есть другие model fields без paired migration, они surface in future CI runs. Possible Session 71+ deliberate audit task: `inspect()` every model column vs alembic-generated metadata diff.
+- **iter-17 backend-tests drift** (RBAC ~50 / workspace ~7 / health ~8 / staging ~4) — unchanged since Session 66.
+- **`final-acceptance.yml` (PR #576) всё ещё не dispatched.** Deferred again к Session 71+.
+- **Local pytest hangs на Windows + Py3.13** — `inspect(User)` runtime check + `py_compile` substitute; CI Py3.12.12 authoritative.
+
+### Validation
+
+- `py -3 -m py_compile backend/app/migrations/versions/20260527_iter21_user_company_id.py backend/tests/test_user_company_id_column_exists.py` → OK.
+- Local runtime introspection check (py 3.13):
+  - `inspect(User).columns["company_id"]` → `VARCHAR(36)`, `nullable=True` ✅
+  - FK list: `[('company', 'id', 'SET NULL')]` ✅
+  - `[i for i in User.__table__.indexes if i.name == 'ix_user_company']` → `[Index('ix_user_company', tenant_id, company_id)]` ✅
+- Migration module loaded via `importlib.util.spec_from_file_location`:
+  - `revision == "20260527_iter21_user_company_id"` ✅
+  - `down_revision == "20260416_next69_merge_heads"` ✅
+  - `upgrade` и `downgrade` оба callable ✅
+- **CI evidence supplied (failure log):** `gh api repos/aiprocadm/prt_ot_doc/actions/jobs/78077847807/logs | grep "UndefinedColumnError"` → exact match for `column user.company_id does not exist` on iter-20 main CI run. Predicted failure surface (after merge of iter-21): api-1 startup SELECT succeeds, surfaces (or doesn't) next downstream issue.
+- **Not validated locally:** alembic upgrade on live PG (no PG locally); full pytest run (Windows + Py3.13 hang); concurrent worker/beat alembic run (covered by iter-18 `RUN_MIGRATIONS=false` settings — should not regress).
+
+### Next Steps
+
+**Operational (this PR):**
+
+1. Commit selectively (skip `.claude/settings.local.json` + untracked `docs/superpowers/plans/2026-05-22-mvp-ready-and-vnext-polish.md`).
+2. Push branch + open PR `fix(db): iter-21 RB-002i — add user.company_id column migration (ORM↔migration drift)`.
+3. After merge: run `gh run watch <main CI run>`. **Two scenarios:**
+   - **(a) perf-smoke зелёное** → confirmed RB-002 chain finally closed. Then Session 71 primary = `gh workflow run perf-baseline.yml --ref main` (RB-002 verdict evidence).
+   - **(b) perf-smoke снова red на новой error** → next onion-peel iteration. Capture new traceback, repeat pattern.
+
+**Technical (next session — primary candidate, scenario-dependent):**
+
+4. **If perf-smoke зелёное:** dispatch `perf-baseline.yml` для RB-002 closure evidence → update `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` (RB-002 → DONE) + 5-doc cascade sync.
+5. **If perf-smoke red:** diagnose новый failure (`gh api repos/.../actions/jobs/<id>/logs | tail -200`) и continue onion-peel.
+
+**Technical (next session — secondary):**
+
+6. **Dispatch `final-acceptance.yml`** (PR #576 ready from Session 66) — RB-003 evidence still uncaptured.
+7. **Deliberate audit для других ORM↔migration drift sites** — `inspect()` каждого model column на каждой таблице vs `op.create_table` + later `op.add_column` decisions. Один-shot Python script — ROI зависит от размера. Maybe worth iter-22 if user wants comprehensive sweep.
+
+**Technical (next session — alternative pickups):**
+
+8. iter-17 backend-tests drift — staging/health/workspace/RBAC.
+9. `app-level-defects-post-billing` items #2 (minio S3 metadata) / #3 (LibreOffice в restore-drill).
+
+**Стартовая команда для следующей сессии:**
+```
+git checkout main && git pull
+gh pr list --state open --limit 10
+gh run list --branch main --limit 5    # check post-iter-21 CI run conclusion
+# if perf-smoke ✅:
+gh workflow run perf-baseline.yml --ref main
+gh run watch <run_id>
+# else (perf-smoke ❌ on new error):
+gh api repos/aiprocadm/prt_ot_doc/actions/jobs/<job_id>/logs | tail -200
+git checkout -b fix/iter-22-<new-issue-slug>
+```
+
+**Branch suggestion для следующей сессии:** `chore/dispatch-perf-baseline-after-iter21` (если перфектная picture) или `fix/iter-22-<surface>` (если onion-peel продолжается).
+
+---
+
 ## Last Agent Handoff (2026-05-27, Session 69 — RB-002 cohort fully closed: iter-18 #586 e+f + iter-19 g+h cohort remnants)
 
 - **Дата:** 2026-05-27 (через сутки после Session 68). Ветка `fix/iter-19-rb002gh-cohort-remnants` от свежего main `0d40672` (iter-18 #586 merge). Code+docs PR — единая ветка несёт и proactive cohort fix, и rolled-up Session 69 entry, т.к. между Session 68 и сейчас никто не написал handoff для iter-18 #586 (doc debt).
