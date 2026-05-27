@@ -28,6 +28,26 @@ Usage::
 
     py -3 scripts/audit/check_orm_migration_drift.py
     py -3 scripts/audit/check_orm_migration_drift.py --json > drift.json
+    py -3 scripts/audit/check_orm_migration_drift.py --severity critical
+    py -3 scripts/audit/check_orm_migration_drift.py --summary
+
+Severity classification (per drifting table):
+
+- ``critical``: model has columns but NO migration creates the table at all.
+  This is the iter-23 RefreshSession / SecurityAuditLog class — fix needs
+  a full ``op.create_table(...)`` migration.
+- ``business``: migration creates the table but model has substantive
+  business columns missing. Fix needs ``op.add_column(...)`` for each.
+- ``mixin``: migration creates the table but only ``TenantBaseModel`` /
+  ``VersionedMixin`` / ``TimestampMixin`` columns are missing. Often this
+  is a legacy migration written before the model adopted the mixin; fix
+  is ``op.add_column(...)`` with sensible defaults.
+- ``rename``: model and migration disagree on table name (singular vs
+  plural is the common case — ``site`` vs ``sites``). Almost always a
+  false positive from the audit's flat-namespace assumption.
+- ``unloaded_model``: migration creates a table but no ORM model is
+  registered with that name. Either the model module isn't imported in
+  ``app.db.base`` or the table is genuinely orphaned.
 """
 
 from __future__ import annotations
@@ -376,51 +396,145 @@ def _collect_migration_columns() -> tuple[dict[str, set[str]], list[dict[str, ob
     return dict(table_columns), per_file
 
 
+# Columns injected by base mixins (``backend/app/models/base.py``). Drift
+# limited to these is classified ``mixin`` severity — usually a legacy
+# migration written before the model adopted the mixin.
+_MIXIN_COLUMNS: frozenset[str] = frozenset(
+    {
+        "id",  # UUIDMixin
+        "tenant_id",  # TenantBaseModel
+        "created_at",  # TimestampMixin
+        "updated_at",  # TimestampMixin
+        "version",  # VersionedMixin
+        "deleted_at",  # SoftDeleteMixin
+    }
+)
+
+
+def _classify_severity(
+    table: str,
+    entry: dict[str, list[str]],
+    model_tables: set[str],
+    migration_tables: set[str],
+) -> str:
+    """Classify a drift entry by severity (see module docstring)."""
+    model_only = entry.get("model_only") or []
+    migration_only = entry.get("migration_only") or []
+
+    in_model = table in model_tables
+    in_migration = table in migration_tables
+
+    # Migration only: an orphaned table the ORM never references.
+    if not in_model and in_migration:
+        return "unloaded_model"
+
+    # Model only, no migration anywhere: must create the table.
+    if in_model and not in_migration:
+        return "critical"
+
+    # Common rename pattern: singular/plural pair. Only flag if a DIFFERENT
+    # table name (singular or plural variant) also exists in migrations —
+    # the table comparing against itself does not count as a rename.
+    if in_model and in_migration:
+        candidates = {table.rstrip("s"), f"{table}s"} - {table}
+        if any(c in migration_tables for c in candidates):
+            return "rename"
+
+    # Both exist; classify by what's missing.
+    if model_only and not migration_only:
+        # All-mixin missing → likely legacy migration retrofit.
+        if all(col in _MIXIN_COLUMNS for col in model_only):
+            return "mixin"
+        return "business"
+    if migration_only and not model_only:
+        # Migration adds something the model doesn't have — probably stale
+        # column that the model evolved past; safe but worth tracking.
+        return "stale_migration_column"
+    # Both sides have drift in opposite directions — substantive.
+    return "business"
+
+
 def _diff(
     model: dict[str, set[str]], migration: dict[str, set[str]]
-) -> dict[str, dict[str, list[str]]]:
-    """Per-table column-level diff (model vs migration)."""
-    drift: dict[str, dict[str, list[str]]] = {}
+) -> dict[str, dict[str, object]]:
+    """Per-table column-level diff (model vs migration), with severity tag."""
+    drift: dict[str, dict[str, object]] = {}
     all_tables = sorted(set(model) | set(migration))
+    model_tables = set(model)
+    migration_tables = set(migration)
     for table in all_tables:
         model_cols = model.get(table, set())
         mig_cols = migration.get(table, set())
         missing_in_migration = sorted(model_cols - mig_cols)
         missing_in_model = sorted(mig_cols - model_cols)
         if missing_in_migration or missing_in_model:
-            entry: dict[str, list[str]] = {}
+            entry: dict[str, object] = {}
             if missing_in_migration:
                 entry["model_only"] = missing_in_migration
             if missing_in_model:
                 entry["migration_only"] = missing_in_model
+            entry["severity"] = _classify_severity(
+                table, entry, model_tables, migration_tables  # type: ignore[arg-type]
+            )
             drift[table] = entry
     return drift
 
 
-def _format_text(drift: dict[str, dict[str, list[str]]]) -> str:
+def _format_text(drift: dict[str, dict[str, object]]) -> str:
     if not drift:
         return "OK: no ORM↔migration column drift detected."
     lines = [f"DRIFT: {len(drift)} table(s) with column-level mismatch.", ""]
     for table in sorted(drift):
         entry = drift[table]
-        lines.append(f"  {table}:")
-        if entry.get("model_only"):
+        severity = entry.get("severity", "?")
+        lines.append(f"  [{severity}] {table}:")
+        model_only = entry.get("model_only")
+        if model_only:
             lines.append(
                 f"    model_only (in model, no migration creates it): "
-                f"{', '.join(entry['model_only'])}"
+                f"{', '.join(model_only)}"  # type: ignore[arg-type]
             )
-        if entry.get("migration_only"):
+        migration_only = entry.get("migration_only")
+        if migration_only:
             lines.append(
                 f"    migration_only (in migration, not on model): "
-                f"{', '.join(entry['migration_only'])}"
+                f"{', '.join(migration_only)}"  # type: ignore[arg-type]
             )
     lines.append("")
     lines.append(
-        "Hint: each `model_only` column needs an `op.add_column(...)` "
-        "migration (cf. iter-21 backend/app/migrations/versions/"
-        "20260527_iter21_user_company_id.py)."
+        "Hint: each `[critical]`/`[business]` model_only column needs an "
+        "`op.add_column(...)` or `op.create_table(...)` migration "
+        "(cf. iter-21 user.company_id / iter-23 refresh_session+securityauditlog)."
     )
     return "\n".join(lines)
+
+
+def _format_summary(drift: dict[str, dict[str, object]]) -> str:
+    """One-line-per-severity rollup. Useful for triaging large drift sets."""
+    if not drift:
+        return "OK: no ORM↔migration column drift detected."
+    buckets: dict[str, list[str]] = defaultdict(list)
+    for table, entry in drift.items():
+        sev = str(entry.get("severity", "?"))
+        buckets[sev].append(table)
+    lines = [
+        f"DRIFT SUMMARY: {len(drift)} tables across {len(buckets)} severity bucket(s).",
+        "",
+    ]
+    # Sort by descending fix-priority.
+    priority = ["critical", "business", "mixin", "stale_migration_column", "rename", "unloaded_model"]
+    for sev in priority:
+        tables = buckets.get(sev, [])
+        if not tables:
+            continue
+        lines.append(f"  [{sev}] ({len(tables)} tables):")
+        for t in sorted(tables):
+            entry = drift[t]
+            mo = entry.get("model_only") or []
+            mo_n = len(mo) if isinstance(mo, list) else 0
+            lines.append(f"    - {t} ({mo_n} model-only cols)")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def _collect_migration_columns_via_alembic() -> dict[str, set[str]] | None:
@@ -471,6 +585,20 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true", help="Emit JSON instead of text.")
     parser.add_argument(
+        "--summary",
+        action="store_true",
+        help="Emit a per-severity rollup instead of the full table list.",
+    )
+    parser.add_argument(
+        "--severity",
+        choices=["critical", "business", "mixin", "rename", "unloaded_model", "stale_migration_column"],
+        action="append",
+        help=(
+            "Filter output to one or more severity levels. Repeat the flag "
+            "to combine (e.g. --severity critical --severity business)."
+        ),
+    )
+    parser.add_argument(
         "--use-alembic",
         action="store_true",
         help=(
@@ -494,12 +622,24 @@ def main(argv: Iterable[str] | None = None) -> int:
         migration_columns, _per_file = _collect_migration_columns()
     drift = _diff(model_columns, migration_columns)
 
+    if args.severity:
+        drift = {
+            t: e for t, e in drift.items() if e.get("severity") in set(args.severity)
+        }
+
     if args.json:
         print(json.dumps(drift, indent=2, sort_keys=True))
+    elif args.summary:
+        print(_format_summary(drift))
     else:
         print(_format_text(drift))
 
-    return 1 if drift else 0
+    # Exit non-zero only for severities that demand a fix (critical/business).
+    # Mixin/rename/unloaded_model are informational unless the caller filters.
+    actionable = {
+        t for t, e in drift.items() if e.get("severity") in {"critical", "business"}
+    }
+    return 1 if actionable else 0
 
 
 if __name__ == "__main__":
