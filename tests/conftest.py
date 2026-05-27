@@ -49,7 +49,7 @@ import pytest
 import pytest_asyncio
 from fastapi import HTTPException, Request, status
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.api import create_app
@@ -113,6 +113,28 @@ async def app_fixture():
     async with engine.begin() as conn:
         await conn.run_sync(SharedBase.metadata.create_all)
         await conn.run_sync(Base.metadata.create_all)
+        # iter-20: Mirror PG audit-immutability triggers from migrations
+        # 20250312_add_audit_log_metadata.py and 20260307_next37_audit_immutable_export.py
+        # for the SQLite test DB (TZ-2.3-MVP-01). `create_all()` builds schema
+        # from SQLAlchemy metadata but does not apply raw SQL triggers from
+        # PG-only migration branches, so without these the DB-level UPDATE/DELETE
+        # protection tests in tests/test_audit_log_immutability.py would fail with
+        # "DID NOT RAISE". The error message contains "immutable" to match the
+        # tests' `pytest.raises(Exception, match="immutable|audit")` regex.
+        await conn.execute(text(
+            "CREATE TRIGGER IF NOT EXISTS auditlog_no_update "
+            "BEFORE UPDATE ON auditlog "
+            "FOR EACH ROW BEGIN "
+            "SELECT RAISE(ABORT, 'auditlog is immutable'); "
+            "END"
+        ))
+        await conn.execute(text(
+            "CREATE TRIGGER IF NOT EXISTS auditlog_no_delete "
+            "BEFORE DELETE ON auditlog "
+            "FOR EACH ROW BEGIN "
+            "SELECT RAISE(ABORT, 'auditlog is immutable'); "
+            "END"
+        ))
 
     TestSession = async_sessionmaker(bind=engine, expire_on_commit=False)
 
