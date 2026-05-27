@@ -2139,6 +2139,8 @@ def _prevent_auditlog_delete(*_args, **_kwargs) -> None:
 
 
 class AuditExportJob(TenantBaseModel):
+    __tablename__ = "audit_export_job"
+
     filters: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     format: Mapped[str] = mapped_column(String(16), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="queued")

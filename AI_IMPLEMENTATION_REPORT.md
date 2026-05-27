@@ -1,5 +1,151 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-27, Session 72 — iter-24 critical-cohort closure RB-002l/m/n: audit_export_job rename + journal + ppeitem tables)
+
+- **Дата:** 2026-05-27 (тот же день что Session 71). Ветка `fix/iter-24-critical-cohort-easy-targets` от свежего main `b2311ec` (iter-23 PR #591 squash-merge). Proactive cohort closure — Session 71 audit-tool обнаружил 9 `critical` drift tables; iter-24 закрывает 3 «easiest» по handoff suggestion (no FK deps on messy `incident`-family, no business-drift entanglements).
+- **Агент:** Claude Opus 4.7 (1M context, local Windows + py 3.13 fallback; explanatory style; Auto Mode).
+- **Задача:** «Продолжай улучшать» — Session 71 Next Steps дал scenario fork. Реальность: iter-21/22/23 main CI runs all `queued` >4h (GitHub Actions backlog still). Pivot к Session 71 Next Steps #4 (iter-24 critical-cohort closure) — alternate path не зависит от CI runner availability.
+
+### Studied Documentation
+
+- `AI_IMPLEMENTATION_REPORT.md` Session 71 handoff `### Next Steps` items #4 (iter-24 critical-cohort) выбран как primary technical path. Handoff явно перечислил 3 «easiest candidates»: `auditexportjob` (clean, naming-mismatch с `audit_export_job` existing migration), `journal` (no FK deps), `ppeitem` (clean). All 3 пошли в iter-24.
+- `gh run list --branch main --limit 6`: iter-21/22/23 все `queued` с 14:15-18:04 UTC (≥4h backlog). Per Session 71 «Не actionable — wait for runner availability».
+- Discovery investigation для `auditexportjob` mystery:
+  - `grep create_table` для `audit_export_job` → existing migration `20260307_next37_audit_immutable_export.py:48` уже создаёт таблицу со ВСЕМИ 14 колонками модели + правильным индексом `ix_audit_export_job_tenant_status`.
+  - `grep audit_export_job` через `backend/`: Celery task module `audit_export_job.py`, task name `app.tasks.audit_export_job`, model's own Index name `ix_audit_export_job_tenant_status` — все snake_case. **Conclusion: `audit_export_job` is the *intended* canonical name; the model just forgot to override default `__tablename__`.** Fix is one-line ORM-side, not new migration.
+- Discovery для `journal`/`ppeitem`:
+  - `grep create_table.*journal|ppeitem` через migrations → **zero matches** — confirmed missing.
+  - `grep JournalType|PPEItemCategory` через migrations → zero — оба enum type names свободны (no A1 antipattern risk).
+  - Model FK references: `JournalEntry.journal_id → journal.id`, `PPEIssue.item_id → ppeitem.id` оба есть в ORM models, но **отсутствуют в их initial_schema migrations** (`journalentry`, `ppeissue` создаются без этих FK колонок). Это отдельный business-drift class — за scope iter-24.
+- Memory: `[[rb002-enum-migration-cohort]]` (cohort precedent), `[[alembic-heads-lesson]]` (head chain discipline), `[[local-env-drift-windows]]` (audit script hangs locally; CI authoritative).
+
+### Selected Plan Item
+
+- **Фаза:** Phase 0 release-blocker chase (P0) — proactive cohort closure для drift class discovered by Session 71 audit; new class RB-002l (audit_export_job naming) + RB-002m (journal) + RB-002n (ppeitem).
+- **Приоритет:** Mixed — `auditexportjob` runtime-crashes ANY Celery audit-export run в Postgres (impactful); `journal`/`ppeitem` crash domain endpoints (less hot path but high-value). Bundling matches iter-23 cohort logic.
+- **Почему выбрана:** Session 71 явно перечислил эту triplet как «easiest» — no `incident`-family entanglements (which need enum-design work для `incident.status` String→Enum migration); no FK deps на ещё не созданные таблицы; no business-drift on these specific tables (only column-list mismatch on dependent ones, deferred separately).
+
+### Recent merged work since Session 71 (chronological)
+
+| PR | Date (UTC) | Iter | Scope | Class |
+|---|---|---|---|---|
+| [#591](https://github.com/aiprocadm/prt_ot_doc/pull/591) | 2026-05-27 | iter-23 | RB-002j+k cohort — creates `refresh_session` + `securityauditlog` tables (audit-discovered); adds new `scripts/audit/check_orm_migration_drift.py` audit tool with severity classification | DB / audit-tool |
+
+### Implemented Changes (this session)
+
+**Code (this PR — iter-24 RB-002l/m/n):**
+
+1. **`backend/app/models/models.py`** (1-line edit, +1) — Add explicit `__tablename__ = "audit_export_job"` to `AuditExportJob` class. **NOT a migration** — the table already exists in `20260307_next37_audit_immutable_export.py` since March 2026; this just aligns ORM-side name with the deployed schema. Closes RB-002l.
+2. **`backend/app/migrations/versions/20260527_iter24_journal_ppeitem.py`** (new, +156) — creates `journal` (12 cols, 3 indexes, 2 FKs: tenant + company-ondelete-SET-NULL, journaltype enum) + `ppeitem` (12 cols, 1 index, 1 FK: tenant, 2 unique constraints, ppeitemcategory enum). `down_revision = "20260527_iter23_refresh_session_securityauditlog"` (true head per `grep --recursive` confirmation — no parallel branches). Both enum names verified absent from migration tree before creation (no A1 antipattern). Downgrade drops indexes + tables + enums (PG-only enum drop gated by `bind.dialect.name == "postgresql"`).
+3. **`backend/tests/test_audit_export_job_tablename_pin.py`** (new, +49) — 2 pin tests: `__tablename__` snake_case enforcement + `__table__.name` paranoia check.
+4. **`backend/tests/test_journal_table_exists.py`** (new, +110) — 6 pin tests: required columns (12), company FK ondelete SET NULL, journaltype enum class binding + value parity, tenant-scoped composite index, migration chain to iter-23 head, both-tables-in-one-migration scope guard.
+5. **`backend/tests/test_ppeitem_table_exists.py`** (new, +97) — 5 pin tests: required columns (12), ppeitemcategory enum class binding + value parity, tenant-scoped unique constraints (uq_ppe_item_name + uq_ppe_item_code), tenant index, migration enum-name source check.
+
+**Doc (this PR — Session 72 sync):**
+
+6. New `## Last Agent Handoff (2026-05-27, Session 72 ...)` block prepended.
+
+### Changed / New Files
+
+- `backend/app/models/models.py` — +1 / -0 (1 line: `__tablename__ = "audit_export_job"`).
+- `backend/app/migrations/versions/20260527_iter24_journal_ppeitem.py` — +156 new.
+- `backend/tests/test_audit_export_job_tablename_pin.py` — +49 new.
+- `backend/tests/test_journal_table_exists.py` — +110 new.
+- `backend/tests/test_ppeitem_table_exists.py` — +97 new.
+- `AI_IMPLEMENTATION_REPORT.md` — +~110 / 0 lines (this handoff).
+
+### Decisions
+
+- **`auditexportjob` → `audit_export_job` model rename, NOT migration rename.** Migration has been in production since March 2026 (2.5 months); renaming it could conflict with `depends_on` chains of subsequent migrations и breaks idempotency on already-upgraded databases. ORM-side `__tablename__` override is reversible, atomic, zero-downtime. Closed-loop validation: `inspect(AuditExportJob).__tablename__ == "audit_export_job"` ✓.
+- **Cohort bundle (RB-002l + RB-002m + RB-002n) в одну PR.** Same reasoning что iter-23: shared discovery (single audit), shared root-cause class (model-without-migration), independent runtime surfaces (audit export, journals, PPE catalog) — landing один без других просто trades, who crashes first. Cost ~410 LOC + 13 pin tests — acceptable.
+- **Out of scope: business-drift на `journalentry` и `ppeissue`.** Both child tables exist (created by `6b6dee7c951f_initial_schema.py`) but lack the FK columns their current models declare (`journal_id`, `item_id`). Fixing those requires:
+  - For `journalentry.journal_id`: ADD COLUMN + populate-or-default + ADD FK constraint. Plus `entry_type` String→Enum migration с backfill (это A3 antipattern territory без careful split).
+  - For `ppeissue.item_id`: ADD COLUMN nullable (since FK is SET NULL) + add FK constraint.
+  - Both deserve their own iters (iter-25? iter-26?) с full data-migration plans. Deferred.
+- **PG-only enum drop в downgrade gated by `bind.dialect.name == "postgresql"`.** SQLite doesn't have enum types as first-class objects (inline CHECK constraints), so `sa.Enum(...).drop()` is a no-op (or crashes). Gating mirrors precedent in [[rb002-enum-migration-cohort]] iter-19 fixes.
+- **Pin tests use SQLAlchemy `inspect()` для column/FK/enum-class assertions.** Это работает на SQLite (where tests run) даже без applying the migration, because we're checking the ORM-side schema declaration. Migration-side validation остаётся за CI's `alembic-postgres-upgrade` job.
+- **Не покрывать all 9 critical в одной PR.** `incident_log`/`incident_person` depend on `incident` business-drift (7 missing cols incl. enum types) — coupled multi-iter work. `inspection_result`, `training_course/plan/session` могут пойти в iter-25 (similar to iter-24 but separate domain).
+
+### Issues Fixed
+
+- **RB-002l (`auditexportjob` model→migration naming mismatch, NEW class)** — every Celery audit-export task call в Postgres eliminated. Pin tests prevent future removal of explicit `__tablename__`.
+- **RB-002m (`journal` table missing from migrations, NEW class)** — domain endpoint crashes eliminated. Pin tests cover column shape, FK ondelete, enum binding, indexes, chain.
+- **RB-002n (`ppeitem` table missing from migrations, NEW class)** — PPE catalog endpoint crashes eliminated. Pin tests cover column shape, enum binding, unique constraints, index, enum-name in migration source.
+
+### Known Problems / Risks
+
+- **Audit script remaining critical: 6 (down from 9).** Still: `incident_log`, `incident_person`, `inspection_result`, `training_course`, `training_plan`, `training_session`. iter-25 should pick 3-4 of the «easy» ones (training family — все three share patterns); `incident_*` deferred until enum-design pass.
+- **iter-21/22/23 main CI ещё не зелёный (queued >4h).** Не actionable — wait for runner availability. Если queued state persists ещё несколько часов, оценить нужно ли cancel и re-trigger.
+- **Risk: iter-24 миграция создаёт два enum types и две таблицы одной transaction.** Если bootstrap data references `journal` or `ppeitem` (нет evidence сейчас — both are domain tables not seed-data), они нужны атомарно — bundle helps.
+- **Risk: `journal_type` enum collides with potential future `journalentry.entry_type` migration.** When iter-26+ (or whichever) flips `journalentry.entry_type` String→Enum, it MUST use `sa.Enum(*JOURNAL_TYPE_VALUES, name="journaltype", create_type=False)` — A1 antipattern guard. Documented in iter-24 migration docstring.
+- **Risk: PPEItem fresh table но PPEIssue.item_id столбца ещё нет в БД.** Insert into `ppeitem` succeeds, but no `ppeissue` row can yet reference it через ORM (model declares FK, DB doesn't know about column). Functional impact: PPEItem catalog CRUD endpoints will work; `Person.ppe_issues[*].item` relationship lookup will hit ORM-level error before reaching SQL. Out-of-scope follow-up.
+- **iter-17 backend-tests drift** (~50/7/8/4 fails) — unchanged.
+- **`final-acceptance.yml` (PR #576)** — still not dispatched; deferred again.
+- **Local pytest hangs на Windows + Py3.13** — `py_compile` + manual function invocation substitutes (all 13 new pin tests passed when called directly); CI Py3.12.12 authoritative.
+- **Risk: iter-24 migration не applied против real PG локально** — alembic-postgres-upgrade CI job validates.
+- **Local audit script hangs (Windows+Py3.13)** — known issue, closed-loop validation moved to CI.
+
+### Validation
+
+- `py -3 -m py_compile <4 new files>` → OK.
+- Local runtime check (py 3.13):
+  - `importlib.util.spec_from_file_location('iter24', ...)` loads cleanly; `revision == "20260527_iter24_journal_ppeitem"`, `down_revision == "20260527_iter23_refresh_session_securityauditlog"` ✓.
+  - `inspect(AuditExportJob).__tablename__ == "audit_export_job"` ✓.
+  - `inspect(Journal).columns` returns expected 12 cols ✓.
+  - `inspect(PPEItem).columns` returns expected 12 cols ✓.
+  - Enum class bindings: `Journal.journal_type.type.enum_class is JournalType`, `PPEItem.category.type.enum_class is PPEItemCategory` ✓.
+- **All 13 new pin tests pass when invoked directly** (manual loop calling each `test_*` function): 2 audit_export_job + 6 journal + 5 ppeitem.
+- **Not validated locally:** `alembic upgrade head` against PG (no local PG); full backend-tests run (Windows + Py3.13 pytest hangs); perf-smoke flow with iter-24 applied; closed-loop audit re-run (audit script hangs locally — CI will validate).
+
+### Next Steps
+
+**Operational (this PR):**
+
+1. Commit selectively (skip `.claude/settings.local.json` + untracked `docs/superpowers/plans/2026-05-22-mvp-ready-and-vnext-polish.md`).
+2. Push branch + open PR `fix(db): iter-24 RB-002l/m/n cohort — audit_export_job rename + journal + ppeitem tables`.
+3. After merge: `gh run watch <main CI run>`. **Three scenarios:**
+   - **(a) perf-smoke зелёное** → multi-iter RB-002 chain finally closed — primary next = `gh workflow run perf-baseline.yml --ref main` (RB-002 verdict evidence).
+   - **(b) perf-smoke red на новой error** → next onion-peel (iter-25).
+   - **(c) main CI всё ещё queued >hours** → wait or check Actions status page; alternate technical path (iter-25 training family) still viable.
+
+**Technical (next session — primary, scenario-dependent):**
+
+4. **iter-25 training-family cohort:** 3 `[critical]` tables share pattern (`training_course`, `training_plan`, `training_session`). All TenantBaseModel + SoftDeleteMixin, likely have enum status columns. Check ORM model for FK deps; if clean of `incident`-family entanglement, single migration creating all three is feasible.
+5. **iter-26 mixin-retrofit cohort:** ~45 tables missing only `version` column. Single migration walks `inspect(model)` to add `version Integer DEFAULT 1` where `VersionedMixin` declared but migration omitted.
+6. **incident-family restoration (P1, multi-iter):** `incident` business cols + enum types (`incidentstatus`, `incidentstage`, `incidentpersonrole`) + `incident_log`/`incident_person` table creation. Requires careful sequence: enums → backfill `status` String→Enum migration → add missing FKs → create child tables.
+
+**Technical (next session — secondary):**
+
+7. **business-drift fixups on `journalentry`/`ppeissue`** — add `journal_id` and `item_id` FK columns respectively + matching enum-typing for `entry_type`. Coupled with iter-24 logically — should land as iter-26 or iter-27.
+8. Dispatch `perf-baseline.yml` (если iter-24 closes chain) для RB-002 closure verdict → 5-doc cascade sync.
+9. Dispatch `final-acceptance.yml` (PR #576) — RB-003 evidence still uncaptured.
+
+**Technical (next session — alternative):**
+
+10. iter-17 backend-tests drift — staging/health/workspace/RBAC.
+11. `app-level-defects-post-billing` items #2 (minio S3 metadata) / #3 (LibreOffice in restore-drill).
+
+**Стартовая команда для следующей сессии:**
+```
+git checkout main && git pull
+gh pr list --state open --limit 10
+gh run list --branch main --limit 6   # check post-iter-24 CI run conclusion
+# Re-run drift audit (CI Py3.12.12 may need this if local Windows hangs):
+py -3 scripts/audit/check_orm_migration_drift.py --summary 2>/dev/null
+# Only actionable (will exit 1 if any critical/business drift):
+py -3 scripts/audit/check_orm_migration_drift.py --severity critical --severity business 2>/dev/null
+# Critical count should now be 6 (was 9 before iter-24; closed: auditexportjob/journal/ppeitem).
+# if perf-smoke ✅:
+gh workflow run perf-baseline.yml --ref main
+# else (perf-smoke ❌):
+gh api repos/aiprocadm/prt_ot_doc/actions/jobs/<job_id>/logs | tail -200
+git checkout -b fix/iter-25-<surface-slug>
+```
+
+**Branch suggestion для следующей сессии:** `fix/iter-25-training-family-cohort` (3 critical: training_course/plan/session), `fix/iter-26-version-retrofit-cohort` (mixin retrofit ~45 tables), или `chore/dispatch-perf-baseline-after-iter24` (evidence-gathering если perf-smoke зелёное).
+
+---
+
 ## Last Agent Handoff (2026-05-27, Session 71 — iter-22 doc-sync (aensure_shared_schema) + iter-23 cohort RB-002j/k (refresh_session + securityauditlog tables) + new ORM↔migration drift audit tool)
 
 - **Дата:** 2026-05-27 (тот же день что Session 70). Ветка `fix/iter-23-refresh-session-securityauditlog-tables` от свежего main `9a65bda` (iter-22 #590 merge). Triple payload: rolled-up doc sync для iter-22 #590 (без handoff entry до сих пор — typical 1-iter doc-debt), новый аудит-инструмент (Session 70 Next Steps #7), и **discovery-driven** iter-23 cohort fix для двух real drift sites выявленных тем же инструментом.
