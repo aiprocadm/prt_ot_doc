@@ -15,6 +15,7 @@ REQUIRED_KEYS = (
     "ADMIN_PASSWORD",
     "ADMIN_TENANT",
     "APP_ENV",
+    "RATE_LIMIT_ENABLED",
 )
 
 

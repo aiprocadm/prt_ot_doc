@@ -470,6 +470,9 @@ jobs:
         # RB-002f: also seed admin-bootstrap env so dev_bootstrap creates the
         # demo admin user; otherwise perf-smoke calls to /api/v1/dashboard/summary
         # 401 because there is no user/token to authenticate.
+        # Rate limit also disabled: login is rate-limited (5/min per identity)
+        # and api_load.py _hit_flow re-logins per worker. Without this,
+        # perf-smoke 60-request batch would 429 after 5 successes.
         run: |
           cat >> .env <<'EOF'
           SECRET_KEY=ci-perf-smoke-not-for-production
@@ -480,6 +483,7 @@ jobs:
           ADMIN_BOOTSTRAP=1
           ADMIN_PASSWORD=PerfSmokeAdmin123!
           ADMIN_TENANT=demo
+          RATE_LIMIT_ENABLED=false
           EOF
 
       - name: Enable Redis memory overcommit
