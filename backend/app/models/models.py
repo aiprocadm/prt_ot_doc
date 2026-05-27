@@ -2065,7 +2065,18 @@ class NPABinding(TenantBaseModel):
     npa_id: Mapped[str] = mapped_column(ForeignKey("npa.id"), nullable=False, index=True)
     ref: Mapped[str | None] = mapped_column(String(255))
     entity_type: Mapped[NpaBindingTarget] = mapped_column(
-        Enum(NpaBindingTarget), nullable=False, default=NpaBindingTarget.TEMPLATE_VERSION
+        Enum(
+            NpaBindingTarget,
+            name="npabindingtarget",
+            # iter-19 RB-002h cohort closure: PG type `npabindingtarget` was
+            # created lowercase by migration 8d2c1a6c5e24:59-62. Member names
+            # are uppercase ("TEMPLATE_VERSION"), so default SQLAlchemy binding
+            # sends the name → asyncpg rejects. Force `.value` via callable.
+            # Pinned by `backend/tests/test_npabinding_target_enum_values.py`.
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
+        nullable=False,
+        default=NpaBindingTarget.TEMPLATE_VERSION,
     )
     entity_id: Mapped[str] = mapped_column(String(36), nullable=False)
     context: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)

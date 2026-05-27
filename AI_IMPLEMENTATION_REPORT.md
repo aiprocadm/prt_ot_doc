@@ -1,5 +1,125 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-27, Session 69 — RB-002 cohort fully closed: iter-18 #586 e+f + iter-19 g+h cohort remnants)
+
+- **Дата:** 2026-05-27 (через сутки после Session 68). Ветка `fix/iter-19-rb002gh-cohort-remnants` от свежего main `0d40672` (iter-18 #586 merge). Code+docs PR — единая ветка несёт и proactive cohort fix, и rolled-up Session 69 entry, т.к. между Session 68 и сейчас никто не написал handoff для iter-18 #586 (doc debt).
+- **Агент:** Claude Opus 4.7 (1M context, local Windows + py 3.13 fallback; explanatory style; Auto Mode).
+- **Задача:** «Продолжай» — после Session 68 RB-002 chain a→d, iter-18 #586 закрыл новые e+f, но Session 69 entry в repo handoff не появился. Эта сессия:
+  1. Документирует под-the-radar iter-18 PR #586 (rolled-up sync, как Session 68 сделала для #581-#584).
+  2. Берёт technical item #8 из Session 68 Next Steps — **proactive cohort closure** для оставшихся `DocumentVersionStatus` + `NpaBindingTarget`. Это разворот решения «defer until surfaces in CI», обоснованный cohort principle (см. [[rb002-enum-migration-cohort]]).
+
+### Studied Documentation
+
+- `AI_IMPLEMENTATION_REPORT.md` Session 68 handoff `### Next Steps` item #8 (cohort remnants): «same one-PR pattern as RB-002d if next bootstrap call-site surfaces».
+- PR #586 metadata (`gh pr view 586 --json files`): 10 files, +1158/-1, merged `0d40672` at 2026-05-27T10:30:53Z. Contents: docker-compose RB-002e fix, dev_bootstrap.py RB-002f fix, ci.yml admin env keys, perf flow JSON, 4 pin tests (`test_docker_compose_run_migrations.py`, `test_dev_bootstrap_tenant_code.py`, `test_perf_smoke_env_contract.py`, `test_perf_smoke_dashboard_flow.py`), `docs/superpowers/plans/2026-05-26-iter-18-perf-smoke-cohort.md`, `docs/superpowers/specs/2026-05-26-mvp-closure-design.md`.
+- Migration `backend/app/migrations/versions/8d2c1a6c5e24_domain_normalization.py:55-62` — defines `documentversionstatus` и `npabindingtarget` PG enum types with lowercase values (`draft|locked|published|archived` / `template_version|document|pack`).
+- `backend/app/models/document.py:134-166` — `DocumentVersionStatus` enum + `DocumentVersion.status` column. Had defensive `name="documentversionstatus"` но без `values_callable=` — half-finished defense.
+- `backend/app/models/models.py:2053-2069` — `NpaBindingTarget` enum + `NPABinding.entity_type` column. Vanilla `Enum(NpaBindingTarget)` — нужны и `name=` и `values_callable=`.
+- Templates: `backend/tests/test_employmentstatus_enum_values.py` (RB-002c) + `backend/tests/test_documentpack_enum_values.py` (RB-002d) — pattern для pin tests.
+- Memory: `[[rb002-enum-migration-cohort]]` (обновлена в этой сессии — cohort 5/5 closed), `[[mvp-release-blockers]]`, `[[prodolzhay-po-tz-workflow]]`.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 0 release-blocker chase (P0) — finalize the RB-002 enum-migration cohort (5/5 columns); roll up iter-18 #586 documentation debt.
+- **Приоритет:** P0 для doc sync; P1 для cohort closure (нет current bootstrap trigger, но устраняет latent risk).
+- **Почему выбрана:** explicit answer to AskUserQuestion в начале сессии (user выбрал «технический шаг #8 (cohort remnants)»). Решение проактивно вместо «защищать как deferred» обосновано в [[rb002-enum-migration-cohort]]: shared root cause + shared source = bundle is principled, future-cost > current cost.
+
+### Recent merged work since Session 68 (chronological)
+
+| PR | Date (UTC) | Iter | Scope | Class |
+|---|---|---|---|---|
+| [#585](https://github.com/aiprocadm/prt_ot_doc/pull/585) | 2026-05-26 (late) | Session 68 doc sync | Doc-only: handoff entry для #581-#584 cohort closure prose | docs |
+| [#586](https://github.com/aiprocadm/prt_ot_doc/pull/586) | 2026-05-27T10:30:53Z | iter-18 RB-002e+f | docker-compose `RUN_MIGRATIONS=false` на worker+beat; admin env keys `ADMIN_PASSWORD/...` для perf-smoke; 2-step login flow `dashboard_summary.json`; 4 pin tests; `docs/superpowers/plans/...iter-18-perf-smoke-cohort.md`, `docs/superpowers/specs/...mvp-closure-design.md` | CI/perf-smoke |
+
+### Implemented Changes (this session)
+
+**Code (this PR — iter-19 RB-002g+h):**
+
+1. **`backend/app/models/document.py:162-172`** — `DocumentVersion.status` обёрнут в `Enum(DocumentVersionStatus, name="documentversionstatus", values_callable=lambda c: [m.value for m in c])`. Inline-комментарий объясняет cohort origin (migration `8d2c1a6c5e24:55-58`) и pinning test path.
+2. **`backend/app/models/models.py:2067-2080`** — `NPABinding.entity_type` обёрнут в `Enum(NpaBindingTarget, name="npabindingtarget", values_callable=...)`. Раньше был vanilla `Enum(NpaBindingTarget)` без `name=` — добавлены оба параметра.
+3. **`backend/tests/test_documentversion_status_enum_values.py`** (new, +49) — `inspect(DocumentVersion).columns["status"].type.enums == ["draft","locked","published","archived"]` + precondition guard `DocumentVersionStatus.DRAFT.name != .value`.
+4. **`backend/tests/test_npabinding_target_enum_values.py`** (new, +49) — analog для `NPABinding.entity_type`.
+
+**Doc (this PR — Session 69 sync):**
+
+5. New `## Last Agent Handoff (2026-05-27, Session 69 ...)` block prepended.
+
+### Changed / New Files
+
+- `backend/app/models/document.py` — +8 / -1 lines.
+- `backend/app/models/models.py` — +9 / -1 lines.
+- `backend/tests/test_documentversion_status_enum_values.py` — +49 new.
+- `backend/tests/test_npabinding_target_enum_values.py` — +49 new.
+- `AI_IMPLEMENTATION_REPORT.md` — +~100 / 0 lines (this handoff).
+
+### Decisions
+
+- **Bundle code + Session 69 entry в одну PR (отступление от Session 68 split).** Session 68 раздваивала: code PR #584 → отдельный doc PR #585. Для iter-19 ветка несёт небольшой code change (5 файлов ~106 LOC) plus Session 69 entry, который ОБЯЗАН покрыть и iter-18 #586 (doc debt). Раздваивание здесь означало бы 2 PR близких по времени с overlapping reviewers — низкий signal. Keep atomic: code + handoff в одной ревизии, заголовок PR чёткий о обеих частях.
+- **Proactive cohort closure вместо «wait for surface».** Session 68 принимала «will fix when surfaced» — разумно при «один уж точно лопнет в CI» (как было для RB-002d перед merge). Здесь RB-002g/h не имеют current bootstrap trigger, **но** код mechanically tractable, и пин тесты приобретают defensive value немедленно. Цена ~106 LOC / 25 минут работы; альтернатива — surprise production crash в будущем когда новый код пути начнёт INSERT в DocumentVersion/NPABinding. Trade-off склоняется к proactive.
+- **`NPABinding` (caps) vs `NpaBinding` в нейминге.** Memory + Session 68 prose говорят «NpaBinding», но actual class — `NPABinding` (line 2061). Используем реальное имя в импортах и комментариях; memory обновлю отдельно если будет drift.
+- **Session 69 = doc-debt repair + small code closure.** Не открывать новые направления (`final-acceptance.yml` dispatch, iter-17 backend-tests drift), потому что:
+  1. Auto Mode classifier заблокировал `gh workflow run --ref main` (production-side action), и пользователь явно перенаправил на code-only задачу.
+  2. Iter-17 backend-tests drift нужно отдельную investigation — не one-line.
+  3. Session 69 уже несёт две distinct deliverables (rolled-up doc sync + cohort proactive closure); добавлять третью увеличивает PR scope без commensurate benefit.
+
+### Issues Fixed
+
+- **RB-002g (`DocumentVersion.status` enum drift, deferred from Session 68)** — pin test asserts `enums == ["draft","locked","published","archived"]`. Local runtime check via `inspect(DocumentVersion)` confirms expected list.
+- **RB-002h (`NPABinding.entity_type` enum drift, deferred from Session 68)** — pin test asserts `enums == ["template_version","document","pack"]`. Local runtime check confirms.
+- **iter-18 #586 doc debt** — Session 69 entry прямо документирует scope/decisions/evidence для #586, чтобы AI_IMPLEMENTATION_REPORT.md перестал отставать на одну итерацию.
+
+### Known Problems / Risks
+
+- **RB-002 perf-baseline.yml ещё не подтверждён зелёным на main с iter-18+iter-19 fixes.** Last scheduled run [26491004461](https://github.com/aiprocadm/prt_ot_doc/actions/runs/26491004461) at 2026-05-27T04:35 UTC был **до** iter-18 merge (10:30 UTC). Next scheduled cron — 2026-05-28T04:35 UTC, или manual `gh workflow run perf-baseline.yml --ref main` (требует user-side action в Auto Mode).
+- **`final-acceptance.yml` (PR #576) всё ещё не dispatched** — RB-003 evidence не собран. Session 68 → 69 → next session.
+- **iter-17 backend-tests drift** (~50/7/8/4 fails) — unchanged since Session 66.
+- **Container-image-scan red под exception** (CVE-2025-62727 starlette DoS) — unchanged.
+- **Local pytest hangs на Windows + Py3.13** — `py_compile` + `inspect(...)` runtime check выступают proxy validation; CI на Py3.12.12 source of truth.
+- **Risk: `NPABinding.entity_type` сейчас имеет `name="npabindingtarget"` впервые (раньше был anonymous Enum).** Если в существующей схеме alembic auto-generated migration зависела от anonymous name, может быть spurious diff. Mitigation: source migration уже создаёт type с тем же именем (`8d2c1a6c5e24:61`); pin test guards against drift.
+
+### Validation
+
+- `py -3 -m py_compile backend/app/models/document.py backend/app/models/models.py backend/tests/test_documentversion_status_enum_values.py backend/tests/test_npabinding_target_enum_values.py` → OK.
+- Local runtime check (py 3.13):
+  - `inspect(DocumentVersion).columns["status"].type.enums == ['draft', 'locked', 'published', 'archived']` ✅
+  - `inspect(NPABinding).columns["entity_type"].type.enums == ['template_version', 'document', 'pack']` ✅
+- **Not validated locally:** pytest full run (Windows + Py3.13 documented to segfault); cohort interaction with prod-bootstrap Postgres path (no current trigger). CI на Py3.12.12 authoritative — после merge `backend-tests` job обеспечит regression coverage.
+- **Cohort completeness audit:** `grep -rn "^class .*Status\|^class .*Target" backend/app/models/` крест-сверен с migration `8d2c1a6c5e24:55-66` enum names — все 5 columns обёрнуты values_callable; других members этой migration нет.
+
+### Next Steps
+
+**Operational (this PR):**
+
+1. Commit selectively (skip `.claude/settings.local.json` and untracked `docs/superpowers/plans/2026-05-22-mvp-ready-and-vnext-polish.md` — старый master plan, не часть iter-19).
+2. Push branch + open PR `fix(models): iter-19 RB-002g+h — DocumentVersion.status + NPABinding.entity_type enum values (cohort closure)` (+ Session 69 handoff entry).
+3. After merge: следующая сессия может dispatch `perf-baseline.yml` manually для подтверждения RB-002 verdict, либо дождаться следующего cron run.
+
+**Technical (next session — primary candidate):**
+
+4. **Dispatch `perf-baseline.yml` на main** (post iter-19 merge) — собрать evidence для RB-002 closure verdict. Если зелёный → обновить `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` (RB-002 → DONE) + cascade 5-doc sync per Synchronization rule.
+5. **Dispatch `final-acceptance.yml`** (PR #576 готов с Session 66) — RB-003 evidence. Workflow ID `283085436`, ни разу не запускался по `gh run list --workflow=final-acceptance.yml`.
+
+**Technical (next session — alternative pickups):**
+
+6. **iter-17 backend-tests drift** — 4 categories (~69 fails total). Pick smallest first (staging ~4 / health ~8 / workspace ~7 / RBAC ~50). Каждый fix likely standalone PR.
+7. **`app-level-defects-post-billing` item #2** (minio S3 metadata drift) — blocks RB-001 postgres-minio mode. Possibly tied to bitnamilegacy compose pin from PR #550. Requires CI evidence first.
+8. **`app-level-defects-post-billing` item #3** (LibreOffice missing in restore-drill CI) — needs apt install step in `.github/workflows/restore-drill.yml`. Quick fix.
+
+**Стартовая команда для следующей сессии:**
+```
+git checkout main && git pull
+gh pr list --state open --limit 10
+# Confirm iter-19 merged; if so:
+gh workflow run perf-baseline.yml --ref main  # primary: RB-002 closure evidence
+gh workflow run final-acceptance.yml --ref main  # secondary: RB-003 closure evidence
+gh run watch <run_id>
+# If perf-baseline green and final-acceptance pass → 5-doc cascade sync
+```
+
+**Branch suggestion для следующей сессии:** `chore/dispatch-perf-baseline-final-acceptance` (если только evidence-gathering) или `docs/release-verdict-sync-after-rb002-closure` (если evidence уже зелёная и нужно sync docs).
+
+---
+
 ## Last Agent Handoff (2026-05-26, Session 68 — RB-002 chain Sessions 67.5+68: parts a/b/c/d shipped; api-1 startup green; RB-002e/f surfaced)
 
 - **Дата:** 2026-05-26 (продолжение Session 67 в тот же день). Doc-only follow-up branch `docs/sync-session-68-rb-002cd-cohort-closure` от свежего main `ff729b1` (merge of #584).
