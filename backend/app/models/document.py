@@ -160,7 +160,16 @@ class DocumentVersion(TenantBaseModel):
     )
     version_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     status: Mapped[DocumentVersionStatus] = mapped_column(
-        Enum(DocumentVersionStatus, name="documentversionstatus"),
+        Enum(
+            DocumentVersionStatus,
+            name="documentversionstatus",
+            # iter-19 RB-002g cohort closure: PG type `documentversionstatus`
+            # was created lowercase by migration 8d2c1a6c5e24:55-58. Member
+            # names are uppercase, so default SQLAlchemy binding sends "DRAFT"
+            # → asyncpg rejects. Force `.value` (lowercase) via callable.
+            # Pinned by `backend/tests/test_documentversion_status_enum_values.py`.
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
         nullable=False,
         default=DocumentVersionStatus.DRAFT,
     )
