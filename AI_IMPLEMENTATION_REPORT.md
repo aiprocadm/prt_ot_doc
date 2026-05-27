@@ -1,5 +1,132 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-27, Session 75 — iter-27 RB-002 perf-auth: global Bearer token in `scripts/perf/api_load.py`)
+
+- **Дата:** 2026-05-27 (тот же день что Sessions 71-74). Ветка `fix/iter-27-perf-auth-bearer-token` от свежего main `57bb375` (iter-26 PR #595 merged). Это первая non-DB-drift итерация в RB-002 chain — drift-class работа iter-17..26 уже закрыла перечень critical-таблиц (остались 2 заблокированы на incident-design), а блокирующая причина provala `perf-baseline.yml` сместилась.
+- **Агент:** Claude Opus 4.7 (1M context, local Windows + py 3.13 fallback; explanatory style; Auto Mode).
+- **Задача:** «продолжи работу с блокерами, найди то что реально блокирует проект». Анализ trace последнего failed run `perf-baseline.yml` [26491004461](https://github.com/aiprocadm/prt_ot_doc/actions/runs/26491004461) показал смену failure-class: backend boots (`/health` 200/200), но `/api/v1/dashboard/summary` → **401**, потому что `scripts/perf/api_load.py` не отправлял Authorization header. iter-18 fix для **perf-smoke** (PR #586 — `flow_steps` с login-step в `scripts/perf/flows/dashboard_summary.json`) не покрывал **perf-baseline** profile `nightly_baseline` — 4 из 8 его scenarios (`dashboard`, `templates_list`, `search_suggest`, `download_file`) до сих пор отправляли только `X-Tenant: demo`.
+
+### Studied Documentation
+
+- Session 74 handoff Next Steps #8 («Dispatch `perf-baseline.yml` после iter-25/26 merge для RB-002 closure verdict»).
+- `[[mvp-release-blockers]]` snapshot 2026-05-21 (RB-002 «still `[ ]`») + freshly checked `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` (3/6 blockers closed, RB-002/003/005 open).
+- `gh run view 26491004461 --log-failed` → key lines: `path=/health requests=200/200 errors=0 statuses=[200]`, `path=/api/v1/dashboard/summary requests=180/180 errors=0 statuses=[401] threshold_check=FAIL`. Confirmed: backend boots, drift-class fixes work, новый блокер — auth.
+- `backend/app/api/routes/auth.py:144-215` (POST /login → TokenPair `{access_token}` + refresh cookie; `LoginRequest{email: EmailStr, password: str}` + `X-Tenant` через `_resolve_login_tenant`).
+- `backend/app/api/routes/dashboard.py:51-79` (`SummaryAccess = abac(..., required_roles=[admin, owner, line_manager, hr, ot_pb_lead])` — ABAC требует JWT + role).
+- `backend/app/services/dev_bootstrap.py:48-105` (`bootstrap_admin_user` создаёт admin row IF `admin_bootstrap=True` AND `app_env ∈ {development, test}` AND `admin_password` non-empty).
+- `scripts/perf/flows/dashboard_summary.json` (iter-18 паттерн с per-worker login — дорогой, мерит login overhead вместо target endpoint).
+- `.github/workflows/ci.yml::perf-smoke` lines 466-487 (iter-18 ADMIN_PASSWORD seed pattern для perf-smoke; шаблон для perf-baseline).
+- `pyproject.toml:14` (pythonpath=[backend, .] — гарантирует `from scripts.perf.api_load import _hit` работает в тестах через namespace package).
+
+### Selected Plan Item
+
+- **Фаза:** Phase 0 release-blocker chase (P0) — closes the active failure-class for RB-002 perf-baseline.
+- **Приоритет:** P0 — direct blocker для **RB-002 closure verdict**. Все 4 не-flow scenarios `nightly_baseline` сейчас 401, что значит nightly `perf-baseline.yml` будет красным независимо от любых дальнейших drift-фиксов.
+- **Почему выбрана (vs. альтернативы из Session 74 Next Steps):**
+  - **#4 iter-27 mixin-retrofit** (~45 таблиц без `version`): preventative, не блокирует никакой CI прямо сейчас.
+  - **#6 incident-family multi-iter**: 3-4 итерации работы по enum design — слишком долго для одной сессии.
+  - **#10 iter-17 backend-tests drift**: тоже актуально, но не gating MVP-relevant CI workflow.
+  - **#11 RB-005 credential-smoke**: следующий по приоритету после RB-002 (PR #580 уже в main, нужна downstream-диагностика).
+  - **iter-27 perf-auth**: единственный путь который (a) точно атакует доказанный root cause из swежего CI лога, (b) укладывается в 1 час, (c) не требует ждать другие fixes.
+
+### Recent merged work since Session 74 (chronological)
+
+| PR | Date (UTC) | Iter | Scope | Class |
+|---|---|---|---|---|
+| [#594](https://github.com/aiprocadm/prt_ot_doc/pull/594) | 2026-05-27T19:25:50Z | iter-25 | RB-002o/p/q cohort — `training_course` + `training_plan` + `training_session` tables | DB / new tables |
+| [#595](https://github.com/aiprocadm/prt_ot_doc/pull/595) | 2026-05-27T19:35:46Z | iter-26 | RB-002r — `inspection_result` table (stacked PR strategy) | DB / new tables |
+
+### Implemented Changes (this session)
+
+**Code (this PR — iter-27 RB-002 perf-auth):**
+
+1. **`scripts/perf/api_load.py`** (+80 / -3) — добавлены 4 CLI флага (`--access-token`, `--login-url` с default `/api/v1/auth/login`, `--login-email`, `--login-password`) + 2 mutual-exclusion guard'а в parser; новый helper `_resolve_access_token(client, login_url, email, password, tenant)` (один POST с `X-Tenant` + JSON `{email,password}`, парсит `{access_token}`, raises `RuntimeError` с первыми 200 символами body на non-200 / missing token); `_hit` и `_hit_flow` принимают optional `access_token` и через `dict.setdefault("Authorization", f"Bearer {token}")` инжектят header только если scenario сам его не задал.
+2. **`.github/workflows/perf-baseline.yml`** (+27 / -2) — `.env` augmentation добавляет `ADMIN_PASSWORD=PerfBaseline123!` (комментарий объясняет почему пустое значение в `.env.example` блокирует bootstrap_admin_user); `Run nightly baseline profile` step получает `env: PERF_LOGIN_EMAIL/PASSWORD` и orchestrator-скрипт читает их + appends `--login-email`/`--login-password` к каждой команде api_load.py (echoed cmdline маскирует пароль как `***`).
+3. **`tests/test_perf_api_load_auth.py`** (new, +220) — 10 pin tests:
+   - **3 CLI guard tests** (subprocess spawning к `api_load.py` script): mutual-exclusion (`--access-token` + `--login-email`), required-together (`--login-email` без `--login-password`), happy-path (parser принимает валидную комбинацию).
+   - **3 `_hit` Authorization tests** (httpx.MockTransport): injection с token, omission без token, setdefault-honoring при существующем header (защита от breaking-flow scenarios).
+   - **3 `_resolve_access_token` tests**: happy-path (POST с креденшалами + X-Tenant, парс `{access_token}`), 401-raise с `status=401` в сообщении, missing-token-field raise.
+   - **1 `_hit_flow` integration test**: global token дотекает до step без явного Authorization.
+
+**Doc (this PR — Session 75 sync):**
+
+4. New `## Last Agent Handoff (2026-05-27, Session 75 ...)` block prepended (this entry).
+
+### Changed / New Files
+
+- `scripts/perf/api_load.py` — +80 / -3 (CLI flags, helper, header injection).
+- `.github/workflows/perf-baseline.yml` — +27 / -2 (`.env` seed, orchestrator env + cmd injection, password masking).
+- `tests/test_perf_api_load_auth.py` — +220 new.
+- `AI_IMPLEMENTATION_REPORT.md` — +~70 / 0 (this handoff).
+
+### Decisions
+
+- **Global one-shot login vs. per-worker flow_steps.** iter-18 паттерн (`scripts/perf/flows/dashboard_summary.json`) делает login на каждом worker'е — для 180-запроса nightly это **180 логинов** и измерения отражают log-in latency, а не target endpoint. iter-27 делает 1 login до load loop'а, кэширует JWT, инжектит Bearer глобально — измерения становятся точнее. Trade-off: глобальный JWT истечёт если профиль очень длинный, но nightly profile <60s.
+- **`dict.setdefault` для Authorization-header.** Сохраняет backward-compat для существующих flow_steps. Scenario, у которого step 2 имеет `Authorization: Bearer {{access_token}}` (от capture step 1), сохраняет своё значение — наш глобальный token не «выигрывает», даже если оба переданы. Это критично для iter-18 flow `dashboard_summary.json` если кто-то одновременно передаст и `--flow-json`, и `--login-email`.
+- **Auth-header добавляется UNCONDITIONALLY ко всем probes (включая `/health`).** Технически `/health` не требует auth. Но добавление Bearer header к open endpoint бесвредно (FastAPI security middleware просто игнорирует), а условная логика «proпустить auth для health» потребовала бы либо нового `requires_auth: true` поля в scenarios.json (scope creep), либо whitelist'а path'ов в api_load.py (chuckle). KISS.
+- **`ADMIN_PASSWORD` hardcoded в workflow vs. `${{ secrets.* }}`.** Это **CI-only placeholder** (как `SECRET_KEY=ci-perf-baseline-not-for-production` рядом). Тот же подход, что и в `ci.yml::perf-smoke` (`ADMIN_PASSWORD=PerfSmokeAdmin123!` plaintext). База данных эфемерная для каждого run, утечка пароля не имеет последствий. Использовать `secrets.*` было бы избыточным.
+- **Не trogal `pr_smoke` profile в `scripts/perf/scenarios.json`.** iter-18 уже закрыл perf-smoke через flow_steps; refactor его под global token — scope creep. Оставлено как kandidat для iter-28 если хочется consistency.
+- **`subprocess` вместо `argparse.parse_args()` в CLI-guard тестах.** `argparse.error` calls `sys.exit(2)`, что внутри pytest требует `pytest.raises(SystemExit)` + проверка `code==2` + захват stderr через capsys. Spawn-based subprocess test проще и foolproof.
+
+### Issues Fixed
+
+- **RB-002 perf-baseline 401-failure-class (`/api/v1/dashboard/summary`, `/api/v1/templates`, `/api/v1/search/suggest`, `/api/v1/files`).** Все 4 plain-path scenarios в `nightly_baseline` теперь получают Bearer JWT из одного предварительного логина admin'а. Threshold_check на `statuses != [200]` перестанет FAIL'ить как только run`perf-baseline.yml` будет dispatched.
+
+### Known Problems / Risks
+
+- **iter-27 не запущена против реального backend локально.** Нужен Docker + PostgreSQL — местная env (Windows + Py3.13) ограничена. Validation gate — следующий CI dispatch `perf-baseline.yml`.
+- **`backend/app/core/config.py::bootstrap` может отвергнуть `ADMIN_PASSWORD=PerfBaseline123!` если паттерн валидации поменялся.** Mitigated проверкой `.env.example` (line 47) — там пустое значение, значит конфиг принимает arbitrary non-blank.
+- **JWT TTL не sanity-check'ен в тестах.** Если `JWT_ACCESS_TTL_MIN` в env будет < 60s и nightly profile тяжелее ожидаемого — token истечёт mid-flight. JWT default TTL в config.py — 60 минут, профиль <60s, риск нулевой.
+- **Race iter-25/26 CI runs.** На момент session 75 их CI всё ещё `queued`. Если они выявят критический drift-bug, iter-27 нужно rebase'ить. Низкий шанс.
+- **RB-005 credential-smoke** остаётся open — Playwright не находит heading «Документы» после login. PR #580 (email TLD) merged, но run `26444184689` всё ещё красный. Требует отдельной session для drill-down: download artifact `e2e-backend-log-bootstrap_local`, разобрать что именно 4xx'ит после login.
+- **45 mixin-retrofit tables** + **2 critical incident-family tables** + **13 business-drift tables** — отдельные cohort'ы, отложены.
+- **`final-acceptance.yml` (PR #576)** — still not dispatched, gates RB-003.
+
+### Validation
+
+- `py -3 -m py_compile scripts/perf/api_load.py` → OK.
+- `py -3 -m py_compile tests/test_perf_api_load_auth.py` → OK.
+- `py -3 scripts/perf/api_load.py --help` → all 4 new flags rendered with descriptions.
+- `py -3 scripts/perf/api_load.py --access-token x --login-email a@b.c --login-password p` → exit 2, stderr contains `mutually exclusive`.
+- `py -3 scripts/perf/api_load.py --login-email a@b.c` → exit 2, stderr contains `must be provided together`.
+- **All 10 pin tests PASS via direct asyncio.run/function invocation** (pytest на Win+Py3.13 hangs per `[[local-env-drift-windows]]`; ту же manual-invoke strategy использовали iter-23..26).
+- **Not validated locally:** `docker compose up` + actual `--login-email admin@example.com --login-password PerfBaseline123!` round-trip против реального backend; CI gate является source of truth.
+
+### Next Steps
+
+**Operational (this PR):**
+
+1. Commit selectively (skip `.claude/settings.local.json`, untracked plan doc, untracked iter-26 implementation report changes).
+2. Push branch + open PR `fix(perf): iter-27 RB-002 perf-auth — global Bearer token in api_load.py`.
+3. After merge: dispatch `perf-baseline.yml` manually via `gh workflow run perf-baseline.yml`; verify all 8 scenarios green в new run → flip **RB-002 → DONE** в `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` → cascade 5-doc sync.
+
+**Technical (next session — primary):**
+
+4. **RB-005 credential-smoke drill-down** — download artifact `e2e-backend-log-bootstrap_local` из run [26444184689](https://github.com/aiprocadm/prt_ot_doc/actions/runs/26444184689). Hypothesis: post-PR-#580 login успешен, но frontend route `/documents` 4xx'ит или редиректит из-за tenant-schema drift / missing entity. Branch: `fix/rb-005-credential-smoke-post-login-route`.
+5. **`final-acceptance.yml` dispatch** (PR #576) — RB-003 evidence. Чисто operational, не требует кода.
+
+**Technical (next session — secondary):**
+
+6. **iter-28 mixin-retrofit mega-cohort** (~45 таблиц без `version`).
+7. **incident-family multi-iter restoration** (3-4 iters, parent business-drift design + 2 child tables).
+8. **iter-17 backend-tests drift** (~50/7/8/4 fails в staging/health/workspace/RBAC).
+9. **`pr_smoke` profile refactor** под global token (consistency с iter-27 — scope creep но low-risk).
+
+**Стартовая команда для следующей сессии:**
+
+```
+git checkout main && git pull
+gh pr list --state open --limit 10
+gh run list --workflow=perf-baseline.yml --limit 5   # check iter-27 effect
+gh run view <latest-perf-baseline-run> --log | grep -E "statuses=|threshold_check"
+# If all green: update RELEASE_BLOCKERS_STATUS.md RB-002 → DONE + 5-doc sync.
+# If some scenarios still red: drill into specific endpoint (most likely ABAC role mismatch).
+```
+
+**Branch suggestion для следующей сессии:** `docs/sync-rb-002-done-after-iter-27` (если perf-baseline зелёное) или `fix/rb-005-credential-smoke-post-login-route` (если переключаемся на RB-005).
+
+---
+
 ## Last Agent Handoff (2026-05-27, Session 74 — iter-26 standalone-critical closure RB-002r: inspection_result table; stacked PR on iter-25)
 
 - **Дата:** 2026-05-27 (тот же день что Sessions 71-73). Ветка `fix/iter-26-inspection-result` от `fix/iter-25-training-family-cohort` HEAD `dd1bc8b` (iter-25 PR #594 не merged ещё; stacked dependent PR strategy). Это первый stacked PR в этом репо — iter-23/24/25 ждали merge перед началом следующего. Решение принято в результате user '`продолжай`' instruction + iter-25 CI ещё pending → продолжение без блокировки.
