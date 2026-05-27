@@ -1,0 +1,506 @@
+"""Audit ORM↔migration drift in this repository.
+
+Surfaces the bug class fixed by iter-21 / PR #589 (RB-002i): a column declared
+in a SQLAlchemy model with no paired Alembic migration. SQLite tests pass
+because they build the schema via ``Base.metadata.create_all()``; Postgres
+deployments fail at runtime when ORM queries reference the missing column.
+
+Strategy:
+  1. Import the same ``ALEMBIC_METADATA`` Alembic uses for autogenerate
+     (this is the authoritative model-side schema).
+  2. Parse every migration file under ``backend/app/migrations/versions/``
+     using ``ast`` to extract all ``op.create_table``, ``op.add_column`` and
+     ``op.drop_column`` calls. Build a ``(table, column)`` set representing
+     what migrations actually create.
+  3. Diff: model columns not in migration set → drift.
+
+Limitations:
+  - Detects column-level drift only. FK and index drift would require
+    walking ``op.create_foreign_key`` / ``op.create_index``.
+  - Misses columns created via raw ``op.execute("ALTER TABLE ... ADD COLUMN
+    ...")`` (the repo does not use this pattern for additions today; if a
+    future migration does, the column will be flagged as a false positive).
+  - Treats ``schema`` parameters as opaque — a table with the same name in
+    ``app_shared`` vs tenant schema is collapsed into one entry. Matches
+    how the ORM models declare them (no schema= on the Mapped class).
+
+Usage::
+
+    py -3 scripts/audit/check_orm_migration_drift.py
+    py -3 scripts/audit/check_orm_migration_drift.py --json > drift.json
+"""
+
+from __future__ import annotations
+
+import argparse
+import ast
+import json
+import os
+import sys
+import tempfile
+from collections import defaultdict
+from collections.abc import Iterable
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+BACKEND_ROOT = REPO_ROOT / "backend"
+MIGRATIONS_DIR = BACKEND_ROOT / "app" / "migrations" / "versions"
+
+
+def _bootstrap_env() -> None:
+    """Set the env vars the model imports need (mirrors tests/conftest.py)."""
+    os.environ.setdefault("APP_NAME", "DriftAudit")
+    os.environ.setdefault("APP_TRUSTED_HOSTS", "localhost,127.0.0.1,testserver")
+    os.environ.setdefault("DEFAULT_LOCALE", "en-US")
+    os.environ.setdefault("LIBREOFFICE_BIN", sys.executable)
+    db_path = Path(tempfile.gettempdir()) / "prt_drift_audit.db"
+    os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{db_path}")
+    os.environ.setdefault("REDIS_URL", "memory://")
+    os.environ.setdefault("REDIS_RESULT_URL", "cache+memory://")
+    os.environ.setdefault("RATE_LIMIT_STORAGE_URI", "memory://")
+    os.environ.setdefault("S3_ENDPOINT", "http://localhost")
+    os.environ.setdefault("SECRET_KEY", "drift-audit-not-for-production")
+    os.environ.setdefault("S3_ACCESS_KEY", "audit")
+    os.environ.setdefault("S3_SECRET_KEY", "audit")
+    os.environ.setdefault("S3_BUCKET", "audit")
+    # crypt stub for Windows / slim containers (passlib import).
+    import types
+
+    sys.modules.setdefault(
+        "crypt", types.SimpleNamespace(crypt=lambda secret, salt: "mocked")
+    )
+
+
+def _load_model_columns() -> dict[str, set[str]]:
+    """Return ``{table_name: {column_name, ...}}`` from ALEMBIC_METADATA."""
+    # ``backend`` must be on sys.path for ``app.*`` imports to resolve.
+    sys.path.insert(0, str(BACKEND_ROOT))
+    from app.db.base import ALEMBIC_METADATA  # type: ignore[import-not-found]
+
+    model_columns: dict[str, set[str]] = {}
+    for table in ALEMBIC_METADATA.tables.values():
+        # Strip schema prefix so "app_shared.user" and "user" collapse.
+        name = table.name
+        model_columns.setdefault(name, set()).update(c.name for c in table.columns)
+    return model_columns
+
+
+def _string_arg(node: ast.expr | None) -> str | None:
+    """Extract a string literal from an AST argument; ``None`` if not a string."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    return None
+
+
+def _columns_in_create_table(call: ast.Call) -> list[str]:
+    """Extract column names from a ``sa.Column("name", ...)`` inside create_table.
+
+    ``op.create_table("user", sa.Column("id", ...), sa.Column("email", ...), ...)``
+    """
+    columns: list[str] = []
+    # First arg is table name; remaining positional args are columns / constraints.
+    for arg in call.args[1:]:
+        if isinstance(arg, ast.Call) and _call_target_endswith(arg, "Column"):
+            if arg.args:
+                col_name = _string_arg(arg.args[0])
+                if col_name:
+                    columns.append(col_name)
+    return columns
+
+
+def _call_target_endswith(call: ast.Call, suffix: str) -> bool:
+    """True if the callee's attribute chain ends with ``suffix`` (case-sensitive)."""
+    func = call.func
+    if isinstance(func, ast.Attribute):
+        return func.attr == suffix
+    if isinstance(func, ast.Name):
+        return func.id == suffix
+    return False
+
+
+def _find_function(tree: ast.Module, name: str) -> ast.FunctionDef | None:
+    """Locate a top-level function by name (None if absent)."""
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef) and node.name == name:
+            return node
+    return None
+
+
+def _all_functions(tree: ast.Module) -> dict[str, ast.FunctionDef]:
+    """Return ``{name: FunctionDef}`` for every top-level def in a module."""
+    return {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
+
+
+def _column_names_in(nodes: Iterable[ast.AST]) -> list[str]:
+    """Walk arbitrary AST nodes; collect every ``sa.Column("name", ...)``."""
+    found: list[str] = []
+    for root in nodes:
+        for node in ast.walk(root):
+            if (
+                isinstance(node, ast.Call)
+                and _call_target_endswith(node, "Column")
+                and node.args
+            ):
+                name = _string_arg(node.args[0])
+                if name:
+                    found.append(name)
+    return found
+
+
+def _helper_extra_columns(
+    func: ast.FunctionDef, functions: dict[str, ast.FunctionDef]
+) -> list[str]:
+    """Columns added unconditionally by a helper's own body.
+
+    Walks ``func``'s body recursively; collects ``sa.Column("name", ...)``
+    literals and inlines any helper calls (e.g. ``_base_columns()``).
+    Used to model wrappers like::
+
+        def _create_soft_table(name, *columns, unique=None):
+            args = list(columns) + _base_columns() + [sa.Column("deleted_at", ...)]
+            op.create_table(name, *args, ...)
+
+    Returns the deleted_at + the columns returned from _base_columns().
+    """
+    extras: list[str] = []
+    # Direct Column literals in the helper body.
+    extras.extend(_column_names_in([func]))
+    # Inline any same-module helpers the function calls.
+    for node in ast.walk(func):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            callee = functions.get(node.func.id)
+            if callee is not None and callee is not func:
+                extras.extend(_column_names_in([callee]))
+    # Deduplicate while preserving order.
+    seen: set[str] = set()
+    result: list[str] = []
+    for name in extras:
+        if name not in seen:
+            seen.add(name)
+            result.append(name)
+    return result
+
+
+def _table_creating_helpers(
+    functions: dict[str, ast.FunctionDef],
+) -> dict[str, list[str]]:
+    """Identify helpers that ultimately call ``op.create_table``.
+
+    Returns ``{helper_name: [extra_column_names_added_by_helper]}``.
+    A helper qualifies if its body contains a call ending in
+    ``create_table`` (e.g. ``op.create_table`` or ``self.create_table``).
+    """
+    helpers: dict[str, list[str]] = {}
+    for name, func in functions.items():
+        if name in ("upgrade", "downgrade"):
+            continue
+        creates_table = False
+        for inner in ast.walk(func):
+            if isinstance(inner, ast.Call) and _call_target_endswith(
+                inner, "create_table"
+            ):
+                # Either direct op.create_table or recursive helper-of-helper.
+                if (
+                    isinstance(inner.func, ast.Attribute)
+                    or isinstance(inner.func, ast.Name)
+                    and inner.func.id != name
+                ):
+                    creates_table = True
+                    break
+        if creates_table:
+            helpers[name] = _helper_extra_columns(func, functions)
+    return helpers
+
+
+def _parse_migration(path: Path) -> dict[str, object]:
+    """Return ops extracted from one migration's ``upgrade()`` function only.
+
+    We deliberately ignore ``downgrade()`` — its ``op.drop_column`` calls
+    would otherwise cancel out the ``op.add_column`` from ``upgrade()``,
+    producing false-positive drift. Forward-only history matches Alembic's
+    actual production semantics (downgrade is dev-only convenience).
+
+    Helper-function aware: calls to module-local helpers that wrap
+    ``op.create_table`` (e.g. ``_create_soft_table(name, sa.Column(...), ...)``)
+    are inlined so columns injected by the wrapper are counted too.
+    """
+    source = path.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(path))
+    upgrade_fn = _find_function(tree, "upgrade")
+    walk_target: ast.AST = upgrade_fn if upgrade_fn is not None else tree
+
+    functions = _all_functions(tree)
+    helpers = _table_creating_helpers(functions)
+
+    create_table: dict[str, list[str]] = defaultdict(list)
+    add_column: dict[str, list[str]] = defaultdict(list)
+    drop_column: dict[str, list[str]] = defaultdict(list)
+    drop_table: list[str] = []
+    rename_table: list[tuple[str, str]] = []  # (old, new)
+
+    # First: handle `with op.batch_alter_table("t", ...) as batch:` blocks.
+    # These hold `batch.add_column(sa.Column("c", ...))` and `batch.drop_column("c")`
+    # that the generic Call-walker can't associate with the right table.
+    for node in ast.walk(walk_target):
+        if not isinstance(node, ast.With):
+            continue
+        for item in node.items:
+            ctx = item.context_expr
+            if not (
+                isinstance(ctx, ast.Call)
+                and _call_target_endswith(ctx, "batch_alter_table")
+                and ctx.args
+            ):
+                continue
+            table_name = _string_arg(ctx.args[0])
+            if not table_name:
+                continue
+            for inner in ast.walk(node):
+                if not isinstance(inner, ast.Call):
+                    continue
+                # batch.add_column(sa.Column("col", ...))
+                if _call_target_endswith(inner, "add_column") and inner.args:
+                    col_arg = inner.args[0]
+                    if (
+                        isinstance(col_arg, ast.Call)
+                        and _call_target_endswith(col_arg, "Column")
+                        and col_arg.args
+                    ):
+                        col_name = _string_arg(col_arg.args[0])
+                        if col_name:
+                            add_column[table_name].append(col_name)
+                # batch.drop_column("col")
+                elif _call_target_endswith(inner, "drop_column") and inner.args:
+                    col_name = _string_arg(inner.args[0])
+                    if col_name:
+                        drop_column[table_name].append(col_name)
+
+    for node in ast.walk(walk_target):
+        if not isinstance(node, ast.Call):
+            continue
+        # Local helper that wraps op.create_table?
+        if (
+            isinstance(node.func, ast.Name)
+            and node.func.id in helpers
+            and node.args
+        ):
+            table_name = _string_arg(node.args[0])
+            if table_name:
+                # Columns passed positionally to the helper.
+                create_table[table_name].extend(_columns_in_create_table(node))
+                # Columns injected by helper's own body.
+                create_table[table_name].extend(helpers[node.func.id])
+            continue
+        # op.create_table("name", Column(...), Column(...), ...)
+        if _call_target_endswith(node, "create_table") and node.args:
+            table_name = _string_arg(node.args[0])
+            if table_name:
+                create_table[table_name].extend(_columns_in_create_table(node))
+        # op.add_column("table", sa.Column("col", ...))
+        elif _call_target_endswith(node, "add_column") and len(node.args) >= 2:
+            table_name = _string_arg(node.args[0])
+            col_arg = node.args[1]
+            if (
+                table_name
+                and isinstance(col_arg, ast.Call)
+                and _call_target_endswith(col_arg, "Column")
+                and col_arg.args
+            ):
+                col_name = _string_arg(col_arg.args[0])
+                if col_name:
+                    add_column[table_name].append(col_name)
+        # op.drop_column("table", "col")
+        elif _call_target_endswith(node, "drop_column") and len(node.args) >= 2:
+            table_name = _string_arg(node.args[0])
+            col_name = _string_arg(node.args[1])
+            if table_name and col_name:
+                drop_column[table_name].append(col_name)
+        # op.drop_table("table")
+        elif _call_target_endswith(node, "drop_table") and node.args:
+            table_name = _string_arg(node.args[0])
+            if table_name:
+                drop_table.append(table_name)
+        # op.rename_table("old", "new")
+        elif _call_target_endswith(node, "rename_table") and len(node.args) >= 2:
+            old_name = _string_arg(node.args[0])
+            new_name = _string_arg(node.args[1])
+            if old_name and new_name:
+                rename_table.append((old_name, new_name))
+
+    return {
+        "create_table": dict(create_table),
+        "add_column": dict(add_column),
+        "drop_column": dict(drop_column),
+        "drop_table": drop_table,
+        "rename_table": rename_table,
+        "_path": str(path.relative_to(REPO_ROOT)),
+    }
+
+
+def _collect_migration_columns() -> tuple[dict[str, set[str]], list[dict[str, object]]]:
+    """Walk all migrations; return aggregate ``{table: {col, ...}}`` + per-file ops.
+
+    Aggregate ignores order; we do not attempt topological replay because the
+    common drift case (column missing entirely) is order-independent.
+    Dropped columns are subtracted; renamed tables map old→new columns.
+    """
+    all_files = sorted(MIGRATIONS_DIR.glob("*.py"))
+    per_file: list[dict[str, object]] = []
+    table_columns: dict[str, set[str]] = defaultdict(set)
+    rename_map: dict[str, str] = {}
+
+    for path in all_files:
+        if path.name.startswith("__"):
+            continue
+        ops = _parse_migration(path)
+        per_file.append(ops)
+        for table, cols in ops["create_table"].items():  # type: ignore[union-attr]
+            table_columns[table].update(cols)
+        for table, cols in ops["add_column"].items():  # type: ignore[union-attr]
+            table_columns[table].update(cols)
+        for old, new in ops["rename_table"]:  # type: ignore[union-attr]
+            rename_map[old] = new
+
+    # Apply renames so model's current name finds historical create_table.
+    for old, new in rename_map.items():
+        if old in table_columns:
+            table_columns.setdefault(new, set()).update(table_columns.pop(old))
+
+    # Subtract drops (must be done after rename merge).
+    for ops in per_file:
+        for table, cols in ops["drop_column"].items():  # type: ignore[union-attr]
+            # If table was renamed after this drop, map to new name.
+            current = rename_map.get(table, table)
+            table_columns.get(current, set()).difference_update(cols)
+
+    return dict(table_columns), per_file
+
+
+def _diff(
+    model: dict[str, set[str]], migration: dict[str, set[str]]
+) -> dict[str, dict[str, list[str]]]:
+    """Per-table column-level diff (model vs migration)."""
+    drift: dict[str, dict[str, list[str]]] = {}
+    all_tables = sorted(set(model) | set(migration))
+    for table in all_tables:
+        model_cols = model.get(table, set())
+        mig_cols = migration.get(table, set())
+        missing_in_migration = sorted(model_cols - mig_cols)
+        missing_in_model = sorted(mig_cols - model_cols)
+        if missing_in_migration or missing_in_model:
+            entry: dict[str, list[str]] = {}
+            if missing_in_migration:
+                entry["model_only"] = missing_in_migration
+            if missing_in_model:
+                entry["migration_only"] = missing_in_model
+            drift[table] = entry
+    return drift
+
+
+def _format_text(drift: dict[str, dict[str, list[str]]]) -> str:
+    if not drift:
+        return "OK: no ORM↔migration column drift detected."
+    lines = [f"DRIFT: {len(drift)} table(s) with column-level mismatch.", ""]
+    for table in sorted(drift):
+        entry = drift[table]
+        lines.append(f"  {table}:")
+        if entry.get("model_only"):
+            lines.append(
+                f"    model_only (in model, no migration creates it): "
+                f"{', '.join(entry['model_only'])}"
+            )
+        if entry.get("migration_only"):
+            lines.append(
+                f"    migration_only (in migration, not on model): "
+                f"{', '.join(entry['migration_only'])}"
+            )
+    lines.append("")
+    lines.append(
+        "Hint: each `model_only` column needs an `op.add_column(...)` "
+        "migration (cf. iter-21 backend/app/migrations/versions/"
+        "20260527_iter21_user_company_id.py)."
+    )
+    return "\n".join(lines)
+
+
+def _collect_migration_columns_via_alembic() -> dict[str, set[str]] | None:
+    """Apply migrations to in-memory SQLite, then reflect resulting schema.
+
+    Returns ``None`` if alembic upgrade fails (likely PG-specific DDL the
+    SQLite dialect rejects); callers fall back to the AST-based parser.
+    """
+    import sqlalchemy as sa
+    from sqlalchemy import inspect as sa_inspect
+
+    tmp_db = Path(tempfile.gettempdir()) / "prt_drift_audit_alembic.db"
+    if tmp_db.exists():
+        tmp_db.unlink()
+
+    # Point env.py at the audit DB instead of the bootstrap default.
+    os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{tmp_db}"
+
+    try:
+        from alembic import command
+        from alembic.config import Config
+    except ImportError:
+        return None
+
+    cfg = Config(str(BACKEND_ROOT / "app" / "migrations" / "alembic.ini"))
+    cfg.set_main_option(
+        "script_location", str(BACKEND_ROOT / "app" / "migrations")
+    )
+    cfg.set_main_option("sqlalchemy.url", f"sqlite:///{tmp_db}")
+
+    try:
+        command.upgrade(cfg, "head")
+    except Exception as exc:  # noqa: BLE001 — alembic raises many exception types
+        print(f"alembic upgrade failed on SQLite: {exc!s}", file=sys.stderr)
+        return None
+
+    sync_engine = sa.create_engine(f"sqlite:///{tmp_db}")
+    inspector = sa_inspect(sync_engine)
+    schema: dict[str, set[str]] = {}
+    for table_name in inspector.get_table_names():
+        if table_name == "alembic_version":
+            continue
+        schema[table_name] = {c["name"] for c in inspector.get_columns(table_name)}
+    return schema
+
+
+def main(argv: Iterable[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--json", action="store_true", help="Emit JSON instead of text.")
+    parser.add_argument(
+        "--use-alembic",
+        action="store_true",
+        help=(
+            "Apply migrations to in-memory SQLite via Alembic and diff the "
+            "reflected schema (more accurate, requires alembic to succeed "
+            "on SQLite). Falls back to AST parser if alembic fails."
+        ),
+    )
+    args = parser.parse_args(list(argv) if argv is not None else None)
+
+    _bootstrap_env()
+    model_columns = _load_model_columns()
+    migration_columns: dict[str, set[str]] | None = None
+    if args.use_alembic:
+        migration_columns = _collect_migration_columns_via_alembic()
+        if migration_columns is None:
+            print(
+                "Alembic mode failed; falling back to AST parser.", file=sys.stderr
+            )
+    if migration_columns is None:
+        migration_columns, _per_file = _collect_migration_columns()
+    drift = _diff(model_columns, migration_columns)
+
+    if args.json:
+        print(json.dumps(drift, indent=2, sort_keys=True))
+    else:
+        print(_format_text(drift))
+
+    return 1 if drift else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
