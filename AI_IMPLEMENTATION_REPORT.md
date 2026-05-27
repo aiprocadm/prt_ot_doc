@@ -1,5 +1,136 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-27, Session 74 — iter-26 standalone-critical closure RB-002r: inspection_result table; stacked PR on iter-25)
+
+- **Дата:** 2026-05-27 (тот же день что Sessions 71-73). Ветка `fix/iter-26-inspection-result` от `fix/iter-25-training-family-cohort` HEAD `dd1bc8b` (iter-25 PR #594 не merged ещё; stacked dependent PR strategy). Это первый stacked PR в этом репо — iter-23/24/25 ждали merge перед началом следующего. Решение принято в результате user '`продолжай`' instruction + iter-25 CI ещё pending → продолжение без блокировки.
+- **Агент:** Claude Opus 4.7 (1M context, local Windows + py 3.13 fallback; explanatory style; Auto Mode).
+- **Задача:** «продолжай» — взять next non-operational item из Session 73 Next Steps. #3 «watch iter-25 CI» blocked (pending). #4 «iter-26 inspection_result» — primary technical, выполнимо stacked от iter-25.
+
+### Studied Documentation
+
+- Session 73 (this conversation) handoff → Next Steps #4 «iter-26 inspection_result: single critical-таблица без `incident`-entanglement».
+- `[[orm-migration-drift-classes]]` — flavor (a) подтверждён: `grep -rn create_table.*inspection_result` → zero matches.
+- `[[alembic-heads-lesson]]` — `down_revision = "20260527_iter25_training_family"` (iter-25's head, не yet merged но live на stacked branch).
+- `backend/app/models/models.py:2455-2475` (`InspectionResult`, `TenantBaseModel + SoftDeleteMixin`).
+- `backend/app/models/models.py:2390-2453` (`Inspection`/`regulatory_inspection` parent — relationship declares `cascade="all, delete-orphan", passive_deletes=True` → ondelete CASCADE on FK is mandatory match).
+- Discovery investigation:
+  - `grep -rn 'create_table.*inspection_result' migrations/` → zero. Flavor (a) confirmed.
+  - `grep -rn 'create_table.*regulatory_inspection' migrations/` → `20250415_create_regulatory_inspection_base.py:39` ✅ FK target exists.
+  - `grep -rn 'create_table(\s*\n?\s*["'"'"']file["'"'"']' migrations/ --multiline` → `6b6dee7c951f_initial_schema.py` ✅ FK target exists.
+  - `grep -rn 'down_revision.*20260527_iter25_training_family' migrations/` → zero (iter-25 is true head on its branch).
+
+### Selected Plan Item
+
+- **Фаза:** Phase 0 release-blocker chase (P0) — proactive standalone critical closure. New class RB-002r.
+- **Приоритет:** P0 — inspection endpoints (`/api/v1/inspections/{id}/results`) являются частью compliance flow; runtime crash в Postgres при первом result-attachment.
+- **Почему выбрана:** Session 73 явно перечислил inspection_result как «standalone, может пойти в iter-26 без entanglement». Все 6 оставшихся critical drift-таблиц рассмотрены:
+  - `inspection_result` ✅ — выбран, нет entanglement.
+  - `incident_log` / `incident_person` — заблокированы родительским `incident` business-drift (7 missing cols incl. enum types).
+  - `training_course/plan/session` ✅ — закрыты в iter-25.
+- **Cohort решение:** standalone, не cohort. Bundling с `incident_*` потребовал бы сначала закрыть `incident` business-drift (3-4 iter работы по enum design).
+
+### Recent merged work since Session 73 (chronological)
+
+| PR | Date (UTC) | Iter | Scope | Class |
+|---|---|---|---|---|
+| [#594](https://github.com/aiprocadm/prt_ot_doc/pull/594) | (pending merge) | iter-25 | RB-002o/p/q cohort — `training_course` + `training_plan` + `training_session` tables | DB / new tables |
+
+*iter-26 is stacked on iter-25 branch and PR — see "Decisions" below for rationale.*
+
+### Implemented Changes (this session)
+
+**Code (this PR — iter-26 RB-002r):**
+
+1. **`backend/app/migrations/versions/20260527_iter26_inspection_result.py`** (new, +112) — creates `inspection_result` (12 cols, 4 indexes, 3 FKs: tenant + regulatory_inspection-CASCADE + file-SET-NULL, no new enums). `down_revision = "20260527_iter25_training_family"`. Downgrade reverses 4 indexes then table drop.
+2. **`backend/tests/test_inspection_result_table_exists.py`** (new, +118) — 7 pin tests: required columns (12), inspection FK CASCADE (matches parent's `cascade="all, delete-orphan"`), file FK SET NULL, composite `(tenant_id, inspection_id)` index, `issued_at` date-range index, migration chain to iter-25 head, scope guard (exactly 1 `op.create_table` — standalone iter).
+
+**Doc (this PR — Session 74 sync):**
+
+3. New `## Last Agent Handoff (2026-05-27, Session 74 ...)` block prepended (this entry).
+
+### Changed / New Files
+
+- `backend/app/migrations/versions/20260527_iter26_inspection_result.py` — +112 new.
+- `backend/tests/test_inspection_result_table_exists.py` — +118 new.
+- `AI_IMPLEMENTATION_REPORT.md` — +~90 / 0 lines (this handoff).
+
+### Decisions
+
+- **Stacked PR (iter-26 от iter-25 branch).** Первый stacked PR в этом repo. Цена: если iter-25 (PR #594) squash-merge'нётся, iter-26 нужен rebase на new main. GitHub предупреждает в UI; pin-тест `test_iter26_migration_chains_to_iter25_head` поднимет alert если rebase сломает chain. Альтернатива (wait for iter-25 merge) дала бы блокировку progress на CI backlog. Выбран progressive подход.
+- **Standalone iter, не cohort.** В отличие от iter-23/24/25 (каждая закрывала 2-3 таблицы), iter-26 — только одна. Reasoning: `incident_*` cohort требует месяцев enum-design работы; bundling сделал бы iter-26 multi-week vs current ~1-hour. Cohort principle ([[rb002-enum-migration-cohort]]) допускает standalone когда entanglement превышает cohort benefits.
+- **`ondelete="CASCADE"` на `inspection_id` mandatory, не choice.** Parent `Inspection.results` declares `cascade="all, delete-orphan", passive_deletes=True`. Если migration use ondelete RESTRICT, ORM `session.delete(inspection)` соберёт child rows но PG откажется удалять child рядов первым → IntegrityError. Match с ORM cascade обязателен.
+- **No new enums.** `outcome` остаётся String(128) per ORM model. Парент `regulatory_inspection.status` использует `regulatoryinspectionstatus` enum (создан в `20250415_create_regulatory_inspection_base.py`); InspectionResult не имеет enum columns.
+- **4 индекса (минимум для hot paths):**
+  - `ix_inspection_result_tenant_id` (base mixin)
+  - `ix_inspection_result_inspection_id` (single-col, FK lookup)
+  - `ix_inspection_result_inspection` (composite tenant-scoped, hot-path для selectin-load)
+  - `ix_inspection_result_issued_at` (date-range compliance reports — NOT tenant-scoped, matches model)
+
+### Issues Fixed
+
+- **RB-002r (`inspection_result` table missing from migrations, NEW class)** — eliminated runtime crash на любой `select(InspectionResult)`, `inspection.results.append(...)` selectin-load в Postgres. Pin tests cover column shape, FK ondelete semantics matching ORM cascade, hot-path indexes.
+
+### Known Problems / Risks
+
+- **Audit script remaining critical: 2 (down from 3).** Still: `incident_log`, `incident_person`. Both blocked on parent `incident` business-drift (7 missing cols including String→Enum migrations for `status`/`stage`/`person_role`). Не actionable до отдельной incident-design итерации.
+- **iter-25 PR #594 ещё не merged.** Если iter-25 review surface'нет change request — iter-26 нужен rebase (миграция down_revision может остаться корректным, но коммит-граф изменится).
+- **45 mixin-retrofit tables** (no `version` column) — отдельный mega-cohort iter (предложен в Session 72/73).
+- **13 business-drift tables** — продолжают ждать ADD COLUMN migrations.
+- **iter-25 CI pending на момент session 74.** Не блокирует local commits, но closure verdict откладывается.
+- **iter-17 backend-tests drift** (~50/7/8/4 fails) — unchanged.
+- **`final-acceptance.yml` (PR #576)** — still not dispatched.
+- **Local pytest hangs на Windows + Py3.13** — все 7 новых pin-тестов прошли через manual function invocation.
+- **Risk: iter-26 миграция не была применена против real Postgres локально** — `alembic-postgres-upgrade` CI job validation gate.
+- **Local audit script hangs (Windows+Py3.13)** — closed-loop drift-count validation deferred to CI.
+
+### Validation
+
+- `py -3 -m py_compile <2 new files>` → OK.
+- Local runtime check (py 3.13):
+  - `importlib.util.spec_from_file_location('iter26', ...)` loads cleanly; `revision == "20260527_iter26_inspection_result"`, `down_revision == "20260527_iter25_training_family"` ✅.
+  - `inspect(InspectionResult).columns` returns expected 12 cols ✅.
+- **All 7 new pin tests pass** via manual function invocation: 5 schema/FK/index + 2 migration-side guards.
+- **Not validated locally:** `alembic upgrade head` против PG (no local PG); full backend-tests run (Win+Py3.13 hang); audit re-run; closed-loop drift count.
+
+### Next Steps
+
+**Operational (this PR):**
+
+1. Commit selectively (skip `.claude/settings.local.json` + untracked plan doc).
+2. Push branch + open PR `fix(db): iter-26 RB-002r — inspection_result table (stacked on iter-25 PR #594)`.
+3. **PR description must mark stacked dependency** — base branch comparison should be vs iter-25 branch ideally, but easier path: open against main and note "Depends on #594" в description so reviewer merges in order.
+
+**Technical (next session — primary, scenario-dependent):**
+
+4. **iter-27 mixin-retrofit mega-cohort:** ~45 tables missing only `version` column. Single migration walks `inspect(model)` to add `version Integer NOT NULL DEFAULT 1`. Самый «механический» drift class.
+5. **iter-27-alt journalentry/ppeissue business-drift:** add FK columns + matching enum-typing. Логически дополняет iter-24.
+6. **incident-family multi-iter restoration (P1):** `incident` business cols + 3 new enum types + 2 child tables. 3-4 iters of work.
+
+**Technical (next session — secondary):**
+
+7. **`Training` legacy entity decision** — keep/deprecate (separate drift entry).
+8. Dispatch `perf-baseline.yml` (после iter-25/26 merge) для RB-002 closure verdict → 5-doc cascade sync.
+9. Dispatch `final-acceptance.yml` (PR #576) — RB-003 evidence still uncaptured.
+
+**Technical (next session — alternative):**
+
+10. iter-17 backend-tests drift — staging/health/workspace/RBAC.
+11. `app-level-defects-post-billing` items #2 (minio S3 metadata) / #3 (LibreOffice in restore-drill).
+
+**Стартовая команда для следующей сессии:**
+```
+git checkout main && git pull
+gh pr list --state open --limit 10
+gh run list --branch main --limit 6   # check iter-25/26 post-merge CI
+py -3 scripts/audit/check_orm_migration_drift.py --summary
+# After iter-26 merge: critical should drop to 2 (incident_log, incident_person).
+# Choose iter-27 path based on critical/business count and perf-smoke verdict.
+```
+
+**Branch suggestion для следующей сессии:** `fix/iter-27-version-retrofit-cohort` (~45 mixin tables), `fix/iter-27-journalentry-ppeissue-business-drift` (iter-24 follow-up), или `chore/dispatch-perf-baseline-after-iter26` (если perf-smoke зелёное).
+
+---
+
 ## Last Agent Handoff (2026-05-27, Session 73 — iter-25 critical-cohort closure RB-002o/p/q: training_course + training_plan + training_session tables)
 
 - **Дата:** 2026-05-27 (тот же день что Session 72). Ветка `fix/iter-25-training-family-cohort` от свежего main `3d40b1a` (iter-24 PR #592 + doc-sync PR #593 merged). Proactive cohort closure — Session 72 handoff явно перечислил training-family как primary next-session candidate (Next Steps #4: «3 critical-таблицы `training_course`, `training_plan`, `training_session` share pattern, all TenantBaseModel + SoftDeleteMixin, single migration creating all three is feasible»).
