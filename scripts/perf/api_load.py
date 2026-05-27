@@ -80,10 +80,13 @@ async def _hit(
     tenant: str | None,
     headers: dict[str, str] | None = None,
     json_body: dict[str, Any] | list[Any] | None = None,
+    access_token: str | None = None,
 ) -> ProbeResult:
     resolved_headers = dict(headers or {})
     if tenant:
         resolved_headers.setdefault("X-Tenant", tenant)
+    if access_token:
+        resolved_headers.setdefault("Authorization", f"Bearer {access_token}")
     started = time.perf_counter()
     response = await client.request(
         method=method.upper(),
@@ -95,12 +98,52 @@ async def _hit(
     return ProbeResult(status_code=response.status_code, latency_ms=elapsed)
 
 
+async def _resolve_access_token(
+    client: httpx.AsyncClient,
+    *,
+    login_url: str,
+    email: str,
+    password: str,
+    tenant: str | None,
+) -> str:
+    """One-shot login at probe start; returns ``access_token`` for the load loop.
+
+    Issues a single POST to ``login_url`` with ``X-Tenant`` resolution mirroring
+    :func:`_hit`. The login response is the FastAPI ``TokenPair`` shape
+    (``{"access_token": ...}``) — refresh token lives in an HttpOnly cookie that
+    perf scenarios don't exercise.
+
+    Raised RuntimeError surfaces the HTTP body to make CI diagnostics quick: a
+    401 here usually means the bootstrap admin wasn't seeded (``ADMIN_BOOTSTRAP``
+    or ``ADMIN_PASSWORD`` missing) or ``app_env`` is not in ``{development,test}``.
+    """
+
+    headers: dict[str, str] = {}
+    if tenant:
+        headers["X-Tenant"] = tenant
+    response = await client.post(
+        login_url,
+        headers=headers,
+        json={"email": email, "password": password},
+    )
+    if response.status_code != 200:
+        raise RuntimeError(
+            f"Auth login {login_url} failed: status={response.status_code} body={response.text[:200]}"
+        )
+    payload = response.json()
+    token = payload.get("access_token") if isinstance(payload, dict) else None
+    if not token:
+        raise RuntimeError(f"Auth login {login_url} returned no access_token: {payload!r}")
+    return str(token)
+
+
 async def _hit_flow(
     client: httpx.AsyncClient,
     *,
     tenant: str | None,
     flow_steps: list[dict[str, Any]],
     worker_idx: int,
+    access_token: str | None = None,
 ) -> ProbeResult:
     started = time.perf_counter()
     context: dict[str, Any] = {
@@ -124,6 +167,8 @@ async def _hit_flow(
         resolved_headers = dict(headers or {})
         if tenant:
             resolved_headers.setdefault("X-Tenant", tenant)
+        if access_token:
+            resolved_headers.setdefault("Authorization", f"Bearer {access_token}")
 
         response = await client.request(method=method, url=path, headers=resolved_headers, json=body)
         status_code = response.status_code
@@ -181,7 +226,27 @@ async def main_async() -> int:
     parser.add_argument("--max-p95-ms", type=float, default=None)
     parser.add_argument("--max-p99-ms", type=float, default=None)
     parser.add_argument("--output-json", default=None)
+    # iter-27 RB-002 perf-auth: bearer-token plumbing.
+    # Two modes: (a) supply a precomputed --access-token (e.g. captured in CI
+    # shell), or (b) supply --login-email / --login-password and let the script
+    # log in once via --login-url before the load loop. The resolved token is
+    # then injected as ``Authorization: Bearer <jwt>`` into every probe — this
+    # keeps the load loop measuring the target endpoint's latency, not the
+    # per-call login overhead.
+    parser.add_argument("--access-token", default=None,
+                        help="Precomputed JWT to send as Authorization: Bearer header.")
+    parser.add_argument("--login-url", default="/api/v1/auth/login",
+                        help="POST endpoint that exchanges email/password for access_token.")
+    parser.add_argument("--login-email", default=None,
+                        help="Login email used to obtain --access-token (mutually exclusive).")
+    parser.add_argument("--login-password", default=None,
+                        help="Login password matching --login-email.")
     args = parser.parse_args()
+
+    if args.access_token and (args.login_email or args.login_password):
+        parser.error("--access-token is mutually exclusive with --login-email/--login-password")
+    if bool(args.login_email) != bool(args.login_password):
+        parser.error("--login-email and --login-password must be provided together")
 
     limits = httpx.Limits(
         max_connections=args.concurrency, max_keepalive_connections=args.concurrency
@@ -203,6 +268,19 @@ async def main_async() -> int:
         if args.flow_json:
             flow_steps = json.loads(args.flow_json)
 
+        # Resolve auth token BEFORE the load loop starts so all worker tasks
+        # share a single JWT. CLI validation above guarantees the modes are
+        # mutually exclusive.
+        access_token: str | None = args.access_token
+        if args.login_email and args.login_password:
+            access_token = await _resolve_access_token(
+                client,
+                login_url=args.login_url,
+                email=args.login_email,
+                password=args.login_password,
+                tenant=args.tenant,
+            )
+
         async def worker() -> None:
             async with sem:
                 try:
@@ -214,6 +292,7 @@ async def main_async() -> int:
                                 tenant=args.tenant,
                                 flow_steps=flow_steps,
                                 worker_idx=idx,
+                                access_token=access_token,
                             )
                         )
                     else:
@@ -225,6 +304,7 @@ async def main_async() -> int:
                                 tenant=args.tenant,
                                 headers=headers_payload,
                                 json_body=body_payload,
+                                access_token=access_token,
                             )
                         )
                 except Exception as exc:  # noqa: BLE001
