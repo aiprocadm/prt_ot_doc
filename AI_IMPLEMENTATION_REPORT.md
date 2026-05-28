@@ -1,5 +1,121 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-29, Session 83 — iter-36 server_default parity audit: third lightweight audit, surfaces 52-col cohort across 40 tables)
+
+- **Дата:** 2026-05-29. Ветка `feat/audit-server-default-parity` от `a34d511` (current main). Sibling-PR [#608](https://github.com/aiprocadm/prt_ot_doc/pull/608) (iter-34 + iter-35 dual NOT-NULL FK closure — Session 82) open at session start; this PR is independent of it (uses different scripts/audit/ file).
+- **Агент:** Claude Opus 4.7 (1M context, local Win+Py3.13; explanatory style + Auto Mode + TDD skill).
+- **Задача:** «прими самое эффективное решение и продолжай» (после shipping #608 in Session 82). Session 82 left Next Step #8 as the only fully-unblocked technical target: a `server_default` parity audit to surface the cohort of `nullable=False, default=<literal>` model columns whose migrations lack a matching `server_default`. iter-32 fixed exactly one such case (`ppeissue.quantity` via `server_default="1"`); the audit's purpose is to find every other instance of the same gap.
+
+### Studied Documentation
+
+- Session 82 Next Step #8 — the audit-extension prompt. "Would catch the ppenorm.{quantity, interval_days} class and similar."
+- `scripts/audit/column_drift_lite.py` (iter-33 closed) — template for pure-AST migration scan + mixin awareness. Reused the architectural pattern (module-level helpers, `REPO_ROOT` discovery, `scan_*` API for testability).
+- `scripts/audit/version_column_drift.py` (Session 80 audit v3) — second template; in particular the helper-aware migration walking.
+- `backend/app/migrations/versions/20260528_iter32_business_drift_cohort.py:80-85` — the established server_default add pattern (iter-32's `ppeissue.quantity` fix).
+- `backend/app/models/models.py` — manual grep surfaced 138 candidate columns with `nullable=False + default=<X>` before audit-side filtering for in-scope defaults (literal/enum only, callables excluded).
+
+### Selected Plan Item
+
+- **Phase 0 tooling extension**, third lightweight audit (after `column_drift_lite` + `version_column_drift`). Class: audit-script authoring, identical category to iter-33's audit fix.
+- **Why selected:** the only Next-Steps item that's fully unblocked and doesn't need user input. #2 (mechanical iters) — exhausted by iter-34+35. #3 (concept resolution) needs user input. #4 (incident-family) needs enum-value decisions. #5 (branch cleanup) needs destructive-git permission grant. #6 (CI strategy) is decisional. #7 (FLOW seed) is non-blocking polish. So #8 it is.
+- **Cost:** ~210 prod LOC (audit script with verbose mode) + ~310 test LOC (16 pin tests covering scan + drift detection + real-codebase closed-loop).
+- **Cohort discovered:** 52 columns across 40 tables — substantial follow-up work for future iter-37+ cohorts.
+
+### Recent merged work since Session 82
+
+- (none — Session 82's PR [#608](https://github.com/aiprocadm/prt_ot_doc/pull/608) still open at session start; iter-36 is independent of it.)
+
+### Implemented Changes (this session)
+
+**Code (PR `feat/audit-server-default-parity`):**
+
+1. **`scripts/audit/server_default_parity.py`** (new, +210) — third lightweight audit. Three public functions:
+   - `scan_model_default_candidates(model_path)` — returns `{(table, col): {default_repr}}` for model columns with `nullable=False + default=<literal or enum attr>`. Uses **PEP 8 UPPER_CASE heuristic** to distinguish enum literals (`RecordStatus.DRAFT`) from callable references (`uuid.uuid4`, `date.today`) — both are `ast.Attribute` syntactically, so the audit accepts only when `attr_name[0].isupper()` (enum convention).
+   - `scan_migration_columns_with_defaults(migration_paths)` — returns `{table: {col: {has_server_default}}}` for all `sa.Column("col", ...)` in `op.create_table(...)` and `op.add_column(...)`. Tracks any migration with `server_default=...` as satisfying parity (latest write wins on the flag).
+   - `detect_drift(model_path, migration_paths)` — combines the two: a model candidate is "drift" iff the column appears in some migration BUT no migration has set `server_default`. Columns absent from migrations entirely are out of scope (that's `column_drift_lite`'s domain).
+   - `run()` — convenience for real-repo scan (REPO_ROOT-relative paths).
+   - `main()` — CLI with `--verbose` flag for per-table breakdown.
+
+2. **`backend/tests/test_audit_server_default_parity.py`** (new, +310) — 16 pure-AST pin tests:
+   - 7 model-scan tests: int literal default / string literal default / enum-attribute default / callable default excluded / nullable=True excluded / no-default excluded / default tablename inference (no `__tablename__`).
+   - 3 migration-scan tests: `create_table` with server_default / without / `add_column` with server_default.
+   - 3 integrated drift tests: drift detected when migration lacks server_default / no drift when present / no drift when column absent.
+   - 3 real-codebase smoke tests (closed-loop verification): `ppenorm.quantity` flagged + `ppenorm.interval_days` flagged + `ppeissue.quantity` NOT flagged (iter-32's fix).
+
+**Doc (this PR — Session 83 sync):**
+
+3. New `## Last Agent Handoff (2026-05-29, Session 83 ...)` block prepended (this entry).
+
+### Changed / New Files
+
+- `scripts/audit/server_default_parity.py` — +210 new.
+- `backend/tests/test_audit_server_default_parity.py` — +310 new.
+- `AI_IMPLEMENTATION_REPORT.md` — +~80 / 0 (this handoff).
+
+### Decisions
+
+- **New script, not extension of `column_drift_lite`.** Could have extended `column_drift_lite.py` with a new section. Rejected: different defect class (parity vs presence) warrants different output schema and different "what to fix" semantics. Co-locating would muddy the single-responsibility of each audit. Three-script regime is intentional — each answers one question.
+- **Heuristic for enum-vs-callable: PEP 8 UPPER_CASE.** `ast.Attribute` is syntactically ambiguous between `RecordStatus.DRAFT` (enum literal, in scope) and `uuid.uuid4` (callable, out of scope). Solutions considered: (a) hardcoded denylist of callable names; (b) hardcoded allowlist of enum classes; (c) PEP 8 case convention. Chose (c): zero maintenance, follows Python community standard, the codebase strictly observes PEP 8 enum casing (verified: 138 model candidates' enum attrs are all UPPER_CASE, all callable attrs are lower_case). Failure mode: an unusually-named enum like `Status.value` would be misclassified — but no such pattern exists in this codebase.
+- **Columns absent from migrations are out of scope.** Could report them too. Rejected: `column_drift_lite` already does, and merging the report types would conflict-handle two unrelated defect classes. Audit explicitly skips them and the test `test_detect_no_drift_when_column_absent_from_migration` pins this.
+- **Did NOT also fix the 52 cohort in this PR.** Could batch a cohort closure into iter-36 alongside the audit. Rejected: (a) 52 cols is too large for one mechanical PR; (b) needs design slice (which cols are mechanically safe vs which involve semantic decisions — e.g., enum-default migrations need `server_default=sa.text("'value'")` or similar); (c) Session 82 demonstrated value of audit-then-fix pattern (iter-33 audit → iter-34/35 fix). Filed as Next Step #2.
+- **TDD synthetic tmp_path fixtures over real-file tests.** Could have written tests against `models.py` directly. Rejected: real-file tests would drift as models evolve; synthetic tests precisely pin the AST detection logic. Three real-codebase tests added as smoke probes for the closed-loop assertion (known ppenorm cases + known iter-32 fix).
+
+### Issues Fixed
+
+- **No-fix iter** — audit-only. Closure: surfaces a 52-col / 40-table cohort that previous sessions couldn't enumerate without `app.*` imports (heavyweight audit still hangs on Win+Py3.13). Unlocks iter-37+ cohort closures.
+- **Closed-loop verification on known cases**: `ppenorm.{quantity, interval_days}` flagged (matches Session 82's hand-noted examples), `ppeissue.quantity` NOT flagged (iter-32's fix is honored).
+
+### Known Problems / Risks
+
+- **52-col cohort still open.** No closure shipped this iter. Future iter-37+ work needs scoping: separate by mechanical-safe (int/str literals → trivial `server_default`) vs enum-default (need PG enum-cast in `sa.text`) vs questionable (e.g., is `status='draft'` what we actually want at DB level when the model uses an enum?). My quick scan of the 52: ~30 enum literals, ~15 int/bool literals, ~7 string literals (some questionable like `'unknown'` for `auditlog.ip`).
+- **Heuristic edge case: enum classes named non-PEP 8.** If a future contributor defines `class status(str, enum.Enum): draft = "draft"` (lowercase enum members), the audit would skip those defaults. Mitigation: any such introduction would also fail PEP 8 linters; if/when discovered, switch to an explicit denylist or allowlist.
+- **Heavyweight audit still hangs.** Unchanged from Sessions 80-82.
+- **CI still off** (PR #598). Unchanged.
+- **iter-30/31 remote branches still persist.** Unchanged.
+- **PR #608 not yet merged** at session end — when both this PR and #608 merge, AI_IMPLEMENTATION_REPORT.md will need a trivial top-of-file merge (both prepend at line 3). Either ordering resolves cleanly.
+
+### Validation
+
+- `py -3 -m py_compile scripts/audit/server_default_parity.py backend/tests/test_audit_server_default_parity.py` → OK.
+- `py -3 -m pytest backend/tests/test_audit_server_default_parity.py -v` → **16/16 pass** in 3.21s (post-heuristic-fix; saw 16/16 RED before writing the audit, 15/16 GREEN after first pass, 1 fail on callable-exclusion → refined heuristic → 16/16 GREEN. TDD red→green→refactor cycle clean).
+- `py -3 -m pytest backend/tests/test_audit_server_default_parity.py backend/tests/test_audit_column_drift_lite.py backend/tests/test_audit_version_column_drift.py backend/tests/test_iter32_business_drift_cohort.py backend/tests/test_iter29_version_retrofit.py -v` → **105/105 pass** in 23.60s. No regression in any audit-related suite.
+- `py -3 scripts/audit/server_default_parity.py` → **52 cols / 40 tables**. Includes `ppenorm.{quantity, interval_days}` (known) + `ppeitem.{category, default_wear_days}` + many enum-default columns (`approval_instances.status`, `incident.{severity, status}`, etc.).
+- `py -3 scripts/audit/column_drift_lite.py` → unchanged (8 business-drift on this branch since iter-34+35 not merged yet; will be 6 after #608 merges).
+- `py -3 scripts/audit/version_column_drift.py` → unchanged (0 drift, 2 critical).
+- **Not validated:** full backend test suite (Win+Py3.13 collect hang). Adjacent isolated suites + py_compile cover the scope.
+
+### Next Steps
+
+**Operational:**
+
+1. Review iter-36 PR (audit script + 16 tests). Merge if approved.
+2. Merge PR [#608](https://github.com/aiprocadm/prt_ot_doc/pull/608) if not already done (Session 82's iter-34+35 cohort).
+
+**Technical (next session — primary):**
+
+3. **iter-37 cohort closure (server_default parity).** Run the new audit, slice the 52-col cohort by safety class:
+   - **Safe-subset A**: int/bool/None literals (~20 cols) — straightforward `server_default="<int>"` adds.
+   - **Safe-subset B**: short string literals (~7 cols) — `server_default="<str>"`.
+   - **Subset C**: enum defaults (~25 cols) — needs PG-vs-SQLite consideration; on PG use `server_default=sa.text("'draft'::status_enum")` or similar. Possibly defer until known SQLite behavior on enums verified.
+   - Bundle Subset A + B as a iter-37 safe-subset (mirror iter-32 pattern).
+
+**Technical (next session — secondary):**
+
+4. **Concept resolution / incident design / cleanup / CI** — unchanged from Session 82 Next Steps #3-#7.
+
+**Стартовая команда для следующей сессии:**
+
+```bash
+git checkout main && git pull
+gh pr list --state open --limit 10
+py -3 scripts/audit/server_default_parity.py --verbose | head -80
+# Then pick iter-37 subset A+B or move to concept-resolution work.
+```
+
+**Branch suggestion для следующей сессии:** `fix/iter-37-server-default-cohort-subset-AB` (safe int/str closures), `chore/cleanup-abandoned-iter30-31-branches` (если cleanup), `design/incident-family-pass-1` (если incident).
+
+---
+
 ## Last Agent Handoff (2026-05-29, Session 81 — iter-33 audit name-override resolution: false-positive Company drift removed)
 
 - **Дата:** 2026-05-29 (after PR [#605](https://github.com/aiprocadm/prt_ot_doc/pull/605) merge `13442e2` — local-evidence policy + RB-002/003/005 closure landed in main). Ветка `fix/iter-33-audit-name-override-resolution` от `13442e2`. Параллельных open-PR на старте session ноль.
