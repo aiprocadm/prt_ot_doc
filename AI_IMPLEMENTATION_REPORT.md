@@ -1,5 +1,133 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-29, Session 84 — iter-37 server_default cohort closure: Subset A+B (19 cols) + audit alter_column extension)
+
+- **Дата:** 2026-05-29. Ветка `fix/iter-37-server-default-cohort-subset-AB` от `6ec940d` (head of `feat/audit-server-default-parity`, which is the iter-36 PR branch — Session 83's work, not merged to main yet). Stacked on top of iter-36 because iter-37 needs the audit script delivered in iter-36 to verify closed-loop. Sibling open PRs at session start: [#608](https://github.com/aiprocadm/prt_ot_doc/pull/608) (iter-34+35 dual NOT-NULL FK) and the iter-36 PR.
+- **Агент:** Claude Opus 4.7 (1M context, local Win+Py3.13; explanatory style + Auto Mode + TDD skill).
+- **Задача:** «продолжай по тз» — Session 83 handoff Next Step #3 (iter-37 cohort closure for server_default parity Subset A + B, mirroring iter-32's `ppeissue.quantity` pattern). Per the established `[[prodolzhay-po-tz-workflow]]` pattern: skip operational items #1-2 (review/merge), take first technical item.
+
+### Studied Documentation
+
+- Session 83 handoff Next Step #3 — the safety-class slicing: Subset A (int/bool/None, ~20), Subset B (string, ~7), Subset C (enum, ~25 — defer).
+- `scripts/audit/server_default_parity.py` — the iter-36 audit. **Critical gap discovered:** `scan_migration_columns_with_defaults` only recognized `op.create_table(..., sa.Column(...))` and `op.add_column(...)` forms — NOT `op.alter_column(..., server_default=X)`. Since iter-37's cohort columns already exist in the schema (the audit's whole point), `op.alter_column` is the only correct primitive. Without audit extension, closed-loop verification would have falsely re-flagged the cohort.
+- `backend/app/migrations/versions/20260528_iter32_business_drift_cohort.py:80-85` — the established `add_column + server_default` pattern (iter-32's single-col fix). iter-37 reuses the spirit but with `alter_column` form.
+- Repo `server_default` convention scan: Boolean uses `sa.true()` / `sa.false()` (e.g. `20250430_client_portal_packages_mvp.py:50`), Integer uses plain string `"<n>"` (iter-32), String uses plain string `"<val>"` (e.g. `20250325_outbox_outbound_traffic.py:34`). Downgrades use `op.alter_column(table, col, server_default=None)` (e.g. `20250218_ot_hazards_workplaces.py:62-64`).
+- `backend/app/models/models.py` — confirmed exact type / nullable for each of the 20 audit-flagged candidates; deferred `tenant.kind` (audit-flagged as string literal `'customer'` but column type is `Enum("customer", "branch", "contractor", name="tenantkind")` — PG enum needs `::tenantkind` cast).
+
+### Selected Plan Item
+
+- **iter-37 cohort closure**, Subset A + B = 19 columns across 15 tables. Final breakdown:
+  - **A.int** (7 cols): `document_pack_item.order`, `pack_runs.{selected_rows_count, source_rows_count}`, `ppeitem.default_wear_days`, `ppenorm.{interval_days, quantity}`, `warehouseppe.quantity`.
+  - **A.bool** (8 cols): `api_key.is_active`, `document_pack.is_active`, `document_pack_item.required`, `package_preset_items.is_required`, `tenant.is_active`, `training_plan.is_mandatory`, `user.is_active`, `webhook_subscription.enabled`.
+  - **B.str** (4 cols): `api_key.scopes='api:read'`, `auditlog.ip='unknown'`, `edo_webhook_inbox.status='received'`, `securityauditlog.ip='unknown'`.
+- **Why selected:** the prime technical Next Step from Session 83 — fully unblocked, established pattern (iter-32 + new audit), mechanical safety class with no design decisions needed. `tenant.kind` was the only audit-flagged item I deferred to Subset C (PG enum type ambiguity).
+- **Cost:** ~270 prod LOC (migration with 19 upgrade + 19 downgrade alter_column pairs) + ~225 test LOC (8 structural tests + 4 parametrized × 19 cohort = 76 + 2 closed-loop) + audit script extension (~30 LOC) + audit test extension (~65 LOC for 3 new tests).
+- **Closed loop:** server_default parity audit drift dropped from **52 → 33 cols / 40 → 29 tables**.
+
+### Recent merged work since Session 83
+
+- (none — both Session 82's PR #608 and Session 83's iter-36 PR still open at session start; iter-37 is stacked on iter-36's branch.)
+
+### Implemented Changes (this session)
+
+**Code (PR `fix/iter-37-server-default-cohort-subset-AB`):**
+
+1. **`scripts/audit/server_default_parity.py`** (+34 / -0) — new `_alter_column_target(call)` helper recognizes `op.alter_column("table", "col", server_default=X)`. Credits parity only when `server_default=` kwarg is present and not `None`. The `None` form (canonical downgrade) is deliberately NOT credited so downgrade migrations don't fool the audit. Plugged into `scan_migration_columns_with_defaults` as a third branch after create_table / add_column.
+
+2. **`backend/app/migrations/versions/20260529_iter37_server_default_cohort_ab.py`** (+302 new) — 19 upgrade `op.alter_column` calls + 19 inverse-order downgrade `op.alter_column(server_default=None)` calls. revision `20260529_iter37_server_default_ab`, down_revision `20260528_iter32_business_drift`. Each upgrade carries `existing_type=` (sa.Integer / sa.Boolean / sa.String(length=N)) + `existing_nullable=False` for PG-correctness.
+
+3. **`backend/tests/test_iter37_server_default_cohort.py`** (+225 new) — 8 structural tests + 4 × 19 parametrized = 76 cohort tests + 2 closed-loop audit-integration tests:
+   - revision chain pin, cohort size = 19 pin, no create_table/add_column in upgrade.
+   - Per-col: alter_column present + existing_type carries SA type name + existing_nullable=False + server_default source matches expected (uses `ast.unparse` semantics for rigor).
+   - Downgrade symmetry: every upgrade alter_column has matching `server_default=None` downgrade.
+   - Closed-loop: `audit.run()` does NOT flag the 19 cols, but DOES still flag a sample of deferred Subset C cols (`incident.{severity, status}`, `permit.status`, `tenant.kind`) as model-scan regression guard.
+
+4. **`backend/tests/test_audit_server_default_parity.py`** (+65 / -16) — 3 new tests for alter_column recognition: positive (credits when kwarg present + non-None), negative-no-kwarg (no credit when alter_column without server_default kwarg — comment-only changes), negative-None-value (server_default=None canonical downgrade does NOT credit). Flipped 2 of the 3 existing real-codebase closed-loop probes: `ppenorm.quantity` and `ppenorm.interval_days` are now NOT-flagged (iter-37 fix landed) — mirror of how iter-32 made `ppeissue.quantity` flip in iter-36's test. `ppeissue.quantity` NOT-flagged probe unchanged.
+
+**Doc (this PR — Session 84 sync):**
+
+5. New `## Last Agent Handoff (2026-05-29, Session 84 ...)` block prepended (this entry).
+
+### Changed / New Files
+
+- `scripts/audit/server_default_parity.py` — +34 / 0 (alter_column branch + helper).
+- `backend/app/migrations/versions/20260529_iter37_server_default_cohort_ab.py` — +302 new.
+- `backend/tests/test_iter37_server_default_cohort.py` — +225 new.
+- `backend/tests/test_audit_server_default_parity.py` — +65 / -16 (3 new tests, 2 flipped probes).
+- `AI_IMPLEMENTATION_REPORT.md` — +~110 / 0 (this handoff).
+
+### Decisions
+
+- **Use `op.alter_column` not `op.add_column`.** All 19 cohort columns already exist in the schema (that's why the audit found them — they have migration columns lacking server_default). `add_column` would fail in PG with "column already exists". `alter_column` with `server_default=X` is the canonical Alembic primitive for retrofitting a default.
+- **Extend audit in same PR as cohort closure.** Could ship the audit extension separately. Rejected: audit gap surfaces ONLY when first cohort closure via `alter_column` is attempted — they're discovered together, fixed together. Audit extension without cohort closure has no test exercising the new code path against a real migration. Bundling keeps the change atomic and reviewable.
+- **Defer `tenant.kind` to Subset C** despite passing the audit's literal-string heuristic. Reason: column type is `Enum("customer", "branch", "contractor", name="tenantkind")` — a named PG enum. `server_default="customer"` would work in SQLite (plain VARCHAR) but on PG needs `sa.text("'customer'::tenantkind")` cast and verification that SQLAlchemy's Boolean adapter handles the dialect difference. Grouping with the 32 enum-typed defaults for Subset C is the cleaner cohort boundary.
+- **`server_default="<n>"` for Integer, `sa.true()` for Boolean.** Repo convention scan (`20250430_client_portal_packages_mvp.py:50` and `20250325_outbox_outbound_traffic.py:34`) confirms these forms. Considered using `sa.text("<n>")` uniformly — rejected because the existing repo style is mixed and iter-32 already established `server_default="1"` for the parallel `ppeissue.quantity` case. Future enum-cohort work (Subset C) will likely need `sa.text(...)` for PG cast — different concern, different iter.
+- **Downgrade reverses upgrade ordering.** Subset B → A.bool → A.int reverse order (B first to drop). Tests pin only the matched `server_default=None` shape, not table-level ordering, so refactoring the order later is safe.
+- **TDD synthetic+real tests, no DB integration test.** Could write an in-memory SQLite + alembic upgrade/downgrade round-trip test. Rejected: (a) Win+Py3.13 conftest crash for full app boot; (b) the AST-pin form is sufficient to catch mechanical errors and is the established pattern in `test_iter32_business_drift_cohort.py`; (c) closed-loop audit run after migration confirms semantic correctness end-to-end. Adding a DB round-trip would 2-3× test runtime for minimal extra signal.
+- **`ast.unparse`-based assertions instead of regex.** Could match source text directly. Rejected: `ast.unparse` is stable across Python 3.9+ and gives `repr()`-style quoting that's unambiguous. Mid-session correction: my first cohort definition used `'"0"'` (double-quoted) for int defaults — `ast.unparse` returns `"'0'"` (single-quoted because it stores str Constant). Fixed without confusing root cause investigation thanks to clear pytest assertion diffs.
+
+### Issues Fixed
+
+- **server_default parity drift class — Subset A+B cohort closure.** 19 columns now have DB-side defaults matching their model `default=` declarations. Raw-SQL paths (perf-baseline `COPY`, restore-drill SQL dumps, manual ops fixes, alembic `op.execute("INSERT ...")`) on these tables will no longer hit `NOT NULL` on Postgres.
+- **Audit alter_column blind spot.** `server_default_parity.py` now recognizes the cohort-closure form. Future iters that retrofit `server_default` via `alter_column` will be credited correctly without needing per-iter audit re-work. Mirror of Session 79's audit-correctness fix (helper-detection) and Session 81's audit-correctness fix (name-override resolution) — third audit-side correctness pass.
+
+### Known Problems / Risks
+
+- **33 cols / 29 tables remain in drift** — primarily Subset C (enum-typed defaults). Each needs PG enum cast (`sa.text("'value'::enum_name")`) handling plus SQLite dialect verification. Of the 33:
+  - 32 are UPPER_CASE enum literals (e.g. `incident.severity = IncidentSeverity.MEDIUM`).
+  - 1 is `tenant.kind = 'customer'` (string literal default on `Enum("customer", "branch", "contractor", name="tenantkind")` column).
+- **Heavyweight audit still hangs.** Unchanged from Sessions 80-83. Lightweight audits are the only viable local tool.
+- **CI still off** (PR #598). Unchanged. Local-evidence policy applies.
+- **iter-30/31 abandoned remote branches still persist.** Unchanged.
+- **PR stacking:** iter-37 is on top of iter-36 (which is on top of main). Either merge order is fine, but if iter-36 is squashed first, iter-37 may need a trivial rebase. AI_IMPLEMENTATION_REPORT.md merges trivially in any order (both prepend at line 3).
+
+### Validation
+
+- `py -3 -m py_compile scripts/audit/server_default_parity.py backend/app/migrations/versions/20260529_iter37_server_default_cohort_ab.py backend/tests/test_iter37_server_default_cohort.py backend/tests/test_audit_server_default_parity.py` → OK.
+- `py -3 -m pytest backend/tests/test_iter37_server_default_cohort.py backend/tests/test_audit_server_default_parity.py backend/tests/test_audit_column_drift_lite.py backend/tests/test_audit_version_column_drift.py backend/tests/test_iter32_business_drift_cohort.py backend/tests/test_iter29_version_retrofit.py` → **190/190 pass** in 25.18s. No regression in any adjacent audit/migration suite.
+- TDD cycle log:
+  - RED: 82 failed / 19 passed (migration file absent → all iter-37 tests fail; 1 audit positive test fails; 18 audit tests + 1 iter-37 sanity test pass = regression guards working).
+  - GREEN-1 (audit extension): 19/19 audit tests pass.
+  - GREEN-2 (migration first attempt): 13 fail / 177 pass — 11 due to test-data quoting (`"0"` vs `'0'` from `ast.unparse`), 2 due to obsolete pre-fix closed-loop assertions on `ppenorm.{quantity, interval_days}`. Both correctness issues, NOT migration bugs.
+  - GREEN-final: 190/190 pass after test data fix + 2 closed-loop probe flips.
+- `py -3 scripts/audit/server_default_parity.py` → **33 cols / 29 tables** (was 52 / 40 pre-iter-37; precisely −19 −11 matching the 19 cohort closures across the 11 tables I altered, the remaining 4 tables had only Subset C cols).
+- `py -3 scripts/audit/column_drift_lite.py` → 111 versioned model classes scanned, unchanged (no regression).
+- `py -3 scripts/audit/version_column_drift.py` → 0 drift, 2 critical (unchanged from Session 81+).
+- **Not validated:** full backend test suite (Win+Py3.13 collect hang per `[[local-env-drift-windows]]`). Adjacent isolated suites + py_compile + closed-loop audit cover the scope.
+
+### Next Steps
+
+**Operational:**
+
+1. Review iter-37 PR (302 prod + 290 test + 34 audit extension LOC).
+2. Merge order suggestion: PR [#608](https://github.com/aiprocadm/prt_ot_doc/pull/608) (iter-34+35) → iter-36 audit PR → iter-37 cohort PR. Each is independent of the others code-wise; AI_IMPLEMENTATION_REPORT.md merges trivially in any order.
+
+**Technical (next session — primary):**
+
+3. **iter-38 — Subset C closure (32 enum-typed defaults + `tenant.kind`).** Bundle plan:
+   - Group by enum class: each `Enum(name="<enum_name>")` column needs `server_default=sa.text("'<value>'::<enum_name>")` on PG.
+   - SQLite dialect path: `Enum` without `name=` falls back to VARCHAR + CHECK constraint; `server_default="<value>"` should work.
+   - Need design decision: bundle all 33 in one iter (big, mechanical) vs slice by enum (smaller, easier review). Recommend single iter for mechanical clarity (each row is one alter_column).
+   - Should also handle `tenant.kind`'s `Enum("customer", "branch", "contractor", name="tenantkind")` form (positional strings, not Python enum class — needs same PG cast).
+
+**Technical (next session — secondary):**
+
+4. **Concept resolution / incident design / branch cleanup / CI / FLOW seed** — unchanged from Session 81/82/83 Next Steps. iter-38 + Subset C closure would close the entire server_default parity defect class (audit drift → 0).
+
+**Стартовая команда для следующей сессии:**
+
+```bash
+git checkout main && git pull
+gh pr list --state open --limit 10
+py -3 scripts/audit/server_default_parity.py --verbose | head -80
+# Expect 33 cols if iter-37 merged, 52 if not — check before scoping.
+# Then design iter-38 Subset C closure: by-enum-group vs single-cohort decision.
+```
+
+**Branch suggestion для следующей сессии:** `fix/iter-38-server-default-cohort-subset-C` (Subset C enum closure), `chore/cleanup-abandoned-iter30-31-branches` (если cleanup), `design/incident-family-pass-1` (если incident).
+
+---
+
 ## Last Agent Handoff (2026-05-29, Session 83 — iter-36 server_default parity audit: third lightweight audit, surfaces 52-col cohort across 40 tables)
 
 - **Дата:** 2026-05-29. Ветка `feat/audit-server-default-parity` от `a34d511` (current main). Sibling-PR [#608](https://github.com/aiprocadm/prt_ot_doc/pull/608) (iter-34 + iter-35 dual NOT-NULL FK closure — Session 82) open at session start; this PR is independent of it (uses different scripts/audit/ file).

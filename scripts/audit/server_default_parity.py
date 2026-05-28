@@ -159,6 +159,37 @@ def _add_column_target(call: ast.Call) -> tuple[str | None, ast.Call | None]:
     return call.args[0].value, call.args[1]
 
 
+def _alter_column_target(call: ast.Call) -> tuple[str | None, str | None, bool]:
+    """Return ``(table, column, credits_server_default)`` for ``op.alter_column``.
+
+    ``credits_server_default`` is True only when the call passes a non-None
+    ``server_default=`` kwarg — that's the iter-37 cohort-closure form for
+    columns that already exist in the schema and gain a DB-side default.
+
+    The ``server_default=None`` form (canonical downgrade — removes the
+    default) returns ``credits_server_default=False`` so it doesn't fool
+    the audit into thinking parity is satisfied.
+    """
+    if not isinstance(call.func, ast.Attribute) or call.func.attr != "alter_column":
+        return None, None, False
+    if len(call.args) < 2:
+        return None, None, False
+    if not isinstance(call.args[0], ast.Constant) or not isinstance(call.args[0].value, str):
+        return None, None, False
+    if not isinstance(call.args[1], ast.Constant) or not isinstance(call.args[1].value, str):
+        return None, None, False
+    credits = False
+    for kw in call.keywords:
+        if kw.arg == "server_default":
+            # `server_default=None` is the downgrade form — does NOT credit parity.
+            if isinstance(kw.value, ast.Constant) and kw.value.value is None:
+                credits = False
+            else:
+                credits = True
+            break
+    return call.args[0].value, call.args[1].value, credits
+
+
 def scan_migration_columns_with_defaults(
     migration_paths: list[Path],
 ) -> dict[str, dict[str, dict[str, bool]]]:
@@ -210,6 +241,12 @@ def scan_migration_columns_with_defaults(
                     cur["has_server_default"] = True
                 else:
                     cur.setdefault("has_server_default", False)
+                continue
+
+            # alter_column form (iter-37 cohort-closure pattern)
+            alt_tbl, alt_col, credits = _alter_column_target(node)
+            if alt_tbl is not None and alt_col is not None and credits:
+                out[alt_tbl][alt_col]["has_server_default"] = True
 
     # Convert defaultdicts to plain dicts for cleaner test asserts.
     return {tbl: dict(cols) for tbl, cols in out.items()}

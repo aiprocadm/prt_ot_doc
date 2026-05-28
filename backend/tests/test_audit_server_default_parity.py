@@ -262,6 +262,99 @@ def upgrade():
     assert info["foo"]["quantity"]["has_server_default"] is True
 
 
+def test_scan_migration_alter_column_with_server_default(tmp_path: Path) -> None:
+    """op.alter_column(table, col, server_default=X) credits parity.
+
+    This is iter-37's pattern: cohort closure for columns that already
+    exist in the schema but lack a DB-side default. Without this
+    recognition, the audit would report iter-37'd columns as still
+    drifting — closed-loop verification would break.
+    """
+    audit = _load_audit()
+    src = tmp_path / "mig.py"
+    src.write_text(
+        """
+import sqlalchemy as sa
+from alembic import op
+
+def upgrade():
+    op.alter_column(
+        'foo',
+        'quantity',
+        existing_type=sa.Integer(),
+        existing_nullable=False,
+        server_default="1",
+    )
+""",
+        encoding="utf-8",
+    )
+    info = audit.scan_migration_columns_with_defaults([src])
+    assert info["foo"]["quantity"]["has_server_default"] is True
+
+
+def test_scan_migration_alter_column_without_server_default(tmp_path: Path) -> None:
+    """op.alter_column without server_default= keyword does NOT credit parity.
+
+    Catches the case where a downgrade resets server_default=None — the
+    audit must not be fooled into thinking that satisfies parity.
+    """
+    audit = _load_audit()
+    src = tmp_path / "mig.py"
+    # First migration creates the column without server_default.
+    src.write_text(
+        """
+import sqlalchemy as sa
+from alembic import op
+
+def upgrade():
+    op.create_table('foo',
+        sa.Column('quantity', sa.Integer(), nullable=False),
+    )
+    op.alter_column(
+        'foo',
+        'quantity',
+        existing_type=sa.Integer(),
+        existing_nullable=False,
+        comment='no default reset here',
+    )
+""",
+        encoding="utf-8",
+    )
+    info = audit.scan_migration_columns_with_defaults([src])
+    assert info["foo"]["quantity"]["has_server_default"] is False
+
+
+def test_scan_migration_alter_column_server_default_none_does_not_credit(tmp_path: Path) -> None:
+    """op.alter_column(..., server_default=None) is the canonical downgrade
+    form (removes the default). It must NOT credit parity.
+    """
+    audit = _load_audit()
+    src = tmp_path / "mig.py"
+    src.write_text(
+        """
+import sqlalchemy as sa
+from alembic import op
+
+def upgrade():
+    op.create_table('foo',
+        sa.Column('quantity', sa.Integer(), nullable=False),
+    )
+
+def downgrade():
+    op.alter_column(
+        'foo',
+        'quantity',
+        existing_type=sa.Integer(),
+        existing_nullable=False,
+        server_default=None,
+    )
+""",
+        encoding="utf-8",
+    )
+    info = audit.scan_migration_columns_with_defaults([src])
+    assert info["foo"]["quantity"]["has_server_default"] is False
+
+
 # ---------------------------------------------------------------------------
 # Integrated drift detection
 # ---------------------------------------------------------------------------
@@ -373,26 +466,31 @@ def upgrade():
 # ---------------------------------------------------------------------------
 
 
-def test_real_codebase_ppenorm_quantity_flagged() -> None:
-    """Known instance: models.py:1291 PPENorm.quantity default=1, initial
-    migration line 623 sa.Column('quantity', sa.Integer(), nullable=False)
-    without server_default → must be flagged.
+def test_real_codebase_ppenorm_quantity_NOT_flagged() -> None:
+    """iter-37 added server_default='1' for ppenorm.quantity (via alter_column).
+
+    The original test asserted IN-drift before iter-37 shipped (the Session 83
+    closed-loop probe for iter-36's cohort discovery). After iter-37 closes
+    Subset A.int, this column flips to NOT-drift — mirrors the
+    ``ppeissue.quantity`` flip after iter-32.
     """
     audit = _load_audit()
     drift = audit.run()
-    assert ("ppenorm", "quantity") in drift, (
-        f"ppenorm.quantity (known drift) should be flagged; got {sorted(drift)[:5]}..."
+    assert ("ppenorm", "quantity") not in drift, (
+        "ppenorm.quantity has iter-37's server_default — should NOT be in drift"
     )
 
 
-def test_real_codebase_ppenorm_interval_days_flagged() -> None:
-    """Known instance: models.py:1292 PPENorm.interval_days default=365,
-    initial migration line 624 nullable=False no server_default.
+def test_real_codebase_ppenorm_interval_days_NOT_flagged() -> None:
+    """iter-37 added server_default='365' for ppenorm.interval_days.
+
+    Sibling closed-loop verification for ``ppenorm.quantity``: Subset A.int
+    cohort closure in iter-37 covers both PPENorm Integer defaults.
     """
     audit = _load_audit()
     drift = audit.run()
-    assert ("ppenorm", "interval_days") in drift, (
-        f"ppenorm.interval_days (known drift) should be flagged; got {sorted(drift)[:5]}..."
+    assert ("ppenorm", "interval_days") not in drift, (
+        "ppenorm.interval_days has iter-37's server_default — should NOT be in drift"
     )
 
 
