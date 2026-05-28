@@ -1,5 +1,142 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-28, Session 77 — iter-29 RB-002s mixin-retrofit cohort: `version` column on 8 approval/EDO tables)
+
+- **Дата:** 2026-05-28 (после `chore: disable GitHub Actions` PR #598 — CI now off, см. [[ci-disabled-actions-off]]). Ветка `fix/iter-29-version-retrofit-mixin-cohort` от свежего main `7921d5b` (PR #598 merge). Параллельных open-PR на момент start session ноль.
+- **Агент:** Claude Opus 4.7 (1M context, local Windows + py 3.13; **explanatory style + Auto Mode**). Memory'инka «pytest hangs на Win+Py3.13» оказалась специфичной для full conftest init — изолированные tests с light imports (`app.models.*` без `app.main`) работают за <5s.
+- **Задача:** «продолжай по ТЗ» — Session 76 handoff Next Steps. Items #3-4 (Monitor CI, RB-003 dispatch) dead из-за CI-disable. Взят **item #5: iter-29 mixin-retrofit mega-cohort** — Session 74 описал как «Самый механический drift class».
+
+### Studied Documentation
+
+- Session 76 (iter-28) handoff Next Steps — items #3-4 invalidated by [[ci-disabled-actions-off]], item #5 = iter-29.
+- `[[mvp-release-blockers]]`, `[[rb002-enum-migration-cohort]]`, `[[orm-migration-drift-classes]]`, `[[alembic-heads-lesson]]`, `[[local-env-drift-windows]]`.
+- `backend/app/models/base.py:37-43` — `VersionedMixin` declares `version: Mapped[int]` *and* sets `__mapper_args__["version_id_col"] = cls.version` (это активирует SA optimistic concurrency control).
+- `backend/app/models/base.py:51` — `TenantBaseModel(TenantBase, TimestampMixin, VersionedMixin, UUIDMixin)` — every tenant-scoped model inherits `version` column automatically.
+- `scripts/audit/check_orm_migration_drift.py:402-411` — `_MIXIN_COLUMNS` frozenset including `"version"` — classification logic для severity=mixin.
+- Existing audit script слишком тяжёлая для Win+Py3.13 (heavy `app.db.base.ALEMBIC_METADATA` chain). **Написан minimal-аудитор:** `scripts/audit/version_column_drift.py` — pure AST analysis без app imports.
+- Audit output:
+  - **8 tables** missing `version` only — mixin retrofit (этот iter).
+  - **21 tables** absent entirely from migrations — `critical` class (отдельные iters, см. Known Problems).
+  - Original session 74 prediction "~45 tables" overstated — реальное число after iter-25/26 closure = 8.
+- `backend/app/migrations/versions/20260303_next30_approval_signing_core.py:47-141` — creates 5 of the 8 tables; the migration's author omitted `version` for ALL 5 of these but DID add it for sibling tables in a later migration (next57), confirming это omission, не intentional opt-out.
+- `backend/app/migrations/versions/20260330_next57_approval_sign_edo_orchestration.py:41,62,70-90,92-107,109-124` — creates remaining 3 tables (approval_instance_steps, edo_status_events, edo_webhook_inbox) — но adds `version` для approval_route_steps (line 41) и approval_instances (line 62). Asymmetry → drift.
+
+### Selected Plan Item
+
+- **Фаза:** Phase 0 release-blocker chase (P0) — proactive cohort closure для drift class. New class RB-002s (mixin-retrofit `version` column на 8 таблицах).
+- **Приоритет:** P0 — каждый ORM UPDATE на одной из 8 таблиц падает с `UndefinedColumnError` на Postgres (SA посылает `WHERE version = <old> RETURNING version` через optimistic-locking machinery). SQLite tolerant → e2e-smoke падает только на restore-drill / perf-baseline / prod.
+- **Почему выбрана:** Альтернативы:
+  - **#3-4 CI dispatch:** dead (no workflows).
+  - **iter-30 incident-family** (RB-002t): blocked на parent `incident` business-drift (7 missing cols incl. enum types) — 3-4 iter design pass.
+  - **iter-17 backend-tests drift:** ~50/7/8/4 fails — не release-blocker, но grindable.
+  - **iter-29 mixin retrofit:** trivial mechanics (1 migration file with `for table in _TABLES: op.add_column(table, sa.Column("version", ...))`), no enum / FK / index design. Highest signal-to-effort ratio.
+
+### Recent merged work since Session 76 (chronological)
+
+| PR | Date (UTC) | Iter | Scope | Class |
+|---|---|---|---|---|
+| [#596](https://github.com/aiprocadm/prt_ot_doc/pull/596) | 2026-05-28 | iter-27 | RB-002 perf-auth — global Bearer token в `scripts/perf/api_load.py` | scripts / auth |
+| [#597](https://github.com/aiprocadm/prt_ot_doc/pull/597) | 2026-05-28 | iter-28 | RB-005 — `UserRole.code` attribute typo в `workflow/api.py` (5 sites + helper) | backend bugfix |
+| [#598](https://github.com/aiprocadm/prt_ot_doc/pull/598) | 2026-05-28 | (none) | `chore(ci)`: disable all 5 GitHub Actions workflows (.yml → .yml.disabled) | infra |
+
+### Implemented Changes (this session)
+
+**Code (this PR — iter-29 RB-002s):**
+
+1. **`backend/app/migrations/versions/20260528_iter29_version_retrofit_approval_edo.py`** (new, +90) — single-loop migration adding `version Integer NOT NULL DEFAULT 1` to 8 tables. `_TABLES: tuple[str, ...]` — single source of truth для upgrade/downgrade symmetry. `down_revision = "20260527_iter26_inspection_result"` (iter-27/28 были app-code only, head не двигался). Downgrade reverses в обратном порядке.
+2. **`backend/tests/test_iter29_version_retrofit.py`** (new, +192) — 29 pin tests:
+   - 8× parametric: each model exposes `version` column (`ORM-side guard`).
+   - 8× parametric: `version` is `Integer NOT NULL` with `python_type is int`.
+   - 8× parametric: mapper's `version_id_col` correctly bound to `version` column — guards against subtle regression where column stays but optimistic-locking machinery breaks.
+   - 1× contract: `TenantBaseModel` still inherits `VersionedMixin` — entire iter-29 cohort assumes this.
+   - 1× migration head: `revision`/`down_revision` shape matches.
+   - 1× cohort-set: migration's `_TABLES` matches test cohort (symmetric drift guard — adding a new table requires touching BOTH files).
+   - 1× scope-guard (AST-scoped к upgrade fn): exactly 1 distinct Column literal in upgrade body == `"version"`, 0 `create_table` calls.
+   - 1× upgrade/downgrade symmetry: tuple length == 8.
+
+**Tooling (this PR):**
+
+3. **`scripts/audit/version_column_drift.py`** (new, +192) — minimal AST audit без heavy app imports. Bypasses Win+Py3.13 hang в основном `check_orm_migration_drift.py`. Возвращает 2 lists: drift (model has version, migration doesn't) + critical (table absent entirely). Reusable для future iters.
+
+**Doc (this PR — Session 77 sync):**
+
+4. New `## Last Agent Handoff (2026-05-28, Session 77 ...)` block prepended (this entry).
+
+### Changed / New Files
+
+- `backend/app/migrations/versions/20260528_iter29_version_retrofit_approval_edo.py` — +90 new.
+- `backend/tests/test_iter29_version_retrofit.py` — +192 new.
+- `scripts/audit/version_column_drift.py` — +192 new.
+- `AI_IMPLEMENTATION_REPORT.md` — +~110 / 0 (this handoff).
+
+### Decisions
+
+- **Single-loop migration vs 8 explicit `add_column` lines.** Loop = single source of truth (`_TABLES` tuple); 8 explicit lines = grep-friendly. Выбран loop потому что: (a) shorter, (b) добавить 9-ю table = 1 line change vs paired add_column+drop_column in both upgrade/downgrade, (c) symmetry-guard pin test catches drift between upgrade and downgrade. Trade-off: slightly harder для casual grep — mitigated тем что табличный список явно перечислен в `_TABLES`.
+- **`server_default="1"` permanent vs drop after backfill.** Существующий precedent в `20260330_next57...` (для approval_route_steps + approval_instances) — keep permanent. Matches convention. Также защищает от raw-SQL INSERTs which bypass ORM `default=1`.
+- **Parametric tests via pytest.mark.parametrize.** 24 параметрических test functions vs 8× custom-named (e.g. `test_approval_process_has_version`). Parametrize выигрывает: (a) DRY, (b) easy add/remove table = 1 tuple line, (c) pytest output показывает per-table verdict без code duplication.
+- **`version_id_col` pin test critical.** Explicit guard потому что: `VersionedMixin` уже не первый раз эволюционирует. Если кто-то откатит `__mapper_args__` setter но keep column declaration, optimistic-locking silently отключается — каждый UPDATE становится lost-update race на concurrent writes. Pin test ловит это явно.
+- **Audit script написан с нуля, не fixed существующий.** `check_orm_migration_drift.py` имеет heavy app-import path (требует `app.db.base.ALEMBIC_METADATA`) — full FastAPI app + celery + redis bootstrap. На Win+Py3.13 это hangs. New script использует pure AST — runs instantly. Existing скрипт остаётся authoritative для CI (когда CI вернётся), new script — local quick-check.
+- **Cohort решение: 8 in single iter.** В отличие от iter-19 (где cohort = 5 enum-types of same flavor), здесь cohort = 8 tables sharing identical fix pattern. No design variation per table. Bundling = correct cohort principle ([[rb002-enum-migration-cohort]]) — shared anti-pattern + shared mechanical fix + shared pin-test template.
+- **Скоupe: 8 only, не "fix all 21 critical tables too".** Critical-class drift (table absent entirely) требует individual enum / FK / index design per table — это flavor (a). iter-29 = flavor (b) только. Separation of concerns.
+
+### Issues Fixed
+
+- **RB-002s mixin-retrofit cohort (NEW class)** — 8 ORM models that inherit `TenantBaseModel→VersionedMixin` but whose creator migration omitted the `version` column. Each table affected:
+  - `approval_processes`, `approval_tasks`, `approval_decision_logs`, `signature_requests`, `edo_envelopes` (originating `20260303_next30_approval_signing_core.py`).
+  - `approval_instance_steps`, `edo_status_events`, `edo_webhook_inbox` (originating `20260330_next57_approval_sign_edo_orchestration.py`).
+- **Diagnostic infrastructure** — new local audit script `version_column_drift.py` для quick mixin-retrofit drift scan без heavy app-imports.
+
+### Known Problems / Risks
+
+- **21 critical-class tables still flagged by new audit.** Сюда входят: incident-family (`incident_log`, `incident_person`), training-family round 2 (10 more `training_*` tables НЕ покрытых iter-25), `briefing_*` cohort (4 tables), `compliance_deadlines`, `calendar_events`, `external_registry_jobs`, `offline_*` (2), `external_registry_jobs`. Каждая требует full table-creation migration с per-table FK / enum / index design — НЕ flavor (b). Отдельные iters.
+- **iter-29 не запущена против реального Postgres локально.** Local Postgres absent. Migration tested через AST + ORM inspection. Validation gate — manual `alembic upgrade head` против PG OR future replacement CI per [[ci-disabled-actions-off]].
+- **CI off → no automated regression.** Любой future PR который случайно сломает iter-29 contract будет caught только если кто-то локально запустит этот pin test. Memory'инka [[ci-disabled-actions-off]] applies — local pytest = source of truth.
+- **`approval_route_steps` / `approval_instances` уже имеют `version`.** Confirmed by reading migration source, не в iter-29 scope. Если audit будущей итерации flag'нет их — это false positive, expected state.
+- **Hard-coded `_TABLES` tuple in migration + test.** Symmetric — meant feature. Если new audit run flag'нет 9-ю таблицу, both files должны быть touched (pin test `test_iter29_migration_table_cohort_matches_expected` catches drift между ними). Alternative: dynamic discovery at migration time (read from audit script output) — rejected, migration files должны быть deterministic snapshot, не runtime-derived.
+- **RB-001/002/003/005 closure still gated on a working CI.** iter-29 closes one drift class but RELEASE_BLOCKERS_STATUS.md cascade ждёт CI green runs of `e2e-smoke`/`perf-baseline`/`final-acceptance` — все 3 disabled. Recommend Session 78 first action: ask user о plans для replacement CI before continuing technical iters.
+
+### Validation
+
+- `py -3 -m py_compile backend/app/migrations/versions/20260528_iter29_version_retrofit_approval_edo.py` → OK.
+- `py -3 -m py_compile backend/tests/test_iter29_version_retrofit.py` → OK.
+- `py -3 -m py_compile scripts/audit/version_column_drift.py` → OK.
+- Inline migration metadata check: `revision == "20260528_iter29_version_retrofit"`, `down_revision == "20260527_iter26_inspection_result"`, `len(_TABLES) == 8`, AST add_column count = 1 (loop literal) ✓.
+- Inline ORM-side check (8 models): each has `version` column, `nullable=False`, `python_type is int`, `mapper.version_id_col.name == "version"` ✓.
+- `TenantBaseModel` inherits `VersionedMixin` ✓.
+- **`py -3 -m pytest backend/tests/test_iter29_version_retrofit.py -v` — 29 passed in 4.67s** ✓.
+- New audit script: 8 mixin-drift + 21 critical-drift detected, matches manual cross-check.
+- **Not validated locally:** `alembic upgrade head` против PG (no local PG); full backend-tests run.
+
+### Next Steps
+
+**Operational (this PR):**
+
+1. Commit selectively (skip `.claude/settings.local.json` + any untracked plan doc).
+2. Push branch + open PR `fix(db): iter-29 RB-002s — version column retrofit on 8 approval/EDO tables`.
+
+**Technical (next session — primary):**
+
+3. **Choose iter-30 path based on user direction:** (a) **incident-family multi-iter restoration** (RB-002t — parent `incident` business-drift design + 2 child tables, ~3-4 iters of work), OR (b) **training-family round 2** (10 more `training_*` tables: `training_attempts`, `training_certificates`, `training_enrollments`, `training_groups`, `training_modules`, `training_programs`, `training_protocol_items`, `training_protocols`, `training_test_questions`, `training_tests` — each one full create_table migration), OR (c) **briefing cohort** (`briefing_entries`, `briefing_journals`, `briefing_signatures`, `briefing_templates` — 4 tables).
+4. **Confirm replacement CI strategy with user** — without CI, RB-001/002/003/005 closure verdict не возможно. Local pytest = source of truth per [[ci-disabled-actions-off]], но restore-drill / perf-baseline / e2e-smoke не повторимы локально. May need free CI (CircleCI free tier, GitLab mirror, etc.) или manual operator runs.
+
+**Technical (next session — secondary):**
+
+5. **iter-17 backend-tests drift** (~50/7/8/4 fails) — gradable but NOT a release-blocker.
+6. **`app-level-defects-post-billing` items #2/#3** (minio S3 metadata + LibreOffice in restore-drill) — больше infra than code.
+
+**Стартовая команда для следующей сессии:**
+
+```bash
+git checkout main && git pull
+gh pr list --state open --limit 10
+py -3 scripts/audit/version_column_drift.py   # confirm iter-29 effect: drift should drop from 8 to 0
+# Pick iter-30 path; see Next Steps #3.
+```
+
+**Branch suggestion для следующей сессии:** `fix/iter-30-incident-family-design` (если incident chosen) или `fix/iter-30-training-cohort-round2` или `fix/iter-30-briefing-cohort`.
+
+---
+
 ## Last Agent Handoff (2026-05-28, Session 76 — iter-28 RB-005 closure: `UserRole.code` attribute typo in `workflow/api.py` breaking navigation API)
 
 - **Дата:** 2026-05-28. Ветка `fix/iter-28-rb-005-workflow-userrole-code-attr` от свежего main `57bb375` (iter-26 PR #595 merged 2026-05-27). Параллельная итерация с iter-27 PR #596 (open, queued) — независимые файлы (perf vs. workflow), conflicts ноль.
