@@ -1,5 +1,144 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-28, Session 79 — **AUDIT BUG PIVOT**: iter-30 PR #600 closed, audit script fix shipped on iter-29 PR #599; flavor-(a) drift backlog drops 21 → 2)
+
+- **Дата:** 2026-05-28. Session 79 продолжает работу с iter-29 PR #599 — добавляет audit fix commit + retracts iter-30 PR #600. Также абортирует iter-31 (training round-2) до начала — investigation revealed target tables already exist в next46.
+- **Агент:** Claude Opus 4.7 (1M context, local Win+Py3.13; explanatory style + Auto Mode).
+- **Задача (трёх-стадная):**
+  - (a) Session 78 (between 77 and 79): user chose «training round 2» via AskUserQuestion после iter-30 ship. PR #600 ship'нут (briefing-cohort, +921 LOC).
+  - (b) Session 79 start: investigation training round 2 tables → discovered `20260317_next46_training_briefings_offline.py` already creates ВСЕ 10 training tables AND ВСЕ 4 briefing tables (последнее = PR #600 duplicate).
+  - (c) Recovery: fix audit, verify iter-29 still correct, close PR #600, document pivot.
+
+### Studied Documentation
+
+- Session 78 handoff (on iter-30 branch, now orphaned with PR #600 close — historical only): chose briefing-cohort because audit reported 4 tables critical.
+- `backend/app/models/models.py:928-1122` — 10 training round-2 models, all `TenantBaseModel`.
+- **Critical discovery via `grep -rn training_modules backend/app/migrations/versions/`** — `20260317_next46_training_briefings_offline.py:60-160` already creates **20 tables** via two local helpers:
+  - `_create_table(name, *cols)` (lines 35-42) — calls `op.create_table(name, *cols, *_base_columns(), ...)`.
+  - `_create_soft_table(name, *cols, unique=None)` (lines 27-32) — wraps `_create_table` adds soft-delete + uniqueness.
+  - `_base_columns()` (lines 17-24) returns a list including `sa.Column("version", sa.Integer(), nullable=False)` — so EVERY table created via these helpers gets `version`.
+- `scripts/audit/version_column_drift.py` v1 (Session 77 — included in iter-29 PR #599) **only matched direct `op.create_table(...)` literals** — missed all helper-wrapped creates. Result: 21 false-positive «critical» drifts → Session 78 chose phantom work.
+- `scripts/audit/check_orm_migration_drift.py:204-232` (heavyweight audit) — DID have correct helper detection via `_table_creating_helpers`. Hangs on Win+Py3.13 due to full app-import chain; that's why minimal audit was authored — но я omitted the helper-detection logic в minimal version.
+
+### Selected Plan Item
+
+- **Phase 0 release-blocker chase, REVISED.** Primary action shifted from "iter-31 cohort closure" to "fix audit + retract phantom work":
+  1. Fix `version_column_drift.py` to detect helper-wrapped create_table.
+  2. Re-run to find REAL drift count.
+  3. Verify iter-29 PR #599 still correct under fixed audit.
+  4. Close iter-30 PR #600 (broken — would cause `alembic upgrade head` to fail with `relation already exists`).
+  5. Abandon iter-31 work (training round-2 tables are not missing — they're in next46).
+
+### Recent merged work since Session 78 (chronological)
+
+| PR | Date (UTC) | Iter | Scope | Class |
+|---|---|---|---|---|
+| (none) | — | — | iter-29 PR [#599](https://github.com/aiprocadm/prt_ot_doc/pull/599) **still OPEN; now with audit-fix commit `4638125`** | — |
+| (closed) | 2026-05-28 | iter-30 | PR [#600](https://github.com/aiprocadm/prt_ot_doc/pull/600) — briefing-cohort, **CLOSED** because all 4 tables already exist in next46 (audit false-positive) | DB / broken |
+
+### Implemented Changes (this session)
+
+**Code (added to iter-29 PR #599 — commit `4638125`):**
+
+1. **`scripts/audit/version_column_drift.py`** (+151 / -31) — v2 with helper detection:
+   - New `_all_functions(tree)` — index module-local functions by name.
+   - New `_table_creating_helpers(functions)` — identify helpers that call `op.create_table` (mirrors heavyweight audit logic).
+   - New `_helper_creates_version(functions, helper_name)` — walks helper body (recursively into same-module helpers) for `sa.Column("version", ...)` literal. Handles next46's `_create_table → _base_columns` indirection.
+   - Updated `_migration_creates_version()` to credit helper calls with `version` column.
+   - Updated `_all_migration_tables()` to credit helper calls with table creation.
+
+**State changes (administrative):**
+
+2. **PR #600 closed** with full explanation (false-positive cascade; v2 audit shows 4 briefing tables aren't drift).
+3. **iter-30 + iter-31 branches abandoned** locally + remote — `git branch -D` blocked by auto-mode classifier (destructive without permission). Branch cleanup deferred to user.
+
+**Doc (this session — Session 79 sync):**
+
+4. New `## Last Agent Handoff (2026-05-28, Session 79 ...)` block prepended (this entry).
+
+### Changed / New Files
+
+- `scripts/audit/version_column_drift.py` — +151 / -31 (helper detection).
+- `AI_IMPLEMENTATION_REPORT.md` — +~110 / 0 (this handoff).
+
+### Decisions
+
+- **Audit fix lands on iter-29 PR #599, not separate PR.** Reasoning: (a) audit was introduced в iter-29 как Session 77's tooling addition; (b) v1 был buggy от первого commit'а; (c) one PR = atomic ship of "audit + the iter-29 fixes it correctly identified"; (d) shipping buggy v1 to main then fixing in PR #601 leaves a window with broken main. Trade-off: PR #599 growls на 1 commit (~150 LOC); reviewer needs to re-glance at audit changes. Acceptable.
+- **PR #600 closed, not amended.** Could have amended migration to be no-op (drop create_table, keep pin tests as ORM regression guards). Rejected because: (a) reviewer signal — closed PR explicitly communicates "we were wrong, here's why"; (b) amend would require force-push to stacked branch which risks confusing reviewers; (c) pin tests assert column shape on tables that ALREADY exist — testing ORM correctness against already-created tables IS useful but should be a separate PR with clear "regression guard, no DDL change" intent.
+- **iter-31 NOT pursued.** Only 2 truly-missing tables remain (`incident_log`, `incident_person`), both blocked on parent `incident` business-drift design. No mechanical work left until that design pass happens. Cohort-discipline says don't bundle pre-design work into a partial PR.
+- **Skip Session 78 handoff inclusion в main.** Session 78 entry exists only на iter-30 branch (now closed). Including it здесь как «historical archive» rejected — would propagate phantom-work narrative into merged main. Just reference Session 78 in this entry as «между Session 77 и 79 был iter-30 attempt closed as broken».
+- **Remote branches not deleted.** Auto-mode classifier blocked destructive git. User can clean up `fix/iter-30-briefing-cohort` and `fix/iter-31-training-cohort-round2` via GitHub UI or by granting destructive-git Bash permission.
+
+### Issues Fixed
+
+- **Audit script v1 false-positive cascade.** Tables created via `_create_table`/`_create_soft_table` helpers в 20260317_next46 не были credited — reported as "critical" drift when actually present. Affected ~19 tables: 10 training round-2 + 4 briefing + 5 misc (calendar/compliance/external_registry/offline_*).
+- **Avoided shipping broken iter-30 migration.** PR #600 would have caused `alembic upgrade head` failure on Postgres (`relation "briefing_templates" already exists`). Caught before merge.
+
+### Known Problems / Risks
+
+- **Real flavor-(a) drift backlog is now: 2 tables, both blocked.** `incident_log` + `incident_person` need parent `incident` business-drift design (7 missing cols including String→Enum migrations for `status`/`stage`/`person_role` — see [[rb002-enum-migration-cohort]] A3-antipattern caveat). Cannot proceed без explicit user direction on enum values + ondelete semantics.
+- **Real flavor-(b) drift backlog is still: 8 tables (iter-29 scope) — STILL VALID.** Verified via grep: `approval_processes`, `approval_tasks`, `approval_decision_logs`, `signature_requests`, `edo_envelopes`, `approval_instance_steps`, `edo_status_events`, `edo_webhook_inbox` находятся в `next30`/`next57` migrations и genuinely lack `version` column. iter-29 PR #599 add_column migration корректен.
+- **iter-30 PR #600 closed но branch + remote ref persist.** No code on main affected, but branch consumes namespace. Deferred to user cleanup.
+- **iter-31 branch is empty but persists.** Same as above.
+- **Audit script v2 still doesn't handle dynamic loop variables (`for table in _TABLES:`).** iter-29's own loop migration adds version via `op.add_column(table, ...)` where `table` is `ast.Name`, not `ast.Constant` — audit doesn't credit iter-29's adds. Not a current bug (iter-29 hasn't merged yet) но means closed-loop drift-count verification after iter-29 merge will look unchanged. **TODO:** add loop-variable tracking to audit v3 if user wants closed-loop verification.
+- **Other potential drift NOT yet checked:** heavyweight `check_orm_migration_drift.py` looks at all column drift (`business` severity), not just `mixin`/`critical`. Tables created via helpers могут still have business-drift on non-mixin columns (e.g. `next46._create_table("training_enrollments", ...)` declares 15 cols, но `TrainingEnrollment` model has 22 cols — 7 added later via next66 `add_column`, но is everything в sync?). Out of scope for Session 79.
+- **No replacement CI.** Same blocker as Session 77-78. RB-001/002/003/005 evidence collection still impossible.
+
+### Validation
+
+- `py -3 -m py_compile scripts/audit/version_column_drift.py` → OK after fix.
+- **Re-run v2 audit results**:
+  ```
+  Versioned model classes (inherit TenantBaseModel/SharedModel): 111
+  TABLES MISSING `version` IN MIGRATIONS: 8 (same as v1 — iter-29 scope confirmed valid)
+  CRITICAL (table not created): 2 (down from 21 — incident_log, incident_person only)
+  With `version` column in migrations: 101 (up from 82)
+  ```
+- **Verification grep для iter-29 cohort:** только 3 migration files reference the 8 tables — `next30` (original creator without version), `next57` (adds columns without version), и `iter-29` (this PR's add_column). No fourth migration adds version → iter-29 stays correct.
+- **PR #600 close confirmed** via `gh pr close 600`.
+- **Audit fix commit pushed** to `fix/iter-29-version-retrofit-mixin-cohort` as commit `4638125`.
+
+### Next Steps
+
+**Operational (administrative):**
+
+1. User may want to **delete remote branches** `fix/iter-30-briefing-cohort` и `fix/iter-31-training-cohort-round2` через GitHub UI (or grant destructive-git Bash permission).
+2. **Review iter-29 PR #599** (2 commits): original `94ec047` + audit fix `4638125`. Merge if approved.
+
+**Technical (next session — primary, scenario-dependent):**
+
+3. **If user wants to proceed with incident-family design**: multi-iter (3-4 sessions) project requiring user input on:
+   - `IncidentStatus` enum values (e.g. `reported`, `triaged`, `investigating`, `closed`).
+   - `IncidentStage` enum values (e.g. `notification`, `analysis`, `corrective_action`, `verification`).
+   - `IncidentPersonRole` enum values (e.g. `victim`, `witness`, `responsible`, `investigator`).
+   - Cascade semantics: when `incident` deleted, what happens to `incident_log` / `incident_person`?
+   - Whether parent `incident` table itself needs business-drift columns (7 missing per old Session 72 handoff).
+4. **If user wants to verify iter-29 PR #599 + audit-fix landing**: review 2 commits then `gh pr merge 599 --squash`.
+
+**Technical (next session — secondary, audit gap follow-ups):**
+
+5. **Business-drift sweep**: run `check_orm_migration_drift.py` somehow (maybe inside Docker/WSL to bypass Win+Py3.13 hang) for `business` severity. Many tables created в next46 likely have post-next46 column additions; some of those might lack the column. Separate audit pass needed.
+6. **Audit v3 — loop variable tracking**: enhance minimal audit to follow `for x in <list_const>:` patterns. Useful для closed-loop verification of iter-29-style loop migrations.
+
+**Technical (next session — operational, unchanged from Session 78):**
+
+7. **Confirm replacement CI strategy with user.** Without CI, RB-001/002/003/005 closure verdict gating MVP release remains impossible.
+
+**Стартовая команда для следующей сессии:**
+
+```bash
+git checkout main && git pull
+gh pr list --state open --limit 10
+gh pr view 599 --json state,mergeable,commits   # confirm iter-29 still mergeable after audit-fix commit
+py -3 scripts/audit/version_column_drift.py     # confirm v2 still shows 2 critical (incident_log/person only)
+# If user wants incident-design pass: branch fix/iter-32-incident-design-pass-1.
+# If user wants to merge iter-29: gh pr merge 599 --squash --delete-branch.
+```
+
+**Branch suggestion для следующей сессии:** `fix/iter-32-incident-design-pass-1` (если incident chosen), `chore/cleanup-abandoned-iter30-31-branches` (если cleanup), or pause for direction.
+
+---
+
 ## Last Agent Handoff (2026-05-28, Session 77 — iter-29 RB-002s mixin-retrofit cohort: `version` column on 8 approval/EDO tables)
 
 - **Дата:** 2026-05-28 (после `chore: disable GitHub Actions` PR #598 — CI now off, см. [[ci-disabled-actions-off]]). Ветка `fix/iter-29-version-retrofit-mixin-cohort` от свежего main `7921d5b` (PR #598 merge). Параллельных open-PR на момент start session ноль.
