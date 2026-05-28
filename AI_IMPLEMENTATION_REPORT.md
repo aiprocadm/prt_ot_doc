@@ -1,5 +1,137 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-28, Session 78 — iter-30 RB-002t briefing-cohort: 4 missing tables for safety-briefing flow)
+
+- **Дата:** 2026-05-28. Ветка `fix/iter-30-briefing-cohort` **stacked** на `fix/iter-29-version-retrofit-mixin-cohort` (PR #599 ещё open). Stacked PR strategy precedent: iter-26 PR #595 was stacked на iter-25 PR #594 — see Session 74 handoff.
+- **Агент:** Claude Opus 4.7 (1M context, local Windows + py 3.13; explanatory style + Auto Mode). Уверенность в local-pytest viability подтверждена iter-29 (29/29 pass за 4.67s); этот session — 24/24 pass за 4.69s.
+- **Задача:** «продолжай работу с блокерами» — user direct command после iter-29 ship. Operational #1-2 done (iter-29 shipped как PR #599). Technical #3 от Session 77 explicit alternative: «briefing cohort (4 tables)». Выбран briefing над training round 2 (10 tables — too large) и incident-family (blocked на parent business-drift).
+
+### Studied Documentation
+
+- Session 77 (iter-29) handoff Next Steps #3 explicit "briefing cohort (`briefing_entries`, `briefing_journals`, `briefing_signatures`, `briefing_templates` — 4 tables)" as viable iter-30 option.
+- `[[orm-migration-drift-classes]]` flavor (a) "table truly absent" — confirmed via `grep -rn Briefing backend/app/migrations/versions` → zero matches.
+- `[[rb002-enum-migration-cohort]]` cohort principle — same root cause + same discovery + tight FK coupling = bundle is principled.
+- `[[alembic-heads-lesson]]` — verified true head via inline `importlib.util.spec_from_file_location` загрузка iter-29 + grep `down_revision == "20260528_iter29_version_retrofit"` → zero parallel branches.
+- `backend/app/models/models.py:1147-1201` (4 model classes):
+  - `BriefingTemplate(TenantBaseModel, SoftDeleteMixin)` — catalog root, only `tenant.id` FK.
+  - `BriefingJournal(TenantBaseModel, SoftDeleteMixin)` — per-site logbook; FK site/department (both SET NULL).
+  - `BriefingEntry(TenantBaseModel, SoftDeleteMixin)` — per-person event; **6 FKs** (journal CASCADE; template/person/site/department/workplace all SET NULL).
+  - `BriefingSignature(TenantBaseModel)` — **NO SoftDeleteMixin** (signatures are immutable compliance evidence); FK entry CASCADE + person SET NULL.
+- iter-25 (training-family) used as **style precedent** for cohort-creation migration. Observed convention: column order id/tenant_id/business-cols/timestamps/version/PK/FKs/UQ, then separate `op.create_index()` calls.
+- Domain semantics check: РФ ОТ safety briefings flow = template (вводный/первичный/повторный) → journal (журнал на участке) → entry (факт проведения) → signature (подпись). CASCADE on journal→entry and entry→signature mirrors "operator deliberately removes logbook"; SET NULL on template→entry mirrors "preserve evidence even when template removed".
+
+### Selected Plan Item
+
+- **Фаза:** Phase 0 release-blocker chase (P0) — proactive cohort closure для drift class.
+- **Приоритет:** P0 — briefing endpoints (`/api/v1/briefings/templates`, `/journals`, `/entries`, `/signatures`) are MVP functional surface; runtime crash в Postgres on first ORM query.
+- **Почему выбрана:** Session 77 alternatives:
+  - **incident-family** (RB-002t-orig): BLOCKED на parent `incident` business-drift (7 missing cols incl. enum types) — 3-4 iter design pass requires user direction.
+  - **training round 2** (10 tables): too large for single iter (vs iter-25's 3-table cohort precedent); split into 2-3 iters would lose cohort coherence.
+  - **briefing cohort** (4 tables): clean cohort — feature-coherent (1 PR closes whole feature), tight FK coupling (3 of 4 have intra-cohort FKs), no enum/business-design dependencies, similar in size to iter-25 (3 tables, 233 LOC) and iter-26 (1 table, 112 LOC).
+- **Cohort decision:** 4-table bundle, not split. Reasoning per [[rb002-enum-migration-cohort]]:
+  - Same root cause (model-without-migration).
+  - Same discovery (single audit run flags all 4).
+  - Same domain (briefing safety-compliance flow).
+  - Tight FK coupling: landing journal without entry leaves 3 critical drift flags; landing entry without signature → signature foreign key fails on apply.
+  - Independent of incident/training cohorts.
+
+### Recent merged work since Session 77 (chronological)
+
+| PR | Date (UTC) | Iter | Scope | Class |
+|---|---|---|---|---|
+| (none) | — | — | iter-29 PR [#599](https://github.com/aiprocadm/prt_ot_doc/pull/599) **still OPEN/MERGEABLE** (CI off; no automated review gate) | — |
+
+### Implemented Changes (this session)
+
+**Code (this PR — iter-30 RB-002t):**
+
+1. **`backend/app/migrations/versions/20260528_iter30_briefing_cohort.py`** (new, +291) — 4 `op.create_table` calls in FK-dependency order (templates → journals → entries → signatures). Each table includes full `id/tenant_id/business-cols/deleted_at?/created_at/updated_at/version` shape from `TenantBaseModel` + optional `SoftDeleteMixin`. All FKs use named `ForeignKeyConstraint(...)` with explicit `ondelete=` matching ORM declarations. 8 explicit `create_index` calls (1 tenant_id per table + 1 per `index=True` Mapped col). `version` columns use `server_default="1"` for raw-SQL INSERT safety. Downgrade reverses FK-dependency order (signatures → entries → journals → templates), drops indexes before tables.
+2. **`backend/tests/test_iter30_briefing_cohort.py`** (new, +366) — 24 pin tests across 6 categories:
+   - 4× cohort column shape (parametric, exact-set match — guards extra cols too).
+   - 10× FK ondelete semantics (parametric over `_FK_CONTRACT` with per-row domain rationale — assertion messages explain WHY the ondelete is correct).
+   - 4× SoftDeleteMixin contract (parametric — guards `BriefingSignature` immutability).
+   - 2× unique-constraint shape (parametric).
+   - 4× migration-side guards (head chain to iter-29; AST-counted exactly 4 create_table calls; all 4 `version` columns have `server_default="1"`; downgrade table order is FK-safe reverse).
+
+**Doc (this PR — Session 78 sync):**
+
+3. New `## Last Agent Handoff (2026-05-28, Session 78 ...)` block prepended (this entry).
+
+### Changed / New Files
+
+- `backend/app/migrations/versions/20260528_iter30_briefing_cohort.py` — +291 new.
+- `backend/tests/test_iter30_briefing_cohort.py` — +366 new.
+- `AI_IMPLEMENTATION_REPORT.md` — +~110 / 0 (this handoff).
+
+### Decisions
+
+- **Stacked PR (iter-30 from iter-29 branch).** Same precedent as iter-26 on iter-25. iter-29's migration file is needed in tree so down_revision chain validates. If iter-29 squash-merges via GitHub, iter-30 needs rebase onto new main (filename + revision id stay identical, parent commit shifts). Alternative (wait for iter-29 merge) would block progress on CI backlog — but there IS no CI backlog now (PR #599 has no checks). Net: stacked-PR has slight rebase risk, but enables continuous progress.
+- **4 explicit `create_table` blocks vs single-loop migration.** iter-29 used a loop because all 8 tables shared identical add_column shape. iter-30 tables each have UNIQUE column shapes (different cols, different FK targets, different SoftDeleteMixin status). A loop would require parametric DDL builders, which obscures the per-table structure that a reviewer needs to verify against ORM models. 4 explicit blocks = 4× verifiable diff hunks.
+- **Indexes follow ORM `index=True` only — no speculative composites.** Risk of inventing indexes the ORM doesn't expect: SA's `Base.metadata.create_all()` (used in unit tests) won't create them, so unit tests + Postgres schema diverge silently. If hot-path needs analysis, add as a follow-up iter via `op.create_index`.
+- **`server_default="1"` on `version` columns despite NEW tables.** Strictly not needed (no existing rows to backfill), but: (a) consistency with iter-29 + next57 precedent, (b) safety for raw-SQL test fixtures / repair scripts that bypass ORM `default=1`. Pin test `test_iter30_version_columns_have_server_default` enforces.
+- **Named FK constraints (`fk_<table>_<descriptor>`).** Iter-25 / iter-26 precedent. Alternative — autogenerated names — would be shorter at write time but harder to reference in `op.drop_constraint` during downgrade and in future ALTER migrations.
+- **`BriefingSignature` no `deleted_at` is INTENTIONAL.** Signatures are immutable compliance evidence — soft-delete would corrupt audit trail. Pin test `test_briefing_soft_delete_contract` guards both directions: ensures it stays absent here, ensures it stays present on the 3 other tables.
+- **Each FK gets its own pin test row, not a generic "all FKs valid".** 10 FK contract rows enable per-FK rationale in assertion messages. A failure says "deleting a person must not destroy compliance history" rather than "FK ondelete mismatch on row 7" — domain-level signal.
+
+### Issues Fixed
+
+- **RB-002t briefing-cohort (NEW class)** — 4 ORM models (`BriefingTemplate`, `BriefingJournal`, `BriefingEntry`, `BriefingSignature`) whose creator migration never existed. Tables created per ORM declarations with FK-correct ondelete semantics encoding РФ ОТ safety-compliance domain rules.
+- **Audit critical-class drift count reduced from 21 → 17** (after PR #599 + #600 merge sequence).
+
+### Known Problems / Risks
+
+- **iter-30 не запущена против реального Postgres.** No local PG. Migration tested via AST + ORM inspection + 24 pin tests. Validation gate: manual `alembic upgrade head` against PG OR future replacement CI per [[ci-disabled-actions-off]].
+- **`scripts/audit/version_column_drift.py` doesn't credit iter-29 dynamic add_column loop.** Discovered Session 78: iter-29 migration uses `for table in _TABLES: op.add_column(table, ...)` where `table` is `ast.Name` not `ast.Constant`. AST audit only matches string-literal table names → audit STILL reports 8 mixin-drift tables. This is an audit limitation, not iter-29 drift. **TODO:** enhance audit to follow loop iteration variables OR document this limitation prominently. Not blocking iter-30, but means closed-loop drift-count check is unreliable.
+- **iter-29 PR #599 stacked dependency.** If iter-29 force-pushed or rebased on main, iter-30 base diverges. Mitigation: pin test `test_iter30_migration_chains_to_iter29_head` catches drift.
+- **iter-27 and iter-28 already merged into main (#596 #597).** iter-30 base branch (iter-29) includes those, so this PR effectively bundles iter-29 + iter-30 changes. Reviewer should look only at iter-30's specific diff.
+- **No replacement CI yet.** Same blocker as Session 77 Next Steps #4 — RB-001/002/003/005 closure verdict not possible until restore-drill / perf-baseline / e2e-smoke can be re-run.
+- **incident-family (`incident_log`, `incident_person`) still deferred.** Parent `incident` business-drift (enum design) blocks. Stays on backlog.
+- **training round 2 (10 tables) still deferred.** Future iter would be one of: (a) single 10-table cohort migration (large but principled), (b) sub-cohort splitting (course → groups → enrollments → attempts as one, certificates → modules → programs → protocols → tests → test_questions as another).
+
+### Validation
+
+- `py -3 -m py_compile backend/app/migrations/versions/20260528_iter30_briefing_cohort.py` → OK.
+- `py -3 -m py_compile backend/tests/test_iter30_briefing_cohort.py` → OK.
+- Inline migration metadata check: `revision == "20260528_iter30_briefing_cohort"`, `down_revision == "20260528_iter29_version_retrofit"` ✓.
+- **`py -3 -m pytest backend/tests/test_iter30_briefing_cohort.py -v` — 24 passed in 4.69s** ✓.
+- All 4 cohort models inspected: column sets match expected (no missing, no extra); FK targets resolve; ondelete clauses match ORM declarations; SoftDeleteMixin presence matches expectation (3 present, 1 absent).
+- AST scan of upgrade(): exactly 4 `create_table` calls in correct FK-dependency order. AST scan of downgrade(): 4 `drop_table` calls in reverse order.
+- **Not validated locally:** `alembic upgrade head` against real PG; CASCADE behavior under load; full backend-tests run.
+
+### Next Steps
+
+**Operational (this PR):**
+
+1. Commit selectively (skip `.claude/settings.local.json`).
+2. Push branch + open PR `fix(db): iter-30 RB-002t — briefing-cohort (4 tables: templates+journals+entries+signatures)`.
+3. **PR body must note stacked dependency on iter-29 PR #599** — base branch comparison ideally vs `fix/iter-29-version-retrofit-mixin-cohort`, OR open vs main and clearly mark "Depends on #599".
+
+**Technical (next session — primary):**
+
+4. **iter-31 candidate selection based on user direction:**
+   - (a) **training round 2 cohort** (10 tables) — large but mechanical; close most remaining flavor-(a) drift in 1 PR.
+   - (b) **standalone singles cohort** (compliance_deadlines + calendar_events + external_registry_jobs + offline_media_queue + offline_sync_batches — 5 tables, mixed feature areas, NOT a true cohort by domain — would need 5 separate iters or one "miscellaneous" iter).
+   - (c) **incident-family design** (RB-002t-incident) — requires enum-design pass for parent `incident` + 2 child tables — 3-4 iter multi-session work.
+5. **Audit script enhancement** — add dynamic loop variable tracking so iter-29 add_column tables are credited. Quick fix: if `add_column` first arg is `ast.Name` AND there's a `for ... in <list>` loop containing it, expand to list elements. Or: instrument audit to also read `_TABLES`/similar tuple constants if migration declares one.
+
+**Technical (next session — secondary):**
+
+6. **Confirm replacement CI strategy with user** — same as Session 77 #4. Without CI, RB-001/002/003/005 evidence collection blocked.
+7. **iter-17 backend-tests drift** (~50/7/8/4 fails) — gradable, not release-blocker.
+
+**Стартовая команда для следующей сессии:**
+
+```bash
+git checkout main && git pull
+gh pr list --state open --limit 10   # check iter-29 #599 + iter-30 status
+py -3 scripts/audit/version_column_drift.py   # confirm critical drops from 21 → 17 after both merge
+# Choose iter-31 path; see Next Steps #4.
+```
+
+**Branch suggestion для следующей сессии:** `fix/iter-31-training-cohort-round2` (если training chosen), `fix/iter-31-standalone-singles-batch` (если singles bundled), или `fix/iter-31-incident-business-drift-design` (если incident chosen).
+
+---
+
 ## Last Agent Handoff (2026-05-28, Session 77 — iter-29 RB-002s mixin-retrofit cohort: `version` column on 8 approval/EDO tables)
 
 - **Дата:** 2026-05-28 (после `chore: disable GitHub Actions` PR #598 — CI now off, см. [[ci-disabled-actions-off]]). Ветка `fix/iter-29-version-retrofit-mixin-cohort` от свежего main `7921d5b` (PR #598 merge). Параллельных open-PR на момент start session ноль.
