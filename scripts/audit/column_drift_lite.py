@@ -251,7 +251,16 @@ def find_versioned_models() -> dict[str, ModelInfo]:
             elif isinstance(sub, ast.AnnAssign) and isinstance(sub.target, ast.Name):
                 # Mapped[T] = mapped_column(...) → column; relationship(...) → skip.
                 if _is_mapped_annotation(sub.annotation) and _is_column_value(sub.value):
-                    columns.add(sub.target.id)
+                    # SQLAlchemy: ``mapped_column("db_name", ...)`` overrides
+                    # the Python attribute name as the DB column name (the
+                    # first positional arg, when it's a string Constant).
+                    # Otherwise the attribute name is the column name.
+                    db_name = sub.target.id
+                    if isinstance(sub.value, ast.Call) and sub.value.args:
+                        first = sub.value.args[0]
+                        if isinstance(first, ast.Constant) and isinstance(first.value, str):
+                            db_name = first.value
+                    columns.add(db_name)
         result[tablename] = ModelInfo(node.name, tablename, columns, bases)
     return result
 
