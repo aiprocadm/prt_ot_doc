@@ -1,5 +1,117 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-29, Session 81 — iter-33 audit name-override resolution: false-positive Company drift removed)
+
+- **Дата:** 2026-05-29 (after PR [#605](https://github.com/aiprocadm/prt_ot_doc/pull/605) merge `13442e2` — local-evidence policy + RB-002/003/005 closure landed in main). Ветка `fix/iter-33-audit-name-override-resolution` от `13442e2`. Параллельных open-PR на старте session ноль.
+- **Агент:** Claude Opus 4.7 (1M context, local Win+Py3.13; explanatory style + Auto Mode + TDD skill).
+- **Задача:** «продолжай работу плану» — Session 80 handoff Next Step #7 (extend lightweight-audit). Investigation выявила: `column_drift_lite.py` (added in PR [#603](https://github.com/aiprocadm/prt_ot_doc/pull/603)) имеет false-positive bug class идентичный по природе v1 `version_column_drift.py` (closed by Session 79): static AST audit игнорировал SQLAlchemy attribute-name decoupling pattern. Fix shipped TDD-style.
+
+### Studied Documentation
+
+- Session 80 handoff Next Step #7 (lightweight-audit feature extension promise).
+- `[[mvp-release-blockers]]` after PR #605 merge — 6/6 closed under local-evidence policy 2026-05-29.
+- `scripts/audit/column_drift_lite.py:251-254` — `find_versioned_models()` collected `sub.target.id` (Python attribute name) unconditionally, ignoring optional first-positional string arg in `mapped_column(...)`.
+- `backend/app/models/models.py:637,642` — `Company.inn = mapped_column("tax_id", String(32), nullable=True)` and `Company.legal_address = mapped_column("address", String(255))` — the only 2 instances of name-override in the entire models file (confirmed via `grep "mapped_column(\"[a-z_]+\""`).
+- `backend/app/migrations/versions/6b6dee7c951f_initial_schema.py:108-122` — creates `company` table with columns `tax_id` + `address` (matches the DB-side override), so no actual drift — only audit reporting bug.
+- iter-32 description (`20260528_iter32_business_drift_cohort.py:31`) had tagged this as «naming drift vs tax_id, address» — but the tag was misattribution: it's name-override resolved at SA layer, not a model-side rename to plan.
+
+### Selected Plan Item
+
+- **Phase 0 release-blocker chase**, lightweight-audit accuracy improvement. Class: tooling bug fix, same family as Session 79 v1 audit fix.
+- **Why selected:** All other Session 80 Next Steps are either blocked (CI re-enable = strategic, incident-family = design pass needing user enum decisions) or completed (PR #601 audit v3 + #602 doc sync + #603 column_drift_lite + #604 iter-32 safe-subset + #605 local-evidence policy). The audit false-positive was the only mechanically actionable item left in scope.
+- **Cost:** ~6 production LOC + 83 test LOC. Reduces audit-reported business-drift from 9 → 8 tables (Company no longer falsely flagged).
+
+### Recent merged work since Session 80 (chronological)
+
+| PR | Date (UTC) | Iter | Scope | Class |
+|---|---|---|---|---|
+| [#601](https://github.com/aiprocadm/prt_ot_doc/pull/601) | 2026-05-28 | audit v3 | version_column_drift credits loop-variable add_column | tooling |
+| [#602](https://github.com/aiprocadm/prt_ot_doc/pull/602) | 2026-05-28 | (doc) | Session 80 sync + RB binary line + CI-disable callout | docs |
+| [#603](https://github.com/aiprocadm/prt_ot_doc/pull/603) | 2026-05-28 | (audit) | column_drift_lite — pure-AST business-drift detector + 14 tests | tooling |
+| [#604](https://github.com/aiprocadm/prt_ot_doc/pull/604) | 2026-05-28 | iter-32 | RB-002 business-drift safe-subset — 7 cols / 3 tables (permit + ppeissue + riskmap) | DB |
+| [#605](https://github.com/aiprocadm/prt_ot_doc/pull/605) | 2026-05-29 | (docs) | local-evidence policy adopted; RB-002/003/005 closed → MVP READY (provisional) | docs/release |
+
+### Implemented Changes (this session)
+
+**Code (PR `fix/iter-33-audit-name-override-resolution`):**
+
+1. **`scripts/audit/column_drift_lite.py`** (+10 / -1) — in `find_versioned_models`, the `ast.AnnAssign` branch now resolves first-positional string Constant in `mapped_column(...)` as DB column name. If the first arg is a Call/Name/missing, falls back to `sub.target.id` (existing behavior preserved). Inline change, no helper extraction — keeps diff atomic.
+
+2. **`backend/tests/test_audit_column_drift_lite.py`** (+83) — 2 new tests + 1 helper:
+   - `_load_models_from(tmp_path, body)` — mirrors `_collect_one` (migrations) by monkey-patching `MODELS_FILE` to a synthetic tmp file; reverts in finally for test isolation.
+   - `test_mapped_column_first_string_arg_resolves_to_db_column_name` — RED case: 2 overrides + 1 plain. Asserts overrides resolve to DB names (`tax_id`, `address`), Python attribute names absent (`inn`, `legal_address`), plain column unchanged (`plain`).
+   - `test_mapped_column_first_non_string_arg_keeps_attribute_name` — regression guard: ensures `mapped_column(String(64))`, `mapped_column(ForeignKey(...))`, `mapped_column(Integer)` still resolve to attribute names. Pre-existed behavior pinned.
+
+**Doc (this PR — Session 81 sync):**
+
+3. New `## Last Agent Handoff (2026-05-29, Session 81 ...)` block prepended (this entry).
+
+### Changed / New Files
+
+- `scripts/audit/column_drift_lite.py` — +10 / -1 (inline AnnAssign branch enhancement).
+- `backend/tests/test_audit_column_drift_lite.py` — +83 (1 helper + 2 tests).
+- `AI_IMPLEMENTATION_REPORT.md` — +~80 / 0 (this handoff).
+
+### Decisions
+
+- **Inline branch fix vs helper extraction.** Could extract `_resolve_db_column_name(annassign_value, default)` helper. Rejected: only one call site, 4-line condition is self-explanatory inline. Adding a helper now would be over-engineering per TDD «minimal code to pass». Helper extraction earned only if a second call site appears.
+- **Synthetic test + regression guard, no real-codebase Company test.** Could add a 4th real-codebase smoke probe (`test_real_codebase_company_resolves_name_overrides`). Rejected: the synthetic test fully covers the behavior; adding a real-codebase test for one of two attributes in models.py would be redundant smoke. If models.py adds more overrides, the synthetic test still defends them.
+- **Did NOT extend version_column_drift.py with the same fix.** Reviewed: `version_column_drift.py` is specialized for the `version` column literal only — it doesn't enumerate arbitrary model columns, so no same-class bug there. Left untouched (defense-in-depth: change scope kept minimal).
+- **No update to iter-32 docstring.** PR #604's docstring (`20260528_iter32_business_drift_cohort.py:31`) mentions Company as "naming drift" — now provably wrong characterisation. Editing the migration docstring post-merge would touch a deployed migration's `Create Date` line and look like a code change in alembic history. Acceptable to leave outdated wording; this handoff explains the misattribution.
+- **Did not pursue genuine drift cohort for iter-34.** 8 tables remain in audit output post-fix. Each requires design (NOT NULL backfill for `ppenorm.hazard_id` / `riskmap.company_id`; concept resolution for `journalentry`, `npabinding`, `training_certificates`; full incident-family design for 3 tables). No mechanical safe-subset left to bundle.
+
+### Issues Fixed
+
+- **`column_drift_lite.py` false-positive on `mapped_column("db_name", ...)`.** Audit reported `Company` as business-drift (missing `inn`, `legal_address`) — actually a static-analysis blind spot for SQLAlchemy's attribute-vs-column-name decoupling pattern. After fix: drift count drops 9 → 8, Company gone. This is the second time (after Session 79 v1 helper-detection fix) that audit needed a SQLAlchemy-pattern correctness pass.
+- **iter-32 misattribution clarified.** PR #604's "deferred: naming drift" list incorrectly grouped Company with cohorts needing real rename design. Handoff explicitly notes the misattribution for future readers.
+
+### Known Problems / Risks
+
+- **8 genuine business-drift tables remain.** Audit output post-fix: `incident`, `incident_log`, `incident_person` (3 design-blocked tables, Session 79's pin), plus `journalentry` (6 cols, concept drift per iter-32), `npabinding` (3 cols, needs design), `ppenorm` (1 col NOT NULL FK, no safe server_default), `riskmap` (1 col NOT NULL FK), `training_certificates` (4 backward-compat legacy cols). Each requires per-table design decision. No mechanical iter-34 cohort possible without that input.
+- **Heavyweight audit still hangs on Win+Py3.13.** Session 80 confirmed: `from app.db.base import ALEMBIC_METADATA` produces no output in 60s. Lightweight audit is the only viable local tool until WSL/Docker or further extension. Out of scope for iter-33.
+- **CI still off (PR #598).** All blocker re-validation rests on local-evidence policy (PR #605). Strategic decision unresolved.
+- **iter-30/31 remote branches still persist** (Session 79 deferred): `fix/iter-30-briefing-cohort`, `fix/iter-31-training-cohort-round2`. Auto-mode classifier blocked destructive git. User cleanup pending.
+
+### Validation
+
+- `py -3 -m py_compile scripts/audit/column_drift_lite.py backend/tests/test_audit_column_drift_lite.py` → OK.
+- `py -3 -m pytest backend/tests/test_audit_column_drift_lite.py -v` → **16/16 pass** (14 pre-existing + 2 new) in 3.23s.
+- `py -3 -m pytest backend/tests/test_audit_version_column_drift.py backend/tests/test_iter29_version_retrofit.py backend/tests/test_iter32_business_drift_cohort.py -v` → **73/73 pass** in 5.81s (regression check on adjacent audit suites).
+- `py -3 scripts/audit/column_drift_lite.py` on current main + fix → **business-drift = 8 tables** (was 9; Company gone). Critical count unchanged at 2 (incident_log + incident_person — Session 79 pin).
+- **Not validated:** full backend test suite (Win+Py3.13 collect hang per `[[local-env-drift-windows]]`). Adjacent isolated suites + py_compile cover the scope.
+
+### Next Steps
+
+**Operational (this PR):**
+
+1. Review iter-33 PR (small diff: 11 prod + 83 test lines). Merge if approved.
+
+**Technical (next session — primary, scenario-dependent):**
+
+2. **If user wants design pass on one of the remaining 8 drift tables**: easiest mechanical targets are `ppenorm.hazard_id` and `riskmap.company_id` (both NOT NULL FK without server_default) — needs backfill plan (likely: temporary nullable → backfill SELECT → ALTER nullable=false in 3 migration steps). 1 iter each.
+3. **If user wants concept resolution on `journalentry` / `npabinding` / `training_certificates`**: each needs business meaning review (e.g., is `JournalEntry.payload` a forward rename of `metadata_json`? Is `TrainingCertificate.{course_id,session_id,plan_id,number}` truly legacy?). User input required.
+4. **If user wants incident-family design**: Session 79's pin — multi-iter project, needs enum value decisions on `IncidentStatus`, `IncidentStage`, `IncidentPersonRole` + parent `incident` business-drift cols + cascade semantics.
+
+**Technical (next session — secondary):**
+
+5. **Cleanup abandoned branches** `fix/iter-30-briefing-cohort`, `fix/iter-31-training-cohort-round2` (Sessions 79+80 deferred). Needs destructive-git permission grant.
+6. **CI re-enable strategy** — RB-002/003/005 are «provisional» under local-evidence policy. Strategic question still open.
+7. **FLOW demo-seed extension** — RB-002 caveat: `document_generate_apply_headers` + `files_upload_flow` need `Greeting` template + `demo-document-version-id` seeded by `bootstrap_demo_tenant`. Non-blocking but would clear the "provisional" qualifier on RB-002.
+
+**Стартовая команда для следующей сессии:**
+
+```bash
+git checkout main && git pull
+gh pr list --state open --limit 10
+py -3 scripts/audit/column_drift_lite.py    # expect 8 business-drift, 2 critical
+py -3 scripts/audit/version_column_drift.py # expect 0 drift, 2 critical
+# Pick next iter target per Next Steps #2-#7.
+```
+
+**Branch suggestion для следующей сессии:** `fix/iter-34-ppenorm-hazard-id-backfill` (если NOT NULL FK дизайн), `chore/cleanup-abandoned-iter30-31-branches` (если cleanup), `feat/perf-baseline-demo-seed-extension` (если FLOW seed). Каждый требует user direction.
+
+---
+
 ## Last Agent Handoff (2026-05-28, Session 80 — audit v3 loop-variable closed-loop verify + release-blocker doc sync)
 
 - **Дата:** 2026-05-28. Ветка `chore/session-80-doc-sync` от свежего main `f86908f` (iter-29 PR #599 merged). Параллельно открыт PR [#601](https://github.com/aiprocadm/prt_ot_doc/pull/601) на ветке `chore/audit-v3-loop-variable-tracking`.

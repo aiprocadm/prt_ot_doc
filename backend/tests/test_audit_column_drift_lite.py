@@ -228,6 +228,89 @@ def test_compute_drift_reports_missing_business_column() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Model-side: mapped_column first-positional-arg DB name override.
+# ---------------------------------------------------------------------------
+
+
+def _load_models_from(tmp_path: Path, body: str) -> dict:
+    """Write a synthetic models file into a tmp dir and run the model walker.
+
+    Mirrors ``_collect_one`` (migrations) — swaps ``MODELS_FILE`` so the
+    audit reads our synthetic content rather than the real codebase, then
+    reverts in a finally so test isolation holds.
+    """
+    models_file = tmp_path / "synthetic_models.py"
+    models_file.write_text(textwrap.dedent(body).lstrip(), encoding="utf-8")
+    original = _AUDIT.MODELS_FILE
+    _AUDIT.MODELS_FILE = models_file
+    try:
+        return _AUDIT.find_versioned_models()
+    finally:
+        _AUDIT.MODELS_FILE = original
+
+
+def test_mapped_column_first_string_arg_resolves_to_db_column_name(tmp_path: Path) -> None:
+    """``mapped_column("db_name", ...)`` overrides the Python attribute name.
+
+    SQLAlchemy decouples Python attribute name from DB column name via the
+    first positional string arg of ``mapped_column``. Real-world hit:
+    ``Company.inn = mapped_column("tax_id", ...)`` — the migration creates
+    column ``tax_id``; without resolving the override, the audit treats
+    ``inn`` as missing and reports a false-positive drift.
+    """
+    models = _load_models_from(
+        tmp_path,
+        """
+        from sqlalchemy.orm import Mapped, mapped_column
+        from sqlalchemy import String
+
+        class Foo(TenantBaseModel):
+            __tablename__ = "foo"
+            inn: Mapped[str | None] = mapped_column("tax_id", String(32), nullable=True)
+            legal_address: Mapped[str | None] = mapped_column("address", String(255))
+            plain: Mapped[str] = mapped_column(String(64), nullable=False)
+        """,
+    )
+    foo = models["foo"]
+    assert "tax_id" in foo.columns, (
+        "first-arg string Constant should be resolved as DB column name"
+    )
+    assert "address" in foo.columns, "second override should also be resolved"
+    assert "inn" not in foo.columns, (
+        "Python attribute name must NOT leak when first-arg override is present"
+    )
+    assert "legal_address" not in foo.columns
+    assert "plain" in foo.columns, (
+        "plain mapped_column without first-string-arg keeps attribute name"
+    )
+
+
+def test_mapped_column_first_non_string_arg_keeps_attribute_name(tmp_path: Path) -> None:
+    """``mapped_column(String(64), ...)`` and ``mapped_column(ForeignKey(...), ...)``
+    have a Call/Name first arg, not a string Constant. Attribute name must
+    be used as the DB column name — this is the existing behavior, pinned
+    here as a regression guard against the override fix.
+    """
+    models = _load_models_from(
+        tmp_path,
+        """
+        from sqlalchemy.orm import Mapped, mapped_column
+        from sqlalchemy import String, ForeignKey, Integer
+
+        class Bar(TenantBaseModel):
+            __tablename__ = "bar"
+            name: Mapped[str] = mapped_column(String(64), nullable=False)
+            other_id: Mapped[str] = mapped_column(ForeignKey("other.id"), nullable=True)
+            count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+        """,
+    )
+    bar = models["bar"]
+    assert "name" in bar.columns
+    assert "other_id" in bar.columns
+    assert "count" in bar.columns
+
+
+# ---------------------------------------------------------------------------
 # Smoke probes against the real codebase.
 # ---------------------------------------------------------------------------
 
