@@ -18,6 +18,22 @@ an ``op.create_table`` call qualifies as a wrapper, and subsequent
 calls ``<helper>("<tablename>", ...)`` inside ``upgrade()`` are credited
 as creating the table.
 
+**v3 (Session 80 fix)**: now resolves loop-variable tablenames for
+``op.add_column``. iter-29's retrofit migration uses
+``for table in _TABLES: op.add_column(table, sa.Column("version", ...))``
+where ``_TABLES: tuple[str, ...] = (...)`` is a module-level constant.
+v2 silently dropped these calls (``tname_arg`` is ``ast.Name``, not
+``ast.Constant``), leaving the 8 retrofitted tables uncredited even after
+the migration shipped — breaking closed-loop drift-count verification.
+
+Loop resolution is intentionally narrow: only constant string sequences
+declared at module level (``_NAME = (...)`` / ``_NAME: type = (...)``)
+or inline (``for t in ("a", "b"):``) qualify. Function calls
+(``for t in get_tables():``) and other unresolved iterables fall through
+to the original "no credit" behavior. ``create_table`` loop-handling is
+deliberately out of scope — no existing migration uses that pattern, and
+expanding scope would risk regressing the v2 helper-detection path.
+
 Usage:
     py -3 scripts/audit/version_column_drift.py
 """
@@ -59,6 +75,102 @@ def _table_creating_helpers(functions: dict[str, ast.FunctionDef]) -> set[str]:
                 helpers.add(name)
                 break
     return helpers
+
+
+def _module_string_seqs(tree: ast.Module) -> dict[str, list[str]]:
+    """Map module-level constant string sequences.
+
+    Matches both ``_NAME = ("a", "b")`` (``ast.Assign``) and the typed form
+    ``_NAME: tuple[str, ...] = ("a", "b")`` (``ast.AnnAssign``) — the latter
+    is what iter-29's migration uses for ``_TABLES``. Only sequences whose
+    elements are *all* string literals are included.
+    """
+    result: dict[str, list[str]] = {}
+
+    def _extract(value: ast.expr | None) -> list[str] | None:
+        if not isinstance(value, (ast.Tuple, ast.List)):
+            return None
+        values: list[str] = []
+        for elt in value.elts:
+            if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                values.append(elt.value)
+            else:
+                return None
+        return values
+
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            extracted = _extract(node.value)
+            if extracted is None:
+                continue
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    result[target.id] = extracted
+        elif isinstance(node, ast.AnnAssign):
+            if not isinstance(node.target, ast.Name):
+                continue
+            extracted = _extract(node.value)
+            if extracted is not None:
+                result[node.target.id] = extracted
+    return result
+
+
+def _resolve_iter(
+    iter_node: ast.expr, module_constants: dict[str, list[str]]
+) -> list[str] | None:
+    """Resolve a ``for`` loop's ``iter`` to a list of constant strings.
+
+    Returns ``None`` when the iterable can't be statically resolved
+    (function calls, generator expressions, etc.) — caller treats that as
+    "no credit", same as the v2 path for an unrecognised tablename arg.
+    """
+    if isinstance(iter_node, (ast.Tuple, ast.List)):
+        values: list[str] = []
+        for elt in iter_node.elts:
+            if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                values.append(elt.value)
+            else:
+                return None
+        return values
+    if isinstance(iter_node, ast.Name):
+        seq = module_constants.get(iter_node.id)
+        return list(seq) if seq is not None else None
+    return None
+
+
+def _parent_map(root: ast.AST) -> dict[int, ast.AST]:
+    """Build ``{id(child): parent}`` for every descendant of ``root``."""
+    parents: dict[int, ast.AST] = {}
+    for node in ast.walk(root):
+        for child in ast.iter_child_nodes(node):
+            parents[id(child)] = node
+    return parents
+
+
+def _enclosing_for_bindings(
+    node: ast.AST,
+    parents: dict[int, ast.AST],
+    module_constants: dict[str, list[str]],
+) -> dict[str, list[str]]:
+    """Loop-variable bindings in scope for ``node``.
+
+    Walks ancestors via ``parents``; each enclosing ``ast.For`` with a
+    ``Name`` target and a resolvable ``iter`` contributes one binding.
+    Innermost binding wins on shadowing (we walk outward).
+    """
+    bindings: dict[str, list[str]] = {}
+    cur = parents.get(id(node))
+    while cur is not None:
+        if (
+            isinstance(cur, ast.For)
+            and isinstance(cur.target, ast.Name)
+            and cur.target.id not in bindings
+        ):
+            values = _resolve_iter(cur.iter, module_constants)
+            if values is not None:
+                bindings[cur.target.id] = values
+        cur = parents.get(id(cur))
+    return bindings
 
 
 def _helper_creates_version(
@@ -190,6 +302,12 @@ def _migration_creates_version(path: Path) -> set[str]:
         ):
             tables_with_version.add(node.args[0].value)
     # Also scan op.add_column("foo", sa.Column("version", ...)) and batch variants.
+    # v3 (Session 79 known-gap fix): credit calls inside a ``for t in _TABLES``
+    # loop where ``_TABLES`` is a module-level constant string sequence. iter-29
+    # uses this pattern; v2 silently dropped such calls because ``tname_arg``
+    # was ``ast.Name``, not ``ast.Constant``.
+    module_constants = _module_string_seqs(tree)
+    parents = _parent_map(upgrade_fn)
     for node in ast.walk(upgrade_fn):
         if not isinstance(node, ast.Call):
             continue
@@ -202,20 +320,23 @@ def _migration_creates_version(path: Path) -> set[str]:
             continue
         tname_arg = node.args[0]
         col_arg = node.args[1]
-        if not (
-            isinstance(tname_arg, ast.Constant)
-            and isinstance(tname_arg.value, str)
-        ):
-            # batch.add_column has 1 arg (column only); look for With ancestor.
+        if isinstance(tname_arg, ast.Constant) and isinstance(tname_arg.value, str):
+            tablename_candidates: list[str] = [tname_arg.value]
+        elif isinstance(tname_arg, ast.Name):
+            loop_bindings = _enclosing_for_bindings(node, parents, module_constants)
+            tablename_candidates = loop_bindings.get(tname_arg.id, [])
+        else:
+            # batch.add_column has 1 arg (column only); With-ancestor branch handles it.
             continue
-        tablename = tname_arg.value
+        if not tablename_candidates:
+            continue
         if (
             isinstance(col_arg, ast.Call)
             and col_arg.args
             and isinstance(col_arg.args[0], ast.Constant)
             and col_arg.args[0].value == "version"
         ):
-            tables_with_version.add(tablename)
+            tables_with_version.update(tablename_candidates)
     # batch_alter_table("foo") ... batch.add_column(sa.Column("version", ...))
     for node in ast.walk(upgrade_fn):
         if not isinstance(node, ast.With):
