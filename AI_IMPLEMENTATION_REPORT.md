@@ -1,5 +1,121 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-28, Session 80 — audit v3 loop-variable closed-loop verify + release-blocker doc sync)
+
+- **Дата:** 2026-05-28. Ветка `chore/session-80-doc-sync` от свежего main `f86908f` (iter-29 PR #599 merged). Параллельно открыт PR [#601](https://github.com/aiprocadm/prt_ot_doc/pull/601) на ветке `chore/audit-v3-loop-variable-tracking`.
+- **Агент:** Claude Opus 4.7 (1M context, local Win+Py3.13; explanatory style + Auto Mode + systematic-debugging skill + TDD skill).
+- **Задача:** «продолжай улучшать проект, дай знать когда будет готов к релизу» — user попросил автономное продолжение. Session 79 закрыл iter-30 PR #600 + добавил audit v2 helper-detection; оставил TODO «audit v3 loop variable tracking». Сессия 80 этот TODO закрывает + делает doc-sync для отражения post-CI-disable реальности.
+
+### Studied Documentation
+
+- Session 79 handoff: known problem «v2 не credit'ит iter-29's loop add_column» + остальные next-steps.
+- [`docs/stabilization/RELEASE_BLOCKERS_STATUS.md`](docs/stabilization/RELEASE_BLOCKERS_STATUS.md) — оказался внутренне inconsistent: line 68 marks RB-001 `[x]` done, но «Binary Go/No-Go» line at 107 still lists RB-001 in "Remaining" — не синхронизирован после 2026-05-23 closure.
+- [`[[ci-disabled-actions-off]]`](C:/Users/karka/.claude/projects/D---------------------------------/memory/ci_disabled_actions_off.md) — CI disabled 2026-05-28 (PR #598). Workflow evidence paths in RELEASE_BLOCKERS_STATUS.md больше не применимы для new closures.
+- `scripts/audit/version_column_drift.py` v2 — добавлен в Session 79 PR #599. Известный gap: add_column tname_arg только `ast.Constant`, не `ast.Name` (loop var).
+- `backend/app/migrations/versions/20260528_iter29_version_retrofit_approval_edo.py` — iter-29 migration uses `_TABLES: tuple[str, ...] = (...)` + `for table in _TABLES: op.add_column(table, ...)` — exactly the pattern v2 dropped.
+
+### Selected Plan Item
+
+- **Phase 0 release-blocker chase**, две независимые мелкие линии работы:
+  1. **Audit v3** — close Session 79 TODO о loop-variable tracking (tooling improvement, не release-blocker code).
+  2. **Doc sync** — fix RELEASE_BLOCKERS_STATUS.md inconsistency + acknowledge CI-disable impact on closure paths.
+- Также проверена возможность business-drift sweep на helper-created tables в next46: heavyweight `check_orm_migration_drift.py` снова hangs локально на app.db.base import (confirmed via test) — отложено до восстановления CI или дальнейшего расширения lightweight audit.
+
+### Recent merged work since Session 79 (chronological)
+
+| PR | Date (UTC) | Iter | Scope | Class |
+|---|---|---|---|---|
+| [#599](https://github.com/aiprocadm/prt_ot_doc/pull/599) | 2026-05-28 19:07Z | iter-29 | RB-002s — version retrofit on 8 approval/EDO tables (mixin cohort) + audit v2 helper-detection | DB / tooling |
+
+### Implemented Changes (this session)
+
+**Code (PR [#601](https://github.com/aiprocadm/prt_ot_doc/pull/601) — chore/audit-v3-loop-variable-tracking):**
+
+1. **`scripts/audit/version_column_drift.py`** (+128 / -7) — v3 loop-variable resolution:
+   - New `_module_string_seqs(tree)` — collect top-level `_NAME = (...)` (ast.Assign) AND `_NAME: type = (...)` (ast.AnnAssign — iter-29's typed form).
+   - New `_resolve_iter(iter_node, module_constants)` — resolve `for.iter` to list of string constants. Handles inline `Tuple`/`List` and module-level `Name` references.
+   - New `_parent_map(root)` — builds `{id(child): parent}` for ancestor lookup.
+   - New `_enclosing_for_bindings(node, parents, module_constants)` — walks ancestors so each `add_column` sees its loop-scope bindings. Innermost binding wins on shadowing.
+   - Modified `_migration_creates_version` add_column branch (10 lines): literal path unchanged; new branch handles `ast.Name` tname via the binding lookup. Empty candidate list → continue (preserves "unresolvable iter credits nothing" semantics).
+   - Module docstring updated with v3 section.
+2. **`backend/tests/test_audit_version_column_drift.py`** (new, +245) — 11 pin tests:
+   - 5 v3 RED cases (annassign tuple, plain tuple, list, inline tuple, real iter-29 file).
+   - 4 v2 regression guards (literal add, direct create_table, helper-wrapped with/without version).
+   - 2 negative tests pinning the boundary (unresolvable iter, non-version column).
+   - Pure AST — zero `app.*` imports; runs on Win+Py3.13.
+
+**Doc (this PR — Session 80 sync, branch chore/session-80-doc-sync):**
+
+3. **`docs/stabilization/RELEASE_BLOCKERS_STATUS.md`** — prepended CI-disable warning callout; fixed Binary Go/No-Go inconsistency (Section was 3/6 closed with RB-001 listed in "Remaining" despite being marked `[x]` done in Section above — synced to 3/6 closed = RB-001 + RB-004 + RB-006). Updated "Updated on (UTC)" to 2026-05-28.
+4. **`AI_IMPLEMENTATION_REPORT.md`** (+~140 / 0) — this Session 80 handoff prepended.
+
+### Changed / New Files
+
+- `scripts/audit/version_column_drift.py` — +128 / -7 (on PR #601 branch).
+- `backend/tests/test_audit_version_column_drift.py` — +245 new (on PR #601 branch).
+- `docs/stabilization/RELEASE_BLOCKERS_STATUS.md` — small inline fix (on chore/session-80-doc-sync).
+- `AI_IMPLEMENTATION_REPORT.md` — +~140 / 0 (on chore/session-80-doc-sync).
+
+### Decisions
+
+- **Split audit v3 and doc sync into separate PRs.** Reasoning: (a) audit v3 = pure tooling code change with tests, reviewable as a unit; (b) doc sync = pure markdown, reviewable as a unit; (c) bundling would mix code-review surface (test correctness) with editorial-review surface (status accuracy), slowing both. Cost: two open PRs at once. Acceptable.
+- **Audit v3 scope kept narrow.** Only constant string sequences resolve via for-loop; function calls (`for t in get_tables():`) fall through to existing "no credit" behavior; `create_table` loop-handling deliberately out of scope (no existing migration uses that pattern, expanding risks v2 helper-detection regression for zero benefit).
+- **Parent-map design over recursive descent.** Could have refactored to recursive AST descent with binding stack — more elegant but requires touching v2 helper-detection path. Parent-map is additive: 30 lines of new code, zero changes to existing v2 paths, no regression risk on the 19 helper-credited tables. Defense-in-depth applied to change scope itself.
+- **Doc-sync acknowledges CI-disable as a strategic blocker, not a "fix-by-coding" item.** RB-002/003/005 closure paths are workflow-dependent and the workflows are off. This is a decision-class problem (restore CI / redefine criteria / waive criteria) only the user can resolve. Surfaced explicitly in the doc callout so future sessions don't try to mechanically close RBs that aren't mechanically closable.
+- **Skipped business-drift sweep this session.** Heavyweight `check_orm_migration_drift.py` confirmed-hanging locally via direct import test (60s no output, killed). Extending lightweight audit to do column-name-level drift detection = significant new code, deferred to future iter when CI is available to validate or when a specific drift hypothesis emerges to scope down the work.
+
+### Issues Fixed
+
+- **Audit v3 loop-variable gap** — Session 79's documented known TODO. After PR #601 merges, `py -3 scripts/audit/version_column_drift.py` correctly reports `drift=0` on current main (was 8 due to v2 not crediting iter-29's loop adds). Closed-loop drift-count verification now works.
+- **RELEASE_BLOCKERS_STATUS.md internal inconsistency** — Binary Go/No-Go line at 107 was last updated when RB-001 was still partial; the per-RB checklist correctly marked RB-001 done. Now synced.
+- **RELEASE_BLOCKERS_STATUS.md CI-disable gap** — doc cited workflow-run evidence paths without acknowledging workflows are now `.yml.disabled`. Future readers would have been misled about the available closure paths. Now flagged in a header callout.
+
+### Known Problems / Risks
+
+- **Three release blockers (RB-002/003/005) have no actionable closure path right now.** All three reference workflow runs (`perf-baseline.yml`, `final-acceptance.yml`, `e2e-smoke.yml`) that are currently `.yml.disabled`. There is no equivalent local-pytest path to produce the cited artifacts. **The user must decide** between: (a) restore CI (CircleCI / GitLab / GHA re-enable), (b) redefine RB-002/003/005 closure criteria to accept local-evidence equivalents (and define what those are), (c) waive these criteria for v1 with a documented known-limitation. Until this decision lands, "release-ready" cannot be claimed.
+- **Local full pytest doesn't run on Win+Py3.13.** Confirmed this session: `py -3 -m pytest backend/tests/ --collect-only` produces Windows access violations during collection (heavy import chain). Narrow targeted runs (`test_audit_version_column_drift.py`, `test_iter29_version_retrofit.py`) work fine because they don't pull app.* imports. Implication: this machine can't be the substitute for CI even if criteria are loosened.
+- **Heavyweight audit `check_orm_migration_drift.py` confirmed-hanging.** Background bash task running `from app.db.base import ALEMBIC_METADATA` produced no output in 60s and was killed. Same `[[local-env-drift-windows]]` chain hang. Business-drift sweep blocked behind this until alternative environment (Docker / WSL with Py3.12) or new lightweight extension.
+- **Incident-family (RB-002 critical, 2 tables) still blocked on design.** Session 79 left this: `incident_log`, `incident_person` need enum values for `IncidentStatus`/`IncidentStage`/`IncidentPersonRole` + cascade semantics + parent `incident` business-drift design. Multi-iter project (~3-4 sessions). Requires user input on enum value lists.
+- **iter-30 / iter-31 remote branches still persist.** Auto-mode classifier in Session 79 declined to delete them (destructive git without explicit auth). User cleanup via GitHub UI or grant of destructive-git permission still pending.
+
+### Validation
+
+- `py -3 -m pytest backend/tests/test_audit_version_column_drift.py -v` → **11/11 pass** (post-fix; same suite was 5/11 RED before the fix, demonstrating proper TDD red→green cycle).
+- `py -3 -m pytest backend/tests/test_iter29_version_retrofit.py -v` → **29/29 pass** (no incidental breakage in adjacent test file).
+- `py -3 scripts/audit/version_column_drift.py` on current main (post-iter-29 + with v3 fix) → **drift=0** (was 8 with v2), critical=2 unchanged (incident_log + incident_person).
+- `py -3 -m py_compile scripts/audit/version_column_drift.py` → OK.
+- Synthetic RED-phase isolation: three patterns tested via tempfiles (literal=works, loop+module-const=fails-pre-fix, loop+inline=fails-pre-fix) — confirms gap is loop-pattern-specific, not file-discovery.
+- **Not validated:** full backend-test run (env hang), heavyweight audit (env hang), business-drift on next46 helper tables (deferred).
+
+### Next Steps
+
+**Operational (this session — pending user action):**
+
+1. **User decides CI strategy.** This unblocks RB-002/003/005 closure paths. Three options listed in Known Problems #1 above.
+2. **User reviews + merges PR [#601](https://github.com/aiprocadm/prt_ot_doc/pull/601)** (audit v3) — small, isolated, well-tested.
+3. **User reviews + merges this doc-sync PR** (the one this handoff is on).
+4. **User cleans up abandoned remote branches** `fix/iter-30-briefing-cohort`, `fix/iter-31-training-cohort-round2` via GitHub UI (Session 79 deferred).
+
+**Technical (next session — primary, scenario-dependent):**
+
+5. **If user restores CI or defines local equivalents**: re-run `restore-drill` / `perf-baseline` / `e2e-smoke` / `final-acceptance` and update RELEASE_BLOCKERS_STATUS.md accordingly. RB-005 root causes (`UserRole.code` typo in PR #597 + `.local` TLD in PR #580) are already shipped — re-runs may close it green directly.
+6. **If user wants incident-family design**: 3-4 iter project. Need enum value decisions on `IncidentStatus`, `IncidentStage`, `IncidentPersonRole`; cascade semantics; parent `incident` business-drift column list.
+7. **If user wants more lightweight-audit features**: extend `version_column_drift.py` to do column-name-level business-drift sweep (mirrors heavyweight script logic but pure-AST, avoids the env hang). Significant new code, ~200-300 LOC + tests.
+
+**Стартовая команда для следующей сессии:**
+
+```bash
+git checkout main && git pull
+gh pr list --state open --limit 10                          # PRs #601 + session-80-doc-sync
+gh pr view 601 --json state,mergeable                       # confirm audit v3 still mergeable
+py -3 scripts/audit/version_column_drift.py                 # expect drift=0, critical=2 if #601 not yet merged on local fork; same if merged
+# Decision point: ask user about CI strategy if RBs are the goal.
+```
+
+**Branch suggestion для следующей сессии:** depends on user decision in step 1 above. If CI restored — re-validation iter. If incident design — `fix/iter-32-incident-family-design-pass-1`. If lightweight-audit extension — `feat/audit-business-drift-pure-ast`.
+
+---
+
 ## Last Agent Handoff (2026-05-28, Session 79 — **AUDIT BUG PIVOT**: iter-30 PR #600 closed, audit script fix shipped on iter-29 PR #599; flavor-(a) drift backlog drops 21 → 2)
 
 - **Дата:** 2026-05-28. Session 79 продолжает работу с iter-29 PR #599 — добавляет audit fix commit + retracts iter-30 PR #600. Также абортирует iter-31 (training round-2) до начала — investigation revealed target tables already exist в next46.

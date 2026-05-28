@@ -5,6 +5,8 @@
 - **Canonical status vocabulary:** `done` / `partial` / `missing` / `blocked`
 - **Single source of truth for release-critical statuses and evidence links.**
 
+> **⚠ CI status note (2026-05-28):** GitHub Actions on `aiprocadm/prt_ot_doc` was deliberately disabled via PR [#598](https://github.com/aiprocadm/prt_ot_doc/pull/598) — all 5 workflow files renamed `.yml → .yml.disabled`. The workflow-run evidence links cited below remain authoritative for closures already recorded (e.g. RB-001 on 2026-05-23), but **new closures of RB-002 / RB-003 / RB-005 cannot be produced via these workflows** until either (a) a replacement CI is set up, (b) the workflows are re-enabled, or (c) the closure criteria are redefined to accept local-evidence equivalents. The path to release-ready therefore has an external dependency on this decision. See `[[ci-disabled-actions-off]]` memory and AI_IMPLEMENTATION_REPORT Session 79 / 80 handoffs.
+
 **Authoring order:** update this file first, then sync [`RELEASE_READINESS.md`](../../RELEASE_READINESS.md) (verdict + RC summary). See **“How to update the release verdict”** in `RELEASE_READINESS.md`.
 
 Cross-links:
