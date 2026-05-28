@@ -1,141 +1,118 @@
 # AI Implementation Report
 
-## Last Agent Handoff (2026-05-29, Session 82 — iter-34 + iter-35 dual NOT-NULL FK closure: ppenorm.hazard_id and riskmap.company_id deferred items from iter-32)
+## Last Agent Handoff (2026-05-29, Session 83 — iter-36 server_default parity audit: third lightweight audit, surfaces 52-col cohort across 40 tables)
 
-- **Дата:** 2026-05-29 (after iter-33 PR [#607](https://github.com/aiprocadm/prt_ot_doc/pull/607) merged into main as `a34d511`). Ветка `fix/iter-34-ppenorm-hazard-id-backfill` от `a34d511`. Параллельных open-PR на старте session ноль. **Working tree carries two iters uncommitted per user direction** (see Decisions).
+- **Дата:** 2026-05-29. Ветка `feat/audit-server-default-parity` от `a34d511` (current main). Sibling-PR [#608](https://github.com/aiprocadm/prt_ot_doc/pull/608) (iter-34 + iter-35 dual NOT-NULL FK closure — Session 82) open at session start; this PR is independent of it (uses different scripts/audit/ file).
 - **Агент:** Claude Opus 4.7 (1M context, local Win+Py3.13; explanatory style + Auto Mode + TDD skill).
-- **Задача:** «продолжай по тз» — Session 81 handoff Next Step #2 (NOT NULL FK backfill, mechanical target). Iter-32 docstring explicitly deferred **two** NOT-NULL FK items as "no safe server_default" — `ppenorm.hazard_id` and `riskmap.company_id`. Session 82 closes both via the same 3-step pattern (nullable add → orphan DELETE → ALTER NOT NULL) + matching `UniqueConstraint` per model `__table_args__`. User then chose «не коммитить» and «возьмусь за iter-35 сейчас» → second iter executed in the same working tree, on top of iter-34's uncommitted files.
+- **Задача:** «прими самое эффективное решение и продолжай» (после shipping #608 in Session 82). Session 82 left Next Step #8 as the only fully-unblocked technical target: a `server_default` parity audit to surface the cohort of `nullable=False, default=<literal>` model columns whose migrations lack a matching `server_default`. iter-32 fixed exactly one such case (`ppeissue.quantity` via `server_default="1"`); the audit's purpose is to find every other instance of the same gap.
 
 ### Studied Documentation
 
-- Session 81 handoff Next Step #2 — "easiest mechanical targets: `ppenorm.hazard_id` and `riskmap.company_id`, 1 iter each". Picked ppenorm first per Session 81 ordering; followed with riskmap after user direction.
-- `backend/app/models/models.py:1285-1306` — `class PPENorm(TenantBaseModel)` with `hazard_id: Mapped[str] = mapped_column(ForeignKey("risk_hazards.id", ondelete="CASCADE"), nullable=False, index=True)` and `UniqueConstraint("tenant_id", "position_id", "hazard_id", "item_name", name="uq_ppe_norm_position_hazard_item")` in `__table_args__`. **Note**: there's a *second* `PPENorm` class in `backend/app/models/safety_core.py:207` (table `ppe_norms` plural, different shape) — this iter touches only the `models.py` table `ppenorm` (singular, default tablename), which is the one the audit flags.
-- `backend/app/models/models.py:1952-1986` — `class RiskMap(TenantBaseModel)` with `company_id: Mapped[str] = mapped_column(ForeignKey("company.id"), nullable=False, index=True)` (**no ondelete** — important contrast with ppenorm.hazard_id which has CASCADE) and `UniqueConstraint("tenant_id", "company_id", "site_id", "position_id", "methodology_id", name="uq_riskmap_scope")` spanning 5 columns.
-- `backend/app/migrations/versions/6b6dee7c951f_initial_schema.py:620-633` — `op.create_table('ppenorm', ...)` lists position_id/item_name/quantity/interval_days/tenant_id/created_at/updated_at/version/id — no `hazard_id`. The `risk_hazards` table (FK target) exists in the same migration at line 306.
-- `backend/app/migrations/versions/6b6dee7c951f_initial_schema.py:484-498` — `op.create_table('riskmap', ...)` lists methodology_id/matrix/recalculated_at/tenant_id/.../version/id — no `company_id`, no `site_id`, no `position_id`, no `document_pack_id`. Iter-32 added the three nullable ones; iter-35 adds the last NOT-NULL one.
-- `backend/app/migrations/versions/20260528_iter32_business_drift_cohort.py:29-30` — the deferral comment naming both `ppenorm.hazard_id` AND `riskmap.company_id` as NOT-NULL-FK exclusions.
-- `backend/tests/test_iter32_business_drift_cohort.py` — template for pure-AST pin tests (parametrized cohort table + revision pin + downgrade symmetry + closed-loop audit credit).
-- `[[alembic-heads-lesson]]` — verified true head of the iter chain by walking down_revision: iter-21 → iter-23 → iter-24 → iter-25 → iter-26 → iter-29 → iter-32 (head). Iter-23 appears as a parallel head only because it predates the iter-24 multi-down — iter-24's tuple chains it in. Iter-32 is the canonical head; iter-34 chains from iter-32; iter-35 chains from iter-34.
+- Session 82 Next Step #8 — the audit-extension prompt. "Would catch the ppenorm.{quantity, interval_days} class and similar."
+- `scripts/audit/column_drift_lite.py` (iter-33 closed) — template for pure-AST migration scan + mixin awareness. Reused the architectural pattern (module-level helpers, `REPO_ROOT` discovery, `scan_*` API for testability).
+- `scripts/audit/version_column_drift.py` (Session 80 audit v3) — second template; in particular the helper-aware migration walking.
+- `backend/app/migrations/versions/20260528_iter32_business_drift_cohort.py:80-85` — the established server_default add pattern (iter-32's `ppeissue.quantity` fix).
+- `backend/app/models/models.py` — manual grep surfaced 138 candidate columns with `nullable=False + default=<X>` before audit-side filtering for in-scope defaults (literal/enum only, callables excluded).
 
 ### Selected Plan Item
 
-- **Phase 0 release-blocker chase**, business-drift cohort second wave (NOT-NULL FK sub-class). Class: iter-32 deferred mechanical items, single-table single-column scope each.
-- **Why selected:** Session 81 marked iter-34 + iter-35 as «1 iter, easiest mechanical» — fully unblocked, doesn't need user input (vs #3 concept resolution / #4 incident design). #5 (branch cleanup) still needs destructive-git permission grant; #6 (CI strategy) is decisional; #7 (FLOW seed) is non-blocking polish. So this pair is the only "just code it" cluster.
-- **Cost:** ~200 prod LOC (two migrations, ~98 LOC each including docstrings) + ~510 test LOC (11 pin tests each). Reduces audit-reported business-drift from 8 → 6 tables (ppenorm + riskmap both gone). Critical unchanged at 2.
+- **Phase 0 tooling extension**, third lightweight audit (after `column_drift_lite` + `version_column_drift`). Class: audit-script authoring, identical category to iter-33's audit fix.
+- **Why selected:** the only Next-Steps item that's fully unblocked and doesn't need user input. #2 (mechanical iters) — exhausted by iter-34+35. #3 (concept resolution) needs user input. #4 (incident-family) needs enum-value decisions. #5 (branch cleanup) needs destructive-git permission grant. #6 (CI strategy) is decisional. #7 (FLOW seed) is non-blocking polish. So #8 it is.
+- **Cost:** ~210 prod LOC (audit script with verbose mode) + ~310 test LOC (16 pin tests covering scan + drift detection + real-codebase closed-loop).
+- **Cohort discovered:** 52 columns across 40 tables — substantial follow-up work for future iter-37+ cohorts.
 
-### Recent merged work since Session 81 (chronological)
+### Recent merged work since Session 82
 
-| PR | Date (UTC) | Iter | Scope | Class |
-|---|---|---|---|---|
-| [#606](https://github.com/aiprocadm/prt_ot_doc/pull/606) | 2026-05-29 | iter-33 | column_drift_lite — mapped_column first-arg as DB column name | tooling |
-| [#607](https://github.com/aiprocadm/prt_ot_doc/pull/607) | 2026-05-29 | iter-33 | (same scope as #606 — re-applied) | tooling |
+- (none — Session 82's PR [#608](https://github.com/aiprocadm/prt_ot_doc/pull/608) still open at session start; iter-36 is independent of it.)
 
 ### Implemented Changes (this session)
 
-**Code (working tree on branch `fix/iter-34-ppenorm-hazard-id-backfill`, both iters uncommitted per user direction):**
+**Code (PR `feat/audit-server-default-parity`):**
 
-1. **`backend/app/migrations/versions/20260529_iter34_ppenorm_hazard_id_backfill.py`** (new, +98) — iter-34, 3-step in-migration upgrade for `ppenorm.hazard_id`:
-   - Step 1: `op.add_column("ppenorm", sa.Column("hazard_id", sa.String(36), sa.ForeignKey("risk_hazards.id", ondelete="CASCADE"), nullable=True))` + `op.create_index("ix_ppenorm_hazard_id", ...)`.
-   - Step 2: `op.execute("DELETE FROM ppenorm WHERE hazard_id IS NULL")` — clears stale rows so Step 3's NOT NULL alter passes on Postgres (table was effectively read-only since deploy per iter-32 docstring; SQLite-tolerant rows lack any meaningful hazard_id).
-   - Step 3: `with op.batch_alter_table("ppenorm") as batch_op: batch_op.alter_column("hazard_id", existing_type=sa.String(36), nullable=False)` — SQLite portable via batch_alter.
-   - Plus matching `batch_op.create_unique_constraint("uq_ppe_norm_position_hazard_item", ["tenant_id", "position_id", "hazard_id", "item_name"])` mirroring the model `__table_args__` exactly.
-   - Downgrade strict inverse: drop unique → drop index → drop column.
-   - Revision `20260529_iter34_ppenorm_hazard`, chains from iter-32.
+1. **`scripts/audit/server_default_parity.py`** (new, +210) — third lightweight audit. Three public functions:
+   - `scan_model_default_candidates(model_path)` — returns `{(table, col): {default_repr}}` for model columns with `nullable=False + default=<literal or enum attr>`. Uses **PEP 8 UPPER_CASE heuristic** to distinguish enum literals (`RecordStatus.DRAFT`) from callable references (`uuid.uuid4`, `date.today`) — both are `ast.Attribute` syntactically, so the audit accepts only when `attr_name[0].isupper()` (enum convention).
+   - `scan_migration_columns_with_defaults(migration_paths)` — returns `{table: {col: {has_server_default}}}` for all `sa.Column("col", ...)` in `op.create_table(...)` and `op.add_column(...)`. Tracks any migration with `server_default=...` as satisfying parity (latest write wins on the flag).
+   - `detect_drift(model_path, migration_paths)` — combines the two: a model candidate is "drift" iff the column appears in some migration BUT no migration has set `server_default`. Columns absent from migrations entirely are out of scope (that's `column_drift_lite`'s domain).
+   - `run()` — convenience for real-repo scan (REPO_ROOT-relative paths).
+   - `main()` — CLI with `--verbose` flag for per-table breakdown.
 
-2. **`backend/tests/test_iter34_ppenorm_hazard_id_backfill.py`** (new, +254) — 11 pin tests, pure AST, no app boot:
-   - revision/down_revision pin to iter-32.
-   - add_column presence + Step 1 nullable=True.
-   - FK target `risk_hazards.id` with ondelete CASCADE.
-   - Step 2 `DELETE FROM ppenorm WHERE hazard_id IS NULL` presence.
-   - Step 3 alter_column nullable=False.
-   - Unique constraint 4-column tuple match.
-   - Index `ix_ppenorm_hazard_id`.
-   - Downgrade drops column + unique + index.
-   - Closed-loop audit credit via `column_drift_lite.collect_migration_columns()`.
+2. **`backend/tests/test_audit_server_default_parity.py`** (new, +310) — 16 pure-AST pin tests:
+   - 7 model-scan tests: int literal default / string literal default / enum-attribute default / callable default excluded / nullable=True excluded / no-default excluded / default tablename inference (no `__tablename__`).
+   - 3 migration-scan tests: `create_table` with server_default / without / `add_column` with server_default.
+   - 3 integrated drift tests: drift detected when migration lacks server_default / no drift when present / no drift when column absent.
+   - 3 real-codebase smoke tests (closed-loop verification): `ppenorm.quantity` flagged + `ppenorm.interval_days` flagged + `ppeissue.quantity` NOT flagged (iter-32's fix).
 
-3. **`backend/app/migrations/versions/20260529_iter35_riskmap_company_id_backfill.py`** (new, +98) — iter-35, same 3-step pattern for `riskmap.company_id` with notable contrasts:
-   - **FK has no `ondelete`** — model declares `ForeignKey("company.id")` plain; migration mirrors that exactly (no spurious ondelete kwarg).
-   - **UC spans 5 columns** `(tenant_id, company_id, site_id, position_id, methodology_id)` — `uq_riskmap_scope`. All five exist by end of upgrade (3 nullable ones added by iter-32, tenant_id + methodology_id from initial schema, company_id from this migration).
-   - Revision `20260529_iter35_riskmap_company`, chains from iter-34.
+**Doc (this PR — Session 83 sync):**
 
-4. **`backend/tests/test_iter35_riskmap_company_id_backfill.py`** (new, +257) — 11 mirror tests of iter-34's suite, with the key contrast `test_company_id_fk_targets_company_without_ondelete` explicitly asserting **no** ondelete kwarg in the migration FK (pins the model-vs-migration parity).
-
-**Doc (this session sync):**
-
-5. New `## Last Agent Handoff (2026-05-29, Session 82 ...)` block prepended (this entry) covering both iter-34 + iter-35.
+3. New `## Last Agent Handoff (2026-05-29, Session 83 ...)` block prepended (this entry).
 
 ### Changed / New Files
 
-- `backend/app/migrations/versions/20260529_iter34_ppenorm_hazard_id_backfill.py` — +98 new (iter-34).
-- `backend/tests/test_iter34_ppenorm_hazard_id_backfill.py` — +254 new (iter-34 pin suite).
-- `backend/app/migrations/versions/20260529_iter35_riskmap_company_id_backfill.py` — +98 new (iter-35).
-- `backend/tests/test_iter35_riskmap_company_id_backfill.py` — +257 new (iter-35 pin suite).
-- `AI_IMPLEMENTATION_REPORT.md` — +~170 / 0 (this handoff covering both iters).
+- `scripts/audit/server_default_parity.py` — +210 new.
+- `backend/tests/test_audit_server_default_parity.py` — +310 new.
+- `AI_IMPLEMENTATION_REPORT.md` — +~80 / 0 (this handoff).
 
 ### Decisions
 
-- **Started with ppenorm, then riskmap on user direction.** Session 81 marked both as equally mechanical and said "1 iter each". I picked ppenorm first (Session 81 ordering + clearer semantic invariant). After iter-34 reached green, asked user about commit/push/PR — user chose «не коммитить, возьмусь за iter-35 сейчас по тому же шаблону». So iter-35 was written on top of iter-34's uncommitted working tree.
-- **Working tree carries both iters uncommitted.** Branch name says iter-34 but contains iter-35 too. The PR-shaping decision (one PR vs two) is now the user's at commit time — they have all files in hand. If wanting one PR: rename branch (e.g. `fix/iters-34-35-not-null-fk-cohort`) and commit both. If wanting two PRs: `git add` only the iter-34 files for one commit, then branch off and add iter-35 files for another. Either split is mechanically straightforward.
-- **3-step in a single migration vs 3 separate migrations.** Could split into `iter-NNa` (add nullable) → `iter-NNb` (backfill) → `iter-NNc` (NOT NULL). Rejected: alembic best practice for the nullable→NOT-NULL transition is to keep it atomic when the gap should be near-zero. Three migrations would mean three deploy windows where the column is in an intermediate state, and our backfill strategy is "DELETE orphans" not "wait for app to backfill new INSERTs" — no operational reason to span deploys.
-- **DELETE orphans rather than backfill with a sentinel.** Could insert a sentinel row (a "default hazard" / "default company") and backfill ppenorm/riskmap rows to point at it. Rejected: (a) inventing a default pollutes the catalog; (b) tables have been effectively read-only since deploy (Postgres `UndefinedColumnError` on every INSERT per iter-32 docstring) so there should be zero rows to backfill in prod; (c) any SQLite-tolerant rows have no meaningful FK target and would be misleading data. DELETE is honest.
-- **Add the matching UniqueConstraint in the same migration each time.** Could leave the UC for a follow-up. Rejected: the new column is part of the model's UC tuple — adding the column without the UC creates a window where DB doesn't enforce the model invariant. Atomic.
-- **iter-35 FK has no ondelete — pinned by test.** `RiskMap.company_id` declares plain `ForeignKey("company.id")` with no ondelete. Test `test_company_id_fk_targets_company_without_ondelete` asserts the migration FK matches exactly (no spurious ondelete kwarg). This contrast with iter-34's CASCADE was the only structural difference between the two iters' migrations.
-- **batch_alter_table only for alter_column + create_unique_constraint, not add_column / create_index.** Plain `op.*` for the latter (matches iter-32 style — simpler, SQLite handles inline). batch_alter is only required for modifying existing columns or adding constraints to existing tables in SQLite. Mixed style is intentional.
-- **Did NOT touch unrelated `ppenorm.{quantity,interval_days}` server_default gaps.** Both have model Python-side defaults but migration `nullable=False` without `server_default` — same defect class iter-32 addressed for `ppeissue.quantity`. Audit doesn't flag them (column-presence audit only), so iter-34 scope kept clean. Filed as Next Step #8 (server_default parity audit).
+- **New script, not extension of `column_drift_lite`.** Could have extended `column_drift_lite.py` with a new section. Rejected: different defect class (parity vs presence) warrants different output schema and different "what to fix" semantics. Co-locating would muddy the single-responsibility of each audit. Three-script regime is intentional — each answers one question.
+- **Heuristic for enum-vs-callable: PEP 8 UPPER_CASE.** `ast.Attribute` is syntactically ambiguous between `RecordStatus.DRAFT` (enum literal, in scope) and `uuid.uuid4` (callable, out of scope). Solutions considered: (a) hardcoded denylist of callable names; (b) hardcoded allowlist of enum classes; (c) PEP 8 case convention. Chose (c): zero maintenance, follows Python community standard, the codebase strictly observes PEP 8 enum casing (verified: 138 model candidates' enum attrs are all UPPER_CASE, all callable attrs are lower_case). Failure mode: an unusually-named enum like `Status.value` would be misclassified — but no such pattern exists in this codebase.
+- **Columns absent from migrations are out of scope.** Could report them too. Rejected: `column_drift_lite` already does, and merging the report types would conflict-handle two unrelated defect classes. Audit explicitly skips them and the test `test_detect_no_drift_when_column_absent_from_migration` pins this.
+- **Did NOT also fix the 52 cohort in this PR.** Could batch a cohort closure into iter-36 alongside the audit. Rejected: (a) 52 cols is too large for one mechanical PR; (b) needs design slice (which cols are mechanically safe vs which involve semantic decisions — e.g., enum-default migrations need `server_default=sa.text("'value'")` or similar); (c) Session 82 demonstrated value of audit-then-fix pattern (iter-33 audit → iter-34/35 fix). Filed as Next Step #2.
+- **TDD synthetic tmp_path fixtures over real-file tests.** Could have written tests against `models.py` directly. Rejected: real-file tests would drift as models evolve; synthetic tests precisely pin the AST detection logic. Three real-codebase tests added as smoke probes for the closed-loop assertion (known ppenorm cases + known iter-32 fix).
 
 ### Issues Fixed
 
-- **`ppenorm.hazard_id` ORM-Migration drift (NOT NULL FK).** iter-32 deferred; iter-34 closes via staged backfill. Closed-loop verified via `test_audit_credits_ppenorm_hazard_id_after_iter34`.
-- **`riskmap.company_id` ORM-Migration drift (NOT NULL FK).** iter-32 deferred; iter-35 closes via the same pattern. Closed-loop verified via `test_audit_credits_riskmap_company_id_after_iter35`.
-- **Combined impact**: `column_drift_lite` business-drift drops 8 → 6 tables after both merge. Critical count unchanged at 2 (incident_log + incident_person remain Session 79's design-blocked pin).
+- **No-fix iter** — audit-only. Closure: surfaces a 52-col / 40-table cohort that previous sessions couldn't enumerate without `app.*` imports (heavyweight audit still hangs on Win+Py3.13). Unlocks iter-37+ cohort closures.
+- **Closed-loop verification on known cases**: `ppenorm.{quantity, interval_days}` flagged (matches Session 82's hand-noted examples), `ppeissue.quantity` NOT flagged (iter-32's fix is honored).
 
 ### Known Problems / Risks
 
-- **6 genuine business-drift tables remain.** Post-iter-34+iter-35 audit output: `incident`, `incident_log`, `incident_person` (Session 79's design-blocked pin — needs IncidentStatus/Stage/PersonRole enum values), `journalentry` (6 cols, concept drift per iter-32), `npabinding` (3 cols, needs design), `training_certificates` (4 backward-compat legacy cols). All remaining drift is either design-blocked or needs user concept-resolution input — no more mechanical iters available.
-- **Heavyweight audit still hangs on Win+Py3.13** (Session 80 confirmed, Session 81+82 re-confirmed). `from app.db.base import ALEMBIC_METADATA` produces no output in 60s. Lightweight audit remains the only viable local tool.
-- **CI still off** (PR #598). All blocker re-validation rests on local-evidence policy (PR #605). Strategic decision unresolved.
-- **iter-30/31 remote branches still persist** (Session 79+80+81+82 deferred). Cleanup needs destructive-git permission grant or user-initiated GitHub UI delete.
-- **Uncommitted CLAUDE.md expansion** in working tree — stashed at session start (`stash@{0}` msg: "CLAUDE.md expansion - leave for next session"). Looks like prior session's `claude-md-management:revise-claude-md` work that didn't get committed. Not iter-34/35 scope; left in stash for owner to land separately.
+- **52-col cohort still open.** No closure shipped this iter. Future iter-37+ work needs scoping: separate by mechanical-safe (int/str literals → trivial `server_default`) vs enum-default (need PG enum-cast in `sa.text`) vs questionable (e.g., is `status='draft'` what we actually want at DB level when the model uses an enum?). My quick scan of the 52: ~30 enum literals, ~15 int/bool literals, ~7 string literals (some questionable like `'unknown'` for `auditlog.ip`).
+- **Heuristic edge case: enum classes named non-PEP 8.** If a future contributor defines `class status(str, enum.Enum): draft = "draft"` (lowercase enum members), the audit would skip those defaults. Mitigation: any such introduction would also fail PEP 8 linters; if/when discovered, switch to an explicit denylist or allowlist.
+- **Heavyweight audit still hangs.** Unchanged from Sessions 80-82.
+- **CI still off** (PR #598). Unchanged.
+- **iter-30/31 remote branches still persist.** Unchanged.
+- **PR #608 not yet merged** at session end — when both this PR and #608 merge, AI_IMPLEMENTATION_REPORT.md will need a trivial top-of-file merge (both prepend at line 3). Either ordering resolves cleanly.
 
 ### Validation
 
-- `py -3 -m py_compile` for all four new files → OK.
-- `py -3 -m pytest backend/tests/test_iter34_ppenorm_hazard_id_backfill.py -v` → **11/11 pass** (post-fix; saw 11/11 RED before writing iter-34 migration — TDD red→green cycle clean).
-- `py -3 -m pytest backend/tests/test_iter35_riskmap_company_id_backfill.py -v` → **11/11 pass** (saw 11/11 RED before writing iter-35 migration; GREEN on first try thanks to iter-34 template).
-- `py -3 -m pytest backend/tests/test_iter34_*.py backend/tests/test_iter35_*.py backend/tests/test_iter32_business_drift_cohort.py backend/tests/test_iter29_version_retrofit.py backend/tests/test_audit_column_drift_lite.py backend/tests/test_audit_version_column_drift.py -v` → **111/111 pass** in 11.26s (no regression in adjacent suites: iter-32 cohort pin, iter-29 version pin, both audit lightweight suites; plus both new iter suites).
-- `py -3 scripts/audit/column_drift_lite.py` → **business-drift = 6 tables** (was 8 at session start; ppenorm + riskmap both gone). Critical = 2 unchanged (incident_log + incident_person — Session 79 pin).
-- **Not validated:** full backend test suite (Win+Py3.13 collect hang per `[[local-env-drift-windows]]`). Adjacent isolated suites + py_compile cover the scope.
+- `py -3 -m py_compile scripts/audit/server_default_parity.py backend/tests/test_audit_server_default_parity.py` → OK.
+- `py -3 -m pytest backend/tests/test_audit_server_default_parity.py -v` → **16/16 pass** in 3.21s (post-heuristic-fix; saw 16/16 RED before writing the audit, 15/16 GREEN after first pass, 1 fail on callable-exclusion → refined heuristic → 16/16 GREEN. TDD red→green→refactor cycle clean).
+- `py -3 -m pytest backend/tests/test_audit_server_default_parity.py backend/tests/test_audit_column_drift_lite.py backend/tests/test_audit_version_column_drift.py backend/tests/test_iter32_business_drift_cohort.py backend/tests/test_iter29_version_retrofit.py -v` → **105/105 pass** in 23.60s. No regression in any audit-related suite.
+- `py -3 scripts/audit/server_default_parity.py` → **52 cols / 40 tables**. Includes `ppenorm.{quantity, interval_days}` (known) + `ppeitem.{category, default_wear_days}` + many enum-default columns (`approval_instances.status`, `incident.{severity, status}`, etc.).
+- `py -3 scripts/audit/column_drift_lite.py` → unchanged (8 business-drift on this branch since iter-34+35 not merged yet; will be 6 after #608 merges).
+- `py -3 scripts/audit/version_column_drift.py` → unchanged (0 drift, 2 critical).
+- **Not validated:** full backend test suite (Win+Py3.13 collect hang). Adjacent isolated suites + py_compile cover the scope.
 
 ### Next Steps
 
-**Operational (this session output):**
+**Operational:**
 
-1. **User decides PR shape** — two PRs (iter-34 + iter-35 separate) or one bundled PR. Files exist on `fix/iter-34-ppenorm-hazard-id-backfill` working tree, uncommitted. Mechanical split: `git add` the iter-34 files for one commit/PR, then add iter-35 files for another. Or rename branch to `fix/iters-34-35-not-null-fk-cohort` for a single PR.
+1. Review iter-36 PR (audit script + 16 tests). Merge if approved.
+2. Merge PR [#608](https://github.com/aiprocadm/prt_ot_doc/pull/608) if not already done (Session 82's iter-34+35 cohort).
 
-**Technical (next session — primary, scenario-dependent):**
+**Technical (next session — primary):**
 
-2. **No more mechanical iters in the audit output.** All 6 remaining drift tables require design or user input — see below.
-3. **If user wants concept resolution on `journalentry`/`npabinding`/`training_certificates`**: each needs business meaning review (e.g., is `JournalEntry.payload` a forward rename of `metadata_json`? Is `TrainingCertificate.{course_id,session_id,plan_id,number}` truly legacy?). User input required.
-4. **If user wants incident-family design**: Session 79's pin — multi-iter project, needs enum value decisions on `IncidentStatus`, `IncidentStage`, `IncidentPersonRole` + parent `incident` business-drift cols + cascade semantics.
+3. **iter-37 cohort closure (server_default parity).** Run the new audit, slice the 52-col cohort by safety class:
+   - **Safe-subset A**: int/bool/None literals (~20 cols) — straightforward `server_default="<int>"` adds.
+   - **Safe-subset B**: short string literals (~7 cols) — `server_default="<str>"`.
+   - **Subset C**: enum defaults (~25 cols) — needs PG-vs-SQLite consideration; on PG use `server_default=sa.text("'draft'::status_enum")` or similar. Possibly defer until known SQLite behavior on enums verified.
+   - Bundle Subset A + B as a iter-37 safe-subset (mirror iter-32 pattern).
 
 **Technical (next session — secondary):**
 
-5. **Cleanup abandoned branches** `fix/iter-30-briefing-cohort`, `fix/iter-31-training-cohort-round2` (Sessions 79+80+81+82 deferred). Needs destructive-git permission grant.
-6. **CI re-enable strategy** — RB-002/003/005 are «provisional» under local-evidence policy. Strategic question still open.
-7. **FLOW demo-seed extension** — RB-002 caveat.
-8. **server_default parity audit** — extend `column_drift_lite` or add new lightweight check to flag `nullable=False` columns where model has `default=X` but migration has no `server_default`. Would catch the `ppenorm.{quantity, interval_days}` class and similar.
-9. **Commit/land stashed CLAUDE.md expansion** (not iter-34/35 scope).
+4. **Concept resolution / incident design / cleanup / CI** — unchanged from Session 82 Next Steps #3-#7.
 
 **Стартовая команда для следующей сессии:**
 
 ```bash
 git checkout main && git pull
 gh pr list --state open --limit 10
-py -3 scripts/audit/column_drift_lite.py    # expect 6 business-drift, 2 critical (after iter-34+iter-35 merge)
-# Pick next iter target per Next Steps #3-#9.
+py -3 scripts/audit/server_default_parity.py --verbose | head -80
+# Then pick iter-37 subset A+B or move to concept-resolution work.
 ```
 
-**Branch suggestion для следующей сессии:** `chore/cleanup-abandoned-iter30-31-branches` (если cleanup), `feat/audit-server-default-parity` (если #8), `design/incident-family-pass-1` (если #4 — needs user enum decisions first). No more "just iter-N mechanical" cohorts available.
+**Branch suggestion для следующей сессии:** `fix/iter-37-server-default-cohort-subset-AB` (safe int/str closures), `chore/cleanup-abandoned-iter30-31-branches` (если cleanup), `design/incident-family-pass-1` (если incident).
 
 ---
 
