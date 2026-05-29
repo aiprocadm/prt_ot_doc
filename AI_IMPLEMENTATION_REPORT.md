@@ -1,5 +1,109 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-29, Session 92 — Integration validation closure: 6 in-flight branches verified merged; all 3 lightweight audits at 0/0; 517/517 tests green)
+
+- **Дата:** 2026-05-29. Ветка `validate/all-six-branches-integration` от `093959b` (`main`). Branch is local-only; carries the integrated state of all 6 Session 86-91 branches (iter-39/40/41/42/43 + RB-002 trim) + 1 test-relax fix + 1 merge playbook doc, on top of `main`. Session 91's handoff Next Step #9 ("Validation of all 6 in-flight branches together") was the explicit target.
+- **Агент:** Claude Opus 4.7 (1M context, local Win+Py3.13; explanatory style + Auto Mode). User instruction: "продолжай по тз" — handoff-driven continuation per `[[prodolzhay-po-tz-workflow]]`.
+- **Задача:** The integration work itself (6 merges + test-relax + playbook) was already committed to this branch in an intervening sub-session that didn't write a handoff. Session 92's job: (a) **verify** the playbook's three asserted invariants under current local state, (b) **document** the Session 92 handoff (this entry) so the rolling backlog advances past S91 with the integration outcome recorded, (c) **advance Next Steps** for the next session.
+
+### Studied Documentation
+
+- `[[prodolzhay-po-tz-workflow]]` — confirmed rolling-backlog protocol: skip operational items in Next Steps, take next technical. S91 Next Step #9 was the natural fit (matches branch name).
+- `docs/merge-playbook-session-86-91.md` (commit `68193b8`, +142) — operational guidance produced by the integration sub-session. Documents recommended merge order (iter-39 first as audit-only, then iter-40/41/42/43 with alembic merge_heads after each beyond the first, then RB-002 trim), the conflict-resolution recipe (single conflict on `AI_IMPLEMENTATION_REPORT.md` per merge — auto-resolvable by appending both handoffs), the 3 closed-loop test relaxations needed, and pre-deploy verifications for the 3 destructive/assumption-based migrations.
+- `git log validate/all-six-branches-integration --oneline` — 14 commits ahead of `main`: 6 substantive code commits (iter-39 `e6bf3de`, iter-40 `858beb6`, iter-41 `2945b15`, iter-42 `a40020e`, iter-43 `2cb158d`, RB-002 trim `aa3e9a8`) + 6 merge commits (`f25b972`, `77f4684`, `3e13c21`, `c4b1bab`, `df06801`, `9fa72ef`) + 1 test-relax (`855385b`) + 1 playbook doc (`68193b8`).
+- `git show 855385b` — relaxed 3 intermediate-state closed-loop assertions: `test_real_codebase_business_drift_count_drops_to_five_after_iter39`, `test_audit_drift_count_drops_to_four_after_iter40`, `test_audit_drift_journalentry_cleared_after_iter41`. Each was correct in isolation but failed under integrated state where ALL drift is closed (an equality/superset check against design-blocked tables breaks when the design-blocked set is empty). Fix: each test now verifies only THAT iter's specific table-clearing contribution, leaving the integration-level "all drift cleared" assertion to iter-42's already-permissive `not (incident_family & drift_tables)` pattern.
+
+### Selected Plan Item
+
+- **Verification + handoff closure for the integration validation** (Session 91 Next Step #9). The integration sub-session left an undocumented gap: 8 commits beyond Session 91 but no `AI_IMPLEMENTATION_REPORT.md` entry to advance the rolling backlog. Without this handoff, future "продолжай по тз" would re-read S91's Next Steps and re-attempt #9.
+- **Why this over other S91 Next Steps:**
+  - #3 branch cleanup, #4 iter-37 dedupe — destructive git, need user permission.
+  - #5 CI re-enable — strategic decision (billing).
+  - #6 heavyweight audit hang diagnosis — open-ended; deferred until backlog is cleaner.
+  - #7 type-parity audit infrastructure — explicitly speculative ("defer until 2nd known case").
+  - #8 RB-002 FLOW Path A — bootstrap stakeholder weigh-in needed.
+  - #9 validation — already DONE; closing it formally is the cheapest, highest-value move.
+- **Cost:** 0 prod LOC, 0 test LOC, ~1 doc file changed (+~130 lines this handoff). Pure documentation/verification work.
+
+### Recent merged work since Session 91
+
+No PRs merged since Session 91 (all 6 branches still local, awaiting push + PR creation per playbook). The integration sub-session produced 8 commits on `validate/all-six-branches-integration` (local-only). No `main` mutations.
+
+### Implemented Changes (this session)
+
+**Verification (read-only):**
+
+1. `py -3 scripts/audit/column_drift_lite.py` → **0 business-drift + 0 critical-absent**. Playbook's primary claim confirmed.
+2. `py -3 scripts/audit/server_default_parity.py` → **0 cols / 0 tables**. Closed by iter-38, unchanged.
+3. `py -3 scripts/audit/version_column_drift.py` → **0 missing + 0 critical** (bonus: critical-absent was 0/2 pre-iter-42 because `incident_log` and `incident_person` were entirely absent; iter-42's `create_table` for both cleared the critical-absent class too).
+4. `py -3 -m pytest backend/tests/test_iter29_version_retrofit.py backend/tests/test_iter32_business_drift_cohort.py backend/tests/test_iter37_server_default_cohort.py backend/tests/test_iter38_server_default_cohort.py backend/tests/test_iter40_training_certificates_legacy_cols.py backend/tests/test_iter41_journalentry_concept_resolution.py backend/tests/test_iter42_incident_family.py backend/tests/test_iter43_incident_status_enum_type_parity.py backend/tests/test_audit_column_drift_lite.py backend/tests/test_audit_version_column_drift.py backend/tests/test_audit_server_default_parity.py backend/tests/test_perf_scenarios_nightly_baseline_pure_get.py` → **517/517 pass in 32.55s**. Playbook's combined-suite claim confirmed exactly.
+
+**Doc:**
+
+5. New `## Last Agent Handoff (2026-05-29, Session 92 ...)` block prepended to `AI_IMPLEMENTATION_REPORT.md` (this entry).
+
+### Changed / New Files
+
+- `AI_IMPLEMENTATION_REPORT.md` — +~130 / 0 (this handoff).
+
+### Decisions
+
+- **Verify before documenting.** The merge playbook (`68193b8`) claimed 517/517 + 0/0/0; running the same commands locally before writing the handoff was the cheapest insurance against propagating a stale claim. All numbers matched exactly — handoff cites them as confirmed, not asserted.
+- **Don't run heavyweight audit or full backend suite.** Per `[[local-env-drift-windows]]`, Win+Py3.13 conftest init hangs the full suite. The 12-file isolated suite is the established working slice for this branch's defect classes. Sufficient verification at the local-evidence level.
+- **No PR creation, no push, no `main` merge from this session.** All 6 branches are still local; pushing + opening PRs + main merges + alembic merge_heads operations are the user's operational purview per the playbook. This session closes the loop on validation only.
+- **No `[[mvp-release-blockers]]` memory update.** Drift class closure is an audit-health milestone, not an MVP blocker (RB-002 caveat was already resolved by Session 91's perf trim; MVP READY status from 2026-05-29 stands). Memory update would be cosmetic.
+- **No update to the merge playbook itself.** The playbook (`68193b8`) is operationally correct as written; the verification confirms it. Re-editing to add "verified by Session 92" would be churn.
+- **Session-numbering continuity preserved.** The integration sub-session that produced 8 commits between S91 and now is unnumbered (no handoff written). Calling this Session 92 keeps the numbering monotonic with the rolling backlog. The integration sub-session's work is attributed to "between S91 and S92" in this handoff's Studied Documentation section.
+
+### Issues Fixed
+
+- **Rolling backlog gap closed.** Session 91 Next Step #9 was complete on disk but not in the handoff log. Next "продолжай по тз" now sees Session 92's Next Steps, not S91's stale list.
+- **Integration verified under local-evidence policy.** All three lightweight audits report 0/0. Combined 12-file test suite at 517/517. The playbook's invariants are no longer just claims — they're observed.
+
+### Known Problems / Risks
+
+- **6 in-flight branches still local.** All commits sit on local refs only (`fix/iter-39-*`, `fix/iter-40-*`, `fix/iter-41-*`, `fix/iter-42-*`, `fix/iter-43-*`, `chore/rb-002-flow-scenarios-trim`). PR creation + push not yet done. Operational follow-up per playbook §"Recommended merge order".
+- **3 alembic `merge heads` operations still required** when iter-40/41/42/43 land in succession on `main`. Playbook §"Alembic merge heads commands" has the exact CLI invocations. Three no-op merge migrations will be produced.
+- **Pre-deploy verifications still pending** for iter-41 (drop_table on `journalentry`), iter-42 (NOT NULL FK add on `incident`), iter-43 (`status::text::incidentstatus` cast). Empty-table assumption needs operator confirmation on any deployed env before applying. Playbook §"Pre-deploy verifications" has the exact SELECT statements.
+- **Validation branch is local-only** by design. Should be discarded once `main` reaches the same merged shape via individual PRs. Branch's only ongoing value is as a reference for the merged shape; not for direct merge to main.
+- **Win+Py3.13 conftest hang unchanged.** Verification used the 12-file isolated slice, not the full backend suite. CI is off → no orthogonal verification path active.
+- **CI still off** (PR #598). Local-evidence policy continues.
+- **iter-30/31 abandoned remote branches still persist** — unchanged from prior sessions. Needs destructive-git permission.
+- **iter-37 PR #610/#611 double-merge** — unchanged from prior sessions. Needs destructive history rewrite permission.
+- **Heavyweight audit (`check_orm_migration_drift.py`) still hangs locally** — unchanged. Lightweight audits are the only local tool.
+- **No PG-side validation.** Pure AST + lightweight-audit closed-loop. Migrations not run against a real PG instance.
+
+### Validation
+
+- `py -3 scripts/audit/column_drift_lite.py` → **0/0**. Match with playbook.
+- `py -3 scripts/audit/server_default_parity.py` → **0/0**. Match.
+- `py -3 scripts/audit/version_column_drift.py` → **0/0**. Match (bonus on critical-absent).
+- `py -3 -m pytest <12 files>` → **517/517 pass in 32.55s**. Match exactly.
+- `git log validate/all-six-branches-integration --oneline | head -14` → 14 commits ahead of `main`. Match with playbook §"Branches summary".
+- `git status` → clean. No drift between disk + index + commit tree.
+- **Not validated:** PG-side upgrade, full backend suite, CI, perf signal (CI off; FLOW probes trimmed).
+
+### Next Steps
+
+**Operational (user's purview, not autopilot):**
+
+1. **Push the 6 in-flight branches + open PRs** in the playbook's recommended order. Each PR will conflict on `AI_IMPLEMENTATION_REPORT.md` after the first one merges — playbook §"Conflict resolution recipe" has the one-liner Python resolver.
+2. **Run `alembic merge heads`** after each of iter-41/42/43 lands on `main` (3 total merge-heads commits expected).
+3. **Pre-deploy verifications** for iter-41/42/43 against any deployed env before applying migrations — playbook §"Pre-deploy verifications" has the SELECT statements.
+4. **Discard `validate/all-six-branches-integration`** after main catches up via individual PRs — it served its purpose as the integrated-shape reference.
+5. **(Optional) Apply test-relax fix `855385b` pre-merge** instead of post-merge. Playbook §"Closed-loop test relaxations" describes both paths; (a) is cleaner history, (b) is what the validation branch already demonstrates.
+
+**Technical (next session — primary options):**
+
+6. **Path A for RB-002 FLOW** — extend `bootstrap_demo_tenant` with the literal-ID seed (Template, TemplateVersion, DocumentVersion, demo-company, demo-person). Re-adds the 3 trimmed FLOW perf scenarios. Stakeholder weigh-in needed: which entities deserve literal IDs vs auto-UUID. Estimated ~150-250 LOC bootstrap + ~80 LOC test + scenarios.json restoration.
+7. **Heavyweight audit hang diagnosis** — `scripts/audit/check_orm_migration_drift.py` hangs locally; with the 3 lightweight audits all at 0/0, this would be the next defensive-tool investment. Open-ended; could be quick (~30 min) or long (multi-session). YAGNI-flagged until the lightweight audits stop being sufficient.
+8. **Type-parity audit infrastructure** — speculative; defer until a second known type-drift case surfaces (one case = iter-43 `incident.status`).
+9. **Branch cleanup (iter-30/31 abandoned remotes)** — destructive-git permission needed. ~5 min CLI work.
+10. **iter-37 PR #610/#611 double-merge dedupe** — destructive history rewrite, permission needed. Long-standing artifact, not blocking anything.
+11. **CI re-enablement** — strategic billing + scope decision. Per `[[ci-disabled-actions-off]]`, deliberate disable; re-enable would unblock the full-suite verification path that local Win+Py3.13 can't run.
+
+**Drift backlog status (across all 3 lightweight audits):** **CLOSED**. First time in repo history all three report 0/0 simultaneously. The defect-class closure is the meta-milestone of Sessions 80-92.
+
 ## Last Agent Handoff (2026-05-29, Session 91 — RB-002 caveat resolution: perf nightly_baseline scope-trim to pure-GET)
 
 - **Дата:** 2026-05-29. Ветка `chore/rb-002-flow-scenarios-trim` от `093959b` (`main`). **Six parallel in-flight branches** in this conversation: iter-39/40/41/42/43 (drift work) + this perf trim.
