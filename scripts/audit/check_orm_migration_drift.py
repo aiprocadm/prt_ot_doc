@@ -9,9 +9,10 @@ Strategy:
   1. Import the same ``ALEMBIC_METADATA`` Alembic uses for autogenerate
      (this is the authoritative model-side schema).
   2. Parse every migration file under ``backend/app/migrations/versions/``
-     using ``ast`` to extract all ``op.create_table``, ``op.add_column`` and
-     ``op.drop_column`` calls. Build a ``(table, column)`` set representing
-     what migrations actually create.
+     using ``ast`` to extract all ``op.create_table``, ``op.add_column``,
+     ``op.drop_column``, ``op.rename_table`` and ``alter_column(...,
+     new_column_name=...)`` (column rename) calls. Build a ``(table, column)``
+     set representing what migrations actually create.
   3. Diff: model columns not in migration set → drift.
 
 Limitations:
@@ -23,6 +24,14 @@ Limitations:
   - Treats ``schema`` parameters as opaque — a table with the same name in
     ``app_shared`` vs tenant schema is collapsed into one entry. Matches
     how the ORM models declare them (no schema= on the Mapped class).
+  - Column renames are recognized only in the ``with op.batch_alter_table(...)``
+    form (``batch.alter_column("old", new_column_name="new")``) — the form
+    every rename in the repo uses today. A bare top-level
+    ``op.alter_column("table", "old", new_column_name="new")`` is NOT tracked;
+    if a future migration uses it, the old name lingers in the migration set
+    while the model declares the new one — the same business false-positive
+    iter-45 closed for the batch form. Promote it to a batch block, or extend
+    the generic Call-walker, when such a migration is introduced.
 
 Usage::
 
@@ -257,6 +266,7 @@ def _parse_migration(path: Path) -> dict[str, object]:
     drop_column: dict[str, list[str]] = defaultdict(list)
     drop_table: list[str] = []
     rename_table: list[tuple[str, str]] = []  # (old, new)
+    rename_column: list[tuple[str, str, str]] = []  # (table, old, new)
 
     # First: handle `with op.batch_alter_table("t", ...) as batch:` blocks.
     # These hold `batch.add_column(sa.Column("c", ...))` and `batch.drop_column("c")`
@@ -294,6 +304,21 @@ def _parse_migration(path: Path) -> dict[str, object]:
                     col_name = _string_arg(inner.args[0])
                     if col_name:
                         drop_column[table_name].append(col_name)
+                # batch.alter_column("old", new_column_name="new") — a rename.
+                # Plain alter_column (type/nullable/server_default, no
+                # new_column_name) is NOT a rename and is ignored.
+                elif _call_target_endswith(inner, "alter_column") and inner.args:
+                    old_name = _string_arg(inner.args[0])
+                    new_name = next(
+                        (
+                            _string_arg(kw.value)
+                            for kw in inner.keywords
+                            if kw.arg == "new_column_name"
+                        ),
+                        None,
+                    )
+                    if old_name and new_name:
+                        rename_column.append((table_name, old_name, new_name))
 
     for node in ast.walk(walk_target):
         if not isinstance(node, ast.Call):
@@ -353,6 +378,7 @@ def _parse_migration(path: Path) -> dict[str, object]:
         "drop_column": dict(drop_column),
         "drop_table": drop_table,
         "rename_table": rename_table,
+        "rename_column": rename_column,
         "_path": str(path.relative_to(REPO_ROOT)),
     }
 
@@ -362,12 +388,14 @@ def _collect_migration_columns() -> tuple[dict[str, set[str]], list[dict[str, ob
 
     Aggregate ignores order; we do not attempt topological replay because the
     common drift case (column missing entirely) is order-independent.
-    Dropped columns are subtracted; renamed tables map old→new columns.
+    Dropped columns are subtracted; renamed tables map old→new table; renamed
+    columns (alter_column new_column_name=) map old→new within a table.
     """
     all_files = sorted(MIGRATIONS_DIR.glob("*.py"))
     per_file: list[dict[str, object]] = []
     table_columns: dict[str, set[str]] = defaultdict(set)
     rename_map: dict[str, str] = {}
+    column_renames: list[tuple[str, str, str]] = []  # (table, old, new), file order
 
     for path in all_files:
         if path.name.startswith("__"):
@@ -380,11 +408,24 @@ def _collect_migration_columns() -> tuple[dict[str, set[str]], list[dict[str, ob
             table_columns[table].update(cols)
         for old, new in ops["rename_table"]:  # type: ignore[union-attr]
             rename_map[old] = new
+        column_renames.extend(ops["rename_column"])  # type: ignore[arg-type]
 
     # Apply renames so model's current name finds historical create_table.
     for old, new in rename_map.items():
         if old in table_columns:
             table_columns.setdefault(new, set()).update(table_columns.pop(old))
+
+    # Apply column renames (alter_column new_column_name=). Done after the
+    # table-rename merge so the rename resolves against the table's current
+    # name, and before drop subtraction. Mirrors rename_table at column scope:
+    # the old name yields to the new one the ORM model declares, so a renamed
+    # column is not stranded as a false-positive drift entry.
+    for table, old_col, new_col in column_renames:
+        current = rename_map.get(table, table)
+        cols = table_columns.get(current)
+        if cols is not None:
+            cols.discard(old_col)
+            cols.add(new_col)
 
     # Subtract drops (must be done after rename merge).
     for ops in per_file:
