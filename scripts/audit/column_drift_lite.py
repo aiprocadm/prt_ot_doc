@@ -49,8 +49,13 @@ from pathlib import Path
 from typing import Iterable
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-MODELS_FILE = REPO_ROOT / "backend" / "app" / "models" / "models.py"
-BASE_FILE = REPO_ROOT / "backend" / "app" / "models" / "base.py"
+MODELS_DIR = REPO_ROOT / "backend" / "app" / "models"
+# iter-44 multi-file scope: scan all ``backend/app/models/*.py``, not just
+# ``models.py``. Closes the 5th audit static-analysis blindspot (single-file
+# scope). Excluded by filename: ``__init__.py`` (re-export only by convention),
+# ``base.py`` (mixin/base classes whose bases don't match VERSIONED_BASES).
+_MODELS_SKIP_FILES = frozenset({"__init__.py", "base.py"})
+BASE_FILE = MODELS_DIR / "base.py"
 MIGRATIONS_DIR = REPO_ROOT / "backend" / "app" / "migrations" / "versions"
 
 VERSIONED_BASES = {"TenantBaseModel", "SharedModel"}
@@ -231,12 +236,20 @@ class ModelInfo:
         return f"ModelInfo({self.class_name}, {self.tablename}, {len(self.columns)} cols)"
 
 
-def find_versioned_models() -> dict[str, ModelInfo]:
-    """Map ``{tablename: ModelInfo}`` for every class inheriting one of
-    ``VERSIONED_BASES`` either directly or transitively (e.g. via
-    ``SoftDeleteMixin``).
+def _discover_model_files() -> list[Path]:
+    """Return all ``MODELS_DIR/*.py`` files worth scanning.
+
+    Excludes ``__init__.py`` (re-export-only by convention) and ``base.py``
+    (mixin/base classes whose bases don't match ``VERSIONED_BASES`` anyway).
+    Sorted for deterministic iteration order.
     """
-    tree = ast.parse(MODELS_FILE.read_text(encoding="utf-8"))
+    return sorted(
+        p for p in MODELS_DIR.glob("*.py") if p.name not in _MODELS_SKIP_FILES
+    )
+
+
+def _versioned_models_in_tree(tree: ast.Module) -> dict[str, ModelInfo]:
+    """Extract ``{tablename: ModelInfo}`` from a single parsed module tree."""
     result: dict[str, ModelInfo] = {}
     for node in tree.body:
         if not isinstance(node, ast.ClassDef):
@@ -268,6 +281,27 @@ def find_versioned_models() -> dict[str, ModelInfo]:
                             db_name = first.value
                     columns.add(db_name)
         result[tablename] = ModelInfo(node.name, tablename, columns, bases)
+    return result
+
+
+def find_versioned_models() -> dict[str, ModelInfo]:
+    """Map ``{tablename: ModelInfo}`` for every class inheriting one of
+    ``VERSIONED_BASES`` either directly or transitively (e.g. via
+    ``SoftDeleteMixin``).
+
+    iter-44: walks every ``*.py`` in ``MODELS_DIR`` (excluding ``__init__.py``
+    and ``base.py``), not just ``models.py``. Closes the 5th audit
+    static-analysis blindspot from Session 93 — model classes in
+    ``approval_workflow.py``, ``job_engine.py``, ``risk.py``, etc. are now
+    visible to the audit.
+    """
+    result: dict[str, ModelInfo] = {}
+    for path in _discover_model_files():
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for tablename, info in _versioned_models_in_tree(tree).items():
+            # Later files don't silently replace earlier ones (would mask
+            # legitimate duplicate __tablename__ declarations).
+            result.setdefault(tablename, info)
     return result
 
 

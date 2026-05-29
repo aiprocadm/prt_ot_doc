@@ -1,5 +1,121 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-29, Session 94 — iter-44 column_drift_lite multi-file scope extension: 5th audit blindspot closed; 3 real business-drift cases surface)
+
+- **Дата:** 2026-05-29. Ветка `validate/all-six-branches-integration` (continuing from Session 93, commit `a0c9f85`). 3 commits ahead of `origin` now (S92, S93, S94 + iter-44 work).
+- **Агент:** Claude Opus 4.7 (1M context, local Win+Py3.13.7; explanatory style + Auto Mode + TDD). User instruction (3rd consecutive): "прими самое эффективное решение и продолжай" — explicit decision delegation.
+- **Задача:** Session 93 Next Step #2 (iter-44 candidate). Closes the 5th audit static-analysis blindspot identified in S93: `column_drift_lite.py` scanning only `models.py` (single file) instead of all `backend/app/models/*.py` (16 files). TDD-driven: RED test → GREEN implementation → REFACTOR (tightened regression-guard floor) → VERIFY.
+
+### Studied Documentation
+
+- `scripts/audit/column_drift_lite.py:52` (pre-iter-44) — `MODELS_FILE = REPO_ROOT / "backend/app/models/models.py"` single-path constant.
+- `backend/tests/test_audit_column_drift_lite.py:235-249` (pre-iter-44) — `_load_models_from(tmp_path, body)` test helper swapped `_AUDIT.MODELS_FILE` to a synthetic single-file path. 27 existing tests used this contract.
+- `scripts/audit/check_orm_migration_drift.py:540-581` — heavyweight's wider scope: imports `ALEMBIC_METADATA` via `from app.db.base import ALEMBIC_METADATA`, sees every model class registered, regardless of source file.
+- `backend/app/models/*.py` directory contents — 16 model files containing `class X(TenantBaseModel)` or `class X(SharedModel)` declarations: `approval_workflow.py`, `calendar_views.py`, `checks.py`, `document.py`, `feature.py`, `file.py`, `finance.py`, `job_engine.py`, `models.py`, `notifications.py`, `npa.py`, `obligations.py`, `risk.py`, `safety_core.py`, `safety_ops.py`, plus `__init__.py` (re-exports only) and `base.py` (the base class definitions themselves).
+- `[[audit-static-analysis-blindspots]]` — pre-iter-44 the memory listed 4 forms (S79/S81/S85/S86); S93 added the 5th (single-file scope); this iter closes it.
+- `backend/app/models/risk.py:152` — `class RiskAssessment(TenantBase)` (note: bare `TenantBase`, NOT `TenantBaseModel`). VERSIONED_BASES doesn't include `TenantBase` because such classes don't have a `version` col. Lightweight correctly excludes this by design; heavyweight catches it because it scans all SA-registered classes regardless of versioning. Different scopes; not a lightweight bug.
+
+### Selected Plan Item
+
+- **iter-44 multi-file scope extension** (Session 93 NS #2). TDD-driven, bounded scope, no destructive ops, no product decisions. Closes the 5th audit blindspot mechanically; reveals true business-drift surface.
+- **Why this over other S93 Next Steps:**
+  - #3 (heavyweight `batch.alter_column(new_column_name=)` tracking) — smaller scope (~30 LOC) but tier-2 audit (lightweight is daily driver); less impact per LOC.
+  - #4 (per-case investigation of 4 candidates) — best done AFTER iter-44 because then lightweight mechanically confirms or denies each case, narrowing investigation surface.
+  - #5-#8 — same caveats as S92/S93 (stakeholder weigh-in, defer, permission gates, strategic).
+
+### Recent merged work since Session 93
+
+None. iter-44 lives on the validation branch (local-only) and can be staged into its own `fix/iter-44-column-drift-lite-multi-file-scope` branch for PR review per the same precedent as commit `855385b` (test-relax fix on validation branch).
+
+### Implemented Changes (this session)
+
+**Code (iter-44 — staged for `fix/iter-44-column-drift-lite-multi-file-scope`):**
+
+1. **`scripts/audit/column_drift_lite.py`** (–37 / +50 effective):
+   - Renamed `MODELS_FILE` (single Path) → `MODELS_DIR` (the parent dir).
+   - Added `_MODELS_SKIP_FILES = frozenset({"__init__.py", "base.py"})` — defensive filename guard for files that don't have versioned model classes.
+   - Added `_discover_model_files() -> list[Path]` — sorted glob of `MODELS_DIR/*.py` minus the skip set. Deterministic iteration order for test stability.
+   - Extracted `_versioned_models_in_tree(tree)` from the body of `find_versioned_models()` — pure per-tree class extraction (existing logic, now reusable).
+   - Refactored `find_versioned_models()` to iterate over all discovered files, parse each, merge results via `result.setdefault(tablename, info)` (first wins — defensive against accidental duplicate `__tablename__` declarations).
+
+2. **`backend/tests/test_audit_column_drift_lite.py`** (–15 / +95 effective):
+   - Updated `_load_models_from(tmp_path, body)` helper to swap `_AUDIT.MODELS_DIR` (not `MODELS_FILE` which no longer exists). Single-file semantics preserved: writes one synthetic file into tmp dir, audit walks the dir (sees only that one file).
+   - Added `_load_models_from_files(tmp_path, files: dict[str, str])` helper for multi-file synthetic scenarios.
+   - Added `test_find_versioned_models_walks_all_files_in_models_dir` — primary RED test (FooFromA in file_a.py + BarFromB in file_b.py, both must be detected).
+   - Added `test_find_versioned_models_skips_init_and_base_files` — defensive guard (ghost models in `__init__.py` and `base.py` must NOT be detected).
+   - Tightened `test_real_codebase_no_unexpected_versioned_classes_missed` floor: `100` → `150` (regression guard against accidental MODELS_FILE revert — pre-iter-44 was 111, post-iter-44 is 186, 150 catches an accidental regression to single-file scope).
+
+**Doc:**
+
+3. New `## Last Agent Handoff (2026-05-29, Session 94 ...)` block prepended to `AI_IMPLEMENTATION_REPORT.md` (this entry).
+
+### Changed / New Files
+
+- `scripts/audit/column_drift_lite.py` — +13 net (refactor with new helpers).
+- `backend/tests/test_audit_column_drift_lite.py` — +80 net (2 new tests + 1 helper + floor tightening).
+- `AI_IMPLEMENTATION_REPORT.md` — +~100 / 0 (this handoff).
+
+### Decisions
+
+- **Rename, don't shim.** `MODELS_FILE` (single path) → `MODELS_DIR` (parent dir) is a clean rename, not a shim that preserves both. Backwards-compat shim would add complexity for no benefit (the only consumer is `_load_models_from` test helper, which I update in the same diff). Clean rename signals the contract change.
+- **Skip-list by filename, not by content-detection.** `_MODELS_SKIP_FILES = {"__init__.py", "base.py"}` is hardcoded. Alternative: detect "no classes inheriting VERSIONED_BASES" and skip empty parses. The hardcoded list is cheaper (no file-read needed) and reflects honest project conventions: `__init__.py` is re-exports, `base.py` is the base-class definitions. If a future model file is named differently (e.g. `_internal.py`), it'd be scanned and yield no models — harmless.
+- **`setdefault` for duplicate tablename — first wins.** Defensive: if two files declare `__tablename__ = "x"` (shouldn't happen but...), the first file (alphabetically) wins. Avoids silent overwrite that could mask a real duplication bug. Could log a warning, but the audit's posture is "stay silent on ambiguous, flag only what's certain".
+- **TDD discipline followed exactly.** Wrote 2 RED tests first (verified `AttributeError: module has no attribute 'MODELS_DIR'`), then GREEN implementation, then verify all 29 tests pass + 519 combined suite pass. Did NOT write code first.
+- **Tighten floor from 100 → 150 in the same iter.** Bundled because it's a free regression guard (1-line change) that locks in the iter-44 contract. Splitting into a separate iter-44a would add operational ceremony for ~0 marginal cost.
+- **Don't fix the 3 new business-drift findings now.** iter-44 is an audit-scope extension; the drift it reveals is reality, not new bugs introduced by the iter. Per-case investigation + per-case migration fixes are iter-46+ work (separate scope per drift case).
+- **Stay on `validate/all-six-branches-integration` branch.** Same precedent as commit `855385b` (test-relax on validation branch). User can cherry-pick iter-44 to its own branch for PR review when ready.
+- **Keep heavyweight's `batch.alter_column(new_column_name=)` blindspot for iter-45.** Out of scope here. Lightweight already handles this via `_extract_alter_rename_kwarg` (line 324 pre-iter-44) — that's why lightweight didn't false-positive on webhook_deliveries this session.
+
+### Issues Fixed
+
+- **Lightweight scope gap closed.** `find_versioned_models()` now walks all `MODELS_DIR/*.py`. Detected versioned classes: **111 → 186** (+68%). The S92 "drift class CLOSED" claim is now verifiable at full project scope, not just `models.py` slice.
+- **5th audit static-analysis blindspot retired.** Memory `[[audit-static-analysis-blindspots]]` was updated in S93 to flag this; now closed in code.
+- **Regression guard tightened.** `>= 150` floor on detected class count locks in the multi-file scope as durable behavior.
+
+### Known Problems / Risks
+
+- **3 new business-drift tables surface — real drift candidates.** Pre-iter-44 lightweight reported 0; post-iter-44 reports 3:
+  - `approval_decisions` (in `approval_workflow.py:166`) — 5 model_only cols (`approval_instance_id, approval_instance_step_id, ip, payload_json, user_agent`). Matches heavyweight finding. Real drift candidate, needs iter-46 investigation.
+  - `file` (in `file.py`) — 8 model_only cols (`clamav_scanned_at, clamav_signature, company_id, is_quarantined, kind, original_name, pack_id, scan_status`). NEW finding — heavyweight didn't surface this (possibly because heavyweight had a rename or tablename mismatch hiding the cols). Needs iter-47 investigation.
+  - `outbox_events` (in `job_engine.py:169`) — 1 model_only col (`last_error`). Matches heavyweight finding. Real drift candidate, needs iter-48 investigation.
+- **Total 14 business-drift cols across 3 tables.** Each requires migration archaeology before any `op.add_column` work — could be real drift, rename chain that audit doesn't track, or design intent (model evolved past migration's old shape).
+- **S92 "drift class CLOSED" claim is qualified once more.** Session 93 already qualified it ("CLOSED at lightweight `models.py` scope"). Session 94 extends scope; new claim: "CLOSED at lightweight versioned-model multi-file scope, except for the 3 surfaced business-drift cases" → not actually CLOSED. The drift class is partially OPEN until iter-46/47/48 land.
+- **All earlier risks from Sessions 92/93 unchanged.** 6 in-flight branches still local, 3 alembic merge_heads still needed, iter-30/31 cleanup pending, iter-37 dedupe pending, CI off, etc.
+
+### Validation
+
+- `py -3 -m pytest backend/tests/test_audit_column_drift_lite.py -v` → **29/29 pass in 7.10s** (27 baseline + 2 new tests post-iter-44).
+- `py -3 -m pytest <12 file combined suite>` → **519/519 pass in 52.60s** (517 baseline + 2 new tests, zero regression in adjacent suites).
+- `py -3 scripts/audit/column_drift_lite.py` → **186 versioned classes scanned** (was 111), 3 business-drift tables (was 0), 0 critical-absent (unchanged).
+- TDD log: RED state confirmed (`AttributeError: module 'column_drift_lite' has no attribute 'MODELS_DIR'`); GREEN after implementation; REFACTOR (floor tighten) stays GREEN.
+- **Not validated:** the 3 new business-drift cases as definite drift vs audit FP (could be rename chains the audit doesn't track — needs per-case migration archaeology). Per-case work for iter-46/47/48.
+
+### Next Steps
+
+**Operational (user's purview — unchanged from S93):**
+
+1. (Unchanged) Push 6 in-flight branches + iter-44 (or stage iter-44 on its own branch) + open PRs + alembic merge_heads + pre-deploy verifications + discard validation branch.
+
+**Technical (next session — primary):**
+
+2. **iter-46 candidate: `approval_decisions` drift investigation.** Read migration history end-to-end for `approval_decisions` table, determine if the 5 model_only cols are (a) real drift needing `op.add_column`, (b) rename chain the audit missed, or (c) intentional design where the model evolved past the migration's old shape. Open the appropriate iter-46 fix branch.
+3. **iter-47 candidate: `file` drift investigation.** Same shape as iter-46 but for `file` table — 8 cols, larger investigation. Heavyweight didn't surface this; lightweight does. Surprising — investigate why.
+4. **iter-48 candidate: `outbox_events.last_error` drift investigation.** Smallest of the three (1 col). Quick close if it turns out to be missing `op.add_column`.
+5. **iter-45 candidate: heavyweight `batch.alter_column(new_column_name=)` rename tracking** (~30 LOC + tests). Closes webhook_deliveries FP in heavyweight + any other rename-tracked drift.
+
+**Technical (next session — secondary, unchanged from S93):**
+
+6. RB-002 Path A (FLOW perf bootstrap extension) — stakeholder weigh-in.
+7. Type-parity audit — speculative, defer.
+8. Branch cleanup (iter-30/31, iter-37 dedupe) — destructive-git permission.
+9. CI re-enablement — billing/strategic.
+
+**Drift backlog status (corrected once more):**
+- Lightweight `models.py` scope (S92 baseline): **0/0**.
+- Lightweight versioned-multi-file scope (post-iter-44): **3 tables / 14 cols** business-drift. Real surface.
+- Heavyweight all-models scope: 6 business + 46 mixin + others — superset; includes FPs and design-by-choice exclusions.
+- iter-46/47/48 close the 3 real cases; after they land, lightweight versioned-multi-file scope reaches 0/0 and the claim "drift class CLOSED" becomes honest at the broadest lightweight scope.
+
 ## Last Agent Handoff (2026-05-29, Session 93 — Heavyweight audit re-verified runnable; reveals lightweight scope gap; S92 "CLOSED" claim qualified)
 
 - **Дата:** 2026-05-29. Ветка `validate/all-six-branches-integration` (continuing from Session 92, commit `d8f8341`). Same `main` base + 9 commits ahead now (including S92 handoff).
