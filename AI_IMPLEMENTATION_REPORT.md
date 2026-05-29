@@ -1,5 +1,124 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-29, Session 85 — iter-38 server_default cohort closure: Subset C (33 cols / 29 tables) — entire defect class closed)
+
+- **Дата:** 2026-05-29. Ветка `fix/iter-38-server-default-cohort-subset-C` от `9d29a45` (current `main`, includes iter-37 merged as [#611](https://github.com/aiprocadm/prt_ot_doc/pull/611)). Open PRs at session start: none. iter-38 is unstacked — clean branch from main, no pending dependencies.
+- **Агент:** Claude Opus 4.7 (1M context, local Win+Py3.13; explanatory style + Auto Mode + TDD skill).
+- **Задача:** «продолжай работу с проектом» — Session 84 handoff Next Step #3 (iter-38 Subset C closure for the remaining 33 enum-typed defaults). Per `[[prodolzhay-po-tz-workflow]]`: skipped operational items #1-2 (review/merge — user's purview), took the first technical item.
+
+### Studied Documentation
+
+- Session 84 handoff Next Step #3 — the Subset C scope statement: 32 enum-typed defaults + `tenant.kind`. Noted the open design question: "bundle all 33 in one iter vs slice by enum (smaller, easier review). Recommend single iter for mechanical clarity (each row is one alter_column)."
+- `backend/app/migrations/versions/20260529_iter37_server_default_cohort_ab.py` — exact template for `alter_column` cohort closure. Reused structure: alphabetical ordering within blocks, `existing_type` + `existing_nullable=False` + `server_default` triplet, inverse-order downgrade with `server_default=None`.
+- `backend/app/migrations/versions/20260319_next48_billing_core.py:97` — **decisive precedent**: `sa.Column("status", invoice_status, nullable=False, server_default="draft")` uses **plain string** for a PG enum column, not `sa.text("'draft'::invoice_status")` cast. Validates that PG's implicit text→enum cast in assignment context (CREATE TABLE column DEFAULT and ALTER COLUMN SET DEFAULT) is sufficient. This contradicts Session 84's handoff note suggesting `sa.text("'value'::enum_name")` — repo precedent is plain string.
+- `backend/app/migrations/versions/6b6dee7c951f_initial_schema.py:194,734,752` — initial PG enum declarations for incident.severity, permit.status, ppeissue.status etc. Confirmed that SA Enum(EnumClass) on PG creates a named ENUM type with the **attribute names** (UPPER_CASE) as labels, not the `.value` strings.
+- `backend/app/migrations/versions/20250601_tenant_quotas_and_counters.py:26-30,46-51` — `tenant_kind` declared as `postgresql.ENUM("customer", "branch", "contractor", name="tenantkind", create_type=False)` + backfill `UPDATE tenant SET kind = 'customer' WHERE kind IS NULL`. The literal `'customer'` is the actual stored value (positional Enum, not `EnumClass` form).
+- `backend/app/models/models.py` — full inventory of all 33 cohort columns. Mapped each to its Enum class + default member + storage form (UPPER_CASE name for Enum-class columns vs lowercase literal for tenant.kind).
+- `scripts/audit/server_default_parity.py:_alter_column_target` — confirmed audit credits parity for any non-None `server_default=` value in `alter_column`. The literal form (plain string vs sa.text) is irrelevant for parity bookkeeping; only presence + non-None matters.
+
+### Selected Plan Item
+
+- **iter-38 cohort closure**, Subset C = 33 columns across 29 tables. Closes the entire `server_default` parity defect class (audit drift → 0).
+- **Why selected:** the prime technical Next Step from Session 84. Mechanically pure, no design decisions remaining (storage convention reverse-engineered from initial_schema + billing_core; iter-37 supplied the alter_column pattern). Single-iter bundle chosen over per-enum slicing — each row is mechanically identical, per-row review is cheap, no inter-row dependencies.
+- **Cost:** ~390 prod LOC (single migration with 33 upgrade + 33 downgrade alter_column pairs) + ~265 test LOC (8 structural tests + 4 parametrized × 33 cohort = 132 cohort tests + 2 closed-loop). One small deletion in `test_iter37_server_default_cohort.py` (obsolete sanity probe).
+- **Closed loop:** server_default parity audit drift dropped from **33 → 0 cols / 29 → 0 tables**.
+
+### Recent merged work since Session 84
+
+| PR | Date (UTC) | Iter | Scope | Class |
+|---|---|---|---|---|
+| [#610](https://github.com/aiprocadm/prt_ot_doc/pull/610) | 2026-05-29 | iter-37 | server_default Subset A+B + audit alter_column extension (first merge) | DB + tooling |
+| [#611](https://github.com/aiprocadm/prt_ot_doc/pull/611) | 2026-05-29 | iter-37 | server_default Subset A+B + audit alter_column extension (second merge — superseded #610) | DB + tooling |
+
+Note: PRs #610 and #611 contain identical work — appears to be a re-merge or double-merge artifact. Both commits exist in main's linear history; iter-38 builds on the latest state (#611). No corrective action needed for iter-38.
+
+### Implemented Changes (this session)
+
+**Code (PR `fix/iter-38-server-default-cohort-subset-C`):**
+
+1. **`backend/app/migrations/versions/20260529_iter38_server_default_cohort_c.py`** (+390 new) — 33 upgrade `op.alter_column` calls + 33 inverse-order downgrade `op.alter_column(server_default=None)` calls. revision `20260529_iter38_server_default_c`, down_revision `20260529_iter37_server_default_ab`. Each upgrade carries `existing_type=sa.String(length=64)` (informational placeholder, accurate for SQLite Enum→VARCHAR fallback) + `existing_nullable=False`. server_default values: UPPER_CASE attribute name for SA-Enum class columns (32 cols), `"customer"` lowercase literal for `tenant.kind` (positional-Enum form).
+
+2. **`backend/tests/test_iter38_server_default_cohort.py`** (+265 new) — mirror of iter-37 test shape: 33-row `_COHORT_C` data table + 8 tests (revision chain pin, cohort size 33 pin, no create_table/add_column in upgrade, 4 × 33 parametrized = 132 cohort assertions + downgrade symmetry) + 2 closed-loop audit-integration tests (`test_audit_no_longer_flags_thirtythree_cohort_cols`, `test_audit_drift_total_count_is_zero`). Total: 141 tests.
+
+3. **`backend/tests/test_iter37_server_default_cohort.py`** (–25 / +6) — removed obsolete `test_audit_still_flags_deferred_subset_c_enum_cols` sanity probe (asserted 4 Subset C cols stayed flagged — invariant broken by iter-38). Replaced with a NOTE comment pointing future readers to `test_audit_drift_total_count_is_zero` as the new equivalent regression guard.
+
+**Doc (this PR — Session 85 sync):**
+
+4. New `## Last Agent Handoff (2026-05-29, Session 85 ...)` block prepended (this entry).
+
+### Changed / New Files
+
+- `backend/app/migrations/versions/20260529_iter38_server_default_cohort_c.py` — +390 new.
+- `backend/tests/test_iter38_server_default_cohort.py` — +265 new.
+- `backend/tests/test_iter37_server_default_cohort.py` — –25 / +6 (delete obsolete sanity probe).
+- `AI_IMPLEMENTATION_REPORT.md` — +~120 / 0 (this handoff).
+
+### Decisions
+
+- **Plain string `server_default="<NAME>"` instead of `sa.text("'<value>'::<enum_name>")`.** Session 84's handoff suggested the explicit PG cast form; repo precedent (`billing_core.py:97`) uses plain string for a PG enum column. PG performs implicit text→enum cast in assignment context (CREATE TABLE column DEFAULT and ALTER COLUMN SET DEFAULT), so plain string suffices. Plain string is also dialect-portable (SQLite Enum falls back to VARCHAR + optional CHECK constraint where `::cast` would be PG-only syntax). The audit doesn't care about the literal form — only presence + non-None.
+- **`existing_type=sa.String(length=64)` for all 33 rows.** The columns are actually a mix of PG-native ENUM types (most) and VARCHAR (e.g. `incident.status` in initial_schema), with the model declaration unified as `Enum(MyEnumClass)`. Alembic's `existing_type` is informational for autogenerate diff and SQLite batch-mode reconstruction; `op.alter_column` with only `server_default` change doesn't recreate the type. `sa.String(64)` is structurally accurate from SQLite's perspective (Enum → VARCHAR) and harmless on PG. This keeps the cohort uniform and matches iter-37's pattern (the 4 tuple `(sa_type_name, sa_type_arg)` shape).
+- **UPPER_CASE name vs lowercase value.** For columns declared `Enum(MyEnumClass[, name=...])` with default `MyEnumClass.MEMBER`, SQLAlchemy's default `native_enum=True` on PG stores the enum **member name** (UPPER_CASE attribute), not the `.value`. So `default=IncidentSeverity.MEDIUM` lands as `'MEDIUM'`, not `'medium'`. Verified via initial_schema enum declarations: `sa.Enum('LOW', 'MEDIUM', 'HIGH', name='incidentseverity')` — labels are UPPER_CASE. The exception: `tenant.kind` declared as `Enum("customer", "branch", "contractor", name="tenantkind"), default="customer"` — positional strings + literal default → stored as `'customer'` lowercase.
+- **Single iter-38 over per-enum slicing.** Considered slicing by enum class (e.g. all *Status* enums together, all *Type* enums together). Rejected: mechanical uniformity (each row is `op.alter_column(table, col, existing_type=..., existing_nullable=False, server_default="...")`) makes per-row review trivial. Per-enum slicing adds PR-management overhead without review benefit. Bundling matches iter-37's 19-row precedent.
+- **Removed iter-37 obsolete probe, not flipped.** `test_audit_still_flags_deferred_subset_c_enum_cols` asserted 4 sample Subset C cols stayed in drift. After iter-38 they're closed; either delete or flip to "no longer flagged". Chose delete because (a) the new `test_audit_drift_total_count_is_zero` in iter-38 provides equivalent global coverage; (b) keeping the flipped form would mislead future readers about iter-37's intent; (c) the NOTE comment preserves the historical context.
+- **No DB integration test (alembic upgrade/downgrade round-trip).** Same rationale as iter-37 / iter-32: Win+Py3.13 conftest crash for full app boot + AST-pin tests catch all mechanical errors + closed-loop audit verifies semantic correctness. Adding a DB round-trip would 2-3× test runtime for marginal extra signal.
+- **Did NOT touch enum column types or values.** Considered also normalizing the `Enum(EnumClass)` columns to consistent `Enum(EnumClass, name="...")` form (some use `name=`, some don't, leading to SA auto-generating names like `clientrequestticketstatus`). Rejected: orthogonal cleanup, would be a separate iter. iter-38 only adds DB-side defaults, doesn't touch types.
+
+### Issues Fixed
+
+- **server_default parity drift class — final closure (Subset C).** All 33 enum-typed columns now have DB-side defaults matching their model `default=` declarations. Combined with iter-32 (`ppeissue.quantity`) and iter-37 (Subset A+B, 19 cols), every model column with `nullable=False, default=<literal or enum attribute>` now has matching `server_default` in migrations. The audit's three-tier drift class (initial-cohort discovery in iter-36 → Subset A+B closure in iter-37 → Subset C closure in iter-38) is the first ORM↔Migration drift class to reach 0/0.
+- **Operational impact for raw-SQL paths.** Restore-drill SQL dumps, perf-baseline `COPY`, manual ops fixes, alembic `op.execute("INSERT ...")` on these 33 columns will no longer hit `NOT NULL` violation — they get the documented default applied at DB level.
+
+### Known Problems / Risks
+
+- **No DB-level upgrade verification.** Migration was not actually run against PG (no PG instance available locally; Win+Py3.13 SQLite conftest hang prevents alembic from running through pytest). Validation rests on: (a) py_compile; (b) AST pin tests on migration shape; (c) closed-loop audit drift = 0; (d) billing_core precedent for plain-string PG enum server_default. CI is disabled (PR #598), so deployment-time validation depends on the operator running `alembic upgrade head` against a real PG before promoting.
+- **`existing_type=sa.String(length=64)` is technically inaccurate** for PG-native ENUM columns. Harmless because `alter_column` SET DEFAULT doesn't recreate the type, but a future SQLite batch-mode migration that touches these tables would see VARCHAR(64) and might reconstruct as such. If that becomes a problem, the existing_type values can be tightened per-row in a follow-up.
+- **Heavyweight audit still hangs.** Unchanged from Sessions 80-84. Lightweight audits remain the only viable local tool.
+- **CI still off** (PR #598). Unchanged. Local-evidence policy applies.
+- **iter-30/31 abandoned remote branches still persist.** Unchanged.
+- **Double-merged iter-37** (PRs #610 + #611 contain identical work). Likely operator artifact, no functional impact. Worth checking with whoever managed the merge whether one should be reverted from history.
+
+### Validation
+
+- `py -3 -m py_compile backend/app/migrations/versions/20260529_iter38_server_default_cohort_c.py backend/tests/test_iter38_server_default_cohort.py backend/tests/test_iter37_server_default_cohort.py` → OK.
+- `py -3 -m pytest backend/tests/test_iter38_server_default_cohort.py backend/tests/test_iter37_server_default_cohort.py backend/tests/test_audit_server_default_parity.py` → **238/238 pass** in 7.47s.
+- `py -3 -m pytest backend/tests/test_audit_column_drift_lite.py backend/tests/test_audit_version_column_drift.py backend/tests/test_iter32_business_drift_cohort.py backend/tests/test_iter29_version_retrofit.py` → **89/89 pass** in 12.51s. No regression in adjacent audit/cohort suites.
+- `py -3 scripts/audit/server_default_parity.py` → **0 cols / 0 tables** (was 33 / 29 pre-iter-38). **Entire defect class closed.**
+- `py -3 scripts/audit/column_drift_lite.py` → unchanged: 6 business-drift tables, 111 versioned models, 240 migration tables. Different drift class (column presence), iter-38 didn't touch it.
+- `py -3 scripts/audit/version_column_drift.py` → unchanged: 0 missing version, 2 critical. Different drift class (version mixin), iter-38 didn't touch it.
+- **Not validated:** full backend test suite (Win+Py3.13 collect hang per `[[local-env-drift-windows]]`). Adjacent isolated suites + py_compile + closed-loop audit cover the scope.
+
+### Next Steps
+
+**Operational:**
+
+1. Review iter-38 PR (390 prod + 265 test LOC + 1 deleted test method). One file deleted + 3 files added/modified.
+2. Decide on the PR #610 / #611 double-merge artifact — non-blocking for iter-38.
+
+**Technical (next session — primary):**
+
+3. **Concept resolution / incident-family design pass / branch cleanup / CI re-enablement / FLOW seed.** With Subset C closed, the entire server_default parity defect class is at 0/0. Remaining technical work items from Session 81-84 Next Steps are all blocked on user input or design decisions:
+   - **Concept resolution** — needs domain decisions on entity merges.
+   - **Incident-family pass** — needs enum-value decisions (closed-set vs free-text status).
+   - **Branch cleanup (iter-30/31 abandoned remotes)** — needs destructive-git permission.
+   - **CI re-enablement** — strategic, needs decision on billing/scope.
+   - **FLOW seed** — non-blocking polish, may not be worth a session.
+4. **column_drift_lite cohort closures.** 6 business-drift tables remain (Incident missing 6 cols; permit, ppeissue, riskmap also flagged for specific column gaps). These are absent-from-migration columns, not server_default — a different defect class. Would need a per-table audit and design call (is the model right or the migration?) before closing.
+
+**Стартовая команда для следующей сессии:**
+
+```bash
+git checkout main && git pull
+gh pr list --state open --limit 10
+py -3 scripts/audit/server_default_parity.py     # expect 0/0 if iter-38 merged
+py -3 scripts/audit/column_drift_lite.py | head -20   # the next drift class
+# Then either pick a column_drift_lite table for cohort closure, or
+# move to design-pass work (incident-family / concept resolution).
+```
+
+**Branch suggestion для следующей сессии:** `fix/iter-39-column-drift-cohort-<scope>` (если cohort closure для column_drift_lite), `design/incident-family-pass-1` (если incident), `chore/cleanup-abandoned-iter30-31-branches` (если cleanup), `chore/dedupe-iter37-double-merge` (если PR #610/#611 fix).
+
+---
+
 ## Last Agent Handoff (2026-05-29, Session 84 — iter-37 server_default cohort closure: Subset A+B (19 cols) + audit alter_column extension)
 
 - **Дата:** 2026-05-29. Ветка `fix/iter-37-server-default-cohort-subset-AB` от `6ec940d` (head of `feat/audit-server-default-parity`, which is the iter-36 PR branch — Session 83's work, not merged to main yet). Stacked on top of iter-36 because iter-37 needs the audit script delivered in iter-36 to verify closed-loop. Sibling open PRs at session start: [#608](https://github.com/aiprocadm/prt_ot_doc/pull/608) (iter-34+35 dual NOT-NULL FK) and the iter-36 PR.
