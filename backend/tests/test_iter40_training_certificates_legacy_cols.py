@@ -364,11 +364,16 @@ def test_audit_credits_iter40_columns() -> None:
         )
 
 
-def test_audit_drift_count_drops_to_four_after_iter40() -> None:
-    """Closed-loop count: pre-iter-40 was 5 business-drift tables (Session 85
-    baseline minus iter-39's npabinding closure).  iter-40 closes
-    training_certificates → exactly 4 remain (incident, incident_log,
-    incident_person, journalentry — all design-blocked).
+def test_audit_drift_training_certificates_cleared_after_iter40() -> None:
+    """Closed-loop scoped to iter-40's contribution: training_certificates
+    must be cleared by the legacy-col cohort closure.
+
+    Originally also asserted that the 4 design-blocked tables (incident,
+    incident_log, incident_person, journalentry) remained flagged. That
+    sibling assertion was correct in isolation but breaks once
+    iter-41 / iter-42 land (those close journalentry + incident family).
+    Relaxed to a single-table check; integration-level "all drift cleared"
+    assertion is owned by iter-42's closed-loop test.
     """
     audit_path = REPO_ROOT / "scripts" / "audit" / "column_drift_lite.py"
     spec = importlib.util.spec_from_file_location("column_drift_lite", audit_path)
@@ -382,14 +387,4 @@ def test_audit_drift_count_drops_to_four_after_iter40() -> None:
     drift_tables = {info.tablename for info, _missing in drift}
     assert _TABLE not in drift_tables, (
         "training_certificates should be cleared by iter-40"
-    )
-    # We allow drift counts to be looser here — the exact remaining set
-    # depends on whether iter-39 is also on this branch. The hard pin is:
-    # training_certificates is gone.
-    remaining_design_blocked = {
-        "incident", "incident_log", "incident_person", "journalentry",
-    }
-    assert remaining_design_blocked <= drift_tables, (
-        f"Expected remaining design-blocked tables ({sorted(remaining_design_blocked)}) "
-        f"still flagged; got {sorted(drift_tables)}"
     )

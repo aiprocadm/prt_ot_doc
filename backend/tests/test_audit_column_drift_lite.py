@@ -533,11 +533,17 @@ def test_real_codebase_npabinding_no_longer_flagged() -> None:
     )
 
 
-def test_real_codebase_business_drift_count_drops_to_five_after_iter39() -> None:
-    """Closed-loop count: pre-iter-39 baseline was 6 business-drift tables
-    (Session 85 audit output). iter-39 closes npabinding's false positive →
-    exactly 5 remain (incident, incident_log, incident_person, journalentry,
-    training_certificates), all design-blocked per `[[mvp-release-blockers]]`.
+def test_real_codebase_npabinding_cleared_from_drift_after_iter39() -> None:
+    """Closed-loop scoped to iter-39's contribution: npabinding's false
+    positive must be cleared by the dynamic-batch_alter_table resolution.
+
+    Originally pinned an exact "expected_remaining" set (5 tables) as the
+    state after iter-39. That worked while iter-39 was the only landing.
+    iter-40 / iter-41 / iter-42 each subsequently close another table —
+    when ALL four land together, the equality assertion fails because
+    drift_tables == empty set. Relaxed to "npabinding is cleared", which
+    holds across any combination of follow-up iters. Integration-level
+    "all drift cleared" assertion is owned by iter-42's closed-loop test.
     """
     models = _AUDIT.find_versioned_models()
     migration_cols = _AUDIT.collect_migration_columns()
@@ -545,17 +551,6 @@ def test_real_codebase_business_drift_count_drops_to_five_after_iter39() -> None
     drift_tables = {info.tablename for info, _missing in drift}
     assert "npabinding" not in drift_tables, (
         "npabinding must be cleared by iter-39 dynamic-batch resolution"
-    )
-    expected_remaining = {
-        "incident",
-        "incident_log",
-        "incident_person",
-        "journalentry",
-        "training_certificates",
-    }
-    assert drift_tables == expected_remaining, (
-        f"Expected drift tables to be exactly {sorted(expected_remaining)} "
-        f"after iter-39; got {sorted(drift_tables)}"
     )
 
 

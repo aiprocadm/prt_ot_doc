@@ -457,7 +457,14 @@ def test_audit_credits_iter41_model_business_columns() -> None:
 
 
 def test_audit_drift_journalentry_cleared_after_iter41() -> None:
-    """Closed-loop count: journalentry must drop out of the business-drift list."""
+    """Closed-loop scoped to iter-41's contribution: journalentry must
+    be cleared by the drop+recreate concept resolution.
+
+    Originally also asserted that the incident family (3 tables) remained
+    flagged. iter-42 closes them. Relaxed to a single-table check;
+    integration-level "all drift cleared" assertion is owned by iter-42's
+    closed-loop test.
+    """
     audit_path = REPO_ROOT / "scripts" / "audit" / "column_drift_lite.py"
     spec = importlib.util.spec_from_file_location("column_drift_lite", audit_path)
     assert spec is not None and spec.loader is not None
@@ -471,10 +478,4 @@ def test_audit_drift_journalentry_cleared_after_iter41() -> None:
     assert _TABLE not in drift_tables, (
         f"{_TABLE} should be cleared by iter-41; still in drift: "
         f"{sorted({info.tablename: sorted(missing) for info, missing in drift if info.tablename == _TABLE})}"
-    )
-    # Incident family stays design-blocked.
-    design_blocked = {"incident", "incident_log", "incident_person"}
-    assert design_blocked <= drift_tables, (
-        f"Expected design-blocked tables {sorted(design_blocked)} still flagged; "
-        f"got {sorted(drift_tables)}"
     )
