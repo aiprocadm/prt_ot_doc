@@ -235,18 +235,19 @@ def test_compute_drift_reports_missing_business_column() -> None:
 def _load_models_from(tmp_path: Path, body: str) -> dict:
     """Write a synthetic models file into a tmp dir and run the model walker.
 
-    Mirrors ``_collect_one`` (migrations) — swaps ``MODELS_FILE`` so the
-    audit reads our synthetic content rather than the real codebase, then
-    reverts in a finally so test isolation holds.
+    iter-44: swaps ``MODELS_DIR`` (not the removed ``MODELS_FILE``) so the
+    audit walks our tmp dir containing one synthetic file. Single-file
+    semantics preserved: only one file written, so behaviorally equivalent
+    to the pre-iter-44 contract. Reverts in a finally so test isolation holds.
     """
     models_file = tmp_path / "synthetic_models.py"
     models_file.write_text(textwrap.dedent(body).lstrip(), encoding="utf-8")
-    original = _AUDIT.MODELS_FILE
-    _AUDIT.MODELS_FILE = models_file
+    original = _AUDIT.MODELS_DIR
+    _AUDIT.MODELS_DIR = tmp_path
     try:
         return _AUDIT.find_versioned_models()
     finally:
-        _AUDIT.MODELS_FILE = original
+        _AUDIT.MODELS_DIR = original
 
 
 def test_mapped_column_first_string_arg_resolves_to_db_column_name(tmp_path: Path) -> None:
@@ -282,6 +283,106 @@ def test_mapped_column_first_string_arg_resolves_to_db_column_name(tmp_path: Pat
     assert "legal_address" not in foo.columns
     assert "plain" in foo.columns, (
         "plain mapped_column without first-string-arg keeps attribute name"
+    )
+
+
+def _load_models_from_files(tmp_path: Path, files: dict[str, str]) -> dict:
+    """Multi-file scope test helper for ``MODELS_DIR``-based walking (iter-44).
+
+    Mirrors :func:`_load_models_from` but for the multi-file case: writes
+    each ``filename: body`` pair into ``tmp_path`` and points
+    ``_AUDIT.MODELS_DIR`` at the tmp dir so the audit walks all files.
+    """
+    for filename, body in files.items():
+        (tmp_path / filename).write_text(textwrap.dedent(body).lstrip(), encoding="utf-8")
+    original = _AUDIT.MODELS_DIR
+    _AUDIT.MODELS_DIR = tmp_path
+    try:
+        return _AUDIT.find_versioned_models()
+    finally:
+        _AUDIT.MODELS_DIR = original
+
+
+def test_find_versioned_models_walks_all_files_in_models_dir(tmp_path: Path) -> None:
+    """iter-44 multi-file scope: models in any *.py under MODELS_DIR are detected.
+
+    Closes the 5th audit static-analysis blindspot (single-file MODELS_FILE
+    scope, Session 93). Before iter-44 the audit scanned only ``models.py``,
+    blind to ``approval_workflow.py``, ``job_engine.py``, ``risk.py``, etc.
+    This test demonstrates models declared across multiple files are all
+    found via the MODELS_DIR walk.
+    """
+    body_a = """
+        from sqlalchemy.orm import Mapped, mapped_column
+        from sqlalchemy import String
+
+        class FooFromA(TenantBaseModel):
+            __tablename__ = "foo_from_a"
+            alpha: Mapped[str] = mapped_column(String(32))
+    """
+    body_b = """
+        from sqlalchemy.orm import Mapped, mapped_column
+        from sqlalchemy import String
+
+        class BarFromB(TenantBaseModel):
+            __tablename__ = "bar_from_b"
+            beta: Mapped[str] = mapped_column(String(64))
+    """
+    models = _load_models_from_files(
+        tmp_path,
+        {"file_a.py": body_a, "file_b.py": body_b},
+    )
+    assert "foo_from_a" in models, (
+        "model in file_a.py must be detected by multi-file walk"
+    )
+    assert "bar_from_b" in models, (
+        "model in file_b.py must be detected by multi-file walk"
+    )
+    assert "alpha" in models["foo_from_a"].columns
+    assert "beta" in models["bar_from_b"].columns
+
+
+def test_find_versioned_models_skips_init_and_base_files(tmp_path: Path) -> None:
+    """iter-44: ``__init__.py`` and ``base.py`` are skipped during multi-file walk.
+
+    ``__init__.py`` typically only re-exports models; ``base.py`` defines
+    the TenantBaseModel/SharedModel classes themselves (whose bases do NOT
+    include the VERSIONED_BASES, so they would be filtered out anyway — but
+    skipping by filename is a defensive cheap guard).
+    """
+    body_real = """
+        from sqlalchemy.orm import Mapped, mapped_column
+        from sqlalchemy import String
+
+        class RealModel(TenantBaseModel):
+            __tablename__ = "real_model"
+            x: Mapped[str] = mapped_column(String(32))
+    """
+    body_noise = """
+        from sqlalchemy.orm import Mapped, mapped_column
+        from sqlalchemy import String
+
+        # This model would be picked up if init.py wasn't skipped.
+        class GhostFromInit(TenantBaseModel):
+            __tablename__ = "ghost_from_init"
+            y: Mapped[str] = mapped_column(String(32))
+    """
+    models = _load_models_from_files(
+        tmp_path,
+        {
+            "real.py": body_real,
+            "__init__.py": body_noise,
+            "base.py": body_noise.replace("GhostFromInit", "GhostFromBase").replace(
+                "ghost_from_init", "ghost_from_base"
+            ),
+        },
+    )
+    assert "real_model" in models
+    assert "ghost_from_init" not in models, (
+        "__init__.py models must be skipped — re-exports only by convention"
+    )
+    assert "ghost_from_base" not in models, (
+        "base.py models must be skipped — only mixin/base classes live there"
     )
 
 
@@ -351,11 +452,19 @@ def test_real_codebase_incident_log_no_longer_critical_absent() -> None:
 
 
 def test_real_codebase_no_unexpected_versioned_classes_missed() -> None:
-    """Sanity: 111 versioned classes detected (matches Session 80 audit output)."""
+    """Sanity: 186 versioned classes detected post-iter-44 multi-file scope.
+
+    Pre-iter-44: ~111 classes (models.py only). Post-iter-44: 186 across all
+    ``backend/app/models/*.py`` files. The 150 floor is the regression guard
+    for the multi-file scope being preserved — if someone accidentally
+    reverts to single-file ``MODELS_FILE``, the count drops back to ~111 and
+    this test fires.
+    """
     models = _AUDIT.find_versioned_models()
-    # Loose floor — the project will add models; this just catches regressions
-    # in the AST class detection (e.g. if the Mapped[...] detection breaks).
-    assert len(models) >= 100, f"Only {len(models)} versioned classes — detection regression?"
+    assert len(models) >= 150, (
+        f"Only {len(models)} versioned classes — multi-file scope regression "
+        f"(iter-44 should detect 180+ across all model files)?"
+    )
 
 
 # ---------------------------------------------------------------------------
