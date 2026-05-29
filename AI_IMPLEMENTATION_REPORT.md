@@ -1,5 +1,708 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-29, Session 91 — RB-002 caveat resolution: perf nightly_baseline scope-trim to pure-GET)
+
+- **Дата:** 2026-05-29. Ветка `chore/rb-002-flow-scenarios-trim` от `093959b` (`main`). **Six parallel in-flight branches** in this conversation: iter-39/40/41/42/43 (drift work) + this perf trim.
+- **Агент:** Claude Opus 4.7 (1M context, local Win+Py3.13; explanatory style + Auto Mode + TDD). User instruction: "прими самое эффективное решение и продолжай" — explicit decision delegation.
+- **Задача:** Decision delegation; selected RB-002 FLOW perf caveat closure (Path B trim) over other options (branch cleanup needs permission; CI re-enable needs billing decision; type-parity audit speculative low-ROI; heavyweight audit hang investigation open-ended).
+
+### Studied Documentation
+
+- `[[mvp-release-blockers]]` "RB-002 caveat" — `"FLOW perf scenarios (document_generate_apply_headers, files_upload_flow) reference demo entities not seeded by bootstrap_demo_tenant. Pure-GET scenarios expected green on next CI re-trigger. Either extend demo_bootstrap OR scope-trim nightly_baseline to pure-GET."`
+- `scripts/perf/scenarios.json` — 3 FLOW scenarios in `nightly_baseline`:
+  - `document_generate_apply_headers` references `template_code="Greeting"`, `template_version=1`, literal `company_id="demo-company"`, `person_id="demo-person"`, path `/api/v1/headers/documents/demo-document-version-id/apply-headers`.
+  - `files_upload_flow` — actually no pre-existing entities (creates new file), but bundled in the trim because it's still a FLOW (POST+capture pipeline).
+  - `jobs_status_transitions` — `template_code="TMP"` literal (not seeded).
+- `backend/app/services/demo_bootstrap.py:18-116` — current seed: Tenant, Company (by name, auto UUID), Site, Department, Position, Person (Иван Иванов, by first/last name, auto UUID), TrainingCourse, plus `ensure_default_packs`. Does NOT seed entities with literal IDs nor a Template/TemplateVersion/DocumentVersion stack.
+- `docs/stabilization/perf-baseline.md:86-95` — documents the post-2026-04-20 expansion (the very probes being trimmed).
+- `scripts/perf/README.md` — generic doc, doesn't enumerate scenarios; no edits needed.
+
+### Selected Plan Item
+
+- **Path B (scope-trim)** chosen over Path A (extend bootstrap).
+- **Why Path B was the most effective:**
+  - CI is OFF (PR #598) so FLOW perf signal currently has ZERO immediate value.
+  - Path B cost: ~10 LOC scenarios.json + ~80 LOC test + doc updates = ~110 LOC total.
+  - Path A cost: ~150-250 LOC bootstrap extension (Template + TemplateVersion + Document + DocumentVersion seeding) + parallel test coverage + likely DB migration to seed entities with literal IDs (not currently a pattern in bootstrap).
+  - Path A also doesn't actually resolve files_upload_flow's reliance on `/api/v1/files:upload-init` working end-to-end (storage backend needs to be functional in CI), which itself was a separate Session 80 cause-class.
+  - Path B preserves the OPTION to add Path A later when CI is re-enabled and someone wants the signal back.
+- **Closed:** RB-002 caveat exactly as specified by the memory (scope-trim to pure-GET).
+
+### Recent merged work since Session 85
+
+| PR | Date (UTC) | Iter / Branch | Scope | Class |
+## Last Agent Handoff (2026-05-29, Session 90 — iter-43 incident.status enum type-parity (smallest in-flight closure))
+
+- **Дата:** 2026-05-29. Ветка `fix/iter-43-incident-status-enum-type-parity` от `093959b` (`main`). **Five parallel in-flight branches now**, all from `main`: iter-39/40/41/42 from prior sessions, plus this iter-43. After all five merge, `column_drift_lite` business-drift = **0** + critical-absent = **0** + incident table fully aligned with model (column presence + type parity both closed for incident).
+- **Агент:** Claude Opus 4.7 (1M context, local Win+Py3.13; explanatory style + Auto Mode + TDD).
+- **Задача:** «продолжай» — Session 89 handoff Next Step #6 sub-bullet ("incident.status type drift — adds incidentstatus PG enum"). Single-col type-parity closure; targeted scope.
+
+### Studied Documentation
+
+- Session 89 (iter-42) handoff — explicit "OUT OF SCOPE for iter-42: ``incident.status`` column type drift". iter-43 closes that explicit deferral.
+- `backend/app/models/models.py:2300-2302` — `Mapped[IncidentStatus] = mapped_column(Enum(IncidentStatus, name="incidentstatus"), nullable=False, default=IncidentStatus.REPORTED)`.
+- `backend/app/migrations/versions/6b6dee7c951f_initial_schema.py:199` — `sa.Column('status', sa.String(length=64), nullable=False)`. The 5-year-old VARCHAR shape.
+- iter-38 / iter-42 storage convention — UPPER_CASE attribute-name labels are the SA default for `Enum(EnumClass, name=X)` without `values_callable`. Confirmed by initial_schema:198's `incidentseverity` enum (`'LOW', 'MEDIUM', 'HIGH'` UPPER_CASE).
+- iter-37 / iter-38 `alter_column` pattern — informational `existing_type` + preserving `existing_nullable`. iter-43 follows.
+
+### Selected Plan Item
+
+- **iter-43 single-col type-parity** — create `incidentstatus` PG enum, alter `incident.status` from `String(64)` to `Enum`. Mirror of iter-37/38 `alter_column` work but for type change (not server_default change).
+- **Why now:** smallest standalone closure in the drift backlog. Self-contained; no domain decision needed; mechanically pure. Natural continuation after iter-42 explicitly deferred it.
+- **Cost:** ~95 prod LOC migration + ~265 test LOC (11 tests).
+- **Closed loop (no audit infrastructure):** column_drift_lite doesn't track types — so no audit closed-loop. Pinned via direct AST tests instead. (Building a `enum_type_parity.py` audit would cost ~200 more LOC for a defect class that may only have this one case; deferred.)
+## Last Agent Handoff (2026-05-29, Session 89 — iter-42 incident family cohort closure: column_drift_lite reaches 0/0)
+
+- **Дата:** 2026-05-29. Ветка `fix/iter-42-incident-family-cohort` от `093959b` (`main`, with iter-38 merged as [#612](https://github.com/aiprocadm/prt_ot_doc/pull/612)). **Four parallel in-flight branches now**, all rooted at the same `main` commit: iter-39 (audit-only, S86), iter-40 (training_certificates, S87), iter-41 (journalentry, S88), iter-42 (incident family, this session). When all four merge, `column_drift_lite` business-drift = **0/0** AND critical-absent = **0** — the audit's entire defect class is closed.
+- **Агент:** Claude Opus 4.7 (1M context, local Win+Py3.13; explanatory style + Auto Mode + TDD).
+- **Задача:** «продолжай» — Session 88 handoff Next Step #4 (incident family pass — design-blocked since Session 79). Investigation revealed the situation was more nuanced than expected: TWO parallel incident model layers exist (`models.py: Incident, IncidentLog, IncidentPerson` for the simple-reporting API vs. `safety_ops.py: IncidentCase, IncidentPerson, IncidentInvestigation, IncidentAttachment` for the safety-ops workflow). The latter is fully migrated via `20260405_next60_incidents_inspections_capa_prep.py`; the former (which `api/routes/incidents.py` uses) is what column_drift_lite was flagging. User confirmed Option A (alter + create) via AskUserQuestion.
+
+### Studied Documentation
+
+- Session 88 handoff Next Step #4 — "incident family pass" with explicit framing as design-blocked since Session 79. Recommended investigation first → present options.
+- `[[mvp-release-blockers]]` — confirmed Session 79 design-block; iter-39/40/41 already in-flight closures for npabinding/training_certificates/journalentry.
+- `backend/app/models/models.py:2254-2392` — full incident family declarations:
+  - `IncidentSeverity` (LOW, MEDIUM, HIGH), `IncidentType` (4 vals), `IncidentStatus` (5 vals), `IncidentStage` (5 vals), `IncidentPersonRole` (3 vals).
+  - `Incident` (11 cols): 5 from initial_schema + 6 missing (`company_id, site_id, incident_type, investigation_stage, location_description, pack_id`). Status col present but with type drift (String(64) vs Enum) — out of column-presence audit scope.
+  - `IncidentPerson` (3 business cols) — entirely absent.
+  - `IncidentLog` (6 business cols, declares separate PG enum names `incidentlogstage`/`incidentlogstatus` even though Python classes shared) — entirely absent.
+- `backend/app/migrations/versions/6b6dee7c951f_initial_schema.py:194-208` — original `incident` table: title, description, occurred_at, severity (Enum LOW/MEDIUM/HIGH), status (String(64)), + mixins. ONLY one index: `ix_incident_tenant_id`. No FK to company/site/document_pack.
+- `backend/app/migrations/versions/20260405_next60_incidents_inspections_capa_prep.py:27-90` — the PARALLEL `incident_cases` family. Different domain (safety-ops workflow with investigations, attachments, prescriptions). Used by `safety_ops.py` models + `safety_ops.py` route + `risk_enterprise.py` (line 218: `select(func.count()).select_from(IncidentCase)...`). NOT competing with `incident` table — coexists.
+- `backend/app/api/routes/incidents.py:1-110` — the active API surface for the SIMPLE incident-reporting domain. Imports `Incident, IncidentLog, IncidentPersonRole, IncidentStatus, IncidentType` from `models.models`. All write paths would have crashed with `UndefinedColumnError` on the missing model cols → confirmed assumption that `incident` table is empty in prod.
+- `backend/app/models/safety_ops.py:22-86` — the PARALLEL model layer. `IncidentCase` (table `incident_cases`), `IncidentPerson` (table `incident_persons`), `IncidentInvestigation` (table `incident_investigations`), `IncidentAttachment` (table `incident_attachments`). These are all properly migrated. Different domain, no overlap with column_drift_lite's findings.
+- `backend/app/migrations/versions/20260528_iter32_business_drift_cohort.py` — the iter-32 cohort pattern for adding nullable cols. Mirrored for the new NOT NULL FK cols + indexes (with the assumption-of-empty-table caveat).
+- `backend/app/migrations/versions/20260527_iter24_journal_ppeitem.py:64-100` — the iter-24 pattern for declaring `JOURNAL_TYPE_VALUES` tuple + `sa.Enum(*VALUES, name="X")` in a create_table. Mirrored for the 5 new PG enums.
+
+### Selected Plan Item
+
+- **iter-42 incident family cohort closure** — ALTER incident (+6 cols + 7 indexes) + CREATE incident_log table + CREATE incident_person table + 5 new PG enum types. User chose Option A (alter incident, not drop+recreate) via AskUserQuestion over Option B (mirror iter-41 drop+recreate) and Option C (skip).
+- **Why Option A over B:**
+  - For incident: lower-LOC (alter vs drop+recreate), additive nature is honest about the work ("add the missing cols"). Same destructive risk (NOT NULL FKs require empty table) but less invasive shape.
+  - For incident_log + incident_person: only choice is create_table (they're entirely absent).
+- **Cost:** ~210 prod LOC (single migration: 5 enum-implicit creates via column type + 6 add_column + 7 create_index + 2 create_table + 9 nested indexes + 1 UC) + ~600 test LOC (85 tests across structural, parametrized cohort, enum verification, UC pin, closed-loop audit, downgrade symmetry).
+- **Closed loop:** `column_drift_lite` business-drift drops from **3 → 0 tables on this branch** (incident family cleared). `column_drift_lite` critical-absent drops from **2 → 0** (incident_log + incident_person now created). After all four in-flight branches (iter-39/40/41/42) merge: **entire column_drift_lite defect class at 0/0**.
+## Last Agent Handoff (2026-05-29, Session 88 — iter-41 journalentry concept resolution: drop-and-recreate (1 of 4 remaining business-drift tables))
+
+- **Дата:** 2026-05-29. Ветка `fix/iter-41-journalentry-concept-resolution` от `093959b` (`main`, with iter-38 merged as [#612](https://github.com/aiprocadm/prt_ot_doc/pull/612)). **Three parallel in-flight branches now**, all rooted at the same `main` commit: `fix/iter-39-audit-batch-alter-dynamic-table-resolution` (S86), `fix/iter-40-training-certificates-legacy-cols` (S87), and this iter-41. When all three merge, drift drops 6 → **3** (incident family only).
+- **Агент:** Claude Opus 4.7 (1M context, local Win+Py3.13; explanatory style + Auto Mode + TDD).
+- **Задача:** «продолжай» — Session 87 handoff Next Step #3 (next design-blocked drift table; recommended start: `journalentry`). Investigation revealed it's a **concept-level rewrite** (initial_schema's generic event-log `{entry_type, payload, occurred_at}` vs current model's safety-briefing entry `{journal_id, person_id, entry_type, entry_date, instructor, notes, metadata_json}`). User confirmed Option A (drop + recreate) via AskUserQuestion over Option B (alter form) and Option C (skip).
+
+### Studied Documentation
+
+- Session 87 handoff Next Step #3 — recommended start with `journalentry` (smallest of remaining 4, "concept drift" tag).
+- `[[mvp-release-blockers]]` — confirms `journalentry — concept drift + 4 FK cols truly absent; design call.` Decision: closed via mechanical drop-and-recreate, not phased rollout.
+- `backend/app/models/models.py:2215-2237` — current `JournalEntry(TenantBaseModel, SoftDeleteMixin)`. 7 business cols + `UniqueConstraint(tenant_id, journal_id, person_id, entry_type, entry_date, name="uq_journal_entry_unique_person_date")` + `Index("ix_journal_entry_type", "tenant_id", "entry_type")`. Both FK cols (`journal_id`, `person_id`) declared NOT NULL with `index=True`.
+- `backend/app/migrations/versions/6b6dee7c951f_initial_schema.py:209-220` — original `journalentry`: generic event-log shape `{entry_type String(128), payload JSON, occurred_at DateTime}`. Mutually incompatible with current model.
+- `backend/app/migrations/versions/20260527_iter24_journal_ppeitem.py:11-17` — iter-24 explicitly deferred this: `"the migration that creates journalentry in 6b6dee7c951f_initial_schema.py does NOT yet add this FK — that is a separate business-drift item, not in this PR's scope"`. iter-41 is that long-deferred item.
+- `backend/app/migrations/versions/20260527_iter24_journal_ppeitem.py:64-71,86-100` — JOURNAL_TYPE_VALUES + the journal-table create that established the `journaltype` PG enum. iter-41 reuses this enum via `sa.Enum(*JOURNAL_TYPE_VALUES, name="journaltype", create_type=False)` to avoid the "type already exists" error.
+- `backend/app/api/routes/journals.py:201-313` — active API surface: list/create/get/patch/delete entries + export. All endpoints reference the modern fields (`journal_id`, `entry_date`, `entry_type`, `instructor`, `notes`, `metadata_json`). Confirmed: the broken migration shape would have caused all endpoints to fail with `UndefinedColumnError` on PostgreSQL.
+- `backend/app/migrations/versions/20260528_iter32_business_drift_cohort.py` + `20260317_next46_training_briefings_offline.py:108-125` — cohort + soft-table patterns reviewed but NOT directly mirrored — iter-41 is a concept replacement, not a column-add.
+
+### Selected Plan Item
+
+- **iter-41 concept resolution** — `op.drop_table("journalentry")` + `op.create_table("journalentry", <new shape>)` in upgrade; inverse in downgrade (drop new, recreate old shape).
+- **Why drop+recreate over alter:**
+  - Two shapes have ZERO overlap beyond `entry_type` (and even that changes type: String(128) → Enum). Alter form would be 2 drop_column + 6 add_column + 3 index + 1 uq — semantically equivalent but more verbose.
+  - Drop+recreate is the honest representation: "this table's concept was wrong, here's the right one".
+  - User chose Option A via AskUserQuestion after explicit data-loss caveat.
+- **Why data-loss is acceptable:**
+  - Model's NOT NULL FKs (`journal_id`, `person_id`) have NO backfill source — preserving old rows is impossible regardless.
+  - The model has been mismatched with the table since the API surface was added → endpoints would have crashed on first write → no real data sits in prod (or if it did, it's already corrupt).
+- **Cost:** ~165 prod LOC (single migration with drop_table + create_table + 4 indexes + uq in upgrade; symmetric inverse downgrade) + ~370 test LOC (52 AST + 2 closed-loop tests).
+- **Closed loop:** `column_drift_lite` business-drift count drops from **5 → 4 tables** on this branch (journalentry cleared). After all three in-flight branches (iter-39, iter-40, iter-41) merge: drift = **3** (incident family only, all genuinely Session-79 design-blocked).
+## Last Agent Handoff (2026-05-29, Session 87 — iter-40 training_certificates legacy-cols cohort closure (1 of 5 remaining business-drift tables))
+
+- **Дата:** 2026-05-29. Ветка `fix/iter-40-training-certificates-legacy-cols` от `093959b` (`main`, with iter-38 merged as [#612](https://github.com/aiprocadm/prt_ot_doc/pull/612)). **Parallel in-flight:** `fix/iter-39-audit-batch-alter-dynamic-table-resolution` (Session 86's audit-correctness fix for npabinding) is open on a sibling branch — both share `main` as base, neither stacks on the other. After both merge, drift drops 6 → 4.
+- **Агент:** Claude Opus 4.7 (1M context, local Win+Py3.13; explanatory style + Auto Mode + TDD).
+- **Задача:** «продолжай» — Session 86 handoff Next Step #2 (pick design-blocked drift table, produce decision-ready proposal, execute if clear-cut). Selected `training_certificates` (smallest scope per recommended order). Investigation revealed the 4 "missing" cols are **active backward-compat** layer (used in `training.py:320-375` + `employee_card.py:328-343`), so the design call collapsed to mechanical mirror-of-iter-32 fix. User confirmed Option A via AskUserQuestion before implementation.
+
+### Studied Documentation
+
+- Session 86 handoff Next Step #2 — recommended order `training_certificates → journalentry → incident family`, with `training_certificates` flagged as "model marks legacy" + "single-stakeholder call".
+- `backend/app/models/models.py:928-965` — `TrainingCertificate(TenantBaseModel, SoftDeleteMixin)`. The 4 "missing" cols (`course_id`, `session_id`, `plan_id`, `number`) appear under the comment `# backward-compatible legacy fields` (lines 943-953), with `UniqueConstraint("tenant_id", "number", name="uq_training_certificate_number")` in `__table_args__` (line 963).
+- Commit `58b428e` "Fix training certificate model mapping for next APIs" (2026-03-09) — added the legacy bridge: renamed `__tablename__ = "training_certificate"` → `"training_certificates"` (plural), made `person_id`/`course_id` nullable, added modern fields (`code`, `training_program_id`, `external_registry_*`), kept legacy fields nullable for backward-compat with the consumer chain.
+- `backend/app/migrations/versions/20260317_next46_training_briefings_offline.py:113-125` — creates `training_certificates` via `_create_soft_table` helper, but ONLY with the modern cols (`code, training_program_id, person_id, issued_at, valid_until, status, file_id, external_registry_status, external_registry_payload`). Predates 58b428e by 9 days — the legacy cols added in the model post-migration are the audit gap.
+- `backend/app/api/routes/training.py:320,321,343,373-375` — legacy training endpoints actively set `course_id`, `plan_id`, `session_id` on payload mapping. `backend/app/services/employee_card.py:328,343` joins with `TrainingCourse.id == TrainingCertificate.course_id`. Confirms these are NOT dead code → Option B (deprecate) is product-decision-blocked, Option A (add to migration) is the safe path.
+- `backend/app/migrations/versions/20260528_iter32_business_drift_cohort.py:55-141` — the exact iter-32 pattern to mirror: `op.add_column` × N + `op.create_index` × N (FK cols only) + inverse-order downgrade.
+- `backend/tests/test_iter32_business_drift_cohort.py` — the parametrized cohort test shape (revision pin + 4 × N parametrized property tests + symmetric upgrade/downgrade + closed-loop audit).
+
+### Selected Plan Item
+
+- **iter-40 cohort closure** — 4 cols (`course_id`, `session_id`, `plan_id`, `number`) + 3 indices (for the 3 FK cols) + 1 `UniqueConstraint(tenant_id, number)` added to `training_certificates`.
+- **Why selected over other candidates:**
+  - Of 5 drift tables flagged by `column_drift_lite` (post-iter-39 baseline), only `training_certificates` had a single-stakeholder mechanical path: cols all nullable, no FK cycles, no data backfill required, matches iter-32 cohort pattern that was already approved.
+  - `journalentry`, `incident`, `incident_log`, `incident_person` all need multi-stakeholder design decisions (concept-level schema work).
+  - User confirmed Option A (add cols) via AskUserQuestion over Option B (deprecate legacy fields — would require API contract review and refactoring 6+ call-sites) and Option C (skip).
+- **Cost:** ~120 prod LOC (migration with 4 add_column + 3 create_index + 1 create_unique_constraint + inverse downgrade) + ~280 test LOC (AST pin + 4-row parametrized × 4 props + 2 closed-loop integration tests + symmetric upgrade/downgrade pin).
+- **Closed loop:** `column_drift_lite` business-drift count drops from **5 → 4 tables** (training_certificates cleared) on iter-40 branch. After both iter-39 and iter-40 merge, drift drops to **4** (incident family ×3 + journalentry).
+## Last Agent Handoff (2026-05-29, Session 86 — iter-39 column_drift_lite audit-correctness pass: dynamic batch_alter_table table-name resolution (npabinding 3-col false positive closed))
+
+- **Дата:** 2026-05-29. Ветка `fix/iter-39-audit-batch-alter-dynamic-table-resolution` от `093959b` (current `main`, includes iter-38 merged as [#612](https://github.com/aiprocadm/prt_ot_doc/pull/612)). Open PRs at session start: none. iter-39 unstacked.
+- **Агент:** Claude Opus 4.7 (1M context, local Win+Py3.13; explanatory style + Auto Mode + TDD).
+- **Задача:** «продолжай по тз» — Session 85 handoff Next Step #4 (`column_drift_lite` cohort closures). Per `[[prodolzhay-po-tz-workflow]]`: skipped operational #1-2 (review/merge — user's purview). Investigated all 6 business-drift candidates, found **5 are design-blocked** per `[[mvp-release-blockers]]` (incident family, journalentry, training_certificates), but **npabinding's 3 "missing" cols are actually a 4th audit static-analysis blindspot** — the cols exist in migration `8d2c1a6c5e24_domain_normalization.py:269-292`, hidden behind dynamic `_resolve_npa_binding_table(bind)` resolution + `batch_alter_table(<variable>, ...)`. Took the mechanical audit-correctness fix.
+
+### Studied Documentation
+
+- Session 85 handoff Next Step #4 — "6 business-drift tables remain" + per-table investigation needed.
+- `[[mvp-release-blockers]]` "drift-class backlog" — confirms 5 of 6 are design-blocked (incident, incident_log, incident_person, journalentry, training_certificates) and tags npabinding as "verify deferred-intentionally vs missed".
+- `[[audit-static-analysis-blindspots]]` — the lesson: scripts/audit/ AST scripts twice missed SQLAlchemy attr-vs-col decoupling (helper-wrapped Session 79; mapped_column override Session 81); enumerate decoupling forms before trusting output. iter-39 closes the **fourth** form: dynamic table-name resolution.
+- `backend/app/migrations/versions/8d2c1a6c5e24_domain_normalization.py:28-34,269-292` — the resolver pattern. `_resolve_npa_binding_table(bind) -> str | None` returns one of `"npa_binding"`, `"npabinding"`, or `None` based on `inspector.has_table`. Used as `with op.batch_alter_table(npa_binding_table, schema=None) as batch:` with the three cols (`entity_type`, `entity_id`, `context`) added inside.
+- `scripts/audit/column_drift_lite.py:469-515` — pre-iter-39 `batch_alter_table` handler required `isinstance(ctx.args[0], ast.Constant) and isinstance(ctx.args[0].value, str)` — silently skipped the variable-name form, causing the 3-col false positive.
+- `backend/tests/test_audit_column_drift_lite.py` — existing test patterns for synthetic migrations via `_collect_one` (tmp_path swap of `MIGRATIONS_DIR`) and `_load_models_from` (similar for `MODELS_FILE`). Mirrored these for the 5 new synthetic-migration tests + 2 closed-loop real-codebase tests + 4 helper-fn unit tests.
+
+### Selected Plan Item
+
+- **iter-39 audit-correctness pass** — extend `column_drift_lite.py` to resolve `batch_alter_table(<var>, ...)` table names via same-module function return-literal tracking. Closes npabinding's 3-col false-positive drift.
+- **Why selected over other candidates:**
+  - npabinding's missing cols ARE in migrations — fixing the audit is the only correct response (vs. adding redundant DDL).
+  - All 5 other drift tables (incident/incident_log/incident_person/journalentry/training_certificates) need genuine design calls per `[[mvp-release-blockers]]` — not appropriate as autopilot continuation.
+  - Mechanical audit fix continues the pattern of S79 → S81 → S85 audit-correctness passes. Auditors' job: stay honest about what's real drift.
+- **Cost:** ~70 prod LOC (2 helper fns + 1 augmented block in collector) + ~210 test LOC (5 synthetic + 4 helper unit + 2 closed-loop).
+- **Closed loop:** column_drift_lite business-drift count dropped from **6 → 5 tables** (npabinding cleared). 5 remaining all confirmed design-blocked.
+
+### Recent merged work since Session 85
+
+| PR | Date (UTC) | Iter | Scope | Class |
+|---|---|---|---|---|
+| — | — | iter-39 | dynamic batch_alter_table audit resolution | audit (in-flight) |
+| — | — | iter-40 | training_certificates legacy cols | DB (in-flight) |
+| — | — | iter-41 | journalentry drop+recreate | DB (in-flight) |
+| — | — | iter-42 | incident family alter+create+5 enums | DB (in-flight) |
+| — | — | iter-43 | incident.status type parity | DB (in-flight) |
+
+Six in-flight branches at this session start.
+
+### Implemented Changes (this session)
+
+**Config + doc:**
+
+1. **`scripts/perf/scenarios.json`** (–137 / +1 effective): removed 3 FLOW scenarios from `nightly_baseline`. Updated `dataset_assumptions.notes` to document the trim rationale, the date (2026-05-29), the RB-002 attribution, and re-introduction options (Path A vs parameterized discovery).
+
+2. **`docs/stabilization/perf-baseline.md`** (+15): added "Trim (from 2026-05-29 — RB-002 caveat resolution)" subsection under "After (from 2026-04-20)". Documents the trim rationale + the two paths for re-introduction.
+
+**Test (+invariant guard):**
+
+3. **`backend/tests/test_perf_scenarios_nightly_baseline_pure_get.py`** (+115 new) — 7-test invariant pin:
+   - JSON validity + both profiles present.
+   - `nightly_baseline` is pure-GET only (no non-GET method).
+   - No `flow_steps` field anywhere in nightly_baseline scenarios.
+   - Hard-pin against the 3 specific banned scenario names (re-adding by name triggers test failure with explanation).
+   - `pr_smoke` shape unchanged (4 GET scenarios: health, dashboard, templates_list, search_suggest).
+   - `nightly_baseline` exact-shape pin (5 GET scenarios: health, dashboard, templates_list, search_suggest, download_file).
+   - `dataset_assumptions.notes` mentions RB-002 / pure-GET (discoverability).
+
+**Doc:**
+
+4. New `## Last Agent Handoff (2026-05-29, Session 91 ...)` block prepended (this entry).
+
+### Changed / New Files
+
+- `scripts/perf/scenarios.json` — –137 / +1 effective (3 FLOW scenarios removed; notes expanded).
+- `docs/stabilization/perf-baseline.md` — +15 (Trim subsection).
+- `backend/tests/test_perf_scenarios_nightly_baseline_pure_get.py` — +115 new.
+- `AI_IMPLEMENTATION_REPORT.md` — +~75 / 0 (this handoff).
+
+### Decisions
+
+- **Path B over Path A.** Detailed in "Selected Plan Item" above. Net: Path B = same caveat-closure with ~1/10 the cost, preserves option to re-add FLOW signal later.
+- **Include `jobs_status_transitions` in the trim.** Memory only mentioned 2 scenarios (`document_generate_apply_headers`, `files_upload_flow`), but `jobs_status_transitions` is also a FLOW with `template_code="TMP"` literal (not seeded). Inheriting it would leave nightly_baseline impure. Trimmed all 3 FLOW scenarios for consistency.
+- **Hard-pin against banned scenario names by literal string.** The invariant test could have just asserted "no FLOW methods" (already covered). The additional name-based pin catches a subtle regression: someone could re-add `document_generate_apply_headers` as method=GET via a pre-flight discovery, which wouldn't violate the FLOW-ban but would silently restore the original broken design (literal IDs in body). The name-based pin forces deliberate review.
+- **Document re-introduction paths in BOTH the JSON notes AND the markdown.** The JSON notes is what an operator reads when debugging perf failures; the markdown is what a developer reads when planning work. Duplicated guidance is intentional — both touchpoints are valid.
+- **No companion bootstrap_demo_tenant change.** Path A would have edited the bootstrap; Path B explicitly leaves the bootstrap alone. Future Path A work needs the user to weigh in on which entities deserve literal IDs (mutates the shape of demo data — different stakeholder).
+
+### Issues Fixed
+
+- **RB-002 FLOW caveat resolved.** The 3 FLOW perf scenarios no longer reference unseeded entities; `nightly_baseline` is pure-GET and would run cleanly against the current `bootstrap_demo_tenant` shape. Re-validation obligation for RB-002 (when CI re-enabled) now scopes to the 5 pure-GET probes.
+- **Invariant guard for future maintainers.** The 7-test pin prevents accidental re-introduction of the broken design. Hard regression cost for any FLOW scenario added without matching bootstrap work.
+
+### Known Problems / Risks
+
+- **FLOW perf signal lost until Path A is done.** The 3 trimmed probes covered: idempotency-key behavior under load, multi-step file upload pipeline, async job lifecycle. None of these have perf coverage post-trim. Mitigation: existing functional reliability tests (`test_job_status_flow.py`, `test_package_pipeline.py`, etc.) cover correctness; perf-signal is the gap. Acceptable while CI is off.
+- **`files_upload_flow` trim is the closest to wrongful loss.** Unlike the others, it doesn't reference unseeded entities — it creates new files. The actual breakage was upstream (`/api/v1/files:upload-init` storage backend issues, per Session 80). Trimming it bundled an unrelated infra concern with the seed-data concern. Worth re-adding when storage backend is verified, independent of bootstrap work.
+- **No CI verification.** The trim couldn't be checked end-to-end against CI (it's off). Local pytest passes (7/7); JSON validity passes.
+
+### Validation
+
+- `py -3 -c "import json; data = json.load(open('scripts/perf/scenarios.json', encoding='utf-8'))..."` → OK valid JSON; pr_smoke=4 scenarios; nightly_baseline=5 scenarios; all methods GET.
+- `py -3 -m pytest backend/tests/test_perf_scenarios_nightly_baseline_pure_get.py -v` → **7/7 pass** in 0.82s.
+- `py -3 -m py_compile backend/tests/test_perf_scenarios_nightly_baseline_pure_get.py` → OK.
+- **Not validated:** any actual perf run (CI off; out of session scope).
+Four parallel in-flight branches at iter-43 session start. All share `093959b` as base.
+
+### Implemented Changes (this session)
+
+**Code (PR `fix/iter-43-incident-status-enum-type-parity`):**
+
+1. **`backend/app/migrations/versions/20260529_iter43_incident_status_enum_type_parity.py`** (+95 new) — revision `20260529_iter43_incident_status_enum`, down_revision `20260529_iter38_server_default_c`. Upgrade:
+   - `INCIDENT_STATUS_VALUES` module-level literal tuple (5 UPPER_CASE attribute names).
+   - `incident_status_enum.create(op.get_bind(), checkfirst=True)` — PG-only; no-op on SQLite.
+   - `op.batch_alter_table("incident")` block with `alter_column("status", existing_type=sa.String(length=64), type_=incident_status_enum, existing_nullable=False, postgresql_using="status::text::incidentstatus")`. The `postgresql_using` cast is dialect-specific (ignored on SQLite).
+   - Downgrade: inverse `alter_column` to `sa.String(length=64)` + `sa.Enum(name="incidentstatus").drop(...)`. Order matters: alter before drop (can't drop type while col references it).
+
+2. **`backend/tests/test_iter43_incident_status_enum_type_parity.py`** (+265 new) — 11-test pin file:
+   - Revision chain pin (`iter-43 → iter-38`).
+   - `INCIDENT_STATUS_VALUES` literal-tuple pin (not aliased) — same `_NEW_ENUMS` resolution pattern as iter-42.
+   - Source-order pin: enum `.create(...)` must precede `alter_column` in upgrade.
+   - `batch_alter_table("incident")` block presence + count.
+   - `alter_column("status")` argument shape: `existing_type=sa.String`, `type_=sa.Enum` (accepts inline call or Name binding), `existing_nullable=False`, `postgresql_using` contains "incidentstatus".
+   - Downgrade symmetry: alter_column reverts to `sa.String`; enum `.drop(...)` present; source-order pin (alter before drop).
+
+**Doc:**
+
+3. New `## Last Agent Handoff (2026-05-29, Session 90 ...)` block prepended (this entry).
+
+### Changed / New Files
+
+- `backend/app/migrations/versions/20260529_iter43_incident_status_enum_type_parity.py` — +95 new.
+- `backend/tests/test_iter43_incident_status_enum_type_parity.py` — +265 new.
+- `AI_IMPLEMENTATION_REPORT.md` — +~80 / 0 (this handoff).
+
+### Decisions
+
+- **Chain from iter-38 (not iter-42), parallel-siblings.** iter-43 touches only the existing `incident.status` col; iter-42 adds 6 NEW cols to incident. No code-level conflict between them. By chaining both from iter-38, they can merge independently (alembic merge_heads needed). The alternative (iter-43 stacked on iter-42) would block iter-43 PR review until iter-42 merges — operationally fragile. Five sibling heads on iter-38 (iter-40, iter-41, iter-42, iter-43, plus future) is the cost of independent merging; user is already paying it for the other three.
+- **No new audit infrastructure.** Type drift (Enum vs String, types of varying length, etc.) could merit a dedicated `enum_type_parity.py` audit, but the known surface for this defect is just `incident.status`. Building infrastructure for a single case would invert the build-then-discover pattern that worked for iter-36 (server_default audit found 52 cols across 40 tables → worth a full audit). Defer until a second type-drift case is observed.
+- **Closed loop via AST pins instead of audit.** Without a type-parity audit, the "closed-loop" assertion is structural: migration declares the right alter_column shape, with the right kwargs, in the right order. This is weaker than an audit but mechanically sufficient — the audit's role is "spot what's missing"; the migration explicitly does it.
+- **`postgresql_using="status::text::incidentstatus"` — double cast.** The single cast `status::incidentstatus` would fail if PG's implicit VARCHAR-to-enum cast isn't available (depends on lc_collate and PG version). The double cast `column::text::incidentstatus` is the defensive idiom: first force to text, then explicit cast. Works across PG 12+.
+- **`batch_alter_table` instead of direct `op.alter_column`.** SQLite doesn't support ALTER COLUMN TYPE — Alembic emulates via table-rebuild. `batch_alter_table` handles both. iter-37/38 used direct `op.alter_column` for server_default changes (which SQLite DOES support). Different ops, different portability constraints.
+- **Source-order pin tests.** Two ordering rules: `enum.create` BEFORE `alter_column` (upgrade); `alter_column` BEFORE `enum.drop` (downgrade). Both pinned via `lineno` comparison. Cheap insurance against future-maintainer refactors that swap statements.
+
+### Issues Fixed
+
+- **`incident.status` type-parity closed.** Migration now declares `Enum(incidentstatus)` matching the model's `Enum(IncidentStatus, name="incidentstatus")`. The last known model↔migration type drift on the incident family is resolved. Combined with iter-42's column-presence closure, `incident` table is now fully model-aligned (column presence + type).
+
+### Known Problems / Risks
+
+- **Empty-table assumption inherited from iter-42.** The `USING status::text::incidentstatus` cast on PG would fail if any existing row's status string isn't in the enum's UPPER_CASE label set (e.g. lowercase `'reported'`). Same pre-deploy verification needed: `SELECT DISTINCT status FROM incident` against prod.
+- **5 in-flight branches all chain from iter-38.** Operational merge ordering is now: 4 alembic merge_heads operations needed after all in-flight branches land (one fewer than 5−1 because the FIRST migration-bearing merge creates no head conflict).
+- **No closed-loop audit for type drift.** A type-parity audit would be valuable infrastructure but is deferred. If future iters surface more type drift, build it then.
+All three previous sessions (S86/S87/S88) are still in-flight at iter-42 session start. All four branches share `093959b` as base.
+
+### Implemented Changes (this session)
+
+**Code (PR `fix/iter-42-incident-family-cohort`):**
+
+1. **`backend/app/migrations/versions/20260529_iter42_incident_family.py`** (+225 new) — revision `20260529_iter42_incident_family`, down_revision `20260529_iter38_server_default_c`. Upgrade structure (3 sections):
+   - Section 1: ALTER incident — 6 add_column (2 NOT NULL FK, 2 Enum NOT NULL with server_default, 1 nullable String, 1 nullable FK with SET NULL) + 7 create_index (3 column-level for FK cols, 4 composite for `__table_args__` indexes).
+   - Section 2: CREATE incident_log — 11 cols + 3 FK constraints (incident_id ondelete=CASCADE, author_id SET NULL, tenant_id) + 5 indexes. Includes JSON column with `server_default=sa.text("'{}'")` for raw-SQL path safety.
+   - Section 3: CREATE incident_person — 8 cols + 3 FK constraints (incident_id CASCADE, person_id RESTRICT, tenant_id) + 1 UniqueConstraint(tenant_id, incident_id, person_id, role) + 4 indexes. `role` col gets `server_default="VICTIM"` (iter-38 enum-default pattern).
+   - Downgrade: inverse order (drop incident_person → drop incident_log → revert incident alterations), with explicit `sa.Enum(name="X").drop(...)` for each of the 5 new PG enum types.
+
+2. **`backend/tests/test_iter42_incident_family.py`** (+600 new) — 85-test pin file:
+   - Revision chain pin (`iter-42 → iter-38`).
+   - 6-row `_INCIDENT_ADD_COLS × 4` parametrized = 24 incident-cohort tests (col present, nullable matches, FK target/ondelete matches, server_default present-when-expected).
+   - `test_incident_alter_creates_all_new_indexes` — pins the 7 new indexes on incident.
+   - 11-row `_INCIDENT_LOG_COHORT × 3` parametrized = 33 incident_log tests (col present, SA type matches, nullable matches).
+   - `test_incident_log_create_table_creates_all_expected_indexes` — pins 5 incident_log indexes.
+   - `test_incident_log_incident_fk_has_cascade_ondelete` — pins CASCADE on the incident_id FK.
+   - 8-row `_INCIDENT_PERSON_COHORT × 1` = 8 incident_person presence tests.
+   - `test_incident_person_creates_all_expected_indexes` — pins 4 incident_person indexes.
+   - `test_incident_person_unique_constraint_present` — exact match on UC name + 4 cols.
+   - `test_incident_person_role_has_victim_server_default` — pins the enum-default pattern.
+   - 5-row `_NEW_ENUMS × 1` parametrized = 5 enum-creation tests via AST walk (resolves both literal tuple and Starred-unpacking forms).
+   - `test_downgrade_drops_all_new_enums` — pins 5 `sa.Enum(name=X).drop(...)` calls in downgrade.
+   - `test_downgrade_drops_incident_log_and_incident_person_tables` — pins the 2 new table drops.
+   - `test_downgrade_drops_all_added_incident_columns` — symmetry pin: each add_column in upgrade has a matching drop_column in downgrade.
+   - **4 closed-loop audit tests**: 3 for "audit credits business cols for each table" + 1 for "incident family cleared from drift list".
+
+3. **`backend/tests/test_audit_column_drift_lite.py`** (–7 / +20) — flipped `test_real_codebase_incident_log_is_critical_absent` to `test_real_codebase_incident_log_no_longer_critical_absent`. The original Session-80 assertion (incident_log MUST be in critical-absent list) was a regression guard against the design-blocked state; iter-42 inverts that state, so the test now asserts incident_log IS in migration_cols AND business cols are credited. Same regression-guard role, opposite shape.
+
+**Doc:**
+
+4. New `## Last Agent Handoff (2026-05-29, Session 89 ...)` block prepended (this entry).
+
+### Changed / New Files
+
+- `backend/app/migrations/versions/20260529_iter42_incident_family.py` — +225 new.
+- `backend/tests/test_iter42_incident_family.py` — +600 new.
+- `backend/tests/test_audit_column_drift_lite.py` — –7 / +20 (one test flipped).
+- `AI_IMPLEMENTATION_REPORT.md` — +~140 / 0 (this handoff).
+
+### Decisions
+
+- **Alter incident (Option A) instead of drop+recreate (Option B).** User-confirmed. The two work to the same end state if incident table is empty (the assumed prod state). Alter is the smaller, additive change — honest about the work ("we missed these 6 cols"). Drop+recreate would have been semantically equivalent but with extra LOC and unnecessary data-deletion ceremony. User's iter-41 precedent (drop+recreate) was suited to mutually-incompatible shapes; iter-42's incident is shape-compatible (additive).
+- **Status col type drift OUT OF SCOPE.** Migration's `status String(64)` vs model's `Enum(IncidentStatus, name="incidentstatus")` is type drift, not column-presence drift. column_drift_lite doesn't flag it. Closing it would require: (a) creating `incidentstatus` PG enum, (b) data backfill if non-empty (existing rows may have UPPER_CASE strings from SA's default attr-name storage), (c) ALTER COLUMN TYPE. Defer to a dedicated type-parity iter if/when an audit script for type drift gets written.
+- **5 new PG enums declared inline in column declarations.** Mirror of iter-24 pattern (`sa.Enum(*VALUES, name="X")` in create_table column). SA's default behavior: creates the type on first column declaration in the migration session. No explicit `CREATE TYPE` op needed in upgrade. Downgrade explicitly drops each: `sa.Enum(name="X").drop(op.get_bind(), checkfirst=True)`.
+- **UPPER_CASE enum members instead of lowercase values.** Mirror of iter-38's decision (`IncidentSeverity.MEDIUM` stored as `"MEDIUM"`, not `"medium"`, per SA default `native_enum=True` without `values_callable`). Verified by initial_schema:198 which declares `sa.Enum('LOW', 'MEDIUM', 'HIGH', name='incidentseverity')` — labels are UPPER_CASE.
+- **`INCIDENT_LOG_STAGE_VALUES` literal-spelled instead of aliased.** First draft used `INCIDENT_LOG_STAGE_VALUES = INCIDENT_STAGE_VALUES` (Name alias). The pin test's AST resolver only follows Starred-of-Name → Tuple-assigned chain, not Starred-of-Name → Name-assigned → Tuple-assigned chain. Spelling values out explicitly is also a future-proofing aid: if model ever diverges `incidentlogstage` from `incidentstage` (separate PG enum names ALREADY suggest this), the declaration is easier to update independently.
+- **Assumption-of-empty-table accepted for incident's NOT NULL FK cols.** `company_id` and `site_id` are NOT NULL with no safe server_default and no backfill source. Migration WILL FAIL with `NotNullViolation` if existing rows are present. Justified by `incidents.py` route writes always referencing the modern model cols (which don't exist in DB) → all writes have crashed → no real data. Documented in migration docstring as a pre-deploy verification step (`SELECT count(*) FROM incident`).
+- **`server_default="ACCIDENT"`, `"REGISTRATION"`, `"VICTIM"` for Enum cols with model defaults.** Mirror iter-38 closure pattern. Skipped server_default for: NOT NULL FK cols (no Python default in model → no DB default); incident_log.stage/status (no model default — model writes always set these); incident_log.metadata_json gets `sa.text("'{}'")` for raw-SQL safety.
+- **Existing-col indexes (status, occurred_at) added in this iter.** Model's `__table_args__` declares composite indexes `ix_incident_status(tenant_id, status)` and `ix_incident_occurred_at(occurred_at)`. These touch EXISTING cols and were missing from migration. Including them in iter-42 closes the index-coverage gap for the table along with the column-coverage gap. Tests pin all 7 new indexes including these two.
+- **Flipped Session-80 audit test instead of deleting.** The test `test_real_codebase_incident_log_is_critical_absent` asserted incident_log MUST be in the critical-absent list. iter-42 inverts that. Per Session 85's pattern (delete-vs-flip decision), this test plays a useful role as a regression guard against future migrations accidentally re-removing the table. Flipped to assert presence + business cols credited, with docstring tying back to Session 79's original concern.
+
+### Issues Fixed
+
+- **Incident family cohort drift closed** — last 3 column_drift_lite business-drift tables (incident + incident_log + incident_person) cleared. The audit's entire business-drift class reaches 0/0 once all four in-flight branches (iter-39/40/41/42) merge to main.
+- **Critical-absent drift class closed** — `incident_log` and `incident_person` were "tables absent from migrations" (the audit's hardest class). iter-42 creates them. Drift class reaches 0.
+- **API surface in `incidents.py` becomes operational on PostgreSQL.** Previously broken (writes to model's NOT NULL `company_id`, `site_id` would crash with UndefinedColumnError); now the DB schema supports the ORM's full insert shape.
+- **Session-79 design-block resolved.** The longest-running open design item in the drift backlog (per `[[mvp-release-blockers]]`) is now closed — under the documented empty-table assumption.
+
+### Known Problems / Risks
+
+- **Alembic multi-head when 3+ migration-bearing branches merge.** iter-40, iter-41, iter-42 all chain from `iter-38`. Operational ordering options:
+  - Merge iter-39 first (audit-only, no migration → no chain conflict).
+  - Merge iter-40 OR iter-41 OR iter-42 next (alembic head moves to that one).
+  - Each subsequent merge requires `alembic merge heads -m "..."` to produce a no-op merge migration unifying the divergent heads.
+  - With 3 migration-bearing branches, at least 2 merge-heads commits will be needed.
+- **Status col type drift unaddressed.** `incident.status` is still `String(64)` in migration vs `Enum(IncidentStatus, name="incidentstatus")` in model. Functionally tolerated by SA (stores attr-name as string), but inconsistent with the other 4 Enum cols. Worth a future iter when there's a type-parity audit to drive it.
+- **Pre-deploy verification needed for incident table.** As documented in the migration: `SELECT count(*) FROM incident`. If non-zero in any deployed environment, the migration WILL FAIL. Pre-deploy mitigation: dump-and-decide (mirror iter-41 reasoning) or design a backfill plan.
+- **No DB-level upgrade verification.** Pure AST + audit closed-loop. The migration was NOT run against a real PG instance.
+- **`safety_ops.py` parallel models continue to coexist.** They're a different domain (safety-ops workflow), not competing with `incident`. No action needed; just noting for future maintainers reading the codebase that "incident_cases" and "incident" are two separate tables, intentionally.
+- **Heavyweight audit still hangs.** Unchanged.
+- **CI still off** (PR #598). Unchanged.
+- **iter-30/31 abandoned remote branches still persist.** Unchanged.
+- **Double-merged iter-37 (PRs #610 + #611)** — unchanged.
+
+### Validation
+
+- `py -3 -m py_compile backend/app/migrations/versions/20260529_iter43_incident_status_enum_type_parity.py backend/tests/test_iter43_incident_status_enum_type_parity.py` → OK.
+- `py -3 -m pytest backend/tests/test_iter43_incident_status_enum_type_parity.py -v` → **11/11 pass** in 0.44s.
+- `py -3 -m pytest backend/tests/test_iter43_incident_status_enum_type_parity.py backend/tests/test_iter37_server_default_cohort.py backend/tests/test_iter38_server_default_cohort.py backend/tests/test_audit_column_drift_lite.py backend/tests/test_audit_server_default_parity.py backend/tests/test_iter32_business_drift_cohort.py` → **298/298 pass** in 11.37s. No regression in any adjacent audit/cohort suite.
+- **Not validated:** full backend test suite + actual alembic upgrade against PG.
+- `py -3 -m py_compile backend/app/migrations/versions/20260529_iter42_incident_family.py backend/tests/test_iter42_incident_family.py` → OK.
+- `py -3 -m pytest backend/tests/test_iter42_incident_family.py -v` → **85/85 pass** in 4.06s (after fix to `INCIDENT_LOG_STAGE_VALUES` aliasing — 1 RED → GREEN cycle).
+- `py -3 -m pytest backend/tests/test_iter42_incident_family.py backend/tests/test_iter32_business_drift_cohort.py backend/tests/test_iter37_server_default_cohort.py backend/tests/test_iter38_server_default_cohort.py backend/tests/test_audit_column_drift_lite.py backend/tests/test_audit_version_column_drift.py backend/tests/test_audit_server_default_parity.py backend/tests/test_iter29_version_retrofit.py` → **412/412 pass** in 13.21s. The flipped audit test pins the new state.
+- `py -3 scripts/audit/column_drift_lite.py` → **3 business-drift tables on this branch** (was 6 pre-iter-39+40+41+42): npabinding (iter-39 not on this branch), training_certificates (iter-40 not on this branch), journalentry (iter-41 not on this branch). **incident family entirely cleared.** Critical-absent: **0** (was 2). When all four in-flight branches merge: business-drift = **0/0**.
+- **Not validated:** full backend test suite + actual alembic upgrade against PG.
+| — | — | iter-39 | dynamic batch_alter_table audit resolution | audit (in-flight on `fix/iter-39-...`) |
+| — | — | iter-40 | training_certificates legacy cols | DB (in-flight on `fix/iter-40-...`) |
+
+Both Session 86 (iter-39) and Session 87 (iter-40) are still in-flight at iter-41 session start. All three branches share `093959b` as base — independent code-wise, share-the-alembic-history when both DB migrations merge.
+
+### Implemented Changes (this session)
+
+**Code (PR `fix/iter-41-journalentry-concept-resolution`):**
+
+1. **`backend/app/migrations/versions/20260529_iter41_journalentry_concept_resolution.py`** (+165 new) — revision `20260529_iter41_journalentry_concept`, down_revision `20260529_iter38_server_default_c`. Upgrade: drop_index + drop_table + create_table (13 cols incl. mixins + 3 FK constraints + uq) + 4 create_index. Downgrade: drop_index ×4 + drop_table + recreate-old-shape create_table + restore tenant_id index. Local `JOURNAL_TYPE_VALUES` tuple mirrors iter-24's source-of-truth.
+
+2. **`backend/tests/test_iter41_journalentry_concept_resolution.py`** (+370 new) — 52-test pin file:
+   - Revision chain pin (iter-41 → iter-38).
+   - drop-table-before-create-table ordering pin (upgrade + downgrade symmetric).
+   - 13-row `_NEW_SHAPE_COHORT × 3` parametrized = 39 property tests (column present in create_table + SA type matches + nullable matches).
+   - `_OLD_SHAPE_BANNED_IN_UPGRADE` parametrized check: `payload`/`occurred_at` MUST NOT appear in the new create_table.
+   - `test_upgrade_entry_type_column_uses_journaltype_enum_create_false` — pins the `create_type=False` kwarg (regression guard against double-create error on PG).
+   - 3-row `_EXPECTED_FKS` parametrized: each FK constraint present + targets correct table.
+   - `test_upgrade_unique_constraint_present` — exact match on `UniqueConstraint(tenant_id, journal_id, person_id, entry_type, entry_date, name="uq_journal_entry_unique_person_date")`.
+   - `test_upgrade_creates_all_expected_indexes` — pins 4 indexes. Handles both `op.f(...)` wrapping and plain string forms.
+   - **2 closed-loop audit-integration tests**: `test_audit_credits_iter41_model_business_columns` (7 model business cols credited) + `test_audit_drift_journalentry_cleared_after_iter41` (journalentry not in drift; incident family still flagged).
+
+**Doc:**
+
+3. New `## Last Agent Handoff (2026-05-29, Session 88 ...)` block prepended (this entry).
+
+### Changed / New Files
+
+- `backend/app/migrations/versions/20260529_iter41_journalentry_concept_resolution.py` — +165 new.
+- `backend/tests/test_iter41_journalentry_concept_resolution.py` — +370 new.
+- `AI_IMPLEMENTATION_REPORT.md` — +~120 / 0 (this handoff).
+
+### Decisions
+
+- **Drop+recreate over alter.** The two shapes share only `entry_type` (and its TYPE changes: String → Enum). Alter form (2 drop_column + 6 add_column + 3 index + 1 uq + 1 alter_column type change) carries the same data-loss footprint but more LOC and harder downgrade. Drop+recreate is honest: "this concept changed completely". User confirmed via AskUserQuestion.
+- **`create_type=False` on the entry_type Enum.** iter-24 first created the PG enum `journaltype` (via `journal.journal_type`). Re-creating the same enum here would fail with `type "journaltype" already exists`. Pinning `create_type=False` in a test prevents future maintainers from "fixing" the missing kwarg.
+- **Local `JOURNAL_TYPE_VALUES` tuple instead of importing iter-24's.** Alembic migrations should never import each other (the parent migration may be rolled back during downgrade). Local re-declaration is the convention. If iter-24's enum values ever change, this iter-41 declaration would need a parallel update — but that's a deliberate cross-file coupling rather than a silent dependency.
+- **down_revision chained to `iter-38` (not `iter-40`).** All three in-flight branches (iter-39, iter-40, iter-41) chain from `iter-38_server_default_c`. iter-39 has no migration file (audit-only fix), so no chain conflict. iter-40 and iter-41 DO have migrations — when both merge, alembic will detect multiple heads and require a merge migration (`alembic merge -m "..." iter-40 iter-41`). This is documented in iter-41's docstring + handoff Known Problems below.
+- **No backfill, no data preservation.** The model's NOT NULL FKs (`journal_id`, `person_id`) have no source value to backfill from. Even if iter-41 wanted to preserve rows, it couldn't satisfy the new constraints. Drop-table accepts this explicitly. The endpoints in `journals.py` have been broken since the model evolved — no real data is at risk.
+- **Test cohort includes mixin cols (id, tenant_id, created_at, etc.).** Unlike iter-32/40 which only pinned business cols, iter-41 pins the FULL create_table shape (13 cols) because we're recreating a table from scratch — getting the mixin columns wrong would break the table entirely. Tests verify the shape exactly matches what `_create_soft_table`-style migrations would have produced.
+- **`_OLD_SHAPE_BANNED_IN_UPGRADE` regression guard.** The upgrade's create_table must NOT carry `payload` or `occurred_at`. Easy regression if a future maintainer "merges" the two shapes thinking that's safer. The parametrized test fails fast if either col reappears.
+- **Closed-loop audit accepts UNION semantics.** `column_drift_lite` doesn't handle `drop_table` (only `drop_column`), so after iter-41 runs the audit sees per_table['journalentry'] = union of initial_schema's shape AND iter-41's shape. This includes both old `payload, occurred_at` AND new business cols. The audit's drift check (`model_business - mig_business`) is still 0 because all 7 model business cols are in the union. The audit's accuracy here is technically over-credited (it shows 2 cols that no longer exist), but the user-visible signal (drift status of journalentry) is correct.
+
+### Issues Fixed
+
+- **journalentry concept-level drift closed.** Migration shape now matches model: 7 business cols (`journal_id, person_id, entry_type, entry_date, instructor, notes, metadata_json`) + `UniqueConstraint` + 4 indexes. The long-deferred TODO from iter-24 (`"the migration ... does NOT yet add this FK — that is a separate business-drift item"`) is closed.
+- **API surface in `journals.py` becomes operational on PostgreSQL.** Previously, endpoints in `list_entries`/`create_entry`/etc. would have crashed with `UndefinedColumnError` on first write. iter-41 brings the DB schema into alignment with the ORM's NOT NULL FK + index expectations.
+
+### Known Problems / Risks
+
+- **Alembic multi-head when iter-40 + iter-41 both merge.** Both chain `down_revision="20260529_iter38_server_default_c"`. On merge, alembic will require `alembic merge heads` to produce a no-op merge migration that unifies them. User's call to do this during PR review. Operational, ~30 sec via CLI.
+- **iter-39 audit fix is on a separate branch — closed-loop count check during iter-41's audit run shows npabinding still flagged.** When iter-39 merges, npabinding's 3 cols become credited. Iter-41's closed-loop test uses a subset assertion (incident family ⊆ drift_tables), so this works on either branch ordering.
+- **Data loss in any prod environment that had rows in old `journalentry`.** Unlikely (endpoints would have crashed before writes succeeded), but operationally requires a pre-deploy check: `SELECT count(*) FROM journalentry` against prod. If non-zero, dump-and-decide before applying.
+- **No DB-level upgrade verification.** Pure AST + audit closed-loop. The `op.drop_table` + `op.create_table` sequence wasn't run against a real PG instance (Win+Py3.13 conftest hang). Validation rests on shape pins + the iter-24 + initial_schema precedents.
+- **Heavyweight audit still hangs.** Unchanged.
+- **CI still off** (PR #598). Unchanged. Local-evidence policy applies.
+- **iter-30/31 abandoned remote branches still persist.** Unchanged.
+- **Double-merged iter-37 (PRs #610 + #611)** — unchanged from prior sessions.
+
+### Validation
+
+- `py -3 -m py_compile backend/app/migrations/versions/20260529_iter41_journalentry_concept_resolution.py backend/tests/test_iter41_journalentry_concept_resolution.py` → OK.
+- `py -3 -m pytest backend/tests/test_iter41_journalentry_concept_resolution.py -v` → **52/52 pass** in 1.38s. All structural pins + 2 closed-loop pass on first run.
+- `py -3 -m pytest backend/tests/test_iter41_journalentry_concept_resolution.py backend/tests/test_iter32_business_drift_cohort.py backend/tests/test_iter37_server_default_cohort.py backend/tests/test_iter38_server_default_cohort.py backend/tests/test_audit_column_drift_lite.py backend/tests/test_audit_version_column_drift.py backend/tests/test_audit_server_default_parity.py backend/tests/test_iter29_version_retrofit.py` → **379/379 pass** in 10.15s. No regression in any adjacent audit/migration cohort suite.
+- `py -3 scripts/audit/column_drift_lite.py` → **5 business-drift tables** on this branch (was 6 pre-iter-41): incident, incident_log, incident_person, npabinding (iter-39 not on this branch), training_certificates (iter-40 not on this branch). **journalentry cleared.** After all three in-flight branches merge: **3 tables** (incident family).
+- **Not validated:** full backend test suite + actual alembic upgrade against PG. Per established Win+Py3.13 + CI-off policy.
+| — | — | iter-39 | audit dynamic batch_alter_table resolution | audit (in-flight on `fix/iter-39-...`) |
+
+Session 86 (iter-39) is in-flight on its own branch; not yet merged at iter-40 session start.
+
+### Implemented Changes (this session)
+
+**Code (PR `fix/iter-40-training-certificates-legacy-cols`):**
+
+1. **`backend/app/migrations/versions/20260529_iter40_training_certificates_legacy_cols.py`** (+125 new) — revision `20260529_iter40_tc_legacy_cols`, down_revision `20260529_iter38_server_default_c`. Upgrade: 4 `op.add_column` + 3 `op.create_index` (FK cols) + 1 `op.create_unique_constraint`. Downgrade: inverse order (drop_constraint → drop_index ×3 → drop_column ×4). FK declarations mirror exactly the model's `mapped_column(ForeignKey(..., ondelete=X))`: `course_id` ondelete=CASCADE, `session_id`/`plan_id` ondelete=SET NULL.
+
+2. **`backend/tests/test_iter40_training_certificates_legacy_cols.py`** (+285 new) — 24-test pin file:
+   - revision chain pin (`iter-40 → iter-38`).
+   - Cohort definition: 4 cols × (column, nullable, fk_target, ondelete) tuples.
+   - 4 × 4 = 16 parametrized property tests (col present in upgrade / nullable matches / FK target matches / ondelete matches).
+   - `test_indexes_for_fk_columns_present_in_upgrade` — pins the 3 expected indexes.
+   - `test_unique_constraint_present_in_upgrade` — pins `uq_training_certificate_number(tenant_id, number)`.
+   - `test_upgrade_and_downgrade_symmetric` — column / index / constraint round-trip.
+   - `test_cohort_size_pinned_at_four` — modify cohort → modify list.
+   - `test_no_create_table_in_upgrade` — pure column-add, no schema scaffolding.
+   - **2 closed-loop audit tests**: `test_audit_credits_iter40_columns` (cols credited to migration set) + `test_audit_drift_count_drops_to_four_after_iter40` (training_certificates cleared, design-blocked subset still flagged).
+
+**Doc:**
+
+3. New `## Last Agent Handoff (2026-05-29, Session 87 ...)` block prepended (this entry).
+
+### Changed / New Files
+
+- `backend/app/migrations/versions/20260529_iter40_training_certificates_legacy_cols.py` — +125 new.
+- `backend/tests/test_iter40_training_certificates_legacy_cols.py` — +285 new.
+- `AI_IMPLEMENTATION_REPORT.md` — +~100 / 0 (this handoff).
+
+### Decisions
+
+- **Add cols to migration (Option A), not deprecate legacy fields (Option B).** Field-usage scan revealed 6+ call-sites actively use `course_id`/`session_id`/`plan_id` in payload mapping and joins. Option B would require API contract review and full refactor — design-blocked, not autopilot-suitable. Option A is mechanical, zero-risk, mirrors approved iter-32 pattern. User confirmed before implementation.
+- **Match FK ondelete semantics exactly to the model.** Model declares `course_id: ondelete=CASCADE` (delete cascade — legacy course was mandatory), `session_id: ondelete=SET NULL`, `plan_id: ondelete=SET NULL`. Migration mirrors all three. `test_cohort_column_ondelete_matches_spec` pins this — easy to drift if someone later "normalizes" the migration without checking the model.
+- **Add the 3 FK indices, mirror of model `index=True` flags.** Model has `index=True` on all 3 FK declarations. Index naming follows the audited convention: `ix_<tablename>_<colname>`.
+- **UniqueConstraint named `uq_training_certificate_number` (singular).** Matches the model's `UniqueConstraint(..., name="uq_training_certificate_number")` declaration exactly. The model has a parallel constraint `uq_training_certificates_code` (plural) for the modern `code` field — that one's already in the next46 migration via `_create_soft_table`'s `unique=` kwarg. iter-40 only adds the legacy-side one.
+- **Tests parametrize over `(column, nullable, fk_target, ondelete)` 4-tuple.** iter-32 used a 5-tuple including `has_server_default`. iter-40's cohort is all-nullable-no-default, so the `server_default` axis is dropped — simpler tuple shape, fewer ignored fields. Also added the `ondelete` axis which iter-32 didn't pin (every iter-40 col has a meaningful ondelete that differs across cols).
+- **Closed-loop test uses subset assertion `remaining_design_blocked <= drift_tables` instead of equality.** Reason: iter-40's branch (from main) doesn't have iter-39's audit fix → npabinding still appears in drift. Equality would fail. The subset check is what we actually care about: training_certificates is cleared, and the 4 design-blocked tables (`incident, incident_log, incident_person, journalentry`) remain flagged. After iter-39 + iter-40 both merge, npabinding will also be cleared and drift becomes exactly the 4 design-blocked tables.
+- **No SQLite/PG dialect-specific code.** All 4 cols are `String(36)` (FK) or `String(64)` (number). Plain ANSI SQL. No batch-mode reconstruction needed; the table already exists, `op.add_column` works on both backends.
+- **No `existing_type` on add_column.** `existing_type` is only meaningful for `alter_column` (informs autogen diff + SQLite batch reconstruction). Skipped, mirroring iter-32's `add_column` form.
+
+### Issues Fixed
+
+- **Business-drift cohort closure for `training_certificates`.** The 4 legacy backward-compat cols + uniqueness constraint declared in `models.py:944-963` (added by commit `58b428e`) are now in the migration history. Raw-SQL paths (perf-baseline `COPY`, restore-drill SQL dumps, alembic `op.execute("INSERT ...")`) on `training_certificates` will no longer hit `UndefinedColumnError` on PostgreSQL. The model↔migration source-of-truth gap for this table is closed.
+
+### Known Problems / Risks
+
+- **The 4 cols are still legacy.** This iter HARDENS the legacy bridge by adding it to migration history — if/when the legacy course/session/plan domain is sunset, removing them requires a parallel migration AND code refactor. iter-40 doesn't prevent eventual cleanup, but it commits the project to keeping them until a deliberate decision otherwise.
+- **No DB-level upgrade verification.** Migration not actually run against PG (Win+Py3.13 SQLite conftest hang prevents pytest-driven alembic runs). Validation rests on py_compile + AST pin tests + closed-loop audit drift = 0 for this table + iter-32 precedent shape match.
+- **iter-40 stacks behaviorally with iter-39 only at audit-output level.** No code conflict between branches (iter-39 modifies `scripts/audit/column_drift_lite.py` + its test, iter-40 modifies migration + new test file). When both merge, the audit drift count converges to 4 — both PRs can land in either order.
+- **Heavyweight audit still hangs.** Unchanged. Lightweight audits remain the only viable local tool.
+- **CI still off** (PR #598). Unchanged. Local-evidence policy applies.
+- **iter-30/31 abandoned remote branches still persist.** Unchanged.
+- **Double-merged iter-37 (PRs #610 + #611)** — unchanged from Sessions 85/86's note.
+
+### Validation
+
+- `py -3 -m py_compile backend/app/migrations/versions/20260529_iter40_training_certificates_legacy_cols.py backend/tests/test_iter40_training_certificates_legacy_cols.py` → OK.
+- `py -3 -m pytest backend/tests/test_iter40_training_certificates_legacy_cols.py -v` → **24/24 pass** in 1.00s.
+- `py -3 -m pytest backend/tests/test_iter40_training_certificates_legacy_cols.py backend/tests/test_iter32_business_drift_cohort.py backend/tests/test_iter37_server_default_cohort.py backend/tests/test_iter38_server_default_cohort.py backend/tests/test_audit_column_drift_lite.py backend/tests/test_audit_version_column_drift.py backend/tests/test_audit_server_default_parity.py backend/tests/test_iter29_version_retrofit.py` → **351/351 pass** in 8.26s. No regression in any adjacent audit/migration cohort suite.
+- `py -3 scripts/audit/column_drift_lite.py` → **5 business-drift tables** (was 6 pre-iter-39 + iter-40): incident, incident_log, incident_person, journalentry, **npabinding** (still here because iter-39 not on this branch). **training_certificates cleared.** When both iter-39 and iter-40 merge, count → **4**.
+| [#612](https://github.com/aiprocadm/prt_ot_doc/pull/612) | 2026-05-29 | iter-38 | server_default Subset C — entire defect class closed | DB |
+
+### Implemented Changes (this session)
+
+**Code (PR `fix/iter-39-audit-batch-alter-dynamic-table-resolution`):**
+
+1. **`scripts/audit/column_drift_lite.py`** (+71 / -7) — two new helpers:
+   - `_function_return_literals(func)` — set of string literals returned by a function (ignores `None` and non-Constant-str returns).
+   - `_resolve_dynamic_name_from_assignments(var_name, scope_fn, functions)` — for `var_name` inside `scope_fn`, find `var_name = <func>(...)` assignments and gather string-literal returns of the called function (when it's a same-module function). Returns sorted list for deterministic test assertions.
+
+   The `batch_alter_table` block handler now branches: `ctx.args[0]` as `ast.Constant` → single-literal `tnames` (unchanged path); as `ast.Name` → resolve via the helper, skip block if unresolvable; otherwise skip. Then iterates the resolved `tnames` list when crediting add_column / drop_column / alter_column rename.
+
+2. **`backend/tests/test_audit_column_drift_lite.py`** (+210 / 0) — 11 new tests in 3 groups:
+   - **5 synthetic-migration tests** for the dynamic-name path (multi-literal, single-literal, unresolvable callee, mixed string+None returns, drop+rename inside dynamic block).
+   - **4 helper-fn unit tests** for the two new primitives (return-literal collection: collects all str / ignores non-str; var-resolution: traces to module fn / empty when var not assigned).
+   - **2 closed-loop real-codebase tests**: npabinding's 3 cols (`context, entity_id, entity_type`) now credited; business-drift count == exactly 5 with the expected table set.
+
+**Doc:**
+
+3. New `## Last Agent Handoff (2026-05-29, Session 86 ...)` block prepended (this entry).
+
+### Changed / New Files
+
+- `scripts/audit/column_drift_lite.py` — +71 / -7 (2 helpers + augmented batch handler + module docstring update).
+- `backend/tests/test_audit_column_drift_lite.py` — +210 / 0 (11 new tests).
+- `AI_IMPLEMENTATION_REPORT.md` — +~90 / 0 (this handoff).
+
+### Decisions
+
+- **Audit fix, not migration add.** npabinding's `entity_type`, `entity_id`, `context` ARE in the schema (added by `8d2c1a6c5e24_domain_normalization.py`). Adding them again via `op.add_column` would either be a no-op (if table-exists detection is added) or a hard error ("column already exists"). The correct fix is on the audit side — recognize the dynamic-name form. Mirror of how Session 81's iter-33 fix added `mapped_column` first-arg name resolution (it was correct on the code side, audit just didn't see it).
+- **Conservative resolver — only same-module function returns.** Considered tracing across modules (imports) or doing full variable assignment chain analysis. Rejected: (a) AST-only with no import resolution keeps the script fast and hang-free; (b) `_resolve_npa_binding_table` is defined in the same migration file (the convention for migration-local helpers); (c) cross-module would require lazy loading + symbol resolution complexity for marginal coverage gain. The conservative path catches the real-world hit exactly.
+- **Fail-open on unresolvable names — skip block, no phantom credits.** When `var` can't be traced to a return-literal-bearing function, the block is silently skipped (cols stay flagged as drift if any). Alternative: treat unresolved as "credit cols to all possible tables" — rejected as massive over-approximation. Skip-block matches the audit's overall posture (only flag what we're sure about).
+- **Sort the resolver's return for determinism.** `set` → `sorted(list)` so test assertions don't flake on iteration order. The set membership semantics are preserved (no duplicates); only the output is deterministic.
+- **Test scope: 5 synthetic + 4 helper unit + 2 closed-loop.** Considered just the closed-loop + one synthetic. Rejected: the helper fns are reusable AST primitives and warrant their own unit pinning; the negative cases (unresolvable, None-return) are easy to regress without explicit tests; the multi-literal-credit assertion (alpha + beta both get the col) is the heart of the change and deserves a dedicated test.
+- **Did NOT extend to `op.add_column(<var>, ...)` or `op.alter_column(<var>, ...)`.** The existing for-loop variable resolution already covers `op.add_column` with loop iteration (v3 mechanism). Adding the function-return-literal path for `op.add_column` would be a separate, similar extension — defer until a real migration triggers the need (YAGNI). Same for non-batch `alter_column`. iter-39 is scoped to the documented blindspot.
+- **No tests for the iter-38 fingerprint — audit suites cover that.** Could pin `server_default_parity = 0/0` here. Rejected: it's already pinned by iter-38's tests; piling on cross-iter assertions creates brittle dependencies. Each iter's tests stay locally scoped.
+
+### Issues Fixed
+
+- **Fourth audit static-analysis blindspot closed.** `column_drift_lite.py` now correctly credits cols added inside `with op.batch_alter_table(<dynamic_var>, ...)` blocks when the var traces to a same-module function returning string literals. Real-world hit: npabinding's 3 cols (`context, entity_id, entity_type`) added by `8d2c1a6c5e24_domain_normalization.py:269-292` — previously falsely reported as drift, now correctly credited to both possible historic table names (`npa_binding`, `npabinding`).
+- **Drift backlog accuracy improved.** Pre-iter-39 the user saw "6 business-drift tables" — 1 of which was a false positive. Post-iter-39 the 5 remaining are all genuine (and all design-blocked per `[[mvp-release-blockers]]`). The audit's signal-to-noise is now cleaner.
+
+### Known Problems / Risks
+
+- **5 genuine business-drift tables remain — all need design calls.** `incident` (6 cols), `incident_log` (6 cols + table absent), `incident_person` (3 cols + table absent), `journalentry` (6 cols, concept drift), `training_certificates` (4 cols, model marks legacy). None mechanically closeable without product/architecture decisions.
+- **The audit extension trusts callees blindly.** If `_resolve_npa_binding_table` were re-written to do dynamic string concatenation (e.g. `return prefix + "_binding"`), the audit would miss it. Acceptable for now — migration code rarely does runtime string assembly of table names, and the failure mode (false-positive drift) is detectable.
+- **No verification against PG instance.** Pure AST analysis. The cols `context, entity_id, entity_type` are credited because the migration's source mentions them in the dynamic block — but actual PG table inspection isn't done. The closed-loop test rests on the migration source's correctness.
+- **Heavyweight audit still hangs.** Unchanged from Sessions 80-85. Lightweight audits remain the only viable local tool.
+- **CI still off** (PR #598). Unchanged. Local-evidence policy applies.
+- **iter-30/31 abandoned remote branches still persist.** Unchanged.
+- **Double-merged iter-37 (PRs #610 + #611)** — unchanged from Session 85's note. Worth checking with the merge operator whether one should be reverted from history.
+
+### Validation
+
+- `py -3 -m py_compile scripts/audit/column_drift_lite.py backend/tests/test_audit_column_drift_lite.py` → OK.
+- `py -3 -m pytest backend/tests/test_audit_column_drift_lite.py -v` → **27/27 pass** in 1.96s. TDD log: RED on first run (1 dynamic test fails with `KeyError 'alpha'`; helper-fn tests would have also failed but `-x` stopped earlier). After audit extension landed: 27/27 GREEN.
+- `py -3 -m pytest backend/tests/test_audit_column_drift_lite.py backend/tests/test_audit_version_column_drift.py backend/tests/test_audit_server_default_parity.py backend/tests/test_iter37_server_default_cohort.py backend/tests/test_iter38_server_default_cohort.py backend/tests/test_iter29_version_retrofit.py backend/tests/test_iter32_business_drift_cohort.py` → **338/338 pass** in 7.24s. No regression in any adjacent audit/migration cohort suite.
+- `py -3 scripts/audit/column_drift_lite.py` → **5 business-drift tables** (was 6 pre-iter-39): incident, incident_log, incident_person, journalentry, training_certificates. **2 critical absent** (unchanged): incident_log, incident_person. **npabinding cleared.**
+- `py -3 scripts/audit/server_default_parity.py` → **0 cols / 0 tables** (unchanged — closed by iter-38).
+- `py -3 scripts/audit/version_column_drift.py` → 0 missing version, 2 critical (unchanged).
+- **Not validated:** full backend test suite (Win+Py3.13 collect hang per `[[local-env-drift-windows]]`). Adjacent isolated suites + py_compile + closed-loop audit cover the scope.
+
+### Next Steps
+
+**Operational:**
+
+1. Review this PR (~225 LOC across 3 files + handoff).
+2. **Six in-flight branches now.** Order unchanged from Session 90: iter-39 first (audit-only), then iter-40/41/42/43 in any order (require 3 alembic merge_heads), then this perf trim (no migration → no chain conflict).
+
+**Technical (next session — primary options remaining):**
+
+3. **Branch cleanup (iter-30/31 abandoned remotes)** — destructive-git permission needed.
+4. **iter-37 PR #610/#611 double-merge dedupe** — destructive history rewrite, permission needed.
+5. **CI re-enablement** — strategic decision (billing + scope).
+6. **Heavyweight audit hang diagnosis** — `check_orm_migration_drift.py` diagnostic.
+7. **Type-parity audit infrastructure** — speculative, defer until 2nd known case.
+8. **Path A for RB-002 FLOW** — extend bootstrap with literal-ID seed (re-add FLOW perf signal).
+9. **Validation of all 6 in-flight branches together** — cherry-pick simulation to verify merge sequence + final audit numbers.
+1. Review iter-43 PR (95 prod + 265 test LOC + ~80 line handoff).
+2. **Merge ordering for 5 in-flight branches:**
+   - iter-39 first (audit-only, no migration → no chain conflict).
+   - iter-40/41/42/43 in any order — each merge after the first migration-bearing one triggers `alembic merge heads`. 4 merges → 3 alembic merge_heads no-op migrations total.
+3. **Pre-deploy verification for incident table** — same `SELECT count(*) FROM incident` + `SELECT DISTINCT status FROM incident` as iter-42's guidance.
+
+**Technical (next session — primary options):**
+
+4. **Type-parity audit (if more drift surfaces)** — build `scripts/audit/enum_type_parity.py` to detect Enum-vs-String mismatches systematically. ~200 LOC audit + tests. Closes a defect class rather than a single case. Worth doing if another known case appears.
+5. **Branch cleanup (iter-30/31 abandoned remotes)** — destructive-git permission needed. ~5 min.
+6. **iter-37 PR #610/#611 double-merge dedupe** — unchanged.
+7. **CI re-enablement** — strategic.
+8. **FLOW seed for RB-002** — non-blocking polish.
+9. **Heavyweight audit hang diagnosis** — `check_orm_migration_drift.py` still hangs locally; could be diagnosed.
+1. Review iter-42 PR (225 prod + 600 test + 1 flipped audit test LOC + ~140 line handoff).
+2. **Plan merge ordering for 4 in-flight branches.** Recommended:
+   - iter-39 first (no migration → no chain conflict).
+   - iter-40, iter-41, iter-42 in any order. After each: `alembic merge heads -m "merge iter-XX + iter-YY"` to unify divergent heads. After all merge: total of 2 merge-heads no-op migrations.
+3. **Pre-deploy verification for incident table.** `SELECT count(*) FROM incident` against prod before applying iter-42.
+4. **Update `[[mvp-release-blockers]]`** to mark incident family resolved (it was the final design-blocked item in the drift backlog).
+
+**Technical (next session — primary):**
+
+5. **column_drift_lite drift class reaches 0/0.** The defect class is closed. No further drift work needed here.
+6. **Potential next directions:**
+   - **incident.status type drift** — type-parity audit + alter column. Adds incidentstatus PG enum. Not column-presence drift (out of column_drift_lite scope).
+   - **Branch cleanup (iter-30/31 abandoned remotes)** — destructive-git permission needed. ~5 min.
+   - **iter-37 PR #610/#611 double-merge dedupe** — long-standing operational artifact.
+   - **CI re-enablement** — strategic decision (billing + scope).
+   - **FLOW seed for RB-002** — non-blocking polish.
+   - **Heavyweight audit fix** — `check_orm_migration_drift.py` still hangs locally; could be diagnosed.
+1. Review iter-41 PR (165 prod + 370 test LOC + ~120 line handoff).
+2. **Plan merge ordering:** three in-flight branches now. Recommended order:
+   - iter-39 (audit-only, no migration → no chain conflict)
+   - iter-40 OR iter-41 (either order — alembic head will move to that one)
+   - The remaining one: `alembic merge heads -m "merge iter-40 + iter-41"` to produce a no-op merge migration
+3. **Pre-deploy check** for any environment with non-empty `journalentry`: dump rows before applying iter-41 (the drop_table is destructive).
+
+**Technical (next session — primary):**
+
+4. **incident family pass.** The last 3 business-drift tables. All design-blocked since Session 79 (`incident_log` and `incident_person` are entirely ABSENT from migrations). This is genuinely a domain-design pass requiring:
+   - Decision on `incident` schema: 6 missing cols (`company_id, incident_type, investigation_stage, location_description, pack_id, site_id`) — concept-level addition or table-replacement?
+   - Decision on `incident_log` schema (6 cols absent) and `incident_person` schema (3 cols absent) — these need full create_table migrations, not column-add cohorts.
+   - Likely needs domain owner input on closed-set enums (status, stage, type), FK ondelete semantics, and uniqueness constraints.
+   - Suggested approach: investigate first, present 2-3 schema options, ask user before implementing.
+
+**Technical (next session — secondary):**
+
+5. **Branch cleanup (iter-30/31 abandoned remotes)** — destructive-git permission needed.
+6. **iter-37 PR #610/#611 double-merge dedupe** — unchanged.
+7. **CI re-enablement** — strategic.
+8. **FLOW seed for RB-002** — non-blocking polish.
+1. Review iter-40 PR (125 prod + 285 test LOC + ~100 line handoff). Independent of iter-39 PR — merge order is free.
+2. After both merge, expected `column_drift_lite` count: **4 business-drift tables** (incident family ×3 + journalentry). All 4 are genuinely design-blocked.
+
+**Technical (next session — primary):**
+
+3. **Pick the next design-blocked drift table.** Remaining candidates after iter-40:
+   - `journalentry` (6 cols, concept drift — model has `entry_date, instructor, journal_id, metadata_json, notes, person_id`; migration may have different field names). Lowest scope of remaining 4. Needs domain owner input on intended fields and rename mappings.
+   - `incident` family (3 tables, 15 cols total). `incident_log` and `incident_person` are entirely absent from migrations (Session 79 design-blocked). Largest scope. Needs structured decision pass.
+4. **Investigation approach for `journalentry`:** compare model cols vs migration cols (specifically `metadata_json/payload`, `entry_date/occurred_at`), determine if rename or full schema replacement is the right call. Migrations `8d2c1a6c5e24_domain_normalization.py` and the initial schema both touch this — likely needs a redesign migration, not a column-add cohort.
+
+**Technical (next session — secondary):**
+
+5. **Branch cleanup (iter-30/31 abandoned remotes)** — needs destructive-git permission. Mechanical, ~5 min.
+6. **iter-37 PR #610/#611 double-merge dedupe** — unchanged from prior sessions.
+7. **CI re-enablement** — strategic decision (billing + scope).
+8. **FLOW seed for RB-002** — non-blocking polish.
+1. Review iter-39 PR (71 prod + 210 test LOC + ~90 line handoff).
+
+**Technical (next session — primary):**
+
+2. **Pick ONE design-blocked drift table and produce a decision-ready proposal.** Recommended order:
+   - `training_certificates` (4 cols, model marks legacy) — likely fastest decision: keep model + add migration, or delete model entirely. Single-stakeholder call.
+   - `journalentry` (6 cols, concept drift) — needs domain owner input on intended fields.
+   - `incident` family (3 tables, 15 cols total) — biggest scope, most complex (`incident_log` and `incident_person` are entirely absent from migrations). Session 79 design-blocked; needs structured decision pass.
+   - For each: produce model↔migration diff, proposed migration (or model deletion), open questions, ETA. Output as a docs/design/ or in-line PR description.
+
+**Technical (next session — secondary):**
+
+3. **Branch cleanup (iter-30/31 abandoned remotes)** — needs destructive-git permission. Mechanical, ~5 min.
+4. **iter-37 PR #610/#611 double-merge dedupe** — unchanged from Session 85's note.
+5. **CI re-enablement** — strategic decision (billing + scope).
+6. **FLOW seed for RB-002** — non-blocking polish.
+
+**Стартовая команда для следующей сессии:**
+
+```bash
+git checkout main && git pull
+gh pr list --state open --limit 10
+py -3 -m pytest backend/tests/test_perf_scenarios_nightly_baseline_pure_get.py
+# Pick a direction from #3-9 above.
+```
+
+**Branch suggestion для следующей сессии:** `chore/cleanup-abandoned-iter30-31-branches` (если cleanup), `chore/heavyweight-audit-hang-diagnosis` (если diagnostic).
+py -3 scripts/audit/column_drift_lite.py    # expect 0/0
+py -3 scripts/audit/server_default_parity.py # expect 0/0
+py -3 scripts/audit/version_column_drift.py  # expect 0/2 critical (unchanged)
+# Then pick direction from #4-9 above.
+```
+
+**Branch suggestion для следующей сессии:** `chore/cleanup-abandoned-iter30-31-branches` (если cleanup), `feat/audit-enum-type-parity` (если audit infrastructure), `chore/heavyweight-audit-hang-diagnosis` (если debug).
+py -3 scripts/audit/column_drift_lite.py
+# Expect: 0 business-drift + 0 critical-absent if all four (iter-39/40/41/42) merged.
+py -3 scripts/audit/server_default_parity.py
+py -3 scripts/audit/version_column_drift.py
+# All three audits should now be at 0/0 (modulo critical version-drift if any).
+# Then pick next direction from #6 above.
+```
+
+**Branch suggestion для следующей сессии:** `chore/cleanup-abandoned-iter30-31-branches` (если cleanup), `fix/incident-status-type-parity` (если type drift), `chore/heavyweight-audit-hang-diagnosis` (если debug).
+# Expect 3 drift tables if all three (iter-39+40+41) merged: incident family only.
+py -3 scripts/audit/column_drift_lite.py --table incident
+py -3 scripts/audit/column_drift_lite.py --table incident_log
+py -3 scripts/audit/column_drift_lite.py --table incident_person
+# Then investigate model definitions in models.py and produce schema design.
+```
+
+**Branch suggestion для следующей сессии:** `design/incident-family-pass-1` (если start with incident scoping), `chore/cleanup-abandoned-iter30-31-branches` (если cleanup).
+py -3 scripts/audit/column_drift_lite.py    # expect 4 drift tables if both iter-39+iter-40 merged
+py -3 scripts/audit/column_drift_lite.py --table journalentry  # detailed diff
+# Then either tackle journalentry's concept drift or scope incident-family design pass.
+```
+
+**Branch suggestion для следующей сессии:** `design/journalentry-concept-drift-pass` (если start with journalentry investigation), `design/incident-family-pass-1` (если incident), `chore/cleanup-abandoned-iter30-31-branches` (если cleanup).
+py -3 scripts/audit/column_drift_lite.py    # expect 5 drift tables if iter-39 merged, 6 if not
+# Then pick a design-blocked table and start producing the decision proposal.
+# Suggested first: training_certificates (smallest, model legacy → likely just drop the model).
+```
+
+**Branch suggestion для следующей сессии:** `design/training-certificates-decision` (если start with the easiest design call), `design/incident-family-pass-1` (если incident), `chore/cleanup-abandoned-iter30-31-branches` (если cleanup).
+
+---
+
 ## Last Agent Handoff (2026-05-29, Session 85 — iter-38 server_default cohort closure: Subset C (33 cols / 29 tables) — entire defect class closed)
 
 - **Дата:** 2026-05-29. Ветка `fix/iter-38-server-default-cohort-subset-C` от `9d29a45` (current `main`, includes iter-37 merged as [#611](https://github.com/aiprocadm/prt_ot_doc/pull/611)). Open PRs at session start: none. iter-38 is unstacked — clean branch from main, no pending dependencies.

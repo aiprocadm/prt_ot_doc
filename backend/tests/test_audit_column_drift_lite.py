@@ -328,13 +328,26 @@ def test_real_codebase_training_enrollments_has_no_drift() -> None:
     )
 
 
-def test_real_codebase_incident_log_is_critical_absent() -> None:
-    """Session 79 documented incident_log as critical/absent (design-blocked)."""
+def test_real_codebase_incident_log_no_longer_critical_absent() -> None:
+    """Session 79 documented incident_log as critical/absent (design-blocked).
+    Closed by iter-42 (Session 89) — table is now created by migration
+    ``20260529_iter42_incident_family.py``. This test inverts the original
+    Session-80 assertion to be a regression guard against the table being
+    accidentally removed from migrations again.
+    """
     models = _AUDIT.find_versioned_models()
     migration_cols = _AUDIT.collect_migration_columns()
     assert "incident_log" in models
-    # incident_log has no migration creating it — it's in the critical list.
-    assert "incident_log" not in migration_cols or len(migration_cols["incident_log"]) == 0
+    # incident_log now exists in migrations with the business cols populated.
+    assert "incident_log" in migration_cols, (
+        "incident_log should be created by iter-42 — regression in migration coverage"
+    )
+    credited = migration_cols["incident_log"]
+    business_cols = {"incident_id", "author_id", "stage", "status", "message", "metadata_json"}
+    missing = business_cols - credited
+    assert not missing, (
+        f"incident_log missing business cols after iter-42: {sorted(missing)}"
+    )
 
 
 def test_real_codebase_no_unexpected_versioned_classes_missed() -> None:
@@ -343,3 +356,266 @@ def test_real_codebase_no_unexpected_versioned_classes_missed() -> None:
     # Loose floor — the project will add models; this just catches regressions
     # in the AST class detection (e.g. if the Mapped[...] detection breaks).
     assert len(models) >= 100, f"Only {len(models)} versioned classes — detection regression?"
+
+
+# ---------------------------------------------------------------------------
+# Dynamic batch_alter_table table-name resolution (iter-39).
+#
+# Closes the fourth audit static-analysis blindspot. Pattern in real
+# migration `8d2c1a6c5e24_domain_normalization.py`:
+#
+#     def _resolve_npa_binding_table(bind) -> str | None:
+#         if inspector.has_table("npa_binding"): return "npa_binding"
+#         if inspector.has_table("npabinding"):  return "npabinding"
+#         return None
+#
+#     def upgrade():
+#         npa_binding_table = _resolve_npa_binding_table(bind)
+#         if npa_binding_table:
+#             with op.batch_alter_table(npa_binding_table, schema=None) as batch:
+#                 batch.add_column(sa.Column("entity_type", ...))
+#                 batch.add_column(sa.Column("entity_id", ...))
+#                 batch.add_column(sa.Column("context", ...))
+#
+# Pre-iter-39 the audit only handled `batch_alter_table("<literal>", ...)`
+# (the first arg as ast.Constant). Variable form was silently skipped →
+# false-positive drift on 3 cols for npabinding.
+#
+# Mirrors prior audit-correctness passes per `[[audit-static-analysis-blindspots]]`:
+#   - Session 79: helper-wrapped create_table
+#   - Session 81: mapped_column first-arg name override
+#   - Session 85: alter_column server_default form
+# ---------------------------------------------------------------------------
+
+
+def test_batch_alter_table_dynamic_name_resolved_via_function_return_literals(
+    tmp_path: Path,
+) -> None:
+    """Variable bound to a function returning multiple string literals: credit
+    cols to ALL possible returns. Mirror of `_resolve_npa_binding_table`.
+    """
+    result = _collect_one(
+        tmp_path,
+        "mig_dynamic_batch",
+        """
+        import sqlalchemy as sa
+        from alembic import op
+        def _resolve_table(bind):
+            if bind.has_table("alpha"):
+                return "alpha"
+            if bind.has_table("beta"):
+                return "beta"
+            return None
+        def upgrade():
+            bind = op.get_bind()
+            tname = _resolve_table(bind)
+            if tname:
+                with op.batch_alter_table(tname, schema=None) as batch:
+                    batch.add_column(sa.Column("new_col", sa.String(36)))
+        """,
+    )
+    assert result["alpha"] == {"new_col"}
+    assert result["beta"] == {"new_col"}
+
+
+def test_batch_alter_table_dynamic_name_single_return_literal(tmp_path: Path) -> None:
+    """Resolver returns one string literal: credit to that single table."""
+    result = _collect_one(
+        tmp_path,
+        "mig_dynamic_single",
+        """
+        import sqlalchemy as sa
+        from alembic import op
+        def _get_name():
+            return "only_table"
+        def upgrade():
+            tname = _get_name()
+            with op.batch_alter_table(tname, schema=None) as batch:
+                batch.add_column(sa.Column("col_a", sa.String(36)))
+        """,
+    )
+    assert result["only_table"] == {"col_a"}
+
+
+def test_batch_alter_table_dynamic_name_unresolvable_does_not_crash(tmp_path: Path) -> None:
+    """Var bound to a Call whose callee isn't in the same module's functions:
+    must skip block silently — no crash, no phantom credits.
+    """
+    result = _collect_one(
+        tmp_path,
+        "mig_dynamic_untraceable",
+        """
+        import sqlalchemy as sa
+        from alembic import op
+        def upgrade():
+            tname = some_undefined_callable()  # not in module's functions
+            with op.batch_alter_table(tname, schema=None) as batch:
+                batch.add_column(sa.Column("ghost", sa.String(36)))
+        """,
+    )
+    assert all("ghost" not in cols for cols in result.values()), (
+        "unresolvable dynamic table name must not credit cols anywhere"
+    )
+
+
+def test_batch_alter_table_dynamic_name_resolver_skips_none_returns(tmp_path: Path) -> None:
+    """Resolver mixing string and `return None`: only string literals counted.
+    Direct parity with `_resolve_npa_binding_table` (None for the missing-
+    table case).
+    """
+    result = _collect_one(
+        tmp_path,
+        "mig_dynamic_with_none",
+        """
+        import sqlalchemy as sa
+        from alembic import op
+        def _resolve(bind):
+            if bind:
+                return "gamma"
+            return None
+        def upgrade():
+            t = _resolve(op.get_bind())
+            if t:
+                with op.batch_alter_table(t, schema=None) as batch:
+                    batch.add_column(sa.Column("only_col", sa.Integer()))
+        """,
+    )
+    assert result["gamma"] == {"only_col"}
+    # None must not have been treated as a phantom table key.
+    assert None not in result
+
+
+def test_batch_alter_table_dynamic_name_supports_drop_and_rename(tmp_path: Path) -> None:
+    """drop_column + alter_column rename inside a dynamic-name batch block:
+    must work for ALL resolved table names symmetrically with the literal-
+    name path.
+    """
+    result = _collect_one(
+        tmp_path,
+        "mig_dynamic_drop_rename",
+        """
+        import sqlalchemy as sa
+        from alembic import op
+        def _names():
+            return "alpha"
+        def upgrade():
+            op.create_table("alpha", sa.Column("orig", sa.String()), sa.Column("temp", sa.String()))
+            t = _names()
+            with op.batch_alter_table(t, schema=None) as batch:
+                batch.add_column(sa.Column("added", sa.Integer()))
+                batch.drop_column("temp")
+                batch.alter_column("orig", new_column_name="renamed")
+        """,
+    )
+    assert result["alpha"] == {"added", "renamed"}
+
+
+def test_real_codebase_npabinding_no_longer_flagged() -> None:
+    """Closed-loop: after iter-39 audit extension, npabinding's 3 cols
+    (`context`, `entity_id`, `entity_type`) are credited via the dynamic
+    `_resolve_npa_binding_table()` resolution path in
+    `8d2c1a6c5e24_domain_normalization.py`.
+    """
+    models = _AUDIT.find_versioned_models()
+    migration_cols = _AUDIT.collect_migration_columns()
+    assert "npabinding" in models
+    info = models["npabinding"]
+    model_business = info.columns - _AUDIT.MIXIN_COLUMNS
+    mig_business = migration_cols.get("npabinding", set()) - _AUDIT.MIXIN_COLUMNS
+    assert {"context", "entity_id", "entity_type"} <= mig_business, (
+        f"Expected dynamic batch_alter_table resolution to credit "
+        f"context/entity_id/entity_type to npabinding; "
+        f"got mig_business={sorted(mig_business)}"
+    )
+    assert model_business <= mig_business, (
+        f"npabinding drift after iter-39: "
+        f"missing={sorted(model_business - mig_business)}"
+    )
+
+
+def test_real_codebase_npabinding_cleared_from_drift_after_iter39() -> None:
+    """Closed-loop scoped to iter-39's contribution: npabinding's false
+    positive must be cleared by the dynamic-batch_alter_table resolution.
+
+    Originally pinned an exact "expected_remaining" set (5 tables) as the
+    state after iter-39. That worked while iter-39 was the only landing.
+    iter-40 / iter-41 / iter-42 each subsequently close another table —
+    when ALL four land together, the equality assertion fails because
+    drift_tables == empty set. Relaxed to "npabinding is cleared", which
+    holds across any combination of follow-up iters. Integration-level
+    "all drift cleared" assertion is owned by iter-42's closed-loop test.
+    """
+    models = _AUDIT.find_versioned_models()
+    migration_cols = _AUDIT.collect_migration_columns()
+    drift = _AUDIT.compute_drift(models, migration_cols)
+    drift_tables = {info.tablename for info, _missing in drift}
+    assert "npabinding" not in drift_tables, (
+        "npabinding must be cleared by iter-39 dynamic-batch resolution"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Helper-function unit tests for the new audit primitives.
+# ---------------------------------------------------------------------------
+
+
+def test_function_return_literals_collects_all_string_returns() -> None:
+    import ast as _ast
+    src = textwrap.dedent("""
+        def f(x):
+            if x == 1:
+                return "alpha"
+            if x == 2:
+                return "beta"
+            return None
+    """).lstrip()
+    func = _ast.parse(src).body[0]
+    assert _AUDIT._function_return_literals(func) == {"alpha", "beta"}
+
+
+def test_function_return_literals_ignores_non_string_returns() -> None:
+    import ast as _ast
+    src = textwrap.dedent("""
+        def f():
+            if True:
+                return 42
+            if False:
+                return some_var
+            return None
+    """).lstrip()
+    func = _ast.parse(src).body[0]
+    assert _AUDIT._function_return_literals(func) == set()
+
+
+def test_resolve_dynamic_name_traces_call_to_module_function() -> None:
+    import ast as _ast
+    src = textwrap.dedent("""
+        def _helper():
+            return "tbl_x"
+        def upgrade():
+            tname = _helper()
+            with op.batch_alter_table(tname) as batch:
+                pass
+    """).lstrip()
+    tree = _ast.parse(src)
+    functions = {n.name: n for n in tree.body if isinstance(n, _ast.FunctionDef)}
+    upgrade = functions["upgrade"]
+    resolved = _AUDIT._resolve_dynamic_name_from_assignments(
+        "tname", upgrade, functions
+    )
+    assert resolved == ["tbl_x"]
+
+
+def test_resolve_dynamic_name_returns_empty_when_var_not_assigned() -> None:
+    import ast as _ast
+    src = textwrap.dedent("""
+        def upgrade():
+            with op.batch_alter_table(other_name) as batch:
+                pass
+    """).lstrip()
+    tree = _ast.parse(src)
+    functions = {n.name: n for n in tree.body if isinstance(n, _ast.FunctionDef)}
+    resolved = _AUDIT._resolve_dynamic_name_from_assignments(
+        "other_name", functions["upgrade"], functions
+    )
+    assert resolved == []
