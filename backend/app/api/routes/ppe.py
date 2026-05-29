@@ -20,7 +20,7 @@ from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.domains.ppe import issue_ppe_item, list_expiring_issues
-from app.models.ppe_registry import PPEIssue, PPEIssueStatus, PPEItem
+from app.models.ppe_registry import PPEIssue, PPEIssueStatus, PPEItem, PPEStockBatch
 from app.models.tenanting import Tenant
 from app.schemas.ppe import (
     PPEIssueCreate,
@@ -31,6 +31,12 @@ from app.schemas.ppe import (
     PPEItemPage,
     PPEItemRead,
     PPEItemUpdate,
+    PPEStockBatchCreate,
+    PPEStockBatchPage,
+    PPEStockBatchRead,
+    PPEStockBatchUpdate,
+    PPEStockLevelPage,
+    PPEStockLevelRead,
 )
 from app.services.events import EventType
 from app.services.outbox import OutboxService
@@ -360,3 +366,165 @@ async def update_issue(
             },
         )
     return _issue_schema(issue)
+
+
+async def _get_batch(session: AsyncSession, tenant: Tenant, batch_id: str) -> PPEStockBatch:
+    stmt = select(PPEStockBatch).where(
+        PPEStockBatch.id == batch_id,
+        PPEStockBatch.tenant_id == tenant.id,
+        PPEStockBatch.deleted_at.is_(None),
+    )
+    batch = (await session.execute(stmt)).scalar_one_or_none()
+    if batch is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE stock batch not found")
+    return batch
+
+
+@router.get("/stock/batches", response_model=PPEStockBatchPage)
+async def list_stock_batches(
+    request: Request,
+    response: Response,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,    item_id: str | None = None,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> PPEStockBatchPage | Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
+    stmt = select(PPEStockBatch).where(
+        PPEStockBatch.tenant_id == tenant.id, PPEStockBatch.deleted_at.is_(None)
+    )
+    if item_id:
+        stmt = stmt.where(PPEStockBatch.item_id == item_id)
+    stmt = stmt.order_by(PPEStockBatch.batch_no.asc()).limit(limit).offset(offset)
+    batches = list((await session.execute(stmt)).scalars().all())
+
+    count_stmt = select(func.count()).where(
+        PPEStockBatch.tenant_id == tenant.id, PPEStockBatch.deleted_at.is_(None)
+    )
+    if item_id:
+        count_stmt = count_stmt.where(PPEStockBatch.item_id == item_id)
+    total = (await session.execute(count_stmt)).scalar_one()
+
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=batches,
+        scalars=[
+            ("total", int(total or 0)),
+            ("limit", limit),
+            ("offset", offset),
+            ("item", item_id or ""),
+        ],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
+    return PPEStockBatchPage(
+        items=[PPEStockBatchRead.model_validate(b) for b in batches], total=total
+    )
+
+
+@router.post(
+    "/stock/batches", response_model=PPEStockBatchRead, status_code=status.HTTP_201_CREATED
+)
+@audit_operation("create", "ppe_stock_batch")
+async def create_stock_batch(
+    payload: PPEStockBatchCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,) -> PPEStockBatchRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
+    await _get_item(session, tenant, payload.item_id)
+
+    batch = PPEStockBatch(
+        tenant_id=tenant.id,
+        item_id=payload.item_id,
+        batch_no=payload.batch_no,
+        quantity=payload.quantity,
+        received_at=payload.received_at,
+        certificate_no=payload.certificate_no,
+        certificate_expires_at=payload.certificate_expires_at,
+        location=payload.location,
+    )
+    session.add(batch)
+    await session.flush()
+    await session.refresh(batch)
+    return PPEStockBatchRead.model_validate(batch)
+
+
+@router.get("/stock/batches/{batch_id}", response_model=PPEStockBatchRead)
+async def get_stock_batch(
+    batch_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,) -> PPEStockBatchRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    batch = await _get_batch(session, tenant, batch_id)
+    return PPEStockBatchRead.model_validate(batch)
+
+
+@router.patch("/stock/batches/{batch_id}", response_model=PPEStockBatchRead)
+@audit_operation("update", "ppe_stock_batch")
+async def update_stock_batch(
+    batch_id: str,
+    payload: PPEStockBatchUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,) -> PPEStockBatchRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    batch = await _get_batch(session, tenant, batch_id)
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(batch, field, value)
+    await session.flush()
+    await session.refresh(batch)
+    return PPEStockBatchRead.model_validate(batch)
+
+
+@router.get("/stock/levels", response_model=PPEStockLevelPage)
+async def list_stock_levels(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,) -> PPEStockLevelPage:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
+    agg_stmt = (
+        select(
+            PPEStockBatch.item_id,
+            func.coalesce(func.sum(PPEStockBatch.quantity), 0),
+            func.count(PPEStockBatch.id),
+            func.min(PPEStockBatch.certificate_expires_at),
+        )
+        .where(
+            PPEStockBatch.tenant_id == tenant.id,
+            PPEStockBatch.deleted_at.is_(None),
+        )
+        .group_by(PPEStockBatch.item_id)
+    )
+    rows = (await session.execute(agg_stmt)).all()
+
+    names: dict[str, str] = {}
+    item_ids = [row[0] for row in rows]
+    if item_ids:
+        name_rows = (
+            await session.execute(
+                select(PPEItem.id, PPEItem.name).where(PPEItem.id.in_(item_ids))
+            )
+        ).all()
+        names = {item_id: name for item_id, name in name_rows}
+
+    levels = [
+        PPEStockLevelRead(
+            item_id=row[0],
+            item_name=names.get(row[0], ""),
+            total_quantity=int(row[1] or 0),
+            batch_count=int(row[2] or 0),
+            nearest_certificate_expiry=row[3],
+        )
+        for row in rows
+    ]
+    return PPEStockLevelPage(items=levels, total=len(levels))

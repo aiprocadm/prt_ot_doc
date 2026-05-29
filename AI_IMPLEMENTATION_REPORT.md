@@ -1,5 +1,34 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-30, W-A — PPE warehouse skeleton landed: TZ-3.2-V11-01 `missing` → `done`; latent feature.py cross-base FK bug surfaced + flagged)
+
+- **Дата:** 2026-05-30. Ветка `feat/wa-ppe-warehouse-skeleton` (off `validate/all-six-branches-integration`, local-only).
+- **Агент:** Claude Opus 4.8 (local Win+Py3.13 venv; explanatory + executing-plans inline). Driver: brainstorm → writing-plans → executing-plans for **W-A**, первый кодовый под-проект roadmap'а полноты ТЗ (спек `docs/superpowers/specs/2026-05-29-tz-completeness-roadmap-design.md`, план `docs/superpowers/plans/2026-05-29-ppe-warehouse-skeleton.md`).
+- **Задача:** W-A · «склад СИЗ skeleton» (`TZ-3.2-V11-01`, [v1.1], был `missing`). Минимальный аддитивный склад: партии + остатки + сертификаты.
+
+### Implemented
+- `PPEStockBatch` (table `ppe_stock_batch`, FK→ppeitem) в `app/models/models.py`; re-export в `app/models/ppe_registry.py`.
+- Additive миграция `20260529_wa01_ppe_stock_batch.py` (`down_revision`=iter48; граф проверен: новая голова, число голов без изменений = 8; БД локально не мутировалась).
+- Схемы `PPEStockBatch{Create,Update,Read,Page}` + `PPEStockLevel{Read,Page}` в `app/schemas/ppe.py`.
+- Эндпоинты в `app/api/routes/ppe.py`: `GET/POST /ppe/stock/batches`, `GET/PATCH /ppe/stock/batches/{id}`, `GET /ppe/stock/levels` (агрегат). ETag через `compute_list_etag`, admin-RBAC.
+- Frontend: `frontend/src/api/warehouse.ts` + `WarehousePage.tsx` переведён с фасада `opsApi.getPpeOverview()` на реальные остатки/партии.
+
+### Tests (local py3.13 venv; CI 3.12.12 canonical)
+- `backend/tests/test_wa01_ppe_stock_batch_migration.py` (4, model+migration AST pin) — green.
+- `tests/api/test_ppe_warehouse_api.py` (4) + `tests/api/test_ppe_warehouse_cache_etag_contract.py` (5) → 9 app-booting green.
+- `frontend/src/__tests__/WarehousePage.test.tsx` (2, vitest) — green; `tsc --noEmit` clean. Matrix validator + OpenAPI contract tests green (no regen).
+
+### Decisions / Deviations
+- **Per-tenant feature gate DEFERRED (deviation from plan).** Запланированный `warehouse`-гейт на `FeatureEnablement` снят: `app/models/feature.py` содержит cross-base FK (`FeatureEnablement(TenantBase).feature_id → Feature(SharedBase).id`), который при импорте моделей роняет SQLAlchemy mapper config (`NoReferencedTableError`) → ломает boot всего приложения. Модели нигде не импортировались раньше → баг был дремлющим. Эндпоинты остались аддитивными + admin-RBAC. Баг вынесен отдельной задачей (починить FK → подключить гейт).
+- Сирота `WarehousePPE` не тронута (additive-правило).
+- Миграция привязана к одной из 8 голов (multi-head by design); консолидация голов — отдельная операционная `merge_heads`-задача пользователя.
+
+### Next Steps
+1. **Починить cross-base FK в `feature.py`** (отдельная задача уже заведена) → затем подключить per-tenant `warehouse`-гейт на `/ppe/stock/*`.
+2. **W-A item #2:** prescriptions lifecycle (`TZ-3.4-V12-01`, `partial`). **item #3:** coverage-gate ≥85% (`TZ-6.3-V11-01`) вместе с W0 (re-enable CI).
+3. PR ветки `feat/wa-ppe-warehouse-skeleton`; CI на 3.12.12 — re-validate `alembic upgrade heads` + 9 app-booting тестов.
+- Матрица: `TZ-3.2-V11-01` → `done`.
+
 ## Last Agent Handoff (2026-05-29, Session 98 — iter-45 heavyweight rename-FP closed: batch.alter_column(new_column_name=) now tracked; webhook_deliveries + outbox FPs cleared; heavyweight audit business-FP class CLOSED)
 
 - **Дата:** 2026-05-29. Ветка `validate/all-six-branches-integration` (continuing from Session 97). iter-45 work is local-only on the validation branch (same precedent as iter-44/46/47/48).

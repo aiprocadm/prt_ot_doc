@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from pydantic import Field, field_validator
@@ -93,4 +93,54 @@ class PPEIssueRead(BaseSchema):
 
 class PPEIssuePage(BaseSchema):
     items: list[PPEIssueRead]
+    total: int
+
+
+class PPEStockBatchCreate(BaseSchema):
+    item_id: str
+    batch_no: str
+    quantity: int = Field(default=0, ge=0)
+    received_at: date | None = None
+    certificate_no: str | None = None
+    certificate_expires_at: date | None = None
+    location: str | None = None
+
+
+class PPEStockBatchUpdate(BaseSchema):
+    batch_no: str | None = None
+    quantity: int | None = Field(default=None, ge=0)
+    received_at: date | None = None
+    certificate_no: str | None = None
+    certificate_expires_at: date | None = None
+    location: str | None = None
+
+
+class PPEStockBatchRead(BaseSchema):
+    id: str
+    item_id: str
+    batch_no: str
+    quantity: int
+    received_at: date | None
+    certificate_no: str | None
+    certificate_expires_at: date | None
+    location: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class PPEStockBatchPage(BaseSchema):
+    items: list[PPEStockBatchRead]
+    total: int
+
+
+class PPEStockLevelRead(BaseSchema):
+    item_id: str
+    item_name: str
+    total_quantity: int
+    batch_count: int
+    nearest_certificate_expiry: date | None
+
+
+class PPEStockLevelPage(BaseSchema):
+    items: list[PPEStockLevelRead]
     total: int

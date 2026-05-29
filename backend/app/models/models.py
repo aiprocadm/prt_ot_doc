@@ -1360,6 +1360,29 @@ class PPEIssue(TenantBaseModel, SoftDeleteMixin):
     )
 
 
+class PPEStockBatch(TenantBaseModel, SoftDeleteMixin):
+    __tablename__ = "ppe_stock_batch"
+
+    item_id: Mapped[str] = mapped_column(
+        ForeignKey("ppeitem.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    batch_no: Mapped[str] = mapped_column(String(128), nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    received_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    certificate_no: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    certificate_expires_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    location: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    item: Mapped[PPEItem] = relationship("PPEItem")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "item_id", "batch_no", name="uq_ppe_stock_batch_item_no"
+        ),
+        Index("ix_ppe_stock_batch_item", "tenant_id", "item_id"),
+    )
+
+
 class TemplateStatus(str, enum.Enum):
     DRAFT = "draft"
     ACTIVE = "active"
