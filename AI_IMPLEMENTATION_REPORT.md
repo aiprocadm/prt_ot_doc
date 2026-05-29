@@ -1,5 +1,134 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-29, Session 87 — iter-40 training_certificates legacy-cols cohort closure (1 of 5 remaining business-drift tables))
+
+- **Дата:** 2026-05-29. Ветка `fix/iter-40-training-certificates-legacy-cols` от `093959b` (`main`, with iter-38 merged as [#612](https://github.com/aiprocadm/prt_ot_doc/pull/612)). **Parallel in-flight:** `fix/iter-39-audit-batch-alter-dynamic-table-resolution` (Session 86's audit-correctness fix for npabinding) is open on a sibling branch — both share `main` as base, neither stacks on the other. After both merge, drift drops 6 → 4.
+- **Агент:** Claude Opus 4.7 (1M context, local Win+Py3.13; explanatory style + Auto Mode + TDD).
+- **Задача:** «продолжай» — Session 86 handoff Next Step #2 (pick design-blocked drift table, produce decision-ready proposal, execute if clear-cut). Selected `training_certificates` (smallest scope per recommended order). Investigation revealed the 4 "missing" cols are **active backward-compat** layer (used in `training.py:320-375` + `employee_card.py:328-343`), so the design call collapsed to mechanical mirror-of-iter-32 fix. User confirmed Option A via AskUserQuestion before implementation.
+
+### Studied Documentation
+
+- Session 86 handoff Next Step #2 — recommended order `training_certificates → journalentry → incident family`, with `training_certificates` flagged as "model marks legacy" + "single-stakeholder call".
+- `backend/app/models/models.py:928-965` — `TrainingCertificate(TenantBaseModel, SoftDeleteMixin)`. The 4 "missing" cols (`course_id`, `session_id`, `plan_id`, `number`) appear under the comment `# backward-compatible legacy fields` (lines 943-953), with `UniqueConstraint("tenant_id", "number", name="uq_training_certificate_number")` in `__table_args__` (line 963).
+- Commit `58b428e` "Fix training certificate model mapping for next APIs" (2026-03-09) — added the legacy bridge: renamed `__tablename__ = "training_certificate"` → `"training_certificates"` (plural), made `person_id`/`course_id` nullable, added modern fields (`code`, `training_program_id`, `external_registry_*`), kept legacy fields nullable for backward-compat with the consumer chain.
+- `backend/app/migrations/versions/20260317_next46_training_briefings_offline.py:113-125` — creates `training_certificates` via `_create_soft_table` helper, but ONLY with the modern cols (`code, training_program_id, person_id, issued_at, valid_until, status, file_id, external_registry_status, external_registry_payload`). Predates 58b428e by 9 days — the legacy cols added in the model post-migration are the audit gap.
+- `backend/app/api/routes/training.py:320,321,343,373-375` — legacy training endpoints actively set `course_id`, `plan_id`, `session_id` on payload mapping. `backend/app/services/employee_card.py:328,343` joins with `TrainingCourse.id == TrainingCertificate.course_id`. Confirms these are NOT dead code → Option B (deprecate) is product-decision-blocked, Option A (add to migration) is the safe path.
+- `backend/app/migrations/versions/20260528_iter32_business_drift_cohort.py:55-141` — the exact iter-32 pattern to mirror: `op.add_column` × N + `op.create_index` × N (FK cols only) + inverse-order downgrade.
+- `backend/tests/test_iter32_business_drift_cohort.py` — the parametrized cohort test shape (revision pin + 4 × N parametrized property tests + symmetric upgrade/downgrade + closed-loop audit).
+
+### Selected Plan Item
+
+- **iter-40 cohort closure** — 4 cols (`course_id`, `session_id`, `plan_id`, `number`) + 3 indices (for the 3 FK cols) + 1 `UniqueConstraint(tenant_id, number)` added to `training_certificates`.
+- **Why selected over other candidates:**
+  - Of 5 drift tables flagged by `column_drift_lite` (post-iter-39 baseline), only `training_certificates` had a single-stakeholder mechanical path: cols all nullable, no FK cycles, no data backfill required, matches iter-32 cohort pattern that was already approved.
+  - `journalentry`, `incident`, `incident_log`, `incident_person` all need multi-stakeholder design decisions (concept-level schema work).
+  - User confirmed Option A (add cols) via AskUserQuestion over Option B (deprecate legacy fields — would require API contract review and refactoring 6+ call-sites) and Option C (skip).
+- **Cost:** ~120 prod LOC (migration with 4 add_column + 3 create_index + 1 create_unique_constraint + inverse downgrade) + ~280 test LOC (AST pin + 4-row parametrized × 4 props + 2 closed-loop integration tests + symmetric upgrade/downgrade pin).
+- **Closed loop:** `column_drift_lite` business-drift count drops from **5 → 4 tables** (training_certificates cleared) on iter-40 branch. After both iter-39 and iter-40 merge, drift drops to **4** (incident family ×3 + journalentry).
+
+### Recent merged work since Session 85
+
+| PR | Date (UTC) | Iter | Scope | Class |
+|---|---|---|---|---|
+| — | — | iter-39 | audit dynamic batch_alter_table resolution | audit (in-flight on `fix/iter-39-...`) |
+
+Session 86 (iter-39) is in-flight on its own branch; not yet merged at iter-40 session start.
+
+### Implemented Changes (this session)
+
+**Code (PR `fix/iter-40-training-certificates-legacy-cols`):**
+
+1. **`backend/app/migrations/versions/20260529_iter40_training_certificates_legacy_cols.py`** (+125 new) — revision `20260529_iter40_tc_legacy_cols`, down_revision `20260529_iter38_server_default_c`. Upgrade: 4 `op.add_column` + 3 `op.create_index` (FK cols) + 1 `op.create_unique_constraint`. Downgrade: inverse order (drop_constraint → drop_index ×3 → drop_column ×4). FK declarations mirror exactly the model's `mapped_column(ForeignKey(..., ondelete=X))`: `course_id` ondelete=CASCADE, `session_id`/`plan_id` ondelete=SET NULL.
+
+2. **`backend/tests/test_iter40_training_certificates_legacy_cols.py`** (+285 new) — 24-test pin file:
+   - revision chain pin (`iter-40 → iter-38`).
+   - Cohort definition: 4 cols × (column, nullable, fk_target, ondelete) tuples.
+   - 4 × 4 = 16 parametrized property tests (col present in upgrade / nullable matches / FK target matches / ondelete matches).
+   - `test_indexes_for_fk_columns_present_in_upgrade` — pins the 3 expected indexes.
+   - `test_unique_constraint_present_in_upgrade` — pins `uq_training_certificate_number(tenant_id, number)`.
+   - `test_upgrade_and_downgrade_symmetric` — column / index / constraint round-trip.
+   - `test_cohort_size_pinned_at_four` — modify cohort → modify list.
+   - `test_no_create_table_in_upgrade` — pure column-add, no schema scaffolding.
+   - **2 closed-loop audit tests**: `test_audit_credits_iter40_columns` (cols credited to migration set) + `test_audit_drift_count_drops_to_four_after_iter40` (training_certificates cleared, design-blocked subset still flagged).
+
+**Doc:**
+
+3. New `## Last Agent Handoff (2026-05-29, Session 87 ...)` block prepended (this entry).
+
+### Changed / New Files
+
+- `backend/app/migrations/versions/20260529_iter40_training_certificates_legacy_cols.py` — +125 new.
+- `backend/tests/test_iter40_training_certificates_legacy_cols.py` — +285 new.
+- `AI_IMPLEMENTATION_REPORT.md` — +~100 / 0 (this handoff).
+
+### Decisions
+
+- **Add cols to migration (Option A), not deprecate legacy fields (Option B).** Field-usage scan revealed 6+ call-sites actively use `course_id`/`session_id`/`plan_id` in payload mapping and joins. Option B would require API contract review and full refactor — design-blocked, not autopilot-suitable. Option A is mechanical, zero-risk, mirrors approved iter-32 pattern. User confirmed before implementation.
+- **Match FK ondelete semantics exactly to the model.** Model declares `course_id: ondelete=CASCADE` (delete cascade — legacy course was mandatory), `session_id: ondelete=SET NULL`, `plan_id: ondelete=SET NULL`. Migration mirrors all three. `test_cohort_column_ondelete_matches_spec` pins this — easy to drift if someone later "normalizes" the migration without checking the model.
+- **Add the 3 FK indices, mirror of model `index=True` flags.** Model has `index=True` on all 3 FK declarations. Index naming follows the audited convention: `ix_<tablename>_<colname>`.
+- **UniqueConstraint named `uq_training_certificate_number` (singular).** Matches the model's `UniqueConstraint(..., name="uq_training_certificate_number")` declaration exactly. The model has a parallel constraint `uq_training_certificates_code` (plural) for the modern `code` field — that one's already in the next46 migration via `_create_soft_table`'s `unique=` kwarg. iter-40 only adds the legacy-side one.
+- **Tests parametrize over `(column, nullable, fk_target, ondelete)` 4-tuple.** iter-32 used a 5-tuple including `has_server_default`. iter-40's cohort is all-nullable-no-default, so the `server_default` axis is dropped — simpler tuple shape, fewer ignored fields. Also added the `ondelete` axis which iter-32 didn't pin (every iter-40 col has a meaningful ondelete that differs across cols).
+- **Closed-loop test uses subset assertion `remaining_design_blocked <= drift_tables` instead of equality.** Reason: iter-40's branch (from main) doesn't have iter-39's audit fix → npabinding still appears in drift. Equality would fail. The subset check is what we actually care about: training_certificates is cleared, and the 4 design-blocked tables (`incident, incident_log, incident_person, journalentry`) remain flagged. After iter-39 + iter-40 both merge, npabinding will also be cleared and drift becomes exactly the 4 design-blocked tables.
+- **No SQLite/PG dialect-specific code.** All 4 cols are `String(36)` (FK) or `String(64)` (number). Plain ANSI SQL. No batch-mode reconstruction needed; the table already exists, `op.add_column` works on both backends.
+- **No `existing_type` on add_column.** `existing_type` is only meaningful for `alter_column` (informs autogen diff + SQLite batch reconstruction). Skipped, mirroring iter-32's `add_column` form.
+
+### Issues Fixed
+
+- **Business-drift cohort closure for `training_certificates`.** The 4 legacy backward-compat cols + uniqueness constraint declared in `models.py:944-963` (added by commit `58b428e`) are now in the migration history. Raw-SQL paths (perf-baseline `COPY`, restore-drill SQL dumps, alembic `op.execute("INSERT ...")`) on `training_certificates` will no longer hit `UndefinedColumnError` on PostgreSQL. The model↔migration source-of-truth gap for this table is closed.
+
+### Known Problems / Risks
+
+- **The 4 cols are still legacy.** This iter HARDENS the legacy bridge by adding it to migration history — if/when the legacy course/session/plan domain is sunset, removing them requires a parallel migration AND code refactor. iter-40 doesn't prevent eventual cleanup, but it commits the project to keeping them until a deliberate decision otherwise.
+- **No DB-level upgrade verification.** Migration not actually run against PG (Win+Py3.13 SQLite conftest hang prevents pytest-driven alembic runs). Validation rests on py_compile + AST pin tests + closed-loop audit drift = 0 for this table + iter-32 precedent shape match.
+- **iter-40 stacks behaviorally with iter-39 only at audit-output level.** No code conflict between branches (iter-39 modifies `scripts/audit/column_drift_lite.py` + its test, iter-40 modifies migration + new test file). When both merge, the audit drift count converges to 4 — both PRs can land in either order.
+- **Heavyweight audit still hangs.** Unchanged. Lightweight audits remain the only viable local tool.
+- **CI still off** (PR #598). Unchanged. Local-evidence policy applies.
+- **iter-30/31 abandoned remote branches still persist.** Unchanged.
+- **Double-merged iter-37 (PRs #610 + #611)** — unchanged from Sessions 85/86's note.
+
+### Validation
+
+- `py -3 -m py_compile backend/app/migrations/versions/20260529_iter40_training_certificates_legacy_cols.py backend/tests/test_iter40_training_certificates_legacy_cols.py` → OK.
+- `py -3 -m pytest backend/tests/test_iter40_training_certificates_legacy_cols.py -v` → **24/24 pass** in 1.00s.
+- `py -3 -m pytest backend/tests/test_iter40_training_certificates_legacy_cols.py backend/tests/test_iter32_business_drift_cohort.py backend/tests/test_iter37_server_default_cohort.py backend/tests/test_iter38_server_default_cohort.py backend/tests/test_audit_column_drift_lite.py backend/tests/test_audit_version_column_drift.py backend/tests/test_audit_server_default_parity.py backend/tests/test_iter29_version_retrofit.py` → **351/351 pass** in 8.26s. No regression in any adjacent audit/migration cohort suite.
+- `py -3 scripts/audit/column_drift_lite.py` → **5 business-drift tables** (was 6 pre-iter-39 + iter-40): incident, incident_log, incident_person, journalentry, **npabinding** (still here because iter-39 not on this branch). **training_certificates cleared.** When both iter-39 and iter-40 merge, count → **4**.
+- **Not validated:** full backend test suite (Win+Py3.13 collect hang per `[[local-env-drift-windows]]`). Adjacent isolated suites + py_compile + closed-loop audit cover the scope.
+
+### Next Steps
+
+**Operational:**
+
+1. Review iter-40 PR (125 prod + 285 test LOC + ~100 line handoff). Independent of iter-39 PR — merge order is free.
+2. After both merge, expected `column_drift_lite` count: **4 business-drift tables** (incident family ×3 + journalentry). All 4 are genuinely design-blocked.
+
+**Technical (next session — primary):**
+
+3. **Pick the next design-blocked drift table.** Remaining candidates after iter-40:
+   - `journalentry` (6 cols, concept drift — model has `entry_date, instructor, journal_id, metadata_json, notes, person_id`; migration may have different field names). Lowest scope of remaining 4. Needs domain owner input on intended fields and rename mappings.
+   - `incident` family (3 tables, 15 cols total). `incident_log` and `incident_person` are entirely absent from migrations (Session 79 design-blocked). Largest scope. Needs structured decision pass.
+4. **Investigation approach for `journalentry`:** compare model cols vs migration cols (specifically `metadata_json/payload`, `entry_date/occurred_at`), determine if rename or full schema replacement is the right call. Migrations `8d2c1a6c5e24_domain_normalization.py` and the initial schema both touch this — likely needs a redesign migration, not a column-add cohort.
+
+**Technical (next session — secondary):**
+
+5. **Branch cleanup (iter-30/31 abandoned remotes)** — needs destructive-git permission. Mechanical, ~5 min.
+6. **iter-37 PR #610/#611 double-merge dedupe** — unchanged from prior sessions.
+7. **CI re-enablement** — strategic decision (billing + scope).
+8. **FLOW seed for RB-002** — non-blocking polish.
+
+**Стартовая команда для следующей сессии:**
+
+```bash
+git checkout main && git pull
+gh pr list --state open --limit 10
+py -3 scripts/audit/column_drift_lite.py    # expect 4 drift tables if both iter-39+iter-40 merged
+py -3 scripts/audit/column_drift_lite.py --table journalentry  # detailed diff
+# Then either tackle journalentry's concept drift or scope incident-family design pass.
+```
+
+**Branch suggestion для следующей сессии:** `design/journalentry-concept-drift-pass` (если start with journalentry investigation), `design/incident-family-pass-1` (если incident), `chore/cleanup-abandoned-iter30-31-branches` (если cleanup).
+
+---
+
 ## Last Agent Handoff (2026-05-29, Session 85 — iter-38 server_default cohort closure: Subset C (33 cols / 29 tables) — entire defect class closed)
 
 - **Дата:** 2026-05-29. Ветка `fix/iter-38-server-default-cohort-subset-C` от `9d29a45` (current `main`, includes iter-37 merged as [#611](https://github.com/aiprocadm/prt_ot_doc/pull/611)). Open PRs at session start: none. iter-38 is unstacked — clean branch from main, no pending dependencies.
