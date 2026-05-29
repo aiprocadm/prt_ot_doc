@@ -1,5 +1,149 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-29, Session 88 — iter-41 journalentry concept resolution: drop-and-recreate (1 of 4 remaining business-drift tables))
+
+- **Дата:** 2026-05-29. Ветка `fix/iter-41-journalentry-concept-resolution` от `093959b` (`main`, with iter-38 merged as [#612](https://github.com/aiprocadm/prt_ot_doc/pull/612)). **Three parallel in-flight branches now**, all rooted at the same `main` commit: `fix/iter-39-audit-batch-alter-dynamic-table-resolution` (S86), `fix/iter-40-training-certificates-legacy-cols` (S87), and this iter-41. When all three merge, drift drops 6 → **3** (incident family only).
+- **Агент:** Claude Opus 4.7 (1M context, local Win+Py3.13; explanatory style + Auto Mode + TDD).
+- **Задача:** «продолжай» — Session 87 handoff Next Step #3 (next design-blocked drift table; recommended start: `journalentry`). Investigation revealed it's a **concept-level rewrite** (initial_schema's generic event-log `{entry_type, payload, occurred_at}` vs current model's safety-briefing entry `{journal_id, person_id, entry_type, entry_date, instructor, notes, metadata_json}`). User confirmed Option A (drop + recreate) via AskUserQuestion over Option B (alter form) and Option C (skip).
+
+### Studied Documentation
+
+- Session 87 handoff Next Step #3 — recommended start with `journalentry` (smallest of remaining 4, "concept drift" tag).
+- `[[mvp-release-blockers]]` — confirms `journalentry — concept drift + 4 FK cols truly absent; design call.` Decision: closed via mechanical drop-and-recreate, not phased rollout.
+- `backend/app/models/models.py:2215-2237` — current `JournalEntry(TenantBaseModel, SoftDeleteMixin)`. 7 business cols + `UniqueConstraint(tenant_id, journal_id, person_id, entry_type, entry_date, name="uq_journal_entry_unique_person_date")` + `Index("ix_journal_entry_type", "tenant_id", "entry_type")`. Both FK cols (`journal_id`, `person_id`) declared NOT NULL with `index=True`.
+- `backend/app/migrations/versions/6b6dee7c951f_initial_schema.py:209-220` — original `journalentry`: generic event-log shape `{entry_type String(128), payload JSON, occurred_at DateTime}`. Mutually incompatible with current model.
+- `backend/app/migrations/versions/20260527_iter24_journal_ppeitem.py:11-17` — iter-24 explicitly deferred this: `"the migration that creates journalentry in 6b6dee7c951f_initial_schema.py does NOT yet add this FK — that is a separate business-drift item, not in this PR's scope"`. iter-41 is that long-deferred item.
+- `backend/app/migrations/versions/20260527_iter24_journal_ppeitem.py:64-71,86-100` — JOURNAL_TYPE_VALUES + the journal-table create that established the `journaltype` PG enum. iter-41 reuses this enum via `sa.Enum(*JOURNAL_TYPE_VALUES, name="journaltype", create_type=False)` to avoid the "type already exists" error.
+- `backend/app/api/routes/journals.py:201-313` — active API surface: list/create/get/patch/delete entries + export. All endpoints reference the modern fields (`journal_id`, `entry_date`, `entry_type`, `instructor`, `notes`, `metadata_json`). Confirmed: the broken migration shape would have caused all endpoints to fail with `UndefinedColumnError` on PostgreSQL.
+- `backend/app/migrations/versions/20260528_iter32_business_drift_cohort.py` + `20260317_next46_training_briefings_offline.py:108-125` — cohort + soft-table patterns reviewed but NOT directly mirrored — iter-41 is a concept replacement, not a column-add.
+
+### Selected Plan Item
+
+- **iter-41 concept resolution** — `op.drop_table("journalentry")` + `op.create_table("journalentry", <new shape>)` in upgrade; inverse in downgrade (drop new, recreate old shape).
+- **Why drop+recreate over alter:**
+  - Two shapes have ZERO overlap beyond `entry_type` (and even that changes type: String(128) → Enum). Alter form would be 2 drop_column + 6 add_column + 3 index + 1 uq — semantically equivalent but more verbose.
+  - Drop+recreate is the honest representation: "this table's concept was wrong, here's the right one".
+  - User chose Option A via AskUserQuestion after explicit data-loss caveat.
+- **Why data-loss is acceptable:**
+  - Model's NOT NULL FKs (`journal_id`, `person_id`) have NO backfill source — preserving old rows is impossible regardless.
+  - The model has been mismatched with the table since the API surface was added → endpoints would have crashed on first write → no real data sits in prod (or if it did, it's already corrupt).
+- **Cost:** ~165 prod LOC (single migration with drop_table + create_table + 4 indexes + uq in upgrade; symmetric inverse downgrade) + ~370 test LOC (52 AST + 2 closed-loop tests).
+- **Closed loop:** `column_drift_lite` business-drift count drops from **5 → 4 tables** on this branch (journalentry cleared). After all three in-flight branches (iter-39, iter-40, iter-41) merge: drift = **3** (incident family only, all genuinely Session-79 design-blocked).
+
+### Recent merged work since Session 85
+
+| PR | Date (UTC) | Iter | Scope | Class |
+|---|---|---|---|---|
+| — | — | iter-39 | dynamic batch_alter_table audit resolution | audit (in-flight on `fix/iter-39-...`) |
+| — | — | iter-40 | training_certificates legacy cols | DB (in-flight on `fix/iter-40-...`) |
+
+Both Session 86 (iter-39) and Session 87 (iter-40) are still in-flight at iter-41 session start. All three branches share `093959b` as base — independent code-wise, share-the-alembic-history when both DB migrations merge.
+
+### Implemented Changes (this session)
+
+**Code (PR `fix/iter-41-journalentry-concept-resolution`):**
+
+1. **`backend/app/migrations/versions/20260529_iter41_journalentry_concept_resolution.py`** (+165 new) — revision `20260529_iter41_journalentry_concept`, down_revision `20260529_iter38_server_default_c`. Upgrade: drop_index + drop_table + create_table (13 cols incl. mixins + 3 FK constraints + uq) + 4 create_index. Downgrade: drop_index ×4 + drop_table + recreate-old-shape create_table + restore tenant_id index. Local `JOURNAL_TYPE_VALUES` tuple mirrors iter-24's source-of-truth.
+
+2. **`backend/tests/test_iter41_journalentry_concept_resolution.py`** (+370 new) — 52-test pin file:
+   - Revision chain pin (iter-41 → iter-38).
+   - drop-table-before-create-table ordering pin (upgrade + downgrade symmetric).
+   - 13-row `_NEW_SHAPE_COHORT × 3` parametrized = 39 property tests (column present in create_table + SA type matches + nullable matches).
+   - `_OLD_SHAPE_BANNED_IN_UPGRADE` parametrized check: `payload`/`occurred_at` MUST NOT appear in the new create_table.
+   - `test_upgrade_entry_type_column_uses_journaltype_enum_create_false` — pins the `create_type=False` kwarg (regression guard against double-create error on PG).
+   - 3-row `_EXPECTED_FKS` parametrized: each FK constraint present + targets correct table.
+   - `test_upgrade_unique_constraint_present` — exact match on `UniqueConstraint(tenant_id, journal_id, person_id, entry_type, entry_date, name="uq_journal_entry_unique_person_date")`.
+   - `test_upgrade_creates_all_expected_indexes` — pins 4 indexes. Handles both `op.f(...)` wrapping and plain string forms.
+   - **2 closed-loop audit-integration tests**: `test_audit_credits_iter41_model_business_columns` (7 model business cols credited) + `test_audit_drift_journalentry_cleared_after_iter41` (journalentry not in drift; incident family still flagged).
+
+**Doc:**
+
+3. New `## Last Agent Handoff (2026-05-29, Session 88 ...)` block prepended (this entry).
+
+### Changed / New Files
+
+- `backend/app/migrations/versions/20260529_iter41_journalentry_concept_resolution.py` — +165 new.
+- `backend/tests/test_iter41_journalentry_concept_resolution.py` — +370 new.
+- `AI_IMPLEMENTATION_REPORT.md` — +~120 / 0 (this handoff).
+
+### Decisions
+
+- **Drop+recreate over alter.** The two shapes share only `entry_type` (and its TYPE changes: String → Enum). Alter form (2 drop_column + 6 add_column + 3 index + 1 uq + 1 alter_column type change) carries the same data-loss footprint but more LOC and harder downgrade. Drop+recreate is honest: "this concept changed completely". User confirmed via AskUserQuestion.
+- **`create_type=False` on the entry_type Enum.** iter-24 first created the PG enum `journaltype` (via `journal.journal_type`). Re-creating the same enum here would fail with `type "journaltype" already exists`. Pinning `create_type=False` in a test prevents future maintainers from "fixing" the missing kwarg.
+- **Local `JOURNAL_TYPE_VALUES` tuple instead of importing iter-24's.** Alembic migrations should never import each other (the parent migration may be rolled back during downgrade). Local re-declaration is the convention. If iter-24's enum values ever change, this iter-41 declaration would need a parallel update — but that's a deliberate cross-file coupling rather than a silent dependency.
+- **down_revision chained to `iter-38` (not `iter-40`).** All three in-flight branches (iter-39, iter-40, iter-41) chain from `iter-38_server_default_c`. iter-39 has no migration file (audit-only fix), so no chain conflict. iter-40 and iter-41 DO have migrations — when both merge, alembic will detect multiple heads and require a merge migration (`alembic merge -m "..." iter-40 iter-41`). This is documented in iter-41's docstring + handoff Known Problems below.
+- **No backfill, no data preservation.** The model's NOT NULL FKs (`journal_id`, `person_id`) have no source value to backfill from. Even if iter-41 wanted to preserve rows, it couldn't satisfy the new constraints. Drop-table accepts this explicitly. The endpoints in `journals.py` have been broken since the model evolved — no real data is at risk.
+- **Test cohort includes mixin cols (id, tenant_id, created_at, etc.).** Unlike iter-32/40 which only pinned business cols, iter-41 pins the FULL create_table shape (13 cols) because we're recreating a table from scratch — getting the mixin columns wrong would break the table entirely. Tests verify the shape exactly matches what `_create_soft_table`-style migrations would have produced.
+- **`_OLD_SHAPE_BANNED_IN_UPGRADE` regression guard.** The upgrade's create_table must NOT carry `payload` or `occurred_at`. Easy regression if a future maintainer "merges" the two shapes thinking that's safer. The parametrized test fails fast if either col reappears.
+- **Closed-loop audit accepts UNION semantics.** `column_drift_lite` doesn't handle `drop_table` (only `drop_column`), so after iter-41 runs the audit sees per_table['journalentry'] = union of initial_schema's shape AND iter-41's shape. This includes both old `payload, occurred_at` AND new business cols. The audit's drift check (`model_business - mig_business`) is still 0 because all 7 model business cols are in the union. The audit's accuracy here is technically over-credited (it shows 2 cols that no longer exist), but the user-visible signal (drift status of journalentry) is correct.
+
+### Issues Fixed
+
+- **journalentry concept-level drift closed.** Migration shape now matches model: 7 business cols (`journal_id, person_id, entry_type, entry_date, instructor, notes, metadata_json`) + `UniqueConstraint` + 4 indexes. The long-deferred TODO from iter-24 (`"the migration ... does NOT yet add this FK — that is a separate business-drift item"`) is closed.
+- **API surface in `journals.py` becomes operational on PostgreSQL.** Previously, endpoints in `list_entries`/`create_entry`/etc. would have crashed with `UndefinedColumnError` on first write. iter-41 brings the DB schema into alignment with the ORM's NOT NULL FK + index expectations.
+
+### Known Problems / Risks
+
+- **Alembic multi-head when iter-40 + iter-41 both merge.** Both chain `down_revision="20260529_iter38_server_default_c"`. On merge, alembic will require `alembic merge heads` to produce a no-op merge migration that unifies them. User's call to do this during PR review. Operational, ~30 sec via CLI.
+- **iter-39 audit fix is on a separate branch — closed-loop count check during iter-41's audit run shows npabinding still flagged.** When iter-39 merges, npabinding's 3 cols become credited. Iter-41's closed-loop test uses a subset assertion (incident family ⊆ drift_tables), so this works on either branch ordering.
+- **Data loss in any prod environment that had rows in old `journalentry`.** Unlikely (endpoints would have crashed before writes succeeded), but operationally requires a pre-deploy check: `SELECT count(*) FROM journalentry` against prod. If non-zero, dump-and-decide before applying.
+- **No DB-level upgrade verification.** Pure AST + audit closed-loop. The `op.drop_table` + `op.create_table` sequence wasn't run against a real PG instance (Win+Py3.13 conftest hang). Validation rests on shape pins + the iter-24 + initial_schema precedents.
+- **Heavyweight audit still hangs.** Unchanged.
+- **CI still off** (PR #598). Unchanged. Local-evidence policy applies.
+- **iter-30/31 abandoned remote branches still persist.** Unchanged.
+- **Double-merged iter-37 (PRs #610 + #611)** — unchanged from prior sessions.
+
+### Validation
+
+- `py -3 -m py_compile backend/app/migrations/versions/20260529_iter41_journalentry_concept_resolution.py backend/tests/test_iter41_journalentry_concept_resolution.py` → OK.
+- `py -3 -m pytest backend/tests/test_iter41_journalentry_concept_resolution.py -v` → **52/52 pass** in 1.38s. All structural pins + 2 closed-loop pass on first run.
+- `py -3 -m pytest backend/tests/test_iter41_journalentry_concept_resolution.py backend/tests/test_iter32_business_drift_cohort.py backend/tests/test_iter37_server_default_cohort.py backend/tests/test_iter38_server_default_cohort.py backend/tests/test_audit_column_drift_lite.py backend/tests/test_audit_version_column_drift.py backend/tests/test_audit_server_default_parity.py backend/tests/test_iter29_version_retrofit.py` → **379/379 pass** in 10.15s. No regression in any adjacent audit/migration cohort suite.
+- `py -3 scripts/audit/column_drift_lite.py` → **5 business-drift tables** on this branch (was 6 pre-iter-41): incident, incident_log, incident_person, npabinding (iter-39 not on this branch), training_certificates (iter-40 not on this branch). **journalentry cleared.** After all three in-flight branches merge: **3 tables** (incident family).
+- **Not validated:** full backend test suite + actual alembic upgrade against PG. Per established Win+Py3.13 + CI-off policy.
+
+### Next Steps
+
+**Operational:**
+
+1. Review iter-41 PR (165 prod + 370 test LOC + ~120 line handoff).
+2. **Plan merge ordering:** three in-flight branches now. Recommended order:
+   - iter-39 (audit-only, no migration → no chain conflict)
+   - iter-40 OR iter-41 (either order — alembic head will move to that one)
+   - The remaining one: `alembic merge heads -m "merge iter-40 + iter-41"` to produce a no-op merge migration
+3. **Pre-deploy check** for any environment with non-empty `journalentry`: dump rows before applying iter-41 (the drop_table is destructive).
+
+**Technical (next session — primary):**
+
+4. **incident family pass.** The last 3 business-drift tables. All design-blocked since Session 79 (`incident_log` and `incident_person` are entirely ABSENT from migrations). This is genuinely a domain-design pass requiring:
+   - Decision on `incident` schema: 6 missing cols (`company_id, incident_type, investigation_stage, location_description, pack_id, site_id`) — concept-level addition or table-replacement?
+   - Decision on `incident_log` schema (6 cols absent) and `incident_person` schema (3 cols absent) — these need full create_table migrations, not column-add cohorts.
+   - Likely needs domain owner input on closed-set enums (status, stage, type), FK ondelete semantics, and uniqueness constraints.
+   - Suggested approach: investigate first, present 2-3 schema options, ask user before implementing.
+
+**Technical (next session — secondary):**
+
+5. **Branch cleanup (iter-30/31 abandoned remotes)** — destructive-git permission needed.
+6. **iter-37 PR #610/#611 double-merge dedupe** — unchanged.
+7. **CI re-enablement** — strategic.
+8. **FLOW seed for RB-002** — non-blocking polish.
+
+**Стартовая команда для следующей сессии:**
+
+```bash
+git checkout main && git pull
+gh pr list --state open --limit 10
+py -3 scripts/audit/column_drift_lite.py
+# Expect 3 drift tables if all three (iter-39+40+41) merged: incident family only.
+py -3 scripts/audit/column_drift_lite.py --table incident
+py -3 scripts/audit/column_drift_lite.py --table incident_log
+py -3 scripts/audit/column_drift_lite.py --table incident_person
+# Then investigate model definitions in models.py and produce schema design.
+```
+
+**Branch suggestion для следующей сессии:** `design/incident-family-pass-1` (если start with incident scoping), `chore/cleanup-abandoned-iter30-31-branches` (если cleanup).
+
+---
+
 ## Last Agent Handoff (2026-05-29, Session 85 — iter-38 server_default cohort closure: Subset C (33 cols / 29 tables) — entire defect class closed)
 
 - **Дата:** 2026-05-29. Ветка `fix/iter-38-server-default-cohort-subset-C` от `9d29a45` (current `main`, includes iter-37 merged as [#611](https://github.com/aiprocadm/prt_ot_doc/pull/611)). Open PRs at session start: none. iter-38 is unstacked — clean branch from main, no pending dependencies.
