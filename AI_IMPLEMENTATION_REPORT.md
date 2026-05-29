@@ -1,5 +1,105 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-29, Session 93 — Heavyweight audit re-verified runnable; reveals lightweight scope gap; S92 "CLOSED" claim qualified)
+
+- **Дата:** 2026-05-29. Ветка `validate/all-six-branches-integration` (continuing from Session 92, commit `d8f8341`). Same `main` base + 9 commits ahead now (including S92 handoff).
+- **Агент:** Claude Opus 4.7 (1M context, local Win+Py3.13). User instruction: "прими самое эффективное решение и продолжай" — explicit decision delegation (same pattern as Session 91).
+- **Задача:** Session 92 Next Step #7 ("heavyweight audit hang diagnosis") — autopilot-safest technical item (pure diagnostic, no destructive ops, no product decisions). Result was unexpected: heavyweight is NOT hanging. The investigation surfaced a more meaningful finding — a scope gap between heavyweight and lightweight audits that qualifies Session 92's "drift class CLOSED" claim.
+
+### Studied Documentation
+
+- `scripts/audit/check_orm_migration_drift.py` (647 LOC) — the heavyweight audit. Strategy: import `ALEMBIC_METADATA` from `app.db.base` (so it sees EVERY model class registered with Alembic, across all `backend/app/models/*.py` files) + AST-parse all migrations + per-table column diff with severity classification (critical/business/mixin/stale_migration_column/rename/unloaded_model).
+- `scripts/audit/column_drift_lite.py:52` — lightweight scope: `MODELS_FILE = REPO_ROOT / "backend" / "app" / "models" / "models.py"` (single file). Lightweight scans models.py AST only — invisible to it: all model classes in `approval_workflow.py`, `job_engine.py`, `notifications.py`, `finance.py`, `risk.py`, `document.py`, `obligations.py`, `calendar_views.py`, and others.
+- `[[audit-static-analysis-blindspots]]` — pre-existing memory listing 4 lightweight audit blindspots (helper-wrap, mapped_column first-arg, mapped_column override, dynamic batch_alter_table table-name). This session adds a **5th blindspot: single-file MODELS_FILE scope**.
+- `backend/app/migrations/versions/20260304_next32_reliability_core.py:44,52` — `op.rename_table("webhook_delivery", "webhook_deliveries")` + `batch.alter_column("subscription_id", new_column_name="endpoint_id")`. Heavyweight's AST analysis tracks `op.rename_table` (it does) but NOT `batch.alter_column(new_column_name=...)` (column renames within batch blocks). This is heavyweight's OWN blindspot — symmetric to lightweight's iter-39-fixed dynamic-name issue.
+
+### Selected Plan Item
+
+- **Diagnose heavyweight hang + reconcile vs lightweight (Session 92 NS #7).** No code change attempted; pure discovery + handoff documentation.
+- **Why this over other S92 Next Steps:**
+  - #6 RB-002 Path A — "stakeholder weigh-in needed" (mutates demo data shape).
+  - #8 type-parity audit — explicitly "defer until 2nd case".
+  - #9-#10 — destructive-git permission gates.
+  - #11 CI re-enable — billing/strategic decision.
+  - #7 — pure-diagnostic, no permission, no product call, no risk to existing 517/517 green state. Genuinely the only autopilot-safe technical pick.
+
+### Recent merged work since Session 92
+
+None. Session 93 added one handoff entry; no code changes.
+
+### Implemented Changes (this session)
+
+**Verification (read-only):**
+
+1. `py -3 scripts/audit/check_orm_migration_drift.py` (60s timeout via PowerShell Job) → **completed in <60s, did not hang**. Outputs 95 drift tables across 5 severity buckets. The "still hangs locally" claim from Sessions 80-92 is **outdated under current local state** (Win+Py3.13.7 + current dependencies).
+2. `py -3 scripts/audit/check_orm_migration_drift.py --summary` → 0 critical, **6 business**, 46 mixin, 3 stale_migration_column, 3 rename, 37 unloaded_model.
+3. Per-case investigation of the 6 business tables:
+   - `npabinding` (3 model_only cols: `context, entity_id, entity_type`) — **iter-39 false-positive**, fixed in lightweight but NOT propagated to heavyweight. Heavyweight needs the same dynamic-`batch_alter_table` resolution iter-39 added to lightweight.
+   - `webhook_deliveries` (model_only: `endpoint_id`; migration_only: `error, response_body, status_code, subscription_id`) — **heavyweight false-positive**. Migration `20260304_next32_reliability_core.py:52` does `batch.alter_column("subscription_id", new_column_name="endpoint_id")` — column rename that heavyweight's AST doesn't track. `error/response_body/status_code` were dropped or renamed in subsequent migrations (`20250501_reliability_outbox_webhook_delivery.py:57` create_table establishes the original shape). Heavyweight blindspot symmetric to lightweight's iter-39 issue.
+   - `approval_decisions` (6 cols incl. `approval_instance_id`, `approval_instance_step_id`, `ip`, `payload_json`, `user_agent`, `version`) — defined in `backend/app/models/approval_workflow.py:166`, **outside lightweight's `models.py` scope**. Real drift candidate; needs per-col verification.
+   - `outbox` + `outbox_events` (model_only: `sent_at` on outbox; `last_error, version` on outbox_events) — `OutboxEvent` is in `job_engine.py:169` (lightweight blindspot). Migration history mentions both `outbox` (singular) and `outbox_events` — likely a rename chain that needs validation.
+   - `risk_assessments` (model_only: `document_pack_id, position_id`; migration_only: `action_plan`) — `RiskAssessment` is in `risk.py:152` (lightweight blindspot). Real drift candidate.
+
+**Doc:**
+
+4. New `## Last Agent Handoff (2026-05-29, Session 93 ...)` block prepended to `AI_IMPLEMENTATION_REPORT.md` (this entry). Qualifies the Session 92 "drift class CLOSED" claim — it's CLOSED at lightweight `models.py` scope only; broader full-codebase scope has 4-5 unresolved business-drift cases (4 lightweight-blind tables + 1 heavyweight FP) + heavyweight's own iter-39-style audit gap.
+
+### Changed / New Files
+
+- `AI_IMPLEMENTATION_REPORT.md` — +~90 / 0 (this handoff).
+
+### Decisions
+
+- **Discovery + document, not implement.** The lightweight scope extension (`column_drift_lite.py` MODELS_FILE → MODELS_DIR) is bounded ~80 LOC + test updates, but the 517-test green state hardcodes `MODELS_FILE` semantics. Extending requires careful TDD; out of this session's scope. Documented as a Next Step iter-44 candidate.
+- **Heavyweight's "still hangs" claim was outdated.** Multiple Sessions 80-92 propagated the assertion without re-verifying. This session re-verified: actually runs in <60s. Lesson: **claims of tool brokenness need periodic re-check, especially after environment drift (dependency upgrades, Python version moves)**. This is a generalization of the [[audit-static-analysis-blindspots]] lesson applied to tool-availability claims.
+- **Don't edit Session 92 handoff in-place.** Handoffs are append-only in this repo (each prepended at line 3). Session 93 adds the correction explicitly, doesn't rewrite history. Future readers see both: S92's claim + S93's qualification.
+- **Don't extend audits this session.** Both lightweight (multi-file extension) and heavyweight (batch.alter_column rename tracking) need fixes; each warrants its own iter with TDD. Bundling would inflate this discovery session into multi-iter work that should be in separate PRs.
+- **Per-case investigation is the next step, not auto-fix.** Of the 6 business-drift tables, 2 are known FPs (npabinding lightweight-fixed already, webhook_deliveries heavyweight-FP). The other 4 (approval_decisions, outbox, outbox_events, risk_assessments) need migration-history audit before any add_column work — each could be a legit gap OR a rename/drop the audit missed.
+
+### Issues Fixed
+
+- **"Heavyweight audit hangs" claim retired.** Local state shows it runs in <60s. The diagnostic Next Step from Sessions 80-92 is resolved as "no longer needed" rather than "fixed".
+- **Lightweight scope gap surfaced.** `column_drift_lite.py` scans single file (`models.py`); 11+ other model files are invisible to it. This explains the 0/0 vs 6 business mismatch.
+- **Heavyweight blindspot surfaced.** `check_orm_migration_drift.py` doesn't track `batch.alter_column(new_column_name=...)` renames. Mirror of iter-39's lightweight fix, applied to a different audit.
+- **Session 92 "CLOSED" claim qualified.** S92 claimed drift defect class closed across all 3 lightweight audits. True under lightweight scope; not true under full-codebase scope. Future readers see this qualification before acting on the S92 claim.
+
+### Known Problems / Risks
+
+- **Lightweight audit blind to 11+ model files.** The 0/0 claim only covers `models.py`. To make lightweight match heavyweight's coverage, the script needs MODELS_FILE → MODELS_DIR refactor + test contract update + closed-loop verification that the resulting drift count matches heavyweight's `business` count modulo FPs.
+- **Heavyweight blind to `batch.alter_column(new_column_name=...)` renames.** webhook_deliveries' `endpoint_id` is the known case; others may exist. Mirror of iter-39's lightweight fix needed here.
+- **4 candidate business-drift cases need investigation** before any iter-44+ DB migration work: `approval_decisions, outbox, outbox_events, risk_assessments`. Each could be real drift, rename chain, or table-restructure that one of the audits missed.
+- **All earlier risks from Session 92 unchanged.** 6 in-flight branches still local, 3 alembic merge_heads still needed, pre-deploy verifications still pending for iter-41/42/43.
+- **CI still off, Win+Py3.13 conftest hang for full suite unchanged.**
+
+### Validation
+
+- `py -3 scripts/audit/check_orm_migration_drift.py` (via PowerShell Job with 60s timeout) → completed, did not hang. 95 drift tables.
+- `py -3 scripts/audit/check_orm_migration_drift.py --summary` → 5 severity buckets, 6 business.
+- `py -3 scripts/audit/check_orm_migration_drift.py --severity business` → 6 tables enumerated.
+- Per-case investigation via `grep` of migration files + model definitions confirmed 1 lightweight known-fixed FP (npabinding), 1 heavyweight FP (webhook_deliveries rename), 4 lightweight-blind candidates needing real investigation.
+- **Not validated:** the 4 candidate cases as definite drift (could be rename chains the audits missed). Per-case migration-history reading needed before any fix.
+
+### Next Steps
+
+**Operational (user's purview):**
+
+1. (Unchanged from Session 92) Push 6 in-flight branches + open PRs + alembic merge_heads + pre-deploy verifications + discard validation branch.
+
+**Technical (next session — primary):**
+
+2. **iter-44 candidate: extend `column_drift_lite.py` to multi-file scope** — refactor `MODELS_FILE` (single file) → `MODELS_DIR` (walk `backend/app/models/*.py`). Estimated ~50 LOC script change + ~80 LOC test updates + closed-loop test that the resulting drift count matches heavyweight's business count (modulo known FPs). TDD-driven; will likely surface that some of the 4 candidate cases are real drift requiring follow-up iters.
+3. **iter-45 candidate: extend heavyweight (`check_orm_migration_drift.py`) batch.alter_column rename tracking** — mirror of iter-39 fix on the other audit. ~30 LOC + tests. Closes webhook_deliveries FP and likely others.
+4. **Per-case investigation of 4 candidate business-drift tables** (approval_decisions, outbox, outbox_events, risk_assessments). For each: read migration history end-to-end, confirm whether real drift or audit FP, write iter-46+ if drift confirmed.
+
+**Technical (next session — secondary):**
+
+5. **RB-002 Path A** — bootstrap extension for FLOW perf scenarios. Same stakeholder-weigh-in caveat as Session 92.
+6. **Type-parity audit** — same speculative defer as Session 92.
+7. **Destructive-git cleanups** — same permission gates.
+8. **CI re-enablement** — same billing/strategic decision.
+
+**Drift backlog status (corrected):** lightweight `models.py` scope = **0/0** (Session 92 claim, scope-limited). Full-codebase drift (per heavyweight) = **4 candidate cases pending investigation + 2 known audit FPs to fix in audit code**. The meta-milestone is still partial; full closure requires iter-44/45/46+.
+
 ## Last Agent Handoff (2026-05-29, Session 92 — Integration validation closure: 6 in-flight branches verified merged; all 3 lightweight audits at 0/0; 517/517 tests green)
 
 - **Дата:** 2026-05-29. Ветка `validate/all-six-branches-integration` от `093959b` (`main`). Branch is local-only; carries the integrated state of all 6 Session 86-91 branches (iter-39/40/41/42/43 + RB-002 trim) + 1 test-relax fix + 1 merge playbook doc, on top of `main`. Session 91's handoff Next Step #9 ("Validation of all 6 in-flight branches together") was the explicit target.
