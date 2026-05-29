@@ -20,6 +20,12 @@ Detection scope (mirrors ``version_column_drift.py`` v3):
   - Loop variables: ``for t in _TABLES: op.add_column(t, sa.Column("c", ...))``
     where ``_TABLES`` is a module-level constant string sequence
     (the v3 mechanism — credits all values in the sequence).
+  - Dynamic batch_alter_table (iter-39):
+    ``t = _resolve(...); with op.batch_alter_table(t, ...): batch.add_column(...)``
+    where ``_resolve`` is a same-module function with one or more
+    ``return "<literal>"`` statements. Cols credit to ALL possible
+    return-literal table names. Closes false-positive on ``npabinding``
+    in ``8d2c1a6c5e24_domain_normalization.py``.
 
 Mixin awareness: a fixed set of column names provided by base mixins
 (``TenantBaseModel``, ``SoftDeleteMixin``, etc.) is subtracted from each
@@ -324,6 +330,58 @@ def _extract_alter_rename_kwarg(call: ast.Call) -> str | None:
     return None
 
 
+def _function_return_literals(func: ast.FunctionDef) -> set[str]:
+    """All string literals returned by ``func``. Ignores ``return None`` and
+    non-Constant-str returns. Used by dynamic batch_alter_table resolution
+    (iter-39) to find which table names a resolver function can produce.
+    """
+    literals: set[str] = set()
+    for node in ast.walk(func):
+        if isinstance(node, ast.Return):
+            if (
+                isinstance(node.value, ast.Constant)
+                and isinstance(node.value.value, str)
+            ):
+                literals.add(node.value.value)
+    return literals
+
+
+def _resolve_dynamic_name_from_assignments(
+    var_name: str,
+    scope_fn: ast.FunctionDef,
+    functions: dict[str, ast.FunctionDef],
+) -> list[str]:
+    """Resolve ``var_name`` to possible string-literal values by tracing
+    assignments inside ``scope_fn``.
+
+    For each ``Assign`` where ``var_name`` is a target and the RHS is
+    a ``Call`` to a same-module function (in ``functions``), collect
+    the callee's string-literal returns. Returns a sorted list (for
+    deterministic test assertions). Empty list when no traceable
+    assignment is found — caller should treat that as "skip block".
+
+    Real-world pattern (``8d2c1a6c5e24_domain_normalization.py:269``):
+        npa_binding_table = _resolve_npa_binding_table(bind)
+        if npa_binding_table:
+            with op.batch_alter_table(npa_binding_table, schema=None) as b:
+                b.add_column(sa.Column("entity_type", ...))
+    """
+    literals: set[str] = set()
+    for node in ast.walk(scope_fn):
+        if not isinstance(node, ast.Assign):
+            continue
+        if not any(
+            isinstance(t, ast.Name) and t.id == var_name for t in node.targets
+        ):
+            continue
+        if not isinstance(node.value, ast.Call):
+            continue
+        called = node.value.func
+        if isinstance(called, ast.Name) and called.id in functions:
+            literals |= _function_return_literals(functions[called.id])
+    return sorted(literals)
+
+
 def collect_migration_columns(verbose: bool = False) -> dict[str, set[str]]:
     """Return ``{tablename: set_of_columns}`` across all migrations.
 
@@ -466,6 +524,8 @@ def collect_migration_columns(verbose: bool = False) -> dict[str, set[str]]:
                 per_table[tname].add(new_name)
 
         # batch_alter_table — handle batch.add_column / batch.drop_column / batch.alter_column inside.
+        # iter-39: also resolves dynamic table name when ctx.args[0] is a
+        # `Name` bound to a same-module function returning string literals.
         for node in ast.walk(upgrade_fn):
             if not isinstance(node, ast.With):
                 continue
@@ -478,11 +538,19 @@ def collect_migration_columns(verbose: bool = False) -> dict[str, set[str]]:
                         or (isinstance(ctx.func, ast.Name) and ctx.func.id == "batch_alter_table")
                     )
                     and ctx.args
-                    and isinstance(ctx.args[0], ast.Constant)
-                    and isinstance(ctx.args[0].value, str)
                 ):
                     continue
-                tname = ctx.args[0].value
+                first = ctx.args[0]
+                if isinstance(first, ast.Constant) and isinstance(first.value, str):
+                    tnames: list[str] = [first.value]
+                elif isinstance(first, ast.Name):
+                    tnames = _resolve_dynamic_name_from_assignments(
+                        first.id, upgrade_fn, functions
+                    )
+                    if not tnames:
+                        continue
+                else:
+                    continue
                 for inner in ast.walk(node):
                     if not isinstance(inner, ast.Call):
                         continue
@@ -493,7 +561,8 @@ def collect_migration_columns(verbose: bool = False) -> dict[str, set[str]]:
                     if f.attr == "add_column" and inner.args and isinstance(inner.args[0], ast.Call):
                         col = _column_name(inner.args[0])
                         if col is not None:
-                            per_table[tname].add(col)
+                            for tn in tnames:
+                                per_table[tn].add(col)
                     # batch.drop_column("col")
                     elif (
                         f.attr == "drop_column"
@@ -501,7 +570,8 @@ def collect_migration_columns(verbose: bool = False) -> dict[str, set[str]]:
                         and isinstance(inner.args[0], ast.Constant)
                         and isinstance(inner.args[0].value, str)
                     ):
-                        per_table[tname].discard(inner.args[0].value)
+                        for tn in tnames:
+                            per_table[tn].discard(inner.args[0].value)
                     # batch.alter_column("old", new_column_name="new")
                     elif (
                         f.attr == "alter_column"
@@ -511,8 +581,9 @@ def collect_migration_columns(verbose: bool = False) -> dict[str, set[str]]:
                     ):
                         new_name = _extract_alter_rename_kwarg(inner)
                         if new_name is not None:
-                            per_table[tname].discard(inner.args[0].value)
-                            per_table[tname].add(new_name)
+                            for tn in tnames:
+                                per_table[tn].discard(inner.args[0].value)
+                                per_table[tn].add(new_name)
 
     # Apply renames: new table inherits old table's history.
     for old, new in renames.items():
