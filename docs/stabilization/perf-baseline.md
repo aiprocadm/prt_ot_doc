@@ -94,6 +94,16 @@ Behavior:
   - `trend-manifest.json`,
   - `summary.md` + `summary.csv` (p50/p95/p99/error-rate/throughput).
 
+### Trim (from 2026-05-29 — RB-002 caveat resolution)
+
+The 3 FLOW probes above were removed from `scripts/perf/scenarios.json` because they reference literal entity IDs (`company_id=demo-company`, `person_id=demo-person`, `document_version_id=demo-document-version-id`, `template_code=Greeting`/`TMP`) that `bootstrap_demo_tenant` does not seed — bootstrap creates entities with auto-generated UUIDs, so the FLOW POST bodies never resolved to real targets. CI runs of the FLOW probes failed before the first response.
+
+`nightly_baseline` is now pure-GET only (5 scenarios: `health`, `dashboard`, `templates_list`, `search_suggest`, `download_file`).
+
+To re-introduce FLOW probes, pick one:
+- (a) Extend `bootstrap_demo_tenant` to seed entities with literal IDs (e.g. `Company(id="demo-company")`) plus a `Template(code="Greeting")` + `TemplateVersion(version=1)` + a stable `DocumentVersion(id="demo-document-version-id")`.
+- (b) Parameterize `scenarios.json` to discover seeded entities at probe-time via a pre-flight lookup (`GET /api/v1/companies?slug=demo` → capture id, then substitute).
+
 ## 6) Threshold policy
 
 Policy levels:

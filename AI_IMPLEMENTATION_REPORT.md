@@ -1,5 +1,36 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-29, Session 91 — RB-002 caveat resolution: perf nightly_baseline scope-trim to pure-GET)
+
+- **Дата:** 2026-05-29. Ветка `chore/rb-002-flow-scenarios-trim` от `093959b` (`main`). **Six parallel in-flight branches** in this conversation: iter-39/40/41/42/43 (drift work) + this perf trim.
+- **Агент:** Claude Opus 4.7 (1M context, local Win+Py3.13; explanatory style + Auto Mode + TDD). User instruction: "прими самое эффективное решение и продолжай" — explicit decision delegation.
+- **Задача:** Decision delegation; selected RB-002 FLOW perf caveat closure (Path B trim) over other options (branch cleanup needs permission; CI re-enable needs billing decision; type-parity audit speculative low-ROI; heavyweight audit hang investigation open-ended).
+
+### Studied Documentation
+
+- `[[mvp-release-blockers]]` "RB-002 caveat" — `"FLOW perf scenarios (document_generate_apply_headers, files_upload_flow) reference demo entities not seeded by bootstrap_demo_tenant. Pure-GET scenarios expected green on next CI re-trigger. Either extend demo_bootstrap OR scope-trim nightly_baseline to pure-GET."`
+- `scripts/perf/scenarios.json` — 3 FLOW scenarios in `nightly_baseline`:
+  - `document_generate_apply_headers` references `template_code="Greeting"`, `template_version=1`, literal `company_id="demo-company"`, `person_id="demo-person"`, path `/api/v1/headers/documents/demo-document-version-id/apply-headers`.
+  - `files_upload_flow` — actually no pre-existing entities (creates new file), but bundled in the trim because it's still a FLOW (POST+capture pipeline).
+  - `jobs_status_transitions` — `template_code="TMP"` literal (not seeded).
+- `backend/app/services/demo_bootstrap.py:18-116` — current seed: Tenant, Company (by name, auto UUID), Site, Department, Position, Person (Иван Иванов, by first/last name, auto UUID), TrainingCourse, plus `ensure_default_packs`. Does NOT seed entities with literal IDs nor a Template/TemplateVersion/DocumentVersion stack.
+- `docs/stabilization/perf-baseline.md:86-95` — documents the post-2026-04-20 expansion (the very probes being trimmed).
+- `scripts/perf/README.md` — generic doc, doesn't enumerate scenarios; no edits needed.
+
+### Selected Plan Item
+
+- **Path B (scope-trim)** chosen over Path A (extend bootstrap).
+- **Why Path B was the most effective:**
+  - CI is OFF (PR #598) so FLOW perf signal currently has ZERO immediate value.
+  - Path B cost: ~10 LOC scenarios.json + ~80 LOC test + doc updates = ~110 LOC total.
+  - Path A cost: ~150-250 LOC bootstrap extension (Template + TemplateVersion + Document + DocumentVersion seeding) + parallel test coverage + likely DB migration to seed entities with literal IDs (not currently a pattern in bootstrap).
+  - Path A also doesn't actually resolve files_upload_flow's reliance on `/api/v1/files:upload-init` working end-to-end (storage backend needs to be functional in CI), which itself was a separate Session 80 cause-class.
+  - Path B preserves the OPTION to add Path A later when CI is re-enabled and someone wants the signal back.
+- **Closed:** RB-002 caveat exactly as specified by the memory (scope-trim to pure-GET).
+
+### Recent merged work since Session 85
+
+| PR | Date (UTC) | Iter / Branch | Scope | Class |
 ## Last Agent Handoff (2026-05-29, Session 90 — iter-43 incident.status enum type-parity (smallest in-flight closure))
 
 - **Дата:** 2026-05-29. Ветка `fix/iter-43-incident-status-enum-type-parity` от `093959b` (`main`). **Five parallel in-flight branches now**, all from `main`: iter-39/40/41/42 from prior sessions, plus this iter-43. After all five merge, `column_drift_lite` business-drift = **0** + critical-absent = **0** + incident table fully aligned with model (column presence + type parity both closed for incident).
@@ -137,7 +168,65 @@
 | — | — | iter-40 | training_certificates legacy cols | DB (in-flight) |
 | — | — | iter-41 | journalentry drop+recreate | DB (in-flight) |
 | — | — | iter-42 | incident family alter+create+5 enums | DB (in-flight) |
+| — | — | iter-43 | incident.status type parity | DB (in-flight) |
 
+Six in-flight branches at this session start.
+
+### Implemented Changes (this session)
+
+**Config + doc:**
+
+1. **`scripts/perf/scenarios.json`** (–137 / +1 effective): removed 3 FLOW scenarios from `nightly_baseline`. Updated `dataset_assumptions.notes` to document the trim rationale, the date (2026-05-29), the RB-002 attribution, and re-introduction options (Path A vs parameterized discovery).
+
+2. **`docs/stabilization/perf-baseline.md`** (+15): added "Trim (from 2026-05-29 — RB-002 caveat resolution)" subsection under "After (from 2026-04-20)". Documents the trim rationale + the two paths for re-introduction.
+
+**Test (+invariant guard):**
+
+3. **`backend/tests/test_perf_scenarios_nightly_baseline_pure_get.py`** (+115 new) — 7-test invariant pin:
+   - JSON validity + both profiles present.
+   - `nightly_baseline` is pure-GET only (no non-GET method).
+   - No `flow_steps` field anywhere in nightly_baseline scenarios.
+   - Hard-pin against the 3 specific banned scenario names (re-adding by name triggers test failure with explanation).
+   - `pr_smoke` shape unchanged (4 GET scenarios: health, dashboard, templates_list, search_suggest).
+   - `nightly_baseline` exact-shape pin (5 GET scenarios: health, dashboard, templates_list, search_suggest, download_file).
+   - `dataset_assumptions.notes` mentions RB-002 / pure-GET (discoverability).
+
+**Doc:**
+
+4. New `## Last Agent Handoff (2026-05-29, Session 91 ...)` block prepended (this entry).
+
+### Changed / New Files
+
+- `scripts/perf/scenarios.json` — –137 / +1 effective (3 FLOW scenarios removed; notes expanded).
+- `docs/stabilization/perf-baseline.md` — +15 (Trim subsection).
+- `backend/tests/test_perf_scenarios_nightly_baseline_pure_get.py` — +115 new.
+- `AI_IMPLEMENTATION_REPORT.md` — +~75 / 0 (this handoff).
+
+### Decisions
+
+- **Path B over Path A.** Detailed in "Selected Plan Item" above. Net: Path B = same caveat-closure with ~1/10 the cost, preserves option to re-add FLOW signal later.
+- **Include `jobs_status_transitions` in the trim.** Memory only mentioned 2 scenarios (`document_generate_apply_headers`, `files_upload_flow`), but `jobs_status_transitions` is also a FLOW with `template_code="TMP"` literal (not seeded). Inheriting it would leave nightly_baseline impure. Trimmed all 3 FLOW scenarios for consistency.
+- **Hard-pin against banned scenario names by literal string.** The invariant test could have just asserted "no FLOW methods" (already covered). The additional name-based pin catches a subtle regression: someone could re-add `document_generate_apply_headers` as method=GET via a pre-flight discovery, which wouldn't violate the FLOW-ban but would silently restore the original broken design (literal IDs in body). The name-based pin forces deliberate review.
+- **Document re-introduction paths in BOTH the JSON notes AND the markdown.** The JSON notes is what an operator reads when debugging perf failures; the markdown is what a developer reads when planning work. Duplicated guidance is intentional — both touchpoints are valid.
+- **No companion bootstrap_demo_tenant change.** Path A would have edited the bootstrap; Path B explicitly leaves the bootstrap alone. Future Path A work needs the user to weigh in on which entities deserve literal IDs (mutates the shape of demo data — different stakeholder).
+
+### Issues Fixed
+
+- **RB-002 FLOW caveat resolved.** The 3 FLOW perf scenarios no longer reference unseeded entities; `nightly_baseline` is pure-GET and would run cleanly against the current `bootstrap_demo_tenant` shape. Re-validation obligation for RB-002 (when CI re-enabled) now scopes to the 5 pure-GET probes.
+- **Invariant guard for future maintainers.** The 7-test pin prevents accidental re-introduction of the broken design. Hard regression cost for any FLOW scenario added without matching bootstrap work.
+
+### Known Problems / Risks
+
+- **FLOW perf signal lost until Path A is done.** The 3 trimmed probes covered: idempotency-key behavior under load, multi-step file upload pipeline, async job lifecycle. None of these have perf coverage post-trim. Mitigation: existing functional reliability tests (`test_job_status_flow.py`, `test_package_pipeline.py`, etc.) cover correctness; perf-signal is the gap. Acceptable while CI is off.
+- **`files_upload_flow` trim is the closest to wrongful loss.** Unlike the others, it doesn't reference unseeded entities — it creates new files. The actual breakage was upstream (`/api/v1/files:upload-init` storage backend issues, per Session 80). Trimming it bundled an unrelated infra concern with the seed-data concern. Worth re-adding when storage backend is verified, independent of bootstrap work.
+- **No CI verification.** The trim couldn't be checked end-to-end against CI (it's off). Local pytest passes (7/7); JSON validity passes.
+
+### Validation
+
+- `py -3 -c "import json; data = json.load(open('scripts/perf/scenarios.json', encoding='utf-8'))..."` → OK valid JSON; pr_smoke=4 scenarios; nightly_baseline=5 scenarios; all methods GET.
+- `py -3 -m pytest backend/tests/test_perf_scenarios_nightly_baseline_pure_get.py -v` → **7/7 pass** in 0.82s.
+- `py -3 -m py_compile backend/tests/test_perf_scenarios_nightly_baseline_pure_get.py` → OK.
+- **Not validated:** any actual perf run (CI off; out of session scope).
 Four parallel in-flight branches at iter-43 session start. All share `093959b` as base.
 
 ### Implemented Changes (this session)
@@ -468,6 +557,18 @@ Session 86 (iter-39) is in-flight on its own branch; not yet merged at iter-40 s
 
 **Operational:**
 
+1. Review this PR (~225 LOC across 3 files + handoff).
+2. **Six in-flight branches now.** Order unchanged from Session 90: iter-39 first (audit-only), then iter-40/41/42/43 in any order (require 3 alembic merge_heads), then this perf trim (no migration → no chain conflict).
+
+**Technical (next session — primary options remaining):**
+
+3. **Branch cleanup (iter-30/31 abandoned remotes)** — destructive-git permission needed.
+4. **iter-37 PR #610/#611 double-merge dedupe** — destructive history rewrite, permission needed.
+5. **CI re-enablement** — strategic decision (billing + scope).
+6. **Heavyweight audit hang diagnosis** — `check_orm_migration_drift.py` diagnostic.
+7. **Type-parity audit infrastructure** — speculative, defer until 2nd known case.
+8. **Path A for RB-002 FLOW** — extend bootstrap with literal-ID seed (re-add FLOW perf signal).
+9. **Validation of all 6 in-flight branches together** — cherry-pick simulation to verify merge sequence + final audit numbers.
 1. Review iter-43 PR (95 prod + 265 test LOC + ~80 line handoff).
 2. **Merge ordering for 5 in-flight branches:**
    - iter-39 first (audit-only, no migration → no chain conflict).
@@ -558,6 +659,11 @@ Session 86 (iter-39) is in-flight on its own branch; not yet merged at iter-40 s
 ```bash
 git checkout main && git pull
 gh pr list --state open --limit 10
+py -3 -m pytest backend/tests/test_perf_scenarios_nightly_baseline_pure_get.py
+# Pick a direction from #3-9 above.
+```
+
+**Branch suggestion для следующей сессии:** `chore/cleanup-abandoned-iter30-31-branches` (если cleanup), `chore/heavyweight-audit-hang-diagnosis` (если diagnostic).
 py -3 scripts/audit/column_drift_lite.py    # expect 0/0
 py -3 scripts/audit/server_default_parity.py # expect 0/0
 py -3 scripts/audit/version_column_drift.py  # expect 0/2 critical (unchanged)
