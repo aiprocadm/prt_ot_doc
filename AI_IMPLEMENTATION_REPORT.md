@@ -1,5 +1,131 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-29, Session 86 — iter-39 column_drift_lite audit-correctness pass: dynamic batch_alter_table table-name resolution (npabinding 3-col false positive closed))
+
+- **Дата:** 2026-05-29. Ветка `fix/iter-39-audit-batch-alter-dynamic-table-resolution` от `093959b` (current `main`, includes iter-38 merged as [#612](https://github.com/aiprocadm/prt_ot_doc/pull/612)). Open PRs at session start: none. iter-39 unstacked.
+- **Агент:** Claude Opus 4.7 (1M context, local Win+Py3.13; explanatory style + Auto Mode + TDD).
+- **Задача:** «продолжай по тз» — Session 85 handoff Next Step #4 (`column_drift_lite` cohort closures). Per `[[prodolzhay-po-tz-workflow]]`: skipped operational #1-2 (review/merge — user's purview). Investigated all 6 business-drift candidates, found **5 are design-blocked** per `[[mvp-release-blockers]]` (incident family, journalentry, training_certificates), but **npabinding's 3 "missing" cols are actually a 4th audit static-analysis blindspot** — the cols exist in migration `8d2c1a6c5e24_domain_normalization.py:269-292`, hidden behind dynamic `_resolve_npa_binding_table(bind)` resolution + `batch_alter_table(<variable>, ...)`. Took the mechanical audit-correctness fix.
+
+### Studied Documentation
+
+- Session 85 handoff Next Step #4 — "6 business-drift tables remain" + per-table investigation needed.
+- `[[mvp-release-blockers]]` "drift-class backlog" — confirms 5 of 6 are design-blocked (incident, incident_log, incident_person, journalentry, training_certificates) and tags npabinding as "verify deferred-intentionally vs missed".
+- `[[audit-static-analysis-blindspots]]` — the lesson: scripts/audit/ AST scripts twice missed SQLAlchemy attr-vs-col decoupling (helper-wrapped Session 79; mapped_column override Session 81); enumerate decoupling forms before trusting output. iter-39 closes the **fourth** form: dynamic table-name resolution.
+- `backend/app/migrations/versions/8d2c1a6c5e24_domain_normalization.py:28-34,269-292` — the resolver pattern. `_resolve_npa_binding_table(bind) -> str | None` returns one of `"npa_binding"`, `"npabinding"`, or `None` based on `inspector.has_table`. Used as `with op.batch_alter_table(npa_binding_table, schema=None) as batch:` with the three cols (`entity_type`, `entity_id`, `context`) added inside.
+- `scripts/audit/column_drift_lite.py:469-515` — pre-iter-39 `batch_alter_table` handler required `isinstance(ctx.args[0], ast.Constant) and isinstance(ctx.args[0].value, str)` — silently skipped the variable-name form, causing the 3-col false positive.
+- `backend/tests/test_audit_column_drift_lite.py` — existing test patterns for synthetic migrations via `_collect_one` (tmp_path swap of `MIGRATIONS_DIR`) and `_load_models_from` (similar for `MODELS_FILE`). Mirrored these for the 5 new synthetic-migration tests + 2 closed-loop real-codebase tests + 4 helper-fn unit tests.
+
+### Selected Plan Item
+
+- **iter-39 audit-correctness pass** — extend `column_drift_lite.py` to resolve `batch_alter_table(<var>, ...)` table names via same-module function return-literal tracking. Closes npabinding's 3-col false-positive drift.
+- **Why selected over other candidates:**
+  - npabinding's missing cols ARE in migrations — fixing the audit is the only correct response (vs. adding redundant DDL).
+  - All 5 other drift tables (incident/incident_log/incident_person/journalentry/training_certificates) need genuine design calls per `[[mvp-release-blockers]]` — not appropriate as autopilot continuation.
+  - Mechanical audit fix continues the pattern of S79 → S81 → S85 audit-correctness passes. Auditors' job: stay honest about what's real drift.
+- **Cost:** ~70 prod LOC (2 helper fns + 1 augmented block in collector) + ~210 test LOC (5 synthetic + 4 helper unit + 2 closed-loop).
+- **Closed loop:** column_drift_lite business-drift count dropped from **6 → 5 tables** (npabinding cleared). 5 remaining all confirmed design-blocked.
+
+### Recent merged work since Session 85
+
+| PR | Date (UTC) | Iter | Scope | Class |
+|---|---|---|---|---|
+| [#612](https://github.com/aiprocadm/prt_ot_doc/pull/612) | 2026-05-29 | iter-38 | server_default Subset C — entire defect class closed | DB |
+
+### Implemented Changes (this session)
+
+**Code (PR `fix/iter-39-audit-batch-alter-dynamic-table-resolution`):**
+
+1. **`scripts/audit/column_drift_lite.py`** (+71 / -7) — two new helpers:
+   - `_function_return_literals(func)` — set of string literals returned by a function (ignores `None` and non-Constant-str returns).
+   - `_resolve_dynamic_name_from_assignments(var_name, scope_fn, functions)` — for `var_name` inside `scope_fn`, find `var_name = <func>(...)` assignments and gather string-literal returns of the called function (when it's a same-module function). Returns sorted list for deterministic test assertions.
+
+   The `batch_alter_table` block handler now branches: `ctx.args[0]` as `ast.Constant` → single-literal `tnames` (unchanged path); as `ast.Name` → resolve via the helper, skip block if unresolvable; otherwise skip. Then iterates the resolved `tnames` list when crediting add_column / drop_column / alter_column rename.
+
+2. **`backend/tests/test_audit_column_drift_lite.py`** (+210 / 0) — 11 new tests in 3 groups:
+   - **5 synthetic-migration tests** for the dynamic-name path (multi-literal, single-literal, unresolvable callee, mixed string+None returns, drop+rename inside dynamic block).
+   - **4 helper-fn unit tests** for the two new primitives (return-literal collection: collects all str / ignores non-str; var-resolution: traces to module fn / empty when var not assigned).
+   - **2 closed-loop real-codebase tests**: npabinding's 3 cols (`context, entity_id, entity_type`) now credited; business-drift count == exactly 5 with the expected table set.
+
+**Doc:**
+
+3. New `## Last Agent Handoff (2026-05-29, Session 86 ...)` block prepended (this entry).
+
+### Changed / New Files
+
+- `scripts/audit/column_drift_lite.py` — +71 / -7 (2 helpers + augmented batch handler + module docstring update).
+- `backend/tests/test_audit_column_drift_lite.py` — +210 / 0 (11 new tests).
+- `AI_IMPLEMENTATION_REPORT.md` — +~90 / 0 (this handoff).
+
+### Decisions
+
+- **Audit fix, not migration add.** npabinding's `entity_type`, `entity_id`, `context` ARE in the schema (added by `8d2c1a6c5e24_domain_normalization.py`). Adding them again via `op.add_column` would either be a no-op (if table-exists detection is added) or a hard error ("column already exists"). The correct fix is on the audit side — recognize the dynamic-name form. Mirror of how Session 81's iter-33 fix added `mapped_column` first-arg name resolution (it was correct on the code side, audit just didn't see it).
+- **Conservative resolver — only same-module function returns.** Considered tracing across modules (imports) or doing full variable assignment chain analysis. Rejected: (a) AST-only with no import resolution keeps the script fast and hang-free; (b) `_resolve_npa_binding_table` is defined in the same migration file (the convention for migration-local helpers); (c) cross-module would require lazy loading + symbol resolution complexity for marginal coverage gain. The conservative path catches the real-world hit exactly.
+- **Fail-open on unresolvable names — skip block, no phantom credits.** When `var` can't be traced to a return-literal-bearing function, the block is silently skipped (cols stay flagged as drift if any). Alternative: treat unresolved as "credit cols to all possible tables" — rejected as massive over-approximation. Skip-block matches the audit's overall posture (only flag what we're sure about).
+- **Sort the resolver's return for determinism.** `set` → `sorted(list)` so test assertions don't flake on iteration order. The set membership semantics are preserved (no duplicates); only the output is deterministic.
+- **Test scope: 5 synthetic + 4 helper unit + 2 closed-loop.** Considered just the closed-loop + one synthetic. Rejected: the helper fns are reusable AST primitives and warrant their own unit pinning; the negative cases (unresolvable, None-return) are easy to regress without explicit tests; the multi-literal-credit assertion (alpha + beta both get the col) is the heart of the change and deserves a dedicated test.
+- **Did NOT extend to `op.add_column(<var>, ...)` or `op.alter_column(<var>, ...)`.** The existing for-loop variable resolution already covers `op.add_column` with loop iteration (v3 mechanism). Adding the function-return-literal path for `op.add_column` would be a separate, similar extension — defer until a real migration triggers the need (YAGNI). Same for non-batch `alter_column`. iter-39 is scoped to the documented blindspot.
+- **No tests for the iter-38 fingerprint — audit suites cover that.** Could pin `server_default_parity = 0/0` here. Rejected: it's already pinned by iter-38's tests; piling on cross-iter assertions creates brittle dependencies. Each iter's tests stay locally scoped.
+
+### Issues Fixed
+
+- **Fourth audit static-analysis blindspot closed.** `column_drift_lite.py` now correctly credits cols added inside `with op.batch_alter_table(<dynamic_var>, ...)` blocks when the var traces to a same-module function returning string literals. Real-world hit: npabinding's 3 cols (`context, entity_id, entity_type`) added by `8d2c1a6c5e24_domain_normalization.py:269-292` — previously falsely reported as drift, now correctly credited to both possible historic table names (`npa_binding`, `npabinding`).
+- **Drift backlog accuracy improved.** Pre-iter-39 the user saw "6 business-drift tables" — 1 of which was a false positive. Post-iter-39 the 5 remaining are all genuine (and all design-blocked per `[[mvp-release-blockers]]`). The audit's signal-to-noise is now cleaner.
+
+### Known Problems / Risks
+
+- **5 genuine business-drift tables remain — all need design calls.** `incident` (6 cols), `incident_log` (6 cols + table absent), `incident_person` (3 cols + table absent), `journalentry` (6 cols, concept drift), `training_certificates` (4 cols, model marks legacy). None mechanically closeable without product/architecture decisions.
+- **The audit extension trusts callees blindly.** If `_resolve_npa_binding_table` were re-written to do dynamic string concatenation (e.g. `return prefix + "_binding"`), the audit would miss it. Acceptable for now — migration code rarely does runtime string assembly of table names, and the failure mode (false-positive drift) is detectable.
+- **No verification against PG instance.** Pure AST analysis. The cols `context, entity_id, entity_type` are credited because the migration's source mentions them in the dynamic block — but actual PG table inspection isn't done. The closed-loop test rests on the migration source's correctness.
+- **Heavyweight audit still hangs.** Unchanged from Sessions 80-85. Lightweight audits remain the only viable local tool.
+- **CI still off** (PR #598). Unchanged. Local-evidence policy applies.
+- **iter-30/31 abandoned remote branches still persist.** Unchanged.
+- **Double-merged iter-37 (PRs #610 + #611)** — unchanged from Session 85's note. Worth checking with the merge operator whether one should be reverted from history.
+
+### Validation
+
+- `py -3 -m py_compile scripts/audit/column_drift_lite.py backend/tests/test_audit_column_drift_lite.py` → OK.
+- `py -3 -m pytest backend/tests/test_audit_column_drift_lite.py -v` → **27/27 pass** in 1.96s. TDD log: RED on first run (1 dynamic test fails with `KeyError 'alpha'`; helper-fn tests would have also failed but `-x` stopped earlier). After audit extension landed: 27/27 GREEN.
+- `py -3 -m pytest backend/tests/test_audit_column_drift_lite.py backend/tests/test_audit_version_column_drift.py backend/tests/test_audit_server_default_parity.py backend/tests/test_iter37_server_default_cohort.py backend/tests/test_iter38_server_default_cohort.py backend/tests/test_iter29_version_retrofit.py backend/tests/test_iter32_business_drift_cohort.py` → **338/338 pass** in 7.24s. No regression in any adjacent audit/migration cohort suite.
+- `py -3 scripts/audit/column_drift_lite.py` → **5 business-drift tables** (was 6 pre-iter-39): incident, incident_log, incident_person, journalentry, training_certificates. **2 critical absent** (unchanged): incident_log, incident_person. **npabinding cleared.**
+- `py -3 scripts/audit/server_default_parity.py` → **0 cols / 0 tables** (unchanged — closed by iter-38).
+- `py -3 scripts/audit/version_column_drift.py` → 0 missing version, 2 critical (unchanged).
+- **Not validated:** full backend test suite (Win+Py3.13 collect hang per `[[local-env-drift-windows]]`). Adjacent isolated suites + py_compile + closed-loop audit cover the scope.
+
+### Next Steps
+
+**Operational:**
+
+1. Review iter-39 PR (71 prod + 210 test LOC + ~90 line handoff).
+
+**Technical (next session — primary):**
+
+2. **Pick ONE design-blocked drift table and produce a decision-ready proposal.** Recommended order:
+   - `training_certificates` (4 cols, model marks legacy) — likely fastest decision: keep model + add migration, or delete model entirely. Single-stakeholder call.
+   - `journalentry` (6 cols, concept drift) — needs domain owner input on intended fields.
+   - `incident` family (3 tables, 15 cols total) — biggest scope, most complex (`incident_log` and `incident_person` are entirely absent from migrations). Session 79 design-blocked; needs structured decision pass.
+   - For each: produce model↔migration diff, proposed migration (or model deletion), open questions, ETA. Output as a docs/design/ or in-line PR description.
+
+**Technical (next session — secondary):**
+
+3. **Branch cleanup (iter-30/31 abandoned remotes)** — needs destructive-git permission. Mechanical, ~5 min.
+4. **iter-37 PR #610/#611 double-merge dedupe** — unchanged from Session 85's note.
+5. **CI re-enablement** — strategic decision (billing + scope).
+6. **FLOW seed for RB-002** — non-blocking polish.
+
+**Стартовая команда для следующей сессии:**
+
+```bash
+git checkout main && git pull
+gh pr list --state open --limit 10
+py -3 scripts/audit/column_drift_lite.py    # expect 5 drift tables if iter-39 merged, 6 if not
+# Then pick a design-blocked table and start producing the decision proposal.
+# Suggested first: training_certificates (smallest, model legacy → likely just drop the model).
+```
+
+**Branch suggestion для следующей сессии:** `design/training-certificates-decision` (если start with the easiest design call), `design/incident-family-pass-1` (если incident), `chore/cleanup-abandoned-iter30-31-branches` (если cleanup).
+
+---
+
 ## Last Agent Handoff (2026-05-29, Session 85 — iter-38 server_default cohort closure: Subset C (33 cols / 29 tables) — entire defect class closed)
 
 - **Дата:** 2026-05-29. Ветка `fix/iter-38-server-default-cohort-subset-C` от `9d29a45` (current `main`, includes iter-37 merged as [#611](https://github.com/aiprocadm/prt_ot_doc/pull/611)). Open PRs at session start: none. iter-38 is unstacked — clean branch from main, no pending dependencies.
