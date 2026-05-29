@@ -328,13 +328,26 @@ def test_real_codebase_training_enrollments_has_no_drift() -> None:
     )
 
 
-def test_real_codebase_incident_log_is_critical_absent() -> None:
-    """Session 79 documented incident_log as critical/absent (design-blocked)."""
+def test_real_codebase_incident_log_no_longer_critical_absent() -> None:
+    """Session 79 documented incident_log as critical/absent (design-blocked).
+    Closed by iter-42 (Session 89) — table is now created by migration
+    ``20260529_iter42_incident_family.py``. This test inverts the original
+    Session-80 assertion to be a regression guard against the table being
+    accidentally removed from migrations again.
+    """
     models = _AUDIT.find_versioned_models()
     migration_cols = _AUDIT.collect_migration_columns()
     assert "incident_log" in models
-    # incident_log has no migration creating it — it's in the critical list.
-    assert "incident_log" not in migration_cols or len(migration_cols["incident_log"]) == 0
+    # incident_log now exists in migrations with the business cols populated.
+    assert "incident_log" in migration_cols, (
+        "incident_log should be created by iter-42 — regression in migration coverage"
+    )
+    credited = migration_cols["incident_log"]
+    business_cols = {"incident_id", "author_id", "stage", "status", "message", "metadata_json"}
+    missing = business_cols - credited
+    assert not missing, (
+        f"incident_log missing business cols after iter-42: {sorted(missing)}"
+    )
 
 
 def test_real_codebase_no_unexpected_versioned_classes_missed() -> None:

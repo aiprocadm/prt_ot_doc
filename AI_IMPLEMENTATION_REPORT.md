@@ -1,5 +1,35 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-29, Session 89 — iter-42 incident family cohort closure: column_drift_lite reaches 0/0)
+
+- **Дата:** 2026-05-29. Ветка `fix/iter-42-incident-family-cohort` от `093959b` (`main`, with iter-38 merged as [#612](https://github.com/aiprocadm/prt_ot_doc/pull/612)). **Four parallel in-flight branches now**, all rooted at the same `main` commit: iter-39 (audit-only, S86), iter-40 (training_certificates, S87), iter-41 (journalentry, S88), iter-42 (incident family, this session). When all four merge, `column_drift_lite` business-drift = **0/0** AND critical-absent = **0** — the audit's entire defect class is closed.
+- **Агент:** Claude Opus 4.7 (1M context, local Win+Py3.13; explanatory style + Auto Mode + TDD).
+- **Задача:** «продолжай» — Session 88 handoff Next Step #4 (incident family pass — design-blocked since Session 79). Investigation revealed the situation was more nuanced than expected: TWO parallel incident model layers exist (`models.py: Incident, IncidentLog, IncidentPerson` for the simple-reporting API vs. `safety_ops.py: IncidentCase, IncidentPerson, IncidentInvestigation, IncidentAttachment` for the safety-ops workflow). The latter is fully migrated via `20260405_next60_incidents_inspections_capa_prep.py`; the former (which `api/routes/incidents.py` uses) is what column_drift_lite was flagging. User confirmed Option A (alter + create) via AskUserQuestion.
+
+### Studied Documentation
+
+- Session 88 handoff Next Step #4 — "incident family pass" with explicit framing as design-blocked since Session 79. Recommended investigation first → present options.
+- `[[mvp-release-blockers]]` — confirmed Session 79 design-block; iter-39/40/41 already in-flight closures for npabinding/training_certificates/journalentry.
+- `backend/app/models/models.py:2254-2392` — full incident family declarations:
+  - `IncidentSeverity` (LOW, MEDIUM, HIGH), `IncidentType` (4 vals), `IncidentStatus` (5 vals), `IncidentStage` (5 vals), `IncidentPersonRole` (3 vals).
+  - `Incident` (11 cols): 5 from initial_schema + 6 missing (`company_id, site_id, incident_type, investigation_stage, location_description, pack_id`). Status col present but with type drift (String(64) vs Enum) — out of column-presence audit scope.
+  - `IncidentPerson` (3 business cols) — entirely absent.
+  - `IncidentLog` (6 business cols, declares separate PG enum names `incidentlogstage`/`incidentlogstatus` even though Python classes shared) — entirely absent.
+- `backend/app/migrations/versions/6b6dee7c951f_initial_schema.py:194-208` — original `incident` table: title, description, occurred_at, severity (Enum LOW/MEDIUM/HIGH), status (String(64)), + mixins. ONLY one index: `ix_incident_tenant_id`. No FK to company/site/document_pack.
+- `backend/app/migrations/versions/20260405_next60_incidents_inspections_capa_prep.py:27-90` — the PARALLEL `incident_cases` family. Different domain (safety-ops workflow with investigations, attachments, prescriptions). Used by `safety_ops.py` models + `safety_ops.py` route + `risk_enterprise.py` (line 218: `select(func.count()).select_from(IncidentCase)...`). NOT competing with `incident` table — coexists.
+- `backend/app/api/routes/incidents.py:1-110` — the active API surface for the SIMPLE incident-reporting domain. Imports `Incident, IncidentLog, IncidentPersonRole, IncidentStatus, IncidentType` from `models.models`. All write paths would have crashed with `UndefinedColumnError` on the missing model cols → confirmed assumption that `incident` table is empty in prod.
+- `backend/app/models/safety_ops.py:22-86` — the PARALLEL model layer. `IncidentCase` (table `incident_cases`), `IncidentPerson` (table `incident_persons`), `IncidentInvestigation` (table `incident_investigations`), `IncidentAttachment` (table `incident_attachments`). These are all properly migrated. Different domain, no overlap with column_drift_lite's findings.
+- `backend/app/migrations/versions/20260528_iter32_business_drift_cohort.py` — the iter-32 cohort pattern for adding nullable cols. Mirrored for the new NOT NULL FK cols + indexes (with the assumption-of-empty-table caveat).
+- `backend/app/migrations/versions/20260527_iter24_journal_ppeitem.py:64-100` — the iter-24 pattern for declaring `JOURNAL_TYPE_VALUES` tuple + `sa.Enum(*VALUES, name="X")` in a create_table. Mirrored for the 5 new PG enums.
+
+### Selected Plan Item
+
+- **iter-42 incident family cohort closure** — ALTER incident (+6 cols + 7 indexes) + CREATE incident_log table + CREATE incident_person table + 5 new PG enum types. User chose Option A (alter incident, not drop+recreate) via AskUserQuestion over Option B (mirror iter-41 drop+recreate) and Option C (skip).
+- **Why Option A over B:**
+  - For incident: lower-LOC (alter vs drop+recreate), additive nature is honest about the work ("add the missing cols"). Same destructive risk (NOT NULL FKs require empty table) but less invasive shape.
+  - For incident_log + incident_person: only choice is create_table (they're entirely absent).
+- **Cost:** ~210 prod LOC (single migration: 5 enum-implicit creates via column type + 6 add_column + 7 create_index + 2 create_table + 9 nested indexes + 1 UC) + ~600 test LOC (85 tests across structural, parametrized cohort, enum verification, UC pin, closed-loop audit, downgrade symmetry).
+- **Closed loop:** `column_drift_lite` business-drift drops from **3 → 0 tables on this branch** (incident family cleared). `column_drift_lite` critical-absent drops from **2 → 0** (incident_log + incident_person now created). After all four in-flight branches (iter-39/40/41/42) merge: **entire column_drift_lite defect class at 0/0**.
 ## Last Agent Handoff (2026-05-29, Session 88 — iter-41 journalentry concept resolution: drop-and-recreate (1 of 4 remaining business-drift tables))
 
 - **Дата:** 2026-05-29. Ветка `fix/iter-41-journalentry-concept-resolution` от `093959b` (`main`, with iter-38 merged as [#612](https://github.com/aiprocadm/prt_ot_doc/pull/612)). **Three parallel in-flight branches now**, all rooted at the same `main` commit: `fix/iter-39-audit-batch-alter-dynamic-table-resolution` (S86), `fix/iter-40-training-certificates-legacy-cols` (S87), and this iter-41. When all three merge, drift drops 6 → **3** (incident family only).
@@ -83,6 +113,94 @@
 
 | PR | Date (UTC) | Iter | Scope | Class |
 |---|---|---|---|---|
+| — | — | iter-39 | dynamic batch_alter_table audit resolution | audit (in-flight) |
+| — | — | iter-40 | training_certificates legacy cols | DB (in-flight) |
+| — | — | iter-41 | journalentry drop+recreate | DB (in-flight) |
+
+All three previous sessions (S86/S87/S88) are still in-flight at iter-42 session start. All four branches share `093959b` as base.
+
+### Implemented Changes (this session)
+
+**Code (PR `fix/iter-42-incident-family-cohort`):**
+
+1. **`backend/app/migrations/versions/20260529_iter42_incident_family.py`** (+225 new) — revision `20260529_iter42_incident_family`, down_revision `20260529_iter38_server_default_c`. Upgrade structure (3 sections):
+   - Section 1: ALTER incident — 6 add_column (2 NOT NULL FK, 2 Enum NOT NULL with server_default, 1 nullable String, 1 nullable FK with SET NULL) + 7 create_index (3 column-level for FK cols, 4 composite for `__table_args__` indexes).
+   - Section 2: CREATE incident_log — 11 cols + 3 FK constraints (incident_id ondelete=CASCADE, author_id SET NULL, tenant_id) + 5 indexes. Includes JSON column with `server_default=sa.text("'{}'")` for raw-SQL path safety.
+   - Section 3: CREATE incident_person — 8 cols + 3 FK constraints (incident_id CASCADE, person_id RESTRICT, tenant_id) + 1 UniqueConstraint(tenant_id, incident_id, person_id, role) + 4 indexes. `role` col gets `server_default="VICTIM"` (iter-38 enum-default pattern).
+   - Downgrade: inverse order (drop incident_person → drop incident_log → revert incident alterations), with explicit `sa.Enum(name="X").drop(...)` for each of the 5 new PG enum types.
+
+2. **`backend/tests/test_iter42_incident_family.py`** (+600 new) — 85-test pin file:
+   - Revision chain pin (`iter-42 → iter-38`).
+   - 6-row `_INCIDENT_ADD_COLS × 4` parametrized = 24 incident-cohort tests (col present, nullable matches, FK target/ondelete matches, server_default present-when-expected).
+   - `test_incident_alter_creates_all_new_indexes` — pins the 7 new indexes on incident.
+   - 11-row `_INCIDENT_LOG_COHORT × 3` parametrized = 33 incident_log tests (col present, SA type matches, nullable matches).
+   - `test_incident_log_create_table_creates_all_expected_indexes` — pins 5 incident_log indexes.
+   - `test_incident_log_incident_fk_has_cascade_ondelete` — pins CASCADE on the incident_id FK.
+   - 8-row `_INCIDENT_PERSON_COHORT × 1` = 8 incident_person presence tests.
+   - `test_incident_person_creates_all_expected_indexes` — pins 4 incident_person indexes.
+   - `test_incident_person_unique_constraint_present` — exact match on UC name + 4 cols.
+   - `test_incident_person_role_has_victim_server_default` — pins the enum-default pattern.
+   - 5-row `_NEW_ENUMS × 1` parametrized = 5 enum-creation tests via AST walk (resolves both literal tuple and Starred-unpacking forms).
+   - `test_downgrade_drops_all_new_enums` — pins 5 `sa.Enum(name=X).drop(...)` calls in downgrade.
+   - `test_downgrade_drops_incident_log_and_incident_person_tables` — pins the 2 new table drops.
+   - `test_downgrade_drops_all_added_incident_columns` — symmetry pin: each add_column in upgrade has a matching drop_column in downgrade.
+   - **4 closed-loop audit tests**: 3 for "audit credits business cols for each table" + 1 for "incident family cleared from drift list".
+
+3. **`backend/tests/test_audit_column_drift_lite.py`** (–7 / +20) — flipped `test_real_codebase_incident_log_is_critical_absent` to `test_real_codebase_incident_log_no_longer_critical_absent`. The original Session-80 assertion (incident_log MUST be in critical-absent list) was a regression guard against the design-blocked state; iter-42 inverts that state, so the test now asserts incident_log IS in migration_cols AND business cols are credited. Same regression-guard role, opposite shape.
+
+**Doc:**
+
+4. New `## Last Agent Handoff (2026-05-29, Session 89 ...)` block prepended (this entry).
+
+### Changed / New Files
+
+- `backend/app/migrations/versions/20260529_iter42_incident_family.py` — +225 new.
+- `backend/tests/test_iter42_incident_family.py` — +600 new.
+- `backend/tests/test_audit_column_drift_lite.py` — –7 / +20 (one test flipped).
+- `AI_IMPLEMENTATION_REPORT.md` — +~140 / 0 (this handoff).
+
+### Decisions
+
+- **Alter incident (Option A) instead of drop+recreate (Option B).** User-confirmed. The two work to the same end state if incident table is empty (the assumed prod state). Alter is the smaller, additive change — honest about the work ("we missed these 6 cols"). Drop+recreate would have been semantically equivalent but with extra LOC and unnecessary data-deletion ceremony. User's iter-41 precedent (drop+recreate) was suited to mutually-incompatible shapes; iter-42's incident is shape-compatible (additive).
+- **Status col type drift OUT OF SCOPE.** Migration's `status String(64)` vs model's `Enum(IncidentStatus, name="incidentstatus")` is type drift, not column-presence drift. column_drift_lite doesn't flag it. Closing it would require: (a) creating `incidentstatus` PG enum, (b) data backfill if non-empty (existing rows may have UPPER_CASE strings from SA's default attr-name storage), (c) ALTER COLUMN TYPE. Defer to a dedicated type-parity iter if/when an audit script for type drift gets written.
+- **5 new PG enums declared inline in column declarations.** Mirror of iter-24 pattern (`sa.Enum(*VALUES, name="X")` in create_table column). SA's default behavior: creates the type on first column declaration in the migration session. No explicit `CREATE TYPE` op needed in upgrade. Downgrade explicitly drops each: `sa.Enum(name="X").drop(op.get_bind(), checkfirst=True)`.
+- **UPPER_CASE enum members instead of lowercase values.** Mirror of iter-38's decision (`IncidentSeverity.MEDIUM` stored as `"MEDIUM"`, not `"medium"`, per SA default `native_enum=True` without `values_callable`). Verified by initial_schema:198 which declares `sa.Enum('LOW', 'MEDIUM', 'HIGH', name='incidentseverity')` — labels are UPPER_CASE.
+- **`INCIDENT_LOG_STAGE_VALUES` literal-spelled instead of aliased.** First draft used `INCIDENT_LOG_STAGE_VALUES = INCIDENT_STAGE_VALUES` (Name alias). The pin test's AST resolver only follows Starred-of-Name → Tuple-assigned chain, not Starred-of-Name → Name-assigned → Tuple-assigned chain. Spelling values out explicitly is also a future-proofing aid: if model ever diverges `incidentlogstage` from `incidentstage` (separate PG enum names ALREADY suggest this), the declaration is easier to update independently.
+- **Assumption-of-empty-table accepted for incident's NOT NULL FK cols.** `company_id` and `site_id` are NOT NULL with no safe server_default and no backfill source. Migration WILL FAIL with `NotNullViolation` if existing rows are present. Justified by `incidents.py` route writes always referencing the modern model cols (which don't exist in DB) → all writes have crashed → no real data. Documented in migration docstring as a pre-deploy verification step (`SELECT count(*) FROM incident`).
+- **`server_default="ACCIDENT"`, `"REGISTRATION"`, `"VICTIM"` for Enum cols with model defaults.** Mirror iter-38 closure pattern. Skipped server_default for: NOT NULL FK cols (no Python default in model → no DB default); incident_log.stage/status (no model default — model writes always set these); incident_log.metadata_json gets `sa.text("'{}'")` for raw-SQL safety.
+- **Existing-col indexes (status, occurred_at) added in this iter.** Model's `__table_args__` declares composite indexes `ix_incident_status(tenant_id, status)` and `ix_incident_occurred_at(occurred_at)`. These touch EXISTING cols and were missing from migration. Including them in iter-42 closes the index-coverage gap for the table along with the column-coverage gap. Tests pin all 7 new indexes including these two.
+- **Flipped Session-80 audit test instead of deleting.** The test `test_real_codebase_incident_log_is_critical_absent` asserted incident_log MUST be in the critical-absent list. iter-42 inverts that. Per Session 85's pattern (delete-vs-flip decision), this test plays a useful role as a regression guard against future migrations accidentally re-removing the table. Flipped to assert presence + business cols credited, with docstring tying back to Session 79's original concern.
+
+### Issues Fixed
+
+- **Incident family cohort drift closed** — last 3 column_drift_lite business-drift tables (incident + incident_log + incident_person) cleared. The audit's entire business-drift class reaches 0/0 once all four in-flight branches (iter-39/40/41/42) merge to main.
+- **Critical-absent drift class closed** — `incident_log` and `incident_person` were "tables absent from migrations" (the audit's hardest class). iter-42 creates them. Drift class reaches 0.
+- **API surface in `incidents.py` becomes operational on PostgreSQL.** Previously broken (writes to model's NOT NULL `company_id`, `site_id` would crash with UndefinedColumnError); now the DB schema supports the ORM's full insert shape.
+- **Session-79 design-block resolved.** The longest-running open design item in the drift backlog (per `[[mvp-release-blockers]]`) is now closed — under the documented empty-table assumption.
+
+### Known Problems / Risks
+
+- **Alembic multi-head when 3+ migration-bearing branches merge.** iter-40, iter-41, iter-42 all chain from `iter-38`. Operational ordering options:
+  - Merge iter-39 first (audit-only, no migration → no chain conflict).
+  - Merge iter-40 OR iter-41 OR iter-42 next (alembic head moves to that one).
+  - Each subsequent merge requires `alembic merge heads -m "..."` to produce a no-op merge migration unifying the divergent heads.
+  - With 3 migration-bearing branches, at least 2 merge-heads commits will be needed.
+- **Status col type drift unaddressed.** `incident.status` is still `String(64)` in migration vs `Enum(IncidentStatus, name="incidentstatus")` in model. Functionally tolerated by SA (stores attr-name as string), but inconsistent with the other 4 Enum cols. Worth a future iter when there's a type-parity audit to drive it.
+- **Pre-deploy verification needed for incident table.** As documented in the migration: `SELECT count(*) FROM incident`. If non-zero in any deployed environment, the migration WILL FAIL. Pre-deploy mitigation: dump-and-decide (mirror iter-41 reasoning) or design a backfill plan.
+- **No DB-level upgrade verification.** Pure AST + audit closed-loop. The migration was NOT run against a real PG instance.
+- **`safety_ops.py` parallel models continue to coexist.** They're a different domain (safety-ops workflow), not competing with `incident`. No action needed; just noting for future maintainers reading the codebase that "incident_cases" and "incident" are two separate tables, intentionally.
+- **Heavyweight audit still hangs.** Unchanged.
+- **CI still off** (PR #598). Unchanged.
+- **iter-30/31 abandoned remote branches still persist.** Unchanged.
+- **Double-merged iter-37 (PRs #610 + #611)** — unchanged.
+
+### Validation
+
+- `py -3 -m py_compile backend/app/migrations/versions/20260529_iter42_incident_family.py backend/tests/test_iter42_incident_family.py` → OK.
+- `py -3 -m pytest backend/tests/test_iter42_incident_family.py -v` → **85/85 pass** in 4.06s (after fix to `INCIDENT_LOG_STAGE_VALUES` aliasing — 1 RED → GREEN cycle).
+- `py -3 -m pytest backend/tests/test_iter42_incident_family.py backend/tests/test_iter32_business_drift_cohort.py backend/tests/test_iter37_server_default_cohort.py backend/tests/test_iter38_server_default_cohort.py backend/tests/test_audit_column_drift_lite.py backend/tests/test_audit_version_column_drift.py backend/tests/test_audit_server_default_parity.py backend/tests/test_iter29_version_retrofit.py` → **412/412 pass** in 13.21s. The flipped audit test pins the new state.
+- `py -3 scripts/audit/column_drift_lite.py` → **3 business-drift tables on this branch** (was 6 pre-iter-39+40+41+42): npabinding (iter-39 not on this branch), training_certificates (iter-40 not on this branch), journalentry (iter-41 not on this branch). **incident family entirely cleared.** Critical-absent: **0** (was 2). When all four in-flight branches merge: business-drift = **0/0**.
+- **Not validated:** full backend test suite + actual alembic upgrade against PG.
 | — | — | iter-39 | dynamic batch_alter_table audit resolution | audit (in-flight on `fix/iter-39-...`) |
 | — | — | iter-40 | training_certificates legacy cols | DB (in-flight on `fix/iter-40-...`) |
 
@@ -277,6 +395,23 @@ Session 86 (iter-39) is in-flight on its own branch; not yet merged at iter-40 s
 
 **Operational:**
 
+1. Review iter-42 PR (225 prod + 600 test + 1 flipped audit test LOC + ~140 line handoff).
+2. **Plan merge ordering for 4 in-flight branches.** Recommended:
+   - iter-39 first (no migration → no chain conflict).
+   - iter-40, iter-41, iter-42 in any order. After each: `alembic merge heads -m "merge iter-XX + iter-YY"` to unify divergent heads. After all merge: total of 2 merge-heads no-op migrations.
+3. **Pre-deploy verification for incident table.** `SELECT count(*) FROM incident` against prod before applying iter-42.
+4. **Update `[[mvp-release-blockers]]`** to mark incident family resolved (it was the final design-blocked item in the drift backlog).
+
+**Technical (next session — primary):**
+
+5. **column_drift_lite drift class reaches 0/0.** The defect class is closed. No further drift work needed here.
+6. **Potential next directions:**
+   - **incident.status type drift** — type-parity audit + alter column. Adds incidentstatus PG enum. Not column-presence drift (out of column_drift_lite scope).
+   - **Branch cleanup (iter-30/31 abandoned remotes)** — destructive-git permission needed. ~5 min.
+   - **iter-37 PR #610/#611 double-merge dedupe** — long-standing operational artifact.
+   - **CI re-enablement** — strategic decision (billing + scope).
+   - **FLOW seed for RB-002** — non-blocking polish.
+   - **Heavyweight audit fix** — `check_orm_migration_drift.py` still hangs locally; could be diagnosed.
 1. Review iter-41 PR (165 prod + 370 test LOC + ~120 line handoff).
 2. **Plan merge ordering:** three in-flight branches now. Recommended order:
    - iter-39 (audit-only, no migration → no chain conflict)
@@ -337,6 +472,14 @@ Session 86 (iter-39) is in-flight on its own branch; not yet merged at iter-40 s
 git checkout main && git pull
 gh pr list --state open --limit 10
 py -3 scripts/audit/column_drift_lite.py
+# Expect: 0 business-drift + 0 critical-absent if all four (iter-39/40/41/42) merged.
+py -3 scripts/audit/server_default_parity.py
+py -3 scripts/audit/version_column_drift.py
+# All three audits should now be at 0/0 (modulo critical version-drift if any).
+# Then pick next direction from #6 above.
+```
+
+**Branch suggestion для следующей сессии:** `chore/cleanup-abandoned-iter30-31-branches` (если cleanup), `fix/incident-status-type-parity` (если type drift), `chore/heavyweight-audit-hang-diagnosis` (если debug).
 # Expect 3 drift tables if all three (iter-39+40+41) merged: incident family only.
 py -3 scripts/audit/column_drift_lite.py --table incident
 py -3 scripts/audit/column_drift_lite.py --table incident_log
