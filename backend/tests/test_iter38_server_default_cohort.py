@@ -1,23 +1,23 @@
-"""Pin tests for iter-37 server_default parity cohort migration (Subset A+B).
+"""Pin tests for iter-38 server_default parity cohort migration (Subset C).
 
-Closes the safe-to-ship subset of server_default drift discovered by
-``scripts/audit/server_default_parity.py`` (Session 83 / iter-36):
+Closes the final 33-col cohort of server_default drift surfaced by
+``scripts/audit/server_default_parity.py`` (iter-36 audit):
 
-  * **Subset A** — int/bool literal defaults (15 cols).
-  * **Subset B** — short string literal defaults (4 cols).
-  * **Subset C** — enum-typed defaults (32 cols) + ``tenant.kind``
-    (string literal but ``Enum`` column type) — deferred. They need
-    per-dialect ``server_default`` SQL (PG ``::enum_name`` cast) and a
-    decision on SQLite behavior. Out of scope for iter-37.
+  * 32 columns declared as ``mapped_column(Enum(EnumClass[, name=...]))``
+    with ``default=EnumClass.MEMBER`` — server_default = UPPER_CASE
+    member name (SA's default native_enum=True PG storage convention).
+  * 1 column ``tenant.kind`` declared as
+    ``mapped_column(Enum("customer", "branch", "contractor",
+    name="tenantkind"))`` with ``default="customer"`` (literal lowercase)
+    — server_default = "customer".
 
-Same operational impact as iter-32's ``ppeissue.quantity`` fix: any raw
-SQL path (perf-baseline ``COPY``, restore-drill dumps, manual ops fixes)
-inserting without these columns crashes on ``NOT NULL`` because no DB-side
-default exists. Adding ``server_default`` matches the Python ``default=``
-already on the model.
+Combined with iter-37 (Subset A+B, 19 cols), this closes the entire
+server_default parity drift class. The audit's drift count goes from
+33 → 0 after this iter.
 
-Tests are pure AST + closed-loop audit run (no full app boot) so they run
-on Win+Py3.13 without the conftest crash.
+Tests are pure AST + closed-loop audit run (no full app boot) so they
+run on Win+Py3.13 without the conftest crash. Mirrors iter-37's test
+shape exactly.
 """
 
 from __future__ import annotations
@@ -35,42 +35,50 @@ MIGRATION_PATH = (
     / "app"
     / "migrations"
     / "versions"
-    / "20260529_iter37_server_default_cohort_ab.py"
+    / "20260529_iter38_server_default_cohort_c.py"
 )
 AUDIT_PATH = REPO_ROOT / "scripts" / "audit" / "server_default_parity.py"
 
 
 # Tuple of (table, column, sa_type_name, sa_type_arg_or_none, default_unparsed_source).
-# `default_unparsed_source` is what ``ast.unparse`` returns for the
-# ``server_default=`` kwarg's AST value node:
-#   * ``"'<n>'"`` — int literal stored as str Constant (single-quoted repr)
-#   * ``'sa.true()'`` — Call node, unparse returns the source as written
-#   * ``"'<val>'"`` — short string literal stored as str Constant
-# Using ast.unparse semantics keeps the comparison rigorous and avoids
-# re-implementing source reconstruction.
-_COHORT_AB: list[tuple[str, str, str, str | int | None, str]] = [
-    # --- Subset A: int defaults (7 cols) ---
-    ("document_pack_item", "order", "Integer", None, "'0'"),
-    ("pack_runs", "selected_rows_count", "Integer", None, "'0'"),
-    ("pack_runs", "source_rows_count", "Integer", None, "'0'"),
-    ("ppeitem", "default_wear_days", "Integer", None, "'365'"),
-    ("ppenorm", "interval_days", "Integer", None, "'365'"),
-    ("ppenorm", "quantity", "Integer", None, "'1'"),
-    ("warehouseppe", "quantity", "Integer", None, "'0'"),
-    # --- Subset A: bool defaults (8 cols) ---
-    ("api_key", "is_active", "Boolean", None, "sa.true()"),
-    ("document_pack", "is_active", "Boolean", None, "sa.true()"),
-    ("document_pack_item", "required", "Boolean", None, "sa.true()"),
-    ("package_preset_items", "is_required", "Boolean", None, "sa.true()"),
-    ("tenant", "is_active", "Boolean", None, "sa.true()"),
-    ("training_plan", "is_mandatory", "Boolean", None, "sa.true()"),
-    ("user", "is_active", "Boolean", None, "sa.true()"),
-    ("webhook_subscription", "enabled", "Boolean", None, "sa.true()"),
-    # --- Subset B: string defaults (4 cols) ---
-    ("api_key", "scopes", "String", 255, "'api:read'"),
-    ("auditlog", "ip", "String", 64, "'unknown'"),
-    ("edo_webhook_inbox", "status", "String", 16, "'received'"),
-    ("securityauditlog", "ip", "String", 64, "'unknown'"),
+# Same shape as iter-37's _COHORT_AB: ``default_unparsed_source`` is what
+# ``ast.unparse`` returns for the ``server_default=`` kwarg's AST value,
+# i.e. ``repr()``-style single-quoted source ("'MEDIUM'", "'customer'").
+# Alphabetically sorted by (table, column) — matches migration ordering.
+_COHORT_C: list[tuple[str, str, str, str | int | None, str]] = [
+    ("approval_instance_steps", "status", "String", 64, "'PENDING'"),
+    ("approval_instances", "status", "String", 64, "'DRAFT'"),
+    ("approval_processes", "status", "String", 64, "'PENDING'"),
+    ("approval_route_steps", "step_type", "String", 64, "'APPROVE'"),
+    ("approval_tasks", "status", "String", 64, "'OPEN'"),
+    ("attestation", "status", "String", 64, "'ACTIVE'"),
+    ("client_request_tickets", "status", "String", 64, "'OPEN'"),
+    ("edo_envelopes", "status", "String", 64, "'QUEUED'"),
+    ("equipment", "status", "String", 64, "'ACTIVE'"),
+    ("idempotency_keys", "status", "String", 64, "'PENDING'"),
+    ("incident", "severity", "String", 64, "'MEDIUM'"),
+    ("incident", "status", "String", 64, "'REPORTED'"),
+    ("inspection_prescription", "status", "String", 64, "'OPEN'"),
+    ("npa", "status", "String", 64, "'ACTIVE'"),
+    ("pack_run_items", "status", "String", 64, "'QUEUED'"),
+    ("pack_runs", "status", "String", 64, "'QUEUED'"),
+    ("package_preset_items", "output_format", "String", 64, "'BOTH'"),
+    ("package_preset_items", "replace_mode", "String", 64, "'NONE'"),
+    ("package_presets_v2", "source_type", "String", 64, "'CSV'"),
+    ("package_presets_v2", "status", "String", 64, "'DRAFT'"),
+    ("package_profiles_v2", "status", "String", 64, "'DRAFT'"),
+    ("package_requirements", "status", "String", 64, "'MISSING'"),
+    ("package_requirements", "type", "String", 64, "'FILE'"),
+    ("package_runs", "status", "String", 64, "'DRAFT'"),
+    ("permit", "status", "String", 64, "'ACTIVE'"),
+    ("pipeline_runs", "status", "String", 64, "'QUEUED'"),
+    ("plantask", "status", "String", 64, "'OPEN'"),
+    ("ppeissue", "status", "String", 64, "'ISSUED'"),
+    ("ppeitem", "category", "String", 64, "'OTHER'"),
+    ("template", "status", "String", 64, "'DRAFT'"),
+    ("templateversion", "status", "String", 64, "'UPLOADED'"),
+    ("tenant", "kind", "String", 64, "'customer'"),
+    ("training_session", "status", "String", 64, "'SCHEDULED'"),
 ]
 
 
@@ -82,11 +90,10 @@ def _function(tree: ast.Module, name: str) -> ast.FunctionDef:
     for node in tree.body:
         if isinstance(node, ast.FunctionDef) and node.name == name:
             return node
-    pytest.fail(f"{name}() not found in iter-37 migration")
+    pytest.fail(f"{name}() not found in iter-38 migration")
 
 
 def _alter_column_calls(fn: ast.FunctionDef) -> list[ast.Call]:
-    """Return every ``op.alter_column(...)`` call in fn."""
     out: list[ast.Call] = []
     for node in ast.walk(fn):
         if (
@@ -120,7 +127,7 @@ def _kw_value_source(call: ast.Call, name: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-def test_migration_revision_chains_to_iter32() -> None:
+def test_migration_revision_chains_to_iter37() -> None:
     tree = _migration_tree()
     revision_assigns = {
         a.target.id: a.value
@@ -129,23 +136,23 @@ def test_migration_revision_chains_to_iter32() -> None:
     }
     rev = revision_assigns.get("revision")
     down = revision_assigns.get("down_revision")
-    assert isinstance(rev, ast.Constant) and rev.value == "20260529_iter37_server_default_ab", (
+    assert isinstance(rev, ast.Constant) and rev.value == "20260529_iter38_server_default_c", (
         f"revision = {getattr(rev, 'value', None)!r}"
     )
-    assert isinstance(down, ast.Constant) and down.value == "20260528_iter32_business_drift", (
+    assert isinstance(down, ast.Constant) and down.value == "20260529_iter37_server_default_ab", (
         f"down_revision = {getattr(down, 'value', None)!r}"
     )
 
 
-def test_cohort_size_pinned_at_nineteen() -> None:
-    """Adding a column to this cohort requires also updating _COHORT_AB."""
+def test_cohort_size_pinned_at_thirtythree() -> None:
+    """Adding/removing a column from this cohort requires also updating _COHORT_C."""
     tree = _migration_tree()
     upgrade = _function(tree, "upgrade")
-    assert len(_alter_column_calls(upgrade)) == len(_COHORT_AB) == 19
+    assert len(_alter_column_calls(upgrade)) == len(_COHORT_C) == 33
 
 
 def test_no_create_table_in_upgrade() -> None:
-    """iter-37 only alters existing columns — no new tables/columns."""
+    """iter-38 only alters existing columns — no new tables/columns."""
     tree = _migration_tree()
     upgrade = _function(tree, "upgrade")
     for node in ast.walk(upgrade):
@@ -154,11 +161,11 @@ def test_no_create_table_in_upgrade() -> None:
             and isinstance(node.func, ast.Attribute)
             and node.func.attr in {"create_table", "add_column"}
         ):
-            pytest.fail(f"unexpected op.{node.func.attr} call in iter-37 upgrade")
+            pytest.fail(f"unexpected op.{node.func.attr} call in iter-38 upgrade")
 
 
 @pytest.mark.parametrize(
-    ("table", "column", "_sa_type", "_arg", "_default"), _COHORT_AB
+    ("table", "column", "_sa_type", "_arg", "_default"), _COHORT_C
 )
 def test_cohort_column_has_alter_column_in_upgrade(
     table: str, column: str, _sa_type: str, _arg: str | int | None, _default: str
@@ -169,7 +176,7 @@ def test_cohort_column_has_alter_column_in_upgrade(
 
 
 @pytest.mark.parametrize(
-    ("table", "column", "sa_type", "_arg", "_default"), _COHORT_AB
+    ("table", "column", "sa_type", "_arg", "_default"), _COHORT_C
 )
 def test_cohort_column_existing_type_present(
     table: str, column: str, sa_type: str, _arg: str | int | None, _default: str
@@ -187,7 +194,7 @@ def test_cohort_column_existing_type_present(
 
 
 @pytest.mark.parametrize(
-    ("table", "column", "_sa_type", "_arg", "_default"), _COHORT_AB
+    ("table", "column", "_sa_type", "_arg", "_default"), _COHORT_C
 )
 def test_cohort_column_existing_nullable_false(
     table: str, column: str, _sa_type: str, _arg: str | int | None, _default: str
@@ -202,7 +209,7 @@ def test_cohort_column_existing_nullable_false(
 
 
 @pytest.mark.parametrize(
-    ("table", "column", "_sa_type", "_arg", "default"), _COHORT_AB
+    ("table", "column", "_sa_type", "_arg", "default"), _COHORT_C
 )
 def test_cohort_column_server_default_matches_model(
     table: str, column: str, _sa_type: str, _arg: str | int | None, default: str
@@ -234,7 +241,7 @@ def test_downgrade_removes_server_default_for_every_cohort_col() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Closed-loop audit verification (requires audit recognizes alter_column form)
+# Closed-loop audit verification (final drift count = 0)
 # ---------------------------------------------------------------------------
 
 
@@ -246,23 +253,30 @@ def _load_audit():
     return mod
 
 
-def test_audit_no_longer_flags_nineteen_cohort_cols() -> None:
-    """After iter-37 + audit alter_column support, the 19 cols disappear from drift."""
+def test_audit_no_longer_flags_thirtythree_cohort_cols() -> None:
+    """After iter-38, every column in the Subset C cohort disappears from drift."""
     audit = _load_audit()
     drift = audit.run()
     flagged = {(t, c) for (t, c) in drift}
-    for table, column, *_ in _COHORT_AB:
+    for table, column, *_ in _COHORT_C:
         assert (table, column) not in flagged, (
             f"{table}.{column} still flagged by audit — alter_column credit broken or "
             f"migration missing this column"
         )
 
 
-# NOTE: the obsolete ``test_audit_still_flags_deferred_subset_c_enum_cols``
-# sanity probe was removed in iter-38: it asserted that 4 sample Subset C
-# columns (incident.severity/status, permit.status, tenant.kind) remained
-# flagged because they were out of iter-37's scope. iter-38's cohort closure
-# flips all 33 Subset C columns out of drift, so the assertion no longer
-# holds. The equivalent regression coverage now lives in
-# ``test_iter38_server_default_cohort.py:test_audit_drift_total_count_is_zero``
-# which pins the global drift count = 0.
+def test_audit_drift_total_count_is_zero() -> None:
+    """The combined iter-37 + iter-38 closure means total drift = 0.
+
+    This is the cumulative closed-loop assertion: server_default parity is
+    fully achieved across the codebase. Any future regression (a new model
+    field with ``nullable=False, default=<literal>`` missing a matching
+    migration ``server_default``) will surface here.
+    """
+    audit = _load_audit()
+    drift = audit.run()
+    assert drift == {}, (
+        f"unexpected server_default drift remaining: {len(drift)} cols "
+        f"across {len({t for (t, _) in drift})} tables: "
+        f"{sorted(drift.keys())}"
+    )
