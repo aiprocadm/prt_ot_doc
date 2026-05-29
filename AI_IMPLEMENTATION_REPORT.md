@@ -1,5 +1,129 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-29, Session 90 — iter-43 incident.status enum type-parity (smallest in-flight closure))
+
+- **Дата:** 2026-05-29. Ветка `fix/iter-43-incident-status-enum-type-parity` от `093959b` (`main`). **Five parallel in-flight branches now**, all from `main`: iter-39/40/41/42 from prior sessions, plus this iter-43. After all five merge, `column_drift_lite` business-drift = **0** + critical-absent = **0** + incident table fully aligned with model (column presence + type parity both closed for incident).
+- **Агент:** Claude Opus 4.7 (1M context, local Win+Py3.13; explanatory style + Auto Mode + TDD).
+- **Задача:** «продолжай» — Session 89 handoff Next Step #6 sub-bullet ("incident.status type drift — adds incidentstatus PG enum"). Single-col type-parity closure; targeted scope.
+
+### Studied Documentation
+
+- Session 89 (iter-42) handoff — explicit "OUT OF SCOPE for iter-42: ``incident.status`` column type drift". iter-43 closes that explicit deferral.
+- `backend/app/models/models.py:2300-2302` — `Mapped[IncidentStatus] = mapped_column(Enum(IncidentStatus, name="incidentstatus"), nullable=False, default=IncidentStatus.REPORTED)`.
+- `backend/app/migrations/versions/6b6dee7c951f_initial_schema.py:199` — `sa.Column('status', sa.String(length=64), nullable=False)`. The 5-year-old VARCHAR shape.
+- iter-38 / iter-42 storage convention — UPPER_CASE attribute-name labels are the SA default for `Enum(EnumClass, name=X)` without `values_callable`. Confirmed by initial_schema:198's `incidentseverity` enum (`'LOW', 'MEDIUM', 'HIGH'` UPPER_CASE).
+- iter-37 / iter-38 `alter_column` pattern — informational `existing_type` + preserving `existing_nullable`. iter-43 follows.
+
+### Selected Plan Item
+
+- **iter-43 single-col type-parity** — create `incidentstatus` PG enum, alter `incident.status` from `String(64)` to `Enum`. Mirror of iter-37/38 `alter_column` work but for type change (not server_default change).
+- **Why now:** smallest standalone closure in the drift backlog. Self-contained; no domain decision needed; mechanically pure. Natural continuation after iter-42 explicitly deferred it.
+- **Cost:** ~95 prod LOC migration + ~265 test LOC (11 tests).
+- **Closed loop (no audit infrastructure):** column_drift_lite doesn't track types — so no audit closed-loop. Pinned via direct AST tests instead. (Building a `enum_type_parity.py` audit would cost ~200 more LOC for a defect class that may only have this one case; deferred.)
+
+### Recent merged work since Session 85
+
+| PR | Date (UTC) | Iter | Scope | Class |
+|---|---|---|---|---|
+| — | — | iter-39 | dynamic batch_alter_table audit resolution | audit (in-flight) |
+| — | — | iter-40 | training_certificates legacy cols | DB (in-flight) |
+| — | — | iter-41 | journalentry drop+recreate | DB (in-flight) |
+| — | — | iter-42 | incident family alter+create+5 enums | DB (in-flight) |
+
+Four parallel in-flight branches at iter-43 session start. All share `093959b` as base.
+
+### Implemented Changes (this session)
+
+**Code (PR `fix/iter-43-incident-status-enum-type-parity`):**
+
+1. **`backend/app/migrations/versions/20260529_iter43_incident_status_enum_type_parity.py`** (+95 new) — revision `20260529_iter43_incident_status_enum`, down_revision `20260529_iter38_server_default_c`. Upgrade:
+   - `INCIDENT_STATUS_VALUES` module-level literal tuple (5 UPPER_CASE attribute names).
+   - `incident_status_enum.create(op.get_bind(), checkfirst=True)` — PG-only; no-op on SQLite.
+   - `op.batch_alter_table("incident")` block with `alter_column("status", existing_type=sa.String(length=64), type_=incident_status_enum, existing_nullable=False, postgresql_using="status::text::incidentstatus")`. The `postgresql_using` cast is dialect-specific (ignored on SQLite).
+   - Downgrade: inverse `alter_column` to `sa.String(length=64)` + `sa.Enum(name="incidentstatus").drop(...)`. Order matters: alter before drop (can't drop type while col references it).
+
+2. **`backend/tests/test_iter43_incident_status_enum_type_parity.py`** (+265 new) — 11-test pin file:
+   - Revision chain pin (`iter-43 → iter-38`).
+   - `INCIDENT_STATUS_VALUES` literal-tuple pin (not aliased) — same `_NEW_ENUMS` resolution pattern as iter-42.
+   - Source-order pin: enum `.create(...)` must precede `alter_column` in upgrade.
+   - `batch_alter_table("incident")` block presence + count.
+   - `alter_column("status")` argument shape: `existing_type=sa.String`, `type_=sa.Enum` (accepts inline call or Name binding), `existing_nullable=False`, `postgresql_using` contains "incidentstatus".
+   - Downgrade symmetry: alter_column reverts to `sa.String`; enum `.drop(...)` present; source-order pin (alter before drop).
+
+**Doc:**
+
+3. New `## Last Agent Handoff (2026-05-29, Session 90 ...)` block prepended (this entry).
+
+### Changed / New Files
+
+- `backend/app/migrations/versions/20260529_iter43_incident_status_enum_type_parity.py` — +95 new.
+- `backend/tests/test_iter43_incident_status_enum_type_parity.py` — +265 new.
+- `AI_IMPLEMENTATION_REPORT.md` — +~80 / 0 (this handoff).
+
+### Decisions
+
+- **Chain from iter-38 (not iter-42), parallel-siblings.** iter-43 touches only the existing `incident.status` col; iter-42 adds 6 NEW cols to incident. No code-level conflict between them. By chaining both from iter-38, they can merge independently (alembic merge_heads needed). The alternative (iter-43 stacked on iter-42) would block iter-43 PR review until iter-42 merges — operationally fragile. Five sibling heads on iter-38 (iter-40, iter-41, iter-42, iter-43, plus future) is the cost of independent merging; user is already paying it for the other three.
+- **No new audit infrastructure.** Type drift (Enum vs String, types of varying length, etc.) could merit a dedicated `enum_type_parity.py` audit, but the known surface for this defect is just `incident.status`. Building infrastructure for a single case would invert the build-then-discover pattern that worked for iter-36 (server_default audit found 52 cols across 40 tables → worth a full audit). Defer until a second type-drift case is observed.
+- **Closed loop via AST pins instead of audit.** Without a type-parity audit, the "closed-loop" assertion is structural: migration declares the right alter_column shape, with the right kwargs, in the right order. This is weaker than an audit but mechanically sufficient — the audit's role is "spot what's missing"; the migration explicitly does it.
+- **`postgresql_using="status::text::incidentstatus"` — double cast.** The single cast `status::incidentstatus` would fail if PG's implicit VARCHAR-to-enum cast isn't available (depends on lc_collate and PG version). The double cast `column::text::incidentstatus` is the defensive idiom: first force to text, then explicit cast. Works across PG 12+.
+- **`batch_alter_table` instead of direct `op.alter_column`.** SQLite doesn't support ALTER COLUMN TYPE — Alembic emulates via table-rebuild. `batch_alter_table` handles both. iter-37/38 used direct `op.alter_column` for server_default changes (which SQLite DOES support). Different ops, different portability constraints.
+- **Source-order pin tests.** Two ordering rules: `enum.create` BEFORE `alter_column` (upgrade); `alter_column` BEFORE `enum.drop` (downgrade). Both pinned via `lineno` comparison. Cheap insurance against future-maintainer refactors that swap statements.
+
+### Issues Fixed
+
+- **`incident.status` type-parity closed.** Migration now declares `Enum(incidentstatus)` matching the model's `Enum(IncidentStatus, name="incidentstatus")`. The last known model↔migration type drift on the incident family is resolved. Combined with iter-42's column-presence closure, `incident` table is now fully model-aligned (column presence + type).
+
+### Known Problems / Risks
+
+- **Empty-table assumption inherited from iter-42.** The `USING status::text::incidentstatus` cast on PG would fail if any existing row's status string isn't in the enum's UPPER_CASE label set (e.g. lowercase `'reported'`). Same pre-deploy verification needed: `SELECT DISTINCT status FROM incident` against prod.
+- **5 in-flight branches all chain from iter-38.** Operational merge ordering is now: 4 alembic merge_heads operations needed after all in-flight branches land (one fewer than 5−1 because the FIRST migration-bearing merge creates no head conflict).
+- **No closed-loop audit for type drift.** A type-parity audit would be valuable infrastructure but is deferred. If future iters surface more type drift, build it then.
+- **Heavyweight audit still hangs.** Unchanged.
+- **CI still off** (PR #598). Unchanged.
+- **iter-30/31 abandoned remote branches still persist.** Unchanged.
+- **Double-merged iter-37 (PRs #610 + #611)** — unchanged.
+
+### Validation
+
+- `py -3 -m py_compile backend/app/migrations/versions/20260529_iter43_incident_status_enum_type_parity.py backend/tests/test_iter43_incident_status_enum_type_parity.py` → OK.
+- `py -3 -m pytest backend/tests/test_iter43_incident_status_enum_type_parity.py -v` → **11/11 pass** in 0.44s.
+- `py -3 -m pytest backend/tests/test_iter43_incident_status_enum_type_parity.py backend/tests/test_iter37_server_default_cohort.py backend/tests/test_iter38_server_default_cohort.py backend/tests/test_audit_column_drift_lite.py backend/tests/test_audit_server_default_parity.py backend/tests/test_iter32_business_drift_cohort.py` → **298/298 pass** in 11.37s. No regression in any adjacent audit/cohort suite.
+- **Not validated:** full backend test suite + actual alembic upgrade against PG.
+
+### Next Steps
+
+**Operational:**
+
+1. Review iter-43 PR (95 prod + 265 test LOC + ~80 line handoff).
+2. **Merge ordering for 5 in-flight branches:**
+   - iter-39 first (audit-only, no migration → no chain conflict).
+   - iter-40/41/42/43 in any order — each merge after the first migration-bearing one triggers `alembic merge heads`. 4 merges → 3 alembic merge_heads no-op migrations total.
+3. **Pre-deploy verification for incident table** — same `SELECT count(*) FROM incident` + `SELECT DISTINCT status FROM incident` as iter-42's guidance.
+
+**Technical (next session — primary options):**
+
+4. **Type-parity audit (if more drift surfaces)** — build `scripts/audit/enum_type_parity.py` to detect Enum-vs-String mismatches systematically. ~200 LOC audit + tests. Closes a defect class rather than a single case. Worth doing if another known case appears.
+5. **Branch cleanup (iter-30/31 abandoned remotes)** — destructive-git permission needed. ~5 min.
+6. **iter-37 PR #610/#611 double-merge dedupe** — unchanged.
+7. **CI re-enablement** — strategic.
+8. **FLOW seed for RB-002** — non-blocking polish.
+9. **Heavyweight audit hang diagnosis** — `check_orm_migration_drift.py` still hangs locally; could be diagnosed.
+
+**Стартовая команда для следующей сессии:**
+
+```bash
+git checkout main && git pull
+gh pr list --state open --limit 10
+py -3 scripts/audit/column_drift_lite.py    # expect 0/0
+py -3 scripts/audit/server_default_parity.py # expect 0/0
+py -3 scripts/audit/version_column_drift.py  # expect 0/2 critical (unchanged)
+# Then pick direction from #4-9 above.
+```
+
+**Branch suggestion для следующей сессии:** `chore/cleanup-abandoned-iter30-31-branches` (если cleanup), `feat/audit-enum-type-parity` (если audit infrastructure), `chore/heavyweight-audit-hang-diagnosis` (если debug).
+
+---
+
 ## Last Agent Handoff (2026-05-29, Session 85 — iter-38 server_default cohort closure: Subset C (33 cols / 29 tables) — entire defect class closed)
 
 - **Дата:** 2026-05-29. Ветка `fix/iter-38-server-default-cohort-subset-C` от `9d29a45` (current `main`, includes iter-37 merged as [#611](https://github.com/aiprocadm/prt_ot_doc/pull/611)). Open PRs at session start: none. iter-38 is unstacked — clean branch from main, no pending dependencies.
