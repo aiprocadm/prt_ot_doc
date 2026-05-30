@@ -1,5 +1,31 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-30, W-A cont. — item #1 warehouse gate verified+closed; item #2 prescriptions lifecycle FSM+evidence+verification shipped)
+
+- **Дата:** 2026-05-30. Ветки: `fix/featureenablement-cross-base-fk` (NS#1 closed) + `feat/wa-prescriptions-lifecycle` (NS#2, **stacked** on the FK-fix branch; both local-only, kept as-is per user workflow).
+- **Агент:** Claude Opus 4.8 (local Win+Py3.13.7 venv; explanatory style). Full driver: **brainstorming → writing-plans → executing-plans → finishing-a-development-branch** for NS#2.
+- **Задача:** continue the W-A roadmap (`docs/superpowers/specs/2026-05-29-tz-completeness-roadmap-design.md` §4). NS#1 (warehouse gate) was code-complete but undocumented; NS#2 (prescriptions lifecycle) was the next missing item.
+
+### NS#1 — `TZ-3.2-V11-01` warehouse gate: VERIFIED + matrix synced (CLOSED)
+- Prior commit `977f5df` (cross-base FK drop + per-tenant `warehouse` gate) was **verified green on Py3.13/Win: 17/17** (2 migration-pin + 8 unit `test_feature_flags`/`test_feature_model_import` + 7 API `test_ppe_warehouse_api`). The native-violation only bites on aggregate app-booting runs, not a single file.
+- Matrix line 32 still claimed the gate was *"blocked on feature.py cross-base FK fix"* — **stale**. Synced to reality (added `feature_flags`, the wa02 migration, the FK/gate/flag tests; rewrote the plan note). Validator green (46 rows). Committed `52ed800`.
+
+### NS#2 — `TZ-3.4-V12-01` prescriptions lifecycle (FSM + evidence + verification) SHIPPED
+- **Spec** `f69560a` (`docs/superpowers/specs/2026-05-30-prescriptions-lifecycle-design.md`), **plan** `30d03f5` (`docs/superpowers/plans/2026-05-30-prescriptions-lifecycle.md`, 6 TDD tasks), then **7 implementation commits** `3719fd9..eb1cb74`.
+- **Implemented:** `PrescriptionStatus.VERIFIED` + `evidence`/`closed_at` columns; pure FSM `app/domains/prescriptions/lifecycle.py` (linear+rework: OPEN→IN_PROGRESS→COMPLETED→VERIFIED; COMPLETED→IN_PROGRESS on failed re-inspection; CANCELLED from OPEN/IN_PROGRESS; VERIFIED/CANCELLED terminal); additive migration `20260530_wa03` (cols + `ALTER TYPE prescriptionstatus ADD VALUE verified`, PG-guarded, transaction-safe since the value is unused in-migration — mirrors next55); schemas (status off Create/Update, new `PrescriptionTransition`, evidence/closed_at on Read); **`POST /prescriptions/{id}/transition`** (409 invalid, **403 admin/owner-only verify** = segregation of duties, 422 evidence-on-complete, `closed_at` on terminal, audit `action=transition`); PATCH drops status; create forces OPEN.
+- **Decisions:** single transition endpoint (vs PATCH-guard / verb-endpoints); verify-segregation enforced to `{admin,owner}` (user choice); matrix stays **`partial`** (escalations + closure-rate `% закрытия` deferred → P10); evidence is free-text (file-binding deferred).
+- **Tests (Py3.13/Win, CI 3.12.12 canonical):** 32 app-free (model/FSM/migration/schemas) + 8 API lifecycle + 2 migrated integration + 13 prescription etag (one adapted to /transition) + 1 access-parity → **all green**. Migration-pin assertion made format-agnostic.
+
+### Known problems / risks
+- **Pre-existing failure (NOT mine, out of scope):** `tests/api/test_ppe_prescriptions_cache_etag_contract.py::test_prescriptions_cross_tenant_etag_does_not_leak` fails with `403 "Tenant assignment mismatch"` on Py3.13/Win. **Proven pre-existing** by checking out base `52ed800` and reproducing the identical failure in isolation with a fresh test DB. It's a two-tenant `make_auth_headers(ADMIN, tenant="beta")` harness issue, likely env-specific; CI on 3.12.12 is canonical. See [[local_env_drift_windows]].
+- Full `make cs:test` not run (no Docker/Py3.12.12 locally, per CLAUDE.md). Alembic live `upgrade heads` not run (graph verified app-free: wa03 is the new W-A head, count stays 8).
+
+### Next Steps
+1. **Operational (user's purview):** PR/merge the two stacked branches (FK-fix first, then prescriptions targeting it), alembic `merge_heads`, then `upgrade heads` on PG.
+2. **NS#3 / W-A item #3:** coverage-gate ≥85% (`TZ-6.3-V11-01`) together with **W0** (re-enable CI).
+3. **Prescriptions follow-ups (deferred → P10):** escalations (overdue → notify), closure-rate (`% закрытия`) aggregate (closed_at already provisioned), file-bound evidence, per-user verifier≠assignee identity check.
+- Матрица: `TZ-3.2-V11-01` → `done`; `TZ-3.4-V12-01` → `partial` (FSM+evidence+verification shipped).
+
 ## Last Agent Handoff (2026-05-30, W-A — PPE warehouse skeleton landed: TZ-3.2-V11-01 `missing` → `done`; latent feature.py cross-base FK bug surfaced + flagged)
 
 - **Дата:** 2026-05-30. Ветка `feat/wa-ppe-warehouse-skeleton` (off `validate/all-six-branches-integration`, local-only).
