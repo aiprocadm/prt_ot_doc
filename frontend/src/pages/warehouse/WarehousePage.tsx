@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { opsApi, type PpeIssueDto, type PpeItemDto } from "@/api/ops";
+import { warehouseApi, type StockBatchDto, type StockLevelDto } from "@/api/warehouse";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
@@ -17,18 +17,21 @@ const WarehousePage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [query, setQuery] = useState("");
-  const [items, setItems] = useState<PpeItemDto[]>([]);
-  const [expiring, setExpiring] = useState<PpeIssueDto[]>([]);
+  const [levels, setLevels] = useState<StockLevelDto[]>([]);
+  const [batches, setBatches] = useState<StockBatchDto[]>([]);
 
   const load = async () => {
     setLoading(true);
     setError(null);
     try {
-      const snapshot = await opsApi.getPpeOverview();
-      setItems(snapshot.items);
-      setExpiring(snapshot.expiring);
+      const [levelsData, batchesData] = await Promise.all([
+        warehouseApi.listLevels(),
+        warehouseApi.listBatches()
+      ]);
+      setLevels(levelsData);
+      setBatches(batchesData);
     } catch (err) {
-      setError((err as ApiError) ?? { message: "Не удалось загрузить складские остатки" });
+      setError((err as ApiError) ?? { message: "Не удалось загрузить склад СИЗ" });
     } finally {
       setLoading(false);
     }
@@ -38,37 +41,26 @@ const WarehousePage = () => {
     void load();
   }, []);
 
-  const expiringByItemId = useMemo(() => {
-    const map = new Map<string, PpeIssueDto[]>();
-    expiring.forEach((issue) => {
-      map.set(issue.item_id, [...(map.get(issue.item_id) ?? []), issue]);
-    });
-    return map;
-  }, [expiring]);
+  const totalQuantity = useMemo(
+    () => levels.reduce((sum, level) => sum + level.total_quantity, 0),
+    [levels]
+  );
 
   const rows = useMemo(() => {
-    return items.map((item) => {
-      const relatedExpiring = expiringByItemId.get(item.id) ?? [];
-      const defaultWearDays = item.default_wear_days ?? 0;
-      const nearestExpiry = relatedExpiring
-        .map((issue) => issue.expires_at)
-        .filter(Boolean)
-        .sort()[0] ?? null;
-      const status = relatedExpiring.length > 0 ? "warning" : defaultWearDays <= 0 ? "draft" : "ready";
-      const searchBlob = [item.code, item.name, item.category, item.description].filter(Boolean).join(" ").toLowerCase();
+    return levels.map((level) => {
+      const status = level.total_quantity <= 0 ? "warning" : "ready";
+      const searchBlob = [level.item_name, level.item_id].filter(Boolean).join(" ").toLowerCase();
       return {
-        id: item.id,
-        sku: item.code,
-        name: item.name,
-        category: item.category,
-        wearDays: defaultWearDays,
-        certificate: nearestExpiry,
-        expiringCount: relatedExpiring.length,
+        id: level.item_id,
+        name: level.item_name,
+        quantity: level.total_quantity,
+        batchCount: level.batch_count,
+        nearestExpiry: level.nearest_certificate_expiry ?? null,
         status,
         searchBlob
       };
     });
-  }, [expiringByItemId, items]);
+  }, [levels]);
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -80,68 +72,67 @@ const WarehousePage = () => {
     <div className="space-y-4">
       <RegistryPageHeader
         title="Склад СИЗ"
-        description="Остатки каталога СИЗ и истекающие выдачи по текущему тенанту (данные API СИЗ)."
-        actions={<Badge variant="secondary">Истекающих выдач: {expiring.length}</Badge>}
+        description="Остатки и партии СИЗ по текущему тенанту (учёт партий, сроки сертификатов)."
+        actions={<Badge variant="secondary">Партий: {batches.length}</Badge>}
       />
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm text-muted-foreground">Позиции каталога</CardTitle>
+            <CardTitle className="text-sm text-muted-foreground">Позиции на складе</CardTitle>
           </CardHeader>
-          <CardContent className="text-3xl font-semibold">{loading ? "—" : items.length}</CardContent>
+          <CardContent className="text-3xl font-semibold">{loading ? "—" : levels.length}</CardContent>
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm text-muted-foreground">Истекают в 30 дней</CardTitle>
+            <CardTitle className="text-sm text-muted-foreground">Суммарный остаток</CardTitle>
           </CardHeader>
-          <CardContent className="text-3xl font-semibold">{loading ? "—" : expiring.length}</CardContent>
+          <CardContent className="text-3xl font-semibold">{loading ? "—" : totalQuantity}</CardContent>
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm text-muted-foreground">Без срока носки</CardTitle>
+            <CardTitle className="text-sm text-muted-foreground">Партий всего</CardTitle>
           </CardHeader>
-          <CardContent className="text-3xl font-semibold">{loading ? "—" : items.filter((item) => !item.default_wear_days).length}</CardContent>
+          <CardContent className="text-3xl font-semibold">{loading ? "—" : batches.length}</CardContent>
         </Card>
       </div>
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Номенклатура и риск истечения</CardTitle>
+          <CardTitle className="text-base">Остатки по номенклатуре</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <Input placeholder="Поиск по SKU, названию, категории" value={query} onChange={(event) => setQuery(event.target.value)} />
+          <Input
+            placeholder="Поиск по номенклатуре"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
           <ErrorState error={error ?? undefined} onRetry={load} />
           {loading ? <LoadingScreen label="Загрузка склада СИЗ" /> : null}
           {!loading && !error && filtered.length === 0 ? (
             <EmptyState
               title="Позиции не найдены"
-              description={query ? "Измените запрос поиска." : "В tenant ещё нет позиций СИЗ."}
+              description={query ? "Измените запрос поиска." : "В tenant ещё нет партий СИЗ на складе."}
             />
           ) : null}
           {!loading && !error && filtered.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>SKU</TableHead>
                   <TableHead>Номенклатура</TableHead>
-                  <TableHead>Категория</TableHead>
-                  <TableHead>Срок носки</TableHead>
+                  <TableHead>Остаток</TableHead>
+                  <TableHead>Партий</TableHead>
                   <TableHead>Ближайшее истечение</TableHead>
-                  <TableHead>Риск</TableHead>
+                  <TableHead>Статус</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.map((item) => (
                   <TableRow key={item.id}>
-                    <TableCell className="font-medium">{item.sku}</TableCell>
-                    <TableCell>{item.name}</TableCell>
-                    <TableCell>{item.category}</TableCell>
-                    <TableCell>{item.wearDays > 0 ? `${item.wearDays} дн.` : "Не задан"}</TableCell>
-                    <TableCell>{formatDate(item.certificate) || "—"}</TableCell>
+                    <TableCell className="font-medium">{item.name}</TableCell>
+                    <TableCell>{item.quantity}</TableCell>
+                    <TableCell>{item.batchCount}</TableCell>
+                    <TableCell>{formatDate(item.nearestExpiry) || "—"}</TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2">
-                        <StatusBadge status={item.status} />
-                        {item.expiringCount > 0 ? <span className="text-xs text-muted-foreground">{item.expiringCount} выдач</span> : null}
-                      </div>
+                      <StatusBadge status={item.status} />
                     </TableCell>
                   </TableRow>
                 ))}
