@@ -14,8 +14,13 @@ Each test covers one critical boundary.
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
+
+from app.models.models import Tenant
 
 
 @pytest.mark.anyio
@@ -282,6 +287,155 @@ async def test_session_contract_isolation(
         # If it succeeds, verify that JWT was actually bound to tenant-a
         # This is checked by middleware/auth layer
         pass
+
+
+# ---------------------------------------------------------------------------
+# Restored data-layer isolation tests (W1). These verify the foundational
+# invariant the audit doc claims for internal infra (audit/notifications/
+# outbox/webhooks/events): every record carries a NON-NULL tenant_id and a
+# tenant-scoped query never leaks the other tenant's rows. Seeded directly via
+# the tenant-aware session (no HTTP), so they are fast and deterministic.
+# ---------------------------------------------------------------------------
+
+
+async def _two_tenant_ids(session) -> tuple[str, str]:
+    """Return the (acme, beta) tenant ids — both are seeded by ``app_fixture``."""
+    acme = (await session.execute(select(Tenant).where(Tenant.slug == "acme"))).scalar_one()
+    beta = (await session.execute(select(Tenant).where(Tenant.slug == "beta"))).scalar_one()
+    return acme.id, beta.id
+
+
+@pytest.mark.anyio
+async def test_audit_log_isolation(sessionmaker) -> None:
+    """Audit logs are tenant-scoped (tenant_id non-null; no cross-tenant leak)."""
+    from app.models.models import AuditLog
+
+    assert AuditLog.__table__.c["tenant_id"].nullable is False
+
+    async with sessionmaker() as session:
+        acme_id, beta_id = await _two_tenant_ids(session)
+        session.add(AuditLog(tenant_id=acme_id, action="probe", object_type="t", object_id="audit-acme"))
+        session.add(AuditLog(tenant_id=beta_id, action="probe", object_type="t", object_id="audit-beta"))
+        await session.commit()
+
+    async with sessionmaker() as session:
+        rows = (
+            await session.execute(select(AuditLog).where(AuditLog.tenant_id == acme_id))
+        ).scalars().all()
+    object_ids = {r.object_id for r in rows}
+    assert "audit-acme" in object_ids
+    assert "audit-beta" not in object_ids
+
+
+@pytest.mark.anyio
+async def test_notification_isolation(sessionmaker) -> None:
+    """Notifications are tenant-scoped (tenant_id non-null; no cross-tenant leak)."""
+    from app.models.notifications import Notification, NotificationChannel, NotificationType
+
+    assert Notification.__table__.c["tenant_id"].nullable is False
+
+    channel = next(iter(NotificationChannel))
+    ntype = next(iter(NotificationType))
+    now = datetime.now(timezone.utc)
+
+    async with sessionmaker() as session:
+        acme_id, beta_id = await _two_tenant_ids(session)
+        for tid, tag in ((acme_id, "acme"), (beta_id, "beta")):
+            session.add(
+                Notification(
+                    tenant_id=tid,
+                    user_id=f"user-{tag}",
+                    channel=channel,
+                    type=ntype,
+                    title="probe",
+                    body="probe",
+                    dedup_key=f"dk-{tag}",
+                    scheduled_at=now,
+                )
+            )
+        await session.commit()
+
+    async with sessionmaker() as session:
+        rows = (
+            await session.execute(select(Notification).where(Notification.tenant_id == acme_id))
+        ).scalars().all()
+    keys = {r.dedup_key for r in rows}
+    assert "dk-acme" in keys
+    assert "dk-beta" not in keys
+
+
+@pytest.mark.anyio
+async def test_outbox_isolation(sessionmaker) -> None:
+    """Outbox messages are tenant-scoped (tenant_id non-null; no cross-tenant leak)."""
+    from app.models.models import Outbox
+
+    assert Outbox.__table__.c["tenant_id"].nullable is False
+
+    async with sessionmaker() as session:
+        acme_id, beta_id = await _two_tenant_ids(session)
+        session.add(Outbox(tenant_id=acme_id, event_type="probe", destination="https://acme.example"))
+        session.add(Outbox(tenant_id=beta_id, event_type="probe", destination="https://beta.example"))
+        await session.commit()
+
+    async with sessionmaker() as session:
+        rows = (
+            await session.execute(select(Outbox).where(Outbox.tenant_id == acme_id))
+        ).scalars().all()
+    destinations = {r.destination for r in rows}
+    assert "https://acme.example" in destinations
+    assert "https://beta.example" not in destinations
+
+
+@pytest.mark.anyio
+async def test_workflow_events_isolation(sessionmaker) -> None:
+    """Workflow/domain events (outbox_events) are tenant-scoped."""
+    from app.models.job_engine import OutboxEvent
+
+    assert OutboxEvent.__table__.c["tenant_id"].nullable is False
+
+    async with sessionmaker() as session:
+        acme_id, beta_id = await _two_tenant_ids(session)
+        session.add(OutboxEvent(tenant_id=acme_id, event_type="probe", event_id="wf-acme"))
+        session.add(OutboxEvent(tenant_id=beta_id, event_type="probe", event_id="wf-beta"))
+        await session.commit()
+
+    async with sessionmaker() as session:
+        rows = (
+            await session.execute(select(OutboxEvent).where(OutboxEvent.tenant_id == acme_id))
+        ).scalars().all()
+    event_ids = {r.event_id for r in rows}
+    assert "wf-acme" in event_ids
+    assert "wf-beta" not in event_ids
+
+
+@pytest.mark.anyio
+async def test_webhook_delivery_isolation(sessionmaker) -> None:
+    """Webhook endpoints + deliveries are tenant-scoped (cannot cross tenants)."""
+    from app.models.models import WebhookDelivery, WebhookEndpoint
+
+    assert WebhookDelivery.__table__.c["tenant_id"].nullable is False
+
+    async with sessionmaker() as session:
+        acme_id, beta_id = await _two_tenant_ids(session)
+        ep_a = WebhookEndpoint(tenant_id=acme_id, url="https://acme.example/hook")
+        ep_b = WebhookEndpoint(tenant_id=beta_id, url="https://beta.example/hook")
+        session.add_all([ep_a, ep_b])
+        await session.flush()
+        session.add(
+            WebhookDelivery(tenant_id=acme_id, endpoint_id=ep_a.id, event_id="wh-acme", status="pending")
+        )
+        session.add(
+            WebhookDelivery(tenant_id=beta_id, endpoint_id=ep_b.id, event_id="wh-beta", status="pending")
+        )
+        await session.commit()
+
+    async with sessionmaker() as session:
+        rows = (
+            await session.execute(select(WebhookDelivery).where(WebhookDelivery.tenant_id == acme_id))
+        ).scalars().all()
+    event_ids = {r.event_id for r in rows}
+    assert "wh-acme" in event_ids
+    assert "wh-beta" not in event_ids
 
 
 class TenantIsolationAuditChecklist:
