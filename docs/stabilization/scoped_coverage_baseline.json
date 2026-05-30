@@ -1,0 +1,22 @@
+{
+  "_note": "Scoped coverage ratchet floors for core/domain/services (TZ-6.3-V11-01). Floors are CONSERVATIVE SEEDS pending the first real CI coverage run, which should bootstrap them to the actual per-scope numbers (see docs/stabilization/coverage_climb_plan.md). 85% line is the documented North-Star target, NOT an immediate hard gate. Enforced by scripts/ci/check_scoped_coverage.py, currently wired into the disabled ci.yml and activating with W0 (CI re-enable).",
+  "measured_at": "2026-04-19 (overall 47% line proxy) / per-scope bootstrap pending first CI run",
+  "target_line_percent": 85.0,
+  "scopes": {
+    "core": {
+      "floor_line_percent": 40.0,
+      "floor_branch_percent": 25.0,
+      "patterns": ["backend/app/core/"]
+    },
+    "domain": {
+      "floor_line_percent": 35.0,
+      "floor_branch_percent": 22.0,
+      "patterns": ["backend/app/domains/"]
+    },
+    "services": {
+      "floor_line_percent": 25.0,
+      "floor_branch_percent": 18.0,
+      "patterns": ["backend/app/services/"]
+    }
+  }
+}
