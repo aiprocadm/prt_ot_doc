@@ -17,6 +17,7 @@ from app.api.helpers.etag import (
 )
 from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
+from app.core.feature_flags import is_feature_enabled
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.domains.ppe import issue_ppe_item, list_expiring_issues
@@ -368,6 +369,25 @@ async def update_issue(
     return _issue_schema(issue)
 
 
+# --- PPE warehouse (stock) pilot feature gate (W-A / TZ-3.2-V11-01) ---------
+# The /ppe/stock/* endpoints sit behind the per-tenant ``warehouse`` pilot flag
+# (docs/FEATURE_FLAGS.md). Default-on: a tenant only loses access by storing
+# FeatureEnablement(on=False) for Feature(code="warehouse"). Disabled tenants
+# get 404 (feature stays invisible) rather than 403.
+_WAREHOUSE_FEATURE_CODE = "warehouse"
+
+
+async def require_warehouse_feature(tenant: TenantDep, session: SessionDep) -> None:
+    if not await is_feature_enabled(session, str(tenant.id), _WAREHOUSE_FEATURE_CODE):
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "PPE warehouse feature is not enabled for this tenant",
+        )
+
+
+WarehouseFeatureGate = Depends(require_warehouse_feature)
+
+
 async def _get_batch(session: AsyncSession, tenant: Tenant, batch_id: str) -> PPEStockBatch:
     stmt = select(PPEStockBatch).where(
         PPEStockBatch.id == batch_id,
@@ -380,7 +400,11 @@ async def _get_batch(session: AsyncSession, tenant: Tenant, batch_id: str) -> PP
     return batch
 
 
-@router.get("/stock/batches", response_model=PPEStockBatchPage)
+@router.get(
+    "/stock/batches",
+    response_model=PPEStockBatchPage,
+    dependencies=[WarehouseFeatureGate],
+)
 async def list_stock_batches(
     request: Request,
     response: Response,
@@ -429,7 +453,10 @@ async def list_stock_batches(
 
 
 @router.post(
-    "/stock/batches", response_model=PPEStockBatchRead, status_code=status.HTTP_201_CREATED
+    "/stock/batches",
+    response_model=PPEStockBatchRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[WarehouseFeatureGate],
 )
 @audit_operation("create", "ppe_stock_batch")
 async def create_stock_batch(
@@ -457,7 +484,11 @@ async def create_stock_batch(
     return PPEStockBatchRead.model_validate(batch)
 
 
-@router.get("/stock/batches/{batch_id}", response_model=PPEStockBatchRead)
+@router.get(
+    "/stock/batches/{batch_id}",
+    response_model=PPEStockBatchRead,
+    dependencies=[WarehouseFeatureGate],
+)
 async def get_stock_batch(
     batch_id: str,
     tenant: TenantDep,
@@ -468,7 +499,11 @@ async def get_stock_batch(
     return PPEStockBatchRead.model_validate(batch)
 
 
-@router.patch("/stock/batches/{batch_id}", response_model=PPEStockBatchRead)
+@router.patch(
+    "/stock/batches/{batch_id}",
+    response_model=PPEStockBatchRead,
+    dependencies=[WarehouseFeatureGate],
+)
 @audit_operation("update", "ppe_stock_batch")
 async def update_stock_batch(
     batch_id: str,
@@ -485,7 +520,11 @@ async def update_stock_batch(
     return PPEStockBatchRead.model_validate(batch)
 
 
-@router.get("/stock/levels", response_model=PPEStockLevelPage)
+@router.get(
+    "/stock/levels",
+    response_model=PPEStockLevelPage,
+    dependencies=[WarehouseFeatureGate],
+)
 async def list_stock_levels(
     tenant: TenantDep,
     session: SessionDep,

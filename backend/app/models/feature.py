@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import Boolean, ForeignKey, Index, String, UniqueConstraint
+from sqlalchemy import Boolean, Index, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON
@@ -26,9 +26,17 @@ class Feature(SharedModel):
 class FeatureEnablement(TenantBaseModel):
     """Associates a feature flag with a tenant."""
 
+    # ``feature_id`` references the shared ``feature`` table (a SharedModel /
+    # SharedBase metadata), but FeatureEnablement lives in TenantBase metadata.
+    # A SQLAlchemy ForeignKey across the two declarative metadatas is
+    # unresolvable when ``TenantBase.metadata.create_all()`` runs before the
+    # ``after_configured`` cross-base mirror is registered (the ordering used by
+    # the test harness and create_all-first boot paths), raising
+    # NoReferencedTableError and breaking app startup. Like the repo's other
+    # tenant->shared references, keep this a plain column; the FK is unenforceable
+    # in this two-metadata setup anyway (TZ-3.2-V11-01).
     feature_id: Mapped[str] = mapped_column(
         String(36),
-        ForeignKey("feature.id", ondelete="CASCADE"),
         nullable=False,
     )
     on: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
