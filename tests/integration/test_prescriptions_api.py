@@ -46,12 +46,22 @@ async def test_prescription_crud_and_audit(
     assert list_response.status_code == 200
     assert any(item["id"] == prescription_id for item in list_response.json()["items"])
 
-    update_response = await async_client.patch(
-        f"/api/v1/prescriptions/{prescription_id}",
-        json={"status": PrescriptionStatus.COMPLETED.value},
+    # Status now moves only through /transition, following the FSM
+    # (OPEN -> IN_PROGRESS -> COMPLETED). A direct OPEN -> COMPLETED jump is no
+    # longer valid, and PATCH no longer accepts `status`.
+    move_in_progress = await async_client.post(
+        f"/api/v1/prescriptions/{prescription_id}/transition",
+        json={"to": PrescriptionStatus.IN_PROGRESS.value},
         headers=headers,
     )
-    assert update_response.status_code == 200
+    assert move_in_progress.status_code == 200, move_in_progress.text
+
+    update_response = await async_client.post(
+        f"/api/v1/prescriptions/{prescription_id}/transition",
+        json={"to": PrescriptionStatus.COMPLETED.value, "evidence": "corrective plan attached"},
+        headers=headers,
+    )
+    assert update_response.status_code == 200, update_response.text
     assert update_response.json()["status"] == PrescriptionStatus.COMPLETED.value
 
     async with sessionmaker() as session:

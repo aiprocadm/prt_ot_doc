@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
@@ -16,12 +17,20 @@ from app.api.helpers.etag import (
 )
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
+from app.domains.prescriptions.lifecycle import (
+    VERIFY_ROLES,
+    InvalidTransition,
+    is_terminal,
+    requires_evidence,
+    validate_transition,
+)
 from app.models.models import Incident, Inspection, Prescription, PrescriptionStatus, User
 from app.models.tenanting import Tenant
 from app.schemas.prescriptions import (
     PrescriptionCreate,
     PrescriptionPage,
     PrescriptionRead,
+    PrescriptionTransition,
     PrescriptionUpdate,
 )
 from app.services.audit import AuditService
@@ -191,7 +200,6 @@ async def create_prescription(
         incident_id=payload.incident_id,
         description=payload.description,
         due_at=payload.due_at,
-        status=payload.status,
         assignee_id=payload.assignee_id,
     )
     session.add(record)
@@ -262,6 +270,84 @@ async def update_prescription(
         request_id=getattr(request.state, "trace_id", None),
         user_agent=request.headers.get("user-agent"),
         details={"status": record.status.value},
+    )
+    await session.commit()
+    await session.refresh(record)
+    return PrescriptionRead.model_validate(record)
+
+
+@router.post("/prescriptions/{prescription_id}/transition", response_model=PrescriptionRead)
+async def transition_prescription(
+    request: Request,
+    prescription_id: str,
+    payload: PrescriptionTransition,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PrescriptionRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
+    record = await _get_prescription(session, str(tenant.id), prescription_id)
+    current = record.status
+    target = payload.to
+
+    try:
+        validate_transition(current, target)
+    except InvalidTransition as exc:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=_error_detail("prescription_invalid_transition", str(exc)),
+        )
+
+    # Idempotent no-op: same state, no write, no audit row.
+    if current == target:
+        return PrescriptionRead.model_validate(record)
+
+    # Segregation of duties: only admin/owner may verify (повторная проверка).
+    if target == PrescriptionStatus.VERIFIED:
+        roles = {value.lower() for value in access.to_auth_context().roles}
+        if not roles & VERIFY_ROLES:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                detail=_error_detail(
+                    "prescription_verify_forbidden",
+                    "Only admin or owner may verify prescriptions",
+                ),
+            )
+
+    # Evidence is required to mark a prescription completed (payload or stored).
+    effective_evidence = payload.evidence if payload.evidence is not None else record.evidence
+    if requires_evidence(target) and not (effective_evidence and effective_evidence.strip()):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=_error_detail(
+                "evidence_required", "Evidence is required to complete a prescription"
+            ),
+        )
+
+    record.status = target
+    if payload.evidence is not None:
+        record.evidence = payload.evidence
+    if is_terminal(target):
+        record.closed_at = datetime.now(timezone.utc)
+
+    audit = AuditService(session)
+    ip = request.client.host if request.client else "unknown"
+    await audit.log_event(
+        tenant_id=str(tenant.id),
+        action="transition",
+        object_type="prescription",
+        object_id=record.id,
+        user_id=getattr(access.user, "id", None),
+        ip=ip,
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        details={
+            "from": current.value,
+            "to": target.value,
+            "evidence_present": bool(record.evidence),
+            "note": payload.note,
+        },
     )
     await session.commit()
     await session.refresh(record)
