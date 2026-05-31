@@ -374,7 +374,7 @@ async def test_prescriptions_hit_returns_304(
 
 
 @pytest.mark.asyncio
-async def test_prescriptions_etag_changes_after_patch(
+async def test_prescriptions_etag_changes_after_status_transition(
     async_client: AsyncClient, make_auth_headers, sessionmaker, data_factory: TestDataFactory
 ) -> None:
     async with sessionmaker() as session:
@@ -394,12 +394,14 @@ async def test_prescriptions_etag_changes_after_patch(
     first = await async_client.get("/api/v1/prescriptions", headers=headers)
     initial_etag = first.headers["ETag"]
 
-    patch = await async_client.patch(
-        f"/api/v1/prescriptions/{prescription['id']}",
-        json={"status": PrescriptionStatus.COMPLETED.value},
+    # Status now moves via /transition (PATCH no longer accepts status); a valid
+    # OPEN -> IN_PROGRESS transition mutates the row and must invalidate the etag.
+    transition = await async_client.post(
+        f"/api/v1/prescriptions/{prescription['id']}/transition",
+        json={"to": PrescriptionStatus.IN_PROGRESS.value},
         headers=headers,
     )
-    assert patch.status_code == status.HTTP_200_OK
+    assert transition.status_code == status.HTTP_200_OK
 
     second = await async_client.get("/api/v1/prescriptions", headers=headers)
     assert second.headers["ETag"] != initial_etag
@@ -500,8 +502,16 @@ async def test_prescriptions_cross_tenant_etag_does_not_leak(
         company_a_id, site_a_id = str(company_a.id), str(site_a.id)
         company_b_id, site_b_id = str(company_b.id), str(site_b.id)
 
-    headers_a = await make_auth_headers(RoleEnum.ADMIN, tenant="acme")
-    headers_b = await make_auth_headers(RoleEnum.ADMIN, tenant="beta")
+    # Distinct per-tenant emails: make_auth_headers' user lookup is not
+    # tenant-scoped, so reusing the same role+default-email across tenants would
+    # return tenant A's user for the tenant B call and 403 "Tenant assignment
+    # mismatch" (see tests/conftest.py make_auth_headers docstring).
+    headers_a = await make_auth_headers(
+        RoleEnum.ADMIN, tenant="acme", email="admin-acme@example.com"
+    )
+    headers_b = await make_auth_headers(
+        RoleEnum.ADMIN, tenant="beta", email="admin-beta@example.com"
+    )
     insp_a = await _seed_inspection(
         async_client, headers_a, company_id=company_a_id, site_id=site_a_id
     )
