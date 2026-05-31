@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
@@ -20,6 +20,7 @@ from app.core.tenant_validation import TenantContextValidator
 from app.domains.prescriptions.lifecycle import (
     VERIFY_ROLES,
     InvalidTransition,
+    is_overdue,
     is_terminal,
     requires_evidence,
     validate_transition,
@@ -46,6 +47,13 @@ _PRESCRIPTION_WRITE_ROLES = ["admin", "owner", "hr", "line_manager"]
 
 def _error_detail(code: str, message: str) -> dict[str, str]:
     return {"code": code, "message": message}
+
+
+def _to_read(record: Prescription, *, today: date) -> PrescriptionRead:
+    """Serialize a prescription with a today-relative is_overdue flag."""
+    return PrescriptionRead.model_validate(record).model_copy(
+        update={"is_overdue": is_overdue(record.due_at, record.status, today)}
+    )
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
@@ -135,6 +143,7 @@ async def list_prescriptions(
     offset: int = Query(0, ge=0),
 ) -> PrescriptionPage | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
+    today = datetime.now(timezone.utc).date()
 
     stmt = select(Prescription).where(
         Prescription.tenant_id == tenant.id, Prescription.deleted_at.is_(None)
@@ -173,7 +182,7 @@ async def list_prescriptions(
             headers=build_not_modified_headers(etag),
         )
     return PrescriptionPage(
-        items=[PrescriptionRead.model_validate(item) for item in items],
+        items=[_to_read(item, today=today) for item in items],
         total=int(total or 0),
     )
 
@@ -219,7 +228,7 @@ async def create_prescription(
     )
     await session.commit()
     await session.refresh(record)
-    return PrescriptionRead.model_validate(record)
+    return _to_read(record, today=datetime.now(timezone.utc).date())
 
 
 @router.get("/prescriptions/{prescription_id}", response_model=PrescriptionRead)
@@ -232,7 +241,7 @@ async def get_prescription(
     TenantContextValidator.ensure_tenant_context(tenant)
 
     record = await _get_prescription(session, str(tenant.id), prescription_id)
-    return PrescriptionRead.model_validate(record)
+    return _to_read(record, today=datetime.now(timezone.utc).date())
 
 
 @router.patch("/prescriptions/{prescription_id}", response_model=PrescriptionRead)
@@ -273,7 +282,7 @@ async def update_prescription(
     )
     await session.commit()
     await session.refresh(record)
-    return PrescriptionRead.model_validate(record)
+    return _to_read(record, today=datetime.now(timezone.utc).date())
 
 
 @router.post("/prescriptions/{prescription_id}/transition", response_model=PrescriptionRead)
@@ -301,7 +310,7 @@ async def transition_prescription(
 
     # Idempotent no-op: same state, no write, no audit row.
     if current == target:
-        return PrescriptionRead.model_validate(record)
+        return _to_read(record, today=datetime.now(timezone.utc).date())
 
     # Segregation of duties: only admin/owner may verify (повторная проверка).
     if target == PrescriptionStatus.VERIFIED:
@@ -351,4 +360,4 @@ async def transition_prescription(
     )
     await session.commit()
     await session.refresh(record)
-    return PrescriptionRead.model_validate(record)
+    return _to_read(record, today=datetime.now(timezone.utc).date())

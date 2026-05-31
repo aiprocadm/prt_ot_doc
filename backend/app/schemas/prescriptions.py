@@ -45,6 +45,7 @@ class PrescriptionRead(BaseSchema):
     closed_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    is_overdue: bool = False
 
 
 class PrescriptionPage(BaseSchema):
