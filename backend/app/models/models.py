@@ -2541,6 +2541,7 @@ class PrescriptionStatus(str, enum.Enum):
     OPEN = "open"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
+    VERIFIED = "verified"
     CANCELLED = "cancelled"
 
 
@@ -2563,6 +2564,8 @@ class Prescription(TenantBaseModel, SoftDeleteMixin):
     assignee_id: Mapped[str | None] = mapped_column(
         ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    evidence: Mapped[str | None] = mapped_column(Text)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     inspection: Mapped[Inspection] = relationship("Inspection")
     incident: Mapped[Incident | None] = relationship("Incident")

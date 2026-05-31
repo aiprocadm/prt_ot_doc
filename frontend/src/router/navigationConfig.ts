@@ -118,6 +118,7 @@ export const MAIN_NAV_GROUPS: NavGroup[] = [
       { label: "Тенанты и роли", to: "/admin", icon: Wrench, permission: PERMISSIONS.ADMIN_MANAGE_ROLES },
       { label: "Биллинг", to: "/admin/billing", icon: Briefcase, permission: PERMISSIONS.ADMIN_MANAGE_ROLES },
       { label: "Исходящая очередь", to: "/admin/outbox", icon: Archive, permission: PERMISSIONS.ADMIN_MANAGE_ROLES },
+      { label: "Состояние системы", to: "/admin/health", icon: Activity, permission: PERMISSIONS.ADMIN_MANAGE_ROLES },
       { label: "Журнал аудита", to: "/audit", icon: History, permission: PERMISSIONS.AUDIT_VIEW },
       { label: "Настройки", to: "/settings", icon: Settings, permission: PERMISSIONS.SETTINGS_VIEW },
       { label: "Синхронизация (offline)", to: "/help/sync-conflicts", icon: History, permission: PERMISSIONS.SETTINGS_VIEW }

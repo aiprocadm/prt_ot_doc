@@ -1,5 +1,91 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-30, W-A item #3 — scoped coverage gate + climb plan shipped: TZ-6.3-V11-01 `missing` → `partial`)
+
+- **Дата:** 2026-05-30. Ветка `feat/wa-coverage-gate` от `main` (093959b; **независима** от prescriptions/FK-веток — это coverage-инфраструктура). Local-only, kept as-is per user workflow. (Параллельно на других локальных ветках: NS#1 warehouse-gate `done` + NS#2 prescriptions lifecycle `partial`.)
+- **Агент:** Claude Opus 4.8 (local Win+Py3.13.7). Driver: design-lite (выбор подхода через вопрос) → TDD execution → finishing. User: "continue from where you left off" + перешёл на русский.
+- **Задача:** W-A item #3 `TZ-6.3-V11-01` — coverage-gate ≥85% для core/domain/services **или** explicit climb plan. Пользователь выбрал «инструментарий + climb-plan» (CI отключён → живой замер локально невозможен).
+
+### Implemented (4 commits `55eff42..8cc540c`)
+- `scripts/ci/check_scoped_coverage.py` — scoped **ratchet**-гейт (floor по core/domain/services) + трекер дистанции до 85% North-Star. Чистое ядро `evaluate(coverage, baseline, target)` без I/O + CLI `main(argv)`.
+- `backend/tests/test_check_scoped_coverage.py` — 6 app-free юнит-тестов на синтетических `coverage.json` (логика гейта проверена детерминированно без живого прогона).
+- `docs/stabilization/scoped_coverage_baseline.json` — консервативные seed-floors (core 40 / domain 35 / services 25 line), bootstrap на первом CI-прогоне.
+- `docs/stabilization/coverage_climb_plan.md` — scope, baseline (47% overall, 2026-04-19), вехи M1–M4 (бить по самым низким: services), ratchet + bootstrap механика.
+- Шаг «Scoped coverage climb gate» вписан в `.github/workflows/ci.yml.disabled` (после whole-app baseline-чека). YAML провалидирован. **Остаётся выключенным до W0.**
+
+### Decisions
+- **Ratchet, а не hard-85.** При 47% overall мгновенный ≥85% завалил бы каждый билд; 85% — задокументированный North-Star, floor поднимается по мере добавления тестов. Требование ТЗ «≥85% **или** explicit climb plan» удовлетворено веткой climb plan.
+- **Статус `partial`, не `done`:** гейт корректен и протестирован, но дремлет (CI off), а floors — seeds (не реальный замер). Активация + bootstrap floors = с W0.
+- Ветка от `main`, не стекается на prescriptions/FK — независимая инфраструктура.
+
+### Validation
+- `test_check_scoped_coverage.py` → **6/6 pass** (Py3.13/Win). Integration-smoke: реальный baseline + синтетический coverage → корректный отчёт (services REGRESSED → exit 1). Matrix-валидатор → 46 rows valid. YAML `ci.yml.disabled` парсится.
+- Реальные per-scope цифры — CI-canonical (локально полный app-booting прогон недоступен, `[[local_env_drift_windows]]`).
+
+### Next Steps
+1. **W0 (user's purview):** re-enable CI → первый прогон bootstrap'ит реальные floors в `scoped_coverage_baseline.json`, гейт оживает.
+2. Восхождение по `coverage_climb_plan.md` (M1: services ≥55%) — отдельная работа на много сессий, предпочтительно app-free юнит-тесты.
+3. Operational: PR/merge ветки (независимая, от main).
+- Матрица: `TZ-6.3-V11-01` → `partial`.
+
+## Last Agent Handoff (2026-05-31, W1 — tenant-isolation audit suite REPAIRED: 1/8 + 5 missing → 13/13 green)
+
+- **Дата:** 2026-05-31. Ветка `feat/wa-tenant-isolation` от `main` (093959b; **независима** от prescriptions/coverage-веток). Local-only, kept as-is per user workflow.
+- **Агент:** Claude Opus 4.8 (local Win+Py3.13.7). Driver: **systematic-debugging** (ultrathink). User: "продолжай" (русский).
+- **Задача:** W1 / Phase 1.3 tenant-isolation audit. Roadmap-framing: «восстановить 5 удалённых тестов + чек-лист + docs». Реальность хуже: backing-сьюит был дырявым (см. ниже).
+
+### Discovery (integrity gap)
+- `docs/TENANT_ISOLATION_BOUNDARIES.md` утверждал «20/20 ✅ VERIFIED», но `tests/test_tenant_isolation_audit.py` был **1/8 passing + 5 тестов удалены** → ложная уверенность в безопасности мультитенантности (SOC2/GDPR-релевантно).
+
+### Root cause (2 причины)
+- **A:** тесты использовали **несидированные** слаги `tenant-a`/`tenant-b`; харнесс dual-seed'ит `{test, acme, beta, gamma, delta, zeta, epsilon}` (public + TestSession, совпадающие id, `conftest.py:141-176`).
+- **B:** один и тот же `role+default-email` на двух тенантах → документированная ловушка `make_auth_headers` (`conftest.py:269-292`): user-lookup по email НЕ tenant-scoped → 403 "Tenant assignment mismatch". (`User.email` unique **per-tenant** — `Index("ix_user_email","tenant_id","email",unique=True)` — поэтому «правильный» глобальный фикс безопасен, но автор отложил.)
+- Подтверждено working-example'ом: `test_ppe_warehouse_api.py::test_batches_tenant_isolation` (проходит) = seeded `beta` + distinct `email=`.
+
+### Implemented (4 commits `85da4ef..aa99178`)
+- **W1-T1 (`85da4ef`):** тесты + `*_multi_tenant` фикстуры (единственный потребитель — этот файл) → seeded `acme`/`beta` + distinct per-tenant emails. Document-generation тест переформулирован в `test_cannot_access_other_tenant_template` (read-by-ID) — generate-payload хрупкий + триггерит отдельный error-handler 500-баг. → **8/8 green**.
+- **W1-T2 (`1128ee4`):** восстановлены 5 удалённых тестов (audit_log / notification / outbox / workflow_events / webhook_delivery isolation) как data-layer тесты: `tenant_id` non-null + records в acme/beta не текут через tenant-scoped query. → **13/13 green**.
+- **W1-T3 (`aa99178`):** `TENANT_ISOLATION_BOUNDARIES.md` сделан честным — dated W1 repair note + исправлены устаревшие test-ссылки (document→template, 20→13).
+
+### Found / spawned bugs
+- **error-handler 500-bug (spawned task):** `backend/app/api/error_handlers.py:184` — `TypeError: Object of type ValueError is not JSON serializable`, когда Pydantic `@model_validator` бросает `ValueError` (любой такой → 500 вместо 422). Найден на `/documents/generate`. Реальный production-relevant дефект, вне scope W1.
+
+### Validation
+- `tests/test_tenant_isolation_audit.py` → **13/13 pass** (Py3.13/Win via PowerShell). Zero blast radius (фикстуры — single-consumer). CI 3.12.12 canonical для полного прогона.
+
+### Next Steps
+1. **Operational (user's purview):** PR/merge ветку (от main, независимо).
+2. **Loose end (одна строка):** `test_prescriptions_cross_tenant_etag_does_not_leak` на ветке `feat/wa-prescriptions-lifecycle` — тот же баг; фикс = distinct emails. См. [[local_env_drift_windows]].
+3. Починить error-handler 500-bug (spawned task).
+4. Опционально: «правильный» tenant-scoped фикс `make_auth_headers` (безопасен — email per-tenant unique).
+- W1 / Phase 1.3 tenant-isolation: **done** (suite 13/13, doc honest).
+
+## Last Agent Handoff (2026-05-30, W-A cont. — item #1 warehouse gate verified+closed; item #2 prescriptions lifecycle FSM+evidence+verification shipped)
+
+- **Дата:** 2026-05-30. Ветки: `fix/featureenablement-cross-base-fk` (NS#1 closed) + `feat/wa-prescriptions-lifecycle` (NS#2, **stacked** on the FK-fix branch; both local-only, kept as-is per user workflow).
+- **Агент:** Claude Opus 4.8 (local Win+Py3.13.7 venv; explanatory style). Full driver: **brainstorming → writing-plans → executing-plans → finishing-a-development-branch** for NS#2.
+- **Задача:** continue the W-A roadmap (`docs/superpowers/specs/2026-05-29-tz-completeness-roadmap-design.md` §4). NS#1 (warehouse gate) was code-complete but undocumented; NS#2 (prescriptions lifecycle) was the next missing item.
+
+### NS#1 — `TZ-3.2-V11-01` warehouse gate: VERIFIED + matrix synced (CLOSED)
+- Prior commit `977f5df` (cross-base FK drop + per-tenant `warehouse` gate) was **verified green on Py3.13/Win: 17/17** (2 migration-pin + 8 unit `test_feature_flags`/`test_feature_model_import` + 7 API `test_ppe_warehouse_api`). The native-violation only bites on aggregate app-booting runs, not a single file.
+- Matrix line 32 still claimed the gate was *"blocked on feature.py cross-base FK fix"* — **stale**. Synced to reality (added `feature_flags`, the wa02 migration, the FK/gate/flag tests; rewrote the plan note). Validator green (46 rows). Committed `52ed800`.
+
+### NS#2 — `TZ-3.4-V12-01` prescriptions lifecycle (FSM + evidence + verification) SHIPPED
+- **Spec** `f69560a` (`docs/superpowers/specs/2026-05-30-prescriptions-lifecycle-design.md`), **plan** `30d03f5` (`docs/superpowers/plans/2026-05-30-prescriptions-lifecycle.md`, 6 TDD tasks), then **7 implementation commits** `3719fd9..eb1cb74`.
+- **Implemented:** `PrescriptionStatus.VERIFIED` + `evidence`/`closed_at` columns; pure FSM `app/domains/prescriptions/lifecycle.py` (linear+rework: OPEN→IN_PROGRESS→COMPLETED→VERIFIED; COMPLETED→IN_PROGRESS on failed re-inspection; CANCELLED from OPEN/IN_PROGRESS; VERIFIED/CANCELLED terminal); additive migration `20260530_wa03` (cols + `ALTER TYPE prescriptionstatus ADD VALUE verified`, PG-guarded, transaction-safe since the value is unused in-migration — mirrors next55); schemas (status off Create/Update, new `PrescriptionTransition`, evidence/closed_at on Read); **`POST /prescriptions/{id}/transition`** (409 invalid, **403 admin/owner-only verify** = segregation of duties, 422 evidence-on-complete, `closed_at` on terminal, audit `action=transition`); PATCH drops status; create forces OPEN.
+- **Decisions:** single transition endpoint (vs PATCH-guard / verb-endpoints); verify-segregation enforced to `{admin,owner}` (user choice); matrix stays **`partial`** (escalations + closure-rate `% закрытия` deferred → P10); evidence is free-text (file-binding deferred).
+- **Tests (Py3.13/Win, CI 3.12.12 canonical):** 32 app-free (model/FSM/migration/schemas) + 8 API lifecycle + 2 migrated integration + 13 prescription etag (one adapted to /transition) + 1 access-parity → **all green**. Migration-pin assertion made format-agnostic.
+
+### Known problems / risks
+- **Pre-existing failure (NOT mine, out of scope):** `tests/api/test_ppe_prescriptions_cache_etag_contract.py::test_prescriptions_cross_tenant_etag_does_not_leak` fails with `403 "Tenant assignment mismatch"` on Py3.13/Win. **Proven pre-existing** by checking out base `52ed800` and reproducing the identical failure in isolation with a fresh test DB. It's a two-tenant `make_auth_headers(ADMIN, tenant="beta")` harness issue, likely env-specific; CI on 3.12.12 is canonical. See [[local_env_drift_windows]].
+- Full `make cs:test` not run (no Docker/Py3.12.12 locally, per CLAUDE.md). Alembic live `upgrade heads` not run (graph verified app-free: wa03 is the new W-A head, count stays 8).
+
+### Next Steps
+1. **Operational (user's purview):** PR/merge the two stacked branches (FK-fix first, then prescriptions targeting it), alembic `merge_heads`, then `upgrade heads` on PG.
+2. **NS#3 / W-A item #3:** coverage-gate ≥85% (`TZ-6.3-V11-01`) together with **W0** (re-enable CI).
+3. **Prescriptions follow-ups (deferred → P10):** escalations (overdue → notify), closure-rate (`% закрытия`) aggregate (closed_at already provisioned), file-bound evidence, per-user verifier≠assignee identity check.
+- Матрица: `TZ-3.2-V11-01` → `done`; `TZ-3.4-V12-01` → `partial` (FSM+evidence+verification shipped).
+
 ## Last Agent Handoff (2026-05-30, W-A — PPE warehouse skeleton landed: TZ-3.2-V11-01 `missing` → `done`; latent feature.py cross-base FK bug surfaced + flagged)
 
 - **Дата:** 2026-05-30. Ветка `feat/wa-ppe-warehouse-skeleton` (off `validate/all-six-branches-integration`, local-only).

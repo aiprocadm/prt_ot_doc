@@ -37,6 +37,7 @@ import {
   InspectionPlansPage,
   InspectionPrepPackagesPage,
   InspectionsPage,
+  HealthStatusPage,
   IntegrationsPage,
   MedicalPage,
   NotificationsPage,
@@ -166,6 +167,7 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
       routes: [
         <Route key="/admin" path="/admin" element={<AdminPage />} />,
         <Route key="/admin/outbox" path="/admin/outbox" element={<OutboxPage />} />,
+        <Route key="/admin/health" path="/admin/health" element={<HealthStatusPage />} />,
         <Route key="/admin/billing" path="/admin/billing" element={<BillingPage />} />,
         <Route key="/admin/layout-presets" path="/admin/layout-presets" element={<AdminLayoutPresetsPage />} />
       ]
