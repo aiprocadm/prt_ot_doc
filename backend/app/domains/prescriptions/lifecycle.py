@@ -7,6 +7,9 @@ VERIFIED/CANCELLED terminal. A self-transition is an idempotent no-op.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
+from datetime import date
+
 from app.models.models import PrescriptionStatus
 
 _S = PrescriptionStatus
@@ -51,3 +54,22 @@ def is_terminal(status: PrescriptionStatus) -> bool:
 
 def requires_evidence(target: PrescriptionStatus) -> bool:
     return target == PrescriptionStatus.COMPLETED
+
+
+def is_overdue(due_at: date | None, status: PrescriptionStatus, today: date) -> bool:
+    """True when the prescription is past its deadline and not yet closed.
+
+    Terminal states (VERIFIED, CANCELLED) are never overdue. A COMPLETED row
+    past its deadline IS overdue — work is done but not yet verified/closed.
+    ``today`` is injected so callers/tests stay deterministic.
+    """
+    return due_at is not None and due_at < today and status not in TERMINAL_STATES
+
+
+def closure_rate(counts: Mapping[PrescriptionStatus, int]) -> float:
+    """(VERIFIED + COMPLETED) / total ; 0.0 when there are no prescriptions."""
+    total = sum(counts.values())
+    if total == 0:
+        return 0.0
+    closed = counts.get(PrescriptionStatus.VERIFIED, 0) + counts.get(PrescriptionStatus.COMPLETED, 0)
+    return closed / total
