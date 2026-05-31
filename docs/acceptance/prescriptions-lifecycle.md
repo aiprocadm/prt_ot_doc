@@ -29,6 +29,30 @@ Every transition writes an immutable audit row (`action="transition"`,
 - `tests/api/test_prescriptions_lifecycle_api.py` — HTTP contract (8 scenarios)
 - `tests/integration/test_prescriptions_api.py` — CRUD + audit (FSM-aligned)
 
+## Overdue escalation + closure-rate (added 2026-05-31)
+
+Overdue = past `due_at` and not terminal (OPEN/IN_PROGRESS/COMPLETED count;
+VERIFIED/CANCELLED do not).
+
+8. **Overdue listing.** Create a prescription with `due_at` in the past →
+   `GET /api/v1/prescriptions/overdue` lists it with `is_overdue: true`. A
+   future-dated or VERIFIED/CANCELLED prescription does not appear.
+9. **On-demand reminder.** `POST /api/v1/prescriptions/remind-overdue` →
+   `{ "count": N, "items": [...] }`; one `TaskOverdue` outbox event per overdue
+   row, keyed `prescription-overdue:{id}:{due_date}` (a same-day repeat reuses
+   the key → no duplicate delivery to subscribers). Writes an audit row
+   `action="notify_overdue"`.
+10. **Scheduled escalation.** The Celery beat task `prescriptions.escalate.tick`
+    runs daily (02:00), iterating active tenants and emitting the same events.
+11. **Closure-rate.** `GET /api/v1/prescriptions/summary` →
+    `{ by_status, total, overdue_count, closure_rate }`, where
+    `closure_rate = (VERIFIED + COMPLETED) / total` (`0.0` when total is 0).
+
+## Tests (escalation)
+- `backend/tests/test_prescription_escalation.py` — is_overdue/closure_rate unit (app-free)
+- `tests/api/test_prescriptions_escalation_api.py` — HTTP contract (overdue/summary/remind)
+- `backend/tests/test_prescriptions_escalate_tick.py` — beat registration (app-free)
+
 ## Deferred (separate increments)
-Escalations (overdue → notify), closure-rate (% закрытия) aggregate, file-bound
-evidence, and per-user verifier ≠ assignee identity checks.
+File-bound evidence (currently free-text) and per-user verifier ≠ assignee
+identity checks (role segregation to admin/owner is enforced).
