@@ -25,12 +25,18 @@ from app.domains.prescriptions.lifecycle import (
     requires_evidence,
     validate_transition,
 )
+from app.domains.prescriptions.service import (
+    list_overdue,
+    notify_overdue,
+    status_summary,
+)
 from app.models.models import Incident, Inspection, Prescription, PrescriptionStatus, User
 from app.models.tenanting import Tenant
 from app.schemas.prescriptions import (
     PrescriptionCreate,
     PrescriptionPage,
     PrescriptionRead,
+    PrescriptionSummary,
     PrescriptionTransition,
     PrescriptionUpdate,
 )
@@ -229,6 +235,66 @@ async def create_prescription(
     await session.commit()
     await session.refresh(record)
     return _to_read(record, today=datetime.now(timezone.utc).date())
+
+
+@router.get("/prescriptions/overdue", response_model=PrescriptionPage)
+async def list_overdue_prescriptions(
+    tenant: TenantDep,
+    session: SessionDep,
+    _: ManagerAccess,
+) -> PrescriptionPage:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    today = datetime.now(timezone.utc).date()
+    items = await list_overdue(session, tenant_id=str(tenant.id), today=today)
+    return PrescriptionPage(
+        items=[_to_read(item, today=today) for item in items],
+        total=len(items),
+    )
+
+
+@router.get("/prescriptions/summary", response_model=PrescriptionSummary)
+async def prescriptions_summary(
+    tenant: TenantDep,
+    session: SessionDep,
+    _: ManagerAccess,
+) -> PrescriptionSummary:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    today = datetime.now(timezone.utc).date()
+    data = await status_summary(session, tenant_id=str(tenant.id), today=today)
+    return PrescriptionSummary(**data)
+
+
+@router.post("/prescriptions/remind-overdue")
+async def remind_overdue_prescriptions(
+    request: Request,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> dict[str, object]:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    today = datetime.now(timezone.utc).date()
+    actor_id = getattr(access.user, "id", None)
+    overdue = await notify_overdue(
+        session, tenant_id=str(tenant.id), actor_id=actor_id, today=today
+    )
+    audit = AuditService(session)
+    ip = request.client.host if request.client else "unknown"
+    await audit.log_event(
+        tenant_id=str(tenant.id),
+        action="notify_overdue",
+        object_type="prescription",
+        object_id="bulk",
+        user_id=actor_id,
+        ip=ip,
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        details={"count": len(overdue)},
+    )
+    await session.commit()
+    return {
+        "count": len(overdue),
+        "items": [_to_read(p, today=today) for p in overdue],
+    }
 
 
 @router.get("/prescriptions/{prescription_id}", response_model=PrescriptionRead)

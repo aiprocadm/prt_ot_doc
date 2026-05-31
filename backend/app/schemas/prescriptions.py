@@ -51,3 +51,10 @@ class PrescriptionRead(BaseSchema):
 class PrescriptionPage(BaseSchema):
     items: list[PrescriptionRead]
     total: int
+
+
+class PrescriptionSummary(BaseSchema):
+    by_status: dict[str, int]
+    total: int
+    overdue_count: int
+    closure_rate: float
