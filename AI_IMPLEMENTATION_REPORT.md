@@ -28,6 +28,38 @@
 3. Operational: PR/merge ветки (независимая, от main).
 - Матрица: `TZ-6.3-V11-01` → `partial`.
 
+## Last Agent Handoff (2026-05-31, W1 — tenant-isolation audit suite REPAIRED: 1/8 + 5 missing → 13/13 green)
+
+- **Дата:** 2026-05-31. Ветка `feat/wa-tenant-isolation` от `main` (093959b; **независима** от prescriptions/coverage-веток). Local-only, kept as-is per user workflow.
+- **Агент:** Claude Opus 4.8 (local Win+Py3.13.7). Driver: **systematic-debugging** (ultrathink). User: "продолжай" (русский).
+- **Задача:** W1 / Phase 1.3 tenant-isolation audit. Roadmap-framing: «восстановить 5 удалённых тестов + чек-лист + docs». Реальность хуже: backing-сьюит был дырявым (см. ниже).
+
+### Discovery (integrity gap)
+- `docs/TENANT_ISOLATION_BOUNDARIES.md` утверждал «20/20 ✅ VERIFIED», но `tests/test_tenant_isolation_audit.py` был **1/8 passing + 5 тестов удалены** → ложная уверенность в безопасности мультитенантности (SOC2/GDPR-релевантно).
+
+### Root cause (2 причины)
+- **A:** тесты использовали **несидированные** слаги `tenant-a`/`tenant-b`; харнесс dual-seed'ит `{test, acme, beta, gamma, delta, zeta, epsilon}` (public + TestSession, совпадающие id, `conftest.py:141-176`).
+- **B:** один и тот же `role+default-email` на двух тенантах → документированная ловушка `make_auth_headers` (`conftest.py:269-292`): user-lookup по email НЕ tenant-scoped → 403 "Tenant assignment mismatch". (`User.email` unique **per-tenant** — `Index("ix_user_email","tenant_id","email",unique=True)` — поэтому «правильный» глобальный фикс безопасен, но автор отложил.)
+- Подтверждено working-example'ом: `test_ppe_warehouse_api.py::test_batches_tenant_isolation` (проходит) = seeded `beta` + distinct `email=`.
+
+### Implemented (4 commits `85da4ef..aa99178`)
+- **W1-T1 (`85da4ef`):** тесты + `*_multi_tenant` фикстуры (единственный потребитель — этот файл) → seeded `acme`/`beta` + distinct per-tenant emails. Document-generation тест переформулирован в `test_cannot_access_other_tenant_template` (read-by-ID) — generate-payload хрупкий + триггерит отдельный error-handler 500-баг. → **8/8 green**.
+- **W1-T2 (`1128ee4`):** восстановлены 5 удалённых тестов (audit_log / notification / outbox / workflow_events / webhook_delivery isolation) как data-layer тесты: `tenant_id` non-null + records в acme/beta не текут через tenant-scoped query. → **13/13 green**.
+- **W1-T3 (`aa99178`):** `TENANT_ISOLATION_BOUNDARIES.md` сделан честным — dated W1 repair note + исправлены устаревшие test-ссылки (document→template, 20→13).
+
+### Found / spawned bugs
+- **error-handler 500-bug (spawned task):** `backend/app/api/error_handlers.py:184` — `TypeError: Object of type ValueError is not JSON serializable`, когда Pydantic `@model_validator` бросает `ValueError` (любой такой → 500 вместо 422). Найден на `/documents/generate`. Реальный production-relevant дефект, вне scope W1.
+
+### Validation
+- `tests/test_tenant_isolation_audit.py` → **13/13 pass** (Py3.13/Win via PowerShell). Zero blast radius (фикстуры — single-consumer). CI 3.12.12 canonical для полного прогона.
+
+### Next Steps
+1. **Operational (user's purview):** PR/merge ветку (от main, независимо).
+2. **Loose end (одна строка):** `test_prescriptions_cross_tenant_etag_does_not_leak` на ветке `feat/wa-prescriptions-lifecycle` — тот же баг; фикс = distinct emails. См. [[local_env_drift_windows]].
+3. Починить error-handler 500-bug (spawned task).
+4. Опционально: «правильный» tenant-scoped фикс `make_auth_headers` (безопасен — email per-tenant unique).
+- W1 / Phase 1.3 tenant-isolation: **done** (suite 13/13, doc honest).
+
 ## Last Agent Handoff (2026-05-29, Session 85 — iter-38 server_default cohort closure: Subset C (33 cols / 29 tables) — entire defect class closed)
 
 - **Дата:** 2026-05-29. Ветка `fix/iter-38-server-default-cohort-subset-C` от `9d29a45` (current `main`, includes iter-37 merged as [#611](https://github.com/aiprocadm/prt_ot_doc/pull/611)). Open PRs at session start: none. iter-38 is unstacked — clean branch from main, no pending dependencies.
