@@ -1932,3 +1932,37 @@ def workflow_timers_tick(tenant_slug: str) -> int:
                 await session.commit()
                 return processed
     return _run_coroutine(_run())
+
+
+@celery_app.task(
+    name="prescriptions.escalate.tick",
+    autoretry_for=RETRYABLE_EXCEPTIONS,
+    retry_backoff=True,
+    retry_jitter=True,
+    max_retries=5,
+)
+def prescriptions_escalate_tick() -> int:
+    return _run_coroutine(_prescriptions_escalate_tick())
+
+
+async def _prescriptions_escalate_tick() -> int:
+    # imported lazily to avoid import cycles at task-module load time
+    from app.domains.prescriptions.service import notify_overdue
+
+    today = datetime.now(tz=timezone.utc).date()
+    async with AsyncSessionLocal(tenant=settings.default_tenant_slug) as session:
+        tenants = list(
+            (await session.execute(select(Tenant).where(Tenant.is_active.is_(True)))).scalars().all()
+        )
+    processed = 0
+    for tenant in tenants:
+        with tenant_context(tenant.slug):
+            ensure_tenant_schema(tenant.slug)
+            async with session_scope(tenant=tenant.slug) as session:
+                tenant_id, _scope = await _resolve_task_tenant_scope(session, tenant.slug)
+                overdue = await notify_overdue(
+                    session, tenant_id=tenant_id, actor_id=None, today=today
+                )
+                await session.commit()
+                processed += len(overdue)
+    return processed

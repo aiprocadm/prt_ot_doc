@@ -61,7 +61,11 @@ celery_app.conf.beat_schedule = {
     "reminders-scan-hourly": {
         "task": "reminders.scan",
         "schedule": crontab(minute=0),
-    }
+    },
+    "prescriptions-escalate-daily": {
+        "task": "prescriptions.escalate.tick",
+        "schedule": crontab(hour=2, minute=0),
+    },
 }
 
 celery_app.conf.task_queues = (
