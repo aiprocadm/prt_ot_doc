@@ -1,5 +1,33 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-30, W-A item #3 — scoped coverage gate + climb plan shipped: TZ-6.3-V11-01 `missing` → `partial`)
+
+- **Дата:** 2026-05-30. Ветка `feat/wa-coverage-gate` от `main` (093959b; **независима** от prescriptions/FK-веток — это coverage-инфраструктура). Local-only, kept as-is per user workflow. (Параллельно на других локальных ветках: NS#1 warehouse-gate `done` + NS#2 prescriptions lifecycle `partial`.)
+- **Агент:** Claude Opus 4.8 (local Win+Py3.13.7). Driver: design-lite (выбор подхода через вопрос) → TDD execution → finishing. User: "continue from where you left off" + перешёл на русский.
+- **Задача:** W-A item #3 `TZ-6.3-V11-01` — coverage-gate ≥85% для core/domain/services **или** explicit climb plan. Пользователь выбрал «инструментарий + climb-plan» (CI отключён → живой замер локально невозможен).
+
+### Implemented (4 commits `55eff42..8cc540c`)
+- `scripts/ci/check_scoped_coverage.py` — scoped **ratchet**-гейт (floor по core/domain/services) + трекер дистанции до 85% North-Star. Чистое ядро `evaluate(coverage, baseline, target)` без I/O + CLI `main(argv)`.
+- `backend/tests/test_check_scoped_coverage.py` — 6 app-free юнит-тестов на синтетических `coverage.json` (логика гейта проверена детерминированно без живого прогона).
+- `docs/stabilization/scoped_coverage_baseline.json` — консервативные seed-floors (core 40 / domain 35 / services 25 line), bootstrap на первом CI-прогоне.
+- `docs/stabilization/coverage_climb_plan.md` — scope, baseline (47% overall, 2026-04-19), вехи M1–M4 (бить по самым низким: services), ratchet + bootstrap механика.
+- Шаг «Scoped coverage climb gate» вписан в `.github/workflows/ci.yml.disabled` (после whole-app baseline-чека). YAML провалидирован. **Остаётся выключенным до W0.**
+
+### Decisions
+- **Ratchet, а не hard-85.** При 47% overall мгновенный ≥85% завалил бы каждый билд; 85% — задокументированный North-Star, floor поднимается по мере добавления тестов. Требование ТЗ «≥85% **или** explicit climb plan» удовлетворено веткой climb plan.
+- **Статус `partial`, не `done`:** гейт корректен и протестирован, но дремлет (CI off), а floors — seeds (не реальный замер). Активация + bootstrap floors = с W0.
+- Ветка от `main`, не стекается на prescriptions/FK — независимая инфраструктура.
+
+### Validation
+- `test_check_scoped_coverage.py` → **6/6 pass** (Py3.13/Win). Integration-smoke: реальный baseline + синтетический coverage → корректный отчёт (services REGRESSED → exit 1). Matrix-валидатор → 46 rows valid. YAML `ci.yml.disabled` парсится.
+- Реальные per-scope цифры — CI-canonical (локально полный app-booting прогон недоступен, `[[local_env_drift_windows]]`).
+
+### Next Steps
+1. **W0 (user's purview):** re-enable CI → первый прогон bootstrap'ит реальные floors в `scoped_coverage_baseline.json`, гейт оживает.
+2. Восхождение по `coverage_climb_plan.md` (M1: services ≥55%) — отдельная работа на много сессий, предпочтительно app-free юнит-тесты.
+3. Operational: PR/merge ветки (независимая, от main).
+- Матрица: `TZ-6.3-V11-01` → `partial`.
+
 ## Last Agent Handoff (2026-05-29, Session 85 — iter-38 server_default cohort closure: Subset C (33 cols / 29 tables) — entire defect class closed)
 
 - **Дата:** 2026-05-29. Ветка `fix/iter-38-server-default-cohort-subset-C` от `9d29a45` (current `main`, includes iter-37 merged as [#611](https://github.com/aiprocadm/prt_ot_doc/pull/611)). Open PRs at session start: none. iter-38 is unstacked — clean branch from main, no pending dependencies.

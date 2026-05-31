@@ -344,6 +344,11 @@ jobs:
       - name: Enforce backend coverage baseline
         run: python scripts/ci/check_backend_coverage_baseline.py --coverage-json artifacts/coverage.json --baseline docs/stabilization/backend_coverage_baseline.json
 
+      - name: Scoped coverage climb gate (core/domain/services)
+        # TZ-6.3-V11-01 — ratchet floor + 85% North-Star tracker. See
+        # docs/stabilization/coverage_climb_plan.md. Floors bootstrap on first run.
+        run: python scripts/ci/check_scoped_coverage.py --coverage-json artifacts/coverage.json --baseline docs/stabilization/scoped_coverage_baseline.json
+
       - name: Upload backend test artifacts
         if: always()
         uses: actions/upload-artifact@v4
