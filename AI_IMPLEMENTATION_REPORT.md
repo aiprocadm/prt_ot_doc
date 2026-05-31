@@ -1,5 +1,32 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-05-31, prescriptions escalation + closure-rate — TZ-3.4-V12-01 `partial` → `done`)
+
+- **Дата:** 2026-05-31. Ветка `feat/wa-prescriptions-escalation` от `main` (8cb14be; независима). Запушена → **PR #632**.
+- **Агент:** Claude Opus 4.8 (local Win+Py3.13.7/.venv; explanatory). Полный драйвер: **brainstorming → writing-plans → executing-plans → finishing-a-development-branch**.
+- **Задача:** последний **кодовый** хвост MVP-матрицы — эскалации предписаний + closure-rate (остаток после lifecycle-инкремента 2026-05-30, который их явно отложил).
+
+### Implemented (5 commits `9c78228..823a142`; spec `155a8b1`, plan `71f3ee4`)
+- Чистые хелперы `is_overdue` / `closure_rate` в `app/domains/prescriptions/lifecycle.py` (app-free).
+- `app/domains/prescriptions/service.py` (новый): `list_overdue` / `notify_overdue` (emit `TASK_OVERDUE` через outbox, date-stamped idempotency key) / `status_summary`.
+- Роуты `GET /prescriptions/overdue`, `GET /prescriptions/summary`, `POST /prescriptions/remind-overdue` (audit `notify_overdue`) — объявлены **ДО** `/{id}`. `is_overdue` на `PrescriptionRead` через хелпер `_to_read`.
+- Daily beat `prescriptions.escalate.tick` (итерирует активные тенанты, по образцу `_scan_reminders_job`); зарегистрирован в `beat_schedule` @ 02:00.
+- **Без миграции** (колонки `due_at`/`closed_at` + индексы `ix_prescription_status`/`ix_prescription_due` уже есть). Аддитивно, без изменения существующих контрактов.
+
+### Decisions
+- **overdue** = past-due И не-терминальный (OPEN/IN_PROGRESS/COMPLETED входят; VERIFIED/CANCELLED — нет; мирроринг briefings).
+- **closure_rate** = `(VERIFIED+COMPLETED)/всего` (0.0 при total=0). Переиспользован `EventType.TASK_OVERDUE` (как briefings, без новой сущности события). Beat daily.
+- Дедуп `TASK_OVERDUE` — **destination-scoped** (в noop-пути без подписок дедупа нет); тест проверяет **стабильность idempotency-ключа** по дате, а не «0 строк».
+
+### Validation (Py3.13/Win; CI 3.12.12 канон, выключен — `[[ci_disabled_actions_off]]`)
+- 25 целевых тестов (10 unit + 2 beat-регистрация + 5 эскалация API + 8 lifecycle регресс) + 2 интеграционных (CRUD+audit) зелёные. Matrix-валидатор зелёный (46 строк). `make cs:test` не гонялся (нет Docker/Py3.12.12).
+
+### Next Steps
+1. **Operational (зона пользователя):** ревью/merge **PR #632** (от main, независимо).
+2. **Остаток хвоста MVP:** `TZ-6.3-V11-01` (coverage-gate) — остаётся `partial`, флипнется в `done` только на **W0 (re-enable CI)**. Кодом не закрывается.
+3. Дальше по roadmap (`docs/superpowers/specs/2026-05-29-tz-completeness-roadmap-design.md`): следующая кодовая волна — **W2 (Command Center / Health UI, frontend; бэкенд готов)**.
+- Матрица: `TZ-3.4-V12-01` → `done`.
+
 ## Last Agent Handoff (2026-05-30, W-A item #3 — scoped coverage gate + climb plan shipped: TZ-6.3-V11-01 `missing` → `partial`)
 
 - **Дата:** 2026-05-30. Ветка `feat/wa-coverage-gate` от `main` (093959b; **независима** от prescriptions/FK-веток — это coverage-инфраструктура). Local-only, kept as-is per user workflow. (Параллельно на других локальных ветках: NS#1 warehouse-gate `done` + NS#2 prescriptions lifecycle `partial`.)
