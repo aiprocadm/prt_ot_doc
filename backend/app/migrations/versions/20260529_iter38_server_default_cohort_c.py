@@ -103,7 +103,7 @@ def upgrade() -> None:
         "status",
         existing_type=sa.String(length=64),
         existing_nullable=False,
-        server_default="PENDING",
+        server_default="pending",
     )
     op.alter_column(
         "approval_route_steps",
@@ -117,28 +117,28 @@ def upgrade() -> None:
         "status",
         existing_type=sa.String(length=64),
         existing_nullable=False,
-        server_default="OPEN",
+        server_default="open",
     )
     op.alter_column(
         "attestation",
         "status",
         existing_type=sa.String(length=64),
         existing_nullable=False,
-        server_default="ACTIVE",
+        server_default="active",
     )
     op.alter_column(
         "client_request_tickets",
         "status",
         existing_type=sa.String(length=64),
         existing_nullable=False,
-        server_default="OPEN",
+        server_default="open",
     )
     op.alter_column(
         "edo_envelopes",
         "status",
         existing_type=sa.String(length=64),
         existing_nullable=False,
-        server_default="QUEUED",
+        server_default="queued",
     )
     op.alter_column(
         "equipment",
@@ -173,7 +173,7 @@ def upgrade() -> None:
         "status",
         existing_type=sa.String(length=64),
         existing_nullable=False,
-        server_default="OPEN",
+        server_default="open",
     )
     op.alter_column(
         "npa",
@@ -187,70 +187,70 @@ def upgrade() -> None:
         "status",
         existing_type=sa.String(length=64),
         existing_nullable=False,
-        server_default="QUEUED",
+        server_default="queued",
     )
     op.alter_column(
         "pack_runs",
         "status",
         existing_type=sa.String(length=64),
         existing_nullable=False,
-        server_default="QUEUED",
+        server_default="queued",
     )
     op.alter_column(
         "package_preset_items",
         "output_format",
         existing_type=sa.String(length=64),
         existing_nullable=False,
-        server_default="BOTH",
+        server_default="both",
     )
     op.alter_column(
         "package_preset_items",
         "replace_mode",
         existing_type=sa.String(length=64),
         existing_nullable=False,
-        server_default="NONE",
+        server_default="none",
     )
     op.alter_column(
         "package_presets_v2",
         "source_type",
         existing_type=sa.String(length=64),
         existing_nullable=False,
-        server_default="CSV",
+        server_default="csv",
     )
     op.alter_column(
         "package_presets_v2",
         "status",
         existing_type=sa.String(length=64),
         existing_nullable=False,
-        server_default="DRAFT",
+        server_default="draft",
     )
     op.alter_column(
         "package_profiles_v2",
         "status",
         existing_type=sa.String(length=64),
         existing_nullable=False,
-        server_default="DRAFT",
+        server_default="draft",
     )
     op.alter_column(
         "package_requirements",
         "status",
         existing_type=sa.String(length=64),
         existing_nullable=False,
-        server_default="MISSING",
+        server_default="missing",
     )
     op.alter_column(
         "package_requirements",
         "type",
         existing_type=sa.String(length=64),
         existing_nullable=False,
-        server_default="FILE",
+        server_default="file",
     )
     op.alter_column(
         "package_runs",
         "status",
         existing_type=sa.String(length=64),
         existing_nullable=False,
-        server_default="DRAFT",
+        server_default="draft",
     )
     op.alter_column(
         "permit",
@@ -285,7 +285,7 @@ def upgrade() -> None:
         "category",
         existing_type=sa.String(length=64),
         existing_nullable=False,
-        server_default="OTHER",
+        server_default="other",
     )
     op.alter_column(
         "template",
@@ -315,7 +315,7 @@ def upgrade() -> None:
         "status",
         existing_type=sa.String(length=64),
         existing_nullable=False,
-        server_default="SCHEDULED",
+        server_default="scheduled",
     )
 
 

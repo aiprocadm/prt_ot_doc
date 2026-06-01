@@ -69,8 +69,16 @@ INCIDENT_STATUS_VALUES = (
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
     incident_status_enum = sa.Enum(*INCIDENT_STATUS_VALUES, name="incidentstatus")
-    incident_status_enum.create(op.get_bind(), checkfirst=True)
+    incident_status_enum.create(bind, checkfirst=True)
+    # PG cannot ALTER COLUMN TYPE while a server_default exists that it can't
+    # auto-cast to the new enum type (iter-37/38 left a plain-string default
+    # like 'REPORTED'). Drop the default, change the type, then re-establish
+    # the default as the enum value. batch_alter_table handles SQLite (which
+    # has no ALTER TYPE and no such default-cast constraint).
+    if bind.dialect.name == "postgresql":
+        op.execute("ALTER TABLE incident ALTER COLUMN status DROP DEFAULT")
     with op.batch_alter_table("incident", schema=None) as batch_op:
         batch_op.alter_column(
             "status",
@@ -79,6 +87,8 @@ def upgrade() -> None:
             existing_nullable=False,
             postgresql_using="status::text::incidentstatus",
         )
+    if bind.dialect.name == "postgresql":
+        op.execute("ALTER TABLE incident ALTER COLUMN status SET DEFAULT 'REPORTED'")
 
 
 def downgrade() -> None:

@@ -74,9 +74,17 @@ FILE_SCAN_STATUS_VALUES = ("PENDING", "IN_PROGRESS", "CLEAN", "INFECTED", "ERROR
 
 def upgrade() -> None:
     # file.{8 business cols} -------------------------------------------------
-    # The two Enum columns auto-create their PG types as part of add_column
-    # (each type used once → no double-create). NOT NULL cols carry a
+    # Explicitly create the two PG enum types up front (checkfirst=True). Under
+    # transaction_per_migration the implicit CREATE TYPE that add_column would
+    # otherwise emit is unreliable across the DAG, so create them here (mirrors
+    # next55 / 8d2c1a6c5e24). No-op on SQLite. NOT NULL cols carry a
     # server_default so existing rows satisfy the constraint.
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        sa.Enum(*FILE_KIND_VALUES, name="file_kind").create(bind, checkfirst=True)
+        sa.Enum(*FILE_SCAN_STATUS_VALUES, name="file_scan_status").create(
+            bind, checkfirst=True
+        )
     op.add_column(
         "file",
         sa.Column("original_name", sa.String(length=255), nullable=True),

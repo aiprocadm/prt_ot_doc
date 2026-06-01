@@ -1,5 +1,59 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-06-01, canonical PG upgrade GREEN — 5-layer migration cascade FIXED ✅)
+
+- **Дата:** 2026-06-01. Ветка `fix/iter38-enum-server-default-case` от `main` (`0d53f46`). Local-only, НЕ влита. Коммиты: `5deeeb0` spec → `4ef39b8` plan → `385f034` (промежуточный handoff, **stale** — описывает незавершённое состояние до того, как я продолжил) → `54cae5c` **fix (5 слоёв, green)**.
+- **Агент:** Claude Opus 4.8 (local Win+Py3.13.7/.venv + Docker PG16). Драйвер: executing-plans, строго по одному шагу. User: «продолжить сейчас».
+- **СТАТУС: `alembic upgrade heads` ЗЕЛЁНЫЙ на свежей Postgres 16** (106 миграций, exit 0). Guard-тест проходит. App-free регрессия 337+117 passed. **Это снимает реальный boot-blocker для canonical CI.**
+
+### Что было сделано (commit `54cae5c`) — 5 слоёв, каждый маскировал следующий
+`alembic upgrade heads` НИКОГДА не проходил на чистой PG: сьют SQLite-only (Enum→VARCHAR прячет всё), CI выключен с 2026-05-28 → накопился стек PG-only багов. env.py оборачивал весь upgrade в одну транзакцию → первый сбой откатывал всё, прятал остальные.
+1. **iter38 enum server_default case** (`InvalidTextRepresentationError`): 18 колонок UPPER→lowercase (реальные `pg_enum` метки); 15 валидных не тронуты; pin `_COHORT_C` синхронизирован.
+2. **Unsafe new enum value** (`UnsafeNewEnumValueUsageError`): `ALTER TYPE ADD VALUE` использовался как server_default в той же tx. **env.py:** `connect()` + `execution_options(isolation_level="AUTOCOMMIT")` + `transaction_per_migration=True` → каждая миграция коммитится отдельно, новое enum-значение durable до использования. (`autocommit_block()` НЕ работает в run_sync; `transaction_per_migration` без AUTOCOMMIT тоже мало — нужен AUTOCOMMIT на connection.)
+3. **iter47** (`type "file_kind" does not exist`): явный `sa.Enum(file_kind/file_scan_status).create(checkfirst=True)` в начале upgrade (неявный CREATE TYPE от add_column ненадёжен под AUTOCOMMIT/DAG).
+4. **iter43** (`DatatypeMismatchError ... incidentstatus`): String→Enum падал из-за plain-string server_default. **DROP DEFAULT → ALTER TYPE → SET DEFAULT** на PG.
+5. **iter42** (`type "incidenttype" does not exist`): явный create `incidenttype`/`incidentstage` (как #3).
+
+### ⚠️ Риск, требующий внимания пользователя/ревью
+**env.py теперь AUTOCOMMIT + transaction_per_migration — это меняет прод-семантику `alembic upgrade`:** упал на середине → НЕ откатывается целиком (частично применённые миграции остаются). Раньше весь upgrade был атомарным. Для прода это **нормальная** альбемик-практика (большинство проектов так и гоняют, миграции должны быть индивидуально атомарны), и совпадает с тем, что авторы миграций уже предполагали (next55b «runs in its own tx»). Но: (а) проверить, нет ли миграций, полагавшихся на глобальный rollback; (б) downgrade-пути не тестировались на PG в этой сессии; (в) канонический прогон — на Py3.12.12 в CI (локально 3.13.7).
+
+### Validation (Py3.13/Win via PowerShell+venv+Docker PG16; canonical 3.12.12 — CI, выключен)
+- Guard `test_alembic_postgres_upgrade.py`: **green**, 106 миграций, exit 0 на throwaway DB.
+- App-free: pin iter38 + `server_default_parity` audit (drift=0) + iter37/42/43 + compose = **337 passed**; siblings iter40/41/46/48 = **117 passed**.
+- Throwaway DB удалён, `cabinet` не тронут.
+
+### Next Steps
+1. **Operational (зона пользователя): W0 — re-enable CI** → canonical 3.12.12-прогон `alembic-postgres-upgrade` (должен пройти), `perf-smoke` (transitive), bootstrap coverage-floors → `TZ-6.3-V11-01`. Снять «provisional» с RB-002/003/005.
+2. **Перед merge:** ревью риска AUTOCOMMIT/transaction_per_migration (см. выше) — желательно прогнать downgrade на PG и проверить отсутствие зависимостей от глобальной атомарности.
+3. **PR/merge ветки** `fix/iter38-enum-server-default-case` (на усмотрение пользователя).
+- **Process lesson (закреплён в [[py313_win_pytest_invocation]]):** НЕ батчить edit→test→commit в одном сообщении (concurrent tool calls рейсятся/отменяются). Один шаг = одно сообщение. Это сработало — после перехода на строгую последовательность всё пошло чисто.
+
+---
+
+### (STALE — оставлено для истории) Промежуточный handoff: Layer-1 fix VALIDATED locally; 4-layer cascade SURFACED; branch reset
+
+- **Дата:** 2026-06-01. Ветка `fix/iter38-enum-server-default-case` от `main` (`0d53f46`). Local-only, НЕ влита. Коммиты: `5deeeb0` spec → `4ef39b8` plan. **Кодовых коммитов НЕТ** (намеренный reset — см. ниже).
+- **Агент:** Claude Opus 4.8 (local Win+Py3.13.7/.venv). Драйвер: finishing→brainstorming→writing-plans→executing-plans. User: «завершить блокеры → canonical CI-green», путь A (enum-slice), затем «прими самое эффективное решение и продолжай».
+- **Статус: НЕ canonical-green. Ветка содержит только spec+plan.** Layer-1 fix БЫЛ написан и локально валидирован (app-free pin зелёный), но закоммичен в **несогласованном** состоянии из-за сбоев инструментов в сессии, поэтому ветка сброшена к `4ef39b8`. Код-фикс нужно переписать в свежей сессии — **точные значения ниже, переписывание тривиально**.
+
+### ГЛАВНЫЙ ВЫВОД
+`alembic upgrade heads` **никогда не проходил зелёным на свежей Postgres**. Тест-сьют SQLite-only (enum→VARCHAR прячет всё это), CI выключен с 2026-05-28 → накопился стек PG-only багов миграций неизвестной глубины. Это **не «enum slice», а стабилизация миграционного DAG** (отдельный крупный план).
+
+### 4 слоя багов (каждый маскировал следующий — env.py оборачивает весь upgrade в ОДНУ транзакцию, поэтому первый сбой откатывал всё)
+1. **Layer 1 — `InvalidTextRepresentationError` (диагноз полный, fix известен):** iter38 (`backend/app/migrations/versions/20260529_iter38_server_default_cohort_c.py`) выставил `server_default` в UPPER_CASE имена членов, но enum'ы хранят lowercase `.value` (`values_callable`). **Чинить 18 колонок** (UPPER→lowercase): approval_processes→`pending`, approval_tasks→`open`, attestation→`active`, client_request_tickets→`open`, edo_envelopes→`queued`, inspection_prescription→`open`, pack_run_items→`queued`, pack_runs→`queued`, package_preset_items.output_format→`both`, package_preset_items.replace_mode→`none`, package_presets_v2.source_type→`csv`, package_presets_v2.status→`draft`, package_profiles_v2→`draft`, package_requirements.status→`missing`, package_requirements.type→`file`, package_runs→`draft`, ppeitem.category→`other`, training_session→`scheduled`. **НЕ трогать 15** (валидны): 4 varchar (approval_instance_steps, approval_instances, approval_route_steps, incident.status) + 10 UPPER-хранящих enum (equipment, idempotency_keys, incident.severity, npa, permit, pipeline_runs, plantask, ppeissue, template, templateversion) + tenant.kind=`customer`. **И синхронно править pin** `_COHORT_C` в `backend/tests/test_iter38_server_default_cohort.py` (те же 18 строк), иначе `test_cohort_column_server_default_matches_model` падает. **НЕ менять** templateversion на None (моя ошибка прошлой сессии — оставить `UPLOADED`).
+2. **Layer 2 — `UnsafeNewEnumValueUsageError`:** `ALTER TYPE templateversionstatus ADD VALUE 'UPLOADED'` (next55) используется iter38 как server_default в той же tx. **Fix:** `backend/app/migrations/env.py` → `connectable.connect()` (вместо `.begin()`) + `transaction_per_migration=True` в `context.configure`. `autocommit_block()` НЕ работает (требует transaction_per_migration; AssertionError в run_sync). ⚠️ transaction_per_migration **меняет прод-семантику** upgrade (теряется глобальная атомарность) — продумать partial-failure/downgrade перед коммитом.
+3. **Layer 3 — `type "file_kind" does not exist`:** под transaction_per_migration неявный `CREATE TYPE` от `add_column(sa.Enum())` в iter47 ненадёжен + DAG-interleaving (iter47 и iter48 оба down_revision=iter38; alembic пошёл iter48→wa01 раньше iter47). **Fix-кандидат:** явный `sa.Enum(*FILE_KIND_VALUES, name="file_kind").create(bind, checkfirst=True)` (+ file_scan_status) в начале iter47.upgrade() под `if bind.dialect.name=="postgresql"`.
+4. **Layer 4 — `DatatypeMismatchError: default for column "status" cannot be cast automatically to type incidentstatus`:** iter43 (`incident_status_enum_type_parity`) меняет тип колонки на enum при несовместимом существующем server_default. НЕ исследован. **Слоёв может быть больше 4** — каждый вскрывается только после фикса предыдущего.
+
+### Верификация (рецепт для след. сессии — Docker+PG16 локально доступны)
+- `$env:TEST_PG_ADMIN_URL="postgresql://postgres:postgres@localhost:5432/postgres"`; `$env:PYTHONPATH="<repo>\backend"`; запускать guard `backend/tests/test_alembic_postgres_upgrade.py` (его надо пересоздать — был в `558106a`, сброшен). Это `@pytest.mark.db`, гоняет `upgrade heads` на throwaway DB. **Первый** PG-исполняющий тест (сьют иначе SQLite-only).
+- Спек: `docs/superpowers/specs/2026-05-31-enum-server-default-canonical-pg-fix-design.md`; план: `docs/superpowers/plans/2026-05-31-enum-server-default-canonical-pg-fix.md` (оба описывают ТОЛЬКО Layer-1 — план надо расширить на Layer 2-4).
+
+### Next Steps (рекомендация: свежая сессия, отдельный план на весь каскад)
+1. **Решение по scope (зона пользователя):** (a) довести весь каскад до зелёного `upgrade heads` на PG16 — отдельный многошаговый план; (b) оставить как есть, закрыть при re-enable CI; (c) принять fresh-PG upgrade как отдельный долг. Релиз остаётся **MVP-READY под local-evidence**; canonical-green требует этого каскада.
+2. **Process lessons (КРИТИЧНО):** (a) НЕ батчить edit→test→commit в одном сообщении — concurrent tool calls рейсятся, verify видит до-edit файл, ненулевой exit (напр. expected-RED тест) отменяет siblings → коммиты молча не проходят. **Один логический шаг = одно сообщение.** При рассинхроне — STOP, один read-only `git status`/`git log`. (b) PowerShell `Out-File`/`*>` пишет UTF-16 → git-bash grep/tail видит пусто; читать тем же PowerShell `-Encoding utf8`. ([[py313_win_pytest_invocation]])
+- **Docker+PG16 локально доступны** ([[local_env_drift_windows]] обновлён) — canonical-эквивалентная верификация миграций без CI.
+
 ## Last Agent Handoff (2026-05-31, prescriptions escalation + closure-rate — TZ-3.4-V12-01 `partial` → `done`)
 
 - **Дата:** 2026-05-31. Ветка `feat/wa-prescriptions-escalation` от `main` (8cb14be; независима). Запушена → **PR #632**.

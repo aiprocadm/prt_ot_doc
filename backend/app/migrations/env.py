@@ -30,7 +30,16 @@ async def run_migrations_online() -> None:
         future=True,
     )
 
-    async with connectable.begin() as connection:
+    # AUTOCOMMIT + transaction_per_migration: each migration commits on its own,
+    # so an `ALTER TYPE ... ADD VALUE` in one migration is durably committed
+    # before a *later* migration references that value (PG forbids using a new
+    # enum value in the transaction that added it). With AUTOCOMMIT, Alembic's
+    # per-migration `begin_transaction()` issues explicit BEGIN/COMMIT around
+    # each migration, while DDL that runs between them (and the ADD VALUE) is
+    # not trapped in one giant outer transaction. Matches the per-migration-tx
+    # assumption migration authors already documented (e.g. next55b "own tx").
+    async with connectable.connect() as connection:
+        await connection.execution_options(isolation_level="AUTOCOMMIT")
         await connection.run_sync(do_run_migrations)
     await connectable.dispose()
 
@@ -43,6 +52,7 @@ def do_run_migrations(connection) -> None:
         include_schemas=True,
         compare_type=True,
         compare_server_default=True,
+        transaction_per_migration=True,
     )
     with context.begin_transaction():
         context.run_migrations()
