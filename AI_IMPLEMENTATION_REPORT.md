@@ -1,6 +1,36 @@
 # AI Implementation Report
 
-## Last Agent Handoff (2026-06-01, canonical-PG upgrade — Layer-1 enum fix VALIDATED locally; deeper 4-layer cascade SURFACED; branch reset to spec+plan, NO code committed)
+## Last Agent Handoff (2026-06-01, canonical PG upgrade GREEN — 5-layer migration cascade FIXED ✅)
+
+- **Дата:** 2026-06-01. Ветка `fix/iter38-enum-server-default-case` от `main` (`0d53f46`). Local-only, НЕ влита. Коммиты: `5deeeb0` spec → `4ef39b8` plan → `385f034` (промежуточный handoff, **stale** — описывает незавершённое состояние до того, как я продолжил) → `54cae5c` **fix (5 слоёв, green)**.
+- **Агент:** Claude Opus 4.8 (local Win+Py3.13.7/.venv + Docker PG16). Драйвер: executing-plans, строго по одному шагу. User: «продолжить сейчас».
+- **СТАТУС: `alembic upgrade heads` ЗЕЛЁНЫЙ на свежей Postgres 16** (106 миграций, exit 0). Guard-тест проходит. App-free регрессия 337+117 passed. **Это снимает реальный boot-blocker для canonical CI.**
+
+### Что было сделано (commit `54cae5c`) — 5 слоёв, каждый маскировал следующий
+`alembic upgrade heads` НИКОГДА не проходил на чистой PG: сьют SQLite-only (Enum→VARCHAR прячет всё), CI выключен с 2026-05-28 → накопился стек PG-only багов. env.py оборачивал весь upgrade в одну транзакцию → первый сбой откатывал всё, прятал остальные.
+1. **iter38 enum server_default case** (`InvalidTextRepresentationError`): 18 колонок UPPER→lowercase (реальные `pg_enum` метки); 15 валидных не тронуты; pin `_COHORT_C` синхронизирован.
+2. **Unsafe new enum value** (`UnsafeNewEnumValueUsageError`): `ALTER TYPE ADD VALUE` использовался как server_default в той же tx. **env.py:** `connect()` + `execution_options(isolation_level="AUTOCOMMIT")` + `transaction_per_migration=True` → каждая миграция коммитится отдельно, новое enum-значение durable до использования. (`autocommit_block()` НЕ работает в run_sync; `transaction_per_migration` без AUTOCOMMIT тоже мало — нужен AUTOCOMMIT на connection.)
+3. **iter47** (`type "file_kind" does not exist`): явный `sa.Enum(file_kind/file_scan_status).create(checkfirst=True)` в начале upgrade (неявный CREATE TYPE от add_column ненадёжен под AUTOCOMMIT/DAG).
+4. **iter43** (`DatatypeMismatchError ... incidentstatus`): String→Enum падал из-за plain-string server_default. **DROP DEFAULT → ALTER TYPE → SET DEFAULT** на PG.
+5. **iter42** (`type "incidenttype" does not exist`): явный create `incidenttype`/`incidentstage` (как #3).
+
+### ⚠️ Риск, требующий внимания пользователя/ревью
+**env.py теперь AUTOCOMMIT + transaction_per_migration — это меняет прод-семантику `alembic upgrade`:** упал на середине → НЕ откатывается целиком (частично применённые миграции остаются). Раньше весь upgrade был атомарным. Для прода это **нормальная** альбемик-практика (большинство проектов так и гоняют, миграции должны быть индивидуально атомарны), и совпадает с тем, что авторы миграций уже предполагали (next55b «runs in its own tx»). Но: (а) проверить, нет ли миграций, полагавшихся на глобальный rollback; (б) downgrade-пути не тестировались на PG в этой сессии; (в) канонический прогон — на Py3.12.12 в CI (локально 3.13.7).
+
+### Validation (Py3.13/Win via PowerShell+venv+Docker PG16; canonical 3.12.12 — CI, выключен)
+- Guard `test_alembic_postgres_upgrade.py`: **green**, 106 миграций, exit 0 на throwaway DB.
+- App-free: pin iter38 + `server_default_parity` audit (drift=0) + iter37/42/43 + compose = **337 passed**; siblings iter40/41/46/48 = **117 passed**.
+- Throwaway DB удалён, `cabinet` не тронут.
+
+### Next Steps
+1. **Operational (зона пользователя): W0 — re-enable CI** → canonical 3.12.12-прогон `alembic-postgres-upgrade` (должен пройти), `perf-smoke` (transitive), bootstrap coverage-floors → `TZ-6.3-V11-01`. Снять «provisional» с RB-002/003/005.
+2. **Перед merge:** ревью риска AUTOCOMMIT/transaction_per_migration (см. выше) — желательно прогнать downgrade на PG и проверить отсутствие зависимостей от глобальной атомарности.
+3. **PR/merge ветки** `fix/iter38-enum-server-default-case` (на усмотрение пользователя).
+- **Process lesson (закреплён в [[py313_win_pytest_invocation]]):** НЕ батчить edit→test→commit в одном сообщении (concurrent tool calls рейсятся/отменяются). Один шаг = одно сообщение. Это сработало — после перехода на строгую последовательность всё пошло чисто.
+
+---
+
+### (STALE — оставлено для истории) Промежуточный handoff: Layer-1 fix VALIDATED locally; 4-layer cascade SURFACED; branch reset
 
 - **Дата:** 2026-06-01. Ветка `fix/iter38-enum-server-default-case` от `main` (`0d53f46`). Local-only, НЕ влита. Коммиты: `5deeeb0` spec → `4ef39b8` plan. **Кодовых коммитов НЕТ** (намеренный reset — см. ниже).
 - **Агент:** Claude Opus 4.8 (local Win+Py3.13.7/.venv). Драйвер: finishing→brainstorming→writing-plans→executing-plans. User: «завершить блокеры → canonical CI-green», путь A (enum-slice), затем «прими самое эффективное решение и продолжай».
