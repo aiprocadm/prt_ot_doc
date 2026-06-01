@@ -96,6 +96,14 @@ INCIDENT_LOG_STATUS_VALUES = (
 
 
 def upgrade() -> None:
+    # Explicitly create the PG enum types up front (checkfirst=True). Under
+    # AUTOCOMMIT + transaction_per_migration the implicit CREATE TYPE that
+    # add_column would emit is unreliable, so create them here (mirrors
+    # iter47 / next55). No-op on SQLite.
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        sa.Enum(*INCIDENT_TYPE_VALUES, name="incidenttype").create(bind, checkfirst=True)
+        sa.Enum(*INCIDENT_STAGE_VALUES, name="incidentstage").create(bind, checkfirst=True)
     # ------------------------------------------------------------------
     # 1. Alter incident: add 6 missing business cols + 4 indexes.
     # ------------------------------------------------------------------
