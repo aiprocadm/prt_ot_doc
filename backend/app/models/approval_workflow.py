@@ -18,7 +18,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import SoftDeleteMixin, TenantBaseModel
+from app.models.base import SoftDeleteMixin, TenantBaseModel, native_enum
 
 
 class ApprovalRequestStatus(str, enum.Enum):
@@ -148,7 +148,7 @@ class ApprovalRequest(TenantBaseModel):
     document_version_id: Mapped[str] = mapped_column(ForeignKey("documentversion.id"), nullable=False, index=True)
     route_id: Mapped[str] = mapped_column(ForeignKey("approval_routes.id"), nullable=False, index=True)
     status: Mapped[ApprovalRequestStatus] = mapped_column(
-        Enum(ApprovalRequestStatus), nullable=False, default=ApprovalRequestStatus.DRAFT
+        native_enum(ApprovalRequestStatus), nullable=False, default=ApprovalRequestStatus.DRAFT
     )
     current_step_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_by: Mapped[str | None] = mapped_column(ForeignKey("user.id"), nullable=True)
@@ -185,7 +185,7 @@ class Signature(TenantBaseModel):
 
     document_version_id: Mapped[str] = mapped_column(ForeignKey("documentversion.id"), nullable=False, index=True)
     type: Mapped[SignatureType] = mapped_column(Enum(SignatureType), nullable=False)
-    status: Mapped[SignatureStatus] = mapped_column(Enum(SignatureStatus), nullable=False, default=SignatureStatus.PENDING)
+    status: Mapped[SignatureStatus] = mapped_column(native_enum(SignatureStatus), nullable=False, default=SignatureStatus.PENDING)
     signer_user_id: Mapped[str | None] = mapped_column(ForeignKey("user.id"), nullable=True, index=True)
     cert_info_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -200,7 +200,7 @@ class Signature(TenantBaseModel):
 class EdoMessage(TenantBaseModel):
     __tablename__ = "edo_messages"
 
-    direction: Mapped[EdoDirection] = mapped_column(Enum(EdoDirection), nullable=False)
+    direction: Mapped[EdoDirection] = mapped_column(native_enum(EdoDirection), nullable=False)
     document_version_id: Mapped[str | None] = mapped_column(ForeignKey("documentversion.id"), nullable=True, index=True)
     provider_code: Mapped[str] = mapped_column(String(64), nullable=False)
     entity_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
@@ -237,7 +237,7 @@ class EdoStatusHistory(TenantBaseModel):
     __tablename__ = "edo_status_history"
 
     edo_message_id: Mapped[str] = mapped_column(ForeignKey("edo_messages.id", ondelete="CASCADE"), nullable=False, index=True)
-    status: Mapped[EdoStatus] = mapped_column(Enum(EdoStatus), nullable=False)
+    status: Mapped[EdoStatus] = mapped_column(native_enum(EdoStatus), nullable=False)
     raw_payload_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
 
 
