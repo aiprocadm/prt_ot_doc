@@ -17,10 +17,15 @@ from app.db.session import SharedBase, TenantBase
 
 # Complete table registry. NOTE: app.db.base.ALEMBIC_METADATA omits app.modules.*
 # (it is snapshotted before those imports — see spec Appendix), so iterate the live
-# SharedBase + TenantBase registries instead.
+# SharedBase + TenantBase registries instead. Key by BARE table name:
+# SharedBase.metadata.schema == "public" makes its keys schema-qualified
+# ("public.billing_events"), so .update(_md.tables) would leave the bare-name
+# DEFECTIVE_COLUMNS lookups KeyError-ing unless an unrelated fixture reset the
+# schema — keep this hermetic and order-independent.
 ALL_TABLES = {}
 for _md in (SharedBase.metadata, TenantBase.metadata):
-    ALL_TABLES.update(_md.tables)
+    for _t in _md.tables.values():
+        ALL_TABLES.setdefault(_t.name, _t)
 
 # (table, column) — exactly the 52 Group-A defective columns (2026-06-02 full PG audit).
 DEFECTIVE_COLUMNS = {
