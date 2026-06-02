@@ -125,13 +125,13 @@ def test_pg_accepts_previously_added_enum_labels_on_write() -> None:
     documentstatus 'draft', roleenum 'auditor_ro', ...) now round-trip on a write.
 
     Uses raw asyncpg INSERTs into a temp table typed with each migration-created enum
-    type, deliberately bypassing the ORM mapper graph: a full-ORM insert configures all
-    mappers in this isolated session and trips a PRE-EXISTING, unrelated registry
-    ambiguity (``Multiple classes found for path "Inspection"``) plus several Tenant
-    ORM<->migration NOT NULL drifts — both out of scope for this enum-label fix. The
-    authoritative subset guard above already proves bound strings ⊆ pg labels for all
-    52 columns; this adds end-to-end proof that the ADD VALUE migration's labels are
-    writable.
+    type, deliberately bypassing the ORM mapper graph: a full-ORM insert in this
+    isolated session would still trip several Tenant ORM<->migration NOT NULL drifts
+    (out of scope for this enum-label fix). (The previously-blocking registry ambiguity
+    ``Multiple classes found for path "Inspection"`` is now fixed — see
+    ``backend/tests/test_orm_mapper_configuration.py``.) The authoritative subset guard
+    above already proves bound strings ⊆ pg labels for all 52 columns; this adds
+    end-to-end proof that the ADD VALUE migration's labels are writable.
     """
     # Mirror of the iter-49 migration's ADD_VALUES (the previously-invalid labels).
     added = {
