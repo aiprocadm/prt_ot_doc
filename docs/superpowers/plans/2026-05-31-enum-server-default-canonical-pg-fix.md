@@ -12,6 +12,24 @@
 
 ---
 
+## ✅ STATUS: COMPLETE (2026-06-02)
+
+All 6 tasks delivered. Scope expanded during execution from the planned 1-layer enum
+`server_default` fix to a **5-layer** migration cascade (each PG-only bug masked the next).
+
+- **Task 1–4** (guard test, 18 `server_default` corrections, `_COHORT_C` pin sync, app-free regression) — commit `54cae5c`. Guard green: `alembic upgrade heads` exit 0, 106 migrations on fresh PG16; app-free 337+117 passed.
+- **Task 5–6** (release docs, final canonical run + handoff) — commit `e0bc078`.
+- **env.py** changed to `AUTOCOMMIT` + `transaction_per_migration` (layer 2) to allow `ALTER TYPE ADD VALUE`; iter47/iter42 explicit enum `create()` (layers 3/5); iter43 PG default-dance (layer 4).
+
+**Post-completion (2026-06-02 session, executing-plans continuation):**
+- **Pre-merge risk review of the env.py atomicity change — DONE.** Verdict: acceptable for merge (per-*statement* autocommit proven; no migration depends on global rollback; all 7 `ADD VALUE` are `IF NOT EXISTS`). See `AI_IMPLEMENTATION_REPORT.md` top handoff + `docs/stabilization/RELEASE_BLOCKERS_STATUS.md`.
+- **Downgrade tested on PG.** Fixed an asymmetry this plan's `54cae5c` introduced: iter43 `downgrade()` now mirrors the upgrade's DROP DEFAULT→retype→SET DEFAULT before `DROP TYPE`. Pre-existing downgrade gaps (next63 `version_num`, iter41 `journaltype`) logged as a separate "downgrade repair" follow-up (not release-blocking).
+- **🔴 New finding (separate plan):** 49/81 ORM native-enum columns lack `values_callable` → SQLAlchemy stores UPPER member *names* while the pg_enum types hold lowercase *value* labels → inserts fail on PG. Out of scope for this plan; spawned as its own task.
+
+The step checkboxes below are left unticked for historical fidelity; this banner is the authoritative completion record.
+
+---
+
 ## File Structure
 
 - **Modify:** `backend/app/migrations/versions/20260529_iter38_server_default_cohort_c.py` — fix 18 `server_default` literals in `upgrade()`. (Downgrade unchanged — it sets `server_default=None`.)

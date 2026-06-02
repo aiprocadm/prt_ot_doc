@@ -92,6 +92,16 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    bind = op.get_bind()
+    # Mirror the upgrade's PG default-dance in reverse. The upgrade ends with
+    # ``SET DEFAULT 'REPORTED'`` while the column is typed ``incidentstatus``,
+    # so the stored default expression depends on that enum type. Retyping the
+    # column back to String does NOT clear that default, so a subsequent
+    # ``DROP TYPE incidentstatus`` fails with DependentObjectsStillExistError.
+    # Drop the enum-typed default first, retype, then restore the plain-string
+    # default the column carried pre-iter-43 (iter-37/38 'REPORTED' convention).
+    if bind.dialect.name == "postgresql":
+        op.execute("ALTER TABLE incident ALTER COLUMN status DROP DEFAULT")
     with op.batch_alter_table("incident", schema=None) as batch_op:
         batch_op.alter_column(
             "status",
@@ -99,4 +109,6 @@ def downgrade() -> None:
             type_=sa.String(length=64),
             existing_nullable=False,
         )
+    if bind.dialect.name == "postgresql":
+        op.execute("ALTER TABLE incident ALTER COLUMN status SET DEFAULT 'REPORTED'")
     sa.Enum(name="incidentstatus").drop(op.get_bind(), checkfirst=True)
