@@ -52,6 +52,7 @@ from app.models.base import (
     TimestampMixin,
     UUIDMixin,
     VersionedMixin,
+    native_enum,
 )
 from app.models.file import File
 
@@ -315,7 +316,7 @@ class BillingSubscription(SharedModel, SoftDeleteMixin):
 
     tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=False, index=True)
     plan_id: Mapped[str] = mapped_column(String(36), ForeignKey("plans.id"), nullable=False)
-    status: Mapped[BillingSubscriptionStatus] = mapped_column(Enum(BillingSubscriptionStatus), nullable=False, default=BillingSubscriptionStatus.ACTIVE)
+    status: Mapped[BillingSubscriptionStatus] = mapped_column(native_enum(BillingSubscriptionStatus), nullable=False, default=BillingSubscriptionStatus.ACTIVE)
     period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     auto_renew: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -358,7 +359,7 @@ class BillingInvoice(SharedModel):
     tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=False, index=True)
     period_yyyymm: Mapped[int] = mapped_column(Integer, nullable=False)
     amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0)
-    status: Mapped[BillingInvoiceStatus] = mapped_column(Enum(BillingInvoiceStatus), nullable=False, default=BillingInvoiceStatus.DRAFT)
+    status: Mapped[BillingInvoiceStatus] = mapped_column(native_enum(BillingInvoiceStatus), nullable=False, default=BillingInvoiceStatus.DRAFT)
     due_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
 
@@ -379,7 +380,7 @@ class BillingEvent(SharedModel):
     __tablename__ = "billing_events"
 
     tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=False, index=True)
-    type: Mapped[BillingEventType] = mapped_column(Enum(BillingEventType), nullable=False, index=True)
+    type: Mapped[BillingEventType] = mapped_column(native_enum(BillingEventType), nullable=False, index=True)
     ref_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
     ref_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     amount: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
@@ -446,7 +447,7 @@ class WebhookSubscription(SharedModel):
 class User(TenantBaseModel, SoftDeleteMixin):
     email: Mapped[str] = mapped_column(String(320), nullable=False)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    role: Mapped[RoleEnum] = mapped_column(Enum(RoleEnum), nullable=False)
+    role: Mapped[RoleEnum] = mapped_column(native_enum(RoleEnum), nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -497,7 +498,7 @@ class UserRole(TenantBaseModel):
     user_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    role: Mapped[RoleEnum] = mapped_column(Enum(RoleEnum), nullable=False)
+    role: Mapped[RoleEnum] = mapped_column(native_enum(RoleEnum), nullable=False)
 
     user: Mapped[User] = relationship("User", back_populates="roles")
 
@@ -909,7 +910,7 @@ class TrainingSession(TenantBaseModel):
         ForeignKey("training_plan.id", ondelete="SET NULL"), nullable=True, index=True
     )
     status: Mapped[TrainingSessionStatus] = mapped_column(
-        Enum(TrainingSessionStatus), nullable=False, default=TrainingSessionStatus.SCHEDULED
+        native_enum(TrainingSessionStatus), nullable=False, default=TrainingSessionStatus.SCHEDULED
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -1318,7 +1319,7 @@ class PPEItemCategory(str, enum.Enum):
 class PPEItem(TenantBaseModel, SoftDeleteMixin):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     code: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    category: Mapped[PPEItemCategory] = mapped_column(Enum(PPEItemCategory), nullable=False, default=PPEItemCategory.OTHER)
+    category: Mapped[PPEItemCategory] = mapped_column(native_enum(PPEItemCategory), nullable=False, default=PPEItemCategory.OTHER)
     description: Mapped[str | None] = mapped_column(String(512))
     default_wear_days: Mapped[int] = mapped_column(Integer, nullable=False, default=365)
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
@@ -1538,7 +1539,7 @@ class PackageProfileConfig(TenantBaseModel):
     pipeline_steps_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
     concurrency_limit: Mapped[int | None] = mapped_column(Integer)
     status: Mapped[PackageEntityStatus] = mapped_column(
-        Enum(PackageEntityStatus, name="package_entity_status"),
+        native_enum(PackageEntityStatus, name="package_entity_status"),
         nullable=False,
         default=PackageEntityStatus.DRAFT,
     )
@@ -1559,12 +1560,12 @@ class PackagePresetConfig(TenantBaseModel):
     package_profile_id: Mapped[str] = mapped_column(ForeignKey("package_profiles_v2.id"), nullable=False, index=True)
     naming_rule: Mapped[str] = mapped_column(String(512), nullable=False)
     source_type: Mapped[PackageSourceType] = mapped_column(
-        Enum(PackageSourceType, name="package_source_type"), nullable=False, default=PackageSourceType.CSV
+        native_enum(PackageSourceType, name="package_source_type"), nullable=False, default=PackageSourceType.CSV
     )
     mapping_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     options_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     status: Mapped[PackageEntityStatus] = mapped_column(
-        Enum(PackageEntityStatus, name="package_preset_status"),
+        native_enum(PackageEntityStatus, name="package_preset_status"),
         nullable=False,
         default=PackageEntityStatus.DRAFT,
     )
@@ -1587,11 +1588,11 @@ class PackagePresetItem(TenantBaseModel):
     template_version_id: Mapped[str] = mapped_column(ForeignKey("templateversion.id"), nullable=False, index=True)
     header_preset_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     replace_mode: Mapped[ReplaceMode] = mapped_column(
-        Enum(ReplaceMode, name="replace_mode"), nullable=False, default=ReplaceMode.NONE
+        native_enum(ReplaceMode, name="replace_mode"), nullable=False, default=ReplaceMode.NONE
     )
     replace_map_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     output_format: Mapped[OutputFormat] = mapped_column(
-        Enum(OutputFormat, name="package_output_format"), nullable=False, default=OutputFormat.BOTH
+        native_enum(OutputFormat, name="package_output_format"), nullable=False, default=OutputFormat.BOTH
     )
     is_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     conditions_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
@@ -1613,11 +1614,11 @@ class PackRun(TenantBaseModel):
     package_preset_id: Mapped[str] = mapped_column(ForeignKey("package_presets_v2.id"), nullable=False, index=True)
     package_profile_id: Mapped[str] = mapped_column(ForeignKey("package_profiles_v2.id"), nullable=False, index=True)
     source_file_id: Mapped[str | None] = mapped_column(ForeignKey("file.id"), nullable=True)
-    source_type: Mapped[PackageSourceType] = mapped_column(Enum(PackageSourceType, name="pack_run_source_type"), nullable=False)
+    source_type: Mapped[PackageSourceType] = mapped_column(native_enum(PackageSourceType, name="pack_run_source_type"), nullable=False)
     source_rows_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     selected_rows_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     status: Mapped[PackRunLifecycleStatus] = mapped_column(
-        Enum(PackRunLifecycleStatus, name="pack_run_lifecycle_status"), nullable=False, default=PackRunLifecycleStatus.QUEUED
+        native_enum(PackRunLifecycleStatus, name="pack_run_lifecycle_status"), nullable=False, default=PackRunLifecycleStatus.QUEUED
     )
     result_zip_file_id: Mapped[str | None] = mapped_column(ForeignKey("file.id"), nullable=True)
     stats_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
@@ -1645,7 +1646,7 @@ class PackRunItem(TenantBaseModel):
     row_no: Mapped[int] = mapped_column(Integer, nullable=False)
     source_record_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[PackRunItemStatus] = mapped_column(
-        Enum(PackRunItemStatus, name="pack_run_item_status"), nullable=False, default=PackRunItemStatus.QUEUED
+        native_enum(PackRunItemStatus, name="pack_run_item_status"), nullable=False, default=PackRunItemStatus.QUEUED
     )
     document_job_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     output_docx_file_id: Mapped[str | None] = mapped_column(ForeignKey("file.id"), nullable=True)
@@ -1663,7 +1664,7 @@ class PackRunLog(TenantBaseModel):
     __tablename__ = "pack_run_logs"
 
     pack_run_id: Mapped[str] = mapped_column(ForeignKey("pack_runs.id"), nullable=False, index=True)
-    level: Mapped[PackLogLevel] = mapped_column(Enum(PackLogLevel, name="pack_log_level"), nullable=False)
+    level: Mapped[PackLogLevel] = mapped_column(native_enum(PackLogLevel, name="pack_log_level"), nullable=False)
     step: Mapped[str | None] = mapped_column(String(64))
     message: Mapped[str] = mapped_column(Text, nullable=False)
     payload: Mapped[dict[str, Any] | None] = mapped_column(JSON)
@@ -1864,7 +1865,7 @@ class ClientPackageRun(TenantBaseModel, SoftDeleteMixin):
     initiated_by_user_id: Mapped[str | None] = mapped_column(ForeignKey("user.id"), nullable=True, index=True)
     client_company_id: Mapped[str | None] = mapped_column(ForeignKey("company.id"), nullable=True, index=True)
     status: Mapped[PackageRunStatus] = mapped_column(
-        Enum(PackageRunStatus), nullable=False, default=PackageRunStatus.DRAFT
+        native_enum(PackageRunStatus), nullable=False, default=PackageRunStatus.DRAFT
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -1887,10 +1888,10 @@ class PackageRequirement(TenantBaseModel):
     key: Mapped[str] = mapped_column(String(128), nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     type: Mapped[PackageRequirementType] = mapped_column(
-        Enum(PackageRequirementType), nullable=False, default=PackageRequirementType.FILE
+        native_enum(PackageRequirementType), nullable=False, default=PackageRequirementType.FILE
     )
     status: Mapped[PackageRequirementStatus] = mapped_column(
-        Enum(PackageRequirementStatus), nullable=False, default=PackageRequirementStatus.MISSING
+        native_enum(PackageRequirementStatus), nullable=False, default=PackageRequirementStatus.MISSING
     )
     payload_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
 
@@ -1916,7 +1917,7 @@ class ClientRequestTicket(TenantBaseModel):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[ClientRequestTicketStatus] = mapped_column(
-        Enum(ClientRequestTicketStatus), nullable=False, default=ClientRequestTicketStatus.OPEN
+        native_enum(ClientRequestTicketStatus), nullable=False, default=ClientRequestTicketStatus.OPEN
     )
     created_by: Mapped[str | None] = mapped_column(String(128))
 
@@ -2223,7 +2224,7 @@ class Journal(TenantBaseModel, SoftDeleteMixin):
         ForeignKey("company.id", ondelete="SET NULL"), nullable=True, index=True
     )
     title: Mapped[str | None] = mapped_column(String(255))
-    journal_type: Mapped[JournalType] = mapped_column(Enum(JournalType), nullable=False)
+    journal_type: Mapped[JournalType] = mapped_column(native_enum(JournalType), nullable=False)
     started_at: Mapped[date | None] = mapped_column(Date, nullable=True)
     closed_at: Mapped[date | None] = mapped_column(Date, nullable=True)
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
@@ -2238,7 +2239,7 @@ class Journal(TenantBaseModel, SoftDeleteMixin):
 class JournalEntry(TenantBaseModel, SoftDeleteMixin):
     journal_id: Mapped[str] = mapped_column(ForeignKey("journal.id"), nullable=False, index=True)
     person_id: Mapped[str] = mapped_column(ForeignKey("person.id"), nullable=False, index=True)
-    entry_type: Mapped[JournalType] = mapped_column(Enum(JournalType), nullable=False)
+    entry_type: Mapped[JournalType] = mapped_column(native_enum(JournalType), nullable=False)
     entry_date: Mapped[date] = mapped_column(Date, nullable=False, default=date.today)
     instructor: Mapped[str | None] = mapped_column(String(255))
     notes: Mapped[str | None] = mapped_column(Text)
@@ -2436,7 +2437,7 @@ class Inspection(TenantBaseModel, SoftDeleteMixin):
         ForeignKey("site.id", ondelete="SET NULL"), nullable=True, index=True
     )
     inspection_type: Mapped[InspectionType] = mapped_column(
-        Enum(InspectionType, name="inspectiontype"),
+        native_enum(InspectionType, name="inspectiontype"),
         nullable=False,
         default=InspectionType.INTERNAL,
     )
@@ -2517,7 +2518,7 @@ class Attestation(TenantBaseModel, SoftDeleteMixin):
     issued_at: Mapped[date | None] = mapped_column(Date)
     expires_at: Mapped[date | None] = mapped_column(Date)
     status: Mapped[AttestationStatus] = mapped_column(
-        Enum(AttestationStatus, name="attestationstatus"),
+        native_enum(AttestationStatus, name="attestationstatus"),
         nullable=False,
         default=AttestationStatus.ACTIVE,
     )
@@ -2557,7 +2558,7 @@ class Prescription(TenantBaseModel, SoftDeleteMixin):
     description: Mapped[str] = mapped_column(Text, nullable=False)
     due_at: Mapped[date | None] = mapped_column(Date)
     status: Mapped[PrescriptionStatus] = mapped_column(
-        Enum(PrescriptionStatus, name="prescriptionstatus"),
+        native_enum(PrescriptionStatus, name="prescriptionstatus"),
         nullable=False,
         default=PrescriptionStatus.OPEN,
     )
@@ -2628,7 +2629,7 @@ class ApprovalProcess(TenantBaseModel):
     object_type: Mapped[str] = mapped_column(String(64), nullable=False)
     object_id: Mapped[str] = mapped_column(String(36), nullable=False)
     route_id: Mapped[str] = mapped_column(ForeignKey("approval_routes.id"), nullable=False, index=True)
-    status: Mapped[ApprovalProcessStatus] = mapped_column(Enum(ApprovalProcessStatus), nullable=False, default=ApprovalProcessStatus.PENDING)
+    status: Mapped[ApprovalProcessStatus] = mapped_column(native_enum(ApprovalProcessStatus), nullable=False, default=ApprovalProcessStatus.PENDING)
     current_step: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -2647,7 +2648,7 @@ class ApprovalTask(TenantBaseModel):
     step_no: Mapped[int] = mapped_column(Integer, nullable=False)
     assignee_type: Mapped[str] = mapped_column(String(16), nullable=False)
     assignee_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    status: Mapped[ApprovalTaskStatus] = mapped_column(Enum(ApprovalTaskStatus), nullable=False, default=ApprovalTaskStatus.OPEN)
+    status: Mapped[ApprovalTaskStatus] = mapped_column(native_enum(ApprovalTaskStatus), nullable=False, default=ApprovalTaskStatus.OPEN)
     decision: Mapped[str | None] = mapped_column(String(16), nullable=True)
     comment: Mapped[str | None] = mapped_column(Text)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -2811,7 +2812,7 @@ class EdoEnvelope(TenantBaseModel):
     object_type: Mapped[str] = mapped_column(String(64), nullable=False)
     object_id: Mapped[str] = mapped_column(String(36), nullable=False)
     provider: Mapped[str] = mapped_column(String(64), nullable=False)
-    status: Mapped[EdoEnvelopeStatus] = mapped_column(Enum(EdoEnvelopeStatus), nullable=False, default=EdoEnvelopeStatus.QUEUED)
+    status: Mapped[EdoEnvelopeStatus] = mapped_column(native_enum(EdoEnvelopeStatus), nullable=False, default=EdoEnvelopeStatus.QUEUED)
     external_id: Mapped[str | None] = mapped_column(String(255), index=True)
     last_event_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

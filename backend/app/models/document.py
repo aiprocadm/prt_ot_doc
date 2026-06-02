@@ -11,7 +11,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym, validates
 from sqlalchemy.types import JSON
 
-from app.models.base import TenantBaseModel
+from app.models.base import TenantBaseModel, native_enum
 from app.models.file import File
 from app.models.finance import Contract, Department, Invoice, Order
 from app.models.models import Company, DocumentPack, Person, Template, TemplateVersion, User
@@ -62,7 +62,7 @@ class Document(TenantBaseModel):
         String(36), ForeignKey("templateversion.id", ondelete="RESTRICT"), nullable=True
     )
     status: Mapped[DocumentStatus] = mapped_column(
-        Enum(DocumentStatus, name="documentstatus"),
+        native_enum(DocumentStatus, name="documentstatus"),
         nullable=False,
         default=DocumentStatus.DRAFT,
     )
@@ -361,7 +361,7 @@ class DocumentBatchRun(TenantBaseModel):
     )
     naming_pattern: Mapped[str | None] = mapped_column(String(255))
     status: Mapped[DocumentBatchStatus] = mapped_column(
-        Enum(DocumentBatchStatus, name="documentbatchstatus"),
+        native_enum(DocumentBatchStatus, name="documentbatchstatus"),
         nullable=False,
         default=DocumentBatchStatus.PENDING,
     )
@@ -413,7 +413,7 @@ class DocumentBatchItem(TenantBaseModel):
     document_id: Mapped[str | None] = mapped_column(String(36))
     document_version_id: Mapped[str | None] = mapped_column(String(36))
     status: Mapped[DocumentBatchItemStatus] = mapped_column(
-        Enum(DocumentBatchItemStatus, name="documentbatchitemstatus"),
+        native_enum(DocumentBatchItemStatus, name="documentbatchitemstatus"),
         nullable=False,
         default=DocumentBatchItemStatus.PENDING,
     )
