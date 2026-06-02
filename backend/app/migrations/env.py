@@ -30,14 +30,19 @@ async def run_migrations_online() -> None:
         future=True,
     )
 
-    # AUTOCOMMIT + transaction_per_migration: each migration commits on its own,
-    # so an `ALTER TYPE ... ADD VALUE` in one migration is durably committed
-    # before a *later* migration references that value (PG forbids using a new
-    # enum value in the transaction that added it). With AUTOCOMMIT, Alembic's
-    # per-migration `begin_transaction()` issues explicit BEGIN/COMMIT around
-    # each migration, while DDL that runs between them (and the ADD VALUE) is
-    # not trapped in one giant outer transaction. Matches the per-migration-tx
-    # assumption migration authors already documented (e.g. next55b "own tx").
+    # AUTOCOMMIT: under this isolation level every *statement* commits
+    # immediately, so an `ALTER TYPE ... ADD VALUE` is durable before a later
+    # statement/migration references it (PG forbids using a new enum value in
+    # the transaction that added it). `transaction_per_migration=True` is kept
+    # for intent, but note: with AUTOCOMMIT the per-migration
+    # `begin_transaction()` is effectively a no-op — a SQLAlchemy rollback does
+    # NOT undo an already-executed statement (verified empirically). Trade-off,
+    # accepted (see RELEASE_BLOCKERS_STATUS "env.py atomicity review"): migrations
+    # are no longer atomic, so a multi-statement migration that fails midway
+    # leaves partial state. Safe here because (a) every `ADD VALUE` site uses
+    # `IF NOT EXISTS` (retry-safe), (b) no migration relies on global rollback,
+    # and (c) the prior single-outer-transaction wrapper never actually
+    # completed `upgrade heads` on PG anyway (this is not a regression).
     async with connectable.connect() as connection:
         await connection.execution_options(isolation_level="AUTOCOMMIT")
         await connection.run_sync(do_run_migrations)

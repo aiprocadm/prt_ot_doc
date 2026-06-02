@@ -1,5 +1,35 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-06-02, pre-merge risk review DONE + iter43 downgrade FIXED + 🔴 MAJOR finding: 49 ORM-enum columns fail on PG)
+
+- **Дата:** 2026-06-02. Ветка `fix/iter38-enum-server-default-case` (продолжение). Local-only, НЕ влита. Среда: Win + Py3.13.7/.venv + Docker PG16 (`promtech-cabinet-db-1`). Драйвер: executing-plans. User: «заверши максимум незакрытых задач из планов».
+- **Что закрыто в этой сессии:** (1) baseline re-verified green; (2) **pre-merge риск-ревью env.py** завершён с вердиктом; (3) **downgrade протестирован на PG** — найден и **исправлен** баг iter43 (атрибутируется этой ветке); (4) varchar-parity вопрос **закрыт**; (5) чекбоксы плана iter38 проставлены. **Новый коммит:** `<iter43 downgrade fix + env.py comment + docs>`.
+
+### 1. Pre-merge риск-ревью env.py (AUTOCOMMIT) — ВЕРДИКТ: приемлемо для merge, с задокументированным trade-off
+- **Эмпирически доказано** (probe): под `isolation_level="AUTOCOMMIT"` SQLAlchemy `begin()/rollback()` — **no-op на уровне БД** (INSERT пережил rollback). Т.е. коммитится **каждый statement**, а не «каждая миграция» — комментарий в env.py был неточен, **исправлен**.
+- **Аудит миграций:** НИ ОДНА миграция не зависит от глобального rollback для корректности (2 упоминания «atomic» — это про логическую группировку iter25 и про statement-level backfill iter29, не про tx). **Все 7 `ADD VALUE` используют `IF NOT EXISTS`** → retry-safe.
+- **Остаточный риск:** multi-statement миграция, упавшая на середине, оставляет частичное состояние (ручное восстановление). LOW: happy-path fresh upgrade green; старый single-tx wrapper на PG **никогда не проходил** → это не регрессия.
+- **Возможное будущее улучшение (НЕ блокер):** вернуть per-migration атомарность = `transaction_per_migration` без глобального AUTOCOMMIT + `autocommit_block()` только в 7 `ADD VALUE`-миграциях. Прошлый handoff утверждал «`autocommit_block()` не работает в run_sync» — при желании проверить в отдельном плане.
+
+### 2. Downgrade на PG протестирован — iter43 ИСПРАВЛЕН (в scope ветки), остальное pre-existing
+- `upgrade heads` (exit 0) → `downgrade base` упал: **iter43 downgrade** делал `DROP TYPE incidentstatus`, пока `incident.status DEFAULT 'REPORTED'::incidentstatus` ещё зависел от типа (`DependentObjectsStillExistError`). Причина: commit `54cae5c` пофиксил `upgrade()` (DROP DEFAULT→ALTER→SET DEFAULT), но **не отзеркалил `downgrade()`**. **ИСПРАВЛЕНО** (зеркальный DROP DEFAULT→retype→SET DEFAULT→DROP TYPE).
+- **Bounded round-trip подтверждает:** downgrade всего тронутого когорта (iter42/43/46/47/48 + wa01/02/03) до iter38 = **exit 0** (включая iter43-фикс). Forward guard после фикса — **green** (1 passed).
+- **Pre-existing downgrade-баги (НЕ scope этой ветки, НЕ release-blocker — прод катится только вперёд):** (а) `next63` downgrade ужимает `alembic_version.version_num` до VARCHAR(32) → truncation на длинных revision-id; (б) `iter41`/journaltype `CREATE TYPE` без drop-на-downgrade → коллизия при re-upgrade. Это отдельный «downgrade repair» план (как был 5-слойный upgrade).
+
+### 3. 🔴 MAJOR (новое, headline): 49 из 81 ORM-enum колонок ПАДАЮТ на PG insert (ORM↔pg_enum label drift)
+- **Доказано ground-truth:** `SELECT 'PENDING'::approvalprocessstatus` → `ERROR: invalid input value`. ORM биндит `'PENDING'` (имя члена, т.к. **нет `values_callable`**), а pg_enum имеет lowercase-метку `pending`. Любой ORM-insert такой колонки на PG падает с `InvalidTextRepresentationError`.
+- **Масштаб (аудит SA bind_processor vs live pg_enum):** **49/81** native-enum колонок дефектны (subscriptions, invoices, billing_events, contract, order, approval_processes/tasks/requests, signatures, edo_*, **user.role/user_role.role** (roleenum — мешанина UPPER+lower меток), training_session, ppeitem, package_*, pack_*, journal/journalentry, attestation, inspection_prescription, document (mixed labels), document_batch_*, **notifications/notification_templates** (PG-метки CamelCase + подмножество!), task/plan_tasks, reminder_rules...). Только ~7 колонок имеют `values_callable` (правильно пишут lowercase) — конвенция применена непоследовательно.
+- **Почему пряталось:** suite SQLite-only (enum→VARCHAR принимает любой регистр); миграция на PG никогда не доходила до конца до iter38. Это **следующий замаскированный слой** после iter38 — приложение грузится, но запись ядра сущностей на PG падает.
+- **НЕ исправлено** (намеренно): это codebase-wide изменение (49 колонок), затрагивает рантайм-формат записи и рискует сломать SQLite-сьют (нужны PG-insert тесты, а не SQLite). Часть кейсов (roleenum, notifications.type CamelCase, document.status mixed) требуют точечного анализа. **Отдельный план + PR + ревью.** Рекомендуемый фикс: добавить `values_callable=lambda e: [m.value for m in e]` ко всем дефектным колонкам (прецедент: `document.py:171`, `models.py:737/748/...`); для messy-enum'ов — выровнять метки. **Создан spawn-task.**
+
+### Next Steps (приоритет)
+1. 🔴 **Закрыть ORM↔enum label drift (49 колонок)** — самый важный незакрытый дефект для «canonical PG green» в полном смысле (приложение работает на PG, а не только мигрирует). Отдельный план/PR. См. spawn-task.
+2. **Operational (зона пользователя): W0 — re-enable CI** → canonical 3.12.12 прогон. Снять «provisional» с RB-002/003/005.
+3. **Merge ветки** `fix/iter38-enum-server-default-case` — риск-ревью env.py пройден (вердикт выше), iter43 downgrade исправлен. На усмотрение пользователя.
+4. (Опц.) **Downgrade repair** план: next63 version_num + iter41 journaltype + полный аудит upgrade/downgrade enum-симметрии.
+
+---
+
 ## Last Agent Handoff (2026-06-01, canonical PG upgrade GREEN — 5-layer migration cascade FIXED ✅)
 
 - **Дата:** 2026-06-01. Ветка `fix/iter38-enum-server-default-case` от `main` (`0d53f46`). Local-only, НЕ влита. Коммиты: `5deeeb0` spec → `4ef39b8` plan → `385f034` (промежуточный handoff, **stale** — описывает незавершённое состояние до того, как я продолжил) → `54cae5c` **fix (5 слоёв, green)**.
