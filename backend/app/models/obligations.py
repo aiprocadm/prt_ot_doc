@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import DateTime, Enum, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import TenantBaseModel
+from app.models.base import TenantBaseModel, native_enum
 
 if TYPE_CHECKING:  # pragma: no cover
     from app.models.models import User
@@ -47,7 +47,7 @@ class Task(TenantBaseModel):
     entity_id: Mapped[str | None] = mapped_column(String(36))
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[TaskStatus] = mapped_column(
-        Enum(TaskStatus, name="taskstatus"), nullable=False, default=TaskStatus.OPEN
+        native_enum(TaskStatus, name="taskstatus"), nullable=False, default=TaskStatus.OPEN
     )
     assignee_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True
@@ -56,13 +56,13 @@ class Task(TenantBaseModel):
         String(36), ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True
     )
     priority: Mapped[TaskPriority] = mapped_column(
-        Enum(TaskPriority, name="taskpriority"),
+        native_enum(TaskPriority, name="taskpriority"),
         nullable=False,
         default=TaskPriority.MEDIUM,
     )
     next_remind_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     reminder_channel: Mapped[TaskReminderChannel | None] = mapped_column(
-        Enum(TaskReminderChannel, name="taskreminderchannel"), nullable=True
+        native_enum(TaskReminderChannel, name="taskreminderchannel"), nullable=True
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
