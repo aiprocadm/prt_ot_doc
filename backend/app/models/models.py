@@ -2457,8 +2457,8 @@ class Inspection(TenantBaseModel, SoftDeleteMixin):
     )
     result_summary: Mapped[str | None] = mapped_column(Text)
 
-    company: Mapped[Company] = relationship(backref="inspections")
-    site: Mapped[Site | None] = relationship(backref="inspections")
+    company: Mapped[Company] = relationship(backref="regulatory_inspections")
+    site: Mapped[Site | None] = relationship(backref="regulatory_inspections")
     responsible: Mapped[User | None] = relationship("User")
     results: Mapped[list["InspectionResult"]] = relationship(
         "InspectionResult",
@@ -2490,7 +2490,7 @@ class InspectionResult(TenantBaseModel, SoftDeleteMixin):
         ForeignKey("file.id", ondelete="SET NULL"), nullable=True
     )
 
-    inspection: Mapped[Inspection] = relationship("Inspection", back_populates="results")
+    inspection: Mapped[Inspection] = relationship("app.models.models.Inspection", back_populates="results")
     file: Mapped[File | None] = relationship("File")
 
     __table_args__ = (
@@ -2568,7 +2568,7 @@ class Prescription(TenantBaseModel, SoftDeleteMixin):
     evidence: Mapped[str | None] = mapped_column(Text)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-    inspection: Mapped[Inspection] = relationship("Inspection")
+    inspection: Mapped[Inspection] = relationship("app.models.models.Inspection")
     incident: Mapped[Incident | None] = relationship("Incident")
     assignee: Mapped[User | None] = relationship("User")
 
