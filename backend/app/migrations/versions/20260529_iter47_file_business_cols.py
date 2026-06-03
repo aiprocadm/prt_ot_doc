@@ -34,19 +34,22 @@ server_defaults are therefore declared in UPPERCASE, matching exactly what
 ``Base.metadata.create_all`` emits on PG. Lowercase would reintroduce the
 RB-002 defect (a server_default that is not a valid enum label).
 
-Enum lifecycle (iter-42 add_column pattern, NOT iter-43's alter_column one):
-``op.add_column`` with a native ``sa.Enum`` auto-emits ``CREATE TYPE`` on PG, so
-upgrade does NOT call ``.create()`` explicitly — doing so would emit a duplicate
-``CREATE TYPE``. Each enum type is used by exactly one column here, so there is
-no double-create across columns. ``drop_column`` does NOT auto-drop the type, so
-downgrade explicitly drops both with ``checkfirst=True``.
+Enum lifecycle (Layer-3 fix, commit 7f92693): although ``op.add_column`` with a
+native ``sa.Enum`` is *meant* to auto-emit ``CREATE TYPE`` on PG, under
+``env.py``'s AUTOCOMMIT + ``transaction_per_migration`` that implicit create
+proved unreliable across the DAG (it failed with ``type "file_kind" does not
+exist``). So upgrade explicitly creates both enum types up front with
+``checkfirst=True`` — the flag makes the create idempotent, so it is a safe no-op
+(NOT a duplicate ``CREATE TYPE`` error) when the type already exists.
+``drop_column`` does NOT auto-drop the type, so downgrade explicitly drops both
+with ``checkfirst=True`` too.
 
 Ordering: ``file`` is created by the universal root ``6b6dee7c951f`` (an ancestor
-of every head) and the two enum types are self-created by this migration's
-add_columns. There are no cross-branch FK targets (``company_id`` / ``pack_id``
-are plain String, no ForeignKey). So ``down_revision = iter38`` alone orders
-this correctly under ``alembic upgrade heads`` — unlike iter-46, no
-``depends_on`` is needed.
+of every head) and the two enum types are self-created up front by this
+migration via ``sa.Enum(...).create(checkfirst=True)``. There are no cross-branch
+FK targets (``company_id`` / ``pack_id`` are plain String, no ForeignKey). So
+``down_revision = iter38`` alone orders this correctly under ``alembic upgrade
+heads`` — unlike iter-46, no ``depends_on`` is needed.
 
 After iter-47 lands, column_drift_lite business-drift drops from 2 -> 1 table
 (only ``outbox_events`` remains — the iter-48 candidate).

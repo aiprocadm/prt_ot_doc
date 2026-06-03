@@ -368,19 +368,22 @@ def test_enum_value_constants_are_uppercase_labels() -> None:
         )
 
 
-def test_upgrade_does_not_explicitly_create_enum_types() -> None:
-    """``op.add_column`` with a native ``sa.Enum`` auto-emits ``CREATE TYPE`` on
-    PG (the iter-42 add_column+enum pattern). An ADDITIONAL explicit
-    ``sa.Enum(...).create(...)`` would emit a DUPLICATE ``CREATE TYPE`` and fail
-    with 'type already exists'. So upgrade must NOT explicitly create these
-    types — pin the auto-create reliance. (Contrast iter-43, which DOES create
-    explicitly because it uses the enum in an ``alter_column``, not add_column.)
+def test_upgrade_explicitly_creates_enum_types_with_checkfirst() -> None:
+    """Layer-3 fix (commit 7f92693): although ``op.add_column`` with a native
+    ``sa.Enum`` is *meant* to auto-emit ``CREATE TYPE`` on PG, under ``env.py``'s
+    AUTOCOMMIT + ``transaction_per_migration`` that implicit create proved
+    unreliable across the DAG (it failed with ``type "file_kind" does not
+    exist``). So upgrade explicitly creates both enum types up front with
+    ``checkfirst=True`` — the flag makes the create idempotent, so it is a safe
+    no-op (NOT a duplicate ``CREATE TYPE`` error) when the type already exists.
+    Pin that behavior; this is the upgrade-side mirror of
+    ``test_enum_types_dropped_in_downgrade_with_checkfirst``.
     """
     upgrade = _upgrade_fn(_migration_tree())
-    created = _enum_lifecycle_names(upgrade, "create", require_checkfirst=False)
-    assert not ({"file_kind", "file_scan_status"} & created), (
-        "upgrade must rely on add_column auto-create, not explicit .create(); "
-        f"found explicit create for {sorted(created)}"
+    created = _enum_lifecycle_names(upgrade, "create", require_checkfirst=True)
+    assert {"file_kind", "file_scan_status"} <= created, (
+        "upgrade must explicitly create both enum types with checkfirst=True "
+        f"(Layer-3 fix for AUTOCOMMIT + transaction_per_migration), found {sorted(created)}"
     )
 
 
