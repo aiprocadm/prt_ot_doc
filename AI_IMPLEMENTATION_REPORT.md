@@ -1,5 +1,16 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-06-04 cont., PR #639 ВЛИТ в main → downgrade-arc ЗАКРЫТ; re-verified green на merged main; остаётся только W0)
+
+- **Дата:** 2026-06-04 (продолжение; «выполни план» → handoff-driven). Ветка `main` синхронизирована с `origin/main`@`f6210c7`. Среда: Win+Py3.13.7/.venv + throwaway Docker `postgres:16` (поднят на host:55432 и снят в этой сессии). Драйвер: executing-plans → finishing-a-development-branch → verification-before-completion. **Кодовых изменений в миграциях НЕТ** — только верификация на merged main + эта doc-реконсиляция.
+- **ГЛАВНОЕ:** документированный «Next» прошлого handoff'а (**PR ветки `fix/migration-downgrade-repair`**) **УЖЕ ВЫПОЛНЕН**: **PR #639** (`fix(migrations): repair downgrade path … (6 layers)`) **squash-влит в `main`** → merge-commit `f6210c7`, merged 2026-06-04T05:52:57Z by `aiprocadm`. `git diff origin/main..fix/migration-downgrade-repair` — **пусто** (контент байт-в-байт в main; squash полный; промежуточных PR между `97adfb1` и `f6210c7` нет). Прошлый верхний handoff (DOWNGRADE-PATH REPAIR) **устарел по «Next»** — он закрыт этим merge'ем.
+- **Re-verify на merged main (`f6210c7`):** оба PG-guard'а на свежей PG16 → `test_alembic_upgrade_heads_on_fresh_postgres` + `test_alembic_downgrade_base_then_reupgrade_on_fresh_postgres` = **2 passed, exit 0, 96.85s** (Py3.13.7/Win; `TEST_PG_ADMIN_URL=…@localhost:55432/postgres`). Round-trip `upgrade heads → downgrade base → re-upgrade heads` зелёный на влитом коде. Warnings — pre-existing deprecations (`tometadata`, pydantic v2 class-config), без изменений. Throwaway-контейнер снят, persistent (chatrix/erpnext/n8n) не тронуты. canonical 3.12.12 = CI (выключен [[ci_disabled_actions_off]]).
+- **Hygiene:** локальный `main` ff-синхронизирован `97adfb1 → f6210c7`; merged-ветка `fix/migration-downgrade-repair` подлежит удалению (squash-merge → `git branch -D`). Эта реконсиляция — на ветке `docs/reconcile-pr639-merged` (doc-only), PR на усмотрение пользователя.
+- **СТАТУС АРКИ:** весь enum/миграционный стабилизационный каскад **#633→#639 ЗАКРЫТ** (upgrade-path #633–#638 + downgrade-path #639). `alembic upgrade heads` **и** `downgrade base`→re-upgrade зелёные на чистой PG16.
+- **Next (единственный остаток):** **W0 — re-enable CI (зона пользователя).** Canonical 3.12.12-прогон (`alembic-postgres-upgrade` guard теперь покрывает обе стороны, perf-smoke, coverage-floors); снять «provisional» с RB-002/003/005. Это операционная политика пользователя ([[ci_disabled_actions_off]]), не код. Кодовых release-blocker'ов миграций НЕТ.
+
+---
+
 ## Last Agent Handoff (2026-06-04 cont., DOWNGRADE-PATH REPAIR — `downgrade base` + re-upgrade зелёные на PG; 6 слоёв; ветка fix/migration-downgrade-repair)
 
 - **Дата:** 2026-06-04 (продолжение сессии «Verify + reconcile», см. handoff ниже). Ветка `fix/migration-downgrade-repair` от `main`@`97adfb1`. Коммиты: `2959a99` (docs-реконсиляция) → `231eb6f` (downgrade-fix: 8 миграций + round-trip guard). Среда: Win+Py3.13.7/.venv + throwaway Docker `postgres:16`. Драйвер: systematic-debugging → TDD → verification-before-completion. User: «прими самое эффективное решение самостоятельно».
