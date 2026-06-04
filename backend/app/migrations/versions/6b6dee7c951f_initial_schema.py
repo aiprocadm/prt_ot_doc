@@ -1017,4 +1017,31 @@ def downgrade() -> None:
     op.drop_table('tenant')
     op.drop_table('npa_act')
     op.drop_table('feature')
+
+    # Postgres does NOT auto-drop an enum type when the table using it is
+    # dropped, so the native enum types created by this initial schema linger
+    # after `downgrade base` and collide ("type ... already exists") on a fresh
+    # re-upgrade. Drop the enums OWNED by this revision explicitly. PG-only:
+    # SQLite degrades Enum to VARCHAR (no native type) and has no DROP TYPE.
+    # Enums introduced by later revisions are dropped by their own downgrades.
+    if op.get_bind().dialect.name == "postgresql":
+        for _enum in (
+            "correctiveactionstatus",
+            "documentjobstatus",
+            "documentstatus",
+            "equipmentstatus",
+            "idempotencystatus",
+            "incidentseverity",
+            "inspectionstatus",
+            "npastatus",
+            "permitstatus",
+            "pipelinerunstatus",
+            "plantaskstatus",
+            "ppeissuestatus",
+            "roleenum",
+            "templateversionstatus",
+            "trainingstatus",
+            "violationseverity",
+        ):
+            op.execute(f"DROP TYPE IF EXISTS {_enum}")
     # ### end Alembic commands ###

@@ -168,6 +168,18 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Drop indexes BEFORE the columns/tables they span. Postgres auto-drops an
+    # index when a column it covers is dropped, so the original order
+    # (drop_column first) made the later drop_index raise "index ... does not
+    # exist" — e.g. ix_edo_messages_entity_status_created spans entity_type /
+    # entity_id, dropped just below. Mirrors upgrade(), which deliberately
+    # creates these indexes only AFTER the add_column calls.
+    op.drop_index("ix_edo_status_events_message_received", table_name="edo_status_events")
+    op.drop_index("ix_edo_messages_entity_status_created", table_name="edo_messages")
+    op.drop_index("ix_signature_requests_entity_status", table_name="signature_requests")
+    op.drop_index("ix_approval_instance_steps_lookup", table_name="approval_instance_steps")
+    op.drop_index("ix_approval_instances_entity", table_name="approval_instances")
+
     op.drop_column("edo_messages", "created_by")
     op.drop_column("edo_messages", "protocol_file_id")
     op.drop_column("edo_messages", "response_payload_json")
@@ -196,12 +208,6 @@ def downgrade() -> None:
     op.drop_column("approval_routes", "conditions_json")
     op.drop_column("approval_routes", "applies_to")
     op.drop_column("approval_routes", "description")
-
-    op.drop_index("ix_edo_status_events_message_received", table_name="edo_status_events")
-    op.drop_index("ix_edo_messages_entity_status_created", table_name="edo_messages")
-    op.drop_index("ix_signature_requests_entity_status", table_name="signature_requests")
-    op.drop_index("ix_approval_instance_steps_lookup", table_name="approval_instance_steps")
-    op.drop_index("ix_approval_instances_entity", table_name="approval_instances")
 
     op.drop_table("edo_webhook_inbox")
     op.drop_table("edo_status_events")

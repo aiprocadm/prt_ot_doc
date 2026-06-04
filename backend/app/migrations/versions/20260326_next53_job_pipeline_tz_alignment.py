@@ -46,7 +46,11 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_column("pipeline_profiles", "concurrency_limit_per_tenant")
 
-    op.drop_index("ix_document_job_steps_job_status", table_name="document_job_steps")
+    # iter-15c mirror: ix_document_job_steps_job_status is co-created (IF NOT
+    # EXISTS) by both this revision and 20260314_next40 (sibling DAG branch).
+    # The branch that downgrades second would hit "index does not exist", so
+    # drop it idempotently to match the idempotent create above.
+    op.execute("DROP INDEX IF EXISTS ix_document_job_steps_job_status")
     op.drop_index("ix_document_job_steps_job_seq", table_name="document_job_steps")
 
     op.drop_column("document_job_steps", "logs_ref")

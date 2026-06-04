@@ -71,8 +71,13 @@ def downgrade() -> None:
     op.drop_index("ix_audit_export_job_tenant_status", table_name="audit_export_job")
     op.drop_table("audit_export_job")
 
+    # Drop only the trigger this revision added. The shared
+    # prevent_auditlog_mutation() function is owned by
+    # 20250312_add_audit_log_metadata (which also created the auditlog_no_update
+    # / auditlog_no_delete triggers that still depend on it and downgrades much
+    # later). This revision only CREATE-OR-REPLACE'd the function, so dropping
+    # it here raises DependentObjectsStillExistError — leave it to its owner.
     op.execute("DROP TRIGGER IF EXISTS trg_auditlog_immutable ON auditlog")
-    op.execute("DROP FUNCTION IF EXISTS prevent_auditlog_mutation")
 
     op.drop_index("ix_auditlog_actor", table_name="auditlog")
     op.drop_index("ix_auditlog_object", table_name="auditlog")

@@ -220,10 +220,20 @@ def downgrade() -> None:
     op.drop_index("ix_document_batch_run_tenant_created", table_name="document_batch_run")
     op.drop_table("document_batch_run")
 
+    # Drop the documentversion -> document_snapshot FK (and its column) BEFORE
+    # dropping the referenced document_snapshot table; the original order
+    # dropped the table first, which raises DependentObjectsStillExistError.
+    with op.batch_alter_table("documentversion", schema=None) as batch:
+        batch.drop_constraint("fk_document_version_snapshot", type_="foreignkey")
+        batch.drop_column("snapshot_id")
+
     op.drop_index("ix_document_snapshot_template", table_name="document_snapshot")
     op.drop_index("ix_document_snapshot_document", table_name="document_snapshot")
     op.drop_table("document_snapshot")
 
-    with op.batch_alter_table("documentversion", schema=None) as batch:
-        batch.drop_constraint("fk_document_version_snapshot", type_="foreignkey")
-        batch.drop_column("snapshot_id")
+    if op.get_bind().dialect.name == "postgresql":
+        # Enum types created by this revision are not auto-dropped with their
+        # tables — remove them so a re-upgrade after `downgrade base` does not
+        # collide. PG-only (SQLite degrades Enum to VARCHAR, no DROP TYPE).
+        op.execute("DROP TYPE IF EXISTS documentbatchitemstatus")
+        op.execute("DROP TYPE IF EXISTS documentbatchstatus")

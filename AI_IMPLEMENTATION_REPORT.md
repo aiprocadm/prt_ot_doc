@@ -1,5 +1,46 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-06-04 cont., DOWNGRADE-PATH REPAIR — `downgrade base` + re-upgrade зелёные на PG; 6 слоёв; ветка fix/migration-downgrade-repair)
+
+- **Дата:** 2026-06-04 (продолжение сессии «Verify + reconcile», см. handoff ниже). Ветка `fix/migration-downgrade-repair` от `main`@`97adfb1`. Коммиты: `2959a99` (docs-реконсиляция) → `231eb6f` (downgrade-fix: 8 миграций + round-trip guard). Среда: Win+Py3.13.7/.venv + throwaway Docker `postgres:16`. Драйвер: systematic-debugging → TDD → verification-before-completion. User: «прими самое эффективное решение самостоятельно».
+- **Контекст:** после реконсиляции `upgrade heads` зелёный, но **downgrade-путь никогда не гонялся на PG** (сьют SQLite-only). Probe round-trip (`upgrade heads → downgrade base → re-upgrade heads`) на свежей PG16 вскрыл **6 замаскированных слоёв** (зеркало 5-слойного upgrade-фикса #633), каждый — в своей миграции:
+  1. **next63** — downgrade ужимал `alembic_version.version_num` → `VARCHAR(32)`, пока там 42-симв. revision-id → `StringDataRightTruncationError`. Теперь **no-op** (расширение bookkeeping-колонки forward-compatible).
+  2. **next57** — дропал колонки `edo_messages` до индекса по ним (PG авто-дропает индекс с колонкой) → `drop_index "does not exist"`. Переставлено **indexes-before-columns**.
+  3. **next40 + next53** — общий `ix_document_job_steps_job_status` создаётся `IF NOT EXISTS`, но дропался безусловно → второй по порядку downgrade падал. Теперь `DROP INDEX IF EXISTS` в обоих.
+  4. **next37** — дропал общую функцию `prevent_auditlog_mutation()`, которую только `CREATE OR REPLACE`'нул (триггеры `20250312` зависят) → `DependentObjectsStillExistError`. Теперь дропает только свой триггер, функцию — владельцу (20250312).
+  5. **20250315** — дропал `document_snapshot` до входящего FK `fk_document_version_snapshot` → dependency error. Переставлено: **FK раньше таблицы**.
+  6. **Сиротство enum-типов** — PG не авто-дропает enum-тип с таблицей → **19 типов** переживали `downgrade base` и коллизились на re-upgrade. Дропаются владельцами (PG-guarded; SQLite Enum→VARCHAR): **16** в `6b6dee7c951f_initial_schema`, **2** в `20250315`, **1** в `next55` (templatestatus).
+- **NB:** предсказанный прошлым handoff'ом `iter41`/journaltype дефект **НЕ подтвердился** — эмпирический orphan-список (19 типов) journaltype не содержит. Probe > догадка.
+- **Новый guard:** `@pytest.mark.db test_alembic_downgrade_base_then_reupgrade_on_fresh_postgres` (RED на старте: next63 truncation, 40s → GREEN: 76s).
+- **Верификация (Win+Py3.13.7/.venv + throwaway postgres:16):** round-trip **1 passed**; app-free enum/iter пины **300** + миграционные пины **67** = **367 passed, 0 failed**. Регрессий нет. canonical 3.12.12 = CI (выключен).
+- **Next:** PR ветки `fix/migration-downgrade-repair` (docs-реконсиляция + downgrade-fix). После этого незакрыт только **W0 (re-enable CI, зона пользователя)**.
+
+---
+
+## Last Agent Handoff (2026-06-04, РЕКОНСИЛЯЦИЯ: enum/миграционный каскад #633–#638 ВЛИТ в main + верификация зелёная; handoff ниже (06-02) частично устарел)
+
+- **Дата:** 2026-06-04. Ветка `main` (синхронна `origin/main`, HEAD `97adfb1`; ahead 0 / behind 0). Среда: Win + Py3.13.7/.venv + throwaway Docker `postgres:16` (поднят и снят в этой сессии). Драйвер: executing-plans → verification-before-completion. User: «выполни план» → выбрал **«Verify + reconcile docs»**. **Кодовых изменений НЕТ** — только верификация на текущем main + правка отчёта/памяти.
+- **ГЛАВНОЕ:** весь enum/миграционный каскад из handoff'ов 06-01/06-02 **влит в main** шестью PR. Прошлый верхний handoff (06-02) **устарел по результату**: его Next Steps **#1** (ORM↔enum label drift, 49/52 кол.) и **#3** (merge ветки `fix/iter38-…`) — **СДЕЛАНЫ И ВЛИТЫ**. Остаётся только #2 (re-enable CI, зона пользователя) и #4 (опц. downgrade repair).
+
+### Влитые PR (timeline по `gh pr list --state merged`)
+- **#633** (06-01) — canonical `alembic upgrade heads` green на свежей PG (5-слойный fix).
+- **#634** (06-02) — iter43 downgrade symmetry + env.py PG-atomicity review (follow-up к #633).
+- **#635** (06-02) — ORM↔Postgres enum-label parity для **52** native-enum колонок (iter49).
+- **#636** (06-03) — qualify duplicate-name relationships → `configure_mappers()` зелёный (+ guard `test_orm_mapper_configuration.py`).
+- **#637** (06-03) — orm enum pg label parity (follow-up).
+- **#638** (06-03) — fix stale iter47 enum-create assertion + docstring (#633 Layer-3 drift).
+
+### Верификация на текущем main (06-04; локально Win+Py3.13.7/.venv; canonical 3.12.12 = CI, выключен [[ci_disabled_actions_off]])
+- **PG guard** `backend/tests/test_alembic_postgres_upgrade.py` (throwaway `postgres:16`, `TEST_PG_ADMIN_URL=postgresql://postgres:postgres@localhost:5432/postgres`): **1 passed, exit 0, 60.6s** — `upgrade heads` (все миграции) зелёный на чистой PG16. Контейнер `alembic-guard-pg` снят, persistent-тома не тронуты.
+- **App-free пины (9 файлов):** `test_iter38/iter37/iter43_*` cohort + `test_audit_server_default_parity` + `test_native_enum_helper` + `test_orm_enum_pg_label_parity` + `test_orm_enum_values_callable_parity` + `test_orm_mapper_configuration` + `test_iter47_file_business_cols` → **300 passed, exit 0, 103.5s**.
+- Итого **301 passed / 0 failed** на merge-релевантной поверхности. **Регрессий нет.** Warnings — pre-existing deprecations (`tometadata`, pydantic v2 class-config), без изменений.
+
+### Остаток (после этого каскада)
+1. **W0 — re-enable CI (зона пользователя):** canonical 3.12.12-прогон (`alembic-postgres-upgrade`, perf-smoke, coverage-floors). Снять «provisional» с RB-002/003/005. CI выключен с 2026-05-28 ([[ci_disabled_actions_off]]) — операционная политика пользователя, не код.
+2. **(Опц., НЕ release-blocker) Downgrade repair** — отдельный план (как был 5-слойный upgrade): (а) `next63` downgrade ужимает `alembic_version.version_num` → `VARCHAR(32)` → truncation на длинных revision-id; (б) `iter41`/journaltype `CREATE TYPE` без drop-на-downgrade → коллизия при re-upgrade; (в) полный аудит upgrade↔downgrade enum-симметрии. Прод катится только вперёд → не блокер. **ВЫПОЛНЕНО в этой же сессии** — см. handoff «DOWNGRADE-PATH REPAIR» выше (6 слоёв, ветка `fix/migration-downgrade-repair`). Реальные дефекты: next63 + next57 + next40/53 + next37 + 20250315 + 19 осиротевших enum-типов; предсказанный `iter41`/journaltype дефектом **НЕ** оказался.
+
+---
+
 ## Last Agent Handoff (2026-06-02, pre-merge risk review DONE + iter43 downgrade FIXED + 🔴 MAJOR finding: 49 ORM-enum columns fail on PG)
 
 - **Дата:** 2026-06-02. Ветка `fix/iter38-enum-server-default-case` (продолжение). Local-only, НЕ влита. Среда: Win + Py3.13.7/.venv + Docker PG16 (`promtech-cabinet-db-1`). Драйвер: executing-plans. User: «заверши максимум незакрытых задач из планов».
