@@ -99,3 +99,11 @@ def downgrade() -> None:
     op.drop_constraint("fk_template_current_version", "template", type_="foreignkey")
     op.drop_column("template", "current_version_id")
     op.drop_column("template", "status")
+
+    # templatestatus is created by this revision (template_status.create() in
+    # upgrade), so drop it to keep a re-upgrade after `downgrade base` from
+    # colliding. templateversionstatus is NOT dropped here — it is owned by
+    # 6b6dee7c951f_initial_schema (this revision only ALTER ... ADD VALUE'd it).
+    # PG-only (SQLite degrades Enum to VARCHAR, no DROP TYPE).
+    if op.get_bind().dialect.name == "postgresql":
+        op.execute("DROP TYPE IF EXISTS templatestatus")
