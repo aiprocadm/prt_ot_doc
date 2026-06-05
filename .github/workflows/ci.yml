@@ -297,6 +297,9 @@ jobs:
 
   backend-tests:
     runs-on: ubuntu-latest
+    # Backstop against a hung test billing up to GitHub's 360-min default.
+    # (Per-test `pytest --timeout` via pytest-timeout is a recommended follow-up.)
+    timeout-minutes: 60
     env:
       APP_ENV: test
       REDIS_URL: memory://
