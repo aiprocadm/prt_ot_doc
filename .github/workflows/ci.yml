@@ -297,9 +297,10 @@ jobs:
 
   backend-tests:
     runs-on: ubuntu-latest
-    # Backstop against a hung test billing up to GitHub's 360-min default.
-    # (Per-test `pytest --timeout` via pytest-timeout is a recommended follow-up.)
-    timeout-minutes: 60
+    # Suite is parallelized with pytest-xdist (-n auto) + bounded per-test by
+    # pytest-timeout below. timeout-minutes is the job-level backstop against
+    # runaway billing (GitHub default is 360min).
+    timeout-minutes: 90
     env:
       APP_ENV: test
       REDIS_URL: memory://
@@ -333,6 +334,9 @@ jobs:
         run: |
           mkdir -p artifacts
           pytest \
+            -n auto \
+            --timeout=300 \
+            -rfE --tb=short \
             --junitxml=artifacts/backend-junit.xml \
             --cov=backend/app \
             --cov-branch \
