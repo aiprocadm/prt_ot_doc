@@ -1,5 +1,17 @@
 # AI Implementation Report
 
+## Last Agent Handoff (2026-06-05, ПЛАН ПОЛНОСТЬЮ ВЫПОЛНЕН/ВЛИТ; гигиена веток сделана; W0 code-half открыт как PR #641 — gated на репо-тумблере)
+
+- **Дата:** 2026-06-05. «выполни план» → handoff-driven. Старт на ветке `docs/reconcile-pr639-merged`. Среда: Win+Py3.13.7. Драйвер: executing-plans → finishing-a-development-branch → verification-before-completion. User: «прими самостоятельно решение наиболее эффективное», общение по-русски. **Кодовых изменений в приложении/миграциях НЕТ** — только верификация состояния, гигиена веток и подготовка W0.
+- **ГЛАВНОЕ — план оказался уже выполнен и влит дальше, чем фиксировал прошлый handoff:** документированный «PR на усмотрение пользователя» (doc-реконсиляция) **УЖЕ СЛИТ** как **PR #640** (squash → `origin/main`@`7387cf9`, merged 2026-06-04T13:19:59Z). Весь enum/миграционный каскад **#633→#640 ЗАКРЫТ и на `main`**. Локальный `main` был behind 1 → ff-синхронизирован на `7387cf9`.
+- **Верификация (дёшево и честно):** `git diff f6210c7..origin/main` = **только `AI_IMPLEMENTATION_REPORT.md`** (+11 строк), **ноль кода** → green-вердикт прошлой сессии на `f6210c7` (оба PG-guard'а + 367 app-free пинов) **транзитивно держится** на текущем `main`@`7387cf9`. Markdown-only diff не может регрессировать код. Тяжёлый Docker-PG прогон намеренно НЕ повторялся (та же кодовая поверхность уже верифицирована — это было бы work-for-work's-sake).
+- **Гигиена веток (выполнено):** `docs/reconcile-pr639-merged` (squash-merged через #640) удалён локально (`-D`) и на remote; merged `fix/migration-downgrade-repair` уже отсутствовал. `main` синхронен с `origin/main`.
+- **W0 — re-enable CI (code-half ВЫПОЛНЕН как PR #641; full activation = зона пользователя):** обнаружено **двухуровневое отключение** — (1) 5 workflow переименованы `*.yml.disabled` (#598) И (2) **репо-тумблер** `gh api .../actions/permissions` = `{"enabled":false}` (жёсткий биллинг-предохранитель). Переименования **самого по себе недостаточно**. Подготовлен **PR [#641](https://github.com/aiprocadm/prt_ot_doc/pull/641)** (ветка `chore/reenable-ci`): обратное переименование 5 файлов → `*.yml`, чистый 100%-rename, реверс #598. PR **gated/безопасен** — пока репо-тумблер `false`, открытие/merge ничего не запускают и биллинг не идёт.
+- **Триггеры:** только `ci.yml` имеет `push[main,work]+pull_request` (канонический 14-job пайплайн вкл. `alembic-postgres-upgrade` на postgres:16); остальные 4 — `schedule`/`workflow_dispatch`.
+- **Next (зона пользователя, рекомендуемый порядок):** (1) флипнуть репо-тумблер `gh api -X PUT repos/aiprocadm/prt_ot_doc/actions/permissions -f enabled=true -f allowed_actions=all` (admin+биллинг); (2) **потом** merge #641 → `ci.yml` валидируется на самом PR (`pull_request`) ДО касания `main`; (3) после зелёного на Py3.12.12 — снять «provisional» с RB-002/003/005. Кодовых release-blocker'ов НЕТ. См. [[ci_disabled_actions_off]].
+
+---
+
 ## Last Agent Handoff (2026-06-04 cont., PR #639 ВЛИТ в main → downgrade-arc ЗАКРЫТ; re-verified green на merged main; остаётся только W0)
 
 - **Дата:** 2026-06-04 (продолжение; «выполни план» → handoff-driven). Ветка `main` синхронизирована с `origin/main`@`f6210c7`. Среда: Win+Py3.13.7/.venv + throwaway Docker `postgres:16` (поднят на host:55432 и снят в этой сессии). Драйвер: executing-plans → finishing-a-development-branch → verification-before-completion. **Кодовых изменений в миграциях НЕТ** — только верификация на merged main + эта doc-реконсиляция.
