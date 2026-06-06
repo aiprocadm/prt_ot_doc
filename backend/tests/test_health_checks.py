@@ -138,7 +138,7 @@ class TestHealthCheckService:
     @pytest.mark.asyncio
     async def test_check_redis_success(self, settings):
         """Test successful Redis check (in-memory mode)."""
-        settings.redis.broker_url = "memory://"
+        settings.redis_url = "memory://"
         service = HealthCheckService(settings)
         result = await service.check_redis()
 
@@ -194,7 +194,7 @@ class TestHealthCheckService:
     async def test_run_all_checks_success(self, settings):
         """Test running all checks successfully."""
         settings.s3_backend = "memory"
-        settings.redis.broker_url = "memory://"
+        settings.redis_url = "memory://"
         service = HealthCheckService(settings)
 
         with patch("app.modules.health_checks.service.engine") as mock_engine:
@@ -215,7 +215,7 @@ class TestHealthCheckService:
     async def test_run_all_checks_skip_slow(self, settings):
         """Test running checks with skip_slow=True."""
         settings.s3_backend = "memory"
-        settings.redis.broker_url = "memory://"
+        settings.redis_url = "memory://"
         service = HealthCheckService(settings)
 
         with patch("app.modules.health_checks.service.engine") as mock_engine:
@@ -241,7 +241,7 @@ class TestHealthCheckService:
     async def test_run_all_checks_cache(self, settings):
         """Test caching of health check results."""
         settings.s3_backend = "memory"
-        settings.redis.broker_url = "memory://"
+        settings.redis_url = "memory://"
         service = HealthCheckService(settings)
 
         with patch("app.modules.health_checks.service.engine") as mock_engine:
@@ -271,7 +271,7 @@ class TestHealthCheckService:
     async def test_run_all_checks_degraded_status(self, settings):
         """Test degraded status when optional check fails."""
         settings.s3_backend = "memory"
-        settings.redis.broker_url = "memory://"
+        settings.redis_url = "memory://"
         service = HealthCheckService(settings)
 
         with patch("app.modules.health_checks.service.engine") as mock_engine:
