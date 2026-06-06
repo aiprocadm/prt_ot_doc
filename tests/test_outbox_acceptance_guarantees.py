@@ -14,7 +14,7 @@ from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.models.models import Outbox, OutboxStatus, Tenant, WebhookDelivery
 from app.services.outbox import OutboxProcessor
@@ -101,7 +101,6 @@ async def test_poison_queue_guarantee_event_moves_to_dead_after_max_attempts(
                 # After max_attempts, should move to POISON_QUEUE or DEAD
                 assert current_event.attempts >= 3
                 assert current_event.status in (
-                    OutboxStatus.POISON_QUEUE,
                     OutboxStatus.DEAD,
                     OutboxStatus.FAILED,  # Some implementations mark as FAILED with attempts >= max
                 )
@@ -165,7 +164,9 @@ async def test_deduplication_guarantee_same_idempotency_key_prevents_duplicate_d
     # Verify deduplication guarantee
     async with sessionmaker() as session:
         count = await session.scalar(
-            select(len(select(Outbox).filter_by(idempotency_key=dedup_key).subquery()))
+            select(func.count()).select_from(
+                select(Outbox).filter_by(idempotency_key=dedup_key).subquery()
+            )
         )
         # Should have exactly 1, never 2
         assert count == 1, f"Dedup guarantee violated: {count} entries with same key"
@@ -225,14 +226,16 @@ async def test_poison_queue_and_dedup_combined_guarantee(
     async with sessionmaker() as session:
         # Should have exactly 1 entry (dedup prevents duplicates)
         count = await session.scalar(
-            select(len(select(Outbox).filter_by(idempotency_key=dedup_key).subquery()))
+            select(func.count()).select_from(
+                select(Outbox).filter_by(idempotency_key=dedup_key).subquery()
+            )
         )
         assert count == 1
 
         # That entry should be in poison queue after max_attempts
         final_event = await session.get(Outbox, event_id)
         assert final_event.attempts >= 2
-        assert final_event.status in (OutboxStatus.POISON_QUEUE, OutboxStatus.DEAD, OutboxStatus.FAILED)
+        assert final_event.status in (OutboxStatus.DEAD, OutboxStatus.FAILED)
 
     # Dispatcher should have been called at most max_attempts times, not more
     assert dispatcher.call_count <= 4  # max_attempts + small buffer

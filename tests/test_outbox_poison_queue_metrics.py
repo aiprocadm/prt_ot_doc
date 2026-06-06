@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.core.config import get_settings
 from app.models.models import Outbox, OutboxStatus, Tenant, WebhookDelivery
@@ -109,7 +109,7 @@ async def test_outbox_poison_queue_after_max_retries(
         refreshed = await session.get(Outbox, entry_id)
         assert refreshed is not None
         # Status should be POISON_QUEUE or similar
-        assert refreshed.status in (OutboxStatus.POISON_QUEUE, OutboxStatus.FAILED)
+        assert refreshed.status in (OutboxStatus.DEAD, OutboxStatus.FAILED)
         assert refreshed.attempts >= 3
 
 
@@ -238,7 +238,9 @@ async def test_outbox_deduplication_same_idempotency_key(sessionmaker) -> None:
     # Verify that deduplication works (either via DB constraint or business logic)
     async with sessionmaker() as session:
         count = await session.scalar(
-            select(len(select(Outbox).where(Outbox.idempotency_key == "key-dedup-1").subquery()))
+            select(func.count()).select_from(
+                select(Outbox).where(Outbox.idempotency_key == "key-dedup-1").subquery()
+            )
         )
         # Should have only 1 or handle gracefully
         assert isinstance(count, int)
@@ -304,23 +306,28 @@ async def test_outbox_webhook_delivery_tracking(sessionmaker) -> None:
         await session.flush()
 
         delivery = WebhookDelivery(
-            outbox_id=outbox.id,
-            destination=outbox.destination,
+            tenant_id=tenant.id,
+            endpoint_id="endpoint-compliance",
+            event_id=outbox.id,
             status="success",
-            response_status=200,
-            response_body='{"status": "ok"}',
-            sent_at=outbox.sent_at,
+            attempts=1,
+            last_status_code=200,
+            last_response_body='{"status": "ok"}',
+            delivered_at=outbox.sent_at,
         )
         session.add(delivery)
         await session.commit()
+        tracked_event_id = outbox.id
 
     # Verify delivery record exists
     async with sessionmaker() as session:
         count = await session.scalar(
-            select(len(select(WebhookDelivery).filter_by(destination="https://compliance-api.example.com/webhooks").subquery()))
+            select(func.count())
+            .select_from(WebhookDelivery)
+            .where(WebhookDelivery.event_id == tracked_event_id)
         )
         assert isinstance(count, int)
-        assert count >= 0
+        assert count >= 1
 
 
 @pytest.mark.anyio
