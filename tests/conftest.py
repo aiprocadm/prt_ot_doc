@@ -311,7 +311,11 @@ async def make_auth_headers(
                 tenant = tenant_record
             else:
                 tenant = await data_factory.ensure_tenant(session=session)
-            result = await session.execute(select(User).where(User.email == candidate_email))
+            result = await session.execute(
+                select(User).where(
+                    User.email == candidate_email, User.tenant_id == tenant.id
+                )
+            )
             user = result.scalar_one_or_none()
             if user is None:
                 user = await data_factory.create_user(

@@ -300,14 +300,19 @@ class TestHealthCheckEndpoint:
 
     def test_health_comprehensive_missing_tenant_header(self, client):
         """Test endpoint returns 400 when X-Tenant-Id header is missing."""
-        response = client.get("/api/v1/health/comprehensive")
+        # The endpoint reads app.state.settings via _resolve_settings (the
+        # get_settings patch is inert); patch _resolve_settings directly so the
+        # feature flag is honored regardless of app-creation defaults.
+        with patch("app.api.routes.health._resolve_settings") as mock_rs:
+            mock_rs.return_value = MagicMock(health_check_comprehensive_enabled=True)
+            response = client.get("/api/v1/health/comprehensive")
         assert response.status_code == 400
-        assert "X-Tenant header required" in response.text
+        assert "X-Tenant-Id header required" in response.text
 
     def test_health_comprehensive_disabled(self, client):
         """Test endpoint returns 403 when feature is disabled."""
-        with patch("app.api.routes.health.get_settings") as mock_settings:
-            mock_settings.return_value.health_check_comprehensive_enabled = False
+        with patch("app.api.routes.health._resolve_settings") as mock_rs:
+            mock_rs.return_value = MagicMock(health_check_comprehensive_enabled=False)
             response = client.get(
                 "/api/v1/health/comprehensive",
                 headers={"X-Tenant-Id": "test-tenant"},
@@ -317,7 +322,10 @@ class TestHealthCheckEndpoint:
 
     def test_health_comprehensive_success(self, client):
         """Test successful health comprehensive endpoint call."""
-        with patch("app.api.routes.health.HealthCheckService") as mock_service_class:
+        with patch("app.api.routes.health._resolve_settings") as mock_rs, patch(
+            "app.api.routes.health.HealthCheckService"
+        ) as mock_service_class:
+            mock_rs.return_value = MagicMock(health_check_comprehensive_enabled=True)
             mock_service = AsyncMock()
             mock_service_class.return_value = mock_service
 
@@ -340,7 +348,10 @@ class TestHealthCheckEndpoint:
 
     def test_health_comprehensive_skip_cache(self, client):
         """Test skip_cache query parameter."""
-        with patch("app.api.routes.health.HealthCheckService") as mock_service_class:
+        with patch("app.api.routes.health._resolve_settings") as mock_rs, patch(
+            "app.api.routes.health.HealthCheckService"
+        ) as mock_service_class:
+            mock_rs.return_value = MagicMock(health_check_comprehensive_enabled=True)
             mock_service = AsyncMock()
             mock_service_class.return_value = mock_service
 

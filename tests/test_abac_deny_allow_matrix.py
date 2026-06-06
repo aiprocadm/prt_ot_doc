@@ -347,10 +347,23 @@ class TestABACAttributes:
                 "enabled": True,
             },
         )()
+        policy_allow_read = type(
+            "AuthzPolicy",
+            (),
+            {
+                "id": "allow-document-read",
+                "resource": "document",
+                "action": "read",
+                "effect": "allow",
+                "conditions_json": {"all": []},
+                "priority": 100,
+                "enabled": True,
+            },
+        )()
         context = PolicyContext(
             tenant_id="tenant-1",
             abac_scopes={"user_id": "employee-1"},
-            request_attrs={"policies": [policy_deny_draft]},
+            request_attrs={"policies": [policy_allow_read, policy_deny_draft]},
         )
 
         result_draft = evaluate(subject, "read", resource_draft, context)
@@ -397,15 +410,28 @@ class TestABACAttributes:
                 "enabled": True,
             },
         )()
+        policy_allow_risk = type(
+            "AuthzPolicy",
+            (),
+            {
+                "id": "allow-risk-read",
+                "resource": "risk",
+                "action": "read",
+                "effect": "allow",
+                "conditions_json": {"all": []},
+                "priority": 100,
+                "enabled": True,
+            },
+        )()
         context_employee = PolicyContext(
             tenant_id="tenant-1",
             abac_scopes={"max_risk_level": 1},
-            request_attrs={"policies": [policy]},
+            request_attrs={"policies": [policy_allow_risk, policy]},
         )
         context_manager = PolicyContext(
             tenant_id="tenant-1",
             abac_scopes={"max_risk_level": 3},
-            request_attrs={"policies": [policy]},
+            request_attrs={"policies": [policy_allow_risk, policy]},
         )
 
         result_employee = evaluate(subject_employee, "read", resource_high, context_employee)
@@ -450,9 +476,22 @@ class TestABACAttributes:
                 "enabled": True,
             },
         )()
+        policy_allow_project = type(
+            "AuthzPolicy",
+            (),
+            {
+                "id": "allow-project-read",
+                "resource": "project",
+                "action": "read",
+                "effect": "allow",
+                "conditions_json": {"all": []},
+                "priority": 100,
+                "enabled": True,
+            },
+        )()
         context = PolicyContext(
             tenant_id="tenant-1",
-            request_attrs={"policies": [policy]},
+            request_attrs={"policies": [policy_allow_project, policy]},
         )
 
         result_assigned = evaluate(subject, "read", resource_assigned, context)
