@@ -9,15 +9,15 @@ import FindingsPage from "@/pages/findings/FindingsPage";
 import PrescriptionsPage from "@/pages/prescriptions/PrescriptionsPage";
 import WarehousePage from "@/pages/warehouse/WarehousePage";
 
-const getPpeOverviewMock = vi.fn();
 const getPrescriptionsMock = vi.fn();
 const getFindingsMock = vi.fn();
 const getCorrectiveActionsMock = vi.fn();
 const getAuditPrepSnapshotMock = vi.fn();
+const listLevelsMock = vi.fn();
+const listBatchesMock = vi.fn();
 
 vi.mock("@/api/ops", () => ({
   opsApi: {
-    getPpeOverview: (...args: unknown[]) => getPpeOverviewMock(...args),
     getPrescriptions: (...args: unknown[]) => getPrescriptionsMock(...args),
     getFindings: (...args: unknown[]) => getFindingsMock(...args),
     getCorrectiveActions: (...args: unknown[]) => getCorrectiveActionsMock(...args),
@@ -25,28 +25,52 @@ vi.mock("@/api/ops", () => ({
   }
 }));
 
+vi.mock("@/api/warehouse", () => ({
+  warehouseApi: {
+    listLevels: (...args: unknown[]) => listLevelsMock(...args),
+    listBatches: (...args: unknown[]) => listBatchesMock(...args)
+  }
+}));
+
 describe("operational pages converted from static to real data", () => {
   beforeEach(() => {
-    getPpeOverviewMock.mockReset();
     getPrescriptionsMock.mockReset();
     getFindingsMock.mockReset();
     getCorrectiveActionsMock.mockReset();
     getAuditPrepSnapshotMock.mockReset();
+    listLevelsMock.mockReset();
+    listBatchesMock.mockReset();
   });
 
-  it("renders warehouse items from PPE overview API", async () => {
-    getPpeOverviewMock.mockResolvedValue({
-      items: [{ id: "item-1", code: "PPE-001", name: "Каска", category: "helmet", default_wear_days: 365 }],
-      issues: [],
-      expiring: [{ id: "issue-1", person_id: "p-1", item_id: "item-1", quantity: 1, status: "issued", expires_at: "2026-04-01" }],
-      persons: []
-    });
+  it("renders warehouse stock levels from the warehouse API", async () => {
+    listLevelsMock.mockResolvedValue([
+      {
+        item_id: "item-1",
+        item_name: "Каска",
+        total_quantity: 12,
+        batch_count: 2,
+        nearest_certificate_expiry: "2026-04-01"
+      }
+    ]);
+    listBatchesMock.mockResolvedValue([
+      {
+        id: "batch-1",
+        item_id: "item-1",
+        batch_no: "B-001",
+        quantity: 12,
+        received_at: "2026-01-01",
+        certificate_no: "C-1",
+        certificate_expires_at: "2026-04-01",
+        location: "A1",
+        created_at: "2026-01-01",
+        updated_at: "2026-01-01"
+      }
+    ]);
 
     render(<WarehousePage />);
 
     expect(await screen.findByText("Каска")).toBeInTheDocument();
-    expect(screen.getByText("PPE-001")).toBeInTheDocument();
-    expect(screen.getByText(/Истекающих выдач: 1/)).toBeInTheDocument();
+    expect(screen.getByText("Партий: 1")).toBeInTheDocument();
   });
 
   it("filters prescriptions loaded from API", async () => {

@@ -34,7 +34,14 @@ def native_enum(enum_cls, *, name=None, **kw):
     apply to Group-B columns whose pg type was created with UPPER member NAMES — see
     the spec Appendix.
     """
-    return Enum(enum_cls, name=name, values_callable=lambda e: [m.value for m in e], **kw)
+    # Forward ``name`` ONLY when explicitly given. SQLAlchemy derives the PG type
+    # name from ``enum_cls.__name__`` only if "name" is absent from kwargs; passing
+    # name=None suppresses that derivation, yielding an UNNAMED native enum that
+    # crashes ``metadata.create_all`` on PostgreSQL ("AsyncPgEnum type requires a
+    # name"). Guarded by backend/tests/test_native_enum_helper.py.
+    if name is not None:
+        kw["name"] = name
+    return Enum(enum_cls, values_callable=lambda e: [m.value for m in e], **kw)
 
 
 class TimestampMixin:
