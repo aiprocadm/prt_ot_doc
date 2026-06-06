@@ -312,6 +312,7 @@ class Settings(BaseSettings):
     admin_email: str = Field("admin@example.com", alias="ADMIN_EMAIL")
     admin_password: str = Field("", alias="ADMIN_PASSWORD")
     admin_tenant: str = Field("public", alias="ADMIN_TENANT")
+    webhook_notification_url: str | None = Field(None, alias="WEBHOOK_NOTIFICATION_URL")
     demo_bootstrap: bool = Field(False, alias="DEMO_BOOTSTRAP")
     demo_tenant_id: str = Field("demo", alias="DEMO_TENANT_ID")
     demo_company_name: str = Field("ООО Демо Строй", alias="DEMO_COMPANY_NAME")
