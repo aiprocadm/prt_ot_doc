@@ -130,7 +130,7 @@ class ContingentItem(BaseModel):
     status: str  # ContingentItemStatus value
     valid_until: date | None = None
     due_at: date | None = None
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ContingentPage(BaseModel):
