@@ -890,6 +890,9 @@ class MedicalNorm(TenantBaseModel):
 
     position: Mapped[Position] = relationship(backref="medical_norms")
 
+    # hazard_id is nullable (position-level "general" norms). NULL != NULL in a
+    # unique constraint, so duplicate general norms are tolerated; the contingent
+    # resolver dedups required kinds via set union, so this is functionally benign.
     __table_args__ = (
         UniqueConstraint(
             "tenant_id", "position_id", "hazard_id", "exam_kind",
@@ -903,13 +906,13 @@ class MedicalReferral(TenantBaseModel, SoftDeleteMixin):
 
     person_id: Mapped[str] = mapped_column(ForeignKey("person.id"), nullable=False, index=True)
     exam_kind: Mapped[MedicalExamKind] = mapped_column(native_enum(MedicalExamKind), nullable=False)
-    due_at: Mapped[date | None] = mapped_column(Date, index=True)
+    due_at: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
     status: Mapped[MedicalReferralStatus] = mapped_column(
         native_enum(MedicalReferralStatus), nullable=False, default=MedicalReferralStatus.ISSUED
     )
     medical_org_name: Mapped[str | None] = mapped_column(String(255))
-    issued_by: Mapped[str | None] = mapped_column(ForeignKey("user.id"), nullable=True)
-    result_exam_id: Mapped[str | None] = mapped_column(ForeignKey("medical_exam.id"), nullable=True)
+    issued_by: Mapped[str | None] = mapped_column(ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True)
+    result_exam_id: Mapped[str | None] = mapped_column(ForeignKey("medical_exam.id", ondelete="SET NULL"), nullable=True)
 
     person: Mapped[Person] = relationship(backref="medical_referrals")
 
@@ -919,15 +922,15 @@ class MedicalSuspension(TenantBaseModel, SoftDeleteMixin):
 
     person_id: Mapped[str] = mapped_column(ForeignKey("person.id"), nullable=False, index=True)
     reason: Mapped[MedicalSuspensionReason] = mapped_column(
-        native_enum(MedicalSuspensionReason), nullable=False
+        native_enum(MedicalSuspensionReason), nullable=False  # no default — service always sets reason explicitly
     )
-    source_exam_id: Mapped[str | None] = mapped_column(ForeignKey("medical_exam.id"), nullable=True)
+    source_exam_id: Mapped[str | None] = mapped_column(ForeignKey("medical_exam.id", ondelete="SET NULL"), nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     lifted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[MedicalSuspensionStatus] = mapped_column(
         native_enum(MedicalSuspensionStatus), nullable=False, default=MedicalSuspensionStatus.ACTIVE
     )
-    lifted_by: Mapped[str | None] = mapped_column(ForeignKey("user.id"), nullable=True)
+    lifted_by: Mapped[str | None] = mapped_column(ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True)
 
     person: Mapped[Person] = relationship(backref="medical_suspensions")
 
