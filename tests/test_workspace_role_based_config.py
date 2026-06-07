@@ -52,7 +52,7 @@ async def test_workspace_config_endpoint_exists(
     authenticated_client: AsyncClient, user_by_role: dict[str, User]
 ):
     """Verify GET /api/v1/users/me/workspace endpoint exists and returns 200."""
-    response = await authenticated_client.get("/users/me/workspace")
+    response = await authenticated_client.get("/api/v1/workspace/users/me/workspace")
     assert response.status_code == 200
     data = response.json()
     assert "role" in data
@@ -103,7 +103,7 @@ async def test_workspace_config_returns_correct_role(
 @pytest.mark.anyio
 async def test_workspace_config_owner_role(authenticated_client: AsyncClient):
     """Verify owner gets executive workspace with all modules."""
-    response = await authenticated_client.get("/users/me/workspace")
+    response = await authenticated_client.get("/api/v1/workspace/users/me/workspace")
     assert response.status_code == 200
     # The actual role depends on the test user created in fixture
 
@@ -111,7 +111,7 @@ async def test_workspace_config_owner_role(authenticated_client: AsyncClient):
 @pytest.mark.anyio
 async def test_workspace_config_includes_required_fields(authenticated_client: AsyncClient):
     """Verify workspace config includes all required fields per spec."""
-    response = await authenticated_client.get("/users/me/workspace")
+    response = await authenticated_client.get("/api/v1/workspace/users/me/workspace")
     assert response.status_code == 200
     data = response.json()
 
@@ -134,7 +134,7 @@ async def test_workspace_config_includes_required_fields(authenticated_client: A
 @pytest.mark.anyio
 async def test_workspace_config_dashboard_route_valid(authenticated_client: AsyncClient):
     """Verify dashboard_route starts with / (valid route)."""
-    response = await authenticated_client.get("/users/me/workspace")
+    response = await authenticated_client.get("/api/v1/workspace/users/me/workspace")
     assert response.status_code == 200
     data = response.json()
     dashboard_route = data["dashboard_route"]
@@ -144,7 +144,7 @@ async def test_workspace_config_dashboard_route_valid(authenticated_client: Asyn
 @pytest.mark.anyio
 async def test_workspace_config_primary_modules_not_empty(authenticated_client: AsyncClient):
     """Verify each role has at least one primary module."""
-    response = await authenticated_client.get("/users/me/workspace")
+    response = await authenticated_client.get("/api/v1/workspace/users/me/workspace")
     assert response.status_code == 200
     data = response.json()
     assert len(data["primary_modules"]) > 0, "Primary modules should not be empty"
@@ -184,7 +184,7 @@ async def test_workspace_config_unmapped_role_fallback(
     """Verify unmapped roles get sensible default workspace config."""
     # Note: In real scenario, would test with a custom role
     # For now, verify the endpoint handles unmapped roles gracefully
-    response = await authenticated_client.get("/users/me/workspace")
+    response = await authenticated_client.get("/api/v1/workspace/users/me/workspace")
     assert response.status_code == 200
     data = response.json()
 
@@ -196,7 +196,7 @@ async def test_workspace_config_unmapped_role_fallback(
 @pytest.mark.anyio
 async def test_workspace_quick_actions_match_permissions(authenticated_client: AsyncClient):
     """Verify quick actions point to accessible routes for the user's role."""
-    response = await authenticated_client.get("/users/me/workspace")
+    response = await authenticated_client.get("/api/v1/workspace/users/me/workspace")
     assert response.status_code == 200
     data = response.json()
 
@@ -212,15 +212,20 @@ async def test_workspace_config_isolation_by_tenant(
     authenticated_client: AsyncClient,
 ):
     """Verify workspace config respects tenant isolation (authenticated user's tenant)."""
-    response = await authenticated_client.get("/users/me/workspace")
+    response = await authenticated_client.get("/api/v1/workspace/users/me/workspace")
     assert response.status_code == 200
     # Should return current user's role in current tenant
 
 
 @pytest.mark.anyio
-async def test_workspace_config_unauthorized_access_forbidden(client: AsyncClient):
+async def test_workspace_config_unauthorized_access_forbidden(async_client: AsyncClient):
     """Verify unauthenticated users cannot access workspace config."""
-    response = await client.get("/users/me/workspace")
+    # Supply a tenant header so the request passes the tenancy gate and is
+    # rejected at the auth layer (without it the tenant middleware returns 400
+    # before authentication is ever checked).
+    response = await async_client.get(
+        "/api/v1/workspace/users/me/workspace", headers={"x-tenant": "test"}
+    )
     # Should require authentication
     assert response.status_code in [401, 403]
 
@@ -228,7 +233,7 @@ async def test_workspace_config_unauthorized_access_forbidden(client: AsyncClien
 @pytest.mark.anyio
 async def test_workspace_kpis_relevant_to_role(authenticated_client: AsyncClient):
     """Verify KPIs enabled for a role are relevant to that role's responsibilities."""
-    response = await authenticated_client.get("/users/me/workspace")
+    response = await authenticated_client.get("/api/v1/workspace/users/me/workspace")
     assert response.status_code == 200
     data = response.json()
 

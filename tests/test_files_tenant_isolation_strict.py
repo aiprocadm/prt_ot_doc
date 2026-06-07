@@ -136,11 +136,9 @@ class TestAssertTenantKeyStrictValidation:
             assert_tenant_key(tenant_id="t1", key="")
 
     def test_assert_tenant_key_only_prefix_no_file_rejected(self) -> None:
-        """Must reject key that is only prefix without file path."""
+        """Must reject a key that is only the tenant prefix with no file component."""
         with pytest.raises(PermissionError, match="tenant_key_forbidden"):
-            # Note: this depends on implementation; if strict, even "tenants/t1/" alone might be rejected
-            # For now, test it accepts well-formed paths
-            assert_tenant_key(tenant_id="t1", key="tenants/t1/file.pdf")  # This should pass
+            assert_tenant_key(tenant_id="t1", key="tenants/t1/")
 
 
 class TestFileServiceUploadArchivePathValidation:

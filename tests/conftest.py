@@ -311,7 +311,11 @@ async def make_auth_headers(
                 tenant = tenant_record
             else:
                 tenant = await data_factory.ensure_tenant(session=session)
-            result = await session.execute(select(User).where(User.email == candidate_email))
+            result = await session.execute(
+                select(User).where(
+                    User.email == candidate_email, User.tenant_id == tenant.id
+                )
+            )
             user = result.scalar_one_or_none()
             if user is None:
                 user = await data_factory.create_user(
@@ -395,6 +399,27 @@ async def test_db_session(sessionmaker):
     """Provide a database session for audit tests."""
     async with sessionmaker() as session:
         yield session
+
+
+@pytest.fixture()
+async def test_tenant(sessionmaker) -> Tenant:
+    """Provide the seeded ``test`` tenant for role-based / workspace tests.
+
+    ``user_by_role`` fixtures (test_workspace_role_based_config,
+    test_rbac_module_access) bind users to this tenant's id. The ``test`` slug
+    is seeded by ``app_fixture``; create it defensively if a future change drops
+    it from the seed set.
+    """
+    async with sessionmaker() as session:
+        tenant = (
+            await session.execute(select(Tenant).where(Tenant.slug == "test"))
+        ).scalar_one_or_none()
+        if tenant is None:
+            tenant = Tenant(slug="test", name="Test", contact_email="test@example.com")
+            session.add(tenant)
+            await session.commit()
+            await session.refresh(tenant)
+        return tenant
 
 
 @pytest.fixture()

@@ -57,6 +57,11 @@ class BriefingJournalPayload(BaseModel):
 
 
 class BriefingEntryPayload(BaseModel):
+    # _entry_read() round-trips a BriefingEntry ORM object through this model
+    # (BriefingEntryPayload.model_validate(entry)); without from_attributes that
+    # raises a pydantic model_type error -> 400 on every entry create.
+    model_config = ConfigDict(from_attributes=True)
+
     briefing_journal_id: str
     briefing_template_id: str | None = None
     person_id: str | None = None

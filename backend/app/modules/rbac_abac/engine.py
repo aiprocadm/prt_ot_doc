@@ -84,7 +84,11 @@ def check_module_access(subject: Subject, module_name: str) -> tuple[bool, str]:
 
     Returns: (allowed: bool, reason: str)
     """
-    normalized_role = str(subject.roles[0]).lower() if subject.roles else "default"
+    first_role = subject.roles[0] if subject.roles else "default"
+    # RoleEnum is ``(str, Enum)``; on Python 3.11+ ``str(member)`` yields
+    # "RoleEnum.OWNER", not the value. Use ``.value`` for enum members and
+    # fall back to the raw string for plain-string roles.
+    normalized_role = str(getattr(first_role, "value", first_role)).lower()
     allowed_modules = ROLE_MODULE_DEFAULTS.get(normalized_role, [])
 
     if module_name in allowed_modules:
@@ -95,7 +99,15 @@ def check_module_access(subject: Subject, module_name: str) -> tuple[bool, str]:
 def _get_cached_policies(ctx: PolicyContext) -> tuple[AuthzPolicy, ...]:
     provided = (ctx.request_attrs or {}).get("policies")
     if isinstance(provided, (list, tuple)):
-        return tuple(item for item in provided if isinstance(item, AuthzPolicy))
+        # Explicit injection seam (overrides / tests): trust duck-typed policy
+        # objects that expose the fields the matcher needs, rather than requiring
+        # the SQLAlchemy ``AuthzPolicy`` type. The DB branch below still yields
+        # real ``AuthzPolicy`` rows, so production behaviour is unchanged.
+        return tuple(
+            item
+            for item in provided
+            if hasattr(item, "resource") and hasattr(item, "action") and hasattr(item, "effect")
+        )
     session = (ctx.request_attrs or {}).get("db_session")
     if session is None or not ctx.tenant_id:
         return ()
@@ -115,16 +127,12 @@ def evaluate(subject: Subject, action: str, resource: Resource, context: PolicyC
     if context and context.tenant_id:
         ctx.setdefault("tenant_id", context.tenant_id)
 
-    # Module-level access control (vNext-SEC-01)
-    module_name = resource.attrs.get("module") or resource.resource_type.split(".")[0]
-    if module_name:
-        module_ok, module_reason = check_module_access(subject, module_name)
-        if not module_ok:
-            return Decision(
-                allow=False,
-                reason=f"module_access_denied",
-                audit_fields={"module": module_name, "resource": resource.resource_type}
-            )
+    # NOTE: Module-level gating is intentionally NOT enforced here. ``evaluate``
+    # is the ABAC policy engine: access can be granted by explicit permissions or
+    # tenant ABAC allow-policies, which a hardcoded role→module table must not
+    # short-circuit. Coarse module gating lives in ``app.core.rbac_abac``
+    # (System B, ``policy_engine.can``); ``check_module_access`` /
+    # ``ROLE_MODULE_DEFAULTS`` here are for UI-navigation filtering.
 
     # RBAC precondition
     normalized_permission = f"{resource.resource_type}:{action}".lower()

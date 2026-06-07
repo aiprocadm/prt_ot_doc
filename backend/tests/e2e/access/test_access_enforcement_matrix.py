@@ -59,7 +59,10 @@ class TestAuditorReadOnly:
             user_id="auditor-1",
             tenant_id="t-1",
             roles=(RoleEnum.AUDITOR_RO.value,),
-            permissions=(),  # Explicit: no write permissions
+            # Read-only role: production derives read perms from the role, and the
+            # permission-based engine needs them on the Subject to pass the
+            # precondition. No write perms -> create/update/delete still denied.
+            permissions=("documents:read",),
         )
 
         # Should allow: read

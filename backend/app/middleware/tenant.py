@@ -34,7 +34,16 @@ class TenantMiddleware(BaseHTTPMiddleware):
     def __init__(self, app: ASGIApp, *, metrics_enabled: bool = False) -> None:
         super().__init__(app)
         self._metrics_enabled = metrics_enabled
-        self._system_paths = {"/health", "/ready", "/healthz", "/readyz"}
+        self._system_paths = {
+            "/health",
+            "/ready",
+            "/healthz",
+            "/readyz",
+            # Comprehensive health is an infra diagnostic that does its own
+            # X-Tenant-Id handling (tenant id is a cache key/label, not a data
+            # scope); it must not be intercepted by tenant resolution.
+            "/api/v1/health/comprehensive",
+        }
         self._public_prefixes = (
             "/api/v1/public",
             "/api/v1/webhooks/incoming",

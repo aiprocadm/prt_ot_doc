@@ -346,13 +346,13 @@ class HealthCheckService:
         # Failed optional checks → "degraded"
         # All ok → "ok"
         has_failed_critical = any(
-            results.get(check, HealthCheckItem(name="", status="unknown")).status
+            results.get(check, HealthCheckItem(name="", status="unknown", duration_ms=0.0)).status
             == "failed"
             for check in ["postgres", "redis", "minio"]
         )
 
         has_failed_optional = any(
-            results.get(check, HealthCheckItem(name="", status="unknown")).status
+            results.get(check, HealthCheckItem(name="", status="unknown", duration_ms=0.0)).status
             == "failed"
             for check in results.keys()
             if check not in ["postgres", "redis", "minio"]

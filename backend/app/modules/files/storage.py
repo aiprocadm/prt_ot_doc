@@ -29,13 +29,20 @@ def build_tenant_key(
 
 
 def assert_tenant_key(*, tenant_id: str, key: str) -> None:
+    # Reject any parent-dir sequence anywhere: ".." covers "../", "..\\" and a
+    # leading ".." inside a filename. Consistent with build_tenant_key, which
+    # sanitizes ".." out of filenames.
+    if ".." in key:
+        raise PermissionError("tenant_key_forbidden")
     valid_prefixes = (
         f"{_CURRENT_TENANT_PREFIX}/{tenant_id}/",
         f"{_LEGACY_TENANT_PREFIX}/{tenant_id}/",
     )
-    if not any(key.startswith(prefix) for prefix in valid_prefixes):
+    matched_prefix = next((prefix for prefix in valid_prefixes if key.startswith(prefix)), None)
+    if matched_prefix is None:
         raise PermissionError("tenant_key_forbidden")
-    if "../" in key or "..\\" in key:
+    # The prefix alone is not a valid file key — require a non-empty file component.
+    if not key[len(matched_prefix):].strip("/"):
         raise PermissionError("tenant_key_forbidden")
 
 

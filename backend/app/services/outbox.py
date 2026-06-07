@@ -43,7 +43,15 @@ def _normalize_datetime(value: datetime | None) -> datetime | None:
 
 
 def _pipeline_for_event(event_type: str) -> PipelineType:
-    resolved = resolve_event_type(event_type)
+    try:
+        resolved = resolve_event_type(event_type)
+    except ValueError:
+        # Generic / external events (webhook-only, test, or future events) are not
+        # in the typed EventType enum. The outbox still delivers them; they simply
+        # map to the UNKNOWN pipeline (no type-specific routing or metrics). Emit
+        # (``enqueue``) stays strict — it builds typed payloads — but delivery is
+        # generic, matching the ``Outbox.event_type`` String column contract.
+        return PipelineType.UNKNOWN
     if resolved in {
         EventType.DOCUMENT_CREATED,
         EventType.DOCUMENT_GENERATED,
