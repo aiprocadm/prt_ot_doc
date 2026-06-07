@@ -46,6 +46,7 @@ from httpx import AsyncClient
 
 from app.api.helpers.etag import (
     DEFAULT_LIST_CACHE_CONTROL,
+    DEFAULT_LIST_VARY,
     apply_etag_response_headers,
     build_not_modified_headers,
     compute_list_etag,
@@ -106,6 +107,7 @@ def test_build_not_modified_headers_returns_dict_with_default() -> None:
     assert headers == {
         "ETag": '"xyz789"',
         "Cache-Control": DEFAULT_LIST_CACHE_CONTROL,
+        "Vary": DEFAULT_LIST_VARY,
     }
 
 
@@ -114,7 +116,7 @@ def test_build_not_modified_headers_accepts_cache_control_override() -> None:
     so 200 and 304 paths can be kept in sync at callsites."""
     headers = build_not_modified_headers('"xyz"', cache_control="private, no-store")
 
-    assert headers == {"ETag": '"xyz"', "Cache-Control": "private, no-store"}
+    assert headers == {"ETag": '"xyz"', "Cache-Control": "private, no-store", "Vary": DEFAULT_LIST_VARY}
 
 
 def test_build_not_modified_headers_cache_control_is_keyword_only() -> None:
