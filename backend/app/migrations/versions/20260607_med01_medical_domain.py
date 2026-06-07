@@ -7,17 +7,18 @@ from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision = "20260607_med01_medical_domain"
 down_revision = "20260602_iter49_enum_label_parity"
 branch_labels = None
 depends_on = None
 
-_EXAM_KIND = sa.Enum("periodic", "preliminary", "psychiatric", "fluorography", "health_book", name="medicalexamkind")
-_FITNESS = sa.Enum("fit", "fit_with_restrictions", "unfit", name="medicalfitness")
-_REF_STATUS = sa.Enum("issued", "scheduled", "completed", "cancelled", name="medicalreferralstatus")
-_SUSP_STATUS = sa.Enum("active", "lifted", name="medicalsuspensionstatus")
-_SUSP_REASON = sa.Enum("unfit", "contraindication", name="medicalsuspensionreason")
+_EXAM_KIND = postgresql.ENUM("periodic", "preliminary", "psychiatric", "fluorography", "health_book", name="medicalexamkind", create_type=False)
+_FITNESS = postgresql.ENUM("fit", "fit_with_restrictions", "unfit", name="medicalfitness", create_type=False)
+_REF_STATUS = postgresql.ENUM("issued", "scheduled", "completed", "cancelled", name="medicalreferralstatus", create_type=False)
+_SUSP_STATUS = postgresql.ENUM("active", "lifted", name="medicalsuspensionstatus", create_type=False)
+_SUSP_REASON = postgresql.ENUM("unfit", "contraindication", name="medicalsuspensionreason", create_type=False)
 
 
 def upgrade() -> None:
@@ -89,6 +90,10 @@ def upgrade() -> None:
     op.create_index("ix_medical_suspension_person_id", "medical_suspension", ["person_id"])
     op.create_index("ix_medical_suspension_lifted_by", "medical_suspension", ["lifted_by"])
 
+    # Columns above were added via bare op.add_column (ALTER TABLE ADD COLUMN —
+    # SQLite-safe, committed before this block). batch_alter_table is used here
+    # SOLELY to add the cyclic FK, which SQLite cannot express via ALTER TABLE.
+    # Do NOT move the add_column calls inside this batch context.
     with op.batch_alter_table("medical_exam") as batch:
         batch.create_foreign_key("fk_medical_exam_referral_id", "medical_referral", ["referral_id"], ["id"])
 
