@@ -29,6 +29,9 @@ class EventType(str, enum.Enum):
     INCIDENT_CREATED = "IncidentCreated"
     INSPECTION_CREATED = "InspectionCreated"
     PRESCRIPTION_OVERDUE = "PrescriptionOverdue"
+    MEDICAL_EXAM_RECORDED = "MedicalExamRecorded"
+    PERSON_SUSPENDED = "PersonSuspended"
+    PERSON_REINSTATED = "PersonReinstated"
 
 
 class BaseEventPayload(BaseModel):
@@ -180,6 +183,26 @@ class TaskDuePayload(BaseEventPayload):
     overdue: bool = False
 
 
+class MedicalExamRecordedPayload(BaseEventPayload):
+    exam_id: str
+    person_id: str
+    exam_kind: str | None = None
+    fitness: str | None = None
+    valid_until: date | None = None
+
+
+class PersonSuspendedPayload(BaseEventPayload):
+    suspension_id: str
+    person_id: str
+    reason: str
+    source_exam_id: str | None = None
+
+
+class PersonReinstatedPayload(BaseEventPayload):
+    suspension_id: str
+    person_id: str
+
+
 _PAYLOADS: dict[EventType, type[BaseEventPayload]] = {
     EventType.DOCUMENT_CREATED: DocumentCreatedPayload,
     EventType.DOCUMENT_GENERATED: DocumentGeneratedPayload,
@@ -202,6 +225,9 @@ _PAYLOADS: dict[EventType, type[BaseEventPayload]] = {
     EventType.INCIDENT_CREATED: IncidentCreatedPayload,
     EventType.INSPECTION_CREATED: InspectionCreatedPayload,
     EventType.PRESCRIPTION_OVERDUE: PrescriptionOverduePayload,
+    EventType.MEDICAL_EXAM_RECORDED: MedicalExamRecordedPayload,
+    EventType.PERSON_SUSPENDED: PersonSuspendedPayload,
+    EventType.PERSON_REINSTATED: PersonReinstatedPayload,
 }
 
 
@@ -260,4 +286,8 @@ def dedupe_key_for(event_type: EventType, payload: BaseEventPayload) -> str:
         return payload.incident_id
     if isinstance(payload, InspectionCreatedPayload):
         return payload.inspection_id
+    if isinstance(payload, MedicalExamRecordedPayload):
+        return payload.exam_id
+    if isinstance(payload, (PersonSuspendedPayload, PersonReinstatedPayload)):
+        return payload.suspension_id
     raise ValueError(f"Unsupported event payload for {event_type.value}")
