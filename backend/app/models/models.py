@@ -95,6 +95,11 @@ __all__ = [
     "PackageProfile",
     "Site",
     "MedicalExam",
+    "MedicalExamKind",
+    "MedicalFitness",
+    "MedicalReferralStatus",
+    "MedicalSuspensionStatus",
+    "MedicalSuspensionReason",
     "DocumentPack",
     "DocumentPackItem",
     "DocumentPackModule",
@@ -810,6 +815,8 @@ class Workplace(TenantBaseModel, SoftDeleteMixin):
 
 
 class MedicalExamKind(str, enum.Enum):
+    """Types of occupational medical examination."""
+
     PERIODIC = "periodic"
     PRELIMINARY = "preliminary"
     PSYCHIATRIC = "psychiatric"
@@ -818,12 +825,16 @@ class MedicalExamKind(str, enum.Enum):
 
 
 class MedicalFitness(str, enum.Enum):
+    """Medical fitness verdict for a person."""
+
     FIT = "fit"
     FIT_WITH_RESTRICTIONS = "fit_with_restrictions"
     UNFIT = "unfit"
 
 
 class MedicalReferralStatus(str, enum.Enum):
+    """Lifecycle state of a medical-exam referral (направление)."""
+
     ISSUED = "issued"
     SCHEDULED = "scheduled"
     COMPLETED = "completed"
@@ -831,11 +842,15 @@ class MedicalReferralStatus(str, enum.Enum):
 
 
 class MedicalSuspensionStatus(str, enum.Enum):
+    """State of a medical suspension (отстранение) record."""
+
     ACTIVE = "active"
     LIFTED = "lifted"
 
 
 class MedicalSuspensionReason(str, enum.Enum):
+    """Why a person is medically suspended from work."""
+
     UNFIT = "unfit"
     CONTRAINDICATION = "contraindication"
 
