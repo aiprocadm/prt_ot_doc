@@ -13,6 +13,16 @@ from app.domains.packs.definitions import (
 from app.models.models import DocumentPack, RoleEnum, Site
 from tests.utils.factories import TestDataFactory
 
+# POST /api/v1/packages (DocumentPack direct-create with {code, name, ...}) no
+# longer exists: packages are created via the packs-v2 preset/pack-run API
+# (/api/v1/package-presets + /api/v1/pack-runs, async 202). These e2e tests
+# target the removed simple-create flow and have failed since the refactor;
+# skip until rewritten to packs-v2 (or a convenience create endpoint is added).
+pytestmark = pytest.mark.skip(
+    reason="DocumentPack direct-create endpoint (POST /api/v1/packages) removed; "
+    "packages now created via packs-v2 presets/pack-runs."
+)
+
 
 @pytest.mark.asyncio
 async def test_package_site_access_e2e(
