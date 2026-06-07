@@ -40,6 +40,8 @@ DEFAULT_INTERVAL_DAYS: dict[MedicalExamKind, int] = {
 
 
 class InvalidTransition(Exception):
+    """Raised when a referral status transition is not permitted by the FSM."""
+
     def __init__(self, current: MedicalReferralStatus, target: MedicalReferralStatus) -> None:
         self.current = current
         self.target = target
@@ -47,6 +49,7 @@ class InvalidTransition(Exception):
 
 
 def validate_transition(current: MedicalReferralStatus, target: MedicalReferralStatus) -> None:
+    """Raise InvalidTransition unless target is reachable from current; self-transition is a no-op."""
     if current == target:
         return
     if target not in ALLOWED_TRANSITIONS[current]:
@@ -54,14 +57,17 @@ def validate_transition(current: MedicalReferralStatus, target: MedicalReferralS
 
 
 def is_terminal(status: MedicalReferralStatus) -> bool:
+    """True if the referral status is a terminal state (COMPLETED/CANCELLED)."""
     return status in TERMINAL_STATES
 
 
 def is_overdue(due_at: date | None, status: MedicalReferralStatus, today: date) -> bool:
+    """True when a non-terminal referral is past its due date. today is injected for determinism."""
     return due_at is not None and due_at < today and status not in TERMINAL_STATES
 
 
 def requires_result(target: MedicalReferralStatus) -> bool:
+    """A referral may move to COMPLETED only with a linked result exam."""
     return target == MedicalReferralStatus.COMPLETED
 
 
@@ -71,16 +77,19 @@ def requires_result(target: MedicalReferralStatus) -> bool:
 
 
 def interval_for_kind(kind: MedicalExamKind, norm_interval_days: int | None) -> int:
+    """Periodicity in days: the norm's interval if given, else the per-kind default (fallback 365)."""
     if norm_interval_days is not None:
         return norm_interval_days
     return DEFAULT_INTERVAL_DAYS.get(kind, 365)
 
 
 def compute_valid_until(exam_date: date, interval_days: int) -> date:
+    """valid_until = exam_date + interval_days."""
     return exam_date + timedelta(days=interval_days)
 
 
 def next_due(last_exam_date: date | None, interval_days: int, today: date) -> date:
+    """When the next exam is due: today if never examined, else last_exam_date + interval_days."""
     if last_exam_date is None:
         return today
     return last_exam_date + timedelta(days=interval_days)
@@ -92,6 +101,8 @@ def next_due(last_exam_date: date | None, interval_days: int, today: date) -> da
 
 
 class ContingentItemStatus(str, enum.Enum):
+    """Per (person, exam-kind) contingent state: ok / due_soon / overdue / missing."""
+
     OK = "ok"
     DUE_SOON = "due_soon"
     OVERDUE = "overdue"
@@ -101,6 +112,7 @@ class ContingentItemStatus(str, enum.Enum):
 def classify(
     latest_valid_until: date | None, today: date, warning_days: int = 30
 ) -> ContingentItemStatus:
+    """Classify a required exam by its latest valid_until: missing/overdue/due_soon/ok (warning_days window)."""
     if latest_valid_until is None:
         return ContingentItemStatus.MISSING
     if latest_valid_until < today:
@@ -114,7 +126,7 @@ def classify(
 # 2.4 — Required-kinds resolution (СОУТ influence)
 # ---------------------------------------------------------------------------
 
-# norm tuple shape: (position_id, hazard_id|None, working_conditions_class|None, exam_kind)
+# norm tuple shape: (position_id, hazard_id | None, working_conditions_class | None, exam_kind)
 NormTuple = Tuple[str, str | None, str | None, MedicalExamKind]
 
 
@@ -124,6 +136,9 @@ def resolve_required_kinds(
     hazard_ids: set[str],
     norms: Iterable[NormTuple],
 ) -> set[MedicalExamKind]:
+    """Required exam kinds for a position: union of norms matching by position, and
+    (hazard in hazard_ids or norm hazard is None) and (working-conditions-class matches or
+    norm class is None). This is the СОУТ-influence point."""
     required: set[MedicalExamKind] = set()
     for n_pos, n_hazard, n_wcc, n_kind in norms:
         if n_pos != position_id:
@@ -141,18 +156,22 @@ def resolve_required_kinds(
 
 
 class SuspensionAction(str, enum.Enum):
+    """Outcome of evaluating a fitness verdict against an existing suspension: open / lift / none."""
+
     OPEN = "open"
     LIFT = "lift"
     NONE = "none"
 
 
 def requires_suspension(fitness: MedicalFitness) -> bool:
+    """True when a fitness verdict (UNFIT) mandates a medical suspension."""
     return fitness == MedicalFitness.UNFIT
 
 
 def suspension_action(
     has_active_suspension: bool, new_fitness: MedicalFitness
 ) -> SuspensionAction:
+    """Decide OPEN (newly unfit), LIFT (now fit/with-restrictions while suspended), or NONE."""
     if not has_active_suspension and new_fitness == MedicalFitness.UNFIT:
         return SuspensionAction.OPEN
     if has_active_suspension and new_fitness in (
@@ -164,6 +183,7 @@ def suspension_action(
 
 
 def reason_for(contraindications: list[str]) -> MedicalSuspensionReason:
+    """Suspension reason: CONTRAINDICATION when contraindications are present, else UNFIT."""
     return (
         MedicalSuspensionReason.CONTRAINDICATION
         if contraindications
