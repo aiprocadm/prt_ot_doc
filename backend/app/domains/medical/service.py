@@ -18,6 +18,7 @@ from app.services.outbox import OutboxService
 async def list_active_suspensions(
     session: AsyncSession, *, tenant_id: str, person_ids: list[str]
 ) -> list[MedicalSuspension]:
+    """Active (not lifted, not deleted) suspensions for the given persons, tenant-scoped."""
     if not person_ids:
         return []
     stmt = select(MedicalSuspension).where(
@@ -32,6 +33,7 @@ async def list_active_suspensions(
 async def _norm_interval(
     session: AsyncSession, *, tenant_id: str, person: Person, exam_kind: MedicalExamKind
 ) -> int:
+    """Periodicity in days for (person's position, exam_kind): the matching norm's interval, else the per-kind default."""
     if person.position_id is None:
         return lc.interval_for_kind(exam_kind, None)
     stmt = select(MedicalNorm.interval_days).where(
@@ -50,13 +52,14 @@ async def record_exam(
     valid_until: date | None, medical_org_name: str | None, referral_id: str | None,
     exam_type: str | None,
 ) -> MedicalExam:
+    """Record an exam result; compute valid_until from norms if absent; emit MedicalExamRecorded; open/lift a suspension per the fitness verdict. Does not commit."""
     person = (await session.execute(
         select(Person).where(
             Person.id == person_id, Person.tenant_id == tenant_id, Person.deleted_at.is_(None)
         )
     )).scalar_one_or_none()
     if person is None:
-        raise ValueError({"code": "person_not_found", "person_id": person_id})
+        raise ValueError(f"person not found: {person_id}")
 
     if valid_until is None:
         interval = await _norm_interval(session, tenant_id=tenant_id, person=person, exam_kind=exam_kind)
@@ -86,17 +89,17 @@ async def record_exam(
 
     if fitness is not None:
         await _apply_suspension(session, tenant_id=tenant_id, actor_id=actor_id,
-                                person_id=person_id, exam=exam, fitness=fitness)
+                                person_id=person_id, exam=exam, fitness=fitness, outbox=outbox)
     return exam
 
 
 async def _apply_suspension(
     session: AsyncSession, *, tenant_id: str, actor_id: str | None, person_id: str,
-    exam: MedicalExam, fitness: MedicalFitness,
+    exam: MedicalExam, fitness: MedicalFitness, outbox: OutboxService,
 ) -> None:
+    """Open a suspension when the verdict is UNFIT (no active one), or lift active ones when fit again — per lc.suspension_action."""
     actives = await list_active_suspensions(session, tenant_id=tenant_id, person_ids=[person_id])
     action = lc.suspension_action(bool(actives), fitness)
-    outbox = OutboxService(session)
     if action is lc.SuspensionAction.OPEN:
         susp = MedicalSuspension(
             tenant_id=tenant_id, person_id=person_id,
@@ -115,15 +118,16 @@ async def _apply_suspension(
             },
         )
     elif action is lc.SuspensionAction.LIFT:
+        now = datetime.now(tz=timezone.utc)
         for susp in actives:
             susp.status = MedicalSuspensionStatus.LIFTED
-            susp.lifted_at = datetime.now(tz=timezone.utc)
+            susp.lifted_at = now
             susp.lifted_by = actor_id
+        await session.flush()
+        for susp in actives:
             await outbox.enqueue(
                 tenant_id=tenant_id, event_type=EventType.PERSON_REINSTATED.value,
                 idempotency_key=f"person-reinstated:{susp.id}",
-                payload={
-                    "tenant_id": tenant_id, "actor_id": actor_id,
-                    "suspension_id": susp.id, "person_id": person_id,
-                },
+                payload={"tenant_id": tenant_id, "actor_id": actor_id,
+                         "suspension_id": susp.id, "person_id": person_id},
             )
