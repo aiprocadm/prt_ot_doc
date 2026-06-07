@@ -8,7 +8,12 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-CI_YAML = ROOT / ".github" / "workflows" / "ci.yml"
+# GitHub Actions is toggled off on main, so the workflow ships as
+# ``ci.yml.disabled`` until W0/#641 re-enables it (renames back to ``ci.yml``).
+# The perf-smoke env block content is identical in both states, so read
+# whichever file is present rather than coupling the contract to the toggle.
+_WORKFLOWS = ROOT / ".github" / "workflows"
+CI_YAML = _WORKFLOWS / "ci.yml" if (_WORKFLOWS / "ci.yml").exists() else _WORKFLOWS / "ci.yml.disabled"
 
 REQUIRED_KEYS = (
     "ADMIN_BOOTSTRAP",
