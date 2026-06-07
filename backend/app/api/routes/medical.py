@@ -83,6 +83,19 @@ def _to_referral_read(record: MedicalReferral, *, today) -> MedicalReferralRead:
     )
 
 
+async def _get_norm(session: AsyncSession, tenant_id: str, norm_id: str) -> MedicalNorm:
+    from app.models.models import MedicalNorm as _MN
+    rec = (await session.execute(select(_MN).where(
+        _MN.id == norm_id, _MN.tenant_id == tenant_id,
+    ))).scalar_one_or_none()
+    if rec is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail=_error("medical_norm_not_found", "Medical norm not found"),
+        )
+    return rec
+
+
 async def _get_referral(session: AsyncSession, tenant_id: str, referral_id: str) -> MedicalReferral:
     rec = (await session.execute(select(MedicalReferral).where(
         MedicalReferral.id == referral_id,
@@ -304,16 +317,7 @@ async def get_medical_norm(
 ) -> MedicalNormRead:
     TenantContextValidator.ensure_tenant_context(tenant)
     _ = access
-    record = (await session.execute(
-        select(MedicalNorm).where(
-            MedicalNorm.id == norm_id, MedicalNorm.tenant_id == tenant.id,
-        )
-    )).scalar_one_or_none()
-    if record is None:
-        raise HTTPException(
-            status.HTTP_404_NOT_FOUND,
-            detail=_error("medical_norm_not_found", "Medical norm not found"),
-        )
+    record = await _get_norm(session, str(tenant.id), norm_id)
     return MedicalNormRead.model_validate(record)
 
 
@@ -328,16 +332,7 @@ async def update_medical_norm(
     access: MedicalAccess,
 ) -> MedicalNormRead:
     TenantContextValidator.ensure_tenant_context(tenant)
-    record = (await session.execute(
-        select(MedicalNorm).where(
-            MedicalNorm.id == norm_id, MedicalNorm.tenant_id == tenant.id,
-        )
-    )).scalar_one_or_none()
-    if record is None:
-        raise HTTPException(
-            status.HTTP_404_NOT_FOUND,
-            detail=_error("medical_norm_not_found", "Medical norm not found"),
-        )
+    record = await _get_norm(session, str(tenant.id), norm_id)
     for k, v in payload.model_dump(exclude_unset=True).items():
         setattr(record, k, v)
     audit = AuditService(session)
@@ -367,16 +362,7 @@ async def delete_medical_norm(
     access: MedicalAccess,
 ) -> Response:
     TenantContextValidator.ensure_tenant_context(tenant)
-    record = (await session.execute(
-        select(MedicalNorm).where(
-            MedicalNorm.id == norm_id, MedicalNorm.tenant_id == tenant.id,
-        )
-    )).scalar_one_or_none()
-    if record is None:
-        raise HTTPException(
-            status.HTTP_404_NOT_FOUND,
-            detail=_error("medical_norm_not_found", "Medical norm not found"),
-        )
+    record = await _get_norm(session, str(tenant.id), norm_id)
     audit = AuditService(session)
     ip = request.client.host if request.client else "unknown"
     await audit.log_event(
@@ -515,6 +501,7 @@ async def get_medical_referral(
 @router.post("/medical/referrals/{referral_id}/transition", response_model=MedicalReferralRead,
              dependencies=[MedicalFeatureGate])
 async def transition_referral(
+    request: Request,
     referral_id: str,
     payload: MedicalReferralTransition,
     tenant: TenantDep,
@@ -522,7 +509,6 @@ async def transition_referral(
     access: MedicalAccess,
 ) -> MedicalReferralRead:
     TenantContextValidator.ensure_tenant_context(tenant)
-    _ = access
     record = await _get_referral(session, str(tenant.id), referral_id)
     current = record.status
     target = payload.to
@@ -542,9 +528,33 @@ async def transition_referral(
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=_error("result_required", "A result exam is required to complete a referral"),
             )
-    record.status = target
     if payload.result_exam_id is not None:
+        exam = (await session.execute(select(MedicalExam).where(
+            MedicalExam.id == payload.result_exam_id,
+            MedicalExam.tenant_id == tenant.id,
+            MedicalExam.deleted_at.is_(None),
+        ))).scalar_one_or_none()
+        if exam is None:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=_error("result_exam_not_found",
+                              "result_exam_id does not reference an exam in this tenant"),
+            )
         record.result_exam_id = payload.result_exam_id
+    record.status = target
+    audit = AuditService(session)
+    ip = request.client.host if request.client else "unknown"
+    await audit.log_event(
+        tenant_id=str(tenant.id),
+        action="transition",
+        object_type="medical_referral",
+        object_id=record.id,
+        user_id=getattr(access.user, "id", None),
+        ip=ip,
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        details={"from": current.value, "to": target.value},
+    )
     await session.commit()
     await session.refresh(record)
     return _to_referral_read(record, today=datetime.now(timezone.utc).date())
@@ -580,6 +590,7 @@ async def get_medical_contingent(
 
 @router.post("/medical/contingent/generate-referrals", dependencies=[MedicalFeatureGate])
 async def generate_referrals(
+    request: Request,
     tenant: TenantDep,
     session: SessionDep,
     access: MedicalAccess,
@@ -591,6 +602,19 @@ async def generate_referrals(
         tenant_id=str(tenant.id),
         today=today,
         issued_by=getattr(access.user, "id", None),
+    )
+    audit = AuditService(session)
+    ip = request.client.host if request.client else "unknown"
+    await audit.log_event(
+        tenant_id=str(tenant.id),
+        action="generate",
+        object_type="medical_referral",
+        object_id="bulk",
+        user_id=getattr(access.user, "id", None),
+        ip=ip,
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+        details={"count": count},
     )
     await session.commit()
     return {"count": count}

@@ -88,7 +88,7 @@ class MedicalNormRead(BaseModel):
 
 
 class MedicalNormUpdate(BaseModel):
-    """Partial update body for PATCH /medical/norms/{norm_id}."""
+    """Partial update body for PATCH /medical/norms/{norm_id}. position_id is intentionally excluded — changing it would re-key the norm; delete + recreate instead."""
     exam_kind: MedicalExamKind | None = None
     hazard_id: str | None = None
     interval_days: int | None = Field(default=None, ge=0, le=3650)

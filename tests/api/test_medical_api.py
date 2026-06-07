@@ -84,6 +84,21 @@ async def test_referral_fsm(async_client, sessionmaker, data_factory, make_auth_
 
 
 @pytest.mark.asyncio
+async def test_referral_complete_rejects_unknown_result_exam(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
+    person_id = await _seed_person(sessionmaker, data_factory)
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    c = await async_client.post("/api/v1/medical/referrals", headers=headers, json={
+        "person_id": person_id, "exam_kind": "periodic"})
+    rid = c.json()["id"]
+    await async_client.post(f"/api/v1/medical/referrals/{rid}/transition", headers=headers, json={"to": "scheduled"})
+    bad = await async_client.post(f"/api/v1/medical/referrals/{rid}/transition", headers=headers,
+                                  json={"to": "completed", "result_exam_id": "00000000-0000-0000-0000-000000000000"})
+    assert bad.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY, bad.text
+
+
+@pytest.mark.asyncio
 async def test_contingent_and_generate(async_client, sessionmaker, data_factory, make_auth_headers):
     from app.models.models import MedicalNorm, Position
     async with sessionmaker() as session:
