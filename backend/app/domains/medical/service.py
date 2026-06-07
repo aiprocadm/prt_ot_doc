@@ -3,13 +3,15 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.domains.medical import lifecycle as lc
 from app.models.models import (
     MedicalExam, MedicalExamKind, MedicalFitness, MedicalNorm,
-    MedicalSuspension, MedicalSuspensionStatus, Person,
+    MedicalReferral, MedicalReferralStatus, MedicalSuspension,
+    MedicalSuspensionStatus, Person, Position,
 )
 from app.services.events import EventType
 from app.services.outbox import OutboxService
@@ -131,3 +133,165 @@ async def _apply_suspension(
                 payload={"tenant_id": tenant_id, "actor_id": actor_id,
                          "suspension_id": susp.id, "person_id": person_id},
             )
+
+
+# ---------------------------------------------------------------------------
+# 5.2 — Contingent computation + summary
+# ---------------------------------------------------------------------------
+
+
+async def compute_contingent(
+    session: AsyncSession, *, tenant_id: str, today: date, warning_days: int = 30,
+    position_id: str | None = None,
+) -> list[dict]:
+    """Per (active person, required exam-kind) contingent rows with status (ok/due_soon/overdue/missing)."""
+    norm_stmt = select(
+        MedicalNorm.position_id, MedicalNorm.hazard_id,
+        MedicalNorm.working_conditions_class, MedicalNorm.exam_kind,
+    ).where(MedicalNorm.tenant_id == tenant_id)
+    norms = [(r[0], r[1], r[2], r[3]) for r in (await session.execute(norm_stmt)).all()]
+    if not norms:
+        return []
+
+    p_stmt = (
+        select(Person)
+        .where(
+            Person.tenant_id == tenant_id, Person.deleted_at.is_(None),
+            Person.position_id.is_not(None),
+        )
+        .options(selectinload(Person.position).selectinload(Position.hazards))
+    )
+    if position_id:
+        p_stmt = p_stmt.where(Person.position_id == position_id)
+    people = list((await session.execute(p_stmt)).scalars().all())
+    if not people:
+        return []
+
+    person_ids = [p.id for p in people]
+    ex_stmt = select(
+        MedicalExam.person_id, MedicalExam.exam_kind, func.max(MedicalExam.valid_until),
+    ).where(
+        MedicalExam.tenant_id == tenant_id, MedicalExam.deleted_at.is_(None),
+        MedicalExam.person_id.in_(person_ids), MedicalExam.exam_kind.is_not(None),
+    ).group_by(MedicalExam.person_id, MedicalExam.exam_kind)
+    latest: dict[tuple[str, MedicalExamKind], date] = {
+        (pid, kind): vu for pid, kind, vu in (await session.execute(ex_stmt)).all()
+    }
+
+    items: list[dict] = []
+    for person in people:
+        hazard_ids = {h.id for h in (person.position.hazards if person.position else [])}
+        required = lc.resolve_required_kinds(
+            person.position_id, person.working_conditions_class, hazard_ids, norms,
+        )
+        for kind in required:
+            vu = latest.get((person.id, kind))
+            st = lc.classify(vu, today, warning_days)
+            items.append({
+                "person_id": person.id, "exam_kind": kind.value,
+                "status": st.value, "valid_until": vu,
+                "due_at": vu if vu is not None else today,
+            })
+    return items
+
+
+async def status_summary(session: AsyncSession, *, tenant_id: str, today: date) -> dict:
+    """Per-status contingent counts + overdue (overdue+missing) + active-suspension count."""
+    items = await compute_contingent(session, tenant_id=tenant_id, today=today)
+    by_status: dict[str, int] = {}
+    for it in items:
+        by_status[it["status"]] = by_status.get(it["status"], 0) + 1
+    suspended = await session.scalar(
+        select(func.count()).select_from(MedicalSuspension).where(
+            MedicalSuspension.tenant_id == tenant_id,
+            MedicalSuspension.deleted_at.is_(None),
+            MedicalSuspension.status == MedicalSuspensionStatus.ACTIVE,
+        )
+    )
+    return {
+        "by_status": by_status,
+        "total": len(items),
+        "overdue_count": by_status.get("overdue", 0) + by_status.get("missing", 0),
+        "suspended_count": int(suspended or 0),
+    }
+
+
+# ---------------------------------------------------------------------------
+# 5.3 — Referrals + idempotent generation
+# ---------------------------------------------------------------------------
+
+
+async def _open_referral_kinds(
+    session: AsyncSession, *, tenant_id: str, person_id: str
+) -> set[MedicalExamKind]:
+    """Exam kinds with a non-terminal (open) referral for the person."""
+    stmt = select(MedicalReferral.exam_kind).where(
+        MedicalReferral.tenant_id == tenant_id,
+        MedicalReferral.deleted_at.is_(None),
+        MedicalReferral.person_id == person_id,
+        MedicalReferral.status.not_in(list(lc.TERMINAL_STATES)),
+    )
+    return set((await session.execute(stmt)).scalars().all())
+
+
+async def issue_referral(
+    session: AsyncSession, *, tenant_id: str, person_id: str, exam_kind: MedicalExamKind,
+    due_at: date | None, medical_org_name: str | None, issued_by: str | None,
+) -> MedicalReferral:
+    """Create an ISSUED referral. Does not commit."""
+    ref = MedicalReferral(
+        tenant_id=tenant_id, person_id=person_id, exam_kind=exam_kind, due_at=due_at,
+        status=MedicalReferralStatus.ISSUED, medical_org_name=medical_org_name,
+        issued_by=issued_by,
+    )
+    session.add(ref)
+    await session.flush()
+    return ref
+
+
+async def generate_due_referrals(
+    session: AsyncSession, *, tenant_id: str, today: date, issued_by: str | None = None,
+) -> int:
+    """Issue ISSUED referrals for MISSING/OVERDUE required kinds lacking an open referral. Idempotent."""
+    items = await compute_contingent(session, tenant_id=tenant_id, today=today)
+    created = 0
+    for it in items:
+        if it["status"] not in ("missing", "overdue"):
+            continue
+        kind = MedicalExamKind(it["exam_kind"])
+        open_kinds = await _open_referral_kinds(session, tenant_id=tenant_id, person_id=it["person_id"])
+        if kind in open_kinds:
+            continue
+        await issue_referral(session, tenant_id=tenant_id, person_id=it["person_id"],
+                             exam_kind=kind, due_at=today, medical_org_name=None,
+                             issued_by=issued_by)
+        created += 1
+    return created
+
+
+# ---------------------------------------------------------------------------
+# 5.4 — notify_overdue
+# ---------------------------------------------------------------------------
+
+
+async def notify_overdue(
+    session: AsyncSession, *, tenant_id: str, actor_id: str | None, today: date
+) -> int:
+    """Enqueue TASK_OVERDUE for overdue/missing contingent items. Idempotent per day via the key."""
+    items = await compute_contingent(session, tenant_id=tenant_id, today=today)
+    outbox = OutboxService(session)
+    count = 0
+    for it in items:
+        if it["status"] not in ("overdue", "missing"):
+            continue
+        await outbox.enqueue(
+            tenant_id=tenant_id, event_type=EventType.TASK_OVERDUE.value,
+            idempotency_key=f"medical-contingent:{it['person_id']}:{it['exam_kind']}:{today.isoformat()}",
+            payload={"tenant_id": tenant_id, "actor_id": actor_id,
+                     "task_id": f"{it['person_id']}:{it['exam_kind']}",
+                     "title": f"Медосмотр просрочен/отсутствует: {it['exam_kind']}",
+                     "due_at": None, "assignee_id": None, "status": it["status"],
+                     "priority": "high", "overdue": True},
+        )
+        count += 1
+    return count

@@ -74,3 +74,43 @@ async def test_record_exam_respects_explicit_valid_until(sessionmaker, data_fact
         )
         await session.commit()
         assert exam.valid_until == date(2026, 6, 1)
+
+
+@pytest.mark.asyncio
+async def test_contingent_lists_missing_required_exam(sessionmaker, data_factory):
+    from app.models.models import MedicalNorm, MedicalExamKind, Position
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        company = await data_factory.create_company(tenant=tenant, session=session)
+        pos = Position(tenant_id=tenant.id, company_id=company.id, name="Сварщик")
+        session.add(pos); await session.flush()
+        person = await data_factory.create_person(
+            tenant=tenant, company=company, session=session, position_id=pos.id)
+        session.add(MedicalNorm(tenant_id=tenant.id, position_id=pos.id,
+                                exam_kind=MedicalExamKind.PERIODIC, interval_days=365))
+        await session.commit()
+
+        items = await svc.compute_contingent(session, tenant_id=str(tenant.id),
+                                              today=date(2026, 6, 1))
+        assert any(i["person_id"] == person.id and i["status"] == "missing" for i in items)
+
+
+@pytest.mark.asyncio
+async def test_generate_due_referrals_is_idempotent(sessionmaker, data_factory):
+    from app.models.models import MedicalNorm, MedicalExamKind, Position
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        company = await data_factory.create_company(tenant=tenant, session=session)
+        pos = Position(tenant_id=tenant.id, company_id=company.id, name="Маляр")
+        session.add(pos); await session.flush()
+        await data_factory.create_person(
+            tenant=tenant, company=company, session=session, position_id=pos.id)
+        session.add(MedicalNorm(tenant_id=tenant.id, position_id=pos.id,
+                                exam_kind=MedicalExamKind.PERIODIC, interval_days=365))
+        await session.commit()
+        tid = str(tenant.id)
+        n1 = await svc.generate_due_referrals(session, tenant_id=tid, today=date(2026, 6, 1))
+        await session.commit()
+        n2 = await svc.generate_due_referrals(session, tenant_id=tid, today=date(2026, 6, 1))
+        await session.commit()
+        assert n1 == 1 and n2 == 0
