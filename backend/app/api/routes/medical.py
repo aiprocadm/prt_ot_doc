@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID
 
@@ -16,10 +17,16 @@ from app.api.helpers.etag import (
     compute_list_etag,
 )
 from app.core.audit_decorator import audit_operation
+from app.core.feature_flags import is_feature_enabled
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
-from app.models.models import MedicalExam, Person, Tenant
-from app.schemas.medical import MedicalExamPage, MedicalExamRead, MedicalRequirementCreate
+from app.domains.medical import lifecycle as lc
+from app.domains.medical import service as medsvc
+from app.models.models import MedicalExam, MedicalSuspension, MedicalSuspensionStatus, Person, Tenant
+from app.schemas.medical import (
+    MedicalExamCreate, MedicalExamPage, MedicalExamRead, MedicalRequirementCreate,
+    MedicalSuspensionPage, MedicalSuspensionRead,
+)
 from app.schemas.task import TaskRead
 from app.services.obligations import create_medical_task
 
@@ -46,6 +53,20 @@ MedicalReadAccess = Annotated[
     AccessContext,
     Depends(abac(_tenant_resource_id, required_roles=_MEDICAL_READ_ROLES, action="read medical")),
 ]
+
+_MEDICAL_FEATURE_CODE = "medical"
+
+
+async def require_medical_feature(tenant: TenantDep, session: SessionDep) -> None:
+    if not await is_feature_enabled(session, str(tenant.id), _MEDICAL_FEATURE_CODE):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Medical feature is not enabled for this tenant")
+
+
+MedicalFeatureGate = Depends(require_medical_feature)
+
+
+def _error(code: str, message: str) -> dict[str, str]:
+    return {"code": code, "message": message}
 
 
 @router.get("/medical/exams", response_model=MedicalExamPage)
@@ -123,3 +144,46 @@ async def create_medical_requirement(
     await session.commit()
     await session.refresh(task)
     return TaskRead.model_validate(task)
+
+
+@router.post("/medical/exams", response_model=MedicalExamRead,
+             status_code=status.HTTP_201_CREATED, dependencies=[MedicalFeatureGate])
+async def create_medical_exam(
+    payload: MedicalExamCreate, tenant: TenantDep, session: SessionDep, access: MedicalAccess,
+) -> MedicalExamRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        exam = await medsvc.record_exam(
+            session, tenant_id=str(tenant.id), actor_id=getattr(access.user, "id", None),
+            person_id=payload.person_id, exam_kind=payload.exam_kind,
+            exam_date=payload.exam_date, fitness=payload.fitness,
+            contraindications=payload.contraindications, conclusion=payload.conclusion,
+            restrictions=payload.restrictions, valid_until=payload.valid_until,
+            medical_org_name=payload.medical_org_name, referral_id=payload.referral_id,
+            exam_type=payload.exam_type,
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc))
+    await session.commit()
+    await session.refresh(exam)
+    return MedicalExamRead.model_validate(exam)
+
+
+@router.get("/medical/suspensions", response_model=MedicalSuspensionPage,
+            dependencies=[MedicalFeatureGate])
+async def list_suspensions(
+    tenant: TenantDep, session: SessionDep, access: MedicalReadAccess,
+    person_id: str | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+) -> MedicalSuspensionPage:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = access
+    stmt = select(MedicalSuspension).where(
+        MedicalSuspension.tenant_id == tenant.id, MedicalSuspension.deleted_at.is_(None))
+    if person_id:
+        stmt = stmt.where(MedicalSuspension.person_id == person_id)
+    if status_filter == "active":
+        stmt = stmt.where(MedicalSuspension.status == MedicalSuspensionStatus.ACTIVE)
+    rows = list((await session.execute(stmt)).scalars().all())
+    return MedicalSuspensionPage(
+        items=[MedicalSuspensionRead.model_validate(r) for r in rows], total=len(rows))
