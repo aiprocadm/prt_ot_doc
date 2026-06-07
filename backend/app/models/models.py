@@ -809,6 +809,37 @@ class Workplace(TenantBaseModel, SoftDeleteMixin):
     )
 
 
+class MedicalExamKind(str, enum.Enum):
+    PERIODIC = "periodic"
+    PRELIMINARY = "preliminary"
+    PSYCHIATRIC = "psychiatric"
+    FLUOROGRAPHY = "fluorography"
+    HEALTH_BOOK = "health_book"
+
+
+class MedicalFitness(str, enum.Enum):
+    FIT = "fit"
+    FIT_WITH_RESTRICTIONS = "fit_with_restrictions"
+    UNFIT = "unfit"
+
+
+class MedicalReferralStatus(str, enum.Enum):
+    ISSUED = "issued"
+    SCHEDULED = "scheduled"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+class MedicalSuspensionStatus(str, enum.Enum):
+    ACTIVE = "active"
+    LIFTED = "lifted"
+
+
+class MedicalSuspensionReason(str, enum.Enum):
+    UNFIT = "unfit"
+    CONTRAINDICATION = "contraindication"
+
+
 class MedicalExam(TenantBaseModel, SoftDeleteMixin):
     __tablename__ = "medical_exam"
 
