@@ -213,10 +213,12 @@ async def create_medical_exam(
 @router.get("/medical/suspensions", response_model=MedicalSuspensionPage,
             dependencies=[MedicalFeatureGate])
 async def list_suspensions(
+    request: Request,
+    response: Response,
     tenant: TenantDep, session: SessionDep, access: MedicalReadAccess,
     person_id: str | None = Query(default=None),
     status_filter: str | None = Query(default=None, alias="status"),
-) -> MedicalSuspensionPage:
+) -> MedicalSuspensionPage | Response:
     TenantContextValidator.ensure_tenant_context(tenant)
     _ = access
     stmt = select(MedicalSuspension).where(
@@ -226,8 +228,66 @@ async def list_suspensions(
     if status_filter == "active":
         stmt = stmt.where(MedicalSuspension.status == MedicalSuspensionStatus.ACTIVE)
     rows = list((await session.execute(stmt)).scalars().all())
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=rows,
+        scalars=[
+            ("total", len(rows)),
+            ("person", person_id or ""),
+            ("status", status_filter or ""),
+        ],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
     return MedicalSuspensionPage(
         items=[MedicalSuspensionRead.model_validate(r) for r in rows], total=len(rows))
+
+
+# ---------------------------------------------------------------------------
+# Task 6.5 — Suspension lift (admin/owner only)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/medical/suspensions/{suspension_id}/lift",
+             response_model=MedicalSuspensionRead, dependencies=[MedicalFeatureGate])
+async def lift_suspension(
+    request: Request, suspension_id: str, tenant: TenantDep, session: SessionDep, access: MedicalAccess,
+) -> MedicalSuspensionRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    roles = {v.lower() for v in access.to_auth_context().roles}
+    if not roles & lc.LIFT_SUSPENSION_ROLES:
+        raise HTTPException(status.HTTP_403_FORBIDDEN,
+                            detail=_error("suspension_lift_forbidden", "Only admin or owner may lift a medical suspension"))
+    record = (await session.execute(select(MedicalSuspension).where(
+        MedicalSuspension.id == suspension_id, MedicalSuspension.tenant_id == tenant.id,
+        MedicalSuspension.deleted_at.is_(None)))).scalar_one_or_none()
+    if record is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=_error("suspension_not_found", "Suspension not found"))
+    if record.status == MedicalSuspensionStatus.ACTIVE:
+        record.status = MedicalSuspensionStatus.LIFTED
+        record.lifted_at = datetime.now(timezone.utc)
+        record.lifted_by = getattr(access.user, "id", None)
+        from app.services.events import EventType
+        from app.services.outbox import OutboxService
+        await OutboxService(session).enqueue(
+            tenant_id=str(tenant.id), event_type=EventType.PERSON_REINSTATED.value,
+            idempotency_key=f"person-reinstated:{record.id}",
+            payload={"tenant_id": str(tenant.id), "actor_id": getattr(access.user, "id", None),
+                     "suspension_id": record.id, "person_id": record.person_id})
+        audit = AuditService(session)
+        ip = request.client.host if request.client else "unknown"
+        await audit.log_event(
+            tenant_id=str(tenant.id), action="lift", object_type="medical_suspension",
+            object_id=record.id, user_id=getattr(access.user, "id", None), ip=ip,
+            request_id=getattr(request.state, "trace_id", None),
+            user_agent=request.headers.get("user-agent"), details={"person_id": record.person_id})
+    await session.commit()
+    await session.refresh(record)
+    return MedicalSuspensionRead.model_validate(record)
 
 
 # ---------------------------------------------------------------------------

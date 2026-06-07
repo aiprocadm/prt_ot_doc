@@ -99,6 +99,23 @@ async def test_referral_complete_rejects_unknown_result_exam(
 
 
 @pytest.mark.asyncio
+async def test_lift_suspension_requires_admin(async_client, sessionmaker, data_factory, make_auth_headers):
+    person_id = await _seed_person(sessionmaker, data_factory)
+    admin = await make_auth_headers(RoleEnum.ADMIN)
+    await async_client.post("/api/v1/medical/exams", headers=admin, json={
+        "person_id": person_id, "exam_kind": "periodic",
+        "exam_date": date(2026, 1, 1).isoformat(), "fitness": "unfit"})
+    sid = (await async_client.get("/api/v1/medical/suspensions", headers=admin,
+                                  params={"person_id": person_id})).json()["items"][0]["id"]
+    hr = await make_auth_headers(RoleEnum.HR, email="hr-lift@example.com")
+    forbidden = await async_client.post(f"/api/v1/medical/suspensions/{sid}/lift", headers=hr)
+    assert forbidden.status_code == status.HTTP_403_FORBIDDEN, forbidden.text
+    ok = await async_client.post(f"/api/v1/medical/suspensions/{sid}/lift", headers=admin)
+    assert ok.status_code == status.HTTP_200_OK
+    assert ok.json()["status"] == "lifted"
+
+
+@pytest.mark.asyncio
 async def test_contingent_and_generate(async_client, sessionmaker, data_factory, make_auth_headers):
     from app.models.models import MedicalNorm, Position
     async with sessionmaker() as session:
