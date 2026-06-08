@@ -186,3 +186,28 @@ async def test_enforce_raises_for_unknown_id(sessionmaker, data_factory):
     err = exc_info.value.args[0]
     assert err["code"] == "employees_not_found"
     assert "does-not-exist" in err["details"]
+
+
+@pytest.mark.asyncio
+async def test_notify_readiness_enqueues_for_non_allowed(sessionmaker, data_factory):
+    """notify_readiness enqueues events only for non-ALLOWED (BLOCKED) employees."""
+    from app.services.contractor_admission import notify_readiness
+
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        tid = str(tenant.id)
+
+        registry = _make_registry(tid)
+        session.add(registry)
+        await session.flush()
+
+        ready = _make_ready_employee(tid, registry.id)   # ALLOWED — must be skipped
+        stale = _make_stale_employee(tid, registry.id)   # BLOCKED — must be enqueued
+        session.add(ready)
+        session.add(stale)
+        await session.commit()
+
+        count = await notify_readiness(session, tenant_id=tid)
+        await session.commit()
+
+    assert count == 1, f"Expected 1 event (stale/BLOCKED only), got {count}"

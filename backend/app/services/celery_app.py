@@ -70,6 +70,10 @@ celery_app.conf.beat_schedule = {
         "task": "medical.contingent.tick",
         "schedule": crontab(hour=3, minute=0),
     },
+    "contractors-readiness-daily": {
+        "task": "contractors.readiness.tick",
+        "schedule": crontab(hour=3, minute=30),
+    },
 }
 
 celery_app.conf.task_queues = (
