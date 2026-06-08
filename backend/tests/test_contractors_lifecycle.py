@@ -54,6 +54,30 @@ def test_expired_status_is_blocked():
     assert "access" in v.violations
 
 
+def test_stale_valid_training_is_blocked():
+    # training_status manually 'valid' but last_training_at + interval is in the past
+    emp = _Emp(
+        training_status=ComplianceStatus.VALID,
+        last_training_at=_dt(TODAY - timedelta(days=TRAINING_INTERVAL_DAYS + 1)),
+        next_medical_at=_dt(TODAY + timedelta(days=200)),
+    )
+    v = evaluate_employee(emp, TODAY)
+    assert v.status == ReadinessStatus.BLOCKED
+    assert "training" in v.violations
+
+
+def test_expired_status_blocks_deadline_bearing_requirement():
+    # EXPIRED on a requirement that also has a (valid) deadline -> still BLOCKED via status
+    emp = _Emp(
+        medical_status=ComplianceStatus.EXPIRED,
+        last_training_at=_dt(TODAY),
+        next_medical_at=_dt(TODAY + timedelta(days=200)),
+    )
+    v = evaluate_employee(emp, TODAY)
+    assert v.status == ReadinessStatus.BLOCKED
+    assert "medical" in v.violations
+
+
 def test_missing_deadlines_are_blocked():
     emp = _Emp(last_training_at=None, next_medical_at=None)
     v = evaluate_employee(emp, TODAY)

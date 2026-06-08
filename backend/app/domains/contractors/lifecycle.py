@@ -35,9 +35,11 @@ class EmployeeVerdict:
     warnings: list[str] = field(default_factory=list)
 
 
-def _as_date(value: datetime | None) -> date | None:
+def _as_date(value: datetime | date | None) -> date | None:
     if value is None:
         return None
+    if not isinstance(value, datetime):
+        return value  # already a plain date
     if value.tzinfo is None:
         value = value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc).date()
