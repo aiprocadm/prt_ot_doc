@@ -134,3 +134,27 @@ async def test_contingent_and_generate(async_client, sessionmaker, data_factory,
     assert gen.status_code == status.HTTP_200_OK and gen.json()["count"] == 1
     summ = await async_client.get("/api/v1/medical/summary", headers=headers)
     assert summ.json()["total"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_medical_cross_tenant_isolation(async_client, sessionmaker, data_factory, make_auth_headers):
+    # tenant A: person + recorded exam
+    async with sessionmaker() as session:
+        ta = await data_factory.ensure_tenant(slug="med-a", session=session)
+        ca = await data_factory.create_company(tenant=ta, session=session)
+        pa = await data_factory.create_person(tenant=ta, company=ca, session=session)
+        await session.commit()
+        a_person = pa.id
+    ha = await make_auth_headers(RoleEnum.ADMIN, tenant="med-a", email="admin-meda@example.com")
+    await async_client.post("/api/v1/medical/exams", headers=ha, json={
+        "person_id": a_person, "exam_kind": "periodic",
+        "exam_date": date(2026, 1, 1).isoformat(), "fitness": "unfit"})
+    # tenant B must not see tenant A's exams or suspensions
+    async with sessionmaker() as session:
+        await data_factory.ensure_tenant(slug="med-b", session=session)
+        await session.commit()
+    hb = await make_auth_headers(RoleEnum.ADMIN, tenant="med-b", email="admin-medb@example.com")
+    ex = await async_client.get("/api/v1/medical/exams", headers=hb, params={"person_id": a_person})
+    assert ex.status_code == status.HTTP_200_OK and ex.json()["total"] == 0
+    su = await async_client.get("/api/v1/medical/suspensions", headers=hb, params={"person_id": a_person})
+    assert su.status_code == status.HTTP_200_OK and su.json()["total"] == 0
