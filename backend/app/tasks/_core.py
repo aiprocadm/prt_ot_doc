@@ -1984,13 +1984,19 @@ async def _contractors_readiness_tick() -> int:
             (await session.execute(select(Tenant).where(Tenant.is_active.is_(True)))).scalars().all()
         )
     total = 0
+    # Per-tenant isolation matches _medical_contingent_tick (no per-tenant try/except):
+    # a tenant failure aborts the run and Celery autoretry re-runs it; both steps are
+    # idempotent (rebuild upserts, notify dedups by (employee, status, day)).
     for tenant in tenants:
         with tenant_context(tenant.slug):
             ensure_tenant_schema(tenant.slug)
             async with session_scope(tenant=tenant.slug) as session:
                 tenant_id, _scope = await _resolve_task_tenant_scope(session, tenant.slug)
-                await ContractorReadinessProjectionService(session, tenant_id).rebuild()
+                # Enqueue notifications first, THEN rebuild — rebuild() commits, making the
+                # outbox events and the refreshed projection a single atomic unit (avoids a
+                # projection/notification split-brain if either step fails midway).
                 total += await notify_readiness(session, tenant_id=tenant_id)
+                await ContractorReadinessProjectionService(session, tenant_id).rebuild()
                 await session.commit()
     return total
 
