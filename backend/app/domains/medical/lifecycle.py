@@ -9,6 +9,8 @@ from collections.abc import Iterable
 from datetime import date, timedelta
 from typing import Tuple
 
+from app.domains.shared import ContingentItemStatus, classify  # re-export (back-compat)
+
 from app.models.models import (
     MedicalExamKind,
     MedicalFitness,
@@ -96,31 +98,8 @@ def next_due(last_exam_date: date | None, interval_days: int, today: date) -> da
 
 
 # ---------------------------------------------------------------------------
-# 2.3 — Contingent classification
+# 2.3 — Contingent classification  (ContingentItemStatus, classify — see shared.py)
 # ---------------------------------------------------------------------------
-
-
-class ContingentItemStatus(str, enum.Enum):
-    """Per (person, exam-kind) contingent state: ok / due_soon / overdue / missing."""
-
-    OK = "ok"
-    DUE_SOON = "due_soon"
-    OVERDUE = "overdue"
-    MISSING = "missing"
-
-
-def classify(
-    latest_valid_until: date | None, today: date, warning_days: int = 30
-) -> ContingentItemStatus:
-    """Classify a required exam by its latest valid_until: missing/overdue/due_soon/ok (warning_days window)."""
-    if latest_valid_until is None:
-        return ContingentItemStatus.MISSING
-    if latest_valid_until < today:
-        return ContingentItemStatus.OVERDUE
-    if latest_valid_until <= today + timedelta(days=warning_days):
-        return ContingentItemStatus.DUE_SOON
-    return ContingentItemStatus.OK
-
 
 # ---------------------------------------------------------------------------
 # 2.4 — Required-kinds resolution (СОУТ influence)
