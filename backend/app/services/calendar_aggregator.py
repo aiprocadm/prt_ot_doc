@@ -42,6 +42,7 @@ from app.models.models import (
     Inspection,
     InspectionStatus,
     MedicalExam,
+    MedicalReferral,
     Permit,
     PermitStatus,
     PPEIssue,
@@ -66,6 +67,7 @@ MAX_ITEMS_PER_SOURCE = 50
 
 ALL_SOURCES: tuple[str, ...] = (
     "medical_exam",
+    "medical_referral",
     "ppe_issue",
     "permit",
     "training_session",
@@ -85,6 +87,7 @@ _CLOSED_DEADLINE_STATUSES = frozenset({"closed", "completed", "cancelled"})
 # v1.1 follow-up that introduces tenant-configurable bands).
 _SLA_THRESHOLDS: dict[str, tuple[int, int]] = {
     "medical_exam": (7, 30),
+    "medical_referral": (7, 30),
     "ppe_issue": (7, 30),
     "permit": (7, 30),
     "training_session": (3, 14),
@@ -192,6 +195,22 @@ class CalendarAggregatorService:
             by_source.append(
                 CalendarSourceCount(
                     source_type="medical_exam", count=total, overdue_count=overdue
+                )
+            )
+
+        if "medical_referral" in sources:
+            collected, total, overdue = await self._build_medical_referrals(
+                from_at=from_at,
+                to_at=to_at,
+                person_id=person_id,
+                now=now,
+                include_fact=include_fact,
+                include_sla=include_sla,
+            )
+            items.extend(collected)
+            by_source.append(
+                CalendarSourceCount(
+                    source_type="medical_referral", count=total, overdue_count=overdue
                 )
             )
 
@@ -404,6 +423,88 @@ class CalendarAggregatorService:
             self._scoped_count(MedicalExam, person_id=person_id).where(
                 MedicalExam.valid_until < today
             )
+        )
+        return items, total, overdue
+
+    async def _build_medical_referrals(
+        self,
+        *,
+        from_at: datetime | None,
+        to_at: datetime | None,
+        person_id: str | None,
+        now: datetime,
+        include_fact: bool = False,
+        include_sla: bool = False,
+    ) -> tuple[list[CalendarEventItem], int, int]:
+        today = now.date()
+        stmt = (
+            select(MedicalReferral)
+            .where(
+                MedicalReferral.tenant_id == self.tenant_id,
+                MedicalReferral.deleted_at.is_(None),
+                MedicalReferral.due_at.is_not(None),
+            )
+            .order_by(MedicalReferral.due_at.asc())
+            .limit(MAX_ITEMS_PER_SOURCE)
+        )
+        if person_id:
+            stmt = stmt.where(MedicalReferral.person_id == person_id)
+        if from_at is not None:
+            stmt = stmt.where(MedicalReferral.due_at >= from_at.date())
+        if to_at is not None:
+            stmt = stmt.where(MedicalReferral.due_at <= to_at.date())
+
+        rows = (await self.db.execute(stmt)).scalars().all()
+        items: list[CalendarEventItem] = []
+        for ref in rows:
+            anchor = _coerce_dt(ref.due_at)
+            if anchor is None:
+                continue
+            is_overdue = ref.due_at < today
+            expected_at = anchor if include_fact else None
+            days_to_due = _days_to_due(anchor, now) if include_sla else None
+            sla_band = (
+                _sla_band(
+                    "medical_referral",
+                    days_to_due=days_to_due,
+                    is_overdue=is_overdue,
+                )
+                if include_sla
+                else None
+            )
+            items.append(
+                CalendarEventItem(
+                    id=f"medical_referral:{ref.id}",
+                    source_type="medical_referral",
+                    source_id=str(ref.id),
+                    title=f"Направление на медосмотр: {ref.exam_kind.value}",
+                    starts_at=anchor,
+                    ends_at=None,
+                    status="expired" if is_overdue else "active",
+                    is_overdue=is_overdue,
+                    person_id=str(ref.person_id) if ref.person_id else None,
+                    site_id=None,
+                    company_id=None,
+                    expected_at=expected_at,
+                    actual_at=None,
+                    variance_days=None,
+                    days_to_due=days_to_due,
+                    sla_band=sla_band,
+                    extra={
+                        "exam_kind": ref.exam_kind.value,
+                        "due_at": ref.due_at.isoformat() if ref.due_at else None,
+                        "status": ref.status.value if hasattr(ref.status, "value") else str(ref.status),
+                        "medical_org_name": ref.medical_org_name,
+                    },
+                )
+            )
+
+        base_count = self._scoped_count(MedicalReferral, person_id=person_id).where(
+            MedicalReferral.due_at.is_not(None)
+        )
+        total = await self._count(base_count)
+        overdue = await self._count(
+            base_count.where(MedicalReferral.due_at < today)
         )
         return items, total, overdue
 

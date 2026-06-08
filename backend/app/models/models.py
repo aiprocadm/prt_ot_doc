@@ -95,6 +95,14 @@ __all__ = [
     "PackageProfile",
     "Site",
     "MedicalExam",
+    "MedicalExamKind",
+    "MedicalFitness",
+    "MedicalReferralStatus",
+    "MedicalSuspensionStatus",
+    "MedicalSuspensionReason",
+    "MedicalNorm",
+    "MedicalReferral",
+    "MedicalSuspension",
     "DocumentPack",
     "DocumentPackItem",
     "DocumentPackModule",
@@ -809,6 +817,47 @@ class Workplace(TenantBaseModel, SoftDeleteMixin):
     )
 
 
+class MedicalExamKind(str, enum.Enum):
+    """Types of occupational medical examination."""
+
+    PERIODIC = "periodic"
+    PRELIMINARY = "preliminary"
+    PSYCHIATRIC = "psychiatric"
+    FLUOROGRAPHY = "fluorography"
+    HEALTH_BOOK = "health_book"
+
+
+class MedicalFitness(str, enum.Enum):
+    """Medical fitness verdict for a person."""
+
+    FIT = "fit"
+    FIT_WITH_RESTRICTIONS = "fit_with_restrictions"
+    UNFIT = "unfit"
+
+
+class MedicalReferralStatus(str, enum.Enum):
+    """Lifecycle state of a medical-exam referral (направление)."""
+
+    ISSUED = "issued"
+    SCHEDULED = "scheduled"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+class MedicalSuspensionStatus(str, enum.Enum):
+    """State of a medical suspension (отстранение) record."""
+
+    ACTIVE = "active"
+    LIFTED = "lifted"
+
+
+class MedicalSuspensionReason(str, enum.Enum):
+    """Why a person is medically suspended from work."""
+
+    UNFIT = "unfit"
+    CONTRAINDICATION = "contraindication"
+
+
 class MedicalExam(TenantBaseModel, SoftDeleteMixin):
     __tablename__ = "medical_exam"
 
@@ -817,8 +866,73 @@ class MedicalExam(TenantBaseModel, SoftDeleteMixin):
     exam_date: Mapped[date] = mapped_column(Date, nullable=False)
     conclusion: Mapped[str | None] = mapped_column(String(255))
     valid_until: Mapped[date] = mapped_column(Date, nullable=False)
+    # --- additive (TZ B.8) ---
+    exam_kind: Mapped[MedicalExamKind | None] = mapped_column(native_enum(MedicalExamKind), nullable=True)
+    fitness: Mapped[MedicalFitness | None] = mapped_column(native_enum(MedicalFitness), nullable=True)
+    restrictions: Mapped[str | None] = mapped_column(Text)
+    contraindications: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    referral_id: Mapped[str | None] = mapped_column(ForeignKey("medical_referral.id"), nullable=True, index=True)
+    medical_org_name: Mapped[str | None] = mapped_column(String(255))
 
     person: Mapped[Person] = relationship(backref="medical_exams")
+
+
+class MedicalNorm(TenantBaseModel):
+    __tablename__ = "medical_norm"
+
+    position_id: Mapped[str] = mapped_column(ForeignKey("position.id"), nullable=False, index=True)
+    hazard_id: Mapped[str | None] = mapped_column(
+        ForeignKey("risk_hazards.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    exam_kind: Mapped[MedicalExamKind] = mapped_column(native_enum(MedicalExamKind), nullable=False)
+    interval_days: Mapped[int] = mapped_column(Integer, nullable=False, default=365)
+    working_conditions_class: Mapped[str | None] = mapped_column(String(32))
+
+    position: Mapped[Position] = relationship(backref="medical_norms")
+
+    # hazard_id is nullable (position-level "general" norms). NULL != NULL in a
+    # unique constraint, so duplicate general norms are tolerated; the contingent
+    # resolver dedups required kinds via set union, so this is functionally benign.
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "position_id", "hazard_id", "exam_kind",
+            name="uq_medical_norm_position_hazard_kind",
+        ),
+    )
+
+
+class MedicalReferral(TenantBaseModel, SoftDeleteMixin):
+    __tablename__ = "medical_referral"
+
+    person_id: Mapped[str] = mapped_column(ForeignKey("person.id"), nullable=False, index=True)
+    exam_kind: Mapped[MedicalExamKind] = mapped_column(native_enum(MedicalExamKind), nullable=False)
+    due_at: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    status: Mapped[MedicalReferralStatus] = mapped_column(
+        native_enum(MedicalReferralStatus), nullable=False, default=MedicalReferralStatus.ISSUED
+    )
+    medical_org_name: Mapped[str | None] = mapped_column(String(255))
+    issued_by: Mapped[str | None] = mapped_column(ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True)
+    result_exam_id: Mapped[str | None] = mapped_column(ForeignKey("medical_exam.id", ondelete="SET NULL"), nullable=True)
+
+    person: Mapped[Person] = relationship(backref="medical_referrals")
+
+
+class MedicalSuspension(TenantBaseModel, SoftDeleteMixin):
+    __tablename__ = "medical_suspension"
+
+    person_id: Mapped[str] = mapped_column(ForeignKey("person.id"), nullable=False, index=True)
+    reason: Mapped[MedicalSuspensionReason] = mapped_column(
+        native_enum(MedicalSuspensionReason), nullable=False  # no default — service always sets reason explicitly
+    )
+    source_exam_id: Mapped[str | None] = mapped_column(ForeignKey("medical_exam.id", ondelete="SET NULL"), nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    lifted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[MedicalSuspensionStatus] = mapped_column(
+        native_enum(MedicalSuspensionStatus), nullable=False, default=MedicalSuspensionStatus.ACTIVE
+    )
+    lifted_by: Mapped[str | None] = mapped_column(ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    person: Mapped[Person] = relationship(backref="medical_suspensions")
 
 
 class TrainingStatus(str, enum.Enum):

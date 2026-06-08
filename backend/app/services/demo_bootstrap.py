@@ -9,8 +9,9 @@ from sqlalchemy import select
 from app.core.config import Settings
 from app.db import aensure_tenant_schema, session_scope
 from app.domains.packs.seeder import ensure_default_packs
+from app.models.feature import Feature
 from app.models.finance import Department
-from app.models.models import Company, Person, Position, Site, Tenant, TrainingCourse
+from app.models.models import Company, MedicalExamKind, MedicalNorm, Person, Position, Site, Tenant, TrainingCourse
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,14 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
             await session.flush()
         tenant_db_id = str(tenant.id)
         tenant_schema_name = str(tenant.schema_name or f"tenant_{tenant_slug}")
+
+        # Seed shared Feature catalogue row for medical (idempotent).
+        medical_feature = (
+            await session.execute(select(Feature).where(Feature.code == "medical"))
+        ).scalar_one_or_none()
+        if medical_feature is None:
+            session.add(Feature(code="medical", title="Медосмотры"))
+            await session.flush()
 
     await aensure_tenant_schema(tenant_slug, schema_name=tenant_schema_name)
 
@@ -110,6 +119,28 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
                     duration_hours=2,
                 )
             )
+
+        # Seed a MedicalNorm for periodic exam on the demo Position (idempotent).
+        # This ensures the demo contingent list shows a "missing" row so the
+        # /medical/contingent endpoint is non-empty out-of-the-box.
+        if position is not None:
+            existing_norm = (
+                await session.execute(
+                    select(MedicalNorm).where(
+                        MedicalNorm.position_id == position.id,
+                        MedicalNorm.exam_kind == MedicalExamKind.PERIODIC,
+                    )
+                )
+            ).scalar_one_or_none()
+            if existing_norm is None:
+                session.add(
+                    MedicalNorm(
+                        tenant_id=tenant_db_id,
+                        position_id=position.id,
+                        exam_kind=MedicalExamKind.PERIODIC,
+                        interval_days=365,
+                    )
+                )
 
         await ensure_default_packs(session, tenant_slug=tenant_slug)
         logger.info("demo.bootstrap.done", extra={"tenant": tenant_slug, "company": company_name, "site": site_name})
