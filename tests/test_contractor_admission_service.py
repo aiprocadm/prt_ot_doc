@@ -45,7 +45,7 @@ def _make_ready_employee(tenant_id: str, contractor_id: str) -> ContractorEmploy
         access_status=ComplianceStatus.VALID,
         training_status=ComplianceStatus.VALID,
         medical_status=ComplianceStatus.VALID,
-        last_training_at=now,  # training deadline = now + 365 days → OK/DUE_SOON
+        last_training_at=now,  # training deadline ≈ today + 365 days → OK → ALLOWED
         next_medical_at=now + timedelta(days=200),
     )
 
@@ -89,11 +89,7 @@ async def test_evaluate_returns_verdicts(sessionmaker, data_factory):
         session.add(stale)
         await session.commit()
 
-        verdicts = evaluate_contractor_admission(
-            session,
-            tenant_scope=(tid,),
-            employees=[ready, stale],
-        )
+        verdicts = evaluate_contractor_admission(employees=[ready, stale])
 
     assert len(verdicts) == 2
 
@@ -160,3 +156,33 @@ async def test_enforce_passes_for_ready(sessionmaker, data_factory):
             tenant_scope=(tid,),
             employee_ids=[ready.id],
         )
+
+
+@pytest.mark.asyncio
+async def test_enforce_empty_ids_is_noop(sessionmaker, data_factory):
+    """enforce_contractor_admission with no ids returns cleanly (no raise)."""
+    async with sessionmaker() as session:
+        await enforce_contractor_admission(
+            session,
+            tenant_scope=("any-tenant",),
+            employee_ids=[],
+        )
+
+
+@pytest.mark.asyncio
+async def test_enforce_raises_for_unknown_id(sessionmaker, data_factory):
+    """A requested id absent within tenant scope must block, not silently pass."""
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        tid = str(tenant.id)
+
+        with pytest.raises(ValueError) as exc_info:
+            await enforce_contractor_admission(
+                session,
+                tenant_scope=(tid,),
+                employee_ids=["does-not-exist"],
+            )
+
+    err = exc_info.value.args[0]
+    assert err["code"] == "employees_not_found"
+    assert "does-not-exist" in err["details"]

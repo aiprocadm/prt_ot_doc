@@ -23,16 +23,13 @@ from app.services.outbox import OutboxService
 
 
 def evaluate_contractor_admission(
-    session: AsyncSession,  # noqa: ARG001 — kept for API symmetry with enforce/notify
     *,
-    tenant_scope: tuple[str, ...],
     employees: list[ContractorEmployee],
 ) -> list[lc.EmployeeVerdict]:
     """Pure compute over already-loaded employees. No DB queries, no raise.
 
-    Uses today's UTC date from the wall clock.
-    ``tenant_scope`` is accepted for API symmetry but is not used here
-    (callers already filtered the employees list before passing it in).
+    Uses today's UTC date from the wall clock. Callers pass an
+    already-tenant-filtered list of employees.
     """
     today = datetime.now(timezone.utc).date()
     return [lc.evaluate_employee(emp, today) for emp in employees]
@@ -47,6 +44,9 @@ async def enforce_contractor_admission(
     """Load employees by id within tenant_scope, evaluate, raise for BLOCKED.
 
     Raises:
+        ValueError: ``{"code": "employees_not_found", "details": [<id>, ...]}``
+            when any requested id is absent within the tenant scope — the gate
+            must never silently pass an employee it could not verify.
         ValueError: ``{"code": "requirements_not_met", "details": [...]}``
             where each detail entry is ``{"employee_id": ..., "violations": [...]}``.
             Only BLOCKED employees are listed.
@@ -60,6 +60,12 @@ async def enforce_contractor_admission(
         ContractorEmployee.deleted_at.is_(None),
     )
     employees = list((await session.execute(stmt)).scalars().all())
+
+    # Defense in depth: a not-found id must block, never silently pass the gate.
+    found_ids = {emp.id for emp in employees}
+    missing_ids = [eid for eid in employee_ids if eid not in found_ids]
+    if missing_ids:
+        raise ValueError({"code": "employees_not_found", "details": missing_ids})
 
     today = datetime.now(timezone.utc).date()
     details: list[dict[str, object]] = []
