@@ -11,7 +11,7 @@ from app.db import aensure_tenant_schema, session_scope
 from app.domains.packs.seeder import ensure_default_packs
 from app.models.feature import Feature
 from app.models.finance import Department
-from app.models.models import Company, MedicalNorm, Person, Position, Site, Tenant, TrainingCourse
+from app.models.models import Company, MedicalExamKind, MedicalNorm, Person, Position, Site, Tenant, TrainingCourse
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +128,7 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
                 await session.execute(
                     select(MedicalNorm).where(
                         MedicalNorm.position_id == position.id,
-                        MedicalNorm.exam_kind == "periodic",
+                        MedicalNorm.exam_kind == MedicalExamKind.PERIODIC,
                     )
                 )
             ).scalar_one_or_none()
@@ -137,7 +137,7 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
                     MedicalNorm(
                         tenant_id=tenant_db_id,
                         position_id=position.id,
-                        exam_kind="periodic",
+                        exam_kind=MedicalExamKind.PERIODIC,
                         interval_days=365,
                     )
                 )
