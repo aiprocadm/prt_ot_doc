@@ -26,21 +26,8 @@ from app.modules.contractors.models import ComplianceStatus, ContractorEmployee,
 
 _NOW = datetime.now(timezone.utc)
 _PAST = _NOW - timedelta(days=10)
+_SOON = _NOW + timedelta(days=10)  # within the 30-day warning window → DUE_SOON
 _FUTURE = _NOW + timedelta(days=200)
-
-
-async def _seed_contractor(sessionmaker, data_factory):
-    """Create a tenant + contractor registry entry; return (tenant, contractor)."""
-    async with sessionmaker() as session:
-        tenant = await data_factory.ensure_tenant(session=session)
-        contractor = ContractorRegistry(
-            tenant_id=str(tenant.id),
-            name="Test Contractor Co",
-        )
-        session.add(contractor)
-        await session.flush()
-        await session.commit()
-        return tenant.id, str(contractor.id)
 
 
 async def _seed_employee(
@@ -140,6 +127,35 @@ async def test_admit_ready_employee_returns_200(
     body = resp.json()
     assert body["status"] == "allowed"
     assert body["employee_id"] == emp_id
+
+
+@pytest.mark.asyncio
+async def test_admit_warning_employee_returns_200_warning(
+    async_client: AsyncClient,
+    sessionmaker,
+    data_factory,
+    make_auth_headers,
+) -> None:
+    """A non-blocked employee with a due-soon deadline admits with 200 + status warning."""
+    _contractor_id, emp_id = await _seed_employee(
+        sessionmaker,
+        data_factory,
+        access_status=ComplianceStatus.VALID,
+        training_status=ComplianceStatus.VALID,
+        medical_status=ComplianceStatus.VALID,
+        last_training_at=_NOW,
+        next_medical_at=_SOON,  # due soon → WARNING, not blocked
+    )
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+
+    resp = await async_client.post(
+        f"/api/v1/contractors/employees/{emp_id}/admit",
+        headers=headers,
+    )
+    assert resp.status_code == status.HTTP_200_OK, resp.text
+    body = resp.json()
+    assert body["status"] == "warning"
+    assert "medical" in body["warnings"]
 
 
 @pytest.mark.asyncio

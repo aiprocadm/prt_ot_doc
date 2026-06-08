@@ -407,7 +407,13 @@ async def admit_contractor_employee(
     session: SessionDep,
     access: WriterAccess,
 ) -> dict:
-    """Admission gate — raises 409 if the employee is BLOCKED."""
+    """Admission gate for a contractor employee.
+
+    Returns 200 with the verdict body when the employee is cleared. A non-blocked
+    employee may still carry ``status: "warning"`` (e.g. a deadline due soon) with
+    a 200 — only ``BLOCKED`` employees are rejected with 409. A missing/cross-tenant
+    id yields 404.
+    """
     row = await _fetch_employee(session, tenant, employee_id)
     access.ensure_abac(contractor_id=row.contractor_id, action="manage contractors")
     try:
@@ -418,6 +424,11 @@ async def admit_contractor_employee(
         )
     except ValueError as exc:
         payload = exc.args[0] if exc.args else {}
+        code = payload.get("code") if isinstance(payload, dict) else None
+        if code == "employees_not_found":
+            # Race: row vanished between the 404 pre-check and enforce. 404 is the
+            # honest answer — never report a missing employee as "requirements_not_met".
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Employee not found") from exc
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             detail={
@@ -428,4 +439,6 @@ async def admit_contractor_employee(
                 "details": payload.get("details", []) if isinstance(payload, dict) else [],
             },
         ) from exc
+    # enforce is read-only, so ``row`` (loaded above) is still fresh; re-evaluate to
+    # surface the non-blocked verdict (allowed/warning) in the success body.
     return _verdict_body(evaluate_contractor_admission(employees=[row])[0])
