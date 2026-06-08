@@ -21,7 +21,7 @@
 
 **В объёме:**
 1. Настоящий движок готовности: вердикт `ALLOWED` / `WARNING` / `BLOCKED` на сотрудника, с перекрёстной сверкой статус-флага и дедлайна.
-2. Жёсткий гейт допуска (enforcing) с контрактом ошибки `requirements_not_met` (байт-в-байт как medical).
+2. Жёсткий гейт допуска (enforcing) с контрактом ошибки `requirements_not_met` (HTTP **409 CONFLICT** + detail-словарь — как у person-admission гейта в `packs.py:316`; уточнено при написании плана: конвенция репо — 409, не 422).
 3. Переписать `rebuild()` проекции: наполнять реальные колонки read-модели из вердиктов.
 4. Ежедневный beat `contractors.readiness.tick` + outbox-события предупреждений/блокировок.
 5. Feature-flag `contractors` (default-ON) + демо-seed (готовый и неготовый сотрудник).
@@ -84,8 +84,8 @@
 Добавляется в `backend/app/api/routes/contractors.py`:
 
 - `POST /contractors/employees/{employee_id}/admit` — enforcing.
-  - Готов → `200`, тело: вердикт (`status=allowed`, пустые violations); запись `AuditService` событие `contractor_admission_granted`.
-  - Не готов → `422` `requirements_not_met` + детали (через существующий обработчик `ValueError`→422, как у medical).
+  - Готов → `200`, тело: вердикт (`status=allowed`, пустые violations); запись `AuditService` событие `contractor_admission_granted` (если аудит в контуре подключён, иначе Срез-2).
+  - Не готов → `409 CONFLICT` `requirements_not_met` + детали (ловим `ValueError`, поднимаем `HTTPException(409, detail={...})` как `packs.py:316-325`).
   - RBAC: write-роли (`admin`, `owner`, `hse_head`) — как существующий write-набор контура.
 - `GET /contractors/employees/{employee_id}/readiness` — advisory.
   - `200`, тело: вердикт без enforcement (для карточки сотрудника в UI). RBAC: read-набор контура.
