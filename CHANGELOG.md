@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 2026-06-08 (feat/medical-exams-contingent — ТЗ B.8 Медосмотры, Срез 1)
+
+### Added
+- **Медосмотры (ТЗ B.8) — Срез 1 + контингент/автоматизация:** write-path осмотров с типами/годностью/противопоказаниями; направления (FSM); нормы + вычисляемый контингент (влияние СОУТ через нормы); безопасностный цикл противопоказание→отстранение→блок допуска; 16 API-эндпоинтов; интеграция календарь/дашборд/Data-Quality; celery beat `medical.contingent.tick`; per-tenant feature-flag `medical` (default-on). Аддитивная миграция `med01`. Ветка `feat/medical-exams-contingent`.
+
 ## 2026-05-21 (Session 61 — Phase 9.4 closure: Vary header uniformity across 25 ETag list endpoints, vNext-PERF-03)
 - **`backend/app/api/helpers/etag.py`** — третий RFC 7234 cache-correctness layer добавлен поверх S58 ETag (conditional GET) и S59 Cache-Control (freshness directives). Helper API расширен симметрично двум предыдущим расширениям:
   - **`DEFAULT_LIST_VARY = "Authorization, X-Tenant"`** — публичная константа, canonical pattern для tenant-scoped data за conditional-GET. Документировано почему именно эти два axes: `Authorization` сегрегирует cache entries по JWT (распределённые JWT = разные пользователи на той же URL получают distinct cache entries — иначе corporate proxy мог бы возвращать response пользователя A пользователю B); `X-Tenant` сегрегирует по tenant header (то же между тенантами). Это **defense-in-depth поверх `Cache-Control: private`** — `private` это *request* к shared cache не кэшировать; `Vary` это *cache-key contract* для любой кэш, которая всё же закэшировала response (misconfigured proxy, browser extension, debug tool). Two distinct axes — minimum sufficient set.
