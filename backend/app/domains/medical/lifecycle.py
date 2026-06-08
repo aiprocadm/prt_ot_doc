@@ -7,7 +7,6 @@ from __future__ import annotations
 import enum
 from collections.abc import Iterable
 from datetime import date, timedelta
-from typing import Tuple
 
 from app.domains.shared import ContingentItemStatus, classify  # re-export (back-compat)
 
@@ -106,7 +105,7 @@ def next_due(last_exam_date: date | None, interval_days: int, today: date) -> da
 # ---------------------------------------------------------------------------
 
 # norm tuple shape: (position_id, hazard_id | None, working_conditions_class | None, exam_kind)
-NormTuple = Tuple[str, str | None, str | None, MedicalExamKind]
+NormTuple = tuple[str, str | None, str | None, MedicalExamKind]
 
 
 def resolve_required_kinds(
