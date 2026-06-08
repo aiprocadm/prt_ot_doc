@@ -66,6 +66,21 @@ def _make_blocked_employee(tenant_id: str, contractor_id: str) -> ContractorEmpl
     )
 
 
+def _make_warning_employee(tenant_id: str, contractor_id: str) -> ContractorEmployee:
+    """Warning employee: all VALID but next_medical_at due soon (within 30d) → WARNING."""
+    now = _now_utc()
+    return ContractorEmployee(
+        tenant_id=tenant_id,
+        contractor_id=contractor_id,
+        full_name="Warning Worker",
+        access_status=ComplianceStatus.VALID,
+        training_status=ComplianceStatus.VALID,
+        medical_status=ComplianceStatus.VALID,
+        last_training_at=now,
+        next_medical_at=now + timedelta(days=10),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -152,14 +167,42 @@ async def test_readiness_projection_ready_when_all_clear(sessionmaker, data_fact
 
 
 @pytest.mark.asyncio
-async def test_readiness_projection_unknown_when_no_employees(sessionmaker, data_factory):
-    """A contractor with packages but no employees gets readiness_status='unknown'."""
-    # We only seed a registry; no employees, no packages.
-    # The projection should still not crash — but it also won't write a row
-    # because no employee group AND no package group includes this contractor.
-    # This test verifies that a contractor that DOES have no employees but IS
-    # discovered via the employee query produces workers_total==0 → 'unknown'.
-    # Since there are no employees AND no packages, the service writes 0 rows.
+async def test_readiness_projection_warning_when_due_soon(sessionmaker, data_factory):
+    """rebuild() sets status='warning' when a worker has a due-soon (not overdue) deadline."""
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        tid = str(tenant.id)
+
+        registry = _make_registry(tid)
+        session.add(registry)
+        await session.flush()
+
+        session.add(_make_warning_employee(tid, registry.id))
+        await session.commit()
+
+        await ContractorReadinessProjectionService(session, tid).rebuild()
+
+    async with sessionmaker() as session:
+        row = (
+            await session.execute(
+                select(ContractorReadinessReadModel).where(
+                    ContractorReadinessReadModel.tenant_id == tid,
+                    ContractorReadinessReadModel.contractor_id == registry.id,
+                )
+            )
+        ).scalar_one_or_none()
+
+    assert row is not None
+    assert row.workers_total == 1
+    assert row.workers_blocked == 0
+    assert row.workers_ready == 0  # WARNING is not ALLOWED
+    assert row.readiness_status == "warning"
+
+
+@pytest.mark.asyncio
+async def test_readiness_projection_no_rows_without_registry(sessionmaker, data_factory):
+    """With no contractor registry for the tenant, rebuild writes 0 rows."""
+    # The authoritative contractor set is the registry; no registry → nothing to project.
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         tid = str(tenant.id)
@@ -167,7 +210,7 @@ async def test_readiness_projection_unknown_when_no_employees(sessionmaker, data
 
         count = await ContractorReadinessProjectionService(session, tid).rebuild()
 
-    assert count == 0, f"No employees/packages → 0 rows written, got {count}"
+    assert count == 0, f"No registry → 0 rows written, got {count}"
 
 
 @pytest.mark.asyncio
