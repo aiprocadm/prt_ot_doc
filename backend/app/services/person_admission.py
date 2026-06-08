@@ -170,7 +170,8 @@ async def enforce_person_admission(
         )
     ).all()
     latest_by_kind: dict[tuple[str, str], object] = {
-        (pid, str(kind)): vu for pid, kind, vu in ex_rows
+        (pid, (kind.value if hasattr(kind, "value") else kind)): vu
+        for pid, kind, vu in ex_rows
     }
 
     # Hazard map: position_id -> set of hazard_id (explicit query, no lazy load)
@@ -184,7 +185,10 @@ async def enforce_person_admission(
                 select(
                     PositionHazardLink.position_id,
                     PositionHazardLink.hazard_id,
-                ).where(PositionHazardLink.position_id.in_(position_ids))
+                ).where(
+                    PositionHazardLink.position_id.in_(position_ids),
+                    PositionHazardLink.tenant_id.in_(tenant_scope),
+                )
             )
         ).all()
         for ph_pos, ph_haz in ph_rows:
@@ -210,14 +214,17 @@ async def enforce_person_admission(
             required_kinds = lc.resolve_required_kinds(
                 pos_id, wcc, hazard_ids, norms
             )
-            medical_missing = False
-            for kind in required_kinds:
-                vu = latest_by_kind.get((person.id, kind.value))
-                if vu is None or vu < today:
-                    medical_missing = True
-                    break
-            if medical_missing:
-                missing.append("medical_exam")
+            if required_kinds:
+                for kind in required_kinds:
+                    vu = latest_by_kind.get((person.id, kind.value))
+                    if vu is None or vu < today:
+                        missing.append("medical_exam")
+                        break
+            else:
+                # Norms exist for position but none apply to this person:
+                # fall back to the same legacy check (any valid exam suffices).
+                if person.id not in valid_medical:
+                    missing.append("medical_exam")
         else:
             # Legacy: any valid medical exam suffices
             if person.id not in valid_medical:
