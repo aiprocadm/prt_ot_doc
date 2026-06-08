@@ -61,6 +61,7 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision: str = "20260529_iter47_file_business_cols"
 down_revision: str | Sequence[str] | None = "20260529_iter38_server_default_c"
@@ -84,8 +85,8 @@ def upgrade() -> None:
     # server_default so existing rows satisfy the constraint.
     bind = op.get_bind()
     if bind.dialect.name == "postgresql":
-        sa.Enum(*FILE_KIND_VALUES, name="file_kind").create(bind, checkfirst=True)
-        sa.Enum(*FILE_SCAN_STATUS_VALUES, name="file_scan_status").create(
+        postgresql.ENUM(*FILE_KIND_VALUES, name="file_kind", create_type=False).create(bind, checkfirst=True)
+        postgresql.ENUM(*FILE_SCAN_STATUS_VALUES, name="file_scan_status", create_type=False).create(
             bind, checkfirst=True
         )
     op.add_column(
@@ -96,7 +97,7 @@ def upgrade() -> None:
         "file",
         sa.Column(
             "kind",
-            sa.Enum(*FILE_KIND_VALUES, name="file_kind"),
+            postgresql.ENUM(*FILE_KIND_VALUES, name="file_kind", create_type=False),
             nullable=False,
             server_default="DOCUMENT",
         ),
@@ -122,7 +123,7 @@ def upgrade() -> None:
         "file",
         sa.Column(
             "scan_status",
-            sa.Enum(*FILE_SCAN_STATUS_VALUES, name="file_scan_status"),
+            postgresql.ENUM(*FILE_SCAN_STATUS_VALUES, name="file_scan_status", create_type=False),
             nullable=False,
             server_default="PENDING",
         ),

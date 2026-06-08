@@ -209,8 +209,8 @@ def test_upgrade_alter_column_status_changes_type_to_enum() -> None:
     # Accept either inline sa.Enum(...) or Name resolved to one.
     if isinstance(type_, ast.Call):
         assert (
-            isinstance(type_.func, ast.Attribute) and type_.func.attr == "Enum"
-        ), f"type_ expected sa.Enum, got {ast.dump(type_.func)}"
+            isinstance(type_.func, ast.Attribute) and type_.func.attr in ("Enum", "ENUM")
+        ), f"type_ expected sa.Enum/postgresql.ENUM, got {ast.dump(type_.func)}"
     elif isinstance(type_, ast.Name):
         # Verify the binding is to sa.Enum(...).
         for stmt in ast.walk(upgrade):
@@ -221,7 +221,7 @@ def test_upgrade_alter_column_status_changes_type_to_enum() -> None:
                 )
                 and isinstance(stmt.value, ast.Call)
                 and isinstance(stmt.value.func, ast.Attribute)
-                and stmt.value.func.attr == "Enum"
+                and stmt.value.func.attr in ("Enum", "ENUM")
             ):
                 break
         else:

@@ -3,7 +3,7 @@ is_overdue flag, /overdue, /summary, /remind-overdue.
 """
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from fastapi import status
@@ -51,11 +51,15 @@ async def test_is_overdue_flag_reflects_due_date(
 ):
     company_id, site_id = await _seed_company_site(sessionmaker, data_factory)
     headers = await make_auth_headers(RoleEnum.ADMIN)
+    # Use the same UTC date basis the API uses (the endpoint computes is_overdue
+    # against datetime.now(timezone.utc).date()). A local date.today() near the UTC
+    # day boundary would put a "yesterday" due-date on the server's UTC today.
+    today_utc = datetime.now(timezone.utc).date()
     pid_past = await _seed_prescription(
-        async_client, headers, company_id, site_id, due_at=date.today() - timedelta(days=1)
+        async_client, headers, company_id, site_id, due_at=today_utc - timedelta(days=1)
     )
     pid_future = await _seed_prescription(
-        async_client, headers, company_id, site_id, due_at=date.today() + timedelta(days=1)
+        async_client, headers, company_id, site_id, due_at=today_utc + timedelta(days=1)
     )
 
     r_past = await async_client.get(f"/api/v1/prescriptions/{pid_past}", headers=headers)

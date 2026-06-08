@@ -209,7 +209,7 @@ def _enum_lifecycle_names(
         if not (
             isinstance(recv, ast.Call)
             and isinstance(recv.func, ast.Attribute)
-            and recv.func.attr == "Enum"
+            and recv.func.attr in ("Enum", "ENUM")
         ):
             continue
         enum_name = None
@@ -341,8 +341,8 @@ def test_enum_columns_reference_correct_type(
     assert (
         isinstance(type_arg, ast.Call)
         and isinstance(type_arg.func, ast.Attribute)
-        and type_arg.func.attr == "Enum"
-    ), f"{_TABLE}.{column}: type arg must be sa.Enum(...), got {ast.dump(type_arg)}"
+        and type_arg.func.attr in ("Enum", "ENUM")
+    ), f"{_TABLE}.{column}: type arg must be sa.Enum/postgresql.ENUM(...), got {ast.dump(type_arg)}"
     name_kw = None
     for kw in type_arg.keywords:
         if kw.arg == "name" and isinstance(kw.value, ast.Constant):

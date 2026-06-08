@@ -229,7 +229,9 @@ async def test_risk_assessment_emits_riskassessed_outbox_event(
         assert outbox_entry.destination is not None or outbox_entry.event_type == "RiskAssessed"
         assert outbox_entry.payload is not None
         payload = outbox_entry.payload
-        assert payload.get("assessment_id") == assessment_id
+        # RiskAssessedPayload keys the id as "risk_assessment_id" in the outbox
+        # payload; the API response exposes the same value as "assessment_id".
+        assert payload.get("risk_assessment_id") == assessment_id
 
 
 @pytest.mark.anyio

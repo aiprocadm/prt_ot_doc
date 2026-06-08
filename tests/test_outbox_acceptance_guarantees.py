@@ -139,7 +139,10 @@ async def test_deduplication_guarantee_same_idempotency_key_prevents_duplicate_d
             next_attempt_at=datetime.now(tz=timezone.utc) - timedelta(seconds=1),
         )
         session.add(event1)
-        await session.flush()
+        # Commit event1 in its own transaction so the duplicate's rollback below
+        # cannot discard it (a flush-only event1 shares the transaction that the
+        # IntegrityError rolls back, which would leave 0 rows, not 1).
+        await session.commit()
         event1_id = event1.id
 
         # Attempt to add duplicate with same key (should fail or be ignored)
@@ -275,4 +278,7 @@ async def test_webhook_delivery_tracking_in_poison_queue(sessionmaker) -> None:
         # Should show multiple failed attempts in the event record
         assert event.attempts >= 1
         assert event.last_error is not None
-        assert "not found" in event.last_error.lower() or "error" in event.last_error.lower()
+        # last_error is a structured JSON diagnostics dict (Outbox.last_error: JSON);
+        # check its serialized form for the recorded failure text.
+        error_text = str(event.last_error).lower()
+        assert "not found" in error_text or "error" in error_text

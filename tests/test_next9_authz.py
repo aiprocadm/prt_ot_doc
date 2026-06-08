@@ -56,7 +56,9 @@ def test_client_cannot_access_templates() -> None:
     actor = _actor(roles=["client"])
     decision = policy_engine.authorize(actor, action="read", resource="templates")
     assert decision.allowed is False
-    assert decision.reason in {"client_resource_restricted", "missing_permission"}
+    # client has no "templates" module (MODULE_PERMISSIONS["client"]), so the
+    # module gate denies first — module_access_denied is the correct reason.
+    assert decision.reason in {"module_access_denied", "client_resource_restricted", "missing_permission"}
 
 
 def test_inspector_contractor_reads_within_contractor() -> None:
@@ -91,8 +93,12 @@ def test_scoped_query_fail_closed_for_scoped_resource_without_columns() -> None:
 
 
 def test_missing_permission_returns_forbidden_decision() -> None:
+    # student has the "training" module but no trainings:delete permission, so this
+    # passes the module gate and is denied at the permission layer. (resource=
+    # "documents" would deny earlier as module_access_denied — student has no
+    # documents module.)
     actor = _actor(roles=["student"])
-    decision = policy_engine.authorize(actor, action="delete", resource="documents")
+    decision = policy_engine.authorize(actor, action="delete", resource="trainings")
     assert decision.allowed is False
     assert decision.reason == "missing_permission"
 

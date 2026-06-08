@@ -282,7 +282,12 @@ async def test_outbox_backoff_exponential(
     # Check that next_attempt_at was moved forward
     async with sessionmaker() as session:
         entry = await session.get(Outbox, entry_id)
-        assert entry.next_attempt_at > datetime.now(tz=timezone.utc)
+        # SQLite drops tzinfo on read-back for DateTime(timezone=True); normalize
+        # the round-tripped value to UTC-aware before comparing (PG keeps it aware).
+        next_attempt = entry.next_attempt_at
+        if next_attempt.tzinfo is None:
+            next_attempt = next_attempt.replace(tzinfo=timezone.utc)
+        assert next_attempt > datetime.now(tz=timezone.utc)
         # Backoff should increase with attempts; for now, just verify it's set
         assert entry.attempts >= 1
 

@@ -58,8 +58,8 @@ _INCIDENT_LOG_COHORT: list[tuple[str, str, bool]] = [
     ("tenant_id", "String", False),
     ("incident_id", "String", False),
     ("author_id", "String", True),
-    ("stage", "Enum", False),
-    ("status", "Enum", False),
+    ("stage", "ENUM", False),
+    ("status", "ENUM", False),
     ("message", "Text", False),
     ("metadata_json", "JSON", False),
     ("created_at", "DateTime", False),
@@ -518,7 +518,7 @@ def test_new_pg_enum_declared_with_expected_values(
         if not (
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Attribute)
-            and node.func.attr == "Enum"
+            and node.func.attr in ("Enum", "ENUM")
         ):
             continue
         name_kw = None

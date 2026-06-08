@@ -65,6 +65,7 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision: str = "20260529_iter42_incident_family"
 down_revision: str | Sequence[str] | None = "20260529_iter38_server_default_c"
@@ -102,8 +103,8 @@ def upgrade() -> None:
     # iter47 / next55). No-op on SQLite.
     bind = op.get_bind()
     if bind.dialect.name == "postgresql":
-        sa.Enum(*INCIDENT_TYPE_VALUES, name="incidenttype").create(bind, checkfirst=True)
-        sa.Enum(*INCIDENT_STAGE_VALUES, name="incidentstage").create(bind, checkfirst=True)
+        postgresql.ENUM(*INCIDENT_TYPE_VALUES, name="incidenttype", create_type=False).create(bind, checkfirst=True)
+        postgresql.ENUM(*INCIDENT_STAGE_VALUES, name="incidentstage", create_type=False).create(bind, checkfirst=True)
     # ------------------------------------------------------------------
     # 1. Alter incident: add 6 missing business cols + 4 indexes.
     # ------------------------------------------------------------------
@@ -129,7 +130,7 @@ def upgrade() -> None:
         "incident",
         sa.Column(
             "incident_type",
-            sa.Enum(*INCIDENT_TYPE_VALUES, name="incidenttype"),
+            postgresql.ENUM(*INCIDENT_TYPE_VALUES, name="incidenttype", create_type=False),
             nullable=False,
             server_default="ACCIDENT",
         ),
@@ -138,7 +139,7 @@ def upgrade() -> None:
         "incident",
         sa.Column(
             "investigation_stage",
-            sa.Enum(*INCIDENT_STAGE_VALUES, name="incidentstage"),
+            postgresql.ENUM(*INCIDENT_STAGE_VALUES, name="incidentstage", create_type=False),
             nullable=False,
             server_default="REGISTRATION",
         ),
@@ -178,12 +179,12 @@ def upgrade() -> None:
         sa.Column("author_id", sa.String(length=36), nullable=True),
         sa.Column(
             "stage",
-            sa.Enum(*INCIDENT_LOG_STAGE_VALUES, name="incidentlogstage"),
+            postgresql.ENUM(*INCIDENT_LOG_STAGE_VALUES, name="incidentlogstage", create_type=False),
             nullable=False,
         ),
         sa.Column(
             "status",
-            sa.Enum(*INCIDENT_LOG_STATUS_VALUES, name="incidentlogstatus"),
+            postgresql.ENUM(*INCIDENT_LOG_STATUS_VALUES, name="incidentlogstatus", create_type=False),
             nullable=False,
         ),
         sa.Column("message", sa.Text(), nullable=False),
@@ -213,7 +214,7 @@ def upgrade() -> None:
         sa.Column("person_id", sa.String(length=36), nullable=False),
         sa.Column(
             "role",
-            sa.Enum(*INCIDENT_PERSON_ROLE_VALUES, name="incidentpersonrole"),
+            postgresql.ENUM(*INCIDENT_PERSON_ROLE_VALUES, name="incidentpersonrole", create_type=False),
             nullable=False,
             server_default="VICTIM",
         ),

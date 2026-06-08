@@ -315,6 +315,9 @@ class TestEmployeeCardService:
         test_db_session.add(signed_file)
         await test_db_session.flush()
 
+        # create_document auto-creates a default admin user when no creator is given;
+        # calling it twice would collide on the unique (tenant_id, email). Reuse one.
+        creator = await data_factory.create_user(tenant=tenant, session=test_db_session)
         signed_doc, _ = await data_factory.create_document(
             tenant=tenant,
             company=company,
@@ -322,6 +325,7 @@ class TestEmployeeCardService:
             status=DocumentStatus.SIGNED,
             session=test_db_session,
             signed_file_id=signed_file.id,
+            creator=creator,
         )
         await data_factory.create_document(
             tenant=tenant,
@@ -329,6 +333,7 @@ class TestEmployeeCardService:
             person=person,
             status=DocumentStatus.DRAFT,
             session=test_db_session,
+            creator=creator,
         )
         # Reference the var so linters don't flag it as unused.
         assert signed_doc.signed_file_id == signed_file.id
