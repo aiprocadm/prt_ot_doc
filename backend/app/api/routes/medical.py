@@ -28,7 +28,7 @@ from app.models.models import (
 )
 from app.schemas.medical import (
     ContingentItem, ContingentPage,
-    MedicalExamCreate, MedicalExamPage, MedicalExamRead, MedicalRequirementCreate,
+    MedicalExamCreate, MedicalExamPage, MedicalExamRead, MedicalExamUpdate, MedicalRequirementCreate,
     MedicalNormCreate, MedicalNormPage, MedicalNormRead, MedicalNormUpdate,
     MedicalReferralCreate, MedicalReferralPage, MedicalReferralRead, MedicalReferralTransition,
     MedicalSummary,
@@ -119,6 +119,8 @@ async def list_medical_exams(
     access: MedicalReadAccess,
     person_id: str | None = Query(default=None),
     status_filter: str | None = Query(default=None, alias="status"),
+    exam_kind: str | None = Query(default=None),
+    fitness: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> MedicalExamPage | Response:
@@ -132,6 +134,10 @@ async def list_medical_exams(
         stmt = stmt.where(MedicalExam.valid_until < func.current_date())
     elif status_filter == "upcoming":
         stmt = stmt.where(MedicalExam.valid_until >= func.current_date())
+    if exam_kind:
+        stmt = stmt.where(MedicalExam.exam_kind == exam_kind)
+    if fitness:
+        stmt = stmt.where(MedicalExam.fitness == fitness)
 
     total_stmt = select(func.count()).select_from(stmt.subquery())
     rows = list((
@@ -149,6 +155,8 @@ async def list_medical_exams(
             ("offset", offset),
             ("person", person_id or ""),
             ("status", status_filter or ""),
+            ("kind", exam_kind or ""),
+            ("fitness", fitness or ""),
         ],
     )
     apply_etag_response_headers(response, etag)
@@ -202,6 +210,43 @@ async def create_medical_exam(
             restrictions=payload.restrictions, valid_until=payload.valid_until,
             medical_org_name=payload.medical_org_name, referral_id=payload.referral_id,
             exam_type=payload.exam_type,
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc))
+    await session.commit()
+    await session.refresh(exam)
+    return MedicalExamRead.model_validate(exam)
+
+
+@router.get("/medical/exams/{exam_id}", response_model=MedicalExamRead,
+            dependencies=[MedicalFeatureGate])
+async def get_medical_exam(
+    exam_id: str, tenant: TenantDep, session: SessionDep, access: MedicalReadAccess,
+) -> MedicalExamRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    _ = access
+    record = (await session.execute(select(MedicalExam).where(
+        MedicalExam.id == exam_id, MedicalExam.tenant_id == tenant.id,
+        MedicalExam.deleted_at.is_(None)))).scalar_one_or_none()
+    if record is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail=_error("medical_exam_not_found", "Medical exam not found"),
+        )
+    return MedicalExamRead.model_validate(record)
+
+
+@router.patch("/medical/exams/{exam_id}", response_model=MedicalExamRead,
+              dependencies=[MedicalFeatureGate])
+async def update_medical_exam(
+    exam_id: str, payload: MedicalExamUpdate, tenant: TenantDep, session: SessionDep, access: MedicalAccess,
+) -> MedicalExamRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    updates = payload.model_dump(exclude_unset=True)
+    try:
+        exam = await medsvc.update_exam(
+            session, tenant_id=str(tenant.id), actor_id=getattr(access.user, "id", None),
+            exam_id=exam_id, **updates,
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc))

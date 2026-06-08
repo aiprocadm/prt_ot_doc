@@ -137,6 +137,61 @@ async def test_contingent_and_generate(async_client, sessionmaker, data_factory,
 
 
 @pytest.mark.asyncio
+async def test_get_and_patch_exam_recalculates_suspension(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
+    person_id = await _seed_person(sessionmaker, data_factory)
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    r = await async_client.post("/api/v1/medical/exams", headers=headers, json={
+        "person_id": person_id, "exam_kind": "periodic",
+        "exam_date": date(2026, 1, 1).isoformat(), "fitness": "unfit"})
+    assert r.status_code == status.HTTP_201_CREATED, r.text
+    exam_id = r.json()["id"]
+
+    # GET by id returns the exam
+    got = await async_client.get(f"/api/v1/medical/exams/{exam_id}", headers=headers)
+    assert got.status_code == status.HTTP_200_OK
+    assert got.json()["id"] == exam_id
+
+    # suspension active after unfit exam
+    susp = await async_client.get("/api/v1/medical/suspensions", headers=headers,
+                                  params={"person_id": person_id, "status": "active"})
+    assert susp.json()["total"] == 1
+
+    # PATCH fitness -> fit should lift the suspension
+    pa = await async_client.patch(f"/api/v1/medical/exams/{exam_id}", headers=headers,
+                                  json={"fitness": "fit"})
+    assert pa.status_code == status.HTTP_200_OK
+    assert pa.json()["fitness"] == "fit"
+    susp2 = await async_client.get("/api/v1/medical/suspensions", headers=headers,
+                                   params={"person_id": person_id, "status": "active"})
+    assert susp2.json()["total"] == 0
+
+    # 404 for unknown exam id
+    unknown = await async_client.get(
+        "/api/v1/medical/exams/00000000-0000-0000-0000-000000000000", headers=headers)
+    assert unknown.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_list_exams_kind_filter(async_client, sessionmaker, data_factory, make_auth_headers):
+    person_id = await _seed_person(sessionmaker, data_factory)
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    await async_client.post("/api/v1/medical/exams", headers=headers, json={
+        "person_id": person_id, "exam_kind": "periodic",
+        "exam_date": date(2026, 1, 1).isoformat(), "fitness": "fit"})
+    await async_client.post("/api/v1/medical/exams", headers=headers, json={
+        "person_id": person_id, "exam_kind": "psychiatric",
+        "exam_date": date(2026, 1, 1).isoformat(), "fitness": "fit"})
+
+    only = await async_client.get("/api/v1/medical/exams", headers=headers,
+                                  params={"person_id": person_id, "exam_kind": "psychiatric"})
+    assert only.status_code == status.HTTP_200_OK
+    assert only.json()["total"] == 1
+    assert only.json()["items"][0]["exam_kind"] == "psychiatric"
+
+
+@pytest.mark.asyncio
 async def test_medical_cross_tenant_isolation(async_client, sessionmaker, data_factory, make_auth_headers):
     # tenant A: person + recorded exam
     async with sessionmaker() as session:

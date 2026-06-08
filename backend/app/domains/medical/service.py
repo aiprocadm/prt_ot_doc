@@ -135,6 +135,36 @@ async def _apply_suspension(
             )
 
 
+async def update_exam(
+    session: AsyncSession, *, tenant_id: str, actor_id: str | None, exam_id: str,
+    fitness: MedicalFitness | None = None, conclusion: str | None = None,
+    restrictions: str | None = None, contraindications: list[str] | None = None,
+    valid_until: date | None = None,
+) -> MedicalExam:
+    """Edit an exam's result fields; if fitness is changed, re-run the suspension safety loop. Does not commit."""
+    exam = (await session.execute(select(MedicalExam).where(
+        MedicalExam.id == exam_id, MedicalExam.tenant_id == tenant_id,
+        MedicalExam.deleted_at.is_(None)))).scalar_one_or_none()
+    if exam is None:
+        raise ValueError(f"exam not found: {exam_id}")
+    if conclusion is not None:
+        exam.conclusion = conclusion
+    if restrictions is not None:
+        exam.restrictions = restrictions
+    if contraindications is not None:
+        exam.contraindications = list(contraindications)
+    if valid_until is not None:
+        exam.valid_until = valid_until
+    if fitness is not None:
+        exam.fitness = fitness
+    await session.flush()
+    if fitness is not None:
+        outbox = OutboxService(session)
+        await _apply_suspension(session, tenant_id=tenant_id, actor_id=actor_id,
+                                person_id=exam.person_id, exam=exam, fitness=fitness, outbox=outbox)
+    return exam
+
+
 # ---------------------------------------------------------------------------
 # 5.2 — Contingent computation + summary
 # ---------------------------------------------------------------------------
