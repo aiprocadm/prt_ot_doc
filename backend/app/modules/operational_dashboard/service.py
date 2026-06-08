@@ -73,7 +73,14 @@ class OperationalDashboardService:
 
         try:
             from sqlalchemy import and_, func, select
-            from app.models.models import MedicalExam, PPEIssue, PPEIssueStatus, TrainingEnrollment
+            from app.models.models import (
+                MedicalExam,
+                MedicalSuspension,
+                MedicalSuspensionStatus,
+                PPEIssue,
+                PPEIssueStatus,
+                TrainingEnrollment,
+            )
         except ImportError:
             logger.debug("overdue aggregates: model import failed", exc_info=True)
             return alerts
@@ -128,6 +135,16 @@ class OperationalDashboardService:
                     PPEIssue.expires_at < now,
                 ),
                 "ppe_issue",
+            )
+            await _add_count(
+                select(func.count())
+                .select_from(MedicalSuspension)
+                .where(
+                    MedicalSuspension.tenant_id == tenant_id,
+                    MedicalSuspension.deleted_at.is_(None),
+                    MedicalSuspension.status == MedicalSuspensionStatus.ACTIVE,
+                ),
+                "medical_suspension",
             )
         except Exception:
             logger.debug("overdue aggregates failed", exc_info=True)

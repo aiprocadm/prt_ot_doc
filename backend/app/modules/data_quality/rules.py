@@ -17,6 +17,9 @@ from app.models.models import (
     Company,
     EmploymentStatus,
     MedicalExam,
+    MedicalFitness,
+    MedicalSuspension,
+    MedicalSuspensionStatus,
     Permit,
     PermitStatus,
     Person,
@@ -911,6 +914,108 @@ class DuplicateRecordsRule(DataQualityRule):
             logger.exception("potential_duplicates rule failed: %s", e)
 
 
+class UnfitWithoutSuspensionRule(DataQualityRule):
+    """Persons whose LATEST MedicalExam verdict is UNFIT but have no active MedicalSuspension.
+
+    A person declared unfit must have a MedicalSuspension in ACTIVE state.
+    If the suspension is absent or was lifted, the risk pipeline is silently
+    broken — the person may continue working despite a medical prohibition.
+    """
+
+    @property
+    def rule_name(self) -> str:
+        return "unfit_without_suspension"
+
+    @property
+    def rule_description(self) -> str:
+        return (
+            "Persons whose latest medical exam verdict is UNFIT "
+            "but who have no active MedicalSuspension"
+        )
+
+    async def check(self) -> None:
+        self.issues = []
+        try:
+            # Subquery: for each person, find the date of their LATEST exam
+            # (across ALL fitness verdicts — we need to know what the most recent
+            # exam says, not just the most recent UNFIT one).
+            latest_date_subq = (
+                select(
+                    MedicalExam.person_id,
+                    func.max(MedicalExam.exam_date).label("max_exam_date"),
+                )
+                .where(
+                    MedicalExam.tenant_id == self.tenant_id,
+                    MedicalExam.deleted_at.is_(None),
+                )
+                .group_by(MedicalExam.person_id)
+                .subquery()
+            )
+
+            # Join back to get persons whose latest exam is UNFIT
+            unfit_stmt = (
+                select(MedicalExam.person_id, MedicalExam.id)
+                .join(
+                    latest_date_subq,
+                    (MedicalExam.person_id == latest_date_subq.c.person_id)
+                    & (MedicalExam.exam_date == latest_date_subq.c.max_exam_date),
+                )
+                .where(
+                    MedicalExam.tenant_id == self.tenant_id,
+                    MedicalExam.deleted_at.is_(None),
+                    MedicalExam.fitness == MedicalFitness.UNFIT,
+                )
+            )
+            unfit_rows = (await self.db.execute(unfit_stmt)).all()
+            self.total_checked = len(unfit_rows)
+
+            if not unfit_rows:
+                return
+
+            unfit_person_ids = [str(row.person_id) for row in unfit_rows]
+            unfit_exam_by_person = {str(row.person_id): str(row.id) for row in unfit_rows}
+
+            # Find which of those persons DO have an active suspension
+            active_susp_stmt = (
+                select(MedicalSuspension.person_id)
+                .where(
+                    MedicalSuspension.tenant_id == self.tenant_id,
+                    MedicalSuspension.deleted_at.is_(None),
+                    MedicalSuspension.status == MedicalSuspensionStatus.ACTIVE,
+                    MedicalSuspension.person_id.in_(unfit_person_ids),
+                )
+            )
+            suspended_ids = set(
+                str(r) for r in (await self.db.execute(active_susp_stmt)).scalars().all()
+            )
+
+            for person_id in unfit_person_ids:
+                if person_id in suspended_ids:
+                    continue
+                exam_id = unfit_exam_by_person.get(person_id, "unknown")
+                self.issues.append(
+                    DataQualityIssue(
+                        id=f"{self.rule_name}:person:{person_id}",
+                        issue_type=IssueType.DATA_MISMATCH,
+                        severity=IssueSeverity.HIGH,
+                        title=f"person {person_id}: UNFIT verdict without active suspension",
+                        description=(
+                            "The person's latest medical exam is marked UNFIT but "
+                            "there is no active MedicalSuspension record. "
+                            "Issue a suspension order to restore compliance."
+                        ),
+                        affected_entity_type="person",
+                        affected_entity_id=str(person_id),
+                        additional_info={
+                            "latest_exam_id": exam_id,
+                            "fitness": MedicalFitness.UNFIT.value,
+                        },
+                    )
+                )
+        except Exception as e:
+            logger.exception("unfit_without_suspension rule failed: %s", e)
+
+
 class DataQualityRuleEngine:
     """Engine for running data quality checks."""
 
@@ -928,6 +1033,7 @@ class DataQualityRuleEngine:
             DocumentReadinessRule,
             DocumentPersonCompanyMismatchRule,
             DuplicateRecordsRule,
+            UnfitWithoutSuspensionRule,
         ]
 
     async def run_all_checks(self) -> tuple[list[DataQualityIssue], list[dict[str, Any]]]:
