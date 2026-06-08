@@ -184,6 +184,9 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
                     next_medical_at=now + timedelta(days=200),
                 )
             )
+            # Пётр keeps a manually-VALID medical_status, yet next_medical_at is in the
+            # past → the admission engine BLOCKS him on the OVERDUE deadline. This is the
+            # headline demo: a "stale-valid" status flag is caught by the real deadline.
             session.add(
                 ContractorEmployee(
                     tenant_id=tenant_db_id,
