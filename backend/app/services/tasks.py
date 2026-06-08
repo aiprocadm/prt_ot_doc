@@ -226,77 +226,9 @@ async def _load_persons(
 async def _enforce_person_invariants(
     session: AsyncSessionLocal, *, tenant_scope: tuple[str, ...], persons: list[Person]
 ) -> None:
-    if not persons:
-        return
+    from app.services.person_admission import enforce_person_admission
 
-    now = datetime.now(timezone.utc)
-    person_ids = [person.id for person in persons]
-
-    training_stmt = (
-        select(Training.person_id, Training.expires_at)
-        .where(
-            Training.person_id.in_(person_ids),
-            Training.tenant_id.in_(tenant_scope),
-            Training.status == TrainingStatus.COMPLETED,
-            Training.expires_at.is_not(None),
-        )
-        .order_by(Training.person_id)
-    )
-    medical_stmt = (
-        select(MedicalExam.person_id, MedicalExam.valid_until)
-        .where(
-            MedicalExam.person_id.in_(person_ids),
-            MedicalExam.tenant_id.in_(tenant_scope),
-            MedicalExam.deleted_at.is_(None),
-        )
-        .order_by(MedicalExam.person_id)
-    )
-    ppe_stmt = (
-        select(PPEIssue.person_id, PPEIssue.expires_at)
-        .where(
-            PPEIssue.person_id.in_(person_ids),
-            PPEIssue.tenant_id.in_(tenant_scope),
-            PPEIssue.status == PPEIssueStatus.ISSUED,
-            PPEIssue.expires_at.is_not(None),
-        )
-        .order_by(PPEIssue.person_id)
-    )
-
-    training_rows = (await session.execute(training_stmt)).all()
-    medical_rows = (await session.execute(medical_stmt)).all()
-    ppe_rows = (await session.execute(ppe_stmt)).all()
-
-    valid_training: set[str] = set()
-    for person_id, expires_at in training_rows:
-        expiry = _normalize_datetime(expires_at)
-        if expiry and expiry > now:
-            valid_training.add(person_id)
-
-    valid_medical: set[str] = set()
-    for person_id, valid_until in medical_rows:
-        if valid_until and valid_until >= now.date():
-            valid_medical.add(person_id)
-
-    valid_ppe: set[str] = set()
-    for person_id, expires_at in ppe_rows:
-        expires = _normalize_datetime(expires_at)
-        if expires and expires > now:
-            valid_ppe.add(person_id)
-
-    violations: list[dict[str, object]] = []
-    for person in persons:
-        missing: list[str] = []
-        if person.id not in valid_training:
-            missing.append("training")
-        if person.id not in valid_medical:
-            missing.append("medical_exam")
-        if person.id not in valid_ppe:
-            missing.append("ppe_issue")
-        if missing:
-            violations.append({"person_id": person.id, "violations": missing})
-
-    if violations:
-        raise ValueError({"code": "requirements_not_met", "details": violations})
+    await enforce_person_admission(session, tenant_scope=tenant_scope, persons=persons)
 
 
 async def _load_pack(
