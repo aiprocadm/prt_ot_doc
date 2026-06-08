@@ -14,6 +14,7 @@ from app.api.helpers.etag import (
     build_not_modified_headers,
     compute_list_etag,
 )
+from app.core.feature_flags import is_feature_enabled
 from app.core.security import AccessContext, abac
 from app.models.models import Tenant
 from app.modules.contractors.models import (
@@ -21,6 +22,10 @@ from app.modules.contractors.models import (
     ContractorEmployee,
     ContractorIncident,
     ContractorRegistry,
+)
+from app.services.contractor_admission import (
+    enforce_contractor_admission,
+    evaluate_contractor_admission,
 )
 
 router = APIRouter(prefix="/contractors", tags=["contractors"])
@@ -30,6 +35,8 @@ TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
 
 _CONTRACTOR_READ_ROLES = ["admin", "owner", "hse_head", "hse_specialist", "inspector_contractor", "client_admin"]
 _CONTRACTOR_WRITE_ROLES = ["admin", "owner", "hse_head"]
+
+_CONTRACTORS_FEATURE_CODE = "contractors"
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
@@ -44,6 +51,14 @@ WriterAccess = Annotated[
     AccessContext,
     Depends(abac(_tenant_resource_id, required_roles=_CONTRACTOR_WRITE_ROLES, action="manage contractors")),
 ]
+
+
+async def require_contractors_feature(tenant: TenantDep, session: SessionDep) -> None:
+    if not await is_feature_enabled(session, str(tenant.id), _CONTRACTORS_FEATURE_CODE):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Contractors feature is not enabled for this tenant")
+
+
+ContractorsFeatureGate = Depends(require_contractors_feature)
 
 
 class ContractorRegistryCreate(BaseModel):
@@ -326,3 +341,91 @@ def _status_totals(values: list[str]) -> dict[str, int]:
             continue
         result[value] += 1
     return result
+
+
+# ---------------------------------------------------------------------------
+# Admission helpers
+# ---------------------------------------------------------------------------
+
+
+async def _fetch_employee(
+    session: AsyncSession, tenant: Tenant, employee_id: str
+) -> ContractorEmployee:
+    """Return the in-tenant, non-deleted ContractorEmployee or raise 404."""
+    row = (
+        await session.execute(
+            select(ContractorEmployee).where(
+                ContractorEmployee.id == employee_id,
+                ContractorEmployee.tenant_id == str(tenant.id),
+                ContractorEmployee.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Employee not found")
+    return row
+
+
+def _verdict_body(verdict) -> dict:
+    return {
+        "employee_id": verdict.employee_id,
+        "status": verdict.status.value,
+        "violations": verdict.violations,
+        "warnings": verdict.warnings,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Admission endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/employees/{employee_id}/readiness",
+    dependencies=[ContractorsFeatureGate],
+)
+async def get_employee_readiness(
+    employee_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ReaderAccess,
+) -> dict:
+    """Advisory readiness check for a contractor employee (no side-effects)."""
+    row = await _fetch_employee(session, tenant, employee_id)
+    access.ensure_abac(contractor_id=row.contractor_id, action="read contractors")
+    verdict = evaluate_contractor_admission(employees=[row])[0]
+    return _verdict_body(verdict)
+
+
+@router.post(
+    "/employees/{employee_id}/admit",
+    dependencies=[ContractorsFeatureGate],
+)
+async def admit_contractor_employee(
+    employee_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: WriterAccess,
+) -> dict:
+    """Admission gate — raises 409 if the employee is BLOCKED."""
+    row = await _fetch_employee(session, tenant, employee_id)
+    access.ensure_abac(contractor_id=row.contractor_id, action="manage contractors")
+    try:
+        await enforce_contractor_admission(
+            session,
+            tenant_scope=(str(tenant.id),),
+            employee_ids=[employee_id],
+        )
+    except ValueError as exc:
+        payload = exc.args[0] if exc.args else {}
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={
+                "code": "requirements_not_met",
+                "error_code": "requirements_not_met",
+                "message": "Contractor employee is not cleared for admission",
+                "type": "contractors",
+                "details": payload.get("details", []) if isinstance(payload, dict) else [],
+            },
+        ) from exc
+    return _verdict_body(evaluate_contractor_admission(employees=[row])[0])
