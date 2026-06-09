@@ -17,7 +17,9 @@ from app.models.models import (
     Site,
 )
 from app.models.notifications import PlanTask
+from app.domains.contractors.lifecycle import ReadinessStatus as ContractorReadinessStatus
 from app.modules.client_portal.services import SafePortalPayloadService
+from app.modules.contractors.models import ContractorEmployee, ContractorRegistry
 from app.modules.projections.models import (
     ClientPortalReadModel,
     ContractorReadinessReadModel,
@@ -28,6 +30,7 @@ from app.modules.projections.models import (
     SiteSafetyReadModel,
 )
 from app.modules.workflow.models import WorkflowTask, WorkflowTaskStatus
+from app.services.contractor_admission import evaluate_contractor_admission
 
 
 class PackageProjectionService:
@@ -104,16 +107,69 @@ class ContractorReadinessProjectionService:
         self.tenant_id = tenant_id
 
     async def rebuild(self) -> int:
-        rows = (await self.session.execute(select(ClientPackageRun).where(ClientPackageRun.tenant_id == self.tenant_id))).scalars().all()
-        grouped: dict[str, int] = {}
-        for run in rows:
-            contractor_id = run.client_company_id
-            if not contractor_id:
+        # The authoritative contractor set is the registry — not package runs.
+        # ClientPackageRun is keyed by *company* id, a different id space from the
+        # registry id that ContractorEmployee.contractor_id references, so we must
+        # iterate registries and join packages through ContractorRegistry.company_id.
+        registries = (
+            await self.session.execute(
+                select(ContractorRegistry).where(
+                    ContractorRegistry.tenant_id == self.tenant_id,
+                    ContractorRegistry.deleted_at.is_(None),
+                )
+            )
+        ).scalars().all()
+
+        # Active package runs counted per client company (for the company→contractor join below).
+        package_runs = (
+            await self.session.execute(
+                select(ClientPackageRun).where(ClientPackageRun.tenant_id == self.tenant_id)
+            )
+        ).scalars().all()
+        packages_by_company: dict[str, int] = {}
+        for run in package_runs:
+            if not run.client_company_id:
                 continue
-            grouped[contractor_id] = grouped.get(contractor_id, 0) + 1
+            packages_by_company[run.client_company_id] = packages_by_company.get(run.client_company_id, 0) + 1
+
+        # Non-deleted employees grouped by contractor (registry) id.
+        employees = (
+            await self.session.execute(
+                select(ContractorEmployee).where(
+                    ContractorEmployee.tenant_id == self.tenant_id,
+                    ContractorEmployee.deleted_at.is_(None),
+                )
+            )
+        ).scalars().all()
+        employees_by_contractor: dict[str, list[ContractorEmployee]] = {}
+        for emp in employees:
+            employees_by_contractor.setdefault(emp.contractor_id, []).append(emp)
 
         total = 0
-        for contractor_id, packages_count in grouped.items():
+        for registry in registries:
+            contractor_id = registry.id
+            contractor_employees = employees_by_contractor.get(contractor_id, [])
+            verdicts = evaluate_contractor_admission(employees=contractor_employees)
+
+            workers_total = len(verdicts)
+            workers_ready = sum(1 for v in verdicts if v.status is ContractorReadinessStatus.ALLOWED)
+            workers_blocked = sum(1 for v in verdicts if v.status is ContractorReadinessStatus.BLOCKED)
+            # "training" in violations covers overdue / expired / absent last_training_at —
+            # not only the literally-missing sub-case the column name might suggest.
+            missing_training_count = sum(1 for v in verdicts if "training" in v.violations)
+            overdue_items_count = sum(len(v.violations) for v in verdicts)
+
+            if workers_blocked > 0:
+                readiness_status = "blocked"
+            elif any(v.status is ContractorReadinessStatus.WARNING for v in verdicts):
+                readiness_status = "warning"
+            elif workers_total > 0:
+                readiness_status = "ready"
+            else:
+                readiness_status = "unknown"
+
+            # Per-contractor SELECT upsert (N+1) — consistent with the sibling
+            # projection services; acceptable for the daily batch rebuild.
             row = (
                 await self.session.execute(
                     select(ContractorReadinessReadModel).where(
@@ -125,8 +181,18 @@ class ContractorReadinessProjectionService:
             if row is None:
                 row = ContractorReadinessReadModel(tenant_id=self.tenant_id, contractor_id=contractor_id)
                 self.session.add(row)
-            row.active_packages_count = packages_count
-            row.readiness_status = "warning" if packages_count else "unknown"
+
+            row.company_id = registry.company_id
+            row.workers_total = workers_total
+            row.workers_ready = workers_ready
+            row.workers_blocked = workers_blocked
+            row.missing_docs_count = 0  # contractor documents are a later slice (Срез 2)
+            row.missing_training_count = missing_training_count
+            row.overdue_items_count = overdue_items_count
+            row.active_packages_count = (
+                packages_by_company.get(registry.company_id, 0) if registry.company_id else 0
+            )
+            row.readiness_status = readiness_status
             total += 1
 
         await self.session.commit()

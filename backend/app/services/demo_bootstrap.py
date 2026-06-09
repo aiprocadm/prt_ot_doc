@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 
@@ -12,6 +13,7 @@ from app.domains.packs.seeder import ensure_default_packs
 from app.models.feature import Feature
 from app.models.finance import Department
 from app.models.models import Company, MedicalExamKind, MedicalNorm, Person, Position, Site, Tenant, TrainingCourse
+from app.modules.contractors.models import ComplianceStatus, ContractorEmployee, ContractorRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +53,14 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
         ).scalar_one_or_none()
         if medical_feature is None:
             session.add(Feature(code="medical", title="Медосмотры"))
+            await session.flush()
+
+        # Seed shared Feature catalogue row for contractors (idempotent).
+        contractors_feature = (
+            await session.execute(select(Feature).where(Feature.code == "contractors"))
+        ).scalar_one_or_none()
+        if contractors_feature is None:
+            session.add(Feature(code="contractors", title="Подрядчики"))
             await session.flush()
 
     await aensure_tenant_schema(tenant_slug, schema_name=tenant_schema_name)
@@ -141,6 +151,54 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
                         interval_days=365,
                     )
                 )
+
+        # Seed a demo ContractorRegistry + 2 ContractorEmployee rows (idempotent).
+        demo_contractor_name = "Демо-подрядчик"
+        contractor = (
+            await session.execute(
+                select(ContractorRegistry).where(
+                    ContractorRegistry.tenant_id == tenant_db_id,
+                    ContractorRegistry.name == demo_contractor_name,
+                )
+            )
+        ).scalar_one_or_none()
+        if contractor is None:
+            contractor = ContractorRegistry(
+                tenant_id=tenant_db_id,
+                name=demo_contractor_name,
+                status="active",
+            )
+            session.add(contractor)
+            await session.flush()
+
+            now = datetime.now(timezone.utc)
+            session.add(
+                ContractorEmployee(
+                    tenant_id=tenant_db_id,
+                    contractor_id=contractor.id,
+                    full_name="Готовый Иван",
+                    access_status=ComplianceStatus.VALID,
+                    training_status=ComplianceStatus.VALID,
+                    medical_status=ComplianceStatus.VALID,
+                    last_training_at=now,
+                    next_medical_at=now + timedelta(days=200),
+                )
+            )
+            # Пётр keeps a manually-VALID medical_status, yet next_medical_at is in the
+            # past → the admission engine BLOCKS him on the OVERDUE deadline. This is the
+            # headline demo: a "stale-valid" status flag is caught by the real deadline.
+            session.add(
+                ContractorEmployee(
+                    tenant_id=tenant_db_id,
+                    contractor_id=contractor.id,
+                    full_name="Просроченный Пётр",
+                    access_status=ComplianceStatus.VALID,
+                    training_status=ComplianceStatus.VALID,
+                    medical_status=ComplianceStatus.VALID,
+                    last_training_at=now,
+                    next_medical_at=now - timedelta(days=1),
+                )
+            )
 
         await ensure_default_packs(session, tenant_slug=tenant_slug)
         logger.info("demo.bootstrap.done", extra={"tenant": tenant_slug, "company": company_name, "site": site_name})

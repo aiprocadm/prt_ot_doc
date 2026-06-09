@@ -32,6 +32,8 @@ class EventType(str, enum.Enum):
     MEDICAL_EXAM_RECORDED = "MedicalExamRecorded"
     PERSON_SUSPENDED = "PersonSuspended"
     PERSON_REINSTATED = "PersonReinstated"
+    CONTRACTOR_READINESS_BLOCKED = "contractor.readiness_blocked"
+    CONTRACTOR_READINESS_WARNING = "contractor.readiness_warning"
 
 
 class BaseEventPayload(BaseModel):
@@ -228,6 +230,8 @@ _PAYLOADS: dict[EventType, type[BaseEventPayload]] = {
     EventType.MEDICAL_EXAM_RECORDED: MedicalExamRecordedPayload,
     EventType.PERSON_SUSPENDED: PersonSuspendedPayload,
     EventType.PERSON_REINSTATED: PersonReinstatedPayload,
+    EventType.CONTRACTOR_READINESS_BLOCKED: InternalEventPayload,
+    EventType.CONTRACTOR_READINESS_WARNING: InternalEventPayload,
 }
 
 
