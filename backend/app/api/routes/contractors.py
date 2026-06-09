@@ -482,8 +482,9 @@ async def admit_contractor_employee(
 # ---------------------------------------------------------------------------
 
 
-def _document_body(doc: ContractorDocument) -> dict:
-    today = datetime.now(timezone.utc).date()
+def _document_body(doc: ContractorDocument, today: date | None = None) -> dict:
+    if today is None:
+        today = datetime.now(timezone.utc).date()
     return {
         "id": doc.id,
         "contractor_id": doc.contractor_id,
@@ -501,6 +502,7 @@ def _document_body(doc: ContractorDocument) -> dict:
 
 
 async def _fetch_document(session: AsyncSession, tenant: Tenant, document_id: str) -> ContractorDocument:
+    """Return the in-tenant, non-deleted ContractorDocument or raise 404."""
     row = (
         await session.execute(
             select(ContractorDocument).where(
@@ -564,7 +566,8 @@ async def list_contractor_documents(
     if contractor_ids:
         stmt = stmt.where(ContractorDocument.contractor_id.in_(contractor_ids))
     items = list((await session.execute(stmt.order_by(ContractorDocument.created_at.desc()))).scalars().all())
-    return {"items": [_document_body(d) for d in items], "total": len(items)}
+    today = datetime.now(timezone.utc).date()
+    return {"items": [_document_body(d, today) for d in items], "total": len(items)}
 
 
 @router.post("/documents", status_code=status.HTTP_201_CREATED, dependencies=[ContractorsFeatureGate])
@@ -603,7 +606,7 @@ async def list_expiring_contractor_documents(
         stmt = stmt.where(ContractorDocument.contractor_id.in_(contractor_ids))
     today = datetime.now(timezone.utc).date()
     flagged = [
-        _document_body(d)
+        _document_body(d, today)
         for d in (await session.execute(stmt)).scalars().all()
         if document_expiry_status(d.valid_until, today) in (
             ContingentItemStatus.DUE_SOON, ContingentItemStatus.OVERDUE,

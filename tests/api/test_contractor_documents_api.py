@@ -133,6 +133,45 @@ async def test_patch_and_soft_delete(async_client, sessionmaker, data_factory, m
 
 
 @pytest.mark.asyncio
+async def test_cross_tenant_document_is_404(async_client, sessionmaker, data_factory, make_auth_headers):
+    """A document created in tenant A is 404 to tenant B (tenant isolation)."""
+    contractor_id, _emp = await _seed_contractor(sessionmaker, data_factory)
+    # tenant A = default "test" tenant
+    headers_a = await make_auth_headers(RoleEnum.ADMIN)
+    created = await async_client.post(
+        "/api/v1/contractors/documents", headers=headers_a,
+        json={"contractor_id": contractor_id, "doc_type": "license", "title": "Secret"},
+    )
+    assert created.status_code == status.HTTP_201_CREATED, created.text
+    doc_id = created.json()["id"]
+
+    # tenant B = "acme"; use a distinct email to avoid the cross-tenant user-lookup
+    # collision documented in conftest.py (make_auth_headers docstring).
+    headers_b = await make_auth_headers(RoleEnum.ADMIN, tenant="acme", email="admin-acme@example.com")
+    resp = await async_client.get(f"/api/v1/contractors/documents/{doc_id}", headers=headers_b)
+    assert resp.status_code == status.HTTP_404_NOT_FOUND, resp.text
+
+
+@pytest.mark.asyncio
+async def test_patch_can_unlink_file(async_client, sessionmaker, data_factory, make_auth_headers):
+    contractor_id, _emp = await _seed_contractor(sessionmaker, data_factory)
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    created = await async_client.post(
+        "/api/v1/contractors/documents", headers=headers,
+        json={"contractor_id": contractor_id, "doc_type": "license", "title": "Doc", "file_id": "file-123"},
+    )
+    assert created.status_code == status.HTTP_201_CREATED, created.text
+    doc_id = created.json()["id"]
+    assert created.json()["file_id"] == "file-123"
+
+    patched = await async_client.patch(
+        f"/api/v1/contractors/documents/{doc_id}", headers=headers, json={"file_id": None},
+    )
+    assert patched.status_code == status.HTTP_200_OK, patched.text
+    assert patched.json()["file_id"] is None
+
+
+@pytest.mark.asyncio
 async def test_expiring_endpoint_flags_due_soon_and_overdue(async_client, sessionmaker, data_factory, make_auth_headers):
     contractor_id, _emp = await _seed_contractor(sessionmaker, data_factory)
     headers = await make_auth_headers(RoleEnum.ADMIN)
