@@ -25,7 +25,14 @@ _STATUS_EVENT = {
 
 
 async def _outbox_key_exists(session: AsyncSession, *, tenant_id: str, key: str) -> bool:
-    """Return True if an outbox row already exists for this idempotency key + tenant."""
+    """Return True if an outbox row already exists for this idempotency key + tenant.
+
+    Deliberately destination-agnostic (unlike ``OutboxService._find_existing``, which
+    keys on destination): the row may have been stored under ``noop://local`` (tenant
+    without webhook destinations) OR under a real destination — both must count as
+    "already emitted today". A destination-scoped check would over-count in the
+    has-destinations regime.
+    """
     stmt = select(Outbox.id).where(
         Outbox.tenant_id == tenant_id,
         Outbox.idempotency_key == key,
@@ -52,6 +59,9 @@ async def notify_document_expiry(session: AsyncSession, *, tenant_id: str) -> in
         if event_type is None:
             continue
         idem_key = f"contractor-document:{doc.id}:{expiry.value}:{today.isoformat()}"
+        # Pre-check before enqueue so ``count`` reflects genuinely NEW events, not
+        # idempotent same-day replays. (Sibling notify_readiness lacks this and would
+        # over-count on a re-run; here the daily-tick total must be honest.)
         if await _outbox_key_exists(session, tenant_id=tenant_id, key=idem_key):
             continue
         await outbox.enqueue(

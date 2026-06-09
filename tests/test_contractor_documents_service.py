@@ -1,13 +1,13 @@
 """notify_document_expiry: enqueue only for DUE_SOON/OVERDUE, idempotent per day."""
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
 from app.modules.contractors.models import ContractorDocument, ContractorRegistry
 
-TODAY = date.today()
+TODAY = datetime.now(timezone.utc).date()  # match the service's UTC clock
 
 
 async def _seed(session, tenant_id: str) -> str:
