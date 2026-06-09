@@ -34,6 +34,8 @@ class EventType(str, enum.Enum):
     PERSON_REINSTATED = "PersonReinstated"
     CONTRACTOR_READINESS_BLOCKED = "contractor.readiness_blocked"
     CONTRACTOR_READINESS_WARNING = "contractor.readiness_warning"
+    CONTRACTOR_DOCUMENT_EXPIRING = "contractor.document_expiring"
+    CONTRACTOR_DOCUMENT_EXPIRED = "contractor.document_expired"
 
 
 class BaseEventPayload(BaseModel):
@@ -232,6 +234,8 @@ _PAYLOADS: dict[EventType, type[BaseEventPayload]] = {
     EventType.PERSON_REINSTATED: PersonReinstatedPayload,
     EventType.CONTRACTOR_READINESS_BLOCKED: InternalEventPayload,
     EventType.CONTRACTOR_READINESS_WARNING: InternalEventPayload,
+    EventType.CONTRACTOR_DOCUMENT_EXPIRING: InternalEventPayload,
+    EventType.CONTRACTOR_DOCUMENT_EXPIRED: InternalEventPayload,
 }
 
 
