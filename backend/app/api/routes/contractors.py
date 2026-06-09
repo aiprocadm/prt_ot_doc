@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Annotated
+from datetime import date, datetime, timezone
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field
@@ -17,8 +17,11 @@ from app.api.helpers.etag import (
 from app.core.feature_flags import is_feature_enabled
 from app.core.security import AccessContext, abac
 from app.models.models import Tenant
+from app.domains.contractors.documents import document_expiry_status
+from app.domains.shared import ContingentItemStatus
 from app.modules.contractors.models import (
     ComplianceStatus,
+    ContractorDocument,
     ContractorEmployee,
     ContractorIncident,
     ContractorRegistry,
@@ -105,6 +108,36 @@ class ContractorIncidentCreate(BaseModel):
     status: str = Field(default="open", max_length=32)
     occurred_at: datetime
     description: str | None = None
+
+
+DocType = Literal[
+    "license", "insurance", "contract", "sro",
+    "training_cert", "medical_cert", "access_permit", "qualification",
+    "other",
+]
+
+
+class ContractorDocumentCreate(BaseModel):
+    contractor_id: str = Field(min_length=1, max_length=36)
+    employee_id: str | None = Field(default=None, max_length=36)
+    doc_type: DocType
+    title: str = Field(min_length=1, max_length=255)
+    number: str | None = Field(default=None, max_length=128)
+    issuing_org: str | None = Field(default=None, max_length=255)
+    issued_at: date | None = None
+    valid_until: date | None = None
+    file_id: str | None = Field(default=None, max_length=36)
+
+
+class ContractorDocumentPatch(BaseModel):
+    doc_type: DocType | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    number: str | None = Field(default=None, max_length=128)
+    issuing_org: str | None = Field(default=None, max_length=255)
+    issued_at: date | None = None
+    valid_until: date | None = None
+    file_id: str | None = Field(default=None, max_length=36)
+    status: str | None = Field(default=None, max_length=32)
 
 
 @router.get("/registry", response_model=None)
@@ -442,3 +475,167 @@ async def admit_contractor_employee(
     # enforce is read-only, so ``row`` (loaded above) is still fresh; re-evaluate to
     # surface the non-blocked verdict (allowed/warning) in the success body.
     return _verdict_body(evaluate_contractor_admission(employees=[row])[0])
+
+
+# ---------------------------------------------------------------------------
+# Document registry
+# ---------------------------------------------------------------------------
+
+
+def _document_body(doc: ContractorDocument) -> dict:
+    today = datetime.now(timezone.utc).date()
+    return {
+        "id": doc.id,
+        "contractor_id": doc.contractor_id,
+        "employee_id": doc.employee_id,
+        "doc_type": doc.doc_type,
+        "title": doc.title,
+        "number": doc.number,
+        "issuing_org": doc.issuing_org,
+        "issued_at": doc.issued_at.isoformat() if doc.issued_at else None,
+        "valid_until": doc.valid_until.isoformat() if doc.valid_until else None,
+        "file_id": doc.file_id,
+        "status": doc.status,
+        "expiry_status": document_expiry_status(doc.valid_until, today).value,
+    }
+
+
+async def _fetch_document(session: AsyncSession, tenant: Tenant, document_id: str) -> ContractorDocument:
+    row = (
+        await session.execute(
+            select(ContractorDocument).where(
+                ContractorDocument.id == document_id,
+                ContractorDocument.tenant_id == str(tenant.id),
+                ContractorDocument.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
+    return row
+
+
+async def _validate_employee_belongs(
+    session: AsyncSession, tenant: Tenant, contractor_id: str, employee_id: str
+) -> None:
+    """422 if employee_id does not belong to contractor_id within the tenant."""
+    emp = (
+        await session.execute(
+            select(ContractorEmployee).where(
+                ContractorEmployee.id == employee_id,
+                ContractorEmployee.tenant_id == str(tenant.id),
+                ContractorEmployee.contractor_id == contractor_id,
+                ContractorEmployee.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if emp is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "employee_id does not belong to contractor_id",
+        )
+
+
+@router.get("/documents", dependencies=[ContractorsFeatureGate])
+async def list_contractor_documents(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ReaderAccess,
+    contractor_id: str | None = Query(default=None),
+    employee_id: str | None = Query(default=None),
+    doc_type: str | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+) -> dict:
+    if contractor_id:
+        access.ensure_abac(contractor_id=contractor_id, action="read contractors")
+    stmt = select(ContractorDocument).where(
+        ContractorDocument.tenant_id == str(tenant.id),
+        ContractorDocument.deleted_at.is_(None),
+    )
+    if contractor_id:
+        stmt = stmt.where(ContractorDocument.contractor_id == contractor_id)
+    if employee_id:
+        stmt = stmt.where(ContractorDocument.employee_id == employee_id)
+    if doc_type:
+        stmt = stmt.where(ContractorDocument.doc_type == doc_type)
+    if status_filter:
+        stmt = stmt.where(ContractorDocument.status == status_filter)
+    contractor_ids = [str(v) for v in access.claims.get("contractor_ids", []) if v]
+    if contractor_ids:
+        stmt = stmt.where(ContractorDocument.contractor_id.in_(contractor_ids))
+    items = list((await session.execute(stmt.order_by(ContractorDocument.created_at.desc()))).scalars().all())
+    return {"items": [_document_body(d) for d in items], "total": len(items)}
+
+
+@router.post("/documents", status_code=status.HTTP_201_CREATED, dependencies=[ContractorsFeatureGate])
+async def create_contractor_document(
+    payload: ContractorDocumentCreate, tenant: TenantDep, session: SessionDep, access: WriterAccess,
+) -> dict:
+    access.ensure_abac(contractor_id=payload.contractor_id, action="manage contractors")
+    if payload.employee_id:
+        await _validate_employee_belongs(session, tenant, payload.contractor_id, payload.employee_id)
+    row = ContractorDocument(tenant_id=str(tenant.id), **payload.model_dump())
+    session.add(row)
+    await session.commit()
+    await session.refresh(row)
+    return _document_body(row)
+
+
+@router.get("/documents/expiring", dependencies=[ContractorsFeatureGate])
+async def list_expiring_contractor_documents(
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ReaderAccess,
+    contractor_id: str | None = Query(default=None),
+) -> dict:
+    """Advisory: documents whose expiry_status is DUE_SOON or OVERDUE."""
+    if contractor_id:
+        access.ensure_abac(contractor_id=contractor_id, action="read contractors")
+    stmt = select(ContractorDocument).where(
+        ContractorDocument.tenant_id == str(tenant.id),
+        ContractorDocument.deleted_at.is_(None),
+        ContractorDocument.valid_until.is_not(None),
+    )
+    if contractor_id:
+        stmt = stmt.where(ContractorDocument.contractor_id == contractor_id)
+    contractor_ids = [str(v) for v in access.claims.get("contractor_ids", []) if v]
+    if contractor_ids:
+        stmt = stmt.where(ContractorDocument.contractor_id.in_(contractor_ids))
+    today = datetime.now(timezone.utc).date()
+    flagged = [
+        _document_body(d)
+        for d in (await session.execute(stmt)).scalars().all()
+        if document_expiry_status(d.valid_until, today) in (
+            ContingentItemStatus.DUE_SOON, ContingentItemStatus.OVERDUE,
+        )
+    ]
+    return {"items": flagged, "total": len(flagged)}
+
+
+@router.get("/documents/{document_id}", dependencies=[ContractorsFeatureGate])
+async def get_contractor_document(document_id: str, tenant: TenantDep, session: SessionDep, access: ReaderAccess) -> dict:
+    row = await _fetch_document(session, tenant, document_id)
+    access.ensure_abac(contractor_id=row.contractor_id, action="read contractors")
+    return _document_body(row)
+
+
+@router.patch("/documents/{document_id}", dependencies=[ContractorsFeatureGate])
+async def patch_contractor_document(
+    document_id: str, payload: ContractorDocumentPatch, tenant: TenantDep, session: SessionDep, access: WriterAccess,
+) -> dict:
+    row = await _fetch_document(session, tenant, document_id)
+    access.ensure_abac(contractor_id=row.contractor_id, action="manage contractors")
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        setattr(row, key, value)
+    await session.commit()
+    await session.refresh(row)
+    return _document_body(row)
+
+
+@router.delete("/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None, dependencies=[ContractorsFeatureGate])
+async def archive_contractor_document(document_id: str, tenant: TenantDep, session: SessionDep, access: WriterAccess):
+    row = await _fetch_document(session, tenant, document_id)
+    access.ensure_abac(contractor_id=row.contractor_id, action="manage contractors")
+    row.deleted_at = datetime.now(timezone.utc)
+    await session.commit()
+    return None
