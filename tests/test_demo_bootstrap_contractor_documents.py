@@ -8,7 +8,11 @@ from sqlalchemy import select
 
 from app.domains.contractors.documents import document_expiry_status
 from app.domains.shared import ContingentItemStatus
-from app.modules.contractors.models import ContractorDocument
+from app.modules.contractors.models import (
+    ContractorDocument,
+    ContractorEmployee,
+    ContractorRegistry,
+)
 
 
 @pytest.mark.asyncio
@@ -18,7 +22,6 @@ async def test_demo_seed_creates_three_documents(sessionmaker, data_factory):
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         tid = str(tenant.id)
-        from app.modules.contractors.models import ContractorEmployee, ContractorRegistry
         contractor = ContractorRegistry(tenant_id=tid, name="Seed Doc Contractor")
         session.add(contractor)
         await session.flush()
