@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import enum
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, String, Text
+from sqlalchemy import Date, DateTime, Enum, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import SoftDeleteMixin, TenantBaseModel
@@ -88,4 +88,35 @@ class ContractorIncident(TenantBaseModel, SoftDeleteMixin):
     __table_args__ = (
         Index("ix_contractor_incidents_tenant_contractor", "tenant_id", "contractor_id"),
         Index("ix_contractor_incidents_tenant_status", "tenant_id", "status"),
+    )
+
+
+class ContractorDocument(TenantBaseModel, SoftDeleteMixin):
+    __tablename__ = "contractor_documents"
+
+    contractor_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("contractor_registry.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # SET NULL: an employee document survives the employee being removed (kept as a contractor-level record).
+    employee_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("contractor_employees.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    # doc_type/status are VARCHAR (validated at the schema layer), NOT PG enums — avoids the
+    # enum-label-parity migration class entirely (PR #635–#638).
+    doc_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    number: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    issuing_org: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    issued_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # file_id is an app-level reference to File (different metadata base) — NO DB FK, mirroring
+    # contractor_registry.company_id, to sidestep cross-base FK migration trouble (wa02).
+    file_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
+
+    __table_args__ = (
+        Index("ix_contractor_documents_tenant_contractor", "tenant_id", "contractor_id"),
+        Index("ix_contractor_documents_tenant_employee", "tenant_id", "employee_id"),
+        Index("ix_contractor_documents_tenant_valid", "tenant_id", "valid_until"),
+        Index("ix_contractor_documents_tenant_type", "tenant_id", "doc_type"),
     )

@@ -74,6 +74,10 @@ celery_app.conf.beat_schedule = {
         "task": "contractors.readiness.tick",
         "schedule": crontab(hour=3, minute=30),
     },
+    "contractors-documents-daily": {
+        "task": "contractors.documents.tick",
+        "schedule": crontab(hour=3, minute=45),
+    },
 }
 
 celery_app.conf.task_queues = (

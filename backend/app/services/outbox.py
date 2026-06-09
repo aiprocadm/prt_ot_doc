@@ -154,23 +154,33 @@ class OutboxService:
                     extra={"tenant_id": tenant_id, "event_type": resolved.value},
                 )
                 self.metrics.record_outbox_no_destination(event_type=resolved.value)
-                entry = Outbox(
-                    tenant_id=tenant_id,
-                    event_type=resolved.value,
-                    destination="noop://local",
-                    payload=normalized_payload,
-                    headers=None,
-                    idempotency_key=key,
-                    status=OutboxStatus.SENT,
-                    next_attempt_at=None,
-                    sent_at=now,
-                )
-                self.session.add(entry)
-                await self.session.flush()
-                if entry.payload.get("event_id") is None:
-                    entry.payload = {**entry.payload, "event_id": entry.id}
+                existing_noop = None
+                if key:
+                    existing_noop = await self._find_existing(
+                        tenant_id=tenant_id,
+                        destination="noop://local",
+                        idempotency_key=key,
+                    )
+                if existing_noop:
+                    created.append(existing_noop)
+                else:
+                    entry = Outbox(
+                        tenant_id=tenant_id,
+                        event_type=resolved.value,
+                        destination="noop://local",
+                        payload=normalized_payload,
+                        headers=None,
+                        idempotency_key=key,
+                        status=OutboxStatus.SENT,
+                        next_attempt_at=None,
+                        sent_at=now,
+                    )
+                    self.session.add(entry)
                     await self.session.flush()
-                created.append(entry)
+                    if entry.payload.get("event_id") is None:
+                        entry.payload = {**entry.payload, "event_id": entry.id}
+                        await self.session.flush()
+                    created.append(entry)
             else:
                 for target in destinations:
                     merged_headers = self._merge_headers(target.headers, headers)

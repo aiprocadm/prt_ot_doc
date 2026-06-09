@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import select
 
@@ -13,9 +13,30 @@ from app.domains.packs.seeder import ensure_default_packs
 from app.models.feature import Feature
 from app.models.finance import Department
 from app.models.models import Company, MedicalExamKind, MedicalNorm, Person, Position, Site, Tenant, TrainingCourse
-from app.modules.contractors.models import ComplianceStatus, ContractorEmployee, ContractorRegistry
+from app.modules.contractors.models import (
+    ComplianceStatus, ContractorDocument, ContractorEmployee, ContractorRegistry,
+)
 
 logger = logging.getLogger(__name__)
+
+
+async def _seed_contractor_documents(session, tenant_db_id: str, contractor_id: str, employee_id: str) -> None:
+    """Seed 3 demo documents: valid (org), expiring (employee), expired (employee)."""
+    today = date.today()
+    session.add(ContractorDocument(
+        tenant_id=tenant_db_id, contractor_id=contractor_id, doc_type="sro",
+        title="СРО допуск (демо)", valid_until=today + timedelta(days=180), status="active",
+    ))
+    session.add(ContractorDocument(
+        tenant_id=tenant_db_id, contractor_id=contractor_id, employee_id=employee_id,
+        doc_type="medical_cert", title="Медзаключение (истекает)",
+        valid_until=today + timedelta(days=15), status="active",
+    ))
+    session.add(ContractorDocument(
+        tenant_id=tenant_db_id, contractor_id=contractor_id, employee_id=employee_id,
+        doc_type="access_permit", title="Допуск на объект (просрочен)",
+        valid_until=today - timedelta(days=5), status="active",
+    ))
 
 
 async def bootstrap_demo_tenant(settings: Settings) -> None:
@@ -172,18 +193,17 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
             await session.flush()
 
             now = datetime.now(timezone.utc)
-            session.add(
-                ContractorEmployee(
-                    tenant_id=tenant_db_id,
-                    contractor_id=contractor.id,
-                    full_name="Готовый Иван",
-                    access_status=ComplianceStatus.VALID,
-                    training_status=ComplianceStatus.VALID,
-                    medical_status=ComplianceStatus.VALID,
-                    last_training_at=now,
-                    next_medical_at=now + timedelta(days=200),
-                )
+            ready_emp = ContractorEmployee(
+                tenant_id=tenant_db_id,
+                contractor_id=contractor.id,
+                full_name="Готовый Иван",
+                access_status=ComplianceStatus.VALID,
+                training_status=ComplianceStatus.VALID,
+                medical_status=ComplianceStatus.VALID,
+                last_training_at=now,
+                next_medical_at=now + timedelta(days=200),
             )
+            session.add(ready_emp)
             # Пётр keeps a manually-VALID medical_status, yet next_medical_at is in the
             # past → the admission engine BLOCKS him on the OVERDUE deadline. This is the
             # headline demo: a "stale-valid" status flag is caught by the real deadline.
@@ -199,6 +219,8 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
                     next_medical_at=now - timedelta(days=1),
                 )
             )
+            await session.flush()  # assign ids before seeding documents
+            await _seed_contractor_documents(session, tenant_db_id, contractor.id, ready_emp.id)
 
         await ensure_default_packs(session, tenant_slug=tenant_slug)
         logger.info("demo.bootstrap.done", extra={"tenant": tenant_slug, "company": company_name, "site": site_name})
