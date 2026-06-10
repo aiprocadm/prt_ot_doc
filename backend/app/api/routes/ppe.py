@@ -21,7 +21,9 @@ from app.core.feature_flags import is_feature_enabled
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.domains.ppe import issue_ppe_item, list_expiring_issues
+from app.models.models import Position, PPENorm
 from app.models.ppe_registry import PPEIssue, PPEIssueStatus, PPEItem, PPEStockBatch
+from app.models.risk import RiskHazard
 from app.models.tenanting import Tenant
 from app.schemas.ppe import (
     PPEIssueCreate,
@@ -32,6 +34,10 @@ from app.schemas.ppe import (
     PPEItemPage,
     PPEItemRead,
     PPEItemUpdate,
+    PPENormCreate,
+    PPENormPage,
+    PPENormRead,
+    PPENormUpdate,
     PPEStockBatchCreate,
     PPEStockBatchPage,
     PPEStockBatchRead,
@@ -207,6 +213,175 @@ async def delete_item(
     item = await _get_item(session, tenant, item_id)
     if item.deleted_at is None:
         item.deleted_at = datetime.now(timezone.utc)
+    await session.flush()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def _norm_schema(norm: PPENorm) -> PPENormRead:
+    return PPENormRead.model_validate(norm)
+
+
+async def _get_norm(session: AsyncSession, tenant: Tenant, norm_id: str) -> PPENorm:
+    stmt = select(PPENorm).where(PPENorm.id == norm_id, PPENorm.tenant_id == tenant.id)
+    norm = (await session.execute(stmt)).scalar_one_or_none()
+    if norm is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE norm not found")
+    return norm
+
+
+async def _check_norm_refs(
+    session: AsyncSession, tenant: Tenant, *, position_id: str, hazard_id: str, item_id: str
+) -> PPEItem:
+    position = (await session.execute(select(Position).where(
+        Position.id == position_id, Position.tenant_id == tenant.id, Position.deleted_at.is_(None),
+    ))).scalar_one_or_none()
+    if position is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Position not found")
+    hazard = (await session.execute(select(RiskHazard).where(
+        RiskHazard.id == hazard_id, RiskHazard.tenant_id == tenant.id,
+    ))).scalar_one_or_none()
+    if hazard is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Hazard not found")
+    return await _get_item(session, tenant, item_id)
+
+
+def _norm_duplicate_conflict() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=api_problem_detail(
+            code="PPE_NORM_DUPLICATE",
+            message="A norm for this position/hazard/item already exists",
+            error_type="ppe",
+        ),
+    )
+
+
+@router.get("/norms", response_model=PPENormPage)
+async def list_norms(
+    request: Request,
+    response: Response,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+    position_id: str | None = None,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> PPENormPage | Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
+    stmt = select(PPENorm).where(PPENorm.tenant_id == tenant.id)
+    count_stmt = select(func.count()).where(PPENorm.tenant_id == tenant.id)
+    if position_id:
+        stmt = stmt.where(PPENorm.position_id == position_id)
+        count_stmt = count_stmt.where(PPENorm.position_id == position_id)
+    stmt = stmt.order_by(PPENorm.item_name.asc()).limit(limit).offset(offset)
+    norms = list((await session.execute(stmt)).scalars().all())
+    total = (await session.execute(count_stmt)).scalar_one()
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=norms,
+        scalars=[
+            ("total", int(total or 0)), ("limit", limit), ("offset", offset),
+            ("position", position_id or ""),
+        ],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
+    return PPENormPage(items=[_norm_schema(n) for n in norms], total=total)
+
+
+@router.post("/norms", response_model=PPENormRead, status_code=status.HTTP_201_CREATED)
+@audit_operation("create", "ppe_norm")
+async def create_norm(
+    payload: PPENormCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPENormRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
+    item = await _check_norm_refs(
+        session, tenant,
+        position_id=payload.position_id, hazard_id=payload.hazard_id, item_id=payload.item_id,
+    )
+    existing = (await session.execute(select(PPENorm).where(
+        PPENorm.tenant_id == tenant.id,
+        PPENorm.position_id == payload.position_id,
+        PPENorm.hazard_id == payload.hazard_id,
+        PPENorm.item_name == item.name,
+    ))).scalar_one_or_none()
+    if existing is not None:
+        raise _norm_duplicate_conflict()
+
+    norm = PPENorm(
+        tenant_id=tenant.id,
+        position_id=payload.position_id,
+        hazard_id=payload.hazard_id,
+        item_id=item.id,
+        item_name=item.name,  # денормализация: ключ сопоставления для legacy-строк
+        quantity=payload.quantity,
+        interval_days=payload.interval_days,
+    )
+    session.add(norm)
+    await session.flush()
+    await session.refresh(norm)
+    return _norm_schema(norm)
+
+
+@router.get("/norms/{norm_id}", response_model=PPENormRead)
+async def get_norm(
+    norm_id: str, tenant: TenantDep, session: SessionDep, access: ManagerAccess
+) -> PPENormRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    return _norm_schema(await _get_norm(session, tenant, norm_id))
+
+
+@router.patch("/norms/{norm_id}", response_model=PPENormRead)
+@audit_operation("update", "ppe_norm")
+async def update_norm(
+    norm_id: str,
+    payload: PPENormUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPENormRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
+    norm = await _get_norm(session, tenant, norm_id)
+    updates = payload.model_dump(exclude_unset=True)
+    new_item_id = updates.pop("item_id", None)
+    if new_item_id is not None:
+        item = await _get_item(session, tenant, new_item_id)
+        dup = (await session.execute(select(PPENorm).where(
+            PPENorm.tenant_id == tenant.id,
+            PPENorm.position_id == norm.position_id,
+            PPENorm.hazard_id == norm.hazard_id,
+            PPENorm.item_name == item.name,
+            PPENorm.id != norm.id,
+        ))).scalar_one_or_none()
+        if dup is not None:
+            raise _norm_duplicate_conflict()
+        norm.item_id = item.id
+        norm.item_name = item.name
+    for field, value in updates.items():
+        setattr(norm, field, value)
+    await session.flush()
+    await session.refresh(norm)
+    return _norm_schema(norm)
+
+
+@router.delete("/norms/{norm_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+@audit_operation("delete", "ppe_norm")
+async def delete_norm(
+    norm_id: str, tenant: TenantDep, session: SessionDep, access: EditorAccess
+) -> None:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    norm = await _get_norm(session, tenant, norm_id)
+    await session.delete(norm)  # PPENorm has no SoftDeleteMixin — hard delete
     await session.flush()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

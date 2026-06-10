@@ -60,6 +60,37 @@ class PPEItemPage(BaseSchema):
     total: int
 
 
+class PPENormCreate(BaseSchema):
+    position_id: str
+    hazard_id: str
+    item_id: str
+    quantity: int = Field(default=1, ge=1)
+    interval_days: int = Field(default=365, ge=1)
+
+
+class PPENormUpdate(BaseSchema):
+    item_id: str | None = None
+    quantity: int | None = Field(default=None, ge=1)
+    interval_days: int | None = Field(default=None, ge=1)
+
+
+class PPENormRead(BaseSchema):
+    id: str
+    position_id: str
+    hazard_id: str
+    item_id: str | None
+    item_name: str
+    quantity: int
+    interval_days: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class PPENormPage(BaseSchema):
+    items: list[PPENormRead]
+    total: int
+
+
 class PPEIssueCreate(BaseSchema):
     person_id: str
     item_id: str
