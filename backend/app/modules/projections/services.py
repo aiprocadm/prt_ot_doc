@@ -30,7 +30,7 @@ from app.modules.projections.models import (
     SiteSafetyReadModel,
 )
 from app.modules.workflow.models import WorkflowTask, WorkflowTaskStatus
-from app.services.contractor_admission import evaluate_contractor_admission
+from app.services.contractor_admission import evaluate_with_documents
 
 
 class PackageProjectionService:
@@ -145,11 +145,16 @@ class ContractorReadinessProjectionService:
         for emp in employees:
             employees_by_contractor.setdefault(emp.contractor_id, []).append(emp)
 
+        # Doc-aware verdicts computed once for the whole tenant (2 extra queries total),
+        # then regrouped per contractor below.
+        all_verdicts = await evaluate_with_documents(self.session, employees=list(employees))
+        verdict_by_emp = {v.employee_id: v for v in all_verdicts}
+
         total = 0
         for registry in registries:
             contractor_id = registry.id
             contractor_employees = employees_by_contractor.get(contractor_id, [])
-            verdicts = evaluate_contractor_admission(employees=contractor_employees)
+            verdicts = [verdict_by_emp[e.id] for e in contractor_employees]
 
             workers_total = len(verdicts)
             workers_ready = sum(1 for v in verdicts if v.status is ContractorReadinessStatus.ALLOWED)
@@ -186,7 +191,9 @@ class ContractorReadinessProjectionService:
             row.workers_total = workers_total
             row.workers_ready = workers_ready
             row.workers_blocked = workers_blocked
-            row.missing_docs_count = 0  # contractor documents are a later slice (Срез 2)
+            row.missing_docs_count = sum(
+                1 for v in verdicts for viol in v.violations if viol.startswith("document:")
+            )
             row.missing_training_count = missing_training_count
             row.overdue_items_count = overdue_items_count
             row.active_packages_count = (

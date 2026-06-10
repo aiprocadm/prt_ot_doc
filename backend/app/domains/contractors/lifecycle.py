@@ -11,6 +11,7 @@ import enum
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 
+from app.domains.contractors.documents import requirement_status
 from app.domains.shared import ContingentItemStatus, classify
 from app.modules.contractors.models import ComplianceStatus
 
@@ -35,6 +36,13 @@ class EmployeeVerdict:
     warnings: list[str] = field(default_factory=list)
 
 
+@dataclass
+class DocumentRequirement:
+    doc_type: str
+    scope: str  # "company" | "employee"
+    mandatory: bool
+
+
 def _as_date(value: datetime | date | None) -> date | None:
     if value is None:
         return None
@@ -56,8 +64,21 @@ def _assess(requirement: str, status: ComplianceStatus, deadline: ContingentItem
         warnings.append(requirement)
 
 
-def evaluate_employee(emp, today: date) -> EmployeeVerdict:
-    """Compute the readiness verdict for a contractor employee."""
+def evaluate_employee(
+    emp,
+    today: date,
+    *,
+    requirements: "list[DocumentRequirement] | tuple[DocumentRequirement, ...]" = (),
+    employee_docs=(),
+    company_docs=(),
+) -> EmployeeVerdict:
+    """Compute the readiness verdict for a contractor employee.
+
+    The optional document dimension (requirements/employee_docs/company_docs) defaults to
+    empty → the verdict is unchanged from the 3-dimension (access/training/medical) base,
+    keeping all pre-existing callers and unit tests intact. Callers pass only ACTIVE,
+    non-deleted documents; this pure function filters by doc_type and folds expiry only.
+    """
     violations: list[str] = []
     warnings: list[str] = []
 
@@ -76,6 +97,17 @@ def evaluate_employee(emp, today: date) -> EmployeeVerdict:
     # medical: explicit deadline next_medical_at
     medical_deadline = classify(_as_date(emp.next_medical_at), today)
     _assess("medical", emp.medical_status, medical_deadline, violations, warnings)
+
+    # documents: each required type, looked up in the scope-appropriate pool
+    for req in requirements:
+        pool = company_docs if req.scope == "company" else employee_docs
+        candidates = [d for d in pool if d.doc_type == req.doc_type]
+        st = requirement_status(candidates, today)
+        label = f"document:{req.doc_type}"
+        if st in (ContingentItemStatus.MISSING, ContingentItemStatus.OVERDUE):
+            (violations if req.mandatory else warnings).append(label)
+        elif st is ContingentItemStatus.DUE_SOON:
+            warnings.append(label)
 
     if violations:
         status = ReadinessStatus.BLOCKED

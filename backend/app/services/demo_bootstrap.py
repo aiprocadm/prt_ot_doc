@@ -14,7 +14,8 @@ from app.models.feature import Feature
 from app.models.finance import Department
 from app.models.models import Company, MedicalExamKind, MedicalNorm, Person, Position, Site, Tenant, TrainingCourse
 from app.modules.contractors.models import (
-    ComplianceStatus, ContractorDocument, ContractorEmployee, ContractorRegistry,
+    ComplianceStatus, ContractorDocument, ContractorDocumentRequirement,
+    ContractorEmployee, ContractorRegistry,
 )
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,24 @@ async def _seed_contractor_documents(session, tenant_db_id: str, contractor_id: 
         doc_type="access_permit", title="Допуск на объект (просрочен)",
         valid_until=today - timedelta(days=5), status="active",
     ))
+
+
+async def _seed_contractor_requirements(session, tenant_db_id: str) -> None:
+    """Seed 2 admission document requirements (idempotent on tenant+doc_type+scope)."""
+    wanted = [("sro", "company"), ("medical_cert", "employee")]
+    for doc_type, scope in wanted:
+        existing = (await session.execute(
+            select(ContractorDocumentRequirement).where(
+                ContractorDocumentRequirement.tenant_id == tenant_db_id,
+                ContractorDocumentRequirement.doc_type == doc_type,
+                ContractorDocumentRequirement.scope == scope,
+                ContractorDocumentRequirement.deleted_at.is_(None),
+            )
+        )).scalar_one_or_none()
+        if existing is None:
+            session.add(ContractorDocumentRequirement(
+                tenant_id=tenant_db_id, doc_type=doc_type, scope=scope, mandatory=True,
+            ))
 
 
 async def bootstrap_demo_tenant(settings: Settings) -> None:
@@ -221,6 +240,7 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
             )
             await session.flush()  # assign ids before seeding documents
             await _seed_contractor_documents(session, tenant_db_id, contractor.id, ready_emp.id)
+            await _seed_contractor_requirements(session, tenant_db_id)
 
         await ensure_default_packs(session, tenant_slug=tenant_slug)
         logger.info("demo.bootstrap.done", extra={"tenant": tenant_slug, "company": company_name, "site": site_name})

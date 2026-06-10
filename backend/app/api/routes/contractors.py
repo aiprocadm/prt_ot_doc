@@ -22,13 +22,15 @@ from app.domains.shared import ContingentItemStatus
 from app.modules.contractors.models import (
     ComplianceStatus,
     ContractorDocument,
+    ContractorDocumentRequirement,
     ContractorEmployee,
     ContractorIncident,
     ContractorRegistry,
 )
 from app.services.contractor_admission import (
     enforce_contractor_admission,
-    evaluate_contractor_admission,
+    evaluate_with_documents,
+    load_document_checklist,
 )
 
 router = APIRouter(prefix="/contractors", tags=["contractors"])
@@ -127,6 +129,15 @@ class ContractorDocumentCreate(BaseModel):
     issued_at: date | None = None
     valid_until: date | None = None
     file_id: str | None = Field(default=None, max_length=36)
+
+
+Scope = Literal["company", "employee"]
+
+
+class DocumentRequirementCreate(BaseModel):
+    doc_type: DocType
+    scope: Scope
+    mandatory: bool = True
 
 
 class ContractorDocumentPatch(BaseModel):
@@ -426,8 +437,22 @@ async def get_employee_readiness(
     """Advisory readiness check for a contractor employee (no side-effects)."""
     row = await _fetch_employee(session, tenant, employee_id)
     access.ensure_abac(contractor_id=row.contractor_id, action="read contractors")
-    verdict = evaluate_contractor_admission(employees=[row])[0]
+    verdict = (await evaluate_with_documents(session, employees=[row]))[0]
     return _verdict_body(verdict)
+
+
+@router.get(
+    "/employees/{employee_id}/document-checklist",
+    dependencies=[ContractorsFeatureGate],
+)
+async def get_employee_document_checklist(
+    employee_id: str, tenant: TenantDep, session: SessionDep, access: ReaderAccess,
+) -> dict:
+    """Per-requirement document collection status for a contractor employee (advisory)."""
+    row = await _fetch_employee(session, tenant, employee_id)
+    access.ensure_abac(contractor_id=row.contractor_id, action="read contractors")
+    items = await load_document_checklist(session, employee=row)
+    return {"employee_id": employee_id, "items": items}
 
 
 @router.post(
@@ -472,9 +497,9 @@ async def admit_contractor_employee(
                 "details": payload.get("details", []) if isinstance(payload, dict) else [],
             },
         ) from exc
-    # enforce is read-only, so ``row`` (loaded above) is still fresh; re-evaluate to
-    # surface the non-blocked verdict (allowed/warning) in the success body.
-    return _verdict_body(evaluate_contractor_admission(employees=[row])[0])
+    # enforce is read-only, so ``row`` (loaded above) is still fresh; re-evaluate
+    # (including documents) to surface the non-blocked verdict in the success body.
+    return _verdict_body((await evaluate_with_documents(session, employees=[row]))[0])
 
 
 # ---------------------------------------------------------------------------
@@ -639,6 +664,82 @@ async def patch_contractor_document(
 async def archive_contractor_document(document_id: str, tenant: TenantDep, session: SessionDep, access: WriterAccess):
     row = await _fetch_document(session, tenant, document_id)
     access.ensure_abac(contractor_id=row.contractor_id, action="manage contractors")
+    row.deleted_at = datetime.now(timezone.utc)
+    await session.commit()
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Document-requirement policy (tenant-level)
+# ---------------------------------------------------------------------------
+
+
+def _requirement_body(req: ContractorDocumentRequirement) -> dict:
+    return {
+        "id": req.id,
+        "doc_type": req.doc_type,
+        "scope": req.scope,
+        "mandatory": req.mandatory,
+    }
+
+
+@router.get("/document-requirements", dependencies=[ContractorsFeatureGate])
+async def list_document_requirements(tenant: TenantDep, session: SessionDep, access: ReaderAccess) -> dict:
+    rows = list((await session.execute(
+        select(ContractorDocumentRequirement).where(
+            ContractorDocumentRequirement.tenant_id == str(tenant.id),
+            ContractorDocumentRequirement.deleted_at.is_(None),
+        ).order_by(ContractorDocumentRequirement.doc_type)
+    )).scalars().all())
+    return {"items": [_requirement_body(r) for r in rows], "total": len(rows)}
+
+
+@router.post(
+    "/document-requirements",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[ContractorsFeatureGate],
+)
+async def create_document_requirement(
+    payload: DocumentRequirementCreate, tenant: TenantDep, session: SessionDep, access: WriterAccess,
+) -> dict:
+    existing = (await session.execute(
+        select(ContractorDocumentRequirement).where(
+            ContractorDocumentRequirement.tenant_id == str(tenant.id),
+            ContractorDocumentRequirement.doc_type == payload.doc_type,
+            ContractorDocumentRequirement.scope == payload.scope,
+            ContractorDocumentRequirement.deleted_at.is_(None),
+        )
+    )).scalar_one_or_none()
+    if existing is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={"code": "requirement_exists", "message": "Requirement already exists for this doc_type/scope"},
+        )
+    row = ContractorDocumentRequirement(tenant_id=str(tenant.id), **payload.model_dump())
+    session.add(row)
+    await session.commit()
+    await session.refresh(row)
+    return _requirement_body(row)
+
+
+@router.delete(
+    "/document-requirements/{requirement_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+    dependencies=[ContractorsFeatureGate],
+)
+async def delete_document_requirement(
+    requirement_id: str, tenant: TenantDep, session: SessionDep, access: WriterAccess,
+):
+    row = (await session.execute(
+        select(ContractorDocumentRequirement).where(
+            ContractorDocumentRequirement.id == requirement_id,
+            ContractorDocumentRequirement.tenant_id == str(tenant.id),
+            ContractorDocumentRequirement.deleted_at.is_(None),
+        )
+    )).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Requirement not found")
     row.deleted_at = datetime.now(timezone.utc)
     await session.commit()
     return None
