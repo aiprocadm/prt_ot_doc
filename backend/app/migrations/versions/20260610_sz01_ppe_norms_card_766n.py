@@ -1,7 +1,7 @@
 """sz01: СИЗ Срез-1 — norms→catalog link, 766н card requisites, VARCHAR status.
 
 Additive columns + one in-place type conversion:
-  * ppenorm.item_id            (nullable FK-like ref to ppeitem; legacy rows keep item_name only)
+  * ppenorm.item_id            (nullable FK to ppeitem ON DELETE SET NULL; legacy rows keep item_name only)
   * person.ppe_sizes           (JSON, 766н sizes/anthropometry)
   * ppeissue: certificate_no / wear_percent / return_wear_percent /
               signature_doc_ref / writeoff_reason / replaces_issue_id
@@ -29,6 +29,15 @@ def upgrade() -> None:
     # --- additive columns ----------------------------------------------
     op.add_column("ppenorm", sa.Column("item_id", sa.String(length=36), nullable=True))
     op.create_index("ix_ppenorm_item_id", "ppenorm", ["item_id"])
+    if dialect == "postgresql":
+        op.create_foreign_key(
+            "fk_ppenorm_item_id_ppeitem",
+            "ppenorm",
+            "ppeitem",
+            ["item_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
 
     op.add_column("person", sa.Column("ppe_sizes", sa.JSON(), nullable=True))
 
@@ -94,5 +103,7 @@ def downgrade() -> None:
     op.drop_column("ppeissue", "wear_percent")
     op.drop_column("ppeissue", "certificate_no")
     op.drop_column("person", "ppe_sizes")
+    if dialect == "postgresql":
+        op.drop_constraint("fk_ppenorm_item_id_ppeitem", "ppenorm", type_="foreignkey")
     op.drop_index("ix_ppenorm_item_id", table_name="ppenorm")
     op.drop_column("ppenorm", "item_id")
