@@ -85,7 +85,7 @@ async def issue_ppe_item(
         issued_at=issued_value,
         expires_at=expires_value,
         wear_days=wear_value,
-        status=PPEIssueStatus.ISSUED,
+        status=PPEIssueStatus.ISSUED.value,
     )
     session.add(record)
     await session.flush()

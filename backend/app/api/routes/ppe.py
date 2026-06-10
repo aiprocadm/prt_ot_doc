@@ -311,7 +311,7 @@ async def create_issue(
             "quantity": issue.quantity,
             "issued_at": issue.issued_at,
             "expires_at": issue.expires_at,
-            "status": issue.status.value,
+            "status": issue.status,
         },
     )
     return _issue_schema(issue)
@@ -343,6 +343,8 @@ async def update_issue(
     issue = await _get_issue(session, tenant, issue_id)
     previous_status = issue.status
     updates = payload.model_dump(exclude_unset=True)
+    if isinstance(updates.get("status"), PPEIssueStatus):
+        updates["status"] = updates["status"].value
     for field, value in updates.items():
         setattr(issue, field, value)
     if issue.status == PPEIssueStatus.RETURNED and issue.returned_at is None:
@@ -363,7 +365,7 @@ async def update_issue(
                 "item_id": issue.item_id,
                 "quantity": issue.quantity,
                 "returned_at": issue.returned_at or datetime.now(timezone.utc),
-                "status": issue.status.value,
+                "status": issue.status,
             },
         )
     return _issue_schema(issue)

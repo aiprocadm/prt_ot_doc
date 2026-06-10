@@ -741,6 +741,9 @@ class Person(TenantBaseModel, SoftDeleteMixin):
     snils: Mapped[str | None] = mapped_column(String(32))
     passport: Mapped[str | None] = mapped_column(String(64))
     current_ppe: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    # 766н: рост и размеры СИЗ работника (одежда/обувь/головной убор/СИЗОД/
+    # перчатки/рукавицы). JSON: состав ключей зависит от выдаваемых СИЗ.
+    ppe_sizes: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     working_conditions_class: Mapped[str | None] = mapped_column(String(32))
     hazardous_factors: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     # values_callable: SQLAlchemy ``Enum`` defaults to sending the Python
@@ -1405,9 +1408,13 @@ class PPENorm(TenantBaseModel):
     item_name: Mapped[str] = mapped_column(String(255), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     interval_days: Mapped[int] = mapped_column(Integer, nullable=False, default=365)
+    item_id: Mapped[str | None] = mapped_column(
+        ForeignKey("ppeitem.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     position: Mapped[Position] = relationship(backref="ppe_norms")
     hazard: Mapped["RiskHazard"] = relationship("RiskHazard")
+    item: Mapped["PPEItem | None"] = relationship("PPEItem")
 
     __table_args__ = (
         UniqueConstraint(
@@ -1447,6 +1454,8 @@ class PPEItem(TenantBaseModel, SoftDeleteMixin):
 class PPEIssueStatus(str, enum.Enum):
     ISSUED = "issued"
     RETURNED = "returned"
+    WRITTEN_OFF = "written_off"
+    REPLACED = "replaced"
     LOST = "lost"
 
 
@@ -1463,9 +1472,18 @@ class PPEIssue(TenantBaseModel, SoftDeleteMixin):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     returned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     wear_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    status: Mapped[PPEIssueStatus] = mapped_column(
-        Enum(PPEIssueStatus), nullable=False, default=PPEIssueStatus.ISSUED
+    # VARCHAR, not a native PG enum (sz01 converted the column; values are
+    # the lowercase PPEIssueStatus .value strings — анти-грабли after the
+    # PG enum incidents, same convention as medical/contractors).
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=PPEIssueStatus.ISSUED.value
     )
+    certificate_no: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    wear_percent: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    return_wear_percent: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    signature_doc_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    writeoff_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    replaces_issue_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
 
     person: Mapped[Person] = relationship(backref="ppe_issues")
     item: Mapped[PPEItem | None] = relationship("PPEItem", backref="issues")
