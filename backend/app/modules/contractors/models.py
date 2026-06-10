@@ -3,7 +3,8 @@ from __future__ import annotations
 import enum
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, Index, String, Text
+from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Index, String, Text
+from sqlalchemy import true as sa_true
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import SoftDeleteMixin, TenantBaseModel
@@ -119,4 +120,24 @@ class ContractorDocument(TenantBaseModel, SoftDeleteMixin):
         Index("ix_contractor_documents_tenant_employee", "tenant_id", "employee_id"),
         Index("ix_contractor_documents_tenant_valid", "tenant_id", "valid_until"),
         Index("ix_contractor_documents_tenant_type", "tenant_id", "doc_type"),
+    )
+
+
+class ContractorDocumentRequirement(TenantBaseModel, SoftDeleteMixin):
+    """Tenant-level policy: which document types are required for admission, and how.
+
+    scope routes where a satisfying document is looked for: "company" → contractor-level
+    documents (employee_id IS NULL); "employee" → the employee's own documents.
+    doc_type/scope are VARCHAR (validated at the schema layer), NOT PG enums — keeps the
+    table out of the enum-label-parity migration class (PR #635–#638).
+    """
+
+    __tablename__ = "contractor_document_requirement"
+
+    doc_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    scope: Mapped[str] = mapped_column(String(16), nullable=False)  # "company" | "employee"
+    mandatory: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=sa_true())
+
+    __table_args__ = (
+        Index("ix_contractor_doc_req_tenant_type", "tenant_id", "doc_type"),
     )
