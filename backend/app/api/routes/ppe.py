@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
@@ -312,8 +312,8 @@ async def create_norm(
         PPENorm.tenant_id == tenant.id,
         PPENorm.position_id == payload.position_id,
         PPENorm.hazard_id == payload.hazard_id,
-        PPENorm.item_name == item.name,
-    ))).scalar_one_or_none()
+        or_(PPENorm.item_name == item.name, PPENorm.item_id == item.id),
+    ))).scalars().first()
     if existing is not None:
         raise _norm_duplicate_conflict()
 
@@ -360,9 +360,9 @@ async def update_norm(
             PPENorm.tenant_id == tenant.id,
             PPENorm.position_id == norm.position_id,
             PPENorm.hazard_id == norm.hazard_id,
-            PPENorm.item_name == item.name,
+            or_(PPENorm.item_name == item.name, PPENorm.item_id == item.id),
             PPENorm.id != norm.id,
-        ))).scalar_one_or_none()
+        ))).scalars().first()
         if dup is not None:
             raise _norm_duplicate_conflict()
         norm.item_id = item.id
