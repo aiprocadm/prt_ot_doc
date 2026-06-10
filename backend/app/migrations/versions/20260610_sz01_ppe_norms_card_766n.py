@@ -10,6 +10,8 @@ Additive columns + one in-place type conversion:
 
 Downgrade is honest about asymmetry: it refuses when written_off/replaced rows
 exist (those values are unrepresentable in the old 3-value enum).
+On SQLite the downgrade only uppercases data (no type narrowing back to
+VARCHAR(8)) — deliberate, SQLite does not enforce VARCHAR length anyway.
 """
 from __future__ import annotations
 
@@ -62,7 +64,7 @@ def upgrade() -> None:
         with op.batch_alter_table("ppeissue") as batch:
             batch.alter_column(
                 "status",
-                existing_type=sa.String(length=32),
+                existing_type=sa.String(length=8),
                 type_=sa.String(length=32),
                 existing_nullable=False,
             )
@@ -92,6 +94,8 @@ def downgrade() -> None:
             "ALTER TABLE ppeissue ALTER COLUMN status TYPE ppeissuestatus "
             "USING upper(status)::ppeissuestatus"
         )
+        # iter38 established DEFAULT 'ISSUED' (enum NAME label) — restore it.
+        op.execute("ALTER TABLE ppeissue ALTER COLUMN status SET DEFAULT 'ISSUED'")
     else:
         op.execute("UPDATE ppeissue SET status = upper(status)")
 

@@ -1483,6 +1483,8 @@ class PPEIssue(TenantBaseModel, SoftDeleteMixin):
     return_wear_percent: Mapped[int | None] = mapped_column(Integer, nullable=True)
     signature_doc_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
     writeoff_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Plain string ref, no FK: the replacement chain must survive hard deletes
+    # of old issues (same анти-грабли convention as contractor_documents.file_id).
     replaces_issue_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
 
     person: Mapped[Person] = relationship(backref="ppe_issues")

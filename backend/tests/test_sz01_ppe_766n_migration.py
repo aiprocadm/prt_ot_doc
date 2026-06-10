@@ -68,3 +68,37 @@ def test_migration_downgrade_guards_new_values():
     # honest asymmetry: downgrade must refuse if written_off/replaced rows exist
     assert "written_off" in src and "replaced" in src
     assert "RuntimeError" in src
+
+
+def test_downgrade_guard_raises_before_destructive_ops(monkeypatch):
+    """Semantic check: with written_off/replaced rows present, downgrade()
+    raises RuntimeError before issuing any destructive op.* call."""
+    import importlib.util
+
+    import pytest as _pytest
+
+    spec = importlib.util.spec_from_file_location("sz01_migration", MIGRATION)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    class _FakeResult:
+        def scalar(self):
+            return 1  # written_off/replaced rows exist
+
+    class _FakeBind:
+        class dialect:
+            name = "postgresql"
+
+        def execute(self, *_args, **_kwargs):
+            return _FakeResult()
+
+    destructive_calls: list[str] = []
+    monkeypatch.setattr(module.op, "get_bind", lambda: _FakeBind())
+    monkeypatch.setattr(module.op, "execute", lambda *a, **k: destructive_calls.append("execute"))
+    monkeypatch.setattr(module.op, "drop_index", lambda *a, **k: destructive_calls.append("drop_index"))
+    monkeypatch.setattr(module.op, "drop_column", lambda *a, **k: destructive_calls.append("drop_column"))
+    monkeypatch.setattr(module.op, "drop_constraint", lambda *a, **k: destructive_calls.append("drop_constraint"))
+
+    with _pytest.raises(RuntimeError, match="written_off/replaced"):
+        module.downgrade()
+    assert destructive_calls == []
