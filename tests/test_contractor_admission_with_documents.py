@@ -92,3 +92,23 @@ async def test_inactive_document_does_not_satisfy(sessionmaker, data_factory):
         verdicts = await evaluate_with_documents(session, employees=[emp])
 
     assert verdicts[0].status is ReadinessStatus.BLOCKED  # archived doc ignored → MISSING
+
+
+@pytest.mark.asyncio
+async def test_requirements_are_tenant_isolated(sessionmaker, data_factory):
+    """A requirement in tenant A must not gate an employee of tenant B."""
+    from app.services.contractor_admission import evaluate_with_documents
+
+    async with sessionmaker() as session:
+        tenant = await data_factory.ensure_tenant(session=session)
+        tid = str(tenant.id)
+        emp = await _seed_ready_employee(session, tid)
+        # A mandatory requirement owned by a DIFFERENT tenant.
+        session.add(ContractorDocumentRequirement(
+            tenant_id="other-tenant", doc_type="medical_cert", scope="employee", mandatory=True,
+        ))
+        await session.commit()
+        verdicts = await evaluate_with_documents(session, employees=[emp])
+
+    # The foreign-tenant rule does not apply → base 3-dim verdict stands.
+    assert verdicts[0].status is ReadinessStatus.ALLOWED

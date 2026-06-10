@@ -47,3 +47,5 @@ async def test_missing_docs_count_reflects_document_violations(sessionmaker, dat
         )).scalar_one()
         assert row.missing_docs_count == 1
         assert row.readiness_status == "blocked"
+        # the document violation also folds into the aggregate overdue/violations counter
+        assert row.overdue_items_count >= 1
