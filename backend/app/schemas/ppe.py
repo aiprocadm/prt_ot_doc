@@ -156,6 +156,50 @@ class PPEIssueReplaceRequest(BaseSchema):
     signature_doc_ref: str | None = Field(default=None, max_length=255)
 
 
+class PPECardRequiredLine(BaseSchema):
+    item_id: str | None
+    item_name: str
+    required_quantity: int
+    interval_days: int | None
+    status: str
+
+
+class PPECardTimelineEvent(BaseSchema):
+    occurred_at: datetime
+    event: str
+    issue_id: str
+    item_name: str
+
+
+class PPECardRead(BaseSchema):
+    person_id: str
+    full_name: str
+    personnel_number: str | None
+    hired_at: date | None
+    position_name: str | None
+    sizes: dict[str, Any] | None
+    required: list[PPECardRequiredLine]
+    issues: list[PPEIssueRead]
+    timeline: list[PPECardTimelineEvent]
+    summary_status: str
+
+
+class PPESizesUpdate(BaseSchema):
+    height: int | None = Field(default=None, ge=100, le=250)
+    clothing_size: str | None = Field(default=None, max_length=16)
+    shoe_size: str | None = Field(default=None, max_length=16)
+    headgear_size: str | None = Field(default=None, max_length=16)
+    gas_mask_size: str | None = Field(default=None, max_length=16)
+    respirator_size: str | None = Field(default=None, max_length=16)
+    gloves_size: str | None = Field(default=None, max_length=16)
+    mittens_size: str | None = Field(default=None, max_length=16)
+
+
+class PPESizesRead(BaseSchema):
+    person_id: str
+    sizes: dict[str, Any] | None
+
+
 class PPEStockBatchCreate(BaseSchema):
     item_id: str
     batch_no: str

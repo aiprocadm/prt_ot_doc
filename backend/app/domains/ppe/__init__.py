@@ -2,6 +2,7 @@
 
 from app.domains.ppe.service import (
     build_journal_export,
+    build_personal_card_766n,
     build_personal_card_payload,
     issue_ppe_item,
     list_expiring_issues,
@@ -11,6 +12,7 @@ from app.domains.ppe.service import (
 )
 
 __all__ = [
+    "build_personal_card_766n",
     "build_personal_card_payload",
     "build_journal_export",
     "issue_ppe_item",

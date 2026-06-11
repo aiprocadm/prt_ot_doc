@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.ppe import lifecycle as lc
+from app.modules.ppe.services import NormItem, PPENormService
 from app.models.models import (
     Journal,
     JournalEntry,
@@ -252,6 +253,148 @@ async def build_personal_card_payload(
     )
     issues = (await session.execute(issue_stmt)).scalars().all()
     return PPEPersonalCard(person=person, position=position, norms=list(norms), issues=list(issues))
+
+
+@dataclass(slots=True)
+class CardRequiredLine:
+    item_id: str | None
+    item_name: str
+    required_quantity: int
+    interval_days: int | None
+    status: str
+
+
+@dataclass(slots=True)
+class CardTimelineEvent:
+    occurred_at: datetime
+    event: str
+    issue_id: str
+    item_name: str
+
+
+@dataclass(slots=True)
+class PersonalCard766n:
+    person: Person
+    position: Position | None
+    required: list[CardRequiredLine]
+    issues: list[PPEIssue]
+    timeline: list[CardTimelineEvent]
+    summary_status: str
+
+
+def _issue_line_key(item_id: str | None, item_name: str) -> str:
+    return item_id or f"name:{item_name}"
+
+
+async def build_personal_card_766n(
+    session: AsyncSession, *, tenant_id: str, person_id: str
+) -> PersonalCard766n | None:
+    """766н personal card: required-by-norms vs issued, with line statuses and timeline.
+
+    Required quantities are the max per catalog item across the position's norms
+    (union over hazards). Issues are matched by item_id, with an item_name
+    fallback for legacy norms that predate the catalog link.
+    """
+    stmt = select(Person).where(
+        Person.id == person_id,
+        Person.tenant_id == tenant_id,
+        Person.deleted_at.is_(None),
+    )
+    person = (await session.execute(stmt)).scalar_one_or_none()
+    if person is None:
+        return None
+
+    position: Position | None = None
+    norms: list[PPENorm] = []
+    if person.position_id:
+        position = await _get_position(session, tenant_id, person.position_id)
+        norms = list((await session.execute(select(PPENorm).where(
+            PPENorm.tenant_id == tenant_id,
+            PPENorm.position_id == person.position_id,
+        ))).scalars().all())
+
+    issues = list((await session.execute(
+        select(PPEIssue).where(
+            PPEIssue.tenant_id == tenant_id,
+            PPEIssue.person_id == person.id,
+            PPEIssue.deleted_at.is_(None),
+        ).order_by(PPEIssue.issued_at.asc())
+    )).scalars().all())
+
+    # «Положено»: max по позиции каталога через переиспользуемый required_union.
+    norm_items = [
+        NormItem(
+            applies_to_type="position",
+            applies_to_id=str(person.position_id),
+            ppe_catalog_id=_issue_line_key(norm.item_id, norm.item_name),
+            quantity=float(norm.quantity),
+            period_months=None,
+        )
+        for norm in norms
+    ]
+    required_qty = PPENormService.required_union(
+        position_id=str(person.position_id) if person.position_id else None,
+        workplace_id=None,
+        hazard_ids=set(),
+        norm_items=norm_items,
+    )
+    # Метаданные строки (имя/интервал) — по «лучшей» норме того же ключа.
+    line_meta: dict[str, PPENorm] = {}
+    for norm in norms:
+        key = _issue_line_key(norm.item_id, norm.item_name)
+        kept = line_meta.get(key)
+        if kept is None or norm.quantity > kept.quantity:
+            line_meta[key] = norm
+
+    issues_by_key: dict[str, list[lc.IssueView]] = {}
+    for issue in issues:
+        key = _issue_line_key(issue.item_id, issue.item_name)
+        issues_by_key.setdefault(key, []).append(lc.IssueView(
+            quantity=issue.quantity,
+            expires_at=issue.expires_at.date() if issue.expires_at else None,
+            status=str(issue.status),
+        ))
+
+    today = datetime.now(tz=timezone.utc).date()
+    required: list[CardRequiredLine] = []
+    for key, qty in required_qty.items():
+        norm = line_meta[key]
+        required.append(CardRequiredLine(
+            item_id=norm.item_id,
+            item_name=norm.item_name,
+            required_quantity=int(qty),
+            interval_days=norm.interval_days,
+            status=lc.card_line_status(int(qty), issues_by_key.get(key, []), today),
+        ))
+    required.sort(key=lambda line: line.item_name)
+
+    timeline: list[CardTimelineEvent] = []
+    for issue in issues:
+        timeline.append(CardTimelineEvent(
+            occurred_at=issue.issued_at, event="issued",
+            issue_id=issue.id, item_name=issue.item_name,
+        ))
+        current = str(issue.status)
+        if current == lc.ISSUE_STATUS_RETURNED and issue.returned_at is not None:
+            timeline.append(CardTimelineEvent(
+                occurred_at=issue.returned_at, event="returned",
+                issue_id=issue.id, item_name=issue.item_name,
+            ))
+        elif current in (lc.ISSUE_STATUS_WRITTEN_OFF, lc.ISSUE_STATUS_REPLACED, lc.ISSUE_STATUS_LOST):
+            timeline.append(CardTimelineEvent(
+                occurred_at=issue.updated_at, event=current,
+                issue_id=issue.id, item_name=issue.item_name,
+            ))
+    timeline.sort(key=lambda e: e.occurred_at)
+
+    return PersonalCard766n(
+        person=person,
+        position=position,
+        required=required,
+        issues=issues,
+        timeline=timeline,
+        summary_status=lc.fold_card_status(line.status for line in required),
+    )
 
 
 async def build_journal_export(

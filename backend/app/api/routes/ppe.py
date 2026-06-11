@@ -21,6 +21,7 @@ from app.core.feature_flags import is_feature_enabled
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.domains.ppe import (
+    build_personal_card_766n,
     issue_ppe_item,
     list_expiring_issues,
     replace_issue,
@@ -28,11 +29,14 @@ from app.domains.ppe import (
     writeoff_issue,
 )
 from app.domains.ppe.lifecycle import PPETransitionError, validate_transition
-from app.models.models import Position, PPENorm
+from app.models.models import Person, Position, PPENorm
 from app.models.ppe_registry import PPEIssue, PPEIssueStatus, PPEItem, PPEStockBatch
 from app.models.risk import RiskHazard
 from app.models.tenanting import Tenant
 from app.schemas.ppe import (
+    PPECardRead,
+    PPECardRequiredLine,
+    PPECardTimelineEvent,
     PPEIssueCreate,
     PPEIssuePage,
     PPEIssueRead,
@@ -48,6 +52,8 @@ from app.schemas.ppe import (
     PPEIssueReplaceRequest,
     PPEIssueReturnRequest,
     PPEIssueWriteoffRequest,
+    PPESizesRead,
+    PPESizesUpdate,
     PPEStockBatchCreate,
     PPEStockBatchPage,
     PPEStockBatchRead,
@@ -900,3 +906,74 @@ async def list_stock_levels(
         for row in rows
     ]
     return PPEStockLevelPage(items=levels, total=len(levels))
+
+
+# --- 766н: личная карточка учёта СИЗ + размеры работника ---------------------
+
+
+@router.get("/employees/{person_id}/card", response_model=PPECardRead)
+async def get_personal_card(
+    person_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+) -> PPECardRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    card = await build_personal_card_766n(session, tenant_id=tenant.id, person_id=person_id)
+    if card is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Person not found")
+    person = card.person
+    full_name = " ".join(part for part in (person.last_name, person.first_name, person.middle_name) if part)
+    return PPECardRead(
+        person_id=person.id,
+        full_name=full_name,
+        personnel_number=person.personnel_number,
+        hired_at=person.hired_at,
+        position_name=card.position.name if card.position else None,
+        sizes=person.ppe_sizes,
+        required=[
+            PPECardRequiredLine(
+                item_id=line.item_id, item_name=line.item_name,
+                required_quantity=line.required_quantity,
+                interval_days=line.interval_days, status=line.status,
+            )
+            for line in card.required
+        ],
+        issues=[_issue_schema(issue) for issue in card.issues],
+        timeline=[
+            PPECardTimelineEvent(
+                occurred_at=event.occurred_at, event=event.event,
+                issue_id=event.issue_id, item_name=event.item_name,
+            )
+            for event in card.timeline
+        ],
+        summary_status=card.summary_status,
+    )
+
+
+@router.put("/employees/{person_id}/sizes", response_model=PPESizesRead)
+@audit_operation("update", "person_ppe_sizes")
+async def put_person_sizes(
+    person_id: str,
+    payload: PPESizesUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPESizesRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    person = (await session.execute(select(Person).where(
+        Person.id == person_id,
+        Person.tenant_id == tenant.id,
+        Person.deleted_at.is_(None),
+    ))).scalar_one_or_none()
+    if person is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Person not found")
+    # PUT-семантика: полная замена; None-поля выбрасываются.
+    person.ppe_sizes = {
+        key: value
+        for key, value in payload.model_dump().items()
+        if value is not None
+    } or None
+    await session.flush()
+    await session.refresh(person)
+    return PPESizesRead(person_id=person.id, sizes=person.ppe_sizes)
