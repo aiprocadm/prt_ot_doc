@@ -9,6 +9,7 @@ from datetime import date, timedelta
 import pytest
 
 from app.domains.ppe.lifecycle import (
+    ADMISSION_BLOCKING_STATUSES,
     ISSUE_STATUS_ISSUED,
     ISSUE_STATUS_LOST,
     ISSUE_STATUS_REPLACED,
@@ -18,6 +19,8 @@ from app.domains.ppe.lifecycle import (
     PPETransitionError,
     card_line_status,
     fold_card_status,
+    match_issues_for_norm_line,
+    norm_line_key,
     validate_transition,
 )
 
@@ -103,3 +106,34 @@ def test_fold_worst_of():
     assert fold_card_status(["ok", "overdue", "due_soon"]) == "overdue"
     assert fold_card_status(["missing", "overdue"]) == "missing"
     assert fold_card_status(["ok", "ok"]) == "ok"
+
+
+# --- norm-line matching helpers (shared by card + admission gate) ------------
+
+def test_norm_line_key_prefers_item_id():
+    assert norm_line_key("item-1", "Каска") == "item-1"
+    assert norm_line_key(None, "Каска") == "name:Каска"
+
+
+def test_match_union_of_id_and_name_dedupes_by_issue_id():
+    v1, v2 = _issue(), _issue(qty=2)
+    by_id = {"item-1": [("iss-1", v1)]}
+    by_name = {"Каска": [("iss-1", v1), ("iss-2", v2)]}
+    views = match_issues_for_norm_line("item-1", "Каска", by_id, by_name)
+    assert len(views) == 2  # iss-1 deduped, iss-2 added by name
+
+
+def test_match_name_only_norm_ignores_id_index():
+    v = _issue()
+    views = match_issues_for_norm_line(
+        None, "Каска", {"item-1": [("iss-1", v)]}, {"Каска": [("iss-1", v)]}
+    )
+    assert views == [v]
+
+
+def test_match_no_hits_is_empty():
+    assert match_issues_for_norm_line("item-x", "Нет такого", {}, {}) == []
+
+
+def test_admission_blocking_statuses_contract():
+    assert ADMISSION_BLOCKING_STATUSES == frozenset({"missing", "overdue"})
