@@ -128,21 +128,11 @@ from app.models.safety_core import (
 from app.models.safety_core import (
     HazardBinding,
     HazardMeasure,
-    PPECatalog,
-    PPENormItem,
-    PPEPersonalCard,
-    PPEPersonalCardItem,
     RiskMapItem,
     RiskMapItemMeasure,
     RiskMeasure,
     SafetyRiskMap,
     SafetyRiskMethodology,
-)
-from app.models.safety_core import (
-    PPEIssue as SafetyPPEIssue,
-)
-from app.models.safety_core import (
-    PPENorm as SafetyPPENorm,
 )
 
 __all__ = [
@@ -214,12 +204,6 @@ __all__ = [
     "SafetyHazard",
     "HazardBinding",
     "HazardMeasure",
-    "PPECatalog",
-    "SafetyPPEIssue",
-    "SafetyPPENorm",
-    "PPENormItem",
-    "PPEPersonalCard",
-    "PPEPersonalCardItem",
     "SafetyRiskMap",
     "RiskMapItem",
     "RiskMapItemMeasure",
