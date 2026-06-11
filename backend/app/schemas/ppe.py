@@ -98,6 +98,9 @@ class PPEIssueCreate(BaseSchema):
     issued_at: datetime | None = None
     wear_days: int | None = Field(default=None, ge=1)
     expires_at: datetime | None = None
+    certificate_no: str | None = Field(default=None, max_length=255)
+    wear_percent: int | None = Field(default=None, ge=0, le=100)
+    signature_doc_ref: str | None = Field(default=None, max_length=255)
 
 
 class PPEIssueUpdate(BaseSchema):
@@ -118,6 +121,12 @@ class PPEIssueRead(BaseSchema):
     returned_at: datetime | None
     wear_days: int | None
     status: PPEIssueStatus
+    certificate_no: str | None
+    wear_percent: int | None
+    return_wear_percent: int | None
+    signature_doc_ref: str | None
+    writeoff_reason: str | None
+    replaces_issue_id: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -125,6 +134,26 @@ class PPEIssueRead(BaseSchema):
 class PPEIssuePage(BaseSchema):
     items: list[PPEIssueRead]
     total: int
+
+
+class PPEIssueReturnRequest(BaseSchema):
+    returned_at: datetime | None = None
+    return_wear_percent: int | None = Field(default=None, ge=0, le=100)
+    signature_doc_ref: str | None = Field(default=None, max_length=255)
+
+
+class PPEIssueWriteoffRequest(BaseSchema):
+    writeoff_reason: str = Field(min_length=1, max_length=255)
+
+
+class PPEIssueReplaceRequest(BaseSchema):
+    item_id: str | None = None  # default: тот же item, что у заменяемой выдачи
+    quantity: int | None = Field(default=None, ge=1)
+    wear_days: int | None = Field(default=None, ge=1)
+    expires_at: datetime | None = None
+    certificate_no: str | None = Field(default=None, max_length=255)
+    wear_percent: int | None = Field(default=None, ge=0, le=100)
+    signature_doc_ref: str | None = Field(default=None, max_length=255)
 
 
 class PPEStockBatchCreate(BaseSchema):

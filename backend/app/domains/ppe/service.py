@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domains.ppe import lifecycle as lc
 from app.models.models import (
     Journal,
     JournalEntry,
@@ -65,6 +66,9 @@ async def issue_ppe_item(
     issued_at: datetime | None = None,
     wear_days: int | None = None,
     expires_at: datetime | None = None,
+    certificate_no: str | None = None,
+    wear_percent: int | None = None,
+    signature_doc_ref: str | None = None,
 ) -> PPEIssue:
     """Issue a PPE item to a person and compute expiration."""
 
@@ -86,6 +90,9 @@ async def issue_ppe_item(
         expires_at=expires_value,
         wear_days=wear_value,
         status=PPEIssueStatus.ISSUED.value,
+        certificate_no=certificate_no,
+        wear_percent=wear_percent,
+        signature_doc_ref=signature_doc_ref,
     )
     session.add(record)
     await session.flush()
@@ -113,6 +120,107 @@ async def list_expiring_issues(
         PPEIssue.expires_at >= now,
     )
     return (await session.execute(stmt)).scalars().all()
+
+
+async def _get_issue_record(session: AsyncSession, tenant_id: str, issue_id: str) -> PPEIssue | None:
+    stmt = select(PPEIssue).where(
+        PPEIssue.id == issue_id,
+        PPEIssue.tenant_id == tenant_id,
+        PPEIssue.deleted_at.is_(None),
+    )
+    return (await session.execute(stmt)).scalar_one_or_none()
+
+
+async def return_issue(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    issue_id: str,
+    returned_at: datetime | None = None,
+    return_wear_percent: int | None = None,
+    signature_doc_ref: str | None = None,
+) -> PPEIssue | None:
+    """Mark an issue as returned. None when not found; PPETransitionError on FSM violation."""
+    issue = await _get_issue_record(session, tenant_id, issue_id)
+    if issue is None:
+        return None
+    lc.validate_transition(str(issue.status), lc.ISSUE_STATUS_RETURNED)
+    issue.status = lc.ISSUE_STATUS_RETURNED
+    issue.returned_at = returned_at or datetime.now(tz=timezone.utc)
+    if return_wear_percent is not None:
+        issue.return_wear_percent = return_wear_percent
+    if signature_doc_ref is not None:
+        issue.signature_doc_ref = signature_doc_ref
+    await session.flush()
+    await session.refresh(issue)
+    return issue
+
+
+async def writeoff_issue(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    issue_id: str,
+    reason: str,
+) -> PPEIssue | None:
+    """Write an issue off. None when not found; PPETransitionError on FSM violation."""
+    issue = await _get_issue_record(session, tenant_id, issue_id)
+    if issue is None:
+        return None
+    lc.validate_transition(str(issue.status), lc.ISSUE_STATUS_WRITTEN_OFF)
+    issue.status = lc.ISSUE_STATUS_WRITTEN_OFF
+    issue.writeoff_reason = reason
+    await session.flush()
+    await session.refresh(issue)
+    return issue
+
+
+async def replace_issue(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    issue_id: str,
+    item_id: str | None = None,
+    quantity: int | None = None,
+    wear_days: int | None = None,
+    expires_at: datetime | None = None,
+    certificate_no: str | None = None,
+    wear_percent: int | None = None,
+    signature_doc_ref: str | None = None,
+) -> tuple[PPEIssue, PPEIssue] | None:
+    """Close the old issue as replaced and create a linked new one.
+
+    Returns (old, new) or None when the old issue is not found.
+    Raises PPETransitionError when the old issue is not active.
+    """
+    old = await _get_issue_record(session, tenant_id, issue_id)
+    if old is None:
+        return None
+    lc.validate_transition(str(old.status), lc.ISSUE_STATUS_REPLACED)
+
+    new_item_id = item_id or old.item_id
+    if new_item_id is None:
+        raise ValueError("cannot replace an issue without item_id: specify item_id")
+
+    new = await issue_ppe_item(
+        session,
+        tenant_id=tenant_id,
+        person_id=old.person_id,
+        item_id=new_item_id,
+        quantity=quantity or old.quantity,
+        wear_days=wear_days,
+        expires_at=expires_at,
+        certificate_no=certificate_no,
+        wear_percent=wear_percent,
+        signature_doc_ref=signature_doc_ref,
+    )
+    new.replaces_issue_id = old.id
+
+    old.status = lc.ISSUE_STATUS_REPLACED
+    await session.flush()
+    await session.refresh(new)
+    await session.refresh(old)
+    return old, new
 
 
 async def build_personal_card_payload(

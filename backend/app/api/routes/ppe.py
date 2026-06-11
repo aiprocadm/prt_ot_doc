@@ -20,7 +20,14 @@ from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_feature_enabled
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
-from app.domains.ppe import issue_ppe_item, list_expiring_issues
+from app.domains.ppe import (
+    issue_ppe_item,
+    list_expiring_issues,
+    replace_issue,
+    return_issue,
+    writeoff_issue,
+)
+from app.domains.ppe.lifecycle import PPETransitionError, validate_transition
 from app.models.models import Position, PPENorm
 from app.models.ppe_registry import PPEIssue, PPEIssueStatus, PPEItem, PPEStockBatch
 from app.models.risk import RiskHazard
@@ -38,6 +45,9 @@ from app.schemas.ppe import (
     PPENormPage,
     PPENormRead,
     PPENormUpdate,
+    PPEIssueReplaceRequest,
+    PPEIssueReturnRequest,
+    PPEIssueWriteoffRequest,
     PPEStockBatchCreate,
     PPEStockBatchPage,
     PPEStockBatchRead,
@@ -74,6 +84,17 @@ def _ppe_bad_request(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
         detail=api_problem_detail(code="PPE_VALIDATION_ERROR", message=message, error_type="ppe"),
+    )
+
+
+def _transition_conflict(exc: PPETransitionError) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=api_problem_detail(
+            code="PPE_TRANSITION_INVALID",
+            message=str(exc),
+            error_type="ppe",
+        ),
     )
 
 
@@ -469,6 +490,9 @@ async def create_issue(
             issued_at=payload.issued_at,
             wear_days=payload.wear_days,
             expires_at=payload.expires_at,
+            certificate_no=payload.certificate_no,
+            wear_percent=payload.wear_percent,
+            signature_doc_ref=payload.signature_doc_ref,
         )
     except ValueError as exc:
         raise _ppe_bad_request(str(exc)) from exc
@@ -490,6 +514,132 @@ async def create_issue(
         },
     )
     return _issue_schema(issue)
+
+
+@router.post("/issues/{issue_id}/return", response_model=PPEIssueRead)
+@audit_operation("update", "ppe_issue")
+async def return_issue_endpoint(
+    issue_id: str,
+    payload: PPEIssueReturnRequest,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPEIssueRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        issue = await return_issue(
+            session, tenant_id=tenant.id, issue_id=issue_id,
+            returned_at=payload.returned_at,
+            return_wear_percent=payload.return_wear_percent,
+            signature_doc_ref=payload.signature_doc_ref,
+        )
+    except PPETransitionError as exc:
+        raise _transition_conflict(exc) from exc
+    if issue is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE issue not found")
+    outbox = OutboxService(session)
+    await outbox.enqueue(
+        tenant_id=str(tenant.id),
+        event_type=EventType.PPE_RETURNED.value,
+        payload={
+            "tenant_id": str(tenant.id),
+            "actor_id": access.user.id if access else None,
+            "occurred_at": issue.returned_at,
+            "ppe_issue_id": issue.id,
+            "person_id": issue.person_id,
+            "item_id": issue.item_id,
+            "quantity": issue.quantity,
+            "returned_at": issue.returned_at,
+            "status": issue.status,
+        },
+    )
+    return _issue_schema(issue)
+
+
+@router.post("/issues/{issue_id}/writeoff", response_model=PPEIssueRead)
+@audit_operation("update", "ppe_issue")
+async def writeoff_issue_endpoint(
+    issue_id: str,
+    payload: PPEIssueWriteoffRequest,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPEIssueRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        issue = await writeoff_issue(
+            session, tenant_id=tenant.id, issue_id=issue_id, reason=payload.writeoff_reason,
+        )
+    except PPETransitionError as exc:
+        raise _transition_conflict(exc) from exc
+    if issue is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE issue not found")
+    outbox = OutboxService(session)
+    await outbox.enqueue(
+        tenant_id=str(tenant.id),
+        event_type=EventType.PPE_WRITTEN_OFF.value,
+        payload={
+            "tenant_id": str(tenant.id),
+            "actor_id": access.user.id if access else None,
+            "occurred_at": datetime.now(timezone.utc),
+            "ppe_issue_id": issue.id,
+            "person_id": issue.person_id,
+            "item_id": issue.item_id,
+            "quantity": issue.quantity,
+            "reason": issue.writeoff_reason,
+            "status": issue.status,
+        },
+    )
+    return _issue_schema(issue)
+
+
+@router.post(
+    "/issues/{issue_id}/replace",
+    response_model=PPEIssueRead,
+    status_code=status.HTTP_201_CREATED,
+)
+@audit_operation("update", "ppe_issue")
+async def replace_issue_endpoint(
+    issue_id: str,
+    payload: PPEIssueReplaceRequest,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPEIssueRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        result = await replace_issue(
+            session, tenant_id=tenant.id, issue_id=issue_id,
+            item_id=payload.item_id, quantity=payload.quantity,
+            wear_days=payload.wear_days, expires_at=payload.expires_at,
+            certificate_no=payload.certificate_no, wear_percent=payload.wear_percent,
+            signature_doc_ref=payload.signature_doc_ref,
+        )
+    except PPETransitionError as exc:
+        raise _transition_conflict(exc) from exc
+    except ValueError as exc:
+        raise _ppe_bad_request(str(exc)) from exc
+    if result is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE issue not found")
+    _old, new_issue = result
+    outbox = OutboxService(session)
+    await outbox.enqueue(
+        tenant_id=str(tenant.id),
+        event_type=EventType.PPE_ISSUED.value,
+        payload={
+            "tenant_id": str(tenant.id),
+            "actor_id": access.user.id if access else None,
+            "occurred_at": new_issue.issued_at,
+            "ppe_issue_id": new_issue.id,
+            "person_id": new_issue.person_id,
+            "item_id": new_issue.item_id,
+            "quantity": new_issue.quantity,
+            "issued_at": new_issue.issued_at,
+            "expires_at": new_issue.expires_at,
+            "status": new_issue.status,
+        },
+    )
+    return _issue_schema(new_issue)
 
 
 @router.get("/issues/{issue_id}", response_model=PPEIssueRead)
@@ -520,6 +670,12 @@ async def update_issue(
     updates = payload.model_dump(exclude_unset=True)
     if isinstance(updates.get("status"), PPEIssueStatus):
         updates["status"] = updates["status"].value
+    new_status = updates.get("status")
+    if new_status is not None and new_status != issue.status:
+        try:
+            validate_transition(str(issue.status), str(new_status))
+        except PPETransitionError as exc:
+            raise _transition_conflict(exc) from exc
     for field, value in updates.items():
         setattr(issue, field, value)
     if issue.status == PPEIssueStatus.RETURNED and issue.returned_at is None:

@@ -5,6 +5,9 @@ from app.domains.ppe.service import (
     build_personal_card_payload,
     issue_ppe_item,
     list_expiring_issues,
+    replace_issue,
+    return_issue,
+    writeoff_issue,
 )
 
 __all__ = [
@@ -12,4 +15,7 @@ __all__ = [
     "build_journal_export",
     "issue_ppe_item",
     "list_expiring_issues",
+    "replace_issue",
+    "return_issue",
+    "writeoff_issue",
 ]
