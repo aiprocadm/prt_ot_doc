@@ -307,7 +307,11 @@ async def build_personal_card_766n(
     position: Position | None = None
     norms: list[PPENorm] = []
     if person.position_id:
-        position = await _get_position(session, tenant_id, person.position_id)
+        position = (await session.execute(select(Position).where(
+            Position.id == person.position_id,
+            Position.tenant_id == tenant_id,
+            Position.deleted_at.is_(None),
+        ))).scalar_one_or_none()
         norms = list((await session.execute(select(PPENorm).where(
             PPENorm.tenant_id == tenant_id,
             PPENorm.position_id == person.position_id,
@@ -346,14 +350,31 @@ async def build_personal_card_766n(
         if kept is None or norm.quantity > kept.quantity:
             line_meta[key] = norm
 
-    issues_by_key: dict[str, list[lc.IssueView]] = {}
+    issues_by_id: dict[str, list[tuple[str, lc.IssueView]]] = {}
+    issues_by_name: dict[str, list[tuple[str, lc.IssueView]]] = {}
     for issue in issues:
-        key = _issue_line_key(issue.item_id, issue.item_name)
-        issues_by_key.setdefault(key, []).append(lc.IssueView(
+        view = lc.IssueView(
             quantity=issue.quantity,
             expires_at=issue.expires_at.date() if issue.expires_at else None,
             status=str(issue.status),
-        ))
+        )
+        if issue.item_id:
+            issues_by_id.setdefault(issue.item_id, []).append((issue.id, view))
+        issues_by_name.setdefault(issue.item_name, []).append((issue.id, view))
+
+    def _views_for_line(norm: PPENorm) -> list[lc.IssueView]:
+        """Union of id-matched and name-matched issues, deduped by issue id.
+
+        Covers both legacy directions: norm without item_id vs catalog issue,
+        and norm with item_id vs legacy issue that predates the catalog link.
+        """
+        seen: dict[str, lc.IssueView] = {}
+        if norm.item_id:
+            for issue_id, view in issues_by_id.get(norm.item_id, []):
+                seen[issue_id] = view
+        for issue_id, view in issues_by_name.get(norm.item_name, []):
+            seen.setdefault(issue_id, view)
+        return list(seen.values())
 
     today = datetime.now(tz=timezone.utc).date()
     required: list[CardRequiredLine] = []
@@ -364,7 +385,7 @@ async def build_personal_card_766n(
             item_name=norm.item_name,
             required_quantity=int(qty),
             interval_days=norm.interval_days,
-            status=lc.card_line_status(int(qty), issues_by_key.get(key, []), today),
+            status=lc.card_line_status(int(qty), _views_for_line(norm), today),
         ))
     required.sort(key=lambda line: line.item_name)
 

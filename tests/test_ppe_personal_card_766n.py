@@ -135,3 +135,59 @@ async def test_put_sizes_validates_and_persists(async_client, make_auth_headers,
         "height": 999,
     })
     assert bad.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+@pytest.mark.asyncio
+async def test_legacy_norm_without_item_id_matches_catalog_issue(async_client, make_auth_headers, sessionmaker, data_factory):
+    """Pre-sz01 norm (no item_id) must be satisfied by a catalog-issued item with the same name."""
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    tenant = await data_factory.ensure_tenant(slug="test")
+    company = await data_factory.create_company(tenant=tenant, name="Legacy Co")
+    async with sessionmaker() as session:
+        position = Position(tenant_id=tenant.id, company_id=company.id, name="Аппаратчик")
+        hazard = RiskHazard(tenant_id=tenant.id, code="legacy", title="Legacy фактор")
+        item = PPEItem(tenant_id=tenant.id, name="Респиратор У-2К", default_wear_days=180)
+        session.add_all([position, hazard, item])
+        await session.flush()
+        session.add(PPENorm(  # legacy: item_id is None
+            tenant_id=tenant.id, position_id=position.id, hazard_id=hazard.id,
+            item_id=None, item_name="Респиратор У-2К", quantity=1, interval_days=180,
+        ))
+        await session.commit()
+        position_id, item_id = str(position.id), str(item.id)
+    person = await data_factory.create_person(tenant=tenant, company=company, position_id=position_id)
+    async with sessionmaker() as session:
+        session.add(PPEIssue(  # catalog issue WITH item_id
+            tenant_id=str(tenant.id), person_id=person.id, item_id=item_id,
+            item_name="Респиратор У-2К", quantity=1, issued_at=NOW,
+            expires_at=NOW + timedelta(days=170), status="issued",
+        ))
+        await session.commit()
+
+    resp = await async_client.get(CARD.format(person_id=str(person.id)), headers=headers)
+    assert resp.status_code == status.HTTP_200_OK, resp.text
+    card = resp.json()
+    assert card["required"][0]["status"] == "ok", card["required"]
+    assert card["summary_status"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_card_with_soft_deleted_position_renders(async_client, make_auth_headers, sessionmaker, data_factory):
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    tenant = await data_factory.ensure_tenant(slug="test")
+    company = await data_factory.create_company(tenant=tenant, name="SoftDel Co")
+    async with sessionmaker() as session:
+        position = Position(tenant_id=tenant.id, company_id=company.id, name="Упразднённая")
+        session.add(position)
+        await session.flush()
+        position_id = str(position.id)
+        await session.commit()
+    person = await data_factory.create_person(tenant=tenant, company=company, position_id=position_id)
+    async with sessionmaker() as session:
+        pos = (await session.execute(select(Position).where(Position.id == position_id))).scalar_one()
+        pos.deleted_at = datetime.now(timezone.utc)
+        await session.commit()
+
+    resp = await async_client.get(CARD.format(person_id=str(person.id)), headers=headers)
+    assert resp.status_code == status.HTTP_200_OK, resp.text
+    assert resp.json()["position_name"] is None
