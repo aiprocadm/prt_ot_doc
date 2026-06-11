@@ -2339,8 +2339,8 @@ class SecurityAuditLog(TenantBaseModel):
 
 # WarehousePPE ORM class was removed in СИЗ Срез-1 (2026-06-11): dead orphan
 # from initial_schema (item_name+quantity+location) without endpoints/services/
-# relationships. Its table (warehouseppe) remains in the DB; DROP is a separate
-# migration outside this slice.
+# relationships. Its table (warehouseppe) was dropped by migration sz02
+# (20260611_sz02_drop_ppe_family_b_tables).
 
 
 class JournalType(str, enum.Enum):
