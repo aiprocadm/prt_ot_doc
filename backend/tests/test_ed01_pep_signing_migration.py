@@ -95,4 +95,4 @@ def test_pg_branch_has_using_cast_and_type_lifecycle():
     assert "DROP TYPE IF EXISTS signaturerequeststatus" in src
     assert "CREATE TYPE signaturerequeststatus AS ENUM ('created', 'requested', 'signed', 'failed')" in src
     assert "USING status::signaturerequeststatus" in src
-    assert "awaiting_code" in src and "declined" in src and "expired" in src  # downgrade blocker
+    assert "NOT IN ('created', 'requested', 'signed', 'failed')" in src  # downgrade blocker (inverted)

@@ -66,16 +66,19 @@ def downgrade() -> None:
     bind = op.get_bind()
     dialect = bind.dialect.name
 
+    # Block on ANY status outside the original 4-value enum: after ed01 the
+    # varchar column legally stores canceled/verifying/verified too — not just
+    # the three PEP values — and the old enum cannot accommodate any of them.
     blockers = bind.execute(
         sa.text(
             "SELECT COUNT(*) FROM signature_requests "
-            "WHERE status IN ('awaiting_code', 'declined', 'expired')"
+            "WHERE status NOT IN ('created', 'requested', 'signed', 'failed')"
         )
     ).scalar()
     if blockers:
         raise RuntimeError(
-            "ed01 downgrade blocked: signature_requests contains PEP statuses "
-            "(awaiting_code/declined/expired) unknown to the pre-ed01 enum; "
+            "ed01 downgrade blocked: signature_requests contains statuses unknown "
+            "to the pre-ed01 enum (e.g. awaiting_code/declined/expired/canceled); "
             f"rows={blockers}"
         )
 
