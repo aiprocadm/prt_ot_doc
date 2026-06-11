@@ -44,8 +44,16 @@ class _FakeDialect:
     name = "sqlite"
 
 
+class _FakeResult:
+    def scalar(self):
+        return 0
+
+
 class _FakeBind:
     dialect = _FakeDialect()
+
+    def execute(self, *a, **k):
+        return _FakeResult()
 
 
 def test_migration_revision_chain():
@@ -79,3 +87,12 @@ def test_downgrade_drops_exactly_pep_columns(monkeypatch):
     monkeypatch.setattr(module.op, "get_bind", lambda: _FakeBind())
     module.downgrade()
     assert {(t, c) for t, c in dropped} == {("signature_requests", c) for c in PEP_COLUMNS}
+
+
+def test_pg_branch_has_using_cast_and_type_lifecycle():
+    src = MIGRATION.read_text(encoding="utf-8")
+    assert "USING status::text" in src
+    assert "DROP TYPE IF EXISTS signaturerequeststatus" in src
+    assert "CREATE TYPE signaturerequeststatus AS ENUM ('created', 'requested', 'signed', 'failed')" in src
+    assert "USING status::signaturerequeststatus" in src
+    assert "awaiting_code" in src and "declined" in src and "expired" in src  # downgrade blocker

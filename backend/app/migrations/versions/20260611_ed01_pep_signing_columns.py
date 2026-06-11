@@ -6,14 +6,16 @@ one-time confirm-code state — plus a status widening VARCHAR(16)->VARCHAR(32)
 for the new awaiting_code/declined/expired values. New rows are written with
 signature_type='pep', provider='internal'; legacy kep/unep rows are untouched.
 
-Downgrade drops the six columns and narrows status back; on PG the narrowing
-fails honestly if rows carry status values longer than 16 chars (same policy
-as sz01's honest downgrade on written_off/replaced).
+Downgrade drops the six columns and (on PG) restores the native enum type;
+it refuses to run while rows carry the new PEP statuses
+(awaiting_code/declined/expired) and the enum cast is a second honest-failure
+line. On SQLite status just narrows back to VARCHAR(16).
 
-Note on status column type: next30 created it as PG ENUM signaturerequeststatus;
-the ORM now uses String(16) (known drift). On SQLite the existing_type is
-String(16) (SQLite has no native ENUM). On PG we use raw ALTER TABLE to avoid
-enum-vs-varchar conflicts.
+Note on status column type: next30 created it as PG ENUM signaturerequeststatus
+(created/requested/signed/failed); the ORM now uses String(16) (known drift).
+On SQLite the existing_type is String(16) (SQLite has no native ENUM). On PG
+we use raw ALTER TABLE with USING cast to avoid enum-vs-varchar conflicts; the
+orphaned enum type is dropped after widening (anti-footgun from PR #639).
 """
 from __future__ import annotations
 
@@ -48,7 +50,8 @@ def upgrade() -> None:
             ["id"],
             ondelete="SET NULL",
         )
-        op.execute(f"ALTER TABLE {TABLE} ALTER COLUMN status TYPE VARCHAR(32)")
+        op.execute(f"ALTER TABLE {TABLE} ALTER COLUMN status TYPE VARCHAR(32) USING status::text")
+        op.execute("DROP TYPE IF EXISTS signaturerequeststatus")
     else:
         with op.batch_alter_table(TABLE) as batch:
             batch.alter_column(
@@ -63,10 +66,26 @@ def downgrade() -> None:
     bind = op.get_bind()
     dialect = bind.dialect.name
 
+    blockers = bind.execute(
+        sa.text(
+            "SELECT COUNT(*) FROM signature_requests "
+            "WHERE status IN ('awaiting_code', 'declined', 'expired')"
+        )
+    ).scalar()
+    if blockers:
+        raise RuntimeError(
+            "ed01 downgrade blocked: signature_requests contains PEP statuses "
+            "(awaiting_code/declined/expired) unknown to the pre-ed01 enum; "
+            f"rows={blockers}"
+        )
+
     if dialect == "postgresql":
         op.drop_constraint("fk_signature_requests_signer_person_id_person", TABLE, type_="foreignkey")
-        # honest narrowing: fails if awaiting_code rows exist (longer than 16)
-        op.execute(f"ALTER TABLE {TABLE} ALTER COLUMN status TYPE VARCHAR(16)")
+        op.execute("CREATE TYPE signaturerequeststatus AS ENUM ('created', 'requested', 'signed', 'failed')")
+        op.execute(
+            f"ALTER TABLE {TABLE} ALTER COLUMN status TYPE signaturerequeststatus "
+            "USING status::signaturerequeststatus"
+        )
     else:
         with op.batch_alter_table(TABLE) as batch:
             batch.alter_column(
