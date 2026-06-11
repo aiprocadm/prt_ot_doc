@@ -12,7 +12,11 @@ from app.db import aensure_tenant_schema, session_scope
 from app.domains.packs.seeder import ensure_default_packs
 from app.models.feature import Feature
 from app.models.finance import Department
-from app.models.models import Company, MedicalExamKind, MedicalNorm, Person, Position, Site, Tenant, TrainingCourse
+from app.models.models import (
+    Company, MedicalExamKind, MedicalNorm, Person, Position, PPEIssue, PPEItem,
+    PPENorm, Site, Tenant, TrainingCourse,
+)
+from app.models.risk import RiskHazard
 from app.modules.contractors.models import (
     ComplianceStatus, ContractorDocument, ContractorDocumentRequirement,
     ContractorEmployee, ContractorRegistry,
@@ -56,6 +60,71 @@ async def _seed_contractor_requirements(session, tenant_db_id: str) -> None:
             session.add(ContractorDocumentRequirement(
                 tenant_id=tenant_db_id, doc_type=doc_type, scope=scope, mandatory=True,
             ))
+
+
+async def _seed_ppe_demo(session, tenant_db_id: str, person, position_id: str) -> None:
+    """Seed PPE norms/sizes/issues so the 766н card demos all line statuses.
+
+    Idempotent: keyed lookups on (tenant, name/code) before each insert.
+    Card outcome: каска=ok (активная выдача), перчатки=overdue (просрочена),
+    очки=missing (норма без выдачи).
+    """
+    hazard = (await session.execute(select(RiskHazard).where(
+        RiskHazard.tenant_id == tenant_db_id, RiskHazard.code == "demo_general",
+    ))).scalar_one_or_none()
+    if hazard is None:
+        hazard = RiskHazard(tenant_id=tenant_db_id, code="demo_general", title="Общие производственные факторы")
+        session.add(hazard)
+        await session.flush()
+
+    async def _ensure_item(name: str, wear_days: int) -> PPEItem:
+        item = (await session.execute(select(PPEItem).where(
+            PPEItem.tenant_id == tenant_db_id, PPEItem.name == name, PPEItem.deleted_at.is_(None),
+        ))).scalar_one_or_none()
+        if item is None:
+            item = PPEItem(tenant_id=tenant_db_id, name=name, default_wear_days=wear_days)
+            session.add(item)
+            await session.flush()
+        return item
+
+    helmet = await _ensure_item("Каска защитная (демо)", 730)
+    gloves = await _ensure_item("Перчатки защитные (демо)", 90)
+    glasses = await _ensure_item("Очки защитные (демо)", 365)
+
+    for item, qty, interval in ((helmet, 1, 730), (gloves, 2, 90), (glasses, 1, 365)):
+        existing = (await session.execute(select(PPENorm).where(
+            PPENorm.tenant_id == tenant_db_id,
+            PPENorm.position_id == position_id,
+            PPENorm.hazard_id == hazard.id,
+            PPENorm.item_name == item.name,
+        ))).scalar_one_or_none()
+        if existing is None:
+            session.add(PPENorm(
+                tenant_id=tenant_db_id, position_id=position_id, hazard_id=hazard.id,
+                item_id=item.id, item_name=item.name, quantity=qty, interval_days=interval,
+            ))
+
+    if not person.ppe_sizes:
+        person.ppe_sizes = {"height": 178, "clothing_size": "52-54", "shoe_size": "43", "headgear_size": "58"}
+
+    now = datetime.now(timezone.utc)
+    existing_issue = (await session.execute(select(PPEIssue).where(
+        PPEIssue.tenant_id == tenant_db_id, PPEIssue.person_id == person.id,
+        PPEIssue.deleted_at.is_(None),
+    ))).scalars().first()
+    if existing_issue is None:
+        session.add(PPEIssue(  # активная, с сертификатом → строка ok
+            tenant_id=tenant_db_id, person_id=person.id, item_id=helmet.id,
+            item_name=helmet.name, quantity=1, issued_at=now,
+            expires_at=now + timedelta(days=700), wear_days=730, status="issued",
+            certificate_no="ЕАЭС RU С-RU.ДЕМО.В.00001/26",
+        ))
+        session.add(PPEIssue(  # просроченная → строка overdue
+            tenant_id=tenant_db_id, person_id=person.id, item_id=gloves.id,
+            item_name=gloves.name, quantity=2, issued_at=now - timedelta(days=120),
+            expires_at=now - timedelta(days=30), wear_days=90, status="issued",
+        ))
+        # очки: норма есть, выдачи нет → строка missing
 
 
 async def bootstrap_demo_tenant(settings: Settings) -> None:
@@ -145,17 +214,17 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
             )
         ).scalar_one_or_none()
         if person is None:
-            session.add(
-                Person(
-                    tenant_id=tenant_db_id,
-                    company_id=company.id,
-                    position_id=position.id if position else None,
-                    first_name="Иван",
-                    last_name="Иванов",
-                    personnel_number="D-001",
-                    email="ivanov@example.local",
-                )
+            person = Person(
+                tenant_id=tenant_db_id,
+                company_id=company.id,
+                position_id=position.id if position else None,
+                first_name="Иван",
+                last_name="Иванов",
+                personnel_number="D-001",
+                email="ivanov@example.local",
             )
+            session.add(person)
+            await session.flush()
 
         course = (
             await session.execute(select(TrainingCourse).where(TrainingCourse.title == "Вводный инструктаж (демо)"))
@@ -241,6 +310,11 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
             await session.flush()  # assign ids before seeding documents
             await _seed_contractor_documents(session, tenant_db_id, contractor.id, ready_emp.id)
             await _seed_contractor_requirements(session, tenant_db_id)
+
+        # Seed PPE norms/sizes/issues for the 766н card demo (idempotent;
+        # called unconditionally so existing demo tenants get the data too).
+        if position is not None and person is not None:
+            await _seed_ppe_demo(session, tenant_db_id, person, str(position.id))
 
         await ensure_default_packs(session, tenant_slug=tenant_slug)
         logger.info("demo.bootstrap.done", extra={"tenant": tenant_slug, "company": company_name, "site": site_name})
