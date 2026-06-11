@@ -11,6 +11,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.medical import lifecycle as lc
+from app.domains.ppe import lifecycle as ppe_lc
+from app.modules.ppe.services import NormItem, PPENormService
 from app.models.models import (
     MedicalExam,
     MedicalNorm,
@@ -20,6 +22,7 @@ from app.models.models import (
     PositionHazardLink,
     PPEIssue,
     PPEIssueStatus,
+    PPENorm,
     Training,
     TrainingStatus,
 )
@@ -43,7 +46,10 @@ async def enforce_person_admission(
 
     Checks training, medical examination, PPE, active medical suspension, and
     (when medical norms exist for the person's position) per-kind norm-aware
-    medical exam completeness.
+    medical exam completeness. The PPE check is likewise norm-aware: when PPE
+    norms exist for the person's position, every 766н card line must avoid
+    missing/overdue (СИЗ Срез-2); without norms the legacy any-active-issue
+    check applies.
 
     Raises:
         ValueError: ``{"code": "requirements_not_met", "details": [...]}``
@@ -194,6 +200,107 @@ async def enforce_person_admission(
         for ph_pos, ph_haz in ph_rows:
             position_hazards.setdefault(ph_pos, set()).add(ph_haz)
 
+    # ------------------------------------------------------------------
+    # СИЗ Срез-2 — norm-aware PPE (mirror of the medical norm-aware path):
+    # when PPE norms exist for the person's position, every 766н card line
+    # must avoid missing/overdue (ok/due_soon pass); otherwise the legacy
+    # any-active-issue check stays in force.
+    # ------------------------------------------------------------------
+    ppe_norm_rows: list = []
+    if position_ids:
+        ppe_norm_rows = (
+            await session.execute(
+                select(
+                    PPENorm.position_id,
+                    PPENorm.item_id,
+                    PPENorm.item_name,
+                    PPENorm.quantity,
+                ).where(
+                    PPENorm.tenant_id.in_(tenant_scope),
+                    PPENorm.position_id.in_(position_ids),
+                )
+            )
+        ).all()
+
+    norms_by_position: dict[str, list[tuple[str | None, str, int]]] = {}
+    for npos_id, nitem_id, nitem_name, nquantity in ppe_norm_rows:
+        norms_by_position.setdefault(npos_id, []).append(
+            (nitem_id, nitem_name, nquantity)
+        )
+
+    # Required card lines per position — same fold as build_personal_card_766n:
+    # required_union (max per catalog key) + best-norm metadata per key.
+    ppe_required_by_position: dict[str, list[tuple[str | None, str, int]]] = {}
+    for npos_id, pos_norms in norms_by_position.items():
+        norm_items = [
+            NormItem(
+                applies_to_type="position",
+                applies_to_id=npos_id,
+                ppe_catalog_id=ppe_lc.norm_line_key(nitem_id, nitem_name),
+                quantity=float(nquantity),
+                period_months=None,
+            )
+            for nitem_id, nitem_name, nquantity in pos_norms
+        ]
+        required_qty = PPENormService.required_union(
+            position_id=npos_id,
+            workplace_id=None,
+            hazard_ids=set(),
+            norm_items=norm_items,
+        )
+        line_meta: dict[str, tuple[str | None, str, int]] = {}
+        for nitem_id, nitem_name, nquantity in pos_norms:
+            key = ppe_lc.norm_line_key(nitem_id, nitem_name)
+            kept = line_meta.get(key)
+            if kept is None or nquantity > kept[2]:
+                line_meta[key] = (nitem_id, nitem_name, nquantity)
+        ppe_required_by_position[npos_id] = [
+            (line_meta[key][0], line_meta[key][1], int(qty))
+            for key, qty in required_qty.items()
+        ]
+
+    normed_person_ids = [
+        person.id
+        for person in persons
+        if person.position_id and person.position_id in ppe_required_by_position
+    ]
+    # person_id -> (issues_by_id, issues_by_name) indexes of IssueView pairs
+    ppe_issue_index: dict[
+        str,
+        tuple[
+            dict[str, list[tuple[str, ppe_lc.IssueView]]],
+            dict[str, list[tuple[str, ppe_lc.IssueView]]],
+        ],
+    ] = {}
+    if normed_person_ids:
+        issue_rows = (
+            await session.execute(
+                select(
+                    PPEIssue.person_id,
+                    PPEIssue.id,
+                    PPEIssue.item_id,
+                    PPEIssue.item_name,
+                    PPEIssue.quantity,
+                    PPEIssue.expires_at,
+                    PPEIssue.status,
+                ).where(
+                    PPEIssue.person_id.in_(normed_person_ids),
+                    PPEIssue.tenant_id.in_(tenant_scope),
+                    PPEIssue.deleted_at.is_(None),
+                )
+            )
+        ).all()
+        for ipid, iid, iitem_id, iitem_name, iqty, iexpires, istatus in issue_rows:
+            view = ppe_lc.IssueView(
+                quantity=iqty,
+                expires_at=iexpires.date() if iexpires is not None else None,
+                status=str(istatus),
+            )
+            by_id, by_name = ppe_issue_index.setdefault(ipid, ({}, {}))
+            if iitem_id:
+                by_id.setdefault(iitem_id, []).append((iid, view))
+            by_name.setdefault(iitem_name, []).append((iid, view))
+
     today = now.date()
 
     # ------------------------------------------------------------------
@@ -230,8 +337,24 @@ async def enforce_person_admission(
             if person.id not in valid_medical:
                 missing.append("medical_exam")
 
-        if person.id not in valid_ppe:
-            missing.append("ppe_issue")
+        # PPE — norm-aware (766н card lines) or legacy fallback
+        ppe_required = (
+            ppe_required_by_position.get(pos_id) if pos_id else None
+        )
+        if ppe_required:
+            by_id, by_name = ppe_issue_index.get(person.id, ({}, {}))
+            for nitem_id, nitem_name, req_qty in ppe_required:
+                views = ppe_lc.match_issues_for_norm_line(
+                    nitem_id, nitem_name, by_id, by_name
+                )
+                line_status = ppe_lc.card_line_status(req_qty, views, today)
+                if line_status in ppe_lc.ADMISSION_BLOCKING_STATUSES:
+                    missing.append("ppe_issue")
+                    break
+        else:
+            # Legacy: any valid (active, non-expired) issue suffices
+            if person.id not in valid_ppe:
+                missing.append("ppe_issue")
 
         # Suspension check (additive — goes after the three standard checks)
         if person.id in suspended:

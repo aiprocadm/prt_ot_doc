@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from typing import Iterable
+from typing import Iterable, Mapping
 
 from app.domains.shared import ContingentItemStatus, classify
 
@@ -97,6 +97,40 @@ def card_line_status(
         if severity in statuses:
             return severity
     return ContingentItemStatus.OK.value
+
+
+# Card-line statuses that block person admission (vNext §12 gate):
+# ok / due_soon pass, overdue / missing block.
+ADMISSION_BLOCKING_STATUSES = frozenset({
+    ContingentItemStatus.MISSING.value,
+    ContingentItemStatus.OVERDUE.value,
+})
+
+
+def norm_line_key(item_id: str | None, item_name: str) -> str:
+    """Stable card-line key for a norm: catalog item id, or name-scoped fallback."""
+    return item_id or f"name:{item_name}"
+
+
+def match_issues_for_norm_line(
+    norm_item_id: str | None,
+    norm_item_name: str,
+    issues_by_id: Mapping[str, Iterable[tuple[str, IssueView]]],
+    issues_by_name: Mapping[str, Iterable[tuple[str, IssueView]]],
+) -> list[IssueView]:
+    """Union of id-matched and name-matched issues, deduped by issue id.
+
+    Covers both legacy directions: norm without ``item_id`` vs catalog issue,
+    and norm with ``item_id`` vs legacy issue that predates the catalog link.
+    Index values are ``(issue_id, IssueView)`` pairs.
+    """
+    seen: dict[str, IssueView] = {}
+    if norm_item_id:
+        for issue_id, view in issues_by_id.get(norm_item_id, ()):
+            seen[issue_id] = view
+    for issue_id, view in issues_by_name.get(norm_item_name, ()):
+        seen.setdefault(issue_id, view)
+    return list(seen.values())
 
 
 def fold_card_status(line_statuses: Iterable[str]) -> str:

@@ -113,10 +113,12 @@ fold_card_status(line_statuses: Iterable[str]) -> str
   - «Выдано/возвращено»: все `PPEIssue` работника (не-удалённые), с реквизитами 766н (`certificate_no`, `wear_percent`, `return_wear_percent`, `signature_doc_ref`, `replaces_issue_id`).
   - Статус каждой строки «положено» через `card_line_status`; итог карточки через `fold_card_status`.
   - Timeline: события по датам (issued_at/returned_at/обновления статусов) — derived из issues, без отдельной таблицы.
-- `apply_issue_operation(session, *, tenant_id, issue_id, operation, payload) -> PPEIssue`:
-  - Одна транзакция: загрузка issue (tenant-scoped, 404), `validate_transition` (409 на нарушение), обновление полей, outbox-событие (`PPE_RETURNED` / `PPE_WRITTEN_OFF` / для replace — старая → `replaced` + новая выдача через существующий `issue_ppe_item` + `PPE_ISSUED`).
-- `list_replacement_due(session, *, tenant_id, within_days, reference)` — активные выдачи с `expires_at` в горизонте (для beat); переиспользует/обобщает `list_expiring_issues`.
-- `notify_replacement_due(session, *, tenant_id, within_days=30)` — outbox `PPE_REPLACEMENT_DUE`, idempotency_key `ppe-replacement-due:{issue_id}:{expires_at}` (паттерн `notify_document_expiry` подрядчиков; noop-дедуп починен в Срезе-2 подрядчиков).
+- Операции жизненного цикла — **as-built: три отдельные функции вместо одной `apply_issue_operation`** (по функции на операцию — проще сигнатуры и возвраты):
+  - `return_issue(session, *, tenant_id, issue_id, returned_at=None, return_wear_percent=None, signature_doc_ref=None) -> PPEIssue | None`;
+  - `writeoff_issue(session, *, tenant_id, issue_id, reason) -> PPEIssue | None`;
+  - `replace_issue(session, *, tenant_id, issue_id, item_id=None, quantity=None, …) -> tuple[PPEIssue, PPEIssue] | None` — старая → `replaced`, новая выдача через существующий `issue_ppe_item` + `replaces_issue_id`; возвращает пару (old, new).
+  - Общий контракт: загрузка issue tenant-scoped (`None` → 404 на API), `validate_transition` (`PPETransitionError` → 409). Outbox-события (`PPE_RETURNED` / `PPE_WRITTEN_OFF` / `PPE_ISSUED` для replace) enqueue'ятся не в сервисе, а в эндпоинтах `api/routes/ppe.py` (`return_issue_endpoint` / `writeoff_issue_endpoint` / `replace_issue_endpoint`) — в той же транзакции/сессии запроса.
+- `notify_replacement_due(session, *, tenant_id, within_days=30)` — outbox `PPE_REPLACEMENT_DUE`, idempotency_key `ppe-replacement-due:{issue_id}:{status}:{utc_day}` (паттерн `notify_document_expiry` подрядчиков; noop-дедуп починен в Срезе-2 подрядчиков). **As-built:** живёт в `services/ppe_notifications.py` и сам выбирает активные выдачи с `expires_at` (+ `classify` из `domains/shared`); отдельный `list_replacement_due` не понадобился.
 
 ## 5. API (роутер `/ppe`, существующие конвенции: `_PPE_READ/WRITE_ROLES`, ABAC `abac(_tenant_resource_id, ...)`, `TenantContextValidator`, `@audit_operation`, структурированные ошибки `_ppe_bad_request`)
 
@@ -149,6 +151,8 @@ Legacy `PATCH /ppe/issues/{id}`: остаётся (фронт `PpePage` им п�
 - Удалить `WarehousePPE` из `models.py` + реэкспорты из `ppe_registry.py` и `models/__init__.py`.
 - `modules/ppe/services.py` (чистая логика) — **остаётся** и переиспользуется (`required_union`, при необходимости `apply_issue_events`); `test_next58_safety_core_services.py` продолжает проходить (он тестирует чистые сервисы, не ORM).
 - Проверить отсутствие прочих импортов удаляемых классов (grep перед удалением); guard-тест `configure_mappers()` должен остаться зелёным.
+
+**As-built — нейтрализация живого читателя семейства B.** Grep выявил один живой read-only потребитель: `GET /packs/{pack_run_id}/safety-summary` (`api/routes/packs.py::pack_safety_summary`) читал `PPEPersonalCard`/`PPEPersonalCardItem` для построения `issued_ppe`. Поскольку write-path к этим таблицам никогда не существовал, чтение всегда давало пустой список (provably dead); `missing_ppe` и до среза был захардкожен `{}`. Чтение семейства B заменено константой `issued_ppe = []` с поясняющим комментарием — контракт ответа эндпоинта сохранён без изменений; реальные личные карточки теперь живут в `GET /ppe/employees/{person_id}/card`.
 
 ## 8. Demo-seed (`services/demo_bootstrap.py`)
 

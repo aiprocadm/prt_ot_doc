@@ -282,8 +282,9 @@ class PersonalCard766n:
     summary_status: str
 
 
-def _issue_line_key(item_id: str | None, item_name: str) -> str:
-    return item_id or f"name:{item_name}"
+# Backwards-compatible alias; the pure helper moved to lifecycle so the
+# admission gate (services/person_admission.py) shares the same semantics.
+_issue_line_key = lc.norm_line_key
 
 
 async def build_personal_card_766n(
@@ -363,18 +364,10 @@ async def build_personal_card_766n(
         issues_by_name.setdefault(issue.item_name, []).append((issue.id, view))
 
     def _views_for_line(norm: PPENorm) -> list[lc.IssueView]:
-        """Union of id-matched and name-matched issues, deduped by issue id.
-
-        Covers both legacy directions: norm without item_id vs catalog issue,
-        and norm with item_id vs legacy issue that predates the catalog link.
-        """
-        seen: dict[str, lc.IssueView] = {}
-        if norm.item_id:
-            for issue_id, view in issues_by_id.get(norm.item_id, []):
-                seen[issue_id] = view
-        for issue_id, view in issues_by_name.get(norm.item_name, []):
-            seen.setdefault(issue_id, view)
-        return list(seen.values())
+        """Bidirectional id+name matching — shared pure helper in lifecycle."""
+        return lc.match_issues_for_norm_line(
+            norm.item_id, norm.item_name, issues_by_id, issues_by_name
+        )
 
     today = datetime.now(tz=timezone.utc).date()
     required: list[CardRequiredLine] = []

@@ -208,5 +208,5 @@ class RiskMapItemMeasure(TenantBase):
 # PPEPersonalCard/PPEPersonalCardItem) were removed in СИЗ Срез-1 (2026-06-10):
 # they had no write path and duplicated the live family in models.py (см.
 # docs/superpowers/specs/2026-06-10-ppe-norms-personal-card-design.md §7).
-# Их таблицы (ppe_norms, ppe_catalog, ...) остаются в БД (миграция next58);
-# DROP — отдельная миграция вне среза.
+# Их таблицы (ppe_norms, ppe_catalog, ...; создавала миграция next58) дропнуты
+# миграцией sz02 (20260611_sz02_drop_ppe_family_b_tables).
