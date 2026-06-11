@@ -104,3 +104,17 @@ def test_confirm_last_attempt_exhausts():
 def test_purposes_vocabulary():
     assert PEP_PURPOSES == {"document", "acknowledgement", "ppe_issue", "briefing"}
     assert CONFIRM_TTL_MINUTES == 15
+    assert MAX_CONFIRM_ATTEMPTS == 5
+
+
+def test_confirm_expires_at_exact_boundary():
+    # now == expires_at → уже истёк (lazy expiry contract)
+    result = confirm_outcome(
+        stored_code_hash=hash_confirm_code("req-1", "123456"),
+        provided_code="123456",
+        request_id="req-1",
+        attempts=0,
+        expires_at=NOW,
+        now=NOW,
+    )
+    assert result is ConfirmOutcome.EXPIRED

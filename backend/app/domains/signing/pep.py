@@ -9,8 +9,9 @@ import enum
 import hashlib
 import json
 from datetime import datetime
+from typing import Any
 
-PEP_PURPOSES = {"document", "acknowledgement", "ppe_issue", "briefing"}
+PEP_PURPOSES = frozenset({"document", "acknowledgement", "ppe_issue", "briefing"})
 MAX_CONFIRM_ATTEMPTS = 5
 CONFIRM_TTL_MINUTES = 15
 
@@ -41,7 +42,7 @@ def assert_transition(src: PepStatus, dst: PepStatus) -> None:
         raise InvalidTransition(f"pep signature request: {src.value} -> {dst.value}")
 
 
-def canonical_payload(object_type: str, object_id: str, content: dict) -> str:
+def canonical_payload(object_type: str, object_id: str, content: dict[str, Any]) -> str:
     """Каноничный JSON того, ЧТО подписывается: sorted keys, компактно, юникод."""
     return json.dumps(
         {"content": content, "object_id": object_id, "object_type": object_type},
@@ -52,6 +53,7 @@ def canonical_payload(object_type: str, object_id: str, content: dict) -> str:
 
 
 def content_hash(payload: str) -> str:
+    """SHA-256 hex digest of the canonical UTF-8 payload string."""
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -76,7 +78,10 @@ def confirm_outcome(
     expires_at: datetime,
     now: datetime,
 ) -> ConfirmOutcome:
-    """Исход попытки подтверждения. Порядок проверок: TTL → код → счётчик."""
+    """Исход попытки подтверждения. Порядок проверок: TTL → код → счётчик.
+
+    Оба datetime-аргумента обязаны быть timezone-aware.
+    """
     if now >= expires_at:
         return ConfirmOutcome.EXPIRED
     if hash_confirm_code(request_id, provided_code) == stored_code_hash:
