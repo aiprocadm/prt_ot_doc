@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_correlation_id, get_session, get_tenant_record
@@ -20,10 +20,23 @@ from app.core.errors import api_problem_detail
 from app.core.feature_flags import is_feature_enabled
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
-from app.domains.ppe import issue_ppe_item, list_expiring_issues
+from app.domains.ppe import (
+    build_personal_card_766n,
+    issue_ppe_item,
+    list_expiring_issues,
+    replace_issue,
+    return_issue,
+    writeoff_issue,
+)
+from app.domains.ppe.lifecycle import PPETransitionError, validate_transition
+from app.models.models import Person, Position, PPENorm
 from app.models.ppe_registry import PPEIssue, PPEIssueStatus, PPEItem, PPEStockBatch
+from app.models.risk import RiskHazard
 from app.models.tenanting import Tenant
 from app.schemas.ppe import (
+    PPECardRead,
+    PPECardRequiredLine,
+    PPECardTimelineEvent,
     PPEIssueCreate,
     PPEIssuePage,
     PPEIssueRead,
@@ -32,6 +45,15 @@ from app.schemas.ppe import (
     PPEItemPage,
     PPEItemRead,
     PPEItemUpdate,
+    PPENormCreate,
+    PPENormPage,
+    PPENormRead,
+    PPENormUpdate,
+    PPEIssueReplaceRequest,
+    PPEIssueReturnRequest,
+    PPEIssueWriteoffRequest,
+    PPESizesRead,
+    PPESizesUpdate,
     PPEStockBatchCreate,
     PPEStockBatchPage,
     PPEStockBatchRead,
@@ -68,6 +90,17 @@ def _ppe_bad_request(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
         detail=api_problem_detail(code="PPE_VALIDATION_ERROR", message=message, error_type="ppe"),
+    )
+
+
+def _transition_conflict(exc: PPETransitionError) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=api_problem_detail(
+            code="PPE_TRANSITION_INVALID",
+            message=str(exc),
+            error_type="ppe",
+        ),
     )
 
 
@@ -211,6 +244,175 @@ async def delete_item(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+def _norm_schema(norm: PPENorm) -> PPENormRead:
+    return PPENormRead.model_validate(norm)
+
+
+async def _get_norm(session: AsyncSession, tenant: Tenant, norm_id: str) -> PPENorm:
+    stmt = select(PPENorm).where(PPENorm.id == norm_id, PPENorm.tenant_id == tenant.id)
+    norm = (await session.execute(stmt)).scalar_one_or_none()
+    if norm is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE norm not found")
+    return norm
+
+
+async def _check_norm_refs(
+    session: AsyncSession, tenant: Tenant, *, position_id: str, hazard_id: str, item_id: str
+) -> PPEItem:
+    position = (await session.execute(select(Position).where(
+        Position.id == position_id, Position.tenant_id == tenant.id, Position.deleted_at.is_(None),
+    ))).scalar_one_or_none()
+    if position is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Position not found")
+    hazard = (await session.execute(select(RiskHazard).where(
+        RiskHazard.id == hazard_id, RiskHazard.tenant_id == tenant.id,
+    ))).scalar_one_or_none()
+    if hazard is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Hazard not found")
+    return await _get_item(session, tenant, item_id)
+
+
+def _norm_duplicate_conflict() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=api_problem_detail(
+            code="PPE_NORM_DUPLICATE",
+            message="A norm for this position/hazard/item already exists",
+            error_type="ppe",
+        ),
+    )
+
+
+@router.get("/norms", response_model=PPENormPage)
+async def list_norms(
+    request: Request,
+    response: Response,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+    position_id: str | None = None,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> PPENormPage | Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
+    stmt = select(PPENorm).where(PPENorm.tenant_id == tenant.id)
+    count_stmt = select(func.count()).where(PPENorm.tenant_id == tenant.id)
+    if position_id:
+        stmt = stmt.where(PPENorm.position_id == position_id)
+        count_stmt = count_stmt.where(PPENorm.position_id == position_id)
+    stmt = stmt.order_by(PPENorm.item_name.asc()).limit(limit).offset(offset)
+    norms = list((await session.execute(stmt)).scalars().all())
+    total = (await session.execute(count_stmt)).scalar_one()
+    etag = compute_list_etag(
+        tenant_id=str(tenant.id),
+        items=norms,
+        scalars=[
+            ("total", int(total or 0)), ("limit", limit), ("offset", offset),
+            ("position", position_id or ""),
+        ],
+    )
+    apply_etag_response_headers(response, etag)
+    if request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=build_not_modified_headers(etag),
+        )
+    return PPENormPage(items=[_norm_schema(n) for n in norms], total=total)
+
+
+@router.post("/norms", response_model=PPENormRead, status_code=status.HTTP_201_CREATED)
+@audit_operation("create", "ppe_norm")
+async def create_norm(
+    payload: PPENormCreate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPENormRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
+    item = await _check_norm_refs(
+        session, tenant,
+        position_id=payload.position_id, hazard_id=payload.hazard_id, item_id=payload.item_id,
+    )
+    existing = (await session.execute(select(PPENorm).where(
+        PPENorm.tenant_id == tenant.id,
+        PPENorm.position_id == payload.position_id,
+        PPENorm.hazard_id == payload.hazard_id,
+        or_(PPENorm.item_name == item.name, PPENorm.item_id == item.id),
+    ))).scalars().first()
+    if existing is not None:
+        raise _norm_duplicate_conflict()
+
+    norm = PPENorm(
+        tenant_id=tenant.id,
+        position_id=payload.position_id,
+        hazard_id=payload.hazard_id,
+        item_id=item.id,
+        item_name=item.name,  # денормализация: ключ сопоставления для legacy-строк
+        quantity=payload.quantity,
+        interval_days=payload.interval_days,
+    )
+    session.add(norm)
+    await session.flush()
+    await session.refresh(norm)
+    return _norm_schema(norm)
+
+
+@router.get("/norms/{norm_id}", response_model=PPENormRead)
+async def get_norm(
+    norm_id: str, tenant: TenantDep, session: SessionDep, access: ManagerAccess
+) -> PPENormRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    return _norm_schema(await _get_norm(session, tenant, norm_id))
+
+
+@router.patch("/norms/{norm_id}", response_model=PPENormRead)
+@audit_operation("update", "ppe_norm")
+async def update_norm(
+    norm_id: str,
+    payload: PPENormUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPENormRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+
+    norm = await _get_norm(session, tenant, norm_id)
+    updates = payload.model_dump(exclude_unset=True)
+    new_item_id = updates.pop("item_id", None)
+    if new_item_id is not None:
+        item = await _get_item(session, tenant, new_item_id)
+        dup = (await session.execute(select(PPENorm).where(
+            PPENorm.tenant_id == tenant.id,
+            PPENorm.position_id == norm.position_id,
+            PPENorm.hazard_id == norm.hazard_id,
+            or_(PPENorm.item_name == item.name, PPENorm.item_id == item.id),
+            PPENorm.id != norm.id,
+        ))).scalars().first()
+        if dup is not None:
+            raise _norm_duplicate_conflict()
+        norm.item_id = item.id
+        norm.item_name = item.name
+    for field, value in updates.items():
+        setattr(norm, field, value)
+    await session.flush()
+    await session.refresh(norm)
+    return _norm_schema(norm)
+
+
+@router.delete("/norms/{norm_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+@audit_operation("delete", "ppe_norm")
+async def delete_norm(
+    norm_id: str, tenant: TenantDep, session: SessionDep, access: EditorAccess
+) -> None:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    norm = await _get_norm(session, tenant, norm_id)
+    await session.delete(norm)  # PPENorm has no SoftDeleteMixin — hard delete
+    await session.flush()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get("/issues", response_model=PPEIssuePage)
 async def list_issues(
     request: Request,
@@ -294,6 +496,9 @@ async def create_issue(
             issued_at=payload.issued_at,
             wear_days=payload.wear_days,
             expires_at=payload.expires_at,
+            certificate_no=payload.certificate_no,
+            wear_percent=payload.wear_percent,
+            signature_doc_ref=payload.signature_doc_ref,
         )
     except ValueError as exc:
         raise _ppe_bad_request(str(exc)) from exc
@@ -311,10 +516,136 @@ async def create_issue(
             "quantity": issue.quantity,
             "issued_at": issue.issued_at,
             "expires_at": issue.expires_at,
-            "status": issue.status.value,
+            "status": issue.status,
         },
     )
     return _issue_schema(issue)
+
+
+@router.post("/issues/{issue_id}/return", response_model=PPEIssueRead)
+@audit_operation("update", "ppe_issue")
+async def return_issue_endpoint(
+    issue_id: str,
+    payload: PPEIssueReturnRequest,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPEIssueRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        issue = await return_issue(
+            session, tenant_id=tenant.id, issue_id=issue_id,
+            returned_at=payload.returned_at,
+            return_wear_percent=payload.return_wear_percent,
+            signature_doc_ref=payload.signature_doc_ref,
+        )
+    except PPETransitionError as exc:
+        raise _transition_conflict(exc) from exc
+    if issue is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE issue not found")
+    outbox = OutboxService(session)
+    await outbox.enqueue(
+        tenant_id=str(tenant.id),
+        event_type=EventType.PPE_RETURNED.value,
+        payload={
+            "tenant_id": str(tenant.id),
+            "actor_id": access.user.id if access else None,
+            "occurred_at": issue.returned_at,
+            "ppe_issue_id": issue.id,
+            "person_id": issue.person_id,
+            "item_id": issue.item_id,
+            "quantity": issue.quantity,
+            "returned_at": issue.returned_at,
+            "status": issue.status,
+        },
+    )
+    return _issue_schema(issue)
+
+
+@router.post("/issues/{issue_id}/writeoff", response_model=PPEIssueRead)
+@audit_operation("update", "ppe_issue")
+async def writeoff_issue_endpoint(
+    issue_id: str,
+    payload: PPEIssueWriteoffRequest,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPEIssueRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        issue = await writeoff_issue(
+            session, tenant_id=tenant.id, issue_id=issue_id, reason=payload.writeoff_reason,
+        )
+    except PPETransitionError as exc:
+        raise _transition_conflict(exc) from exc
+    if issue is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE issue not found")
+    outbox = OutboxService(session)
+    await outbox.enqueue(
+        tenant_id=str(tenant.id),
+        event_type=EventType.PPE_WRITTEN_OFF.value,
+        payload={
+            "tenant_id": str(tenant.id),
+            "actor_id": access.user.id if access else None,
+            "occurred_at": datetime.now(timezone.utc),
+            "ppe_issue_id": issue.id,
+            "person_id": issue.person_id,
+            "item_id": issue.item_id,
+            "quantity": issue.quantity,
+            "reason": issue.writeoff_reason,
+            "status": issue.status,
+        },
+    )
+    return _issue_schema(issue)
+
+
+@router.post(
+    "/issues/{issue_id}/replace",
+    response_model=PPEIssueRead,
+    status_code=status.HTTP_201_CREATED,
+)
+@audit_operation("update", "ppe_issue")
+async def replace_issue_endpoint(
+    issue_id: str,
+    payload: PPEIssueReplaceRequest,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPEIssueRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    try:
+        result = await replace_issue(
+            session, tenant_id=tenant.id, issue_id=issue_id,
+            item_id=payload.item_id, quantity=payload.quantity,
+            wear_days=payload.wear_days, expires_at=payload.expires_at,
+            certificate_no=payload.certificate_no, wear_percent=payload.wear_percent,
+            signature_doc_ref=payload.signature_doc_ref,
+        )
+    except PPETransitionError as exc:
+        raise _transition_conflict(exc) from exc
+    except ValueError as exc:
+        raise _ppe_bad_request(str(exc)) from exc
+    if result is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "PPE issue not found")
+    _old, new_issue = result
+    outbox = OutboxService(session)
+    await outbox.enqueue(
+        tenant_id=str(tenant.id),
+        event_type=EventType.PPE_ISSUED.value,
+        payload={
+            "tenant_id": str(tenant.id),
+            "actor_id": access.user.id if access else None,
+            "occurred_at": new_issue.issued_at,
+            "ppe_issue_id": new_issue.id,
+            "person_id": new_issue.person_id,
+            "item_id": new_issue.item_id,
+            "quantity": new_issue.quantity,
+            "issued_at": new_issue.issued_at,
+            "expires_at": new_issue.expires_at,
+            "status": new_issue.status,
+        },
+    )
+    return _issue_schema(new_issue)
 
 
 @router.get("/issues/{issue_id}", response_model=PPEIssueRead)
@@ -343,6 +674,14 @@ async def update_issue(
     issue = await _get_issue(session, tenant, issue_id)
     previous_status = issue.status
     updates = payload.model_dump(exclude_unset=True)
+    if isinstance(updates.get("status"), PPEIssueStatus):
+        updates["status"] = updates["status"].value
+    new_status = updates.get("status")
+    if new_status is not None and new_status != issue.status:
+        try:
+            validate_transition(str(issue.status), str(new_status))
+        except PPETransitionError as exc:
+            raise _transition_conflict(exc) from exc
     for field, value in updates.items():
         setattr(issue, field, value)
     if issue.status == PPEIssueStatus.RETURNED and issue.returned_at is None:
@@ -363,7 +702,7 @@ async def update_issue(
                 "item_id": issue.item_id,
                 "quantity": issue.quantity,
                 "returned_at": issue.returned_at or datetime.now(timezone.utc),
-                "status": issue.status.value,
+                "status": issue.status,
             },
         )
     return _issue_schema(issue)
@@ -567,3 +906,74 @@ async def list_stock_levels(
         for row in rows
     ]
     return PPEStockLevelPage(items=levels, total=len(levels))
+
+
+# --- 766н: личная карточка учёта СИЗ + размеры работника ---------------------
+
+
+@router.get("/employees/{person_id}/card", response_model=PPECardRead)
+async def get_personal_card(
+    person_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+) -> PPECardRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    card = await build_personal_card_766n(session, tenant_id=tenant.id, person_id=person_id)
+    if card is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Person not found")
+    person = card.person
+    full_name = " ".join(part for part in (person.last_name, person.first_name, person.middle_name) if part)
+    return PPECardRead(
+        person_id=person.id,
+        full_name=full_name,
+        personnel_number=person.personnel_number,
+        hired_at=person.hired_at,
+        position_name=card.position.name if card.position else None,
+        sizes=person.ppe_sizes,
+        required=[
+            PPECardRequiredLine(
+                item_id=line.item_id, item_name=line.item_name,
+                required_quantity=line.required_quantity,
+                interval_days=line.interval_days, status=line.status,
+            )
+            for line in card.required
+        ],
+        issues=[_issue_schema(issue) for issue in card.issues],
+        timeline=[
+            PPECardTimelineEvent(
+                occurred_at=event.occurred_at, event=event.event,
+                issue_id=event.issue_id, item_name=event.item_name,
+            )
+            for event in card.timeline
+        ],
+        summary_status=card.summary_status,
+    )
+
+
+@router.put("/employees/{person_id}/sizes", response_model=PPESizesRead)
+@audit_operation("update", "person_ppe_sizes")
+async def put_person_sizes(
+    person_id: str,
+    payload: PPESizesUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: EditorAccess,
+) -> PPESizesRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    person = (await session.execute(select(Person).where(
+        Person.id == person_id,
+        Person.tenant_id == tenant.id,
+        Person.deleted_at.is_(None),
+    ))).scalar_one_or_none()
+    if person is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Person not found")
+    # PUT-семантика: полная замена; None-поля выбрасываются.
+    person.ppe_sizes = {
+        key: value
+        for key, value in payload.model_dump().items()
+        if value is not None
+    } or None
+    await session.flush()
+    await session.refresh(person)
+    return PPESizesRead(person_id=person.id, sizes=person.ppe_sizes)

@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.models import Incident, Inspection, PPEIssue, Prescription, TrainingPlan
+from app.models.models import Incident, Inspection, PPEIssue, PPEIssueStatus, Prescription, TrainingPlan
 from app.models.notifications import (
     Notification,
     NotificationStatus,
@@ -127,7 +127,7 @@ class AnalyticsAggregationService:
     async def detailed_counters(self, filters: DashboardFilters) -> dict[str, int]:
         today = date.today()
         trainings_overdue = int(await self.session.scalar(select(func.count()).select_from(TrainingPlan).where(TrainingPlan.tenant_id == self.tenant_id, TrainingPlan.due_date.is_not(None), TrainingPlan.due_date < today)) or 0)
-        ppe_overdue = int(await self.session.scalar(select(func.count()).select_from(PPEIssue).where(PPEIssue.tenant_id == self.tenant_id, PPEIssue.expires_at.is_not(None), func.date(PPEIssue.expires_at) < today)) or 0)
+        ppe_overdue = int(await self.session.scalar(select(func.count()).select_from(PPEIssue).where(PPEIssue.tenant_id == self.tenant_id, PPEIssue.deleted_at.is_(None), PPEIssue.status == PPEIssueStatus.ISSUED, PPEIssue.expires_at.is_not(None), func.date(PPEIssue.expires_at) < today)) or 0)
         incidents_open = int(await self.session.scalar(select(func.count()).select_from(Incident).where(Incident.tenant_id == self.tenant_id, Incident.deleted_at.is_(None))) or 0)
         inspections_open = int(await self.session.scalar(select(func.count()).select_from(Inspection).where(Inspection.tenant_id == self.tenant_id, Inspection.deleted_at.is_(None))) or 0)
         prescriptions_overdue = int(await self.session.scalar(select(func.count()).select_from(Prescription).where(Prescription.tenant_id == self.tenant_id, Prescription.deleted_at.is_(None), Prescription.due_at.is_not(None), Prescription.due_at < today)) or 0)

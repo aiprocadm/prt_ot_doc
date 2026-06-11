@@ -53,7 +53,7 @@ from app.models.models import (
     Training,
     TrainingStatus,
 )
-from app.models.safety_core import PPEPersonalCard, PPEPersonalCardItem, RiskMapItem, SafetyRiskMap
+from app.models.safety_core import RiskMapItem, SafetyRiskMap
 from app.modules.ppe.services import PackSafetySummaryService
 from app.schemas.pack import (
     PackFromScenarioRequest,
@@ -1071,24 +1071,10 @@ async def pack_safety_summary(
             rank = {"low": 0, "medium": 1, "high": 2, "critical": 3}
             levels = sorted(set(raw_levels), key=lambda value: rank.get(value, -1))
 
-        card_stmt = select(PPEPersonalCard).where(
-            PPEPersonalCard.tenant_id.in_(tenant_scope),
-            PPEPersonalCard.person_id == person.id,
-            PPEPersonalCard.deleted_at.is_(None),
-        )
-        card = (await session.execute(card_stmt)).scalar_one_or_none()
+        # PPE personal-card lookup removed in СИЗ Срез-1: family-B tables
+        # (ppe_personal_cards/...) never had a write path — this always resolved
+        # to an empty list. Real personal cards now live at /ppe/employees/{id}/card.
         issued_ppe: list[dict[str, object]] = []
-        if card is not None:
-            card_items_stmt = select(PPEPersonalCardItem).where(
-                PPEPersonalCardItem.tenant_id.in_(tenant_scope),
-                PPEPersonalCardItem.personal_card_id == card.id,
-            )
-            card_items = (await session.execute(card_items_stmt)).scalars().all()
-            issued_ppe = [
-                {"ppe_catalog_id": item.ppe_catalog_id, "quantity": float(item.current_quantity)}
-                for item in card_items
-                if float(item.current_quantity) > 0
-            ]
 
         missing_ppe: dict[str, float] = {}
         has_clearance = PackSafetySummaryService.has_clearance(risk_levels=levels, missing_ppe=missing_ppe)

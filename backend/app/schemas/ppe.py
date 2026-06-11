@@ -60,6 +60,37 @@ class PPEItemPage(BaseSchema):
     total: int
 
 
+class PPENormCreate(BaseSchema):
+    position_id: str
+    hazard_id: str
+    item_id: str
+    quantity: int = Field(default=1, ge=1)
+    interval_days: int = Field(default=365, ge=1)
+
+
+class PPENormUpdate(BaseSchema):
+    item_id: str | None = None
+    quantity: int | None = Field(default=None, ge=1)
+    interval_days: int | None = Field(default=None, ge=1)
+
+
+class PPENormRead(BaseSchema):
+    id: str
+    position_id: str
+    hazard_id: str
+    item_id: str | None
+    item_name: str
+    quantity: int
+    interval_days: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class PPENormPage(BaseSchema):
+    items: list[PPENormRead]
+    total: int
+
+
 class PPEIssueCreate(BaseSchema):
     person_id: str
     item_id: str
@@ -67,6 +98,9 @@ class PPEIssueCreate(BaseSchema):
     issued_at: datetime | None = None
     wear_days: int | None = Field(default=None, ge=1)
     expires_at: datetime | None = None
+    certificate_no: str | None = Field(default=None, max_length=255)
+    wear_percent: int | None = Field(default=None, ge=0, le=100)
+    signature_doc_ref: str | None = Field(default=None, max_length=255)
 
 
 class PPEIssueUpdate(BaseSchema):
@@ -87,6 +121,12 @@ class PPEIssueRead(BaseSchema):
     returned_at: datetime | None
     wear_days: int | None
     status: PPEIssueStatus
+    certificate_no: str | None
+    wear_percent: int | None
+    return_wear_percent: int | None
+    signature_doc_ref: str | None
+    writeoff_reason: str | None
+    replaces_issue_id: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -94,6 +134,70 @@ class PPEIssueRead(BaseSchema):
 class PPEIssuePage(BaseSchema):
     items: list[PPEIssueRead]
     total: int
+
+
+class PPEIssueReturnRequest(BaseSchema):
+    returned_at: datetime | None = None
+    return_wear_percent: int | None = Field(default=None, ge=0, le=100)
+    signature_doc_ref: str | None = Field(default=None, max_length=255)
+
+
+class PPEIssueWriteoffRequest(BaseSchema):
+    writeoff_reason: str = Field(min_length=1, max_length=255)
+
+
+class PPEIssueReplaceRequest(BaseSchema):
+    item_id: str | None = None  # default: тот же item, что у заменяемой выдачи
+    quantity: int | None = Field(default=None, ge=1)
+    wear_days: int | None = Field(default=None, ge=1)
+    expires_at: datetime | None = None
+    certificate_no: str | None = Field(default=None, max_length=255)
+    wear_percent: int | None = Field(default=None, ge=0, le=100)
+    signature_doc_ref: str | None = Field(default=None, max_length=255)
+
+
+class PPECardRequiredLine(BaseSchema):
+    item_id: str | None
+    item_name: str
+    required_quantity: int
+    interval_days: int | None
+    status: str
+
+
+class PPECardTimelineEvent(BaseSchema):
+    occurred_at: datetime
+    event: str
+    issue_id: str
+    item_name: str
+
+
+class PPECardRead(BaseSchema):
+    person_id: str
+    full_name: str
+    personnel_number: str | None
+    hired_at: date | None
+    position_name: str | None
+    sizes: dict[str, Any] | None
+    required: list[PPECardRequiredLine]
+    issues: list[PPEIssueRead]
+    timeline: list[PPECardTimelineEvent]
+    summary_status: str
+
+
+class PPESizesUpdate(BaseSchema):
+    height: int | None = Field(default=None, ge=100, le=250)
+    clothing_size: str | None = Field(default=None, max_length=16)
+    shoe_size: str | None = Field(default=None, max_length=16)
+    headgear_size: str | None = Field(default=None, max_length=16)
+    gas_mask_size: str | None = Field(default=None, max_length=16)
+    respirator_size: str | None = Field(default=None, max_length=16)
+    gloves_size: str | None = Field(default=None, max_length=16)
+    mittens_size: str | None = Field(default=None, max_length=16)
+
+
+class PPESizesRead(BaseSchema):
+    person_id: str
+    sizes: dict[str, Any] | None
 
 
 class PPEStockBatchCreate(BaseSchema):
