@@ -204,6 +204,19 @@ class RiskMapItemMeasure(TenantBase):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+# NOTE (СИЗ Срез-1, 2026-06-11): the PPE family-B classes below (PPENorm/
+# PPECatalog/PPENormItem/PPEIssue/PPEPersonalCard/PPEPersonalCardItem) were
+# slated for removal (см. docs/superpowers/specs/
+# 2026-06-10-ppe-norms-personal-card-design.md §7) but are KEPT for now:
+# api/routes/packs.py (GET /{pack_run_id}/safety-summary) still imports and
+# queries PPEPersonalCard/PPEPersonalCardItem (read-only; nothing ever writes
+# these tables), and the intra-family FK chain (card_item -> ppe_catalog/
+# ppe_issues; ppe_issues -> ppe_norm_items -> ppe_norms) pins the rest in
+# MetaData (create_all would fail otherwise). Follow-up: strip the dead read
+# from packs.py, then delete the whole family. PPENorm/PPEIssue here are name
+# duplicates of the live classes in models.py (tables ppenorm/ppeissue).
+
+
 class PPENorm(TenantBaseModel, SoftDeleteMixin):
     __tablename__ = "ppe_norms"
 

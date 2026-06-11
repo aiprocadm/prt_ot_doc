@@ -91,7 +91,6 @@ from app.models.models import (
     TrainingStatus,
     User,
     UserRole,
-    WarehousePPE,
     WebhookEndpoint,
     WebhookSubscription,
 )
@@ -249,7 +248,6 @@ __all__ = [
     "TrainingStatus",
     "User",
     "UserRole",
-    "WarehousePPE",
     "WebhookSubscription",
     "WebhookEndpoint",
     "ApprovalRoute",
