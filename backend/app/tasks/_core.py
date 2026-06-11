@@ -2033,6 +2033,37 @@ async def _contractors_documents_tick() -> int:
 
 
 @celery_app.task(
+    name="ppe.expiry.tick",
+    autoretry_for=RETRYABLE_EXCEPTIONS,
+    retry_backoff=True,
+    retry_jitter=True,
+    max_retries=5,
+)
+def ppe_expiry_tick() -> int:
+    return _run_coroutine(_ppe_expiry_tick())
+
+
+async def _ppe_expiry_tick() -> int:
+    from app.services.ppe_notifications import notify_replacement_due
+
+    async with AsyncSessionLocal(tenant=settings.default_tenant_slug) as session:
+        tenants = list(
+            (await session.execute(select(Tenant).where(Tenant.is_active.is_(True)))).scalars().all()
+        )
+    total = 0
+    for tenant in tenants:
+        with tenant_context(tenant.slug):
+            ensure_tenant_schema(tenant.slug)
+            async with session_scope(tenant=tenant.slug) as session:
+                tenant_id, _scope = await _resolve_task_tenant_scope(session, tenant.slug)
+                # Enqueue then commit — события атомарны с чтением; notify дедупит
+                # по (issue, status, day), поэтому autoretry безопасен.
+                total += await notify_replacement_due(session, tenant_id=tenant_id)
+                await session.commit()
+    return total
+
+
+@celery_app.task(
     name="prescriptions.escalate.tick",
     autoretry_for=RETRYABLE_EXCEPTIONS,
     retry_backoff=True,
