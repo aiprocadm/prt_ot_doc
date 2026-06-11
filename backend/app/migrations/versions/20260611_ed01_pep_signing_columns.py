@@ -27,33 +27,30 @@ down_revision = "20260611_sz02_drop_ppe_family_b_tables"
 branch_labels = None
 depends_on = None
 
-TABLE = "signature_requests"
-
-
 def upgrade() -> None:
     bind = op.get_bind()
     dialect = bind.dialect.name
 
-    op.add_column(TABLE, sa.Column("signer_person_id", sa.String(length=36), nullable=True))
-    op.add_column(TABLE, sa.Column("content_hash", sa.String(length=64), nullable=True))
-    op.add_column(TABLE, sa.Column("purpose", sa.String(length=32), nullable=True))
-    op.add_column(TABLE, sa.Column("confirm_code_hash", sa.String(length=64), nullable=True))
-    op.add_column(TABLE, sa.Column("confirm_code_expires_at", sa.DateTime(timezone=True), nullable=True))
-    op.add_column(TABLE, sa.Column("confirm_attempts", sa.Integer(), nullable=False, server_default="0"))
-    op.create_index("ix_signature_requests_signer_person_id", TABLE, ["signer_person_id"])
+    op.add_column("signature_requests", sa.Column("signer_person_id", sa.String(length=36), nullable=True))
+    op.add_column("signature_requests", sa.Column("content_hash", sa.String(length=64), nullable=True))
+    op.add_column("signature_requests", sa.Column("purpose", sa.String(length=32), nullable=True))
+    op.add_column("signature_requests", sa.Column("confirm_code_hash", sa.String(length=64), nullable=True))
+    op.add_column("signature_requests", sa.Column("confirm_code_expires_at", sa.DateTime(timezone=True), nullable=True))
+    op.add_column("signature_requests", sa.Column("confirm_attempts", sa.Integer(), nullable=False, server_default="0"))
+    op.create_index("ix_signature_requests_signer_person_id", "signature_requests", ["signer_person_id"])
     if dialect == "postgresql":
         op.create_foreign_key(
             "fk_signature_requests_signer_person_id_person",
-            TABLE,
+            "signature_requests",
             "person",
             ["signer_person_id"],
             ["id"],
             ondelete="SET NULL",
         )
-        op.execute(f"ALTER TABLE {TABLE} ALTER COLUMN status TYPE VARCHAR(32) USING status::text")
+        op.execute("ALTER TABLE signature_requests ALTER COLUMN status TYPE VARCHAR(32) USING status::text")
         op.execute("DROP TYPE IF EXISTS signaturerequeststatus")
     else:
-        with op.batch_alter_table(TABLE) as batch:
+        with op.batch_alter_table("signature_requests") as batch:
             batch.alter_column(
                 "status",
                 existing_type=sa.String(length=16),
@@ -83,24 +80,24 @@ def downgrade() -> None:
         )
 
     if dialect == "postgresql":
-        op.drop_constraint("fk_signature_requests_signer_person_id_person", TABLE, type_="foreignkey")
+        op.drop_constraint("fk_signature_requests_signer_person_id_person", "signature_requests", type_="foreignkey")
         op.execute("CREATE TYPE signaturerequeststatus AS ENUM ('created', 'requested', 'signed', 'failed')")
         op.execute(
-            f"ALTER TABLE {TABLE} ALTER COLUMN status TYPE signaturerequeststatus "
+            "ALTER TABLE signature_requests ALTER COLUMN status TYPE signaturerequeststatus "
             "USING status::signaturerequeststatus"
         )
     else:
-        with op.batch_alter_table(TABLE) as batch:
+        with op.batch_alter_table("signature_requests") as batch:
             batch.alter_column(
                 "status",
                 existing_type=sa.String(length=32),
                 type_=sa.String(length=16),
                 existing_nullable=False,
             )
-    op.drop_index("ix_signature_requests_signer_person_id", table_name=TABLE)
-    op.drop_column(TABLE, "confirm_attempts")
-    op.drop_column(TABLE, "confirm_code_expires_at")
-    op.drop_column(TABLE, "confirm_code_hash")
-    op.drop_column(TABLE, "purpose")
-    op.drop_column(TABLE, "content_hash")
-    op.drop_column(TABLE, "signer_person_id")
+    op.drop_index("ix_signature_requests_signer_person_id", table_name="signature_requests")
+    op.drop_column("signature_requests", "confirm_attempts")
+    op.drop_column("signature_requests", "confirm_code_expires_at")
+    op.drop_column("signature_requests", "confirm_code_hash")
+    op.drop_column("signature_requests", "purpose")
+    op.drop_column("signature_requests", "content_hash")
+    op.drop_column("signature_requests", "signer_person_id")
