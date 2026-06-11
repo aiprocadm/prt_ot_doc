@@ -2927,6 +2927,8 @@ class SignatureRequest(TenantBaseModel):
     result_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
 
     # --- PEP (простая электронная подпись, ed01) ---
+    # Plain string — no FK (user ids come from external auth; pattern follows requested_by).
+    signer_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     signer_person_id: Mapped[str | None] = mapped_column(
         ForeignKey("person.id", ondelete="SET NULL"), nullable=True, index=True
     )

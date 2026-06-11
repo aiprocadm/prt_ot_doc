@@ -31,6 +31,9 @@ def upgrade() -> None:
     bind = op.get_bind()
     dialect = bind.dialect.name
 
+    # Plain string, no FK — user ids are external auth identifiers (same pattern as requested_by).
+    op.add_column("signature_requests", sa.Column("signer_user_id", sa.String(length=36), nullable=True))
+    op.create_index("ix_signature_requests_signer_user_id", "signature_requests", ["signer_user_id"])
     op.add_column("signature_requests", sa.Column("signer_person_id", sa.String(length=36), nullable=True))
     op.add_column("signature_requests", sa.Column("content_hash", sa.String(length=64), nullable=True))
     op.add_column("signature_requests", sa.Column("purpose", sa.String(length=32), nullable=True))
@@ -101,3 +104,5 @@ def downgrade() -> None:
     op.drop_column("signature_requests", "purpose")
     op.drop_column("signature_requests", "content_hash")
     op.drop_column("signature_requests", "signer_person_id")
+    op.drop_index("ix_signature_requests_signer_user_id", table_name="signature_requests")
+    op.drop_column("signature_requests", "signer_user_id")
