@@ -6,7 +6,7 @@ one-time confirm-code state — plus a status widening VARCHAR(16)->VARCHAR(32)
 for the new awaiting_code/declined/expired values. New rows are written with
 signature_type='pep', provider='internal'; legacy kep/unep rows are untouched.
 
-Downgrade drops the six columns and (on PG) restores the native enum type;
+Downgrade drops the seven columns and (on PG) restores the native enum type;
 it refuses to run while rows carry the new PEP statuses
 (awaiting_code/declined/expired) and the enum cast is a second honest-failure
 line. On SQLite status just narrows back to VARCHAR(16).
@@ -106,3 +106,4 @@ def downgrade() -> None:
     op.drop_column("signature_requests", "signer_person_id")
     op.drop_index("ix_signature_requests_signer_user_id", table_name="signature_requests")
     op.drop_column("signature_requests", "signer_user_id")
+

@@ -13,6 +13,7 @@ os.environ.setdefault("S3_SECRET_KEY", "test-secret-key")
 MIGRATION = Path(__file__).resolve().parents[1] / "app" / "migrations" / "versions" / "20260611_ed01_pep_signing_columns.py"
 
 PEP_COLUMNS = {
+    "signer_user_id",
     "signer_person_id",
     "content_hash",
     "purpose",
