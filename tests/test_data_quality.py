@@ -193,6 +193,9 @@ class TestDataQualityService:
             "document_readiness",
             "document_person_company_mismatch",
             "potential_duplicates",
+            # Added by the medical contour (PR #643): flags persons with an
+            # unfit medical verdict but no active suspension.
+            "unfit_without_suspension",
         }
         assert expected_rules.issubset(rule_names)
         assert len(report.check_results) == len(expected_rules)
