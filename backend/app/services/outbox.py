@@ -61,7 +61,12 @@ def _pipeline_for_event(event_type: str) -> PipelineType:
         return PipelineType.DOCUMENT
     if resolved == EventType.RISK_ASSESSED:
         return PipelineType.RISK
-    if resolved in {EventType.PPE_ISSUED, EventType.PPE_RETURNED}:
+    if resolved in {
+        EventType.PPE_ISSUED,
+        EventType.PPE_RETURNED,
+        EventType.PPE_WRITTEN_OFF,
+        EventType.PPE_REPLACEMENT_DUE,
+    }:
         return PipelineType.PPE
     if resolved in {EventType.TRAINING_ASSIGNED, EventType.TRAINING_COMPLETED}:
         return PipelineType.TRAINING

@@ -35,7 +35,10 @@ async def _get_person(session: AsyncSession, tenant_id: str, person_id: str) -> 
         Person.tenant_id == tenant_id,
         Person.deleted_at.is_(None),
     )
-    return (await session.execute(stmt)).scalar_one()
+    person = (await session.execute(stmt)).scalar_one_or_none()
+    if person is None:
+        raise ValueError(f"Person not found: {person_id}")
+    return person
 
 
 async def _get_position(session: AsyncSession, tenant_id: str, position_id: str) -> Position:
@@ -53,7 +56,10 @@ async def _get_ppe_item(session: AsyncSession, tenant_id: str, item_id: str) -> 
         PPEItem.tenant_id == tenant_id,
         PPEItem.deleted_at.is_(None),
     )
-    return (await session.execute(stmt)).scalar_one()
+    item = (await session.execute(stmt)).scalar_one_or_none()
+    if item is None:
+        raise ValueError(f"PPE item not found: {item_id}")
+    return item
 
 
 async def issue_ppe_item(

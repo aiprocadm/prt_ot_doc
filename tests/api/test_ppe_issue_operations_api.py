@@ -95,3 +95,14 @@ async def test_legacy_patch_respects_fsm(async_client, make_auth_headers, sessio
 
     bad = await async_client.patch(f"{ISSUES}/{issue_id}", headers=headers, json={"status": "lost"})
     assert bad.status_code == status.HTTP_409_CONFLICT, bad.text
+
+
+@pytest.mark.asyncio
+async def test_replace_with_unknown_item_returns_400(async_client, make_auth_headers, sessionmaker, data_factory):
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    issue_id, _ = await _seed_issue(async_client, headers, sessionmaker, data_factory)
+
+    resp = await async_client.post(f"{ISSUES}/{issue_id}/replace", headers=headers, json={
+        "item_id": "no-such-item",
+    })
+    assert resp.status_code == status.HTTP_400_BAD_REQUEST, resp.text
