@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Protocol
 
@@ -16,39 +15,28 @@ class EdoOperatorAdapter(Protocol):
     async def fetch_protocol(self, message: EdoMessage) -> dict[str, Any]: ...
 
 
-@dataclass
-class MockEdoOperator:
-    async def send_outgoing_message(self, message: EdoMessage) -> dict[str, Any]:
-        return {"external_message_id": f"edo-{message.id}", "status": "sent"}
-
-    async def get_message_status(self, message: EdoMessage) -> dict[str, Any]:
-        progression = ["queued", "sent", "delivered", "viewed", "signed", "completed"]
-        try:
-            idx = progression.index(message.status)
-            status = progression[min(idx + 1, len(progression) - 1)]
-        except ValueError:
-            status = "sent"
-        return {"status": status}
-
-    async def parse_webhook(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return payload
-
-    async def fetch_protocol(self, message: EdoMessage) -> dict[str, Any]:
-        return {"protocol": {"message_id": message.id, "status": message.status}}
+# Мок-оператор удалён (Срез-1 чистка симуляции).
+# Реальный оператор ЭДО появится при продуктовой интеграции.
 
 
 class EdoMessageService:
+    """Сервис исходящих ЭДО-сообщений.
+
+    operator=None означает «оператор не сконфигурирован»; методы, не
+    использующие оператора напрямую, работают и без него.
+    """
+
     def __init__(self, session: AsyncSession, tenant_id: str, operator: EdoOperatorAdapter | None = None) -> None:
         self.session = session
         self.tenant_id = tenant_id
-        self.operator = operator or MockEdoOperator()
+        self.operator = operator
 
 
 class EdoWebhookService:
     def __init__(self, session: AsyncSession, tenant_id: str, operator: EdoOperatorAdapter | None = None) -> None:
         self.session = session
         self.tenant_id = tenant_id
-        self.operator = operator or MockEdoOperator()
+        self.operator = operator
 
     async def ingest(self, *, operator_code: str, dedupe_key: str, headers_json: dict[str, Any], payload_json: dict[str, Any]) -> EdoWebhookInbox:
         inbox = EdoWebhookInbox(
