@@ -74,7 +74,7 @@ async def test_sign_creates_pep_record_and_links_it(sessionmaker, data_factory):
 @pytest.mark.asyncio
 async def test_repeated_sign_does_not_duplicate_pep(sessionmaker, data_factory):
     async with sessionmaker() as session:
-        tenant, person, entry = await _entry(session, data_factory)
+        tenant, _, entry = await _entry(session, data_factory)
         await BriefingEntryService().sign(session, entry, "employee", None)
         await BriefingEntryService().sign(session, entry, "employee", None)
         pep = await _pep_rows(session, tenant, entry)
@@ -84,7 +84,7 @@ async def test_repeated_sign_does_not_duplicate_pep(sessionmaker, data_factory):
 @pytest.mark.asyncio
 async def test_instructor_sign_pep_uses_user_signer(sessionmaker, data_factory):
     async with sessionmaker() as session:
-        tenant, person, entry = await _entry(session, data_factory)
+        tenant, _, entry = await _entry(session, data_factory)
         await BriefingEntryService().sign(session, entry, "instructor", "user-42")
         pep = await _pep_rows(session, tenant, entry)
         assert len(pep) == 1

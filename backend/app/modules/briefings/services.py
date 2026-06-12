@@ -39,17 +39,22 @@ class BriefingEntryService:
             return existing
 
         # Для employee подписант — person записи; для instructor — signer_user_id.
-        # Edge: если signer_type=="employee" и entry.person_id is None — оба подписанта
-        # None; create_attested не валидирует «ровно один», но для ясности fallback
-        # на signer_user_id (может тоже быть None — PEP-запись создаётся без подписанта,
-        # что допустимо для attested-режима «в присутствии»).
+        # Fallback реализован: если signer_type=="employee" и entry.person_id is None,
+        # подпись фиксируется за user-оформителем (signer_user_id); если и он None —
+        # PEP-запись создаётся без указания подписанта (допустимо для attested-режима).
+        employee_person_id = entry.person_id if signer_type == "employee" else None
+        pep_signer_user_id = (
+            signer_user_id
+            if signer_type == "instructor" or employee_person_id is None
+            else None
+        )
         pep_req = await PepSigningService(session, str(entry.tenant_id)).create_attested(
             object_type="briefing_entry",
             object_id=entry.id,
             purpose="briefing",
             requested_by=signer_user_id or "system",
-            signer_user_id=signer_user_id if signer_type == "instructor" else None,
-            signer_person_id=entry.person_id if signer_type == "employee" else None,
+            signer_user_id=pep_signer_user_id,
+            signer_person_id=employee_person_id,
         )
         signature = BriefingSignature(
             tenant_id=entry.tenant_id,

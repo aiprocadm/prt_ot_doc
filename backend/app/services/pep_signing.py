@@ -388,6 +388,9 @@ class PepSigningService:
 
         Для briefings (Срез-1): мгновенный signed и для person-подписанта —
         без кода; факт attestation фиксируется в result_json.
+
+        NB: не валидирует purpose/подписанта и не делает dup-check — ответственность
+        вызывающего (briefings: existing-check в sign); guard — Срез-2.
         """
         content = await self._build_content(object_type, object_id)
         payload = canonical_payload(object_type, object_id, content)
