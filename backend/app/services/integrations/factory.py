@@ -23,7 +23,6 @@ from .stubs import (
     DisabledEDOIntegration,
     DisabledEISOTIntegration,
     DisabledFRDOIntegration,
-    StubEDOIntegration,
 )
 
 
@@ -49,7 +48,9 @@ def get_edo_integration() -> BaseEDOIntegration:
             outbound_path=settings.edo_integration_outbound_path,
             app_env=settings.app_env,
         )
-    return StubEDOIntegration()
+    # Флаг включён, но base_url не задан: провайдер не сконфигурирован.
+    # Честно сообщаем о недоступности (IntegrationDisabledError), не имитируем отправку.
+    return DisabledEDOIntegration()
 
 
 @lru_cache()

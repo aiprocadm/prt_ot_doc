@@ -168,7 +168,7 @@ async def eval_policy(payload: EvaluatePayload, *, tenant: TenantDep, access: Ad
 
 _KNOWN_PROVIDERS = [
     ("signing", "internal-fallback"),
-    ("edo", "stub-edo"),
+    ("edo", "disabled-edo"),
     ("accounting", "stub-1c"),
     ("websocket", "polling_fallback"),
     ("frdo", "stub-frdo"),
