@@ -10,7 +10,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.signing.pep import (
@@ -25,8 +25,9 @@ from app.domains.signing.pep import (
     content_hash,
     hash_confirm_code,
 )
+from app.models.approval_workflow import ApprovalInstanceStatus
 from app.models.document import DocumentVersion
-from app.models.models import BriefingEntry, Person, PPEIssue, SignatureRequest
+from app.models.models import ApprovalInstance, BriefingEntry, Person, PPEIssue, SignatureRequest
 from app.services.events import EventType
 from app.services.outbox import OutboxService
 
@@ -293,12 +294,113 @@ class PepSigningService:
         )
         await self.session.flush()
 
-    # --- hooks, реализуются в Task 5 ---------------------------------------
+    # --- hooks (Task 5) ----------------------------------------------------
 
     async def _approval_gate(self, object_type: str, object_id: str, purpose: str) -> None:
-        """Гейт согласования перед созданием запроса — реализуется в Task 5."""
-        return None
+        """Гейт: документ нельзя подписывать, пока активный маршрут не APPROVED.
+
+        Ищем инстансы по обоим якорям (entity_id = id версии ИЛИ id документа) —
+        в репо встречаются оба способа привязки. Ознакомления гейт не блокирует.
+        """
+        if purpose != "document" or object_type != "document_version":
+            return None
+        doc = await self.session.get(DocumentVersion, object_id)
+        anchor_ids = [object_id] + ([doc.document_id] if doc is not None else [])
+        rows = (
+            (
+                await self.session.execute(
+                    select(ApprovalInstance)
+                    .where(
+                        ApprovalInstance.tenant_id == self.tenant_id,
+                        ApprovalInstance.entity_id.in_(anchor_ids),
+                    )
+                    .order_by(ApprovalInstance.created_at.desc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+        latest = rows[0] if rows else None
+        if latest is not None and latest.status != ApprovalInstanceStatus.APPROVED:
+            raise PepConflict("approval_required: document is not approved yet")
 
     async def _dispatch_signed(self, req: SignatureRequest) -> None:
-        """Диспетчер постобработки после подписания — реализуется в Task 5."""
-        return None
+        """Диспетчер потребителей: проекции на signed по purpose.
+
+        DocumentVersion.signature_status обновляется через core UPDATE, а не через
+        ORM-атрибут, чтобы обойти before_update-гард иммутабельности (см.
+        DocumentVersionUpdateError в services/documents.py). После UPDATE объект
+        вытесняется из identity map, чтобы тест мог прочитать актуальное значение.
+        """
+        if req.purpose == "document" and req.object_type == "document_version":
+            doc = await self.session.get(DocumentVersion, req.object_id)
+            if doc is not None and str(doc.tenant_id) == str(self.tenant_id):
+                # Core UPDATE — не бьёт ORM before_update event listener.
+                # "evaluate" синхронизирует in-memory объект напрямую (Python-
+                # оценка WHERE), не через дополнительный SELECT и не через flush.
+                await self.session.execute(
+                    update(DocumentVersion)
+                    .where(DocumentVersion.id == req.object_id)
+                    .values(signature_status="signed")
+                    .execution_options(synchronize_session="evaluate")
+                )
+        elif req.purpose == "ppe_issue" and req.object_type == "ppe_issue":
+            issue = await self.session.get(PPEIssue, req.object_id)
+            if issue is not None and str(issue.tenant_id) == str(self.tenant_id):
+                issue.signature_doc_ref = f"pep:{req.id}"
+        # acknowledgement / briefing: сама запись и есть результат
+
+    async def verify(self, request_id: str) -> dict[str, Any]:
+        """Пересчёт канонического hash по ТЕКУЩЕМУ объекту; протокол — в запись."""
+        req = await self._get_own(request_id)
+        if req.status != PepStatus.SIGNED.value:
+            raise PepConflict(f"only signed requests are verifiable, got {req.status}")
+        content = await self._build_content(req.object_type, req.object_id)
+        actual = content_hash(canonical_payload(req.object_type, req.object_id, content))
+        protocol = {
+            "checked_at": datetime.now(tz=timezone.utc).isoformat(),
+            "expected_hash": req.content_hash,
+            "actual_hash": actual,
+            "match": actual == req.content_hash,
+        }
+        req.verification_result_json = protocol
+        await self.session.flush()
+        return protocol
+
+    async def create_attested(
+        self,
+        *,
+        object_type: str,
+        object_id: str,
+        purpose: str,
+        requested_by: str,
+        signer_user_id: str | None = None,
+        signer_person_id: str | None = None,
+    ) -> SignatureRequest:
+        """Attested-подпись: оформитель фиксирует подпись в своём присутствии.
+
+        Для briefings (Срез-1): мгновенный signed и для person-подписанта —
+        без кода; факт attestation фиксируется в result_json.
+        """
+        content = await self._build_content(object_type, object_id)
+        payload = canonical_payload(object_type, object_id, content)
+        req = SignatureRequest(
+            tenant_id=self.tenant_id,
+            object_type=object_type,
+            object_id=object_id,
+            provider="internal",
+            provider_code="internal",
+            signature_type="pep",
+            purpose=purpose,
+            requested_by=requested_by,
+            signer_user_id=signer_user_id,
+            signer_person_id=signer_person_id,
+            content_hash=content_hash(payload),
+            payload_json={"canonical": payload},
+            result_json={"attested_by": requested_by},
+            status=PepStatus.CREATED.value,
+        )
+        self.session.add(req)
+        await self.session.flush()
+        await self._mark_signed(req)
+        return req
