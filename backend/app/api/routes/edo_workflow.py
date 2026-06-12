@@ -26,21 +26,17 @@ from app.models.workflow import (
     ApprovalRequest,
     ApprovalRequestStatus,
     ApprovalRoute,
-    EdoDirection,
     EdoMessage,
     EdoStatus,
-    EdoStatusHistory,
     Signature,
-    SignatureStatus,
     SignatureType,
 )
 from app.services.billing import BillingService
-from app.services.events import EventType
-from app.services.file_storage import FileStorageService
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 from app.services.outbox import OutboxService
 from app.services.provider_registry import provider_response_meta
-from app.tasks import edo_status_simulation_job, process_inbound_webhook, send_edo_job
+from app.services.pep_signing import PepConflict, PepNotFound, PepSigningService
+from app.tasks import process_inbound_webhook
 
 router = APIRouter()
 SessionDep = Depends(get_session)
@@ -58,6 +54,25 @@ def _edo_unprocessable(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         detail=api_problem_detail(code="EDO_VALIDATION_ERROR", message=message, error_type="edo"),
+    )
+
+
+def _provider_not_configured(kind: str) -> HTTPException:
+    """Честный отказ вместо симуляции: внешний провайдер не настроен (Срез-1 ПЭП).
+
+    Codes: EDO_PROVIDER_NOT_CONFIGURED | SIGNATURE_PROVIDER_NOT_CONFIGURED
+    """
+    code = f"{kind.upper()}_PROVIDER_NOT_CONFIGURED"
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=api_problem_detail(
+            code=code,
+            message=(
+                f"external {kind} provider is not configured; "
+                "internal PEP signing is available at /sign/pep"
+            ),
+            error_type="edo",
+        ),
     )
 
 
@@ -452,42 +467,34 @@ async def create_signature(
     access: AccessContext = AccessDep,
 ):
     cid = _correlation_id(request, response)
+    if payload.type is not SignatureType.INTERNAL:
+        raise _provider_not_configured("signature")
     doc_ver = await session.get(DocumentVersion, payload.document_version_id)
     if doc_ver is None or str(doc_ver.tenant_id) != str(tenant.id):
         raise _edo_not_found("document_version")
-    now = datetime.now(tz=timezone.utc)
-    signature = Signature(
-        tenant_id=str(tenant.id),
-        document_version_id=payload.document_version_id,
-        type=payload.type,
-        status=SignatureStatus.PENDING,
-        signer_user_id=access.user.id,
-    )
-    if payload.type is SignatureType.INTERNAL:
-        signature.status = SignatureStatus.SIGNED
-        signature.signed_at = now
-    session.add(signature)
-    await session.flush()
-    storage = FileStorageService.default()
-    receipt = {"signature_id": signature.id, "status": signature.status.value, "signed_at": now.isoformat()}
-    receipt_key = f"{tenant.slug}/signatures/{uuid4().hex}.json"
-    storage.put(receipt_key, json.dumps(receipt).encode("utf-8"), content_type="application/json")
-    signature.receipts_s3_key = receipt_key
-    await session.flush()
-    await OutboxService(session).enqueue(
-        tenant_id=str(tenant.id),
-        event_type=EventType.DOCUMENT_SIGNED.value,
-        payload={
-            "tenant_id": str(tenant.id),
-            "event_id": str(uuid4()),
-            "document_id": payload.document_version_id,
-            "document_version_id": payload.document_version_id,
-            "status": signature.status.value,
-            "signed_at": (signature.signed_at or now).isoformat(),
-        },
-        idempotency_key=f"signature:{signature.id}",
-    )
-    return {"id": signature.id, "status": signature.status.value, "receipts_s3_key": signature.receipts_s3_key, "correlation_id": cid}
+    svc = PepSigningService(session, str(tenant.id))
+    try:
+        req, _code = await svc.create_request(
+            object_type="document_version",
+            object_id=payload.document_version_id,
+            purpose="document",
+            requested_by=str(access.user.id),
+            signer_user_id=str(access.user.id),
+        )
+    except PepNotFound:
+        raise _edo_not_found("document_version")
+    except PepConflict as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=api_problem_detail(code="PEP_CONFLICT", message=str(exc), error_type="edo"),
+        ) from exc
+    await session.commit()
+    return {
+        "id": req.id,
+        "status": req.status,
+        "receipts_s3_key": None,
+        "correlation_id": cid,
+    }
 
 
 @router.post("/sign/request")
@@ -514,24 +521,29 @@ async def sign_submit(
     access: AccessContext = AccessDep,
 ):
     cid = _correlation_id(request, response)
-    signature = Signature(
-        tenant_id=str(tenant.id),
-        document_version_id=payload.document_version_id,
-        type=payload.kind,
-        status=SignatureStatus.SIGNED,
-        signer_user_id=access.user.id,
-        cert_info_json=payload.cert_info,
-        signed_at=datetime.now(tz=timezone.utc),
-    )
-    session.add(signature)
-    await session.flush()
-    await OutboxService(session).enqueue(
-        tenant_id=str(tenant.id),
-        event_type=EventType.DOCUMENT_SIGNED.value,
-        payload={"tenant_id": str(tenant.id), "event_id": str(uuid4()), "document_version_id": payload.document_version_id, "status": signature.status.value},
-        idempotency_key=f"signature:submit:{signature.id}",
-    )
-    return {"id": signature.id, "status": signature.status.value, "correlation_id": cid}
+    if payload.kind is not SignatureType.INTERNAL:
+        raise _provider_not_configured("signature")
+    doc_ver = await session.get(DocumentVersion, payload.document_version_id)
+    if doc_ver is None or str(doc_ver.tenant_id) != str(tenant.id):
+        raise _edo_not_found("document_version")
+    svc = PepSigningService(session, str(tenant.id))
+    try:
+        req, _code = await svc.create_request(
+            object_type="document_version",
+            object_id=payload.document_version_id,
+            purpose="document",
+            requested_by=str(access.user.id),
+            signer_user_id=str(access.user.id),
+        )
+    except PepNotFound:
+        raise _edo_not_found("document_version")
+    except PepConflict as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=api_problem_detail(code="PEP_CONFLICT", message=str(exc), error_type="edo"),
+        ) from exc
+    await session.commit()
+    return {"id": req.id, "status": req.status, "correlation_id": cid}
 
 
 @router.get("/sign/status")
@@ -569,53 +581,12 @@ async def send_to_edo(
     access: AccessContext = AccessDep
 ):
     _correlation_id(request, response)
-    await BillingService(session).assert_allowed(tenant, "edo.send")
     idem_service, replay = await _idempotent_or_replay(
         request=request, response=response, session=session, tenant=tenant, user_id=str(access.user.id), model=payload
     )
     if replay is not None:
         return replay
-    message = EdoMessage(
-        tenant_id=str(tenant.id),
-        direction=EdoDirection.OUTGOING,
-        document_version_id=payload.document_version_id,
-        provider_code=payload.resolved_provider(),
-        status=EdoStatus.QUEUED,
-        payload_json={"document_version_id": payload.document_version_id},
-    )
-    session.add(message)
-    await session.flush()
-    message.external_id = f"{payload.resolved_provider()}-{message.id}"
-    message.status = EdoStatus.SENT
-    history = EdoStatusHistory(
-        tenant_id=str(tenant.id),
-        edo_message_id=message.id,
-        status=EdoStatus.SENT,
-        raw_payload_json={"provider": payload.resolved_provider()},
-    )
-    session.add(history)
-    await OutboxService(session).enqueue(
-        tenant_id=str(tenant.id),
-        event_type="edo.sent",
-        payload={"tenant_id": str(tenant.id), "event_id": str(uuid4()), "metadata": {"edo_message_id": message.id}},
-        destination="internal://edo",
-        idempotency_key=f"edo.sent:{message.id}",
-    )
-    await BillingService(session).add_usage(tenant_id=str(tenant.id), edo_outgoing=1)
-    body = {
-        "id": message.id,
-        "external_id": message.external_id,
-        "status": message.status.value,
-        **provider_response_meta(payload.resolved_provider()),
-    }
-    send_edo_job.delay(message_id=message.id, tenant_id=str(tenant.id), provider_code=payload.resolved_provider())
-    edo_status_simulation_job.delay(message_id=message.id, tenant_id=str(tenant.id), status="delivered")
-    edo_status_simulation_job.delay(message_id=message.id, tenant_id=str(tenant.id), status="accepted")
-    if idem_service is not None:
-        record = getattr(request.state, "idempotency_record", None)
-        if record is not None:
-            await idem_service.store_success(record, status_code=200, body=body)
-    return body
+    raise _provider_not_configured("edo")
 
 
 @router.get("/edo-workflow/messages")
