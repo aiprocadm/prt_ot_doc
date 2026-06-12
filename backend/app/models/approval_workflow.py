@@ -41,12 +41,6 @@ class SignatureType(str, enum.Enum):
     INTERNAL = "INTERNAL"
 
 
-class SignatureStatus(str, enum.Enum):
-    PENDING = "pending"
-    SIGNED = "signed"
-    FAILED = "failed"
-
-
 class EdoDirection(str, enum.Enum):
     OUTGOING = "outgoing"
     INCOMING = "incoming"
@@ -178,23 +172,6 @@ class ApprovalDecision(TenantBaseModel):
     user_agent: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
     request: Mapped[ApprovalRequest | None] = relationship("ApprovalRequest", backref="decisions")
-
-
-class Signature(TenantBaseModel):
-    __tablename__ = "signatures"
-
-    document_version_id: Mapped[str] = mapped_column(ForeignKey("documentversion.id"), nullable=False, index=True)
-    type: Mapped[SignatureType] = mapped_column(Enum(SignatureType), nullable=False)
-    status: Mapped[SignatureStatus] = mapped_column(native_enum(SignatureStatus), nullable=False, default=SignatureStatus.PENDING)
-    signer_user_id: Mapped[str | None] = mapped_column(ForeignKey("user.id"), nullable=True, index=True)
-    cert_info_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
-    signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    receipts_s3_key: Mapped[str | None] = mapped_column(String(512))
-
-    __table_args__ = (
-        Index("ix_signatures_document", "tenant_id", "document_version_id"),
-        Index("ix_signatures_status", "tenant_id", "status"),
-    )
 
 
 class EdoMessage(TenantBaseModel):

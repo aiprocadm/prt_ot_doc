@@ -27,9 +27,12 @@ for _md in (SharedBase.metadata, TenantBase.metadata):
     for _t in _md.tables.values():
         ALL_TABLES.setdefault(_t.name, _t)
 
-# (table, column) — exactly the 52 Group-A defective columns (2026-06-02 full PG audit).
+# (table, column) — the Group-A defective columns (2026-06-02 full PG audit).
+# Исходно 52; минус 2 после ed02 (2026-06-12): ORM-классы EdoEnvelope и
+# Signature удалены, их таблицы edo_envelopes / signatures дропнуты
+# (20260612_ed02_drop_legacy_signing_tables) → колонок больше не существует.
 DEFECTIVE_COLUMNS = {
-    # models.py (28)
+    # models.py (27)
     ("subscriptions", "status"), ("invoices", "status"), ("billing_events", "type"),
     ("user", "role"), ("user_role", "role"), ("training_session", "status"),
     ("ppeitem", "category"), ("package_profiles_v2", "status"),
@@ -42,14 +45,13 @@ DEFECTIVE_COLUMNS = {
     ("journalentry", "entry_type"), ("regulatory_inspection", "inspection_type"),
     ("attestation", "status"), ("inspection_prescription", "status"),
     ("approval_processes", "status"), ("approval_tasks", "status"),
-    ("edo_envelopes", "status"),
     # notifications.py (8)
     ("notification_templates", "channel"), ("notification_templates", "type"),
     ("notifications", "channel"), ("notifications", "type"),
     ("notifications", "priority"), ("notifications", "status"),
     ("reminder_rules", "entity_type"), ("plan_tasks", "status"),
-    # approval_workflow.py (4)
-    ("approval_requests", "status"), ("signatures", "status"),
+    # approval_workflow.py (3)
+    ("approval_requests", "status"),
     ("edo_messages", "direction"), ("edo_status_history", "status"),
     # document.py (3)
     ("document", "status"), ("document_batch_run", "status"),
@@ -64,8 +66,10 @@ DEFECTIVE_COLUMNS = {
 }
 
 
-def test_exactly_52_columns_pinned() -> None:
-    assert len(DEFECTIVE_COLUMNS) == 52
+def test_exactly_50_columns_pinned() -> None:
+    # 52 по аудиту 2026-06-02, минус edo_envelopes.status и signatures.status
+    # (таблицы дропнуты ed02, ORM-классы удалены).
+    assert len(DEFECTIVE_COLUMNS) == 50
 
 
 def test_defective_columns_bind_enum_values_not_names() -> None:
