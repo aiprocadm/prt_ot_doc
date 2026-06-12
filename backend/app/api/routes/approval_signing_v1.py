@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import hmac
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
@@ -9,7 +7,6 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
@@ -23,19 +20,15 @@ from app.models.approval_signing import (
     ApprovalRoute,
     ApprovalTask,
     ApprovalTaskStatus,
-    EdoEnvelope,
-    EdoEnvelopeStatus,
     SignatureRequest,
-    SignatureRequestStatus,
     WebhookEndpoint,
 )
-from app.models.job_engine import InboundWebhookDedup
 from app.models.models import IdempotencyStatus, UserRole
 from app.models.tenanting import Tenant
 from app.modules.approval.core import cond_matches, make_request_hash
-from app.modules.approval.webhook_utils import build_edo_status_dedup_key, build_webhook_signature
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 from app.services.outbox import OutboxService
+from app.services.pep_signing import PepConflict, PepNotFound, PepSigningService
 from app.services.provider_registry import provider_response_meta
 
 router = APIRouter()
@@ -72,20 +65,44 @@ def _approval_signing_forbidden(message: str) -> HTTPException:
     )
 
 
-def _approval_signing_unauthorized(message: str) -> HTTPException:
-    return _approval_signing_error(
-        code="APPROVAL_SIGNING_UNAUTHORIZED",
-        message=message,
-        status_code=status.HTTP_401_UNAUTHORIZED,
-    )
-
-
 def _approval_signing_conflict(message: str) -> HTTPException:
     return _approval_signing_error(
         code="APPROVAL_SIGNING_CONFLICT",
         message=message,
         status_code=status.HTTP_409_CONFLICT,
     )
+
+
+def _provider_not_configured(kind: str) -> HTTPException:
+    """Честный отказ вместо симуляции (зеркало edo_workflow._provider_not_configured).
+
+    Codes: EDO_PROVIDER_NOT_CONFIGURED | SIGNATURE_PROVIDER_NOT_CONFIGURED
+    """
+    code = f"{kind.upper()}_PROVIDER_NOT_CONFIGURED"
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=api_problem_detail(
+            code=code,
+            message=(
+                f"external {kind} provider is not configured; "
+                "internal PEP signing is available at /sign/pep"
+            ),
+            error_type="edo",
+        ),
+    )
+
+
+def _pep_conflict(exc: PepConflict) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=api_problem_detail(code="PEP_CONFLICT", message=str(exc), error_type="edo"),
+    )
+
+
+def _status_str(value: Any) -> str:
+    """Диалект-безопасная строка статуса: после ed01 колонка status — VARCHAR,
+    из БД приходит str; до flush может попасться enum-инстанс."""
+    return str(getattr(value, "value", value))
 
 
 def _correlation_id(request: Request, response: Response) -> str:
@@ -152,11 +169,6 @@ class EdoSendIn(BaseModel):
     recipient: str | None = None
     meta: dict[str, Any] | None = None
 
-
-class EdoSendOut(BaseModel):
-    id: str
-    status: str
-    external_id: str
 
 class ApprovalRouteIn(BaseModel):
     code: str
@@ -331,14 +343,24 @@ async def sign_request(payload: SignRequestIn, request: Request, response: Respo
         rec, _ = await idem.acquire(key=normalize_idempotency_key(key), request_hash=make_request_hash(request.url.path, str(tenant.id), x_user_id, payload.model_dump(mode="json")), method="POST", path=request.url.path)
         if rec.status == IdempotencyStatus.SUCCEEDED:
             return rec.result_json["body"]
-    sig = SignatureRequest(tenant_id=str(tenant.id), object_type=payload.object_type, object_id=object_id, provider=payload.provider, status=SignatureRequestStatus.REQUESTED, payload_json={"kind": payload.kind or "un_ep", **(payload.payload or {})})
-    session.add(sig)
-    await session.flush()
-    if payload.provider in {"stub", "internal-fallback"}:
-        sig.status = SignatureRequestStatus.SIGNED
-        sig.result_json = {"signed_by": x_user_id, "verified": True}
-        await OutboxService(session).enqueue(tenant_id=str(tenant.id), event_type="Signed", payload={"event_id": str(uuid4()), "tenant_id": str(tenant.id), "document_id": object_id, "document_version_id": object_id, "status": "signed", "signed_at": datetime.now(timezone.utc).isoformat()})
-    body = {"signature_request_id": sig.id, "status": sig.status.value, "correlation_id": cid, **provider_response_meta(payload.provider)}
+    if payload.provider != "internal-fallback":
+        # Внешние провайдеры подписи не сконфигурированы — честный 409 вместо
+        # прежнего мгновенного SIGNED (симуляция, вычищена в ЭДО Срез-1).
+        raise _provider_not_configured("signature")
+    svc = PepSigningService(session, str(tenant.id))
+    try:
+        req, _code = await svc.create_request(
+            object_type="document_version",
+            object_id=object_id,
+            purpose="document",
+            requested_by=x_user_id,
+            signer_user_id=x_user_id,
+        )
+    except PepNotFound:
+        raise _approval_signing_not_found("document_version")
+    except PepConflict as exc:
+        raise _pep_conflict(exc) from exc
+    body = {"signature_request_id": req.id, "status": _status_str(req.status), "correlation_id": cid, **provider_response_meta(payload.provider)}
     if idem:
         await idem.store_success(rec, status_code=200, body=body)
     return body
@@ -354,7 +376,7 @@ async def sign_requests(status: str | None = None, object_id: str | None = None,
     rows = (await session.execute(stmt.order_by(SignatureRequest.created_at.desc()))).scalars().all()
     return {
         "items": [
-            {"id": r.id, "status": r.status.value, "provider": r.provider, **provider_response_meta(r.provider)}
+            {"id": r.id, "status": _status_str(r.status), "provider": r.provider, **provider_response_meta(r.provider)}
             for r in rows
         ]
     }
@@ -365,7 +387,7 @@ async def sign_request_get(request_id: str, session: AsyncSession = Depends(get_
     row = await session.get(SignatureRequest, request_id)
     if not row or row.tenant_id != str(tenant.id):
         raise _approval_signing_not_found("signature_request")
-    return {"id": row.id, "status": row.status.value, "result_json": row.result_json}
+    return {"id": row.id, "status": _status_str(row.status), "result_json": row.result_json}
 
 
 @router.post("/edo:send")
@@ -377,85 +399,40 @@ async def edo_send(
     session: AsyncSession = Depends(get_session),
     tenant: Tenant = Depends(get_tenant_record),
 ):
-    cid = _correlation_id(request, response)
-    key = normalize_idempotency_key(request.headers.get("Idempotency-Key"))
-    request_hash = make_request_hash(request.url.path, str(tenant.id), None, payload.model_dump(mode="json"))
-    idem = IdempotencyService(session=session, tenant_id=str(tenant.id), endpoint="approval.edo_send")
-    rec, created = await idem.acquire(key=key, request_hash=request_hash, method="POST", path=request.url.path)
-    if not created:
-        return await idem.respond_from_store(rec, model=EdoSendOut, response=response)
-
-    object_id = _require_document_object_id(payload.document_version_id, payload.object_id)
-    env = EdoEnvelope(
-        tenant_id=str(tenant.id),
-        object_type=payload.object_type,
-        object_id=object_id,
-        provider=payload.operator_code or payload.provider,
-        status=EdoEnvelopeStatus.SENT,
-        external_id=f"{(payload.operator_code or payload.provider)}-{uuid4().hex[:12]}",
-        last_event_at=datetime.now(timezone.utc),
-    )
-    session.add(env)
-    await session.flush()
-    outbox = OutboxService(session)
-    await outbox.enqueue(
-        tenant_id=str(tenant.id),
-        event_type="Exported",
-        payload={"event_id": str(uuid4()), "tenant_id": str(tenant.id), "metadata": {"envelope_id": env.id}},
-    )
-    await outbox.enqueue(
-        tenant_id=str(tenant.id),
-        event_type="EdoStatusChanged",
-        payload={"event_id": str(uuid4()), "tenant_id": str(tenant.id), "metadata": {"envelope_id": env.id, "status": EdoEnvelopeStatus.DELIVERED.value}},
-    )
-    body = {"id": env.id, "status": env.status.value, "external_id": env.external_id, "correlation_id": cid}
-    await idem.store_success(
-        rec,
-        status_code=200,
-        body=body,
-        headers={"X-Correlation-Id": cid, "X-Request-Id": cid, "X-Trace-Id": cid},
-    )
-    await session.commit()
-    return body
+    _correlation_id(request, response)
+    key = request.headers.get("Idempotency-Key")
+    if key:
+        idem = IdempotencyService(session=session, tenant_id=str(tenant.id), endpoint="approval.edo_send")
+        rec, created = await idem.acquire(
+            key=normalize_idempotency_key(key),
+            request_hash=make_request_hash(request.url.path, str(tenant.id), None, payload.model_dump(mode="json")),
+            method="POST",
+            path=request.url.path,
+        )
+        if not created and rec.status == IdempotencyStatus.SUCCEEDED:
+            return rec.result_json["body"]
+    # Внешний ЭДО-оператор не сконфигурирован — честный 409, ничего не пишем
+    # (прежняя симуляция SENT→DELIVERED вычищена в ЭДО Срез-1).
+    raise _provider_not_configured("edo")
 
 
 @router.get("/edo/envelopes")
 async def edo_list(status: str | None = None, object_id: str | None = None, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
-    stmt = select(EdoEnvelope).where(EdoEnvelope.tenant_id == str(tenant.id))
-    if status:
-        stmt = stmt.where(EdoEnvelope.status == status)
-    if object_id:
-        stmt = stmt.where(EdoEnvelope.object_id == object_id)
-    rows = (await session.execute(stmt.order_by(EdoEnvelope.created_at.desc()))).scalars().all()
-    return {"items": [{"id": e.id, "status": e.status.value, "external_id": e.external_id} for e in rows]}
+    # Легаси-таблица edo_envelopes дропнута (ed02): конвертов не существует.
+    return {"items": []}
 
 
 @router.get("/edo/envelopes/{envelope_id}")
 async def edo_get(envelope_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
-    e = await session.get(EdoEnvelope, envelope_id)
-    if not e or e.tenant_id != str(tenant.id):
-        raise _approval_signing_not_found("envelope")
-    return {"id": e.id, "status": e.status.value, "external_id": e.external_id, "last_event_at": e.last_event_at}
+    raise _approval_signing_not_found("envelope")
 
 
 @router.post("/edo/webhooks/{provider}")
 @audit_operation("ingest_webhook", "edo_webhook")
 async def edo_webhook(provider: str, payload: dict[str, Any], request: Request, response: Response, x_signature: str | None = Header(default=None, alias="X-Signature"), session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
-    cid = _correlation_id(request, response)
-    configured_secret = (tenant.settings or {}).get("edo_webhook_secret")
-    if configured_secret:
-        expected = build_webhook_signature(secret=str(configured_secret), body=await request.body())
-        if x_signature and not hmac.compare_digest(x_signature, expected):
-            raise _approval_signing_unauthorized("Invalid signature")
-    external_id = payload.get("external_id")
-    env = (await session.execute(select(EdoEnvelope).where(EdoEnvelope.tenant_id == str(tenant.id), EdoEnvelope.provider == provider, EdoEnvelope.external_id == external_id))).scalar_one_or_none()
-    if not env:
-        raise _approval_signing_not_found("envelope")
-    new_status = payload.get("status", "failed")
-    env.status = EdoEnvelopeStatus(new_status)
-    env.last_event_at = datetime.now(timezone.utc)
-    await OutboxService(session).enqueue(tenant_id=str(tenant.id), event_type="edo.status_changed", payload={"event_id": str(uuid4()), "tenant_id": str(tenant.id), "metadata": {"envelope_id": env.id, "status": env.status.value}})
-    return {"status": "ok", "correlation_id": cid}
+    _correlation_id(request, response)
+    # Провайдер не сконфигурирован — входящих вебхуков быть не может.
+    raise _provider_not_configured("edo")
 
 
 @router.post("/approvals/start")
@@ -496,17 +473,30 @@ async def sign_request_v1(payload: SignRequestIn, request: Request, response: Re
 async def sign_submit_v1(payload: SignSubmitIn, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record), x_user_id: str = Header(default="system", alias="X-User-Id")):
     cert_info = payload.cert_info or {}
     _validate_certificate_period(cert_info)
-    sig = SignatureRequest(tenant_id=str(tenant.id), object_type="document_version", object_id=payload.document_version_id, provider="internal-fallback", status=SignatureRequestStatus.SIGNED, payload_json={"kind": payload.kind, "signed_blob": payload.signed_blob[:64]}, result_json={"cert_info": cert_info, "ocsp_status": cert_info.get("ocsp_status", "unknown")})
-    session.add(sig)
-    await session.flush()
-    await OutboxService(session).enqueue(tenant_id=str(tenant.id), event_type="Signed", payload={"event_id": str(uuid4()), "tenant_id": str(tenant.id), "document_version_id": payload.document_version_id, "signature_id": sig.id})
-    return {"id": sig.id, "status": sig.status.value}
+    if payload.kind != "internal":
+        # Внешние виды подписи (un_ep/kep/...) не сконфигурированы — честный 409
+        # (зеркало edo_workflow.sign_submit; прежний мгновенный SIGNED — симуляция).
+        raise _provider_not_configured("signature")
+    svc = PepSigningService(session, str(tenant.id))
+    try:
+        req, _code = await svc.create_request(
+            object_type="document_version",
+            object_id=payload.document_version_id,
+            purpose="document",
+            requested_by=x_user_id,
+            signer_user_id=x_user_id,
+        )
+    except PepNotFound:
+        raise _approval_signing_not_found("document_version")
+    except PepConflict as exc:
+        raise _pep_conflict(exc) from exc
+    return {"id": req.id, "status": _status_str(req.status)}
 
 
 @router.get("/sign/status")
 async def sign_status_v1(document_version_id: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
     rows = (await session.execute(select(SignatureRequest).where(SignatureRequest.tenant_id == str(tenant.id), SignatureRequest.object_id == document_version_id).order_by(SignatureRequest.created_at.desc()))).scalars().all()
-    return {"items": [{"id": s.id, "status": s.status.value, "payload": s.payload_json, "result": s.result_json} for s in rows]}
+    return {"items": [{"id": s.id, "status": _status_str(s.status), "payload": s.payload_json, "result": s.result_json} for s in rows]}
 
 
 @router.post("/edo/send")
@@ -516,43 +506,15 @@ async def edo_send_v1(payload: EdoSendIn, request: Request, response: Response, 
 
 @router.get("/edo/messages")
 async def edo_messages_v1(document_version_id: str | None = None, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
-    stmt = select(EdoEnvelope).where(EdoEnvelope.tenant_id == str(tenant.id))
-    if document_version_id:
-        stmt = stmt.where(EdoEnvelope.object_id == document_version_id)
-    items = (await session.execute(stmt.order_by(EdoEnvelope.created_at.desc()))).scalars().all()
-    return {"items": [{"id": e.id, "document_version_id": e.object_id, "status": e.status.value, "external_id": e.external_id, "last_status_at": e.last_event_at} for e in items]}
+    # Легаси-таблица edo_envelopes дропнута (ed02): сообщений не существует.
+    return {"items": []}
 
 
 @router.post("/edo/webhook/status")
 @audit_operation("ingest_webhook", "edo_status")
 async def edo_webhook_status(payload: dict[str, Any], session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)):
-    provider = str(payload.get("provider") or "internal-fallback")
-    external_id = payload.get("external_id")
-    if not external_id:
-        raise _approval_signing_unprocessable("external_id is required")
-    status_value = str(payload.get("status", "failed"))
-    dedup_key = build_edo_status_dedup_key(external_id=external_id, status=status_value)
-    dedup = InboundWebhookDedup(
-        tenant_id=str(tenant.id),
-        source=f"edo_status:{provider}",
-        dedup_key=dedup_key,
-        payload_hash=hashlib.sha256(str(payload).encode("utf-8")).hexdigest(),
-        received_at=datetime.now(timezone.utc),
-    )
-    session.add(dedup)
-    try:
-        await session.flush()
-    except IntegrityError:
-        await session.rollback()
-        return {"status": "duplicate"}
-
-    env = (await session.execute(select(EdoEnvelope).where(EdoEnvelope.tenant_id == str(tenant.id), EdoEnvelope.provider == provider, EdoEnvelope.external_id == external_id))).scalar_one_or_none()
-    if not env:
-        raise _approval_signing_not_found("envelope")
-    env.status = EdoEnvelopeStatus(status_value)
-    env.last_event_at = datetime.now(timezone.utc)
-    await OutboxService(session).enqueue(tenant_id=str(tenant.id), event_type="EdoStatusChanged", payload={"event_id": str(uuid4()), "tenant_id": str(tenant.id), "metadata": {"envelope_id": env.id, "status": env.status.value}})
-    return {"status": "ok"}
+    # Провайдер не сконфигурирован — входящих статусов быть не может.
+    raise _provider_not_configured("edo")
 
 
 @router.get("/approvals/routes")
