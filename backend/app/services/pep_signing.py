@@ -207,12 +207,16 @@ class PepSigningService:
                 raise PepConflict("code is required for person signer")
             if req.confirm_code_expires_at is None:
                 raise PepConflict("confirmation code state is corrupted (no expiry)")
+            expires_at = req.confirm_code_expires_at
+            # SQLite returns naive datetimes; normalise to UTC-aware for comparison.
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
             outcome = confirm_outcome(
                 stored_code_hash=req.confirm_code_hash or "",
                 provided_code=code,
                 request_id=req.id,
                 attempts=req.confirm_attempts,
-                expires_at=req.confirm_code_expires_at,
+                expires_at=expires_at,
                 now=datetime.now(tz=timezone.utc),
             )
             if outcome is ConfirmOutcome.EXPIRED:
