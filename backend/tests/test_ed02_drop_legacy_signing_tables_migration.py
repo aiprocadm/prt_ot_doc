@@ -58,7 +58,6 @@ def test_dropped_tables_have_no_orm_mapping():
     """Обе дропаемые таблицы отсутствуют в declarative-реестрах, а живой
     ПЭП/ЭДО-контур (signature_requests, edo_messages) остаётся замаплен."""
     import app.db.base  # noqa: F401  # side-effect: регистрирует все модели
-
     from app.db.session import SharedBase, TenantBase
 
     mapped = set(SharedBase.metadata.tables) | set(TenantBase.metadata.tables)
