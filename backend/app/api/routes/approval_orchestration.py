@@ -27,7 +27,7 @@ from app.models.workflow import (
 from app.modules.approvals.service import ApprovalDecisionService, ApprovalInstanceService
 from app.modules.edo.service import EdoStatusProjectionService, EdoWebhookService
 from app.modules.sign.service import SignatureRequestService
-from app.services.pep_signing import PepConflict, PepNotFound, PepSigningService
+from app.services.pep_signing import PepApprovalRequired, PepConflict, PepNotFound, PepSigningService
 from app.services.provider_registry import provider_response_meta
 
 router = APIRouter()
@@ -463,10 +463,15 @@ async def verify_sign_request(request_id: str, request: Request, response: Respo
     except PepNotFound:
         raise _approval_orchestration_not_found("signature_request")
     except PepConflict as exc:
+        # PepApprovalRequired (гейт согласования) — отдельный код; прочее — PEP_CONFLICT.
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=api_problem_detail(
-                code="PEP_CONFLICT",
+                code=(
+                    "PEP_APPROVAL_REQUIRED"
+                    if isinstance(exc, PepApprovalRequired)
+                    else "PEP_CONFLICT"
+                ),
                 message=str(exc),
                 error_type="approvals",
             ),

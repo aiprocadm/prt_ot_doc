@@ -1307,6 +1307,15 @@ class BriefingEntry(TenantBaseModel, SoftDeleteMixin):
 
 class BriefingSignature(TenantBaseModel):
     __tablename__ = "briefing_signatures"
+    __table_args__ = (
+        # Анти-гонка: один signer_type на briefing_entry (миграция ed03).
+        Index(
+            "uq_briefing_signatures_entry_signer",
+            "briefing_entry_id",
+            "signer_type",
+            unique=True,
+        ),
+    )
 
     briefing_entry_id: Mapped[str] = mapped_column(ForeignKey("briefing_entries.id", ondelete="CASCADE"), nullable=False, index=True)
     signer_type: Mapped[str] = mapped_column(String(16), nullable=False)
