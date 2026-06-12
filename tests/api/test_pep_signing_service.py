@@ -4,9 +4,10 @@ from __future__ import annotations
 from datetime import timedelta
 
 import pytest
+from sqlalchemy import select
 
 from app.domains.signing.pep import MAX_CONFIRM_ATTEMPTS, PepStatus
-from app.models.models import PPEIssue, SignatureRequest
+from app.models.models import Outbox, PPEIssue, SignatureRequest
 from app.services.pep_signing import PepConflict, PepNotFound, PepSigningService
 
 
@@ -155,3 +156,51 @@ async def test_tenant_isolation_on_confirm(sessionmaker, data_factory):
         foreign = PepSigningService(session, "00000000-0000-0000-0000-00000000dead")
         with pytest.raises(PepNotFound):
             await foreign.confirm(req.id, code=code)
+
+
+@pytest.mark.asyncio
+async def test_signed_enqueues_pep_signed_event(sessionmaker, data_factory):
+    async with sessionmaker() as session:
+        tenant, person, issue = await _person_with_issue(session, data_factory, tag="ev1")
+        svc = PepSigningService(session, str(tenant.id))
+        req, code = await svc.create_request(
+            object_type="ppe_issue", object_id=issue.id, purpose="ppe_issue",
+            signer_person_id=person.id, requested_by="user-1",
+        )
+        await svc.confirm(req.id, code=code)
+        await session.commit()
+
+        outbox_entry = (
+            await session.execute(
+                select(Outbox).where(
+                    Outbox.tenant_id == str(tenant.id),
+                    Outbox.event_type == "PEPSigned",
+                )
+            )
+        ).scalar_one_or_none()
+        assert outbox_entry is not None
+        assert outbox_entry.payload["signature_request_id"] == req.id
+
+
+@pytest.mark.asyncio
+async def test_declined_enqueues_pep_declined_event(sessionmaker, data_factory):
+    async with sessionmaker() as session:
+        tenant, person, issue = await _person_with_issue(session, data_factory, tag="ev2")
+        svc = PepSigningService(session, str(tenant.id))
+        req, _ = await svc.create_request(
+            object_type="ppe_issue", object_id=issue.id, purpose="ppe_issue",
+            signer_person_id=person.id, requested_by="user-1",
+        )
+        await svc.decline(req.id, reason="тест отклонения")
+        await session.commit()
+
+        outbox_entry = (
+            await session.execute(
+                select(Outbox).where(
+                    Outbox.tenant_id == str(tenant.id),
+                    Outbox.event_type == "PEPDeclined",
+                )
+            )
+        ).scalar_one_or_none()
+        assert outbox_entry is not None
+        assert outbox_entry.payload["signature_request_id"] == req.id

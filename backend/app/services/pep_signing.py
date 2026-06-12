@@ -17,6 +17,7 @@ from app.domains.signing.pep import (
     CONFIRM_TTL_MINUTES,
     PEP_PURPOSES,
     ConfirmOutcome,
+    InvalidTransition,
     PepStatus,
     assert_transition,
     canonical_payload,
@@ -45,6 +46,7 @@ class PepSigningService:
     def __init__(self, session: AsyncSession, tenant_id: str) -> None:
         self.session = session
         self.tenant_id = tenant_id
+        self._outbox = OutboxService(self.session)
 
     # --- payload builders -------------------------------------------------
 
@@ -84,13 +86,19 @@ class PepSigningService:
             }
         raise PepConflict(f"unsupported object_type: {object_type}")
 
-    async def _signer_name(self, *, signer_user_id: str | None, signer_person_id: str | None) -> str | None:
+    async def _signer_name(
+        self,
+        *,
+        signer_user_id: str | None,
+        signer_person_id: str | None,
+    ) -> str | None:
         if signer_person_id:
             person = await self.session.get(Person, signer_person_id)
             if person is None or str(person.tenant_id) != str(self.tenant_id):
                 raise PepNotFound("person")
             parts = [person.last_name, person.first_name, person.middle_name or ""]
             return " ".join(p for p in parts if p).strip()
+        # TODO: display name пользователя — внешний auth-контур; пока сырой id
         return signer_user_id
 
     # --- lifecycle ---------------------------------------------------------
@@ -157,13 +165,15 @@ class PepSigningService:
         if signer_person_id:
             code = f"{secrets.randbelow(1_000_000):06d}"
             req.confirm_code_hash = hash_confirm_code(req.id, code)
-            req.confirm_code_expires_at = datetime.now(tz=timezone.utc) + timedelta(minutes=CONFIRM_TTL_MINUTES)
+            req.confirm_code_expires_at = (
+                datetime.now(tz=timezone.utc) + timedelta(minutes=CONFIRM_TTL_MINUTES)
+            )
             assert_transition(PepStatus.CREATED, PepStatus.AWAITING_CODE)
             req.status = PepStatus.AWAITING_CODE.value
+            await self.session.flush()
         elif signer_user_id == requested_by:
             await self._mark_signed(req)
         # else: чужой user-подписант подтверждает сам через confirm(code=None)
-        await self.session.flush()
         return req, code
 
     async def _get_own(self, request_id: str) -> SignatureRequest:
@@ -172,13 +182,30 @@ class PepSigningService:
             raise PepNotFound("signature_request")
         return req
 
-    async def confirm(self, request_id: str, *, code: str | None = None, acting_user_id: str | None = None) -> SignatureRequest:
+    async def confirm(
+        self,
+        request_id: str,
+        *,
+        code: str | None = None,
+        acting_user_id: str | None = None,
+    ) -> SignatureRequest:
+        """Подтвердить запрос подписи.
+
+        Person-подписант: обязателен code; user-подписант: acting_user_id должен
+        совпадать с signer_user_id.
+
+        КОНТРАКТ ДЛЯ API-СЛОЯ: при PepConflict состояние запроса уже изменено
+        (инкремент попыток / expired / declined) — вызывающий обязан COMMIT,
+        а не rollback, иначе счётчик попыток теряется (бесконечный перебор кода).
+        """
         req = await self._get_own(request_id)
         if req.signer_person_id:
             if req.status != PepStatus.AWAITING_CODE.value:
                 raise PepConflict(f"cannot confirm from status {req.status}")
             if not code:
                 raise PepConflict("code is required for person signer")
+            if req.confirm_code_expires_at is None:
+                raise PepConflict("confirmation code state is corrupted (no expiry)")
             outcome = confirm_outcome(
                 stored_code_hash=req.confirm_code_hash or "",
                 provided_code=code,
@@ -209,6 +236,7 @@ class PepSigningService:
         return req
 
     async def decline(self, request_id: str, *, reason: str | None = None) -> SignatureRequest:
+        """Отклонить запрос подписи вручную."""
         req = await self._get_own(request_id)
         await self._mark_declined(req, reason=reason or "manual")
         return req
@@ -216,15 +244,20 @@ class PepSigningService:
     # --- terminal transitions + events -------------------------------------
 
     async def _mark_signed(self, req: SignatureRequest) -> None:
-        assert_transition(PepStatus(req.status), PepStatus.SIGNED)
+        """Перевести запрос в SIGNED, снять код, выслать outbox-событие."""
+        try:
+            assert_transition(PepStatus(req.status), PepStatus.SIGNED)
+        except InvalidTransition as exc:
+            raise PepConflict(str(exc)) from exc
         req.status = PepStatus.SIGNED.value
         req.signed_at = datetime.now(tz=timezone.utc)
         req.signer_name = await self._signer_name(
-            signer_user_id=req.signer_user_id, signer_person_id=req.signer_person_id
+            signer_user_id=req.signer_user_id,
+            signer_person_id=req.signer_person_id,
         )
         req.confirm_code_hash = None
         await self._dispatch_signed(req)
-        await OutboxService(self.session).enqueue(
+        await self._outbox.enqueue(
             tenant_id=self.tenant_id,
             event_type=EventType.PEP_SIGNED.value,
             idempotency_key=f"pep.signed:{req.id}",
@@ -241,10 +274,14 @@ class PepSigningService:
         await self.session.flush()
 
     async def _mark_declined(self, req: SignatureRequest, *, reason: str) -> None:
-        assert_transition(PepStatus(req.status), PepStatus.DECLINED)
+        """Перевести запрос в DECLINED и выслать outbox-событие."""
+        try:
+            assert_transition(PepStatus(req.status), PepStatus.DECLINED)
+        except InvalidTransition as exc:
+            raise PepConflict(str(exc)) from exc
         req.status = PepStatus.DECLINED.value
         req.result_json = {**(req.result_json or {}), "declined_reason": reason}
-        await OutboxService(self.session).enqueue(
+        await self._outbox.enqueue(
             tenant_id=self.tenant_id,
             event_type=EventType.PEP_DECLINED.value,
             idempotency_key=f"pep.declined:{req.id}",
@@ -259,7 +296,9 @@ class PepSigningService:
     # --- hooks, реализуются в Task 5 ---------------------------------------
 
     async def _approval_gate(self, object_type: str, object_id: str, purpose: str) -> None:
+        """Гейт согласования перед созданием запроса — реализуется в Task 5."""
         return None
 
     async def _dispatch_signed(self, req: SignatureRequest) -> None:
+        """Диспетчер постобработки после подписания — реализуется в Task 5."""
         return None
