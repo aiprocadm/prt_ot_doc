@@ -24,7 +24,7 @@ from app.models.models import (
     BriefingTemplate,
     Tenant,
 )
-from app.modules.briefings.services import BriefingEntryService
+from app.modules.briefings.services import BriefingEntryService, BriefingSignatureConflict
 from app.modules.rbac_abac import require_permission
 from app.services.audit import AuditService
 
@@ -133,6 +133,14 @@ def _briefing_bad_request(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
         detail=api_problem_detail(code="BRIEFING_VALIDATION_ERROR", message=message, error_type="briefings"),
+    )
+
+
+def _briefing_signature_conflict(message: str) -> HTTPException:
+    """Гонка дублей подписи (unique-индекс ed03) → честный 409, не 500."""
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=api_problem_detail(code="BRIEFING_SIGNATURE_CONFLICT", message=message, error_type="briefings"),
     )
 
 
@@ -272,7 +280,10 @@ async def sign_employee(item_id: str, payload: BriefingSignPayload, request: Req
     item = await session.get(BriefingEntry, item_id)
     if not item or item.tenant_id != tenant.id:
         raise HTTPException(404, "Entry not found")
-    sig = await BriefingEntryService().sign(session, item, "employee", payload.signer_user_id, signature_payload=payload.signature_payload)
+    try:
+        sig = await BriefingEntryService().sign(session, item, "employee", payload.signer_user_id, signature_payload=payload.signature_payload)
+    except BriefingSignatureConflict as exc:
+        raise _briefing_signature_conflict(str(exc)) from exc
     await session.commit()
     return {"entry": _entry_read(item, [sig]), "signature": BriefingSignatureRead.model_validate(sig)}
 
@@ -283,7 +294,10 @@ async def sign_instructor(item_id: str, payload: BriefingSignPayload, request: R
     item = await session.get(BriefingEntry, item_id)
     if not item or item.tenant_id != tenant.id:
         raise HTTPException(404, "Entry not found")
-    sig = await BriefingEntryService().sign(session, item, "instructor", payload.signer_user_id, signature_payload=payload.signature_payload)
+    try:
+        sig = await BriefingEntryService().sign(session, item, "instructor", payload.signer_user_id, signature_payload=payload.signature_payload)
+    except BriefingSignatureConflict as exc:
+        raise _briefing_signature_conflict(str(exc)) from exc
     await session.commit()
     return {"entry": _entry_read(item, [sig]), "signature": BriefingSignatureRead.model_validate(sig)}
 

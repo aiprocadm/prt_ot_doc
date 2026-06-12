@@ -40,6 +40,14 @@ class PepConflict(ValueError):
     """Бизнес-конфликт: дубль, неверный/истёкший код, недопустимый переход."""
 
 
+class PepApprovalRequired(PepConflict):
+    """Гейт согласования не пройден: документ не APPROVED.
+
+    Подкласс PepConflict — существующие except PepConflict продолжают ловить
+    его; API-слой маппит отдельно в 409 code="PEP_APPROVAL_REQUIRED".
+    """
+
+
 class PepForbidden(PermissionError):
     """Авторизационный отказ: только назначенный подписант может подтвердить запрос."""
 
@@ -333,7 +341,7 @@ class PepSigningService:
         )
         latest = rows[0] if rows else None
         if latest is not None and latest.status != ApprovalInstanceStatus.APPROVED:
-            raise PepConflict("approval_required: document is not approved yet")
+            raise PepApprovalRequired("approval_required: document is not approved yet")
 
     async def _dispatch_signed(self, req: SignatureRequest) -> None:
         """Диспетчер потребителей: проекции на signed по purpose.

@@ -8,7 +8,7 @@ from app.domains.signing.pep import PepStatus
 from app.models.document import DocumentVersion
 from app.models.models import ApprovalInstance, ApprovalRoute, PPEIssue
 from app.models.approval_workflow import ApprovalInstanceStatus
-from app.services.pep_signing import PepConflict, PepSigningService
+from app.services.pep_signing import PepApprovalRequired, PepSigningService
 
 
 async def _doc_version(session, data_factory, *, tag: str):
@@ -58,7 +58,8 @@ async def test_document_sign_blocked_until_instance_approved(sessionmaker, data_
         session.add(instance)
         await session.flush()
         svc = PepSigningService(session, str(tenant.id))
-        with pytest.raises(PepConflict):
+        # Гейт согласования кидает специализированный подкласс PepConflict.
+        with pytest.raises(PepApprovalRequired):
             await svc.create_request(
                 object_type="document_version", object_id=ver.id, purpose="document",
                 signer_user_id="user-1", requested_by="user-1",

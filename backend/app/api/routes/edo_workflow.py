@@ -33,7 +33,7 @@ from app.models.workflow import (
 from app.services.billing import BillingService
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 from app.services.outbox import OutboxService
-from app.services.pep_signing import PepConflict, PepNotFound, PepSigningService
+from app.services.pep_signing import PepApprovalRequired, PepConflict, PepNotFound, PepSigningService
 from app.services.provider_registry import provider_response_meta
 from app.tasks import process_inbound_webhook
 
@@ -483,9 +483,11 @@ async def create_signature(
     except PepNotFound:
         raise _edo_not_found("document_version")
     except PepConflict as exc:
+        # PepApprovalRequired (гейт согласования) — отдельный код; прочее — PEP_CONFLICT.
+        code = "PEP_APPROVAL_REQUIRED" if isinstance(exc, PepApprovalRequired) else "PEP_CONFLICT"
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=api_problem_detail(code="PEP_CONFLICT", message=str(exc), error_type="edo"),
+            detail=api_problem_detail(code=code, message=str(exc), error_type="edo"),
         ) from exc
     await session.commit()
     return {
@@ -537,9 +539,11 @@ async def sign_submit(
     except PepNotFound:
         raise _edo_not_found("document_version")
     except PepConflict as exc:
+        # PepApprovalRequired (гейт согласования) — отдельный код; прочее — PEP_CONFLICT.
+        code = "PEP_APPROVAL_REQUIRED" if isinstance(exc, PepApprovalRequired) else "PEP_CONFLICT"
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=api_problem_detail(code="PEP_CONFLICT", message=str(exc), error_type="edo"),
+            detail=api_problem_detail(code=code, message=str(exc), error_type="edo"),
         ) from exc
     await session.commit()
     return {"id": req.id, "status": req.status, "correlation_id": cid}
