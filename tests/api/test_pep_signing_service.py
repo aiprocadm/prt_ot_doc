@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from app.domains.signing.pep import MAX_CONFIRM_ATTEMPTS, PepStatus
 from app.models.models import Outbox, PPEIssue, SignatureRequest
-from app.services.pep_signing import PepConflict, PepNotFound, PepSigningService
+from app.services.pep_signing import PepConflict, PepForbidden, PepNotFound, PepSigningService
 
 
 async def _person_with_issue(session, data_factory, *, tag: str):
@@ -204,3 +204,28 @@ async def test_declined_enqueues_pep_declined_event(sessionmaker, data_factory):
         ).scalar_one_or_none()
         assert outbox_entry is not None
         assert outbox_entry.payload["signature_request_id"] == req.id
+
+
+@pytest.mark.asyncio
+async def test_foreign_user_confirm_forbidden(sessionmaker, data_factory):
+    """Чужой user-подписант получает PepForbidden (403-семантика), не PepConflict."""
+    async with sessionmaker() as session:
+        tenant, person, issue = await _person_with_issue(session, data_factory, tag="f1")
+        svc = PepSigningService(session, str(tenant.id))
+        # signer_user_id="user-2", requested_by="user-1" → запрос остаётся created
+        req, code = await svc.create_request(
+            object_type="ppe_issue", object_id=issue.id, purpose="ppe_issue",
+            signer_user_id="user-2", requested_by="user-1",
+        )
+        await session.commit()
+        assert req.status == PepStatus.CREATED.value
+        assert code is None
+
+        # Чужой пользователь — PepForbidden
+        with pytest.raises(PepForbidden):
+            await svc.confirm(req.id, acting_user_id="user-3")
+
+        # Назначенный подписант — успешная подпись
+        signed = await svc.confirm(req.id, acting_user_id="user-2")
+        await session.commit()
+        assert signed.status == PepStatus.SIGNED.value

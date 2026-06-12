@@ -168,3 +168,44 @@ async def test_decline_endpoint(async_client, sessionmaker, data_factory, make_a
     )
     assert declined.status_code == 200
     assert declined.json()["status"] == "declined"
+
+
+@pytest.mark.asyncio
+async def test_foreign_user_signer_confirm_403(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
+    """Чужой user-подписант получает 403; назначенный — 200 signed."""
+    async with sessionmaker() as session:
+        tenant, person, issue = await _issue_world(session, data_factory)
+    headers = await make_auth_headers(RoleEnum.ADMIN, tenant=tenant.slug)
+
+    # Создаём запрос с signer_user_id="user-77"; создатель — "system" (default X-User-Id)
+    created = await async_client.post(
+        "/api/v1/sign/pep/requests",
+        json={
+            "object_type": "ppe_issue", "object_id": issue.id,
+            "purpose": "ppe_issue", "signer_user_id": "user-77",
+        },
+        headers={**headers, "X-User-Id": "system"},
+    )
+    assert created.status_code == 201, created.text
+    rid = created.json()["id"]
+    assert created.json()["status"] == "created"
+
+    # Чужой пользователь → 403
+    intruder = await async_client.post(
+        f"/api/v1/sign/pep/requests/{rid}/confirm",
+        json={},
+        headers={**headers, "X-User-Id": "intruder"},
+    )
+    assert intruder.status_code == 403, intruder.text
+    assert intruder.json()["detail"]["code"] == "PEP_FORBIDDEN"
+
+    # Назначенный подписант → 200 signed
+    signed = await async_client.post(
+        f"/api/v1/sign/pep/requests/{rid}/confirm",
+        json={},
+        headers={**headers, "X-User-Id": "user-77"},
+    )
+    assert signed.status_code == 200, signed.text
+    assert signed.json()["status"] == "signed"

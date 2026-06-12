@@ -385,28 +385,18 @@ async def approval_cancel(approval_id: str, request: Request, response: Response
 async def create_sign_request(payload: SignatureRequestIn, request: Request, response: Response, session: SessionDep, tenant: TenantDep, _: EditorAccess, x_user_id: str = Header(default="system", alias="X-User-Id")):
     cid = _correlation_id(request, response)
     tenant_id = _tenant_id_value(tenant)
+    # ПЭП-запросы создаются через /sign/pep/requests — не через этот роутер.
+    if payload.signature_type == "pep":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=api_problem_detail(
+                code="PEP_CONFLICT",
+                message="use /sign/pep/requests for internal PEP signing",
+                error_type="approvals",
+            ),
+        )
     # Внешние провайдеры подписи (KEP/UNEP/МЧД и любые неизвестные типы) не сконфигурированы.
-    # ПЭП использует свой роутер /sign/pep/*, сюда не приходит.
-    if payload.signature_type != "pep":
-        raise _provider_not_configured("signature")
-    await _assert_entity_belongs_to_tenant(session=session, tenant_id=tenant_id, entity_type=payload.entity_type, entity_id=payload.entity_id)
-    if payload.approval_instance_id:
-        approval_instance = await session.get(ApprovalInstance, payload.approval_instance_id)
-        if approval_instance is None or approval_instance.tenant_id != tenant_id:
-            raise _approval_orchestration_not_found("approval_instance")
-    req = SignatureRequest(
-        tenant_id=tenant_id,
-        object_type=payload.entity_type,
-        object_id=payload.entity_id,
-        provider=payload.provider_code,
-        provider_code=payload.provider_code,
-        signature_type=payload.signature_type,
-        payload_json=payload.options,
-        requested_by=x_user_id,
-        approval_instance_id=payload.approval_instance_id,
-    )
-    req = await SignatureRequestService(session, tenant_id).create(req)
-    return {"id": req.id, "status": req.status, "correlation_id": cid, **provider_response_meta(payload.provider_code)}
+    raise _provider_not_configured("signature")
 
 
 @router.get("/sign/requests")
@@ -430,6 +420,15 @@ async def cancel_sign_request(request_id: str, request: Request, response: Respo
     row = await session.get(SignatureRequest, request_id)
     if not row or row.tenant_id != _tenant_id_value(tenant):
         raise _approval_orchestration_not_found("signature_request")
+    if getattr(row, "signature_type", None) == "pep":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=api_problem_detail(
+                code="PEP_CONFLICT",
+                message="pep requests are managed via /sign/pep (decline)",
+                error_type="approvals",
+            ),
+        )
     row.status = "canceled"
     return {"id": row.id, "status": row.status, "correlation_id": cid}
 

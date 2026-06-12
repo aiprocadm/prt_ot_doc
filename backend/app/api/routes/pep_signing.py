@@ -14,7 +14,7 @@ from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
 from app.models.models import SignatureRequest, Tenant
-from app.services.pep_signing import PepConflict, PepNotFound, PepSigningService
+from app.services.pep_signing import PepConflict, PepForbidden, PepNotFound, PepSigningService
 
 router = APIRouter()
 
@@ -75,6 +75,11 @@ def _pep_error(exc: Exception) -> HTTPException:
         return HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=api_problem_detail(code="PEP_NOT_FOUND", message=str(exc), error_type="pep"),
+        )
+    if isinstance(exc, PepForbidden):
+        return HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=api_problem_detail(code="PEP_FORBIDDEN", message=str(exc), error_type="pep"),
         )
     if isinstance(exc, PepConflict):
         return HTTPException(
@@ -152,6 +157,9 @@ async def confirm_pep_request(
             code=payload.code,
             acting_user_id=x_user_id,
         )
+    except PepForbidden as exc:
+        # Состояние не менялось — commit не нужен.
+        raise _pep_error(exc)
     except PepConflict as exc:
         # КОНТРАКТ: инкремент попыток сохранён внутри сервиса через flush;
         # обязан COMMIT перед 409, иначе счётчик теряется.

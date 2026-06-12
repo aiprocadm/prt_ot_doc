@@ -40,6 +40,10 @@ class PepConflict(ValueError):
     """Бизнес-конфликт: дубль, неверный/истёкший код, недопустимый переход."""
 
 
+class PepForbidden(PermissionError):
+    """Авторизационный отказ: только назначенный подписант может подтвердить запрос."""
+
+
 _ACTIVE_STATUSES = (PepStatus.CREATED.value, PepStatus.AWAITING_CODE.value)
 
 
@@ -236,7 +240,7 @@ class PepSigningService:
             if req.status != PepStatus.CREATED.value:
                 raise PepConflict(f"cannot confirm from status {req.status}")
             if acting_user_id is not None and acting_user_id != req.signer_user_id:
-                raise PepConflict("only the designated signer can confirm")
+                raise PepForbidden("only the designated signer can confirm")
         await self._mark_signed(req)
         return req
 
