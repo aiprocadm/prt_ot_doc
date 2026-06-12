@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.models import BriefingEntry, BriefingSignature, BriefingTemplate
 from app.services.events import EventType
 from app.services.outbox import OutboxService
+from app.services.pep_signing import PepSigningService
 
 
 class BriefingEntryService:
@@ -37,13 +38,31 @@ class BriefingEntryService:
             await session.flush()
             return existing
 
+        # Для employee подписант — person записи; для instructor — signer_user_id.
+        # Fallback реализован: если signer_type=="employee" и entry.person_id is None,
+        # подпись фиксируется за user-оформителем (signer_user_id); если и он None —
+        # PEP-запись создаётся без указания подписанта (допустимо для attested-режима).
+        employee_person_id = entry.person_id if signer_type == "employee" else None
+        pep_signer_user_id = (
+            signer_user_id
+            if signer_type == "instructor" or employee_person_id is None
+            else None
+        )
+        pep_req = await PepSigningService(session, str(entry.tenant_id)).create_attested(
+            object_type="briefing_entry",
+            object_id=entry.id,
+            purpose="briefing",
+            requested_by=signer_user_id or "system",
+            signer_user_id=pep_signer_user_id,
+            signer_person_id=employee_person_id,
+        )
         signature = BriefingSignature(
             tenant_id=entry.tenant_id,
             briefing_entry_id=entry.id,
             signer_type=signer_type,
             signer_user_id=signer_user_id,
             signature_mode="internal_simple",
-            signature_payload=signature_payload or {},
+            signature_payload={**(signature_payload or {}), "pep_request_id": pep_req.id},
         )
         session.add(signature)
         entry.status = "signed_employee" if signer_type == "employee" else "signed_instructor"

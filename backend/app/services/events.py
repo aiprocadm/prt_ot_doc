@@ -38,6 +38,8 @@ class EventType(str, enum.Enum):
     CONTRACTOR_DOCUMENT_EXPIRED = "contractor.document_expired"
     PPE_WRITTEN_OFF = "PPEWrittenOff"
     PPE_REPLACEMENT_DUE = "PPEReplacementDue"
+    PEP_SIGNED = "PEPSigned"
+    PEP_DECLINED = "PEPDeclined"
 
 
 class BaseEventPayload(BaseModel):
@@ -143,6 +145,20 @@ class PPEReplacementDuePayload(BaseEventPayload):
     status: str
 
 
+class PEPSignedPayload(BaseEventPayload):
+    signature_request_id: str
+    object_type: str
+    object_id: str
+    purpose: str
+    signer_user_id: str | None = None
+    signer_person_id: str | None = None
+
+
+class PEPDeclinedPayload(BaseEventPayload):
+    signature_request_id: str
+    reason: str | None = None
+
+
 class TrainingAssignedPayload(BaseEventPayload):
     training_event_id: str
     plan_id: str
@@ -239,6 +255,8 @@ _PAYLOADS: dict[EventType, type[BaseEventPayload]] = {
     EventType.PPE_RETURNED: PPEReturnedPayload,
     EventType.PPE_WRITTEN_OFF: PPEWrittenOffPayload,
     EventType.PPE_REPLACEMENT_DUE: PPEReplacementDuePayload,
+    EventType.PEP_SIGNED: PEPSignedPayload,
+    EventType.PEP_DECLINED: PEPDeclinedPayload,
     EventType.TRAINING_COMPLETED: TrainingCompletedPayload,
     EventType.TRAINING_ASSIGNED: TrainingAssignedPayload,
     EventType.TASK_DUE_SOON: TaskDuePayload,
@@ -306,6 +324,10 @@ def dedupe_key_for(event_type: EventType, payload: BaseEventPayload) -> str:
         return f"{payload.ppe_issue_id}:written_off"
     if isinstance(payload, PPEReplacementDuePayload):
         return f"{payload.ppe_issue_id}:replacement_due"
+    if isinstance(payload, PEPSignedPayload):
+        return f"{payload.signature_request_id}:pep_signed"
+    if isinstance(payload, PEPDeclinedPayload):
+        return f"{payload.signature_request_id}:pep_declined"
     if isinstance(payload, TrainingCompletedPayload):
         return payload.training_event_id
     if isinstance(payload, TrainingAssignedPayload):

@@ -4,7 +4,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
@@ -26,7 +26,8 @@ from app.models.workflow import (
 )
 from app.modules.approvals.service import ApprovalDecisionService, ApprovalInstanceService
 from app.modules.edo.service import EdoStatusProjectionService, EdoWebhookService
-from app.modules.sign.service import SignatureRequestService, SignatureVerificationService
+from app.modules.sign.service import SignatureRequestService
+from app.services.pep_signing import PepConflict, PepNotFound, PepSigningService
 from app.services.provider_registry import provider_response_meta
 
 router = APIRouter()
@@ -60,6 +61,22 @@ def _approval_orchestration_unprocessable(message: str) -> HTTPException:
         detail=api_problem_detail(
             code="APPROVAL_ORCHESTRATION_VALIDATION_ERROR",
             message=message,
+            error_type="approvals",
+        ),
+    )
+
+
+def _provider_not_configured(kind: str) -> HTTPException:
+    """Честный отказ вместо симуляции: внешний провайдер не настроен (Срез-1).
+
+    Codes: EDO_PROVIDER_NOT_CONFIGURED | SIGNATURE_PROVIDER_NOT_CONFIGURED
+    """
+    code = f"{kind.upper()}_PROVIDER_NOT_CONFIGURED"
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=api_problem_detail(
+            code=code,
+            message=f"{kind} provider is not configured",
             error_type="approvals",
         ),
     )
@@ -265,7 +282,13 @@ async def start_approval(payload: ApprovalStartIn, request: Request, response: R
     if payload.entity_type == "document":
         dv = await _get_document_for_tenant(session, tenant_id, payload.entity_id)
         if dv is not None:
-            dv.approval_status = "running"
+            # Core UPDATE — обходит before_update гард иммутабельности DocumentVersion.
+            await session.execute(
+                update(DocumentVersion)
+                .where(DocumentVersion.id == payload.entity_id)
+                .values(approval_status="running")
+                .execution_options(synchronize_session="evaluate")
+            )
     if payload.entity_type == "pack":
         run = await _get_pack_for_tenant(session, tenant_id, payload.entity_id)
         if run is not None:
@@ -304,7 +327,13 @@ async def _act(approval_id: str, action: str, payload: ApprovalActionIn, session
     if instance.entity_type == "document":
         dv = await _get_document_for_tenant(session, tenant_id, instance.entity_id)
         if dv is not None:
-            dv.approval_status = instance.status.value
+            # Core UPDATE — обходит before_update гард иммутабельности DocumentVersion.
+            await session.execute(
+                update(DocumentVersion)
+                .where(DocumentVersion.id == instance.entity_id)
+                .values(approval_status=instance.status.value)
+                .execution_options(synchronize_session="evaluate")
+            )
     if instance.entity_type == "pack":
         run = await _get_pack_for_tenant(session, tenant_id, instance.entity_id)
         if run is not None:
@@ -356,24 +385,18 @@ async def approval_cancel(approval_id: str, request: Request, response: Response
 async def create_sign_request(payload: SignatureRequestIn, request: Request, response: Response, session: SessionDep, tenant: TenantDep, _: EditorAccess, x_user_id: str = Header(default="system", alias="X-User-Id")):
     cid = _correlation_id(request, response)
     tenant_id = _tenant_id_value(tenant)
-    await _assert_entity_belongs_to_tenant(session=session, tenant_id=tenant_id, entity_type=payload.entity_type, entity_id=payload.entity_id)
-    if payload.approval_instance_id:
-        approval_instance = await session.get(ApprovalInstance, payload.approval_instance_id)
-        if approval_instance is None or approval_instance.tenant_id != tenant_id:
-            raise _approval_orchestration_not_found("approval_instance")
-    req = SignatureRequest(
-        tenant_id=tenant_id,
-        object_type=payload.entity_type,
-        object_id=payload.entity_id,
-        provider=payload.provider_code,
-        provider_code=payload.provider_code,
-        signature_type=payload.signature_type,
-        payload_json=payload.options,
-        requested_by=x_user_id,
-        approval_instance_id=payload.approval_instance_id,
-    )
-    req = await SignatureRequestService(session, tenant_id).create(req)
-    return {"id": req.id, "status": req.status, "correlation_id": cid, **provider_response_meta(payload.provider_code)}
+    # ПЭП-запросы создаются через /sign/pep/requests — не через этот роутер.
+    if payload.signature_type == "pep":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=api_problem_detail(
+                code="PEP_CONFLICT",
+                message="use /sign/pep/requests for internal PEP signing",
+                error_type="approvals",
+            ),
+        )
+    # Внешние провайдеры подписи (KEP/UNEP/МЧД и любые неизвестные типы) не сконфигурированы.
+    raise _provider_not_configured("signature")
 
 
 @router.get("/sign/requests")
@@ -397,6 +420,15 @@ async def cancel_sign_request(request_id: str, request: Request, response: Respo
     row = await session.get(SignatureRequest, request_id)
     if not row or row.tenant_id != _tenant_id_value(tenant):
         raise _approval_orchestration_not_found("signature_request")
+    if getattr(row, "signature_type", None) == "pep":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=api_problem_detail(
+                code="PEP_CONFLICT",
+                message="pep requests are managed via /sign/pep (decline)",
+                error_type="approvals",
+            ),
+        )
     row.status = "canceled"
     return {"id": row.id, "status": row.status, "correlation_id": cid}
 
@@ -408,7 +440,10 @@ async def refresh_sign_status(request_id: str, request: Request, response: Respo
     row = await session.get(SignatureRequest, request_id)
     if not row or row.tenant_id != _tenant_id_value(tenant):
         raise _approval_orchestration_not_found("signature_request")
-    await SignatureVerificationService(session, _tenant_id_value(tenant)).refresh(row)
+    if getattr(row, "signature_type", None) != "pep":
+        # Внешние провайдеры подписи не сконфигурированы.
+        raise _provider_not_configured("signature")
+    # ПЭП: нет внешнего провайдера — возвращаем текущий статус без изменений.
     return {"id": row.id, "status": row.status, "correlation_id": cid}
 
 
@@ -419,8 +454,25 @@ async def verify_sign_request(request_id: str, request: Request, response: Respo
     row = await session.get(SignatureRequest, request_id)
     if not row or row.tenant_id != _tenant_id_value(tenant):
         raise _approval_orchestration_not_found("signature_request")
-    await SignatureVerificationService(session, _tenant_id_value(tenant)).verify(row)
-    return {"id": row.id, "status": row.status, "verification_result": row.verification_result_json, "correlation_id": cid}
+    if getattr(row, "signature_type", None) != "pep":
+        raise _provider_not_configured("signature")
+    # ПЭП: делегируем в PepSigningService.verify (пересчёт hash + протокол).
+    tenant_id = _tenant_id_value(tenant)
+    try:
+        protocol = await PepSigningService(session, tenant_id).verify(request_id)
+    except PepNotFound:
+        raise _approval_orchestration_not_found("signature_request")
+    except PepConflict as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=api_problem_detail(
+                code="PEP_CONFLICT",
+                message=str(exc),
+                error_type="approvals",
+            ),
+        ) from exc
+    await session.commit()
+    return {"id": row.id, "status": row.status, "verification_result": protocol, "correlation_id": cid}
 
 
 @router.post("/edo/messages")
@@ -468,13 +520,11 @@ async def list_edo_events(message_id: str, session: SessionDep, tenant: TenantDe
 @router.post("/edo/messages/{message_id}/refresh-status")
 @audit_operation("refresh_status", "edo_message")
 async def refresh_edo_status(message_id: str, request: Request, response: Response, session: SessionDep, tenant: TenantDep, _: EditorAccess):
-    cid = _correlation_id(request, response)
+    _correlation_id(request, response)
     row = await session.get(EdoMessage, message_id)
     if not row or row.tenant_id != _tenant_id_value(tenant):
         raise _approval_orchestration_not_found("edo_message")
-    next_status = "sent" if row.status == "queued" else "delivered"
-    await EdoStatusProjectionService(session, _tenant_id_value(tenant)).apply_event(row, next_status, {"source": "refresh"}, None)
-    return {"id": row.id, "status": row.status, "correlation_id": cid}
+    raise _provider_not_configured("edo")
 
 
 @router.post("/edo/messages/{message_id}/cancel")

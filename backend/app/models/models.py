@@ -2902,6 +2902,9 @@ class SignatureRequestStatus(str, enum.Enum):
     REQUESTED = "requested"
     SIGNED = "signed"
     FAILED = "failed"
+    AWAITING_CODE = "awaiting_code"
+    DECLINED = "declined"
+    EXPIRED = "expired"
 
 
 class SignatureRequest(TenantBaseModel):
@@ -2914,7 +2917,7 @@ class SignatureRequest(TenantBaseModel):
     approval_instance_id: Mapped[str | None] = mapped_column(ForeignKey("approval_instances.id"), nullable=True, index=True)
     signature_type: Mapped[str] = mapped_column(String(16), nullable=False, default="kep")
     provider_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    status: Mapped[str] = mapped_column(String(16), nullable=False, default=SignatureProviderStatus.PENDING.value)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default=SignatureProviderStatus.PENDING.value)
     external_request_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     certificate_thumbprint: Mapped[str | None] = mapped_column(String(255), nullable=True)
     signer_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -2922,6 +2925,18 @@ class SignatureRequest(TenantBaseModel):
     verification_result_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     result_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+
+    # --- PEP (простая электронная подпись, ed01) ---
+    # Plain string — no FK (user ids come from external auth; pattern follows requested_by).
+    signer_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    signer_person_id: Mapped[str | None] = mapped_column(
+        ForeignKey("person.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    purpose: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    confirm_code_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    confirm_code_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    confirm_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
     __table_args__ = (
         Index("ix_signature_requests_status", "tenant_id", "status"),

@@ -57,6 +57,8 @@ def _pipeline_for_event(event_type: str) -> PipelineType:
         EventType.DOCUMENT_GENERATED,
         EventType.DOCUMENT_SIGNED,
         EventType.DOCUMENT_EXPORTED,
+        EventType.PEP_SIGNED,
+        EventType.PEP_DECLINED,
     }:
         return PipelineType.DOCUMENT
     if resolved == EventType.RISK_ASSESSED:
