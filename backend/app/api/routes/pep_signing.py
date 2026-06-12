@@ -36,7 +36,9 @@ ReaderAccess = Annotated[
 ]
 EditorAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_PEP_WRITE_ROLES, action="manage pep signing")),
+    Depends(
+        abac(_tenant_resource_id, required_roles=_PEP_WRITE_ROLES, action="manage pep signing")
+    ),
 ]
 
 
@@ -74,10 +76,12 @@ def _pep_error(exc: Exception) -> HTTPException:
             status_code=status.HTTP_404_NOT_FOUND,
             detail=api_problem_detail(code="PEP_NOT_FOUND", message=str(exc), error_type="pep"),
         )
-    return HTTPException(
-        status_code=status.HTTP_409_CONFLICT,
-        detail=api_problem_detail(code="PEP_CONFLICT", message=str(exc), error_type="pep"),
-    )
+    if isinstance(exc, PepConflict):
+        return HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=api_problem_detail(code="PEP_CONFLICT", message=str(exc), error_type="pep"),
+        )
+    raise AssertionError(f"unexpected pep error: {exc!r}")
 
 
 def _request_read(row: SignatureRequest) -> dict:
@@ -217,6 +221,8 @@ async def list_pep_requests(
 
 
 @router.get("/sign/pep/requests/{request_id}/verify")
+# GET с побочной записью протокола — осознанный выбор спека (§4);
+# audit намеренно нет: read-семантика для клиента.
 async def verify_pep_request(
     request_id: str,
     session: SessionDep,
@@ -252,7 +258,10 @@ async def list_acknowledgements(
         .order_by(SignatureRequest.created_at.desc())
     )
     if document_version_id is not None:
-        stmt = stmt.where(SignatureRequest.object_id == document_version_id)
+        stmt = stmt.where(
+            SignatureRequest.object_type == "document_version",
+            SignatureRequest.object_id == document_version_id,
+        )
     if person_id is not None:
         stmt = stmt.where(SignatureRequest.signer_person_id == person_id)
     rows = (await session.execute(stmt)).scalars().all()

@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import pytest
+from sqlalchemy import select
 
-from app.models.models import PPEIssue, RoleEnum
+from app.models.models import PPEIssue, RoleEnum, SignatureRequest
 
 
 async def _issue_world(session, data_factory):
@@ -20,7 +21,9 @@ async def _issue_world(session, data_factory):
 
 
 @pytest.mark.asyncio
-async def test_full_person_cycle_via_http(async_client, sessionmaker, data_factory, make_auth_headers):
+async def test_full_person_cycle_via_http(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
     async with sessionmaker() as session:
         tenant, person, issue = await _issue_world(session, data_factory)
     headers = await make_auth_headers(RoleEnum.ADMIN, tenant=tenant.slug)
@@ -40,7 +43,9 @@ async def test_full_person_cycle_via_http(async_client, sessionmaker, data_facto
     rid = body["id"]
 
     confirmed = await async_client.post(
-        f"/api/v1/sign/pep/requests/{rid}/confirm", json={"code": body["confirm_code"]}, headers=headers
+        f"/api/v1/sign/pep/requests/{rid}/confirm",
+        json={"code": body["confirm_code"]},
+        headers=headers,
     )
     assert confirmed.status_code == 200, confirmed.text
     assert confirmed.json()["status"] == "signed"
@@ -60,7 +65,9 @@ async def test_full_person_cycle_via_http(async_client, sessionmaker, data_facto
 
 
 @pytest.mark.asyncio
-async def test_wrong_code_409_persists_attempts(async_client, sessionmaker, data_factory, make_auth_headers):
+async def test_wrong_code_409_persists_attempts(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
     async with sessionmaker() as session:
         tenant, person, issue = await _issue_world(session, data_factory)
     headers = await make_auth_headers(RoleEnum.ADMIN, tenant=tenant.slug)
@@ -80,8 +87,6 @@ async def test_wrong_code_409_persists_attempts(async_client, sessionmaker, data
     assert wrong.status_code == 409
 
     # КРИТИЧНО: инкремент попыток должен пережить 409 (commit-on-conflict)
-    from sqlalchemy import select
-    from app.models.models import SignatureRequest
     async with sessionmaker() as session:
         row = (
             await session.execute(select(SignatureRequest).where(SignatureRequest.id == rid))
@@ -106,7 +111,9 @@ async def test_unknown_object_404(async_client, sessionmaker, data_factory, make
 
 
 @pytest.mark.asyncio
-async def test_acknowledgements_journal(async_client, sessionmaker, data_factory, make_auth_headers):
+async def test_acknowledgements_journal(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         company = await data_factory.create_company(tenant=tenant, session=session, name="ACK API")
@@ -126,7 +133,11 @@ async def test_acknowledgements_journal(async_client, sessionmaker, data_factory
     assert created.status_code == 201, created.text
     code = created.json()["confirm_code"]
     rid = created.json()["id"]
-    await async_client.post(f"/api/v1/sign/pep/requests/{rid}/confirm", json={"code": code}, headers=headers)
+    await async_client.post(
+        f"/api/v1/sign/pep/requests/{rid}/confirm",
+        json={"code": code},
+        headers=headers,
+    )
 
     acks = await async_client.get(
         "/api/v1/sign/acknowledgements", params={"document_version_id": ver.id}, headers=headers
