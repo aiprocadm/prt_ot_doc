@@ -19,7 +19,7 @@ from __future__ import annotations
 from alembic import op
 
 revision = "20260612_ed03_briefing_signature_unique"
-down_revision = "20260611_ed01_pep_signing_columns"
+down_revision = "20260612_ed02_drop_legacy_signing_tables"
 branch_labels = None
 depends_on = None
 
