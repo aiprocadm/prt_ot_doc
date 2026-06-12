@@ -34,8 +34,8 @@ from app.models.workflow import (
 from app.services.billing import BillingService
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 from app.services.outbox import OutboxService
-from app.services.provider_registry import provider_response_meta
 from app.services.pep_signing import PepConflict, PepNotFound, PepSigningService
+from app.services.provider_registry import provider_response_meta
 from app.tasks import process_inbound_webhook
 
 router = APIRouter()

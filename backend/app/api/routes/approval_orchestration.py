@@ -26,7 +26,7 @@ from app.models.workflow import (
 )
 from app.modules.approvals.service import ApprovalDecisionService, ApprovalInstanceService
 from app.modules.edo.service import EdoStatusProjectionService, EdoWebhookService
-from app.modules.sign.service import SignatureRequestService, SignatureVerificationService
+from app.modules.sign.service import SignatureRequestService
 from app.services.pep_signing import PepConflict, PepNotFound, PepSigningService
 from app.services.provider_registry import provider_response_meta
 
@@ -442,7 +442,7 @@ async def refresh_sign_status(request_id: str, request: Request, response: Respo
     if not row or row.tenant_id != _tenant_id_value(tenant):
         raise _approval_orchestration_not_found("signature_request")
     if getattr(row, "signature_type", None) != "pep":
-        # Внешние провайдеры не сконфигурированы; для ПЭП нет внешнего статуса — возвращаем текущий.
+        # Внешние провайдеры подписи не сконфигурированы.
         raise _provider_not_configured("signature")
     # ПЭП: нет внешнего провайдера — возвращаем текущий статус без изменений.
     return {"id": row.id, "status": row.status, "correlation_id": cid}
@@ -471,7 +471,8 @@ async def verify_sign_request(request_id: str, request: Request, response: Respo
                 message=str(exc),
                 error_type="approvals",
             ),
-        )
+        ) from exc
+    await session.commit()
     return {"id": row.id, "status": row.status, "verification_result": protocol, "correlation_id": cid}
 
 
@@ -520,7 +521,7 @@ async def list_edo_events(message_id: str, session: SessionDep, tenant: TenantDe
 @router.post("/edo/messages/{message_id}/refresh-status")
 @audit_operation("refresh_status", "edo_message")
 async def refresh_edo_status(message_id: str, request: Request, response: Response, session: SessionDep, tenant: TenantDep, _: EditorAccess):
-    cid = _correlation_id(request, response)
+    _correlation_id(request, response)
     row = await session.get(EdoMessage, message_id)
     if not row or row.tenant_id != _tenant_id_value(tenant):
         raise _approval_orchestration_not_found("edo_message")
