@@ -299,8 +299,10 @@ class PepSigningService:
     async def _approval_gate(self, object_type: str, object_id: str, purpose: str) -> None:
         """Гейт: документ нельзя подписывать, пока активный маршрут не APPROVED.
 
-        Ищем инстансы по обоим якорям (entity_id = id версии ИЛИ id документа) —
-        в репо встречаются оба способа привязки. Ознакомления гейт не блокирует.
+        Ищем инстансы по обоим якорям (entity_id = id версии ИЛИ id
+        документа) — в репо встречаются оба способа привязки.
+        Soft-deleted инстансы (deleted_at IS NOT NULL) пропускаются.
+        Ознакомления гейт не блокирует.
         """
         if purpose != "document" or object_type != "document_version":
             return None
@@ -313,6 +315,7 @@ class PepSigningService:
                     .where(
                         ApprovalInstance.tenant_id == self.tenant_id,
                         ApprovalInstance.entity_id.in_(anchor_ids),
+                        ApprovalInstance.deleted_at.is_(None),
                     )
                     .order_by(ApprovalInstance.created_at.desc())
                 )

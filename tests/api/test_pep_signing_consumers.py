@@ -31,7 +31,7 @@ async def _doc_version(session, data_factory, *, tag: str):
 
 
 @pytest.mark.asyncio
-async def test_document_sign_without_route_is_allowed_and_projects_status(sessionmaker, data_factory):
+async def test_document_sign_no_route_projects_status(sessionmaker, data_factory):
     async with sessionmaker() as session:
         tenant, _doc, ver = await _doc_version(session, data_factory, tag="g1")
         svc = PepSigningService(session, str(tenant.id))
@@ -105,7 +105,10 @@ async def test_ppe_issue_signed_sets_signature_doc_ref(sessionmaker, data_factor
         tenant = await data_factory.ensure_tenant(session=session)
         company = await data_factory.create_company(tenant=tenant, session=session, name="PPE d1")
         person = await data_factory.create_person(tenant=tenant, company=company, session=session)
-        issue = PPEIssue(tenant_id=tenant.id, person_id=person.id, item_name="Каска d1", quantity=1, status="issued")
+        issue = PPEIssue(
+            tenant_id=tenant.id, person_id=person.id,
+            item_name="Каска d1", quantity=1, status="issued",
+        )
         session.add(issue)
         await session.flush()
         svc = PepSigningService(session, str(tenant.id))
@@ -123,7 +126,10 @@ async def test_verify_detects_content_drift(sessionmaker, data_factory):
         tenant = await data_factory.ensure_tenant(session=session)
         company = await data_factory.create_company(tenant=tenant, session=session, name="PPE v1")
         person = await data_factory.create_person(tenant=tenant, company=company, session=session)
-        issue = PPEIssue(tenant_id=tenant.id, person_id=person.id, item_name="Каска v1", quantity=1, status="issued")
+        issue = PPEIssue(
+            tenant_id=tenant.id, person_id=person.id,
+            item_name="Каска v1", quantity=1, status="issued",
+        )
         session.add(issue)
         await session.flush()
         svc = PepSigningService(session, str(tenant.id))
@@ -149,7 +155,10 @@ async def test_create_attested_signs_instantly_for_person(sessionmaker, data_fac
         tenant = await data_factory.ensure_tenant(session=session)
         company = await data_factory.create_company(tenant=tenant, session=session, name="ATT a1")
         person = await data_factory.create_person(tenant=tenant, company=company, session=session)
-        issue = PPEIssue(tenant_id=tenant.id, person_id=person.id, item_name="Каска a1", quantity=1, status="issued")
+        issue = PPEIssue(
+            tenant_id=tenant.id, person_id=person.id,
+            item_name="Каска a1", quantity=1, status="issued",
+        )
         session.add(issue)
         await session.flush()
         svc = PepSigningService(session, str(tenant.id))
@@ -160,3 +169,5 @@ async def test_create_attested_signs_instantly_for_person(sessionmaker, data_fac
         assert req.status == PepStatus.SIGNED.value
         assert req.result_json["attested_by"] == "user-9"
         assert req.signed_at is not None
+        # attested тоже проходит через _mark_signed → _dispatch_signed
+        assert issue.signature_doc_ref == f"pep:{req.id}"
