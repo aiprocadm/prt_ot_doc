@@ -52,7 +52,6 @@ from app.models.job_engine import (
 )
 from app.models.models import (
     Company,
-    EdoEnvelopeStatus,
     EdoMessage,
     EdoStatus,
     EdoStatusHistory,
@@ -1375,9 +1374,8 @@ def process_inbound_webhook(*, source: str, tenant_slug: str, payload: dict[str,
 
 
 async def _process_inbound_webhook(*, source: str, tenant_slug: str, payload: dict[str, Any]) -> int:
-    from app.models.document import DocumentVersion, DocumentVersionStatus
-    from app.models.models import EdoEnvelope
-
+    # Легаси-ветка EdoEnvelope удалена (ed02): таблица edo_envelopes дропнута,
+    # живой путь — только EdoMessage.
     async with session_scope(tenant=tenant_slug) as session:
         tenant_id = str(session.info.get("tenant_id") or "").strip() or tenant_slug
         tenant_scope = (tenant_id, tenant_slug) if tenant_id != tenant_slug else (tenant_id,)
@@ -1389,113 +1387,49 @@ async def _process_inbound_webhook(*, source: str, tenant_slug: str, payload: di
             return 0
 
         status_map = {
-            "queued": EdoEnvelopeStatus.QUEUED,
-            "sent": EdoEnvelopeStatus.SENT,
-            "delivered": EdoEnvelopeStatus.DELIVERED,
-            "signed": EdoEnvelopeStatus.SIGNED,
-            "rejected": EdoEnvelopeStatus.REJECTED,
-            "failed": EdoEnvelopeStatus.FAILED,
-            "accepted": EdoEnvelopeStatus.SIGNED,
+            "queued": EdoStatus.QUEUED,
+            "sent": EdoStatus.SENT,
+            "delivered": EdoStatus.DELIVERED,
+            "signed": EdoStatus.ACCEPTED,
+            "rejected": EdoStatus.REJECTED,
+            "failed": EdoStatus.FAILED,
+            "accepted": EdoStatus.ACCEPTED,
         }
-        target_status = status_map.get(status_value)
-        if target_status is None:
+        message_target = status_map.get(status_value)
+        if message_target is None:
             return 0
 
-        envelope = (
-            await session.execute(
-                select(EdoEnvelope).where(EdoEnvelope.tenant_id.in_(tenant_scope), EdoEnvelope.external_id == external_id)
-            )
-        ).scalar_one_or_none()
         message = (
             await session.execute(
                 select(EdoMessage).where(EdoMessage.tenant_id.in_(tenant_scope), EdoMessage.external_id == external_id)
             )
         ).scalar_one_or_none()
-        if envelope is None and message is None:
+        if message is None:
             return 0
 
-        changed = 0
-        if envelope is not None:
-            current = envelope.status
-            rank = {
-                EdoEnvelopeStatus.QUEUED: 0,
-                EdoEnvelopeStatus.SENT: 1,
-                EdoEnvelopeStatus.DELIVERED: 2,
-                EdoEnvelopeStatus.SIGNED: 3,
-                EdoEnvelopeStatus.REJECTED: 3,
-                EdoEnvelopeStatus.FAILED: 3,
-            }
-            if rank[target_status] > rank[current]:
-                envelope.status = target_status
-                envelope.last_event_at = datetime.now(tz=timezone.utc)
-                changed += 1
-                if envelope.object_type == "document_version":
-                    version = await session.get(DocumentVersion, envelope.object_id)
-                    if version is not None:
-                        try:
-                            _assert_tenant_row_matches_session(
-                                session,
-                                version,
-                                mismatch_event="document_version.tenant_scope_mismatch",
-                                not_found_message="Document version not found",
-                            )
-                        except ValueError:
-                            version = None
-                    if version is not None and target_status in {EdoEnvelopeStatus.SIGNED, EdoEnvelopeStatus.DELIVERED}:
-                        version.status = DocumentVersionStatus.PUBLISHED
-        if message is not None:
-            msg_map = {
-                EdoEnvelopeStatus.QUEUED: EdoStatus.QUEUED,
-                EdoEnvelopeStatus.SENT: EdoStatus.SENT,
-                EdoEnvelopeStatus.DELIVERED: EdoStatus.DELIVERED,
-                EdoEnvelopeStatus.SIGNED: EdoStatus.ACCEPTED,
-                EdoEnvelopeStatus.REJECTED: EdoStatus.REJECTED,
-                EdoEnvelopeStatus.FAILED: EdoStatus.FAILED,
-            }
-            message_target = msg_map[target_status]
-            if message.status != message_target:
-                message.status = message_target
-                changed += 1
-                session.add(
-                    EdoStatusHistory(
-                        tenant_id=tenant_id,
-                        edo_message_id=message.id,
-                        status=message_target,
-                        raw_payload_json=payload,
-                    )
-                )
-
-        if changed == 0:
+        if message.status == message_target:
             return 0
+        message.status = message_target
+        session.add(
+            EdoStatusHistory(
+                tenant_id=tenant_id,
+                edo_message_id=message.id,
+                status=message_target,
+                raw_payload_json=payload,
+            )
+        )
 
         await AuditService(session).log_event(
             tenant_id=tenant_id,
             action="edo_status_update",
-            object_type="EdoEnvelope" if envelope is not None else "EdoMessage",
-            object_id=(envelope.id if envelope is not None else message.id),
+            object_type="EdoMessage",
+            object_id=message.id,
             actor_type="service",
             ip="system",
             request_id=str(payload.get("correlation_id") or payload.get("event_id") or uuid4()),
             changed_fields=None,
-            details={"source": source, "status": target_status.value, "external_id": external_id},
+            details={"source": source, "status": message_target.value, "external_id": external_id},
         )
-        if target_status == EdoEnvelopeStatus.SIGNED and envelope is not None:
-            await OutboxService(session).add_event(
-                tenant_id=tenant_id,
-                event_type="Signed",
-                aggregate_type="edo_envelope",
-                aggregate_id=envelope.id,
-                payload={
-                    "tenant_id": tenant_id,
-                    "event_id": str(uuid4()),
-                    "document_id": envelope.object_id,
-                    "document_version_id": envelope.object_id,
-                    "status": "signed",
-                    "signed_at": datetime.now(timezone.utc).isoformat(),
-                    "correlation_id": payload.get("correlation_id"),
-                },
-                headers={"correlation_id": payload.get("correlation_id"), "produced_by": "inbound_webhook", "schema_version": 1},
-            )
         return 1
 
 

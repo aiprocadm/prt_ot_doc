@@ -19,7 +19,7 @@ from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
 from app.models.document import DocumentVersion
 from app.models.job_engine import InboundWebhookDedup
-from app.models.models import IdempotencyStatus, RoleEnum, Tenant
+from app.models.models import IdempotencyStatus, RoleEnum, SignatureRequest, Tenant
 from app.models.workflow import (
     ApprovalDecision,
     ApprovalDecisionType,
@@ -28,7 +28,6 @@ from app.models.workflow import (
     ApprovalRoute,
     EdoMessage,
     EdoStatus,
-    Signature,
     SignatureType,
 )
 from app.services.billing import BillingService
@@ -553,21 +552,30 @@ async def sign_status(
     tenant: Tenant = TenantDep,
     _: AccessContext = AccessDep,
 ):
+    # Легаси-таблица signatures дропнута (ed02); живой источник — signature_requests
+    # (ПЭП-ядро). Статус в БД — VARCHAR (ed01), отдаём строку без .value.
     items = (
         await session.execute(
-            select(Signature).where(Signature.tenant_id == str(tenant.id), Signature.document_version_id == document_version_id)
+            select(SignatureRequest).where(
+                SignatureRequest.tenant_id == str(tenant.id),
+                SignatureRequest.object_type == "document_version",
+                SignatureRequest.object_id == document_version_id,
+            )
         )
     ).scalars().all()
-    return {"items": [{"id": row.id, "status": row.status.value, "kind": row.type.value} for row in items]}
+    return {"items": [{"id": row.id, "status": str(getattr(row.status, "value", row.status)), "kind": "pep"} for row in items]}
 
 
 @router.get("/signatures")
 async def list_signatures(document_version_id: str | None = None, session: AsyncSession = SessionDep, tenant: Tenant = TenantDep, _: AccessContext = AccessDep):
-    stmt = select(Signature).where(Signature.tenant_id == str(tenant.id))
+    stmt = select(SignatureRequest).where(
+        SignatureRequest.tenant_id == str(tenant.id),
+        SignatureRequest.object_type == "document_version",
+    )
     if document_version_id:
-        stmt = stmt.where(Signature.document_version_id == document_version_id)
-    items = (await session.execute(stmt.order_by(Signature.created_at.desc()))).scalars().all()
-    return {"items": [{"id": row.id, "status": row.status.value, "type": row.type.value} for row in items]}
+        stmt = stmt.where(SignatureRequest.object_id == document_version_id)
+    items = (await session.execute(stmt.order_by(SignatureRequest.created_at.desc()))).scalars().all()
+    return {"items": [{"id": row.id, "status": str(getattr(row.status, "value", row.status)), "type": "pep"} for row in items]}
 
 
 @router.post("/edo/send")
