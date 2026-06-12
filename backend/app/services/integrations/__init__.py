@@ -23,7 +23,6 @@ from .stubs import (
     DisabledEDOIntegration,
     DisabledEISOTIntegration,
     DisabledFRDOIntegration,
-    StubEDOIntegration,
 )
 
 __all__ = [
@@ -39,7 +38,6 @@ __all__ = [
     "DisabledEDOIntegration",
     "DisabledEISOTIntegration",
     "DisabledFRDOIntegration",
-    "StubEDOIntegration",
     "PilotAccountingIntegration",
     "PilotFRDOIntegration",
     "PilotEISOTIntegration",

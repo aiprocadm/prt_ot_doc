@@ -12,7 +12,6 @@ from app.modules.files.models import FileEntityType, FileLinkRole
 from app.modules.files.service import FileService, build_artifact_name
 from app.services.document_quality import build_quality_report
 from app.services.integrations.factory import get_edo_integration
-from app.services.integrations.interfaces import IntegrationDisabledError
 
 StepHandler = Callable[..., Awaitable[dict[str, Any]]]
 
@@ -163,27 +162,19 @@ async def edo_step_handler(*, job: DocumentJob, step: DocumentJobStep) -> dict[s
         sort_keys=True,
         default=str,
     ).encode("utf-8")
-    try:
-        status = await provider.send_document(
-            content=content,
-            filename=filename,
-            metadata={
-                "job_id": job.id,
-                "step_id": step.id,
-                "tenant_id": job.tenant_id,
-                "correlation_id": job.correlation_id,
-            },
-        )
-    except IntegrationDisabledError:
-        return {
-            "status": "completed",
-            "provider": provider.name,
-            "reason": "edo_integration_disabled",
-            "deferred": False,
-            "provider_mode": "non_production",
-            "bridge_mode": "internal-fallback",
-            "detail": "Internal fallback completed without external EDO adapter.",
-        }
+    # Если интеграция выключена/не сконфигурирована, IntegrationDisabledError
+    # пролетает наружу: оркестратор честно зафейлит шаг (step_failed + лог),
+    # никакого internal-fallback с имитацией успеха.
+    status = await provider.send_document(
+        content=content,
+        filename=filename,
+        metadata={
+            "job_id": job.id,
+            "step_id": step.id,
+            "tenant_id": job.tenant_id,
+            "correlation_id": job.correlation_id,
+        },
+    )
     return {
         "status": status.status,
         "provider": provider.name,
