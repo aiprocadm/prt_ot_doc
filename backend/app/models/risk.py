@@ -74,6 +74,10 @@ class RiskHazard(TenantBase):
     document_file_id: Mapped[str | None] = mapped_column(
         ForeignKey("file.id", ondelete="SET NULL"), nullable=True
     )
+    # §9.2: maps this tenant hazard to a 29н factor code (MedicalFactor.code).
+    # Plain string — RiskHazard is on TenantBase, MedicalFactor on TenantBaseModel;
+    # a cross-base FK breaks metadata wiring (wa02 lesson). No FK by design.
+    medical_factor_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     document_file: Mapped["File | None"] = relationship("File")
     positions: Mapped[list["Position"]] = relationship(
