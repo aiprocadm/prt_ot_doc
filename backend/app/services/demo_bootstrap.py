@@ -13,6 +13,7 @@ from app.domains.packs.seeder import ensure_default_packs
 from app.models.feature import Feature
 from app.models.finance import Department
 from app.models.models import (
+    BriefingEntry, BriefingJournal, BriefingTemplate,
     Company, MedicalExamKind, MedicalFactor, MedicalNorm, Person, Position,
     PositionHazardLink, PPEIssue, PPEItem, PPENorm, Site, Tenant, TrainingCourse,
 )
@@ -157,6 +158,49 @@ async def _seed_medical_factor_demo(session, tenant_db_id: str, position_id: str
     if link is None:
         session.add(PositionHazardLink(
             tenant_id=tenant_db_id, position_id=position_id, hazard_id=hazard.id,
+        ))
+
+
+async def _seed_briefing_code_flow_demo(session, tenant_db_id: str, person) -> None:
+    """§6.9 Срез-3: seed a briefing template opted into code-flow signing
+    (require_signature_code=True) + a journal + one assigned entry for the demo
+    person, so the code-flow (sign-employee → confirm-code) is demoable out-of-box.
+    Idempotent (lookup-or-create each)."""
+    template = (await session.execute(select(BriefingTemplate).where(
+        BriefingTemplate.tenant_id == tenant_db_id,
+        BriefingTemplate.code == "demo-primary-code",
+    ))).scalar_one_or_none()
+    if template is None:
+        template = BriefingTemplate(
+            tenant_id=tenant_db_id, code="demo-primary-code",
+            title="Вводный инструктаж (с кодом)", briefing_type="primary",
+            require_signature_code=True,
+        )
+        session.add(template)
+        await session.flush()
+    journal = (await session.execute(select(BriefingJournal).where(
+        BriefingJournal.tenant_id == tenant_db_id,
+        BriefingJournal.code == "demo-brf-journal",
+    ))).scalar_one_or_none()
+    if journal is None:
+        journal = BriefingJournal(
+            tenant_id=tenant_db_id, code="demo-brf-journal",
+            title="Журнал инструктажей (демо)", journal_type="workplace", status="active",
+        )
+        session.add(journal)
+        await session.flush()
+    entry = (await session.execute(select(BriefingEntry).where(
+        BriefingEntry.tenant_id == tenant_db_id,
+        BriefingEntry.briefing_journal_id == journal.id,
+        BriefingEntry.person_id == person.id,
+        BriefingEntry.briefing_template_id == template.id,
+    ))).scalar_one_or_none()
+    if entry is None:
+        session.add(BriefingEntry(
+            tenant_id=tenant_db_id, person_id=person.id,
+            briefing_journal_id=journal.id, briefing_template_id=template.id,
+            briefing_type="primary",
+            briefing_date=datetime.now(timezone.utc), status="assigned",
         ))
 
 
@@ -349,6 +393,7 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
         if position is not None and person is not None:
             await _seed_ppe_demo(session, tenant_db_id, person, str(position.id))
             await _seed_medical_factor_demo(session, tenant_db_id, str(position.id))
+            await _seed_briefing_code_flow_demo(session, tenant_db_id, person)
 
         await ensure_default_packs(session, tenant_slug=tenant_slug)
         logger.info("demo.bootstrap.done", extra={"tenant": tenant_slug, "company": company_name, "site": site_name})
