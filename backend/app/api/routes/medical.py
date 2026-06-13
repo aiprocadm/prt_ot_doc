@@ -709,10 +709,10 @@ async def list_medical_factors(
 @router.post("/medical/factors", response_model=MedicalFactorRead,
              status_code=status.HTTP_201_CREATED, dependencies=[MedicalFeatureGate])
 async def create_medical_factor(
+    request: Request,
     payload: MedicalFactorCreate, tenant: TenantDep, session: SessionDep, access: MedicalAccess,
 ) -> MedicalFactorRead:
     TenantContextValidator.ensure_tenant_context(tenant)
-    _ = access
     dup = await session.scalar(select(MedicalFactor).where(
         MedicalFactor.tenant_id == tenant.id, MedicalFactor.code == payload.code,
     ))
@@ -725,6 +725,19 @@ async def create_medical_factor(
     data["exam_kinds"] = [k.value for k in payload.exam_kinds]
     record = MedicalFactor(tenant_id=str(tenant.id), **data)
     session.add(record)
+    await session.flush()
+    audit = AuditService(session)
+    ip = request.client.host if request.client else "unknown"
+    await audit.log_event(
+        tenant_id=str(tenant.id),
+        action="create",
+        object_type="medical_factor",
+        object_id=record.id,
+        user_id=getattr(access.user, "id", None),
+        ip=ip,
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+    )
     await session.commit()
     await session.refresh(record)
     return MedicalFactorRead.model_validate(record)
@@ -743,17 +756,29 @@ async def get_medical_factor(
 @router.patch("/medical/factors/{factor_id}", response_model=MedicalFactorRead,
               dependencies=[MedicalFeatureGate])
 async def update_medical_factor(
+    request: Request,
     factor_id: str, payload: MedicalFactorUpdate, tenant: TenantDep,
     session: SessionDep, access: MedicalAccess,
 ) -> MedicalFactorRead:
     TenantContextValidator.ensure_tenant_context(tenant)
-    _ = access
     record = await _get_factor(session, str(tenant.id), factor_id)
     data = payload.model_dump(exclude_unset=True)
     if "exam_kinds" in data and data["exam_kinds"] is not None:
         data["exam_kinds"] = [k.value if hasattr(k, "value") else k for k in data["exam_kinds"]]
     for k, v in data.items():
         setattr(record, k, v)
+    audit = AuditService(session)
+    ip = request.client.host if request.client else "unknown"
+    await audit.log_event(
+        tenant_id=str(tenant.id),
+        action="update",
+        object_type="medical_factor",
+        object_id=record.id,
+        user_id=getattr(access.user, "id", None),
+        ip=ip,
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+    )
     await session.commit()
     await session.refresh(record)
     return MedicalFactorRead.model_validate(record)
@@ -762,11 +787,23 @@ async def update_medical_factor(
 @router.delete("/medical/factors/{factor_id}", status_code=status.HTTP_204_NO_CONTENT,
                dependencies=[MedicalFeatureGate])
 async def delete_medical_factor(
+    request: Request,
     factor_id: str, tenant: TenantDep, session: SessionDep, access: MedicalAccess,
 ) -> Response:
     TenantContextValidator.ensure_tenant_context(tenant)
-    _ = access
     record = await _get_factor(session, str(tenant.id), factor_id)
+    audit = AuditService(session)
+    ip = request.client.host if request.client else "unknown"
+    await audit.log_event(
+        tenant_id=str(tenant.id),
+        action="delete",
+        object_type="medical_factor",
+        object_id=record.id,
+        user_id=getattr(access.user, "id", None),
+        ip=ip,
+        request_id=getattr(request.state, "trace_id", None),
+        user_agent=request.headers.get("user-agent"),
+    )
     await session.delete(record)
     await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
