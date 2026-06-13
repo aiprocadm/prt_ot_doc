@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.domains.medical import lifecycle as lc
 from app.models.models import (
-    MedicalExam, MedicalExamKind, MedicalFitness, MedicalNorm,
+    MedicalExam, MedicalExamKind, MedicalFactor, MedicalFitness, MedicalNorm,
     MedicalReferral, MedicalReferralStatus, MedicalSuspension,
     MedicalSuspensionStatus, Person, Position,
 )
@@ -170,17 +170,37 @@ async def update_exam(
 # ---------------------------------------------------------------------------
 
 
+async def _load_factor_catalog(
+    session: AsyncSession, *, tenant_id: str
+) -> list[lc.FactorTuple]:
+    """29н factor catalog as ORM-free FactorTuples for the pure engine."""
+    stmt = select(
+        MedicalFactor.code, MedicalFactor.name,
+        MedicalFactor.exam_kinds, MedicalFactor.periodicity_months,
+    ).where(MedicalFactor.tenant_id == tenant_id)
+    out: list[lc.FactorTuple] = []
+    for code, name, kinds, months in (await session.execute(stmt)).all():
+        out.append((code, name, tuple(MedicalExamKind(k) for k in (kinds or [])), int(months)))
+    return out
+
+
 async def compute_contingent(
     session: AsyncSession, *, tenant_id: str, today: date, warning_days: int = 30,
     position_id: str | None = None,
 ) -> list[dict]:
-    """Per (active person, required exam-kind) contingent rows with status (ok/due_soon/overdue/missing)."""
+    """Per (active person, required exam-kind) contingent rows with status (ok/due_soon/overdue/missing).
+
+    Required kinds = norm-driven (resolve_required_kinds) ∪ factor-driven (29н factors mapped
+    via Position hazards' medical_factor_code). A person enters the contingent even without a
+    manual MedicalNorm when their position's hazards map to 29н factors.
+    """
     norm_stmt = select(
         MedicalNorm.position_id, MedicalNorm.hazard_id,
         MedicalNorm.working_conditions_class, MedicalNorm.exam_kind,
     ).where(MedicalNorm.tenant_id == tenant_id)
     norms = [(r[0], r[1], r[2], r[3]) for r in (await session.execute(norm_stmt)).all()]
-    if not norms:
+    catalog = await _load_factor_catalog(session, tenant_id=tenant_id)
+    if not norms and not catalog:
         return []
 
     p_stmt = (
@@ -210,9 +230,16 @@ async def compute_contingent(
 
     items: list[dict] = []
     for person in people:
-        hazard_ids = {h.id for h in (person.position.hazards if person.position else [])}
+        hazards = person.position.hazards if person.position else []
+        hazard_ids = {h.id for h in hazards}
+        factor_codes = {h.medical_factor_code for h in hazards if h.medical_factor_code}
         required = lc.resolve_required_kinds(
             person.position_id, person.working_conditions_class, hazard_ids, norms,
+        )
+        required |= set(
+            lc.required_exams_from_factors(
+                lc.factors_for_hazards(factor_codes, catalog)
+            ).keys()
         )
         for kind in required:
             vu = latest.get((person.id, kind))
