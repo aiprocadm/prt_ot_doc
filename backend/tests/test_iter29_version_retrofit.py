@@ -35,23 +35,30 @@ from app.models.models import (
     ApprovalInstanceStep,
     ApprovalProcess,
     ApprovalTask,
-    EdoEnvelope,
     EdoStatusEvent,
     EdoWebhookInbox,
     SignatureRequest,
 )
 
 # Tuple of (ORM model class, DDL table name) — both halves of the contract.
+# NOTE (ed02, 2026-06-12): EdoEnvelope удалён из ORM, а таблица edo_envelopes
+# дропнута миграцией 20260612_ed02_drop_legacy_signing_tables. Историческая
+# iter-29 миграция НЕ редактируется (она уже применена в проде) — её _TABLES
+# по-прежнему содержит "edo_envelopes"; см. _MIGRATION_TABLES ниже.
 _COHORT = [
     (ApprovalDecisionLog, "approval_decision_logs"),
     (ApprovalInstanceStep, "approval_instance_steps"),
     (ApprovalProcess, "approval_processes"),
     (ApprovalTask, "approval_tasks"),
-    (EdoEnvelope, "edo_envelopes"),
     (EdoStatusEvent, "edo_status_events"),
     (EdoWebhookInbox, "edo_webhook_inbox"),
     (SignatureRequest, "signature_requests"),
 ]
+
+# Migration-side cohort: исторический состав iter-29 (включая дропнутую позже
+# таблицу edo_envelopes — ed02 идёт ПОСЛЕ iter-29 в цепочке, поэтому ретрофит
+# на тот момент был корректен и обязан остаться нетронутым).
+_MIGRATION_TABLES = {tablename for _, tablename in _COHORT} | {"edo_envelopes"}
 
 
 @pytest.mark.parametrize(("model", "tablename"), _COHORT)
@@ -140,14 +147,14 @@ def test_iter29_migration_chains_to_iter26_head() -> None:
 
 def test_iter29_migration_table_cohort_matches_expected() -> None:
     module = _load_iter29_migration()
-    expected = {tablename for _, tablename in _COHORT}
     actual = set(module._TABLES)
-    assert actual == expected, (
+    assert actual == _MIGRATION_TABLES, (
         f"iter-29 cohort drift. Migration touches: {actual}. "
-        f"Test cohort expects: {expected}. "
-        "If a new table needs the same fix, add it to BOTH lists; "
-        "if a table no longer needs retrofitting (e.g. recreated "
-        "with version), remove from BOTH."
+        f"Historical cohort expects: {_MIGRATION_TABLES}. "
+        "iter-29 — историческая миграция: её _TABLES не редактируется; "
+        "если ORM-когорта меняется (модель удалена + таблица дропнута "
+        "последующей миграцией, как edo_envelopes/ed02), правь _COHORT и "
+        "_MIGRATION_TABLES в этом тесте."
     )
 
 
@@ -199,8 +206,7 @@ def test_iter29_adds_only_version_column() -> None:
 
 def test_iter29_upgrade_and_downgrade_are_inverse() -> None:
     module = _load_iter29_migration()
-    expected_tables = tuple(tablename for _, tablename in _COHORT)
-    assert tuple(sorted(module._TABLES)) == tuple(sorted(expected_tables))
+    assert tuple(sorted(module._TABLES)) == tuple(sorted(_MIGRATION_TABLES))
     # ``_TABLES`` is the single source of truth in the migration — both
     # ``upgrade()`` (forward) and ``downgrade()`` (reversed) iterate it,
     # so symmetry is structural. Pin the tuple shape so a future edit

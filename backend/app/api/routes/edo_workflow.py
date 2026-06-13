@@ -19,7 +19,7 @@ from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
 from app.models.document import DocumentVersion
 from app.models.job_engine import InboundWebhookDedup
-from app.models.models import IdempotencyStatus, RoleEnum, Tenant
+from app.models.models import IdempotencyStatus, RoleEnum, SignatureRequest, Tenant
 from app.models.workflow import (
     ApprovalDecision,
     ApprovalDecisionType,
@@ -28,13 +28,12 @@ from app.models.workflow import (
     ApprovalRoute,
     EdoMessage,
     EdoStatus,
-    Signature,
     SignatureType,
 )
 from app.services.billing import BillingService
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 from app.services.outbox import OutboxService
-from app.services.pep_signing import PepConflict, PepNotFound, PepSigningService
+from app.services.pep_signing import PepApprovalRequired, PepConflict, PepNotFound, PepSigningService
 from app.services.provider_registry import provider_response_meta
 from app.tasks import process_inbound_webhook
 
@@ -484,9 +483,11 @@ async def create_signature(
     except PepNotFound:
         raise _edo_not_found("document_version")
     except PepConflict as exc:
+        # PepApprovalRequired (гейт согласования) — отдельный код; прочее — PEP_CONFLICT.
+        code = "PEP_APPROVAL_REQUIRED" if isinstance(exc, PepApprovalRequired) else "PEP_CONFLICT"
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=api_problem_detail(code="PEP_CONFLICT", message=str(exc), error_type="edo"),
+            detail=api_problem_detail(code=code, message=str(exc), error_type="edo"),
         ) from exc
     await session.commit()
     return {
@@ -538,9 +539,11 @@ async def sign_submit(
     except PepNotFound:
         raise _edo_not_found("document_version")
     except PepConflict as exc:
+        # PepApprovalRequired (гейт согласования) — отдельный код; прочее — PEP_CONFLICT.
+        code = "PEP_APPROVAL_REQUIRED" if isinstance(exc, PepApprovalRequired) else "PEP_CONFLICT"
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=api_problem_detail(code="PEP_CONFLICT", message=str(exc), error_type="edo"),
+            detail=api_problem_detail(code=code, message=str(exc), error_type="edo"),
         ) from exc
     await session.commit()
     return {"id": req.id, "status": req.status, "correlation_id": cid}
@@ -553,21 +556,30 @@ async def sign_status(
     tenant: Tenant = TenantDep,
     _: AccessContext = AccessDep,
 ):
+    # Легаси-таблица signatures дропнута (ed02); живой источник — signature_requests
+    # (ПЭП-ядро). Статус в БД — VARCHAR (ed01), отдаём строку без .value.
     items = (
         await session.execute(
-            select(Signature).where(Signature.tenant_id == str(tenant.id), Signature.document_version_id == document_version_id)
+            select(SignatureRequest).where(
+                SignatureRequest.tenant_id == str(tenant.id),
+                SignatureRequest.object_type == "document_version",
+                SignatureRequest.object_id == document_version_id,
+            )
         )
     ).scalars().all()
-    return {"items": [{"id": row.id, "status": row.status.value, "kind": row.type.value} for row in items]}
+    return {"items": [{"id": row.id, "status": str(getattr(row.status, "value", row.status)), "kind": "pep"} for row in items]}
 
 
 @router.get("/signatures")
 async def list_signatures(document_version_id: str | None = None, session: AsyncSession = SessionDep, tenant: Tenant = TenantDep, _: AccessContext = AccessDep):
-    stmt = select(Signature).where(Signature.tenant_id == str(tenant.id))
+    stmt = select(SignatureRequest).where(
+        SignatureRequest.tenant_id == str(tenant.id),
+        SignatureRequest.object_type == "document_version",
+    )
     if document_version_id:
-        stmt = stmt.where(Signature.document_version_id == document_version_id)
-    items = (await session.execute(stmt.order_by(Signature.created_at.desc()))).scalars().all()
-    return {"items": [{"id": row.id, "status": row.status.value, "type": row.type.value} for row in items]}
+        stmt = stmt.where(SignatureRequest.object_id == document_version_id)
+    items = (await session.execute(stmt.order_by(SignatureRequest.created_at.desc()))).scalars().all()
+    return {"items": [{"id": row.id, "status": str(getattr(row.status, "value", row.status)), "type": "pep"} for row in items]}
 
 
 @router.post("/edo/send")

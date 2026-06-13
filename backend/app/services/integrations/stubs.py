@@ -90,36 +90,6 @@ class DisabledEDOIntegration(BaseEDOIntegration):
         raise IntegrationDisabledError("EDO integration is disabled")
 
 
-class StubEDOIntegration(BaseEDOIntegration):
-    name = "stub-edo"
-
-    async def send_document(
-        self, *, content: bytes, filename: str, metadata: dict[str, Any] | None = None
-    ) -> IntegrationStatus:
-        return IntegrationStatus(
-            external_id=f"edo-{int(datetime.now(tz=timezone.utc).timestamp())}",
-            status="sent",
-            details=_stub_details(
-                provider=self.name,
-                operation="send_document",
-                extra={"filename": filename, "size": len(content), "metadata": metadata or {}},
-            ),
-        )
-
-    async def download_document(self, external_id: str) -> bytes:
-        return f"stub-document:{external_id}".encode()
-
-    async def get_document_status(self, external_id: str) -> IntegrationStatus:
-        return IntegrationStatus(
-            external_id=external_id,
-            status="delivered",
-            details=_stub_details(provider=self.name, operation="get_document_status"),
-        )
-
-    async def health_check(self) -> bool:
-        return True
-
-
 class DisabledFRDOIntegration(BaseFRDOIntegration):
     name = "disabled-frdo"
 

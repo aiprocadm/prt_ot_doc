@@ -40,9 +40,7 @@ from app.models.approval_workflow import (
     EdoReceipt,
     EdoStatus,
     EdoStatusHistory,
-    Signature,
     SignatureProviderStatus,
-    SignatureStatus,
     SignatureType,
 )
 from app.models.base import (
@@ -175,8 +173,6 @@ __all__ = [
     "ApprovalDecision",
     "ApprovalRequestStatus",
     "ApprovalDecisionType",
-    "Signature",
-    "SignatureStatus",
     "SignatureType",
     "EdoMessage",
     "EdoReceipt",
@@ -1307,6 +1303,15 @@ class BriefingEntry(TenantBaseModel, SoftDeleteMixin):
 
 class BriefingSignature(TenantBaseModel):
     __tablename__ = "briefing_signatures"
+    __table_args__ = (
+        # Анти-гонка: один signer_type на briefing_entry (миграция ed03).
+        Index(
+            "uq_briefing_signatures_entry_signer",
+            "briefing_entry_id",
+            "signer_type",
+            unique=True,
+        ),
+    )
 
     briefing_entry_id: Mapped[str] = mapped_column(ForeignKey("briefing_entries.id", ondelete="CASCADE"), nullable=False, index=True)
     signer_type: Mapped[str] = mapped_column(String(16), nullable=False)
@@ -2942,31 +2947,6 @@ class SignatureRequest(TenantBaseModel):
         Index("ix_signature_requests_status", "tenant_id", "status"),
         Index("ix_signature_requests_object", "tenant_id", "object_type", "object_id"),
         Index("ix_signature_requests_entity_status", "tenant_id", "object_type", "object_id", "status"),
-    )
-
-
-class EdoEnvelopeStatus(str, enum.Enum):
-    QUEUED = "queued"
-    SENT = "sent"
-    DELIVERED = "delivered"
-    SIGNED = "signed"
-    REJECTED = "rejected"
-    FAILED = "failed"
-
-
-class EdoEnvelope(TenantBaseModel):
-    __tablename__ = "edo_envelopes"
-
-    object_type: Mapped[str] = mapped_column(String(64), nullable=False)
-    object_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    provider: Mapped[str] = mapped_column(String(64), nullable=False)
-    status: Mapped[EdoEnvelopeStatus] = mapped_column(native_enum(EdoEnvelopeStatus), nullable=False, default=EdoEnvelopeStatus.QUEUED)
-    external_id: Mapped[str | None] = mapped_column(String(255), index=True)
-    last_event_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
-    __table_args__ = (
-        Index("ix_edo_envelopes_status", "tenant_id", "status"),
-        Index("ix_edo_envelopes_object", "tenant_id", "object_type", "object_id"),
     )
 
 

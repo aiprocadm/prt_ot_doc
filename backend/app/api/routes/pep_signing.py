@@ -5,7 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_tenant_record
@@ -14,7 +14,13 @@ from app.core.audit_decorator import audit_operation
 from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
 from app.models.models import SignatureRequest, Tenant
-from app.services.pep_signing import PepConflict, PepForbidden, PepNotFound, PepSigningService
+from app.services.pep_signing import (
+    PepApprovalRequired,
+    PepConflict,
+    PepForbidden,
+    PepNotFound,
+    PepSigningService,
+)
 
 router = APIRouter()
 
@@ -82,9 +88,11 @@ def _pep_error(exc: Exception) -> HTTPException:
             detail=api_problem_detail(code="PEP_FORBIDDEN", message=str(exc), error_type="pep"),
         )
     if isinstance(exc, PepConflict):
+        # PepApprovalRequired — подкласс PepConflict с отдельным кодом для гейта.
+        code = "PEP_APPROVAL_REQUIRED" if isinstance(exc, PepApprovalRequired) else "PEP_CONFLICT"
         return HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=api_problem_detail(code="PEP_CONFLICT", message=str(exc), error_type="pep"),
+            detail=api_problem_detail(code=code, message=str(exc), error_type="pep"),
         )
     raise AssertionError(f"unexpected pep error: {exc!r}")
 
@@ -205,14 +213,12 @@ async def list_pep_requests(
     signer_person_id: str | None = Query(default=None),
     purpose: str | None = Query(default=None),
     status_filter: str | None = Query(default=None, alias="status"),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
 ) -> dict:
-    stmt = (
-        select(SignatureRequest)
-        .where(
-            SignatureRequest.tenant_id == _tenant_id_value(tenant),
-            SignatureRequest.signature_type == "pep",
-        )
-        .order_by(SignatureRequest.created_at.desc())
+    stmt = select(SignatureRequest).where(
+        SignatureRequest.tenant_id == _tenant_id_value(tenant),
+        SignatureRequest.signature_type == "pep",
     )
     if object_type is not None:
         stmt = stmt.where(SignatureRequest.object_type == object_type)
@@ -224,8 +230,19 @@ async def list_pep_requests(
         stmt = stmt.where(SignatureRequest.purpose == purpose)
     if status_filter is not None:
         stmt = stmt.where(SignatureRequest.status == status_filter)
-    rows = (await session.execute(stmt)).scalars().all()
-    return {"items": [_request_read(r) for r in rows]}
+    total = int(await session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
+    rows = (
+        await session.execute(
+            stmt.order_by(
+                # Стабильная сортировка: id desc как tie-breaker при равных created_at.
+                SignatureRequest.created_at.desc(),
+                SignatureRequest.id.desc(),
+            )
+            .offset(offset)
+            .limit(limit)
+        )
+    ).scalars().all()
+    return {"items": [_request_read(r) for r in rows], "total": total}
 
 
 @router.get("/sign/pep/requests/{request_id}/verify")
