@@ -24,8 +24,13 @@ from app.models.models import (
     BriefingTemplate,
     Tenant,
 )
-from app.modules.briefings.services import BriefingEntryService, BriefingSignatureConflict
+from app.modules.briefings.services import (
+    BriefingEntryService,
+    BriefingSignatureConflict,
+    NoPendingCodeRequest,
+)
 from app.modules.rbac_abac import require_permission
+from app.services.pep_signing import PepConflict
 from app.services.audit import AuditService
 
 _BRIEFINGS_READ_PERMISSION = "briefings.read"
@@ -81,6 +86,10 @@ class BriefingEntryPayload(BaseModel):
 class BriefingSignPayload(BaseModel):
     signer_user_id: str | None = None
     signature_payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class BriefingConfirmCodePayload(BaseModel):
+    code: str
 
 
 class BriefingBulkCreatePayload(BriefingEntryPayload):
@@ -142,6 +151,13 @@ def _briefing_signature_conflict(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_409_CONFLICT,
         detail=api_problem_detail(code="BRIEFING_SIGNATURE_CONFLICT", message=message, error_type="briefings"),
+    )
+
+
+def _briefing_conflict(code: str, message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=api_problem_detail(code=code, message=message, error_type="briefings"),
     )
 
 
@@ -281,8 +297,41 @@ async def sign_employee(item_id: str, payload: BriefingSignPayload, request: Req
     item = await session.get(BriefingEntry, item_id)
     if not item or item.tenant_id != tenant.id:
         raise HTTPException(404, "Entry not found")
+    svc = BriefingEntryService()
+    if await svc.requires_signature_code(session, item):
+        try:
+            req, code = await svc.start_employee_signature(session, item, payload.signer_user_id)
+        except PepConflict as exc:
+            await session.commit()
+            raise _briefing_conflict("PEP_CONFLICT", str(exc)) from exc
+        await session.commit()
+        return {
+            "entry": _entry_read(item),
+            "pending": {"pep_request_id": req.id, "status": req.status, "confirm_code": code},
+        }
     try:
-        sig = await BriefingEntryService().sign(session, item, "employee", payload.signer_user_id, signature_payload=payload.signature_payload)
+        sig = await svc.sign(session, item, "employee", payload.signer_user_id, signature_payload=payload.signature_payload)
+    except BriefingSignatureConflict as exc:
+        raise _briefing_signature_conflict(str(exc)) from exc
+    await session.commit()
+    return {"entry": _entry_read(item, [sig]), "signature": BriefingSignatureRead.model_validate(sig)}
+
+
+@router.post("/entries/{item_id}/confirm-code")
+@audit_operation("confirm_code", "briefing_entry", id_attr="entry")
+async def confirm_code(item_id: str, payload: BriefingConfirmCodePayload, request: Request, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), __: Any = _PermWriteDep):
+    item = await session.get(BriefingEntry, item_id)
+    if not item or item.tenant_id != tenant.id:
+        raise HTTPException(404, "Entry not found")
+    svc = BriefingEntryService()
+    try:
+        sig = await svc.confirm_code(session, item, payload.code)
+    except NoPendingCodeRequest as exc:
+        raise _briefing_conflict("NO_PENDING_CODE_REQUEST", str(exc)) from exc
+    except PepConflict as exc:
+        # commit-on-conflict: счётчик попыток / expired / declined должны сохраниться
+        await session.commit()
+        raise _briefing_conflict("PEP_CONFLICT", str(exc)) from exc
     except BriefingSignatureConflict as exc:
         raise _briefing_signature_conflict(str(exc)) from exc
     await session.commit()
