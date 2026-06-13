@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.domains.medical import lifecycle as lc
 from app.models.models import (
+    EmploymentStatus,
     MedicalExam, MedicalExamKind, MedicalFactor, MedicalFitness, MedicalNorm,
     MedicalReferral, MedicalReferralStatus, MedicalSuspension,
     MedicalSuspensionStatus, Person, Position,
@@ -286,6 +287,126 @@ async def status_summary(session: AsyncSession, *, tenant_id: str, today: date) 
         "overdue_count": by_status.get("overdue", 0) + by_status.get("missing", 0),
         "suspended_count": int(suspended or 0),
     }
+
+
+# ---------------------------------------------------------------------------
+# 5.2b — §9.2 formal 29н documents (live-compute, no snapshot table)
+# ---------------------------------------------------------------------------
+
+
+async def _active_headcount_by_position(
+    session: AsyncSession, *, tenant_id: str
+) -> dict[str, int]:
+    """Count of active (non-deleted, employment_status=active) persons per position."""
+    stmt = select(Person.position_id, func.count()).where(
+        Person.tenant_id == tenant_id, Person.deleted_at.is_(None),
+        Person.position_id.is_not(None),
+        Person.employment_status == EmploymentStatus.ACTIVE,
+    ).group_by(Person.position_id)
+    return {pid: int(n) for pid, n in (await session.execute(stmt)).all()}
+
+
+async def build_contingent_register(
+    session: AsyncSession, *, tenant_id: str, today: date
+) -> list[dict]:
+    """29н «контингент»: position-level rows of factors + headcount (factor-driven only)."""
+    catalog = await _load_factor_catalog(session, tenant_id=tenant_id)
+    if not catalog:
+        return []
+    headcount = await _active_headcount_by_position(session, tenant_id=tenant_id)
+    pos_stmt = (
+        select(Position)
+        .where(Position.tenant_id == tenant_id, Position.deleted_at.is_(None))
+        .options(selectinload(Position.hazards))
+    )
+    positions = list((await session.execute(pos_stmt)).scalars().all())
+    rows: list[dict] = []
+    for pos in positions:
+        codes = {h.medical_factor_code for h in pos.hazards if h.medical_factor_code}
+        factors = lc.factors_for_hazards(codes, catalog)
+        hc = headcount.get(pos.id, 0)
+        if not factors or hc == 0:
+            continue
+        exams = lc.required_exams_from_factors(factors)
+        rows.append({
+            "position_id": pos.id,
+            "position_name": pos.name,
+            "factors": [{"code": f[0], "name": f[1]} for f in sorted(factors, key=lambda f: f[0])],
+            "headcount": hc,
+            "exam_kinds": sorted(k.value for k in exams),
+            "periodicity_months": min(exams.values()) if exams else None,
+        })
+    return rows
+
+
+async def build_named_list(
+    session: AsyncSession, *, tenant_id: str, today: date, warning_days: int = 30
+) -> list[dict]:
+    """29н «поименный список»: person-level rows with factors, last/next exam, status (factor-driven)."""
+    catalog = await _load_factor_catalog(session, tenant_id=tenant_id)
+    if not catalog:
+        return []
+    p_stmt = (
+        select(Person)
+        .where(
+            Person.tenant_id == tenant_id, Person.deleted_at.is_(None),
+            Person.position_id.is_not(None),
+            Person.employment_status == EmploymentStatus.ACTIVE,
+        )
+        .options(
+            selectinload(Person.position).selectinload(Position.hazards),
+            selectinload(Person.workplace),
+        )
+    )
+    people = list((await session.execute(p_stmt)).scalars().all())
+    if not people:
+        return []
+
+    person_ids = [p.id for p in people]
+    vu_stmt = select(
+        MedicalExam.person_id, MedicalExam.exam_kind, func.max(MedicalExam.valid_until),
+    ).where(
+        MedicalExam.tenant_id == tenant_id, MedicalExam.deleted_at.is_(None),
+        MedicalExam.person_id.in_(person_ids), MedicalExam.exam_kind.is_not(None),
+    ).group_by(MedicalExam.person_id, MedicalExam.exam_kind)
+    latest_vu: dict[tuple[str, MedicalExamKind], date] = {
+        (pid, kind): vu for pid, kind, vu in (await session.execute(vu_stmt)).all()
+    }
+    ld_stmt = select(MedicalExam.person_id, func.max(MedicalExam.exam_date)).where(
+        MedicalExam.tenant_id == tenant_id, MedicalExam.deleted_at.is_(None),
+        MedicalExam.person_id.in_(person_ids),
+    ).group_by(MedicalExam.person_id)
+    last_exam: dict[str, date] = {
+        pid: d for pid, d in (await session.execute(ld_stmt)).all()
+    }
+
+    rows: list[dict] = []
+    for person in people:
+        hazards = person.position.hazards if person.position else []
+        codes = {h.medical_factor_code for h in hazards if h.medical_factor_code}
+        factors = lc.factors_for_hazards(codes, catalog)
+        if not factors:
+            continue
+        required = lc.required_exams_from_factors(factors)
+        statuses: list[str] = []
+        dues: list[date] = []
+        for kind in required:
+            vu = latest_vu.get((person.id, kind))
+            statuses.append(lc.classify(vu, today, warning_days).value)
+            dues.append(vu if vu is not None else today)
+        full_name = f"{person.last_name} {person.first_name}".strip()
+        rows.append({
+            "person_id": person.id,
+            "full_name": full_name,
+            "position_name": person.position.name if person.position else None,
+            "department": person.workplace.name if person.workplace else None,
+            "factors": [{"code": f[0], "name": f[1]} for f in sorted(factors, key=lambda f: f[0])],
+            "required_kinds": sorted(k.value for k in required),
+            "last_exam_date": last_exam.get(person.id),
+            "next_due_date": min(dues) if dues else today,
+            "status": lc.worst_status(statuses),
+        })
+    return rows
 
 
 # ---------------------------------------------------------------------------
