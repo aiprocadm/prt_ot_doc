@@ -129,6 +129,45 @@ def resolve_required_kinds(
 
 
 # ---------------------------------------------------------------------------
+# 2.6 — §9.2 factor-driven resolution (29н catalog → required kinds)
+# ---------------------------------------------------------------------------
+
+# (code, name, exam_kinds, periodicity_months) — ORM-free 29н factor tuple.
+FactorTuple = tuple[str, str, tuple["MedicalExamKind", ...], int]
+
+# Worst-first priority of contingent statuses (for per-person rollup).
+_STATUS_PRIORITY: dict[str, int] = {"missing": 3, "overdue": 2, "due_soon": 1, "ok": 0}
+
+
+def factors_for_hazards(
+    hazard_factor_codes: set[str], catalog: Iterable[FactorTuple]
+) -> set[FactorTuple]:
+    """29н factors whose code is mapped by one of the position's hazards."""
+    return {f for f in catalog if f[0] in hazard_factor_codes}
+
+
+def required_exams_from_factors(
+    factors: Iterable[FactorTuple],
+) -> dict[MedicalExamKind, int]:
+    """Union of mandated exam kinds → strictest (min) periodicity in months."""
+    result: dict[MedicalExamKind, int] = {}
+    for _code, _name, kinds, months in factors:
+        for kind in kinds:
+            if kind not in result or months < result[kind]:
+                result[kind] = months
+    return result
+
+
+def worst_status(statuses: Iterable[str]) -> str:
+    """Roll up per-kind contingent statuses to the most severe; 'ok' when empty."""
+    worst = "ok"
+    for st in statuses:
+        if _STATUS_PRIORITY.get(st, 0) > _STATUS_PRIORITY[worst]:
+            worst = st
+    return worst
+
+
+# ---------------------------------------------------------------------------
 # 2.5 — Suspension rule
 # ---------------------------------------------------------------------------
 
