@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -165,4 +166,78 @@ class MedicalSuspensionRead(BaseModel):
 
 class MedicalSuspensionPage(BaseModel):
     items: list[MedicalSuspensionRead]
+    total: int
+
+
+class MedicalFactorCreate(BaseModel):
+    code: str = Field(..., min_length=1, max_length=32)
+    name: str = Field(..., min_length=1, max_length=255)
+    category: Literal["factor", "work"] = "factor"
+    exam_kinds: list[MedicalExamKind] = Field(..., min_length=1)
+    periodicity_months: int = Field(default=12, ge=1, le=120)
+    participants: list[str] | None = None
+    lab_tests: list[str] | None = None
+    model_config = ConfigDict(extra="forbid")
+
+
+class MedicalFactorRead(BaseModel):
+    id: str
+    code: str
+    name: str
+    category: str
+    exam_kinds: list[str]
+    periodicity_months: int
+    participants: list[str] | None = None
+    lab_tests: list[str] | None = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MedicalFactorUpdate(BaseModel):
+    name: str | None = Field(default=None, max_length=255)
+    category: Literal["factor", "work"] | None = None
+    exam_kinds: list[MedicalExamKind] | None = None
+    periodicity_months: int | None = Field(default=None, ge=1, le=120)
+    participants: list[str] | None = None
+    lab_tests: list[str] | None = None
+    model_config = ConfigDict(extra="forbid")
+
+
+class MedicalFactorPage(BaseModel):
+    items: list[MedicalFactorRead]
+    total: int
+
+
+class FactorRef(BaseModel):
+    code: str
+    name: str
+
+
+class ContingentRegisterRow(BaseModel):
+    position_id: str
+    position_name: str
+    factors: list[FactorRef]
+    headcount: int
+    exam_kinds: list[str]
+    periodicity_months: int | None = None
+
+
+class ContingentRegisterPage(BaseModel):
+    items: list[ContingentRegisterRow]
+    total: int
+
+
+class NamedListRow(BaseModel):
+    person_id: str
+    full_name: str
+    position_name: str | None = None
+    department: str | None = None
+    factors: list[FactorRef]
+    required_kinds: list[str]
+    last_exam_date: date | None = None
+    next_due_date: date | None = None
+    status: str
+
+
+class NamedListPage(BaseModel):
+    items: list[NamedListRow]
     total: int

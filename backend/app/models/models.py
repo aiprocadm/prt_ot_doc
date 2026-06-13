@@ -899,6 +899,27 @@ class MedicalNorm(TenantBaseModel):
     )
 
 
+class MedicalFactor(TenantBaseModel):
+    """29н reference catalog: harmful factor / kind of work mandating periodic exams.
+
+    VARCHAR ``category`` (no PG enum — enum-label-parity anti-pattern). Linked from
+    ``RiskHazard.medical_factor_code`` (string, no cross-base FK). Optional norm overrides.
+    """
+    __tablename__ = "medical_factor"
+
+    code: Mapped[str] = mapped_column(String(32), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    category: Mapped[str] = mapped_column(String(16), nullable=False, default="factor")
+    exam_kinds: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    periodicity_months: Mapped[int] = mapped_column(Integer, nullable=False, default=12)
+    participants: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    lab_tests: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "code", name="uq_medical_factor_tenant_code"),
+    )
+
+
 class MedicalReferral(TenantBaseModel, SoftDeleteMixin):
     __tablename__ = "medical_referral"
 
