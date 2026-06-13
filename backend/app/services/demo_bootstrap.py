@@ -13,8 +13,8 @@ from app.domains.packs.seeder import ensure_default_packs
 from app.models.feature import Feature
 from app.models.finance import Department
 from app.models.models import (
-    Company, MedicalExamKind, MedicalNorm, Person, Position, PPEIssue, PPEItem,
-    PPENorm, Site, Tenant, TrainingCourse,
+    Company, MedicalExamKind, MedicalFactor, MedicalNorm, Person, Position,
+    PositionHazardLink, PPEIssue, PPEItem, PPENorm, Site, Tenant, TrainingCourse,
 )
 from app.models.risk import RiskHazard
 from app.modules.contractors.models import (
@@ -125,6 +125,39 @@ async def _seed_ppe_demo(session, tenant_db_id: str, person, position_id: str) -
             expires_at=now - timedelta(days=30), wear_days=90, status="issued",
         ))
         # очки: норма есть, выдачи нет → строка missing
+
+
+async def _seed_medical_factor_demo(session, tenant_db_id: str, position_id: str) -> None:
+    """§9.2: seed one 29н factor, map the demo hazard to it, and link the hazard to
+    the demo position — so the demo контингент/поименный список are non-empty
+    factor-driven (no manual MedicalNorm needed). Idempotent (lookup-or-create each)."""
+    hazard = (await session.execute(select(RiskHazard).where(
+        RiskHazard.tenant_id == tenant_db_id, RiskHazard.code == "demo_general",
+    ))).scalar_one_or_none()
+    if hazard is None:
+        hazard = RiskHazard(tenant_id=tenant_db_id, code="demo_general",
+                            title="Общие производственные факторы")
+        session.add(hazard)
+        await session.flush()
+    if not hazard.medical_factor_code:
+        hazard.medical_factor_code = "4.4"
+    factor = (await session.execute(select(MedicalFactor).where(
+        MedicalFactor.tenant_id == tenant_db_id, MedicalFactor.code == "4.4",
+    ))).scalar_one_or_none()
+    if factor is None:
+        session.add(MedicalFactor(
+            tenant_id=tenant_db_id, code="4.4", name="Шум", category="factor",
+            exam_kinds=[MedicalExamKind.PERIODIC.value], periodicity_months=12,
+        ))
+    link = (await session.execute(select(PositionHazardLink).where(
+        PositionHazardLink.tenant_id == tenant_db_id,
+        PositionHazardLink.position_id == position_id,
+        PositionHazardLink.hazard_id == hazard.id,
+    ))).scalar_one_or_none()
+    if link is None:
+        session.add(PositionHazardLink(
+            tenant_id=tenant_db_id, position_id=position_id, hazard_id=hazard.id,
+        ))
 
 
 async def bootstrap_demo_tenant(settings: Settings) -> None:
@@ -315,6 +348,7 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
         # called unconditionally so existing demo tenants get the data too).
         if position is not None and person is not None:
             await _seed_ppe_demo(session, tenant_db_id, person, str(position.id))
+            await _seed_medical_factor_demo(session, tenant_db_id, str(position.id))
 
         await ensure_default_packs(session, tenant_slug=tenant_slug)
         logger.info("demo.bootstrap.done", extra={"tenant": tenant_slug, "company": company_name, "site": site_name})
