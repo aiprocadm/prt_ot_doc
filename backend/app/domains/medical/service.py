@@ -309,7 +309,12 @@ async def _active_headcount_by_position(
 async def build_contingent_register(
     session: AsyncSession, *, tenant_id: str, today: date
 ) -> list[dict]:
-    """29н «контингент»: position-level rows of factors + headcount (factor-driven only)."""
+    """29н «контингент»: position-level rows of factors + headcount (factor-driven only).
+
+    `today` is accepted for API symmetry with the other builders (build_named_list,
+    compute_contingent) and is intentionally unused here — the register is purely
+    position-level and carries no per-person exam dates.
+    """
     catalog = await _load_factor_catalog(session, tenant_id=tenant_id)
     if not catalog:
         return []
@@ -393,6 +398,9 @@ async def build_named_list(
         for kind in required:
             vu = latest_vu.get((person.id, kind))
             statuses.append(lc.classify(vu, today, warning_days).value)
+            # Sentinel: a never-examined / no-record kind contributes `today` so the
+            # row is surfaced as due now. The `status` field ("missing"/"overdue")
+            # is the authoritative severity; next_due_date is "earliest due-or-now".
             dues.append(vu if vu is not None else today)
         full_name = f"{person.last_name} {person.first_name}".strip()
         rows.append({
