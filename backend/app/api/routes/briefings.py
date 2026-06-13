@@ -155,6 +155,7 @@ def _briefing_signature_conflict(message: str) -> HTTPException:
 
 
 def _briefing_conflict(code: str, message: str) -> HTTPException:
+    """Явные конфликты сервис-слоя (PEP_CONFLICT / NO_PENDING_CODE_REQUEST); в отличие от _briefing_signature_conflict не связан с гонкой unique-индекса."""
     return HTTPException(
         status_code=status.HTTP_409_CONFLICT,
         detail=api_problem_detail(code=code, message=message, error_type="briefings"),
@@ -305,6 +306,9 @@ async def sign_employee(item_id: str, payload: BriefingSignPayload, request: Req
             await session.commit()
             raise _briefing_conflict("PEP_CONFLICT", str(exc)) from exc
         await session.commit()
+        # confirm_code возвращается оформителю намеренно — единственная точка
+        # видимости разового кода (прод-доставка работнику OOB: SMS/печать).
+        # Зеркало контракта документов (см. spec §1/§6).
         return {
             "entry": _entry_read(item),
             "pending": {"pep_request_id": req.id, "status": req.status, "confirm_code": code},

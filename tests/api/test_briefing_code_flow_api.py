@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.models.models import BriefingEntry, BriefingJournal, BriefingTemplate, RoleEnum
+from app.models.models import BriefingEntry, BriefingJournal, BriefingTemplate, RoleEnum, SignatureRequest
 
 _counter = itertools.count(1)
 
@@ -131,11 +131,27 @@ async def test_confirm_code_wrong_code_returns_409_and_persists_attempt(
         tenant, _, entry = await _entry_with_template(session, data_factory, require_code=True)
     headers = await make_auth_headers(RoleEnum.ADMIN, tenant=tenant.slug)
 
-    await async_client.post(
+    started = await async_client.post(
         f"/api/v1/briefings/entries/{entry.id}/sign-employee", json={}, headers=headers
     )
+    assert started.status_code == 200, started.text
+    pending = started.json()["pending"]
+
     wrong = await async_client.post(
         f"/api/v1/briefings/entries/{entry.id}/confirm-code",
         json={"code": "000000"}, headers=headers,
     )
     assert wrong.status_code == 409, wrong.text
+
+    # commit-on-conflict: инкремент попыток пережил 409
+    async with sessionmaker() as s:
+        req = await s.get(SignatureRequest, pending["pep_request_id"])
+        assert req.confirm_attempts == 1
+        assert req.status == "awaiting_code"
+
+    # верный код после неверного всё ещё проходит
+    ok = await async_client.post(
+        f"/api/v1/briefings/entries/{entry.id}/confirm-code",
+        json={"code": pending["confirm_code"]}, headers=headers,
+    )
+    assert ok.status_code == 200, ok.text
