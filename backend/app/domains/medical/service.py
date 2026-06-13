@@ -170,6 +170,21 @@ async def update_exam(
 # ---------------------------------------------------------------------------
 
 
+def _safe_exam_kinds(raw: list[str] | None) -> tuple[MedicalExamKind, ...]:
+    """Convert stored exam-kind labels to enum members, skipping any unknown label.
+
+    Defensive: a single bad value in MedicalFactor.exam_kinds must not break the
+    whole tenant's contingent. The write API validates kinds; this guards stray data.
+    """
+    out: list[MedicalExamKind] = []
+    for k in (raw or []):
+        try:
+            out.append(MedicalExamKind(k))
+        except ValueError:
+            continue
+    return tuple(out)
+
+
 async def _load_factor_catalog(
     session: AsyncSession, *, tenant_id: str
 ) -> list[lc.FactorTuple]:
@@ -180,7 +195,7 @@ async def _load_factor_catalog(
     ).where(MedicalFactor.tenant_id == tenant_id)
     out: list[lc.FactorTuple] = []
     for code, name, kinds, months in (await session.execute(stmt)).all():
-        out.append((code, name, tuple(MedicalExamKind(k) for k in (kinds or [])), int(months)))
+        out.append((code, name, _safe_exam_kinds(kinds), int(months)))
     return out
 
 
