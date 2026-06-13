@@ -45,6 +45,7 @@ class BriefingTemplatePayload(BaseModel):
     status: str = "draft"
     description: str | None = None
     validity_days: int | None = None
+    require_signature_code: bool = False
 
 
 class BriefingJournalPayload(BaseModel):
