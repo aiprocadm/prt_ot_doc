@@ -30,6 +30,6 @@ def test_ed04_adds_column_with_literal_names():
     src = _MIGRATION.read_text(encoding="utf-8")
     assert 'add_column(' in src and '"briefing_templates"' in src
     assert '"require_signature_code"' in src
-    assert 'server_default="false"' in src or "server_default='false'" in src
+    assert 'server_default=sa.false()' in src
     # honest downgrade drops the column
     assert 'drop_column("briefing_templates", "require_signature_code")' in src

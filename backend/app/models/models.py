@@ -1288,7 +1288,7 @@ class BriefingTemplate(TenantBaseModel, SoftDeleteMixin):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     validity_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     require_signature_code: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default="false", default=False
+        Boolean, nullable=False, default=False
     )
 
     __table_args__ = (UniqueConstraint("tenant_id", "code", name="uq_briefing_templates_code"),)

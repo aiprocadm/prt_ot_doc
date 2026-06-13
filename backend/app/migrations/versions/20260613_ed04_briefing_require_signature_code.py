@@ -22,7 +22,7 @@ def upgrade() -> None:
             "require_signature_code",
             sa.Boolean(),
             nullable=False,
-            server_default="false",
+            server_default=sa.false(),
         ),
     )
 
