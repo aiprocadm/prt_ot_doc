@@ -37,9 +37,13 @@ class PermitTransitionError(ValueError):
 
 
 def validate_transition(current: str, target: str) -> None:
-    """Raise PermitTransitionError unless current -> target is allowed."""
-    allowed = ALLOWED_TRANSITIONS.get(current)
-    if allowed is None or target not in allowed:
+    """Raise PermitTransitionError unless current -> target is an allowed transition.
+
+    An unknown current/target status is rejected as well.
+    """
+    if current not in PERMIT_STATUSES or target not in PERMIT_STATUSES:
+        raise PermitTransitionError(current, target)
+    if target not in ALLOWED_TRANSITIONS[current]:
         raise PermitTransitionError(current, target)
 
 
