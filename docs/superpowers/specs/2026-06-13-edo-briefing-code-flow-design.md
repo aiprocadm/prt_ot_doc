@@ -4,6 +4,7 @@
 **Контур:** ЭДО / подпись (ТЗ раздел B.5, vNext §6.9 «ПЭП для внутреннего контура», §6.10 «история ознакомлений»)
 **Ветка:** `feat/edo-briefing-code-flow`
 **Статус до среза:** ПЭП-ядро влито (Срез-1 PR #649 → `974cd30`, Срез-2-мини PR #650 → `a006d6e`). Подпись ознакомления с инструктажем (`BriefingEntryService.sign`) идёт **только как attested-подпись** — `PepSigningService.create_attested` ставит `signed` мгновенно, без разового кода. Сотрудник без учётки фактически код не вводит — фиксация подписи отражает присутствие оформителя, а не подтверждение работником. Был обозначен «Не-целью» Среза-1 (`2026-06-11-edo-pep-signing-design.md:22`).
+**Статус после среза:** ✅ РЕАЛИЗОВАНО И ВЛИТО — PR #652 (`cd57127`) + PR #653 (`ad900c4`). Двухфазный код-flow: `POST /briefings/entries/{id}/sign-employee` (выдаёт 6-значный код) → `POST /briefings/entries/{id}/confirm-code` (создаёт `BriefingSignature`); флаг `BriefingTemplate.require_signature_code`, миграция `ed04`, attested-путь сохранён как fallback (back-compat), сервис/API/тесты + demo-seed. Проверено аудитом кода 2026-06-15.
 
 ## 1. Цель среза
 

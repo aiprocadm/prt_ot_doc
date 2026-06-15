@@ -4,6 +4,7 @@
 **Контур:** Медосмотры (ТЗ раздел B.8, vNext §9.2 «Автоматизация: формирование контингента, влияние СОУТ/рисков»)
 **Ветка:** `feat/medical-contingent-staffing`
 **Статус до среза:** Медосмотры Срез-1 ВЛИТ (PR #643 → `ced6570`). Уже построено из буквального текста §9.2: `compute_contingent` (norm-driven), влияние СОУТ через `resolve_required_kinds` (position.hazards + working_conditions_class), события календаря, блокировка допуска при противопоказании (suspension → admission block). Реально отложенный объём — **авто-контингент из штатного расписания** и **формальные документы приказа 29н**.
+**Статус после среза:** ✅ РЕАЛИЗОВАНО И ВЛИТО — PR #651 (`71e3587`). Построены: модель `MedicalFactor` + миграция `med02`, чистый движок (`factors_for_hazards`, `required_exams_from_factors`, factor-driven путь в `compute_contingent`), документы 29н (`build_contingent_register`, `build_named_list`), CRUD `/medical/factors`, эндпоинты `/medical/contingent/register` и `/medical/named-list`, demo-seed, тесты. Проверено аудитом кода 2026-06-15.
 
 ## 1. Цель среза
 
