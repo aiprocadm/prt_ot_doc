@@ -11,6 +11,13 @@ from app.domains.permits.lifecycle import (
     is_expired,
     validate_transition,
 )
+from app.domains.permits.service import (
+    create_permit,
+    expire_due,
+    extend_permit,
+    revoke_permit,
+    update_permit,
+)
 
 __all__ = [
     "ALLOWED_TRANSITIONS",
@@ -22,4 +29,9 @@ __all__ = [
     "due_status",
     "is_expired",
     "validate_transition",
+    "create_permit",
+    "expire_due",
+    "extend_permit",
+    "revoke_permit",
+    "update_permit",
 ]
