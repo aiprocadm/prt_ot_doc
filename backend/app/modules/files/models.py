@@ -64,6 +64,7 @@ class FileEntityType(str, Enum):
     site = "site"
     incident = "incident"
     inspection = "inspection"
+    prescription = "prescription"
     report = "report"
     other = "other"
 
@@ -75,6 +76,7 @@ class FileLinkRole(str, Enum):
     attachment = "attachment"
     signature = "signature"
     certificate = "certificate"
+    evidence = "evidence"
     import_file = "import"
     export = "export"
 
