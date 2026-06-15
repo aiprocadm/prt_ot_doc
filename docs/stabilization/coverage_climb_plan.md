@@ -1,8 +1,12 @@
 # Coverage climb plan — core/domain/services → 85% (TZ-6.3-V11-01)
 
-**Status:** tooling + plan shipped; the gate **activates with W0** (CI re-enable).
-The scoped gate is wired into `.github/workflows/ci.yml.disabled` and runs only
-once CI is turned back on.
+**Status:** ✅ **active.** W0 (CI re-enable) is done; the scoped gate is wired
+into the **live** `.github/workflows/ci.yml` (`Scoped coverage climb gate` step)
+and ran green on the canonical run **27508869071** (2026-06-14, Py3.12.12, 3138
+tests). Per-scope floors are **bootstrapped from that run's real
+`coverage.json`** (see Bootstrap below) — no longer conservative seeds. The
+ratchet now holds the real line: any PR that drops a scope below its floor fails
+CI. 85% line remains the North-Star to climb toward.
 
 ## Why a climb plan, not a hard 85% gate
 
@@ -23,46 +27,50 @@ Three packages, per `TZ-6.3-V11-01`:
 | `domain` | `backend/app/domains/` | business rules (risk, ppe, prescriptions, packs, …) |
 | `services` | `backend/app/services/` | outbox, events, idempotency, audit — cross-cutting infra |
 
-## Baseline (2026-04-19, themed proxy)
+## Baseline — bootstrapped 2026-06-14 (canonical, direct per-scope)
 
-The 2026-04-19 baseline is recorded by **theme**, which overlaps the scopes:
+The earlier 2026-04-19 themed proxy (overall 47.0% line / 36.0% branch) has been
+**superseded** by direct per-scope measurement from the first canonical CI run
+after W0 (run **27508869071**, Py3.12.12, 3138 tests):
 
-| Theme (proxy) | line % | branch % | Overlaps scope |
-|---|---|---|---|
-| tenancy | 72.2 | 57.8 | core |
-| rbac_abac | 66.2 | 46.3 | core |
-| auth | 65.5 | 49.4 | core |
-| files | 55.7 | 39.6 | domain |
-| jobs_outbox | 31.9 | 31.5 | services |
-| **overall** | **47.0** | **36.0** | — |
+| Scope | line % (measured) | branch % (measured) | statements | floor (line/branch) | gap to 85% |
+|---|---|---|---|---|---|
+| core | 82.83 | 69.33 | 2469 | 81.0 / 68.0 | +2.17 |
+| domain | 75.18 | 59.03 | 2172 | 74.0 / 58.0 | +9.82 |
+| services | 79.63 | 65.92 | 6231 | 78.0 / 64.0 | +5.37 |
 
-Per-scope numbers are not yet measured directly; the seed floors in
-`scoped_coverage_baseline.json` are deliberately **conservative** (core 40 /
-domain 35 / services 25 line) so the ratchet does not false-fail on the first
-real run.
+Floors are `floor(measured)` minus a ~1pp jitter margin (whole-percent,
+~1.0–1.9pp headroom) so the ratchet locks in the real gain without false-failing
+on run-to-run coverage jitter. The actual numbers came in **far above** the old
+conservative seeds (core 40 / domain 35 / services 25 line) — the suite was
+already near the North-Star.
 
-## Bootstrap (first CI run after W0)
+## Bootstrap — DONE (2026-06-14, post-W0)
 
-1. Re-enable CI (W0); the backend coverage job produces `artifacts/coverage.json`.
-2. Read the actual per-scope line/branch from the report and write them into
-   `docs/stabilization/scoped_coverage_baseline.json` as the real floors.
-3. From then on the ratchet holds the line; every PR that lowers a scope below
-   its floor fails `scripts/ci/check_scoped_coverage.py`.
+1. ✅ Re-enable CI (W0); the backend coverage job produced `artifacts/coverage.json`
+   on run 27508869071.
+2. ✅ Read the actual per-scope line/branch from that report and wrote them into
+   `docs/stabilization/scoped_coverage_baseline.json` as the real floors (above).
+3. ✅ The ratchet now holds the line; every PR that lowers a scope below its floor
+   fails `scripts/ci/check_scoped_coverage.py`.
 
 ## Climb milestones (47% → 85%)
 
 Attack the lowest-coverage scope first — it has the most untested surface per
 test written, so it moves the overall number fastest.
 
-| Milestone | Focus | Target |
-|---|---|---|
-| M1 | `services` (outbox/events/idempotency/audit) — lift from ~32% proxy | services ≥ 55% line |
-| M2 | `domain` (risk, ppe, prescriptions, packs) — pure functions first | domain ≥ 65% line |
-| M3 | `core` (security/tenancy/rbac) — already 65–72%; close the gaps | core ≥ 80% line |
-| M4 | All scopes converge | each scope ≥ 85% line (North Star) |
+| Milestone | Focus | Target | Status (2026-06-14 canonical) |
+|---|---|---|---|
+| M1 | `services` (outbox/events/idempotency/audit) | services ≥ 55% line | ✅ met (79.63%) |
+| M2 | `domain` (risk, ppe, prescriptions, packs) — pure functions first | domain ≥ 65% line | ✅ met (75.18%) |
+| M3 | `core` (security/tenancy/rbac) — close the gaps | core ≥ 80% line | ✅ met (82.83%) |
+| M4 | All scopes converge | each scope ≥ 85% line (North Star) | climbing — domain +9.82, services +5.37, core +2.17 |
 
-After each milestone, raise the corresponding floor(s) in the baseline so the
-ratchet locks in the gain. Prefer **app-free unit tests** (pure functions in
+The 47%→85% framing was set against the 2026-04-19 proxy; the canonical
+per-scope measurement landed M1–M3 already met. Remaining work is **M4** —
+close the last few points per scope (domain has the largest gap, attack it
+first). After each gain, raise the corresponding floor(s) in the baseline so the
+ratchet locks it in. Prefer **app-free unit tests** (pure functions in
 `core`/`domain`) — they are fast, deterministic, and runnable even on the
 Py3.13/Win local box where the full app-booting suite is flaky.
 
@@ -73,8 +81,8 @@ Py3.13/Win local box where the full app-booting suite is flaky.
   `coverage.json` (`backend/tests/test_check_scoped_coverage.py`), so the logic
   is verified without a live coverage run.
 - **Floors:** `docs/stabilization/scoped_coverage_baseline.json`.
-- **CI:** a `Scoped coverage climb gate` step in `ci.yml(.disabled)` runs the
-  script after the backend coverage job; non-zero exit fails the build.
+- **CI:** a `Scoped coverage climb gate` step in the live `.github/workflows/ci.yml`
+  runs the script after the backend coverage job; non-zero exit fails the build.
 - **Run locally** (once you have a `coverage.json`):
   `python scripts/ci/check_scoped_coverage.py --coverage-json artifacts/coverage.json`
 
