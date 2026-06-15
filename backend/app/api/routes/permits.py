@@ -30,7 +30,7 @@ from app.schemas.permit import (
     PermitUpdate,
 )
 
-router = APIRouter(prefix="/permits", tags=["permits"])
+router = APIRouter(prefix="/permits")
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 TenantDep = Annotated[Tenant, Depends(get_tenant_record)]
@@ -111,6 +111,11 @@ async def list_permits(
     offset: int = Query(0, ge=0),
 ) -> PermitPage:
     TenantContextValidator.ensure_tenant_context(tenant)
+    if status_filter and expired_only:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "status filter and expired_only are mutually exclusive",
+        )
     stmt = select(Permit).where(Permit.tenant_id == tenant.id)
     count_stmt = select(func.count()).select_from(Permit).where(Permit.tenant_id == tenant.id)
     if person_id:
@@ -159,9 +164,11 @@ async def update_permit_endpoint(
     permit_id: str, payload: PermitUpdate, tenant: TenantDep, session: SessionDep, access: WriterAccess
 ) -> PermitRead:
     TenantContextValidator.ensure_tenant_context(tenant)
+    await _get_permit_or_404(session, tenant, permit_id)  # fast-fail before any other work
     fields = payload.model_dump(exclude_unset=True)
-    if payload.position_id:
-        await _ensure_position(session, tenant, payload.position_id)
+    new_position_id = fields.get("position_id")
+    if new_position_id is not None:
+        await _ensure_position(session, tenant, new_position_id)
     try:
         permit = await update_permit(
             session, tenant_id=tenant.id, permit_id=permit_id,

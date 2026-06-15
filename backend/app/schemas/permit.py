@@ -9,7 +9,7 @@ from app.schemas.base import BaseSchema
 class PermitCreate(BaseSchema):
     person_id: str
     permit_type: str
-    issued_at: date | None = None
+    issued_at: date | None = None  # defaults to today in the service layer
     valid_until: date | None = None
     position_id: str | None = None
 
