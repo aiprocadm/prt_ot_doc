@@ -56,6 +56,16 @@ def requires_evidence(target: PrescriptionStatus) -> bool:
     return target == PrescriptionStatus.COMPLETED
 
 
+def evidence_satisfied(*, has_text: bool, file_count: int) -> bool:
+    """True when evidence is present: a textual note OR at least one file.
+
+    Used to gate the COMPLETED transition. Either form alone suffices, so a
+    legacy text-only note keeps working while attached evidence files (linked
+    via :class:`FileLink` with ``role="evidence"``) are accepted on their own.
+    """
+    return has_text or file_count > 0
+
+
 def is_overdue(due_at: date | None, status: PrescriptionStatus, today: date) -> bool:
     """True when the prescription is past its deadline and not yet closed.
 
