@@ -20,6 +20,7 @@ import {
   ClientPortalHistoryPage,
   ClientPortalPackagesPage,
   ClientPortalRequestsPage,
+  CommandCenterPage,
   CompaniesPage,
   ContractorsPage,
   CorrectiveActionsPage,
@@ -88,6 +89,7 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
         <Route key="/dashboard/training" path="/dashboard/training" element={<TrainingDashboardPage />} />,
         <Route key="/dashboard/ppe" path="/dashboard/ppe" element={<PpeDashboardPage />} />,
         <Route key="/dashboard/client-delivery" path="/dashboard/client-delivery" element={<ClientDeliveryDashboardPage />} />,
+        <Route key="/command-center" path="/command-center" element={<CommandCenterPage />} />,
         <Route key="/workspace/attention" path="/workspace/attention" element={<WorkspaceAttentionPage />} />
       ]
     },

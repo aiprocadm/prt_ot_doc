@@ -54,6 +54,7 @@ export const MAIN_NAV_GROUPS: NavGroup[] = [
       { label: "Пайплайны и задания", to: "/pipelines/runs", icon: Archive, permission: PERMISSIONS.DOCUMENT_VIEW },
       { label: "Архив", to: "/archive", icon: FileArchive, permission: PERMISSIONS.FILE_VIEW },
       { label: "Поиск", to: "/search", icon: Search, permission: PERMISSIONS.FILE_VIEW },
+      { label: "Командный центр", to: "/command-center", icon: ShieldAlert, permission: PERMISSIONS.DASHBOARD_VIEW },
       { label: "Центр внимания", to: "/workspace/attention", icon: AlertTriangle, permission: PERMISSIONS.DASHBOARD_VIEW },
       { label: "Качество данных", to: "/workspace/data-quality", icon: ClipboardCheck, permission: PERMISSIONS.DATA_QUALITY_VIEW },
       { label: "Экспорты", to: "/exports", icon: Archive, permission: PERMISSIONS.REPORTS_VIEW },
