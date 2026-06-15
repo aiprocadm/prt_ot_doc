@@ -1418,7 +1418,7 @@ class Permit(TenantBaseModel):
     permit_type: Mapped[str] = mapped_column(String(128), nullable=False)
     issued_at: Mapped[date] = mapped_column(Date, nullable=False, default=date.today)
     valid_until: Mapped[date | None] = mapped_column(Date)
-    status: Mapped[PermitStatus] = mapped_column(Enum(PermitStatus), nullable=False, default=PermitStatus.ACTIVE)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default=PermitStatus.ACTIVE.value)
 
     position: Mapped[Position | None] = relationship(backref="permits")
     person: Mapped[Person] = relationship(backref="permits")

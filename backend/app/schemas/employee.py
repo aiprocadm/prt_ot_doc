@@ -152,7 +152,7 @@ class EmployeePermitItem(BaseSchema):
     permit_type: str
     issued_at: date
     valid_until: date | None = None
-    status: PermitStatus
+    status: str
     position_id: str | None = None
     is_expired: bool = False
 
