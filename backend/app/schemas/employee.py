@@ -26,7 +26,6 @@ from app.models.models import (
     IncidentSeverity,
     IncidentStatus,
     IncidentType,
-    PermitStatus,
     PPEIssueStatus,
     TrainingSessionStatus,
 )
