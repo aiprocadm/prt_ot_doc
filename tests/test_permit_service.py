@@ -55,6 +55,22 @@ async def test_extend_revalidates_expired(sessionmaker, data_factory):
 
 
 @pytest.mark.asyncio
+async def test_extend_revoked_is_rejected(sessionmaker, data_factory):
+    person = await data_factory.create_person()
+    async with sessionmaker() as session:
+        permit = await svc.create_permit(
+            session, tenant_id=person.tenant_id, person_id=person.id,
+            permit_type="x", issued_at=date.today(), valid_until=None, position_id=None,
+        )
+        await svc.revoke_permit(session, tenant_id=person.tenant_id, permit_id=permit.id)
+        with pytest.raises(lc.PermitTransitionError):
+            await svc.extend_permit(
+                session, tenant_id=person.tenant_id, permit_id=permit.id,
+                valid_until=date.today() + timedelta(days=30),
+            )
+
+
+@pytest.mark.asyncio
 async def test_update_non_active_conflicts(sessionmaker, data_factory):
     person = await data_factory.create_person()
     async with sessionmaker() as session:

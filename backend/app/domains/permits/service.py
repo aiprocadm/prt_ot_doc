@@ -90,8 +90,10 @@ async def extend_permit(
     permit = await _get(session, tenant_id, permit_id)
     if permit is None:
         return None
-    if str(permit.status) == lc.PERMIT_STATUS_REVOKED:
-        lc.validate_transition(lc.PERMIT_STATUS_REVOKED, lc.PERMIT_STATUS_ACTIVE)  # raises
+    # active = plain date update; expired = re-validation; anything else (revoked,
+    # unknown) is rejected by the FSM.
+    if str(permit.status) not in (lc.PERMIT_STATUS_ACTIVE, lc.PERMIT_STATUS_EXPIRED):
+        lc.validate_transition(str(permit.status), lc.PERMIT_STATUS_ACTIVE)  # raises
     permit.valid_until = valid_until
     permit.status = lc.PERMIT_STATUS_ACTIVE
     await session.flush()
