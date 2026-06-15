@@ -1,5 +1,7 @@
 # Подрядчики Срез-3 — документ→вердикт допуска: Implementation Plan
 
+> **✅ РЕАЛИЗОВАНО И ВЛИТО — PR #646 (`67e9468`).** Все 9 задач + финальная регрессия выполнены: чистые `requirement_status`/`best_document`, модель `ContractorDocumentRequirement` + миграция con02, doc-aware `evaluate_with_documents`, CRUD `/document-requirements`, `/document-checklist`, гейтинг `/admit` и `/readiness`, проекция `missing_docs_count`, demo-seed. Чекбоксы ниже отмечены пост-фактум по аудиту кода 2026-06-15.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Конфигурируемые «требуемые типы документов» (тенант-политика) гатят вердикт допуска подрядного сотрудника: отсутствующий/просроченный обязательный документ → `BLOCKED` → `POST /admit` = 409.
@@ -41,7 +43,7 @@
 - Modify: `backend/app/domains/contractors/documents.py`
 - Test: `backend/tests/test_contractor_document_requirements.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # backend/tests/test_contractor_document_requirements.py
@@ -93,12 +95,12 @@ def test_best_document_none_when_empty():
     assert best_document([], TODAY) is None
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest backend/tests/test_contractor_document_requirements.py -v`
 Expected: FAIL — `ImportError: cannot import name 'requirement_status'`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Append to `backend/app/domains/contractors/documents.py` (keep existing `document_expiry_status`):
 
@@ -134,12 +136,12 @@ def requirement_status(candidates: Sequence[_DocLike], today: date) -> Contingen
     return document_expiry_status(best.valid_until, today)
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest backend/tests/test_contractor_document_requirements.py -v`
 Expected: PASS (7 passed).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/domains/contractors/documents.py backend/tests/test_contractor_document_requirements.py
@@ -155,7 +157,7 @@ git commit -m "feat(contractors): pure requirement_status + best_document classi
 - Create: `backend/app/migrations/versions/20260610_con02_contractor_document_requirements.py`
 - Test: `backend/tests/test_con02_contractor_document_requirements_migration.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # backend/tests/test_con02_contractor_document_requirements_migration.py
@@ -202,12 +204,12 @@ def test_migration_has_upgrade_and_downgrade() -> None:
     assert callable(mod.downgrade)
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest backend/tests/test_con02_contractor_document_requirements_migration.py -v`
 Expected: FAIL — `ImportError: cannot import name 'ContractorDocumentRequirement'` and missing migration file.
 
-- [ ] **Step 3a: Add the model**
+- [x] **Step 3a: Add the model**
 
 In `backend/app/modules/contractors/models.py`, extend the sqlalchemy import to include `Boolean`:
 
@@ -248,7 +250,7 @@ from sqlalchemy import true as sa_true
 > at the service layer (Task 5 POST returns 409 on duplicate), NOT a partial-unique index — partial
 > indexes render differently per dialect and soft-delete would block re-creating a deleted rule.
 
-- [ ] **Step 3b: Create the migration**
+- [x] **Step 3b: Create the migration**
 
 ```python
 # backend/app/migrations/versions/20260610_con02_contractor_document_requirements.py
@@ -293,17 +295,17 @@ def downgrade() -> None:
     op.drop_table("contractor_document_requirement")
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest backend/tests/test_con02_contractor_document_requirements_migration.py -v`
 Expected: PASS (3 passed).
 
-- [ ] **Step 5: Verify the migration chain has a single head**
+- [x] **Step 5: Verify the migration chain has a single head**
 
 Run: `python -m pytest backend/tests/test_con01_contractor_documents_migration.py backend/tests/test_con02_contractor_document_requirements_migration.py -v`
 Expected: PASS (6 passed). (con02.down_revision == con01.revision keeps a linear chain.)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/app/modules/contractors/models.py backend/app/migrations/versions/20260610_con02_contractor_document_requirements.py backend/tests/test_con02_contractor_document_requirements_migration.py
@@ -318,7 +320,7 @@ git commit -m "feat(contractors): ContractorDocumentRequirement model + con02 ad
 - Modify: `backend/app/domains/contractors/lifecycle.py`
 - Test: `backend/tests/test_contractor_document_requirements.py` (append)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `backend/tests/test_contractor_document_requirements.py`:
 
@@ -396,12 +398,12 @@ def test_satisfied_company_rule_is_allowed():
     assert v.status is ReadinessStatus.ALLOWED
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest backend/tests/test_contractor_document_requirements.py -v`
 Expected: FAIL — `ImportError: cannot import name 'DocumentRequirement'`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 In `backend/app/domains/contractors/lifecycle.py`:
 
@@ -478,17 +480,17 @@ def evaluate_employee(
     return EmployeeVerdict(employee_id=emp.id, status=status, violations=violations, warnings=warnings)
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest backend/tests/test_contractor_document_requirements.py -v`
 Expected: PASS (14 passed — 7 from Task 1 + 7 here).
 
-- [ ] **Step 5: Run the base-dimension regression**
+- [x] **Step 5: Run the base-dimension regression**
 
 Run: `python -m pytest backend/tests/test_contractors_lifecycle.py -v`
 Expected: PASS (unchanged — defaults make documents a no-op).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/app/domains/contractors/lifecycle.py backend/tests/test_contractor_document_requirements.py
@@ -503,7 +505,7 @@ git commit -m "feat(contractors): document dimension in evaluate_employee (back-
 - Modify: `backend/app/services/contractor_admission.py`
 - Test: `tests/test_contractor_admission_with_documents.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/test_contractor_admission_with_documents.py
@@ -603,12 +605,12 @@ async def test_inactive_document_does_not_satisfy(sessionmaker, data_factory):
     assert verdicts[0].status is ReadinessStatus.BLOCKED  # archived doc ignored → MISSING
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_contractor_admission_with_documents.py -v`
 Expected: FAIL — `ImportError: cannot import name 'evaluate_with_documents'`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 In `backend/app/services/contractor_admission.py`, update imports:
 
@@ -740,17 +742,17 @@ Reroute `notify_readiness` — replace `lc.evaluate_employee(emp, today)` inside
     return count
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `python -m pytest tests/test_contractor_admission_with_documents.py -v`
 Expected: PASS (3 passed).
 
-- [ ] **Step 5: Run admission service regression**
+- [x] **Step 5: Run admission service regression**
 
 Run: `python -m pytest backend/tests/test_contractors_lifecycle.py backend/tests/test_contractors_deny_first.py tests/test_outbox_dispatch.py -v`
 Expected: PASS (notify_readiness still emits per non-ALLOWED employee; base verdicts unchanged with no requirements seeded).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/app/services/contractor_admission.py tests/test_contractor_admission_with_documents.py
@@ -765,7 +767,7 @@ git commit -m "feat(contractors): evaluate_with_documents loader; route enforce/
 - Modify: `backend/app/api/routes/contractors.py`
 - Test: `tests/api/test_contractor_document_requirements_api.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/api/test_contractor_document_requirements_api.py
@@ -839,12 +841,12 @@ async def test_reader_cannot_create_requirement(async_client, make_auth_headers)
 > but not `_CONTRACTOR_WRITE_ROLES`). If that exact member name differs, use any role present in the
 > read list but absent from the write list to assert the 403.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/api/test_contractor_document_requirements_api.py -v`
 Expected: FAIL — 404 (route not registered).
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 In `backend/app/api/routes/contractors.py`, add the model import:
 
@@ -968,12 +970,12 @@ async def delete_document_requirement(
 > function next; the checklist route arrives in Task 6. (If running Task 5 in isolation, temporarily
 > drop `load_document_checklist` from the import until Task 6.)
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `python -m pytest tests/api/test_contractor_document_requirements_api.py -v -k "requirement"`
 Expected: PASS (4 passed).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/api/routes/contractors.py tests/api/test_contractor_document_requirements_api.py
@@ -989,7 +991,7 @@ git commit -m "feat(contractors): document-requirement policy CRUD API (409 on d
 - Modify: `backend/app/api/routes/contractors.py` (add route)
 - Test: `tests/api/test_contractor_document_requirements_api.py` (append)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/api/test_contractor_document_requirements_api.py`:
 
@@ -1040,12 +1042,12 @@ async def test_checklist_reports_status_and_satisfied_by(async_client, sessionma
     assert items["medical_cert"]["satisfied_by"] is None
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/api/test_contractor_document_requirements_api.py::test_checklist_reports_status_and_satisfied_by -v`
 Expected: FAIL — 404 (route not registered) / ImportError for `load_document_checklist`.
 
-- [ ] **Step 3: Implement the loader**
+- [x] **Step 3: Implement the loader**
 
 In `backend/app/services/contractor_admission.py`, add imports and the function:
 
@@ -1102,7 +1104,7 @@ async def load_document_checklist(
     return items
 ```
 
-- [ ] **Step 4: Add the route**
+- [x] **Step 4: Add the route**
 
 In `backend/app/api/routes/contractors.py`, add after the admission endpoints (near `get_employee_readiness`):
 
@@ -1121,12 +1123,12 @@ async def get_employee_document_checklist(
     return {"employee_id": employee_id, "items": items}
 ```
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run: `python -m pytest tests/api/test_contractor_document_requirements_api.py -v`
 Expected: PASS (all requirement + checklist tests).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/app/services/contractor_admission.py backend/app/api/routes/contractors.py tests/api/test_contractor_document_requirements_api.py
@@ -1141,7 +1143,7 @@ git commit -m "feat(contractors): document-checklist endpoint (wizard deliverabl
 - Modify: `backend/app/api/routes/contractors.py`
 - Test: `tests/api/test_contractor_document_requirements_api.py` (append)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/api/test_contractor_document_requirements_api.py`:
 
@@ -1205,12 +1207,12 @@ async def test_admit_passes_when_document_present(async_client, sessionmaker, da
     assert resp.json()["status"] == "allowed"
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/api/test_contractor_document_requirements_api.py::test_admit_blocked_by_missing_mandatory_document -v`
 Expected: FAIL — admit returns 200 (documents not yet consulted in the success/readiness re-evaluation; enforce already uses the loader from Task 4, so this may already 409 — if so, confirm, but the readiness/success body still needs the loader).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `backend/app/api/routes/contractors.py`:
 
@@ -1228,17 +1230,17 @@ In `backend/app/api/routes/contractors.py`:
     return _verdict_body((await evaluate_with_documents(session, employees=[row]))[0])
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `python -m pytest tests/api/test_contractor_document_requirements_api.py -v`
 Expected: PASS (all, incl. both admit e2e tests).
 
-- [ ] **Step 5: Run the contractors API regression**
+- [x] **Step 5: Run the contractors API regression**
 
 Run: `python -m pytest tests/api/test_contractor_documents_api.py backend/tests/test_contractors_access_parity.py -v`
 Expected: PASS (existing behavior unaffected when no requirements seeded).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/app/api/routes/contractors.py tests/api/test_contractor_document_requirements_api.py
@@ -1253,7 +1255,7 @@ git commit -m "feat(contractors): admit/readiness consult document requirements 
 - Modify: `backend/app/modules/projections/services.py`
 - Test: `backend/tests/test_contractor_readiness_projection_documents.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # backend/tests/test_contractor_readiness_projection_documents.py
@@ -1305,12 +1307,12 @@ async def test_missing_docs_count_reflects_document_violations(sessionmaker, dat
         assert row.readiness_status == "blocked"
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest backend/tests/test_contractor_readiness_projection_documents.py -v`
 Expected: FAIL — `missing_docs_count == 0` (placeholder).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `backend/app/modules/projections/services.py`:
 
@@ -1343,17 +1345,17 @@ Replace the `missing_docs_count` placeholder line:
 
 (`overdue_items_count = sum(len(v.violations) for v in verdicts)` already includes document violations — leave it.)
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `python -m pytest backend/tests/test_contractor_readiness_projection_documents.py -v`
 Expected: PASS.
 
-- [ ] **Step 5: Run projection regression**
+- [x] **Step 5: Run projection regression**
 
 Run: `python -m pytest backend/tests -k "projection" -v`
 Expected: PASS (existing contractor-readiness projection tests still green; with no requirements, `missing_docs_count` is 0 as before).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/app/modules/projections/services.py backend/tests/test_contractor_readiness_projection_documents.py
@@ -1368,7 +1370,7 @@ git commit -m "feat(contractors): projection fills missing_docs_count from docum
 - Modify: `backend/app/services/demo_bootstrap.py`
 - Test: `tests/test_demo_bootstrap_contractor_requirements.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/test_demo_bootstrap_contractor_requirements.py
@@ -1407,12 +1409,12 @@ async def test_seed_requirements_idempotent(sessionmaker, data_factory):
     assert len(rows) == 2  # idempotent — no duplicates
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_demo_bootstrap_contractor_requirements.py -v`
 Expected: FAIL — `ImportError: cannot import name '_seed_contractor_requirements'`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `backend/app/services/demo_bootstrap.py`, add the import for the model (extend the existing line):
 
@@ -1451,12 +1453,12 @@ Call it inside the demo contractor block (right after `_seed_contractor_document
             await _seed_contractor_requirements(session, tenant_db_id)
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `python -m pytest tests/test_demo_bootstrap_contractor_requirements.py -v`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/services/demo_bootstrap.py tests/test_demo_bootstrap_contractor_requirements.py
@@ -1467,7 +1469,7 @@ git commit -m "feat(contractors): demo-seed 2 admission document requirements"
 
 ## Final: Full contour cohort + regression
 
-- [ ] **Step 1: Run the Срез-3 cohort + adjacent regression**
+- [x] **Step 1: Run the Срез-3 cohort + adjacent regression**
 
 ```
 $env:PYTHONPATH="backend"; & .\.venv\Scripts\python.exe -m pytest `
@@ -1486,13 +1488,13 @@ $env:PYTHONPATH="backend"; & .\.venv\Scripts\python.exe -m pytest `
 ```
 Expected: EXIT=0; all passed. (Read `_t_srez3.txt` tail for the `N passed` summary.)
 
-- [ ] **Step 2: Clean up temp file**
+- [x] **Step 2: Clean up temp file**
 
 ```bash
 rm -f _t_srez3.txt
 ```
 
-- [ ] **Step 3: Update the handoff report**
+- [x] **Step 3: Update the handoff report**
 
 Prepend a "Last Agent Handoff (2026-06-10, Подрядчики Срез-3)" section to `AI_IMPLEMENTATION_REPORT.md` documenting: branch, 9 tasks/commits, the document→verdict gate, `missing_docs_count` now filled, checklist API, anti-grabli adherence (VARCHAR/no-enum, no cross-base FK, additive con02), test evidence, and the e2e safety invariant. Commit.
 

@@ -1,5 +1,7 @@
 # ЭДО Срез-3: код-flow для briefing — Implementation Plan
 
+> **✅ РЕАЛИЗОВАНО И ВЛИТО — PR #652 (`cd57127`) + PR #653 (`ad900c4`).** Проверено аудитом кода 2026-06-15: двухфазный код-flow (`sign-employee` → `confirm-code`), флаг `require_signature_code`, миграция `ed04`, attested-fallback, сервис/API/тесты + demo-seed. Чекбоксы ниже отмечены пост-фактум.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Опциональная подпись ознакомления с инструктажем разовым 6-значным кодом (ПЭП код-flow) для работников без учётки, включаемая флагом на шаблоне инструктажа.
@@ -38,7 +40,7 @@
 - Create: `backend/app/migrations/versions/20260613_ed04_briefing_require_signature_code.py`
 - Test: `backend/tests/test_ed04_briefing_require_signature_code_migration.py`
 
-- [ ] **Step 1: Write the failing migration guard test**
+- [x] **Step 1: Write the failing migration guard test**
 
 Create `backend/tests/test_ed04_briefing_require_signature_code_migration.py`:
 
@@ -80,12 +82,12 @@ def test_ed04_adds_column_with_literal_names():
     assert 'drop_column("briefing_templates", "require_signature_code")' in src
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `.venv\Scripts\python.exe -m pytest backend/tests/test_ed04_briefing_require_signature_code_migration.py -p no:xdist --timeout=120 -v`
 Expected: FAIL — `FileNotFoundError` / load error (migration file does not exist yet).
 
-- [ ] **Step 3: Add the model column**
+- [x] **Step 3: Add the model column**
 
 In `backend/app/models/models.py`, inside `class BriefingTemplate` (after `validity_days`, before `__table_args__`):
 
@@ -98,7 +100,7 @@ In `backend/app/models/models.py`, inside `class BriefingTemplate` (after `valid
 
 (Verify `Boolean` is already imported in models.py — it is used elsewhere; if not, add to the SQLAlchemy import.)
 
-- [ ] **Step 4: Create the migration**
+- [x] **Step 4: Create the migration**
 
 Create `backend/app/migrations/versions/20260613_ed04_briefing_require_signature_code.py`:
 
@@ -136,17 +138,17 @@ def downgrade() -> None:
     op.drop_column("briefing_templates", "require_signature_code")
 ```
 
-- [ ] **Step 5: Run guard test to verify it passes**
+- [x] **Step 5: Run guard test to verify it passes**
 
 Run: `.venv\Scripts\python.exe -m pytest backend/tests/test_ed04_briefing_require_signature_code_migration.py -p no:xdist --timeout=120 -v`
 Expected: PASS (2 tests).
 
-- [ ] **Step 6: Verify single-head migration chain**
+- [x] **Step 6: Verify single-head migration chain**
 
 Run: `.venv\Scripts\python.exe -m pytest -k "migration or downgrade or mapper" -p no:xdist --timeout=300 -q 2>&1 | Tee-Object test_ed04_step6.txt`
 Expected: all pass (no multiple-heads error; new revision is the single head after med02).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/app/models/models.py backend/app/migrations/versions/20260613_ed04_briefing_require_signature_code.py backend/tests/test_ed04_briefing_require_signature_code_migration.py
@@ -161,7 +163,7 @@ git commit -m "feat(edo): BriefingTemplate.require_signature_code + миграц
 - Modify: `backend/app/api/routes/briefings.py:41-47` (`BriefingTemplatePayload`)
 - Test: `tests/api/test_briefing_code_flow_api.py` (создаём файл; первый тест — CRUD флага)
 
-- [ ] **Step 1: Write the failing API test**
+- [x] **Step 1: Write the failing API test**
 
 Create `tests/api/test_briefing_code_flow_api.py`:
 
@@ -205,12 +207,12 @@ async def test_template_require_signature_code_roundtrip(
     assert created2.json()["require_signature_code"] is False
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/api/test_briefing_code_flow_api.py::test_template_require_signature_code_roundtrip -p no:xdist --timeout=120 -v`
 Expected: FAIL — `require_signature_code` ignored on create / missing in read (KeyError or `False` when `True` expected).
 
-- [ ] **Step 3: Add the field to the template payload**
+- [x] **Step 3: Add the field to the template payload**
 
 In `backend/app/api/routes/briefings.py`, `class BriefingTemplatePayload`:
 
@@ -227,12 +229,12 @@ class BriefingTemplatePayload(BaseModel):
 
 (`BriefingTemplateRead(BriefingTemplatePayload)` inherits the field; `create_template`/`patch_template` use `payload.model_dump()` so it round-trips automatically.)
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/api/test_briefing_code_flow_api.py::test_template_require_signature_code_roundtrip -p no:xdist --timeout=120 -v`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/api/routes/briefings.py tests/api/test_briefing_code_flow_api.py
@@ -247,7 +249,7 @@ git commit -m "feat(edo): проброс require_signature_code в CRUD шабл
 - Modify: `backend/app/modules/briefings/services.py` (`BriefingEntryService` + new exception)
 - Test: `tests/services/test_briefing_code_flow_service.py`
 
-- [ ] **Step 1: Write the failing service tests**
+- [x] **Step 1: Write the failing service tests**
 
 Create `tests/services/test_briefing_code_flow_service.py`:
 
@@ -376,12 +378,12 @@ async def test_confirm_without_pending_request_raises(sessionmaker, data_factory
             await BriefingEntryService().confirm_code(session, entry, "123456")
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/services/test_briefing_code_flow_service.py -p no:xdist --timeout=120 -v`
 Expected: FAIL — `ImportError: cannot import name 'NoPendingCodeRequest'` / missing methods.
 
-- [ ] **Step 3: Implement the service methods**
+- [x] **Step 3: Implement the service methods**
 
 In `backend/app/modules/briefings/services.py`, add imports near the top:
 
@@ -498,12 +500,12 @@ Add methods to `BriefingEntryService` (after `sign`):
         return signature
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/services/test_briefing_code_flow_service.py -p no:xdist --timeout=120 -v`
 Expected: PASS (4 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/modules/briefings/services.py tests/services/test_briefing_code_flow_service.py
@@ -518,7 +520,7 @@ git commit -m "feat(edo): двухфазный код-flow briefing в серв�
 - Modify: `backend/app/api/routes/briefings.py` (`sign_employee` :277; new payload + endpoint; error mapping)
 - Test: `tests/api/test_briefing_code_flow_api.py` (добавить тесты цикла)
 
-- [ ] **Step 1: Write the failing API tests**
+- [x] **Step 1: Write the failing API tests**
 
 Append to `tests/api/test_briefing_code_flow_api.py`:
 
@@ -626,12 +628,12 @@ async def test_confirm_code_wrong_code_returns_409_and_persists_attempt(
     assert wrong.status_code == 409, wrong.text
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/api/test_briefing_code_flow_api.py -p no:xdist --timeout=120 -v`
 Expected: FAIL — `sign-employee` ignores the flag (always returns `signature`, no `pending`); `confirm-code` endpoint → 404/405 (not defined).
 
-- [ ] **Step 3: Add the confirm payload, branch sign_employee, add confirm-code endpoint**
+- [x] **Step 3: Add the confirm payload, branch sign_employee, add confirm-code endpoint**
 
 In `backend/app/api/routes/briefings.py`:
 
@@ -708,12 +710,12 @@ async def confirm_code(item_id: str, payload: BriefingConfirmCodePayload, reques
 
 NB: verify the helper `_briefing_signature_conflict` and `api_problem_detail` exist in this module (they are used by neighbouring handlers; `api_problem_detail` is imported at line 18). If `_briefing_signature_conflict` wraps `api_problem_detail`, reuse the same pattern for `no_pending_code_request`. If `_entry_read` requires a second arg, the pending branch passes only `item` (no signatures yet) — confirm `_entry_read(item)` is valid (it has a default `[]`); if not, pass `_entry_read(item, [])`.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/api/test_briefing_code_flow_api.py -p no:xdist --timeout=120 -v`
 Expected: PASS (all tests in the file, incl. Task 2's).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/api/routes/briefings.py tests/api/test_briefing_code_flow_api.py
@@ -728,12 +730,12 @@ git commit -m "feat(edo): API ветвление sign-employee + эндпоин�
 - Modify: `backend/app/services/demo_bootstrap.py` (briefing-секция seed)
 - Test: `tests/test_briefing_code_flow_seed.py`
 
-- [ ] **Step 1: Locate the briefing seed block**
+- [x] **Step 1: Locate the briefing seed block**
 
 Run: `.venv\Scripts\python.exe -m pytest --co -q 2>$null; ` then inspect:
 Grep for `BriefingTemplate(` / `briefing` in `backend/app/services/demo_bootstrap.py`. If a briefing template is already seeded, set `require_signature_code=True` on one template (or add a second template with the flag). If briefings are NOT seeded there, add a minimal seed: one `BriefingTemplate(require_signature_code=True)` + one `BriefingJournal` + one `BriefingEntry` with a `person_id` from the existing demo person, guarded as idempotent (skip if a template with that code exists), matching the file's existing idempotency style.
 
-- [ ] **Step 2: Write the failing seed test**
+- [x] **Step 2: Write the failing seed test**
 
 Create `tests/test_briefing_code_flow_seed.py`:
 
@@ -765,21 +767,21 @@ async def test_demo_seed_has_code_flow_template(sessionmaker, data_factory):
 
 NB: the implementer must adjust `seed_demo_data` import path / signature to the real demo-bootstrap entrypoint (read the file first; mirror how other seed tests in the repo call it).
 
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/test_briefing_code_flow_seed.py -p no:xdist --timeout=120 -v`
 Expected: FAIL — no template with `require_signature_code=True`.
 
-- [ ] **Step 4: Implement the seed change**
+- [x] **Step 4: Implement the seed change**
 
 Apply the change identified in Step 1 (set/add a template with `require_signature_code=True`), following the file's existing idempotency and helper conventions.
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/test_briefing_code_flow_seed.py -p no:xdist --timeout=120 -v`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/app/services/demo_bootstrap.py tests/test_briefing_code_flow_seed.py
@@ -792,21 +794,21 @@ git commit -m "feat(edo): demo-seed шаблона briefing с require_signature
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Run the briefing + pep cohort**
+- [x] **Step 1: Run the briefing + pep cohort**
 
 Run: `.venv\Scripts\python.exe -m pytest -k "briefing or pep or signing" -p no:xdist --timeout=300 -q 2>&1 | Tee-Object test_brf_cohort.txt`
 Expected: all pass (existing briefing attested-path + unique-index + pep tests stay green — back-compat).
 
-- [ ] **Step 2: Run the migration cohort**
+- [x] **Step 2: Run the migration cohort**
 
 Run: `.venv\Scripts\python.exe -m pytest -k "migration or downgrade or mapper" -p no:xdist --timeout=300 -q 2>&1 | Tee-Object test_mig_cohort.txt`
 Expected: all pass; single head after med02 → ed04.
 
-- [ ] **Step 3: Holistic review**
+- [x] **Step 3: Holistic review**
 
 Dispatch a holistic code review against the spec (`docs/superpowers/specs/2026-06-13-edo-briefing-code-flow-design.md`): spec-section coverage, back-compat of attested path, commit-on-conflict correctness, tenant-isolation, no scope creep. Address any Critical/Important findings before declaring done.
 
-- [ ] **Step 4: Final commit (if review fixes applied)**
+- [x] **Step 4: Final commit (if review fixes applied)**
 
 ```bash
 git add -A

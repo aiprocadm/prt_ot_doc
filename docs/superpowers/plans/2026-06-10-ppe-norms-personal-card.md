@@ -1,5 +1,7 @@
 # СИЗ Срез-1: нормы + личная карточка 766н + жизненный цикл выдачи — Implementation Plan
 
+> **✅ РЕАЛИЗОВАНО И ВЛИТО — PR #647 (`12cef77`) + #648 (`597694d`).** Все 9 задач выполнены: чистый `domains/ppe/lifecycle.py` (FSM), миграции sz01/sz02, CRUD `/ppe/norms`, операции return/writeoff/replace + FSM в legacy PATCH, личная карточка 766н, размеры работника, beat `ppe.expiry.tick`, удаление орфанного семейства B, demo-seed. Чекбоксы ниже отмечены пост-фактум по аудиту кода 2026-06-15.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Превратить «schema theater» PPE-контура в рабочий поток: CRUD норм выдачи, вычисляемая личная карточка по 766н (с хранимыми реквизитами), явный FSM-цикл выдачи (return/writeoff/replace), beat-скан истекающих СИЗ, удаление орфанного семейства B из ORM.
@@ -26,7 +28,7 @@
 - Create: `backend/app/domains/ppe/lifecycle.py`
 - Test: `backend/tests/test_ppe_lifecycle.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # backend/tests/test_ppe_lifecycle.py
@@ -137,12 +139,12 @@ def test_fold_worst_of():
     assert fold_card_status(["ok", "ok"]) == "ok"
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `.venv\Scripts\python.exe -m pytest backend/tests/test_ppe_lifecycle.py -p no:xdist --timeout=120 -q > test_out.txt 2>&1; Get-Content test_out.txt -Tail 15`
 Expected: FAIL — `ImportError: cannot import name ... from 'app.domains.ppe.lifecycle'` (модуля нет)
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```python
 # backend/app/domains/ppe/lifecycle.py
@@ -258,12 +260,12 @@ def fold_card_status(line_statuses: Iterable[str]) -> str:
 
 Замечание: `classify(expires_at_date, today)` принимает `date`; `IssueView.expires_at` — `date`. При построении из ORM (Task 5) `PPEIssue.expires_at` (datetime) приводится через `.date()`.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `.venv\Scripts\python.exe -m pytest backend/tests/test_ppe_lifecycle.py -p no:xdist --timeout=120 -q > test_out.txt 2>&1; Get-Content test_out.txt -Tail 5`
 Expected: `18 passed`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/domains/ppe/lifecycle.py backend/tests/test_ppe_lifecycle.py
@@ -281,7 +283,7 @@ git commit -m "feat(ppe): pure lifecycle - issue FSM + card line statuses"
 - Modify: `backend/app/domains/ppe/service.py` (issue_ppe_item, list_expiring_issues)
 - Test: `backend/tests/test_sz01_ppe_766n_migration.py`
 
-- [ ] **Step 1: Write the failing tests (hermetic — модели и текст миграции, без route-импортов)**
+- [x] **Step 1: Write the failing tests (hermetic — модели и текст миграции, без route-импортов)**
 
 ```python
 # backend/tests/test_sz01_ppe_766n_migration.py
@@ -357,12 +359,12 @@ def test_migration_downgrade_guards_new_values():
     assert "RuntimeError" in src
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `.venv\Scripts\python.exe -m pytest backend/tests/test_sz01_ppe_766n_migration.py -p no:xdist --timeout=120 -q > test_out.txt 2>&1; Get-Content test_out.txt -Tail 15`
 Expected: FAIL — отсутствуют колонки/файл миграции
 
-- [ ] **Step 3: Update models**
+- [x] **Step 3: Update models**
 
 В `backend/app/models/models.py`:
 
@@ -414,7 +416,7 @@ class PPEIssueStatus(str, enum.Enum):
     ppe_sizes: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 ```
 
-- [ ] **Step 4: Write the migration**
+- [x] **Step 4: Write the migration**
 
 ```python
 # backend/app/migrations/versions/20260610_sz01_ppe_norms_card_766n.py
@@ -518,7 +520,7 @@ def downgrade() -> None:
     op.drop_column("ppenorm", "item_id")
 ```
 
-- [ ] **Step 5: Fix status readers/writers (`.value`-доступы ломаются на str-колонке)**
+- [x] **Step 5: Fix status readers/writers (`.value`-доступы ломаются на str-колонке)**
 
 В `backend/app/api/routes/ppe.py`:
 - строка ~314 (`create_issue` payload): `"status": issue.status.value` → `"status": issue.status`
@@ -538,17 +540,17 @@ def downgrade() -> None:
 
 Читатели в `modules/analytics/services.py:130`, `modules/data_quality/rules.py:410`, `modules/operational_dashboard/service.py:133` сравнивают `== PPEIssueStatus.ISSUED` — str-enum, работает с VARCHAR-колонкой, изменений НЕ требуется (проверяется регрессией в Task 9).
 
-- [ ] **Step 6: Run tests**
+- [x] **Step 6: Run tests**
 
 Run: `.venv\Scripts\python.exe -m pytest backend/tests/test_sz01_ppe_766n_migration.py backend/tests/test_ppe_lifecycle.py backend/tests/test_ppeitem_table_exists.py -p no:xdist --timeout=120 -q > test_out.txt 2>&1; Get-Content test_out.txt -Tail 10`
 Expected: PASS (все)
 
-- [ ] **Step 7: Smoke — существующий PPE API-контур не сломан**
+- [x] **Step 7: Smoke — существующий PPE API-контур не сломан**
 
 Run: `.venv\Scripts\python.exe -m pytest tests -k "ppe" -p no:xdist --timeout=240 -q > test_out.txt 2>&1; Get-Content test_out.txt -Tail 15`
 Expected: PASS (текущие ppe-тесты в корневом tests/, если есть; иначе «no tests ran» — это ок)
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add backend/app/models/models.py backend/app/migrations/versions/20260610_sz01_ppe_norms_card_766n.py backend/app/api/routes/ppe.py backend/app/domains/ppe/service.py backend/tests/test_sz01_ppe_766n_migration.py
@@ -564,7 +566,7 @@ git commit -m "feat(ppe): sz01 migration - norm item_id, 766n requisites, VARCHA
 - Modify: `backend/app/api/routes/ppe.py` (добавить норм-эндпоинты)
 - Test: `tests/api/test_ppe_norms_api.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # tests/api/test_ppe_norms_api.py
@@ -647,12 +649,12 @@ async def test_norm_foreign_refs_must_exist_in_tenant(async_client, make_auth_he
 
 Примечание для исполнителя: проверь сигнатуру `Position` (обязательные поля) в `backend/app/models/models.py` и подправь сидинг при расхождении (`title` vs `name`); схема теста от этого не меняется.
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/api/test_ppe_norms_api.py -p no:xdist --timeout=240 -q > test_out.txt 2>&1; Get-Content test_out.txt -Tail 15`
 Expected: FAIL — 404/405 на `/ppe/norms` (роута нет)
 
-- [ ] **Step 3: Add schemas (`backend/app/schemas/ppe.py`, после PPEItemPage)**
+- [x] **Step 3: Add schemas (`backend/app/schemas/ppe.py`, после PPEItemPage)**
 
 ```python
 class PPENormCreate(BaseSchema):
@@ -686,7 +688,7 @@ class PPENormPage(BaseSchema):
     total: int
 ```
 
-- [ ] **Step 4: Add endpoints (`backend/app/api/routes/ppe.py`)**
+- [x] **Step 4: Add endpoints (`backend/app/api/routes/ppe.py`)**
 
 Импорты: добавить `PPENorm` в импорт из `app.models.ppe_registry`? — НЕТ: `PPENorm` не реэкспортирован в ppe_registry; импортировать из `app.models.models`:
 ```python
@@ -869,12 +871,12 @@ async def delete_norm(
 
 ВАЖНО (FastAPI route ordering): `/norms` — отдельный префикс, с `/items`/`/issues` не конфликтует; порядок внутри файла не критичен, но статические пути (`/issues/expiring`) должны оставаться ДО `/issues/{issue_id}` — не переставлять существующие.
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/api/test_ppe_norms_api.py -p no:xdist --timeout=240 -q > test_out.txt 2>&1; Get-Content test_out.txt -Tail 10`
 Expected: `3 passed`
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/app/schemas/ppe.py backend/app/api/routes/ppe.py tests/api/test_ppe_norms_api.py
@@ -893,7 +895,7 @@ git commit -m "feat(ppe): norms CRUD with catalog link + 409 duplicate guard"
 - Modify: `backend/app/api/routes/ppe.py` (3 эндпоинта + FSM в PATCH)
 - Test: `tests/api/test_ppe_issue_operations_api.py`, `backend/tests/test_ppe_events.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # backend/tests/test_ppe_events.py
@@ -1034,12 +1036,12 @@ async def test_legacy_patch_respects_fsm(async_client, make_auth_headers, sessio
 
 Примечание: имя модели Outbox/поля payload проверь по `app/models/models.py` (используется в `services/contractor_documents.py:16` — `from app.models.models import Outbox`).
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `.venv\Scripts\python.exe -m pytest backend/tests/test_ppe_events.py tests/api/test_ppe_issue_operations_api.py -p no:xdist --timeout=240 -q > test_out.txt 2>&1; Get-Content test_out.txt -Tail 15`
 Expected: FAIL — нет EventType/эндпоинтов
 
-- [ ] **Step 3: EventType + payloads (`backend/app/services/events.py`)**
+- [x] **Step 3: EventType + payloads (`backend/app/services/events.py`)**
 
 После `CONTRACTOR_DOCUMENT_EXPIRED` (строка ~38):
 ```python
@@ -1066,7 +1068,7 @@ class PPEReplacementDuePayload(BaseEventPayload):
     status: str
 ```
 
-- [ ] **Step 4: Service operations (`backend/app/domains/ppe/service.py`)**
+- [x] **Step 4: Service operations (`backend/app/domains/ppe/service.py`)**
 
 Импорты: добавить
 ```python
@@ -1194,7 +1196,7 @@ async def replace_issue(
 
 Проверь `backend/app/domains/ppe/__init__.py` и добавь в реэкспорт: `return_issue, writeoff_issue, replace_issue`.
 
-- [ ] **Step 5: Schemas (`backend/app/schemas/ppe.py`)**
+- [x] **Step 5: Schemas (`backend/app/schemas/ppe.py`)**
 
 `PPEIssueCreate` — добавить поля:
 ```python
@@ -1233,7 +1235,7 @@ class PPEIssueReplaceRequest(BaseSchema):
     signature_doc_ref: str | None = Field(default=None, max_length=255)
 ```
 
-- [ ] **Step 6: Routes (`backend/app/api/routes/ppe.py`)**
+- [x] **Step 6: Routes (`backend/app/api/routes/ppe.py`)**
 
 Импорты: `return_issue, writeoff_issue, replace_issue` из `app.domains.ppe`; `PPETransitionError` из `app.domains.ppe.lifecycle`; новые схемы. Пробросить реквизиты в `create_issue` (передать `certificate_no=payload.certificate_no, wear_percent=payload.wear_percent, signature_doc_ref=payload.signature_doc_ref` в `issue_ppe_item`).
 
@@ -1390,12 +1392,12 @@ FSM в legacy PATCH `update_issue` (после `updates = payload.model_dump(exc
 ```
 (импортировать `validate_transition` из `app.domains.ppe.lifecycle`).
 
-- [ ] **Step 7: Run tests**
+- [x] **Step 7: Run tests**
 
 Run: `.venv\Scripts\python.exe -m pytest backend/tests/test_ppe_events.py tests/api/test_ppe_issue_operations_api.py -p no:xdist --timeout=240 -q > test_out.txt 2>&1; Get-Content test_out.txt -Tail 10`
 Expected: `8 passed` (3 + 5)
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add backend/app/services/events.py backend/app/domains/ppe/ backend/app/schemas/ppe.py backend/app/api/routes/ppe.py backend/tests/test_ppe_events.py tests/api/test_ppe_issue_operations_api.py
@@ -1412,7 +1414,7 @@ git commit -m "feat(ppe): explicit issue lifecycle - return/writeoff/replace + F
 - Modify: `backend/app/api/routes/ppe.py` (2 эндпоинта)
 - Test: `tests/test_ppe_personal_card_766n.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # tests/test_ppe_personal_card_766n.py
@@ -1557,12 +1559,12 @@ async def test_put_sizes_validates_and_persists(async_client, make_auth_headers,
 
 Примечание: `create_person(..., position_id=..., ppe_sizes=...)` идут через `**overrides` фабрики — это колонки Person, сработает.
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/test_ppe_personal_card_766n.py -p no:xdist --timeout=240 -q > test_out.txt 2>&1; Get-Content test_out.txt -Tail 15`
 Expected: FAIL — 404 на новых путях
 
-- [ ] **Step 3: Service (`backend/app/domains/ppe/service.py`)**
+- [x] **Step 3: Service (`backend/app/domains/ppe/service.py`)**
 
 ```python
 @dataclass(slots=True)
@@ -1714,7 +1716,7 @@ from app.modules.ppe.services import NormItem, PPENormService
 ```
 (NB: `_get_person` в существующем коде использует `.scalar_one()` — для карточки нужен `scalar_one_or_none`, поэтому отдельный запрос выше, `_get_person` не трогать.)
 
-- [ ] **Step 4: Schemas (`backend/app/schemas/ppe.py`)**
+- [x] **Step 4: Schemas (`backend/app/schemas/ppe.py`)**
 
 ```python
 class PPECardRequiredLine(BaseSchema):
@@ -1761,7 +1763,7 @@ class PPESizesRead(BaseSchema):
     sizes: dict[str, Any] | None
 ```
 
-- [ ] **Step 5: Routes (`backend/app/api/routes/ppe.py`)**
+- [x] **Step 5: Routes (`backend/app/api/routes/ppe.py`)**
 
 Импорты: `build_personal_card_766n` из `app.domains.ppe`; `Person` из `app.models.models`; схемы. Добавить в `app.domains.ppe.__init__` реэкспорт `build_personal_card_766n`.
 
@@ -1836,12 +1838,12 @@ async def put_person_sizes(
 
 NB: проверь имя поля названия должности в `Position` (`title` или `name`) — в `position.title if card.position else None` подставь фактическое (см. модель `Position` в models.py); тест выше сидит `title="Монтажник"` — поправь обе стороны согласованно по факту модели.
 
-- [ ] **Step 6: Run tests**
+- [x] **Step 6: Run tests**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/test_ppe_personal_card_766n.py -p no:xdist --timeout=240 -q > test_out.txt 2>&1; Get-Content test_out.txt -Tail 10`
 Expected: `4 passed`
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/app/domains/ppe/ backend/app/schemas/ppe.py backend/app/api/routes/ppe.py tests/test_ppe_personal_card_766n.py
@@ -1858,7 +1860,7 @@ git commit -m "feat(ppe): 766n personal card endpoint + employee sizes PUT"
 - Modify: `backend/app/services/celery_app.py` (beat_schedule, ~строка 80)
 - Test: `tests/test_ppe_replacement_due_tick.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # tests/test_ppe_replacement_due_tick.py
@@ -1930,12 +1932,12 @@ async def test_notify_replacement_due_scans_and_dedups(sessionmaker, data_factor
         assert len(rows) == 2
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/test_ppe_replacement_due_tick.py -p no:xdist --timeout=240 -q > test_out.txt 2>&1; Get-Content test_out.txt -Tail 10`
 Expected: FAIL — `ModuleNotFoundError: app.services.ppe_notifications`
 
-- [ ] **Step 3: Service**
+- [x] **Step 3: Service**
 
 ```python
 # backend/app/services/ppe_notifications.py
@@ -2010,7 +2012,7 @@ async def notify_replacement_due(
     return count
 ```
 
-- [ ] **Step 4: Beat task (`backend/app/tasks/_core.py`, после `_contractors_documents_tick`)**
+- [x] **Step 4: Beat task (`backend/app/tasks/_core.py`, после `_contractors_documents_tick`)**
 
 ```python
 @celery_app.task(
@@ -2052,12 +2054,12 @@ beat_schedule (`backend/app/services/celery_app.py`, после `contractors-doc
     },
 ```
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/test_ppe_replacement_due_tick.py backend/tests/test_ppe_events.py -p no:xdist --timeout=240 -q > test_out.txt 2>&1; Get-Content test_out.txt -Tail 10`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/app/services/ppe_notifications.py backend/app/tasks/_core.py backend/app/services/celery_app.py tests/test_ppe_replacement_due_tick.py
@@ -2074,7 +2076,7 @@ git commit -m "feat(ppe): replacement-due notifications + ppe.expiry.tick beat"
 - Modify: `backend/app/models/ppe_registry.py` (убрать WarehousePPE)
 - Modify: `backend/app/models/__init__.py` (убрать реэкспорты удалённых классов, если есть)
 
-- [ ] **Step 1: Inventory imports (обязателен ПЕРЕД удалением)**
+- [x] **Step 1: Inventory imports (обязателен ПЕРЕД удалением)**
 
 Run: `rg -n "WarehousePPE|PPECatalog|PPENormItem|PPEPersonalCard|PPEPersonalCardItem" --type py backend tests frontend 2>$null` (через Grep-инструмент)
 И отдельно для дублей имён (важно отличать models.py-класс от safety_core-класса):
@@ -2082,7 +2084,7 @@ Run: `rg -n "WarehousePPE|PPECatalog|PPENormItem|PPEPersonalCard|PPEPersonalCard
 
 Ожидаемое: упоминания только в `safety_core.py`, `models.py` (WarehousePPE), `ppe_registry.py`, `models/__init__.py`, миграции `20260401_next58_safety_core.py` (НЕ трогать) и, возможно, тестах. `domains/ppe/service.py` содержит СВОЙ dataclass `PPEPersonalCard` (строка ~24) — НЕ трогать; `PersonalCard766n` из Task 5 тоже не трогать. Любое НЕинвентаризованное живое использование — STOP, доложить в финальном отчёте, не удалять этот символ.
 
-- [ ] **Step 2: Delete**
+- [x] **Step 2: Delete**
 
 - `safety_core.py`: удалить классы `PPENorm`, `PPECatalog`, `PPENormItem`, `PPEIssue`, `PPEPersonalCard`, `PPEPersonalCardItem` (строки ~207–298). Оставить комментарий-надгробие:
 ```python
@@ -2097,7 +2099,7 @@ Run: `rg -n "WarehousePPE|PPECatalog|PPENormItem|PPEPersonalCard|PPEPersonalCard
 - `ppe_registry.py`: убрать `WarehousePPE` из импорта и `__all__`.
 - `models/__init__.py`: убрать ссылки на удалённые имена (проверить grep'ом).
 
-- [ ] **Step 3: Verify mappers + existing tests still green**
+- [x] **Step 3: Verify mappers + existing tests still green**
 
 Run: `.venv\Scripts\python.exe -m pytest backend/tests/test_next58_safety_core_services.py backend/tests/test_ppe_lifecycle.py backend/tests/test_sz01_ppe_766n_migration.py -p no:xdist --timeout=120 -q > test_out.txt 2>&1; Get-Content test_out.txt -Tail 10`
 Expected: PASS (`test_next58_safety_core_services` тестирует чистые сервисы `modules/ppe/services.py` — они не удалялись)
@@ -2106,7 +2108,7 @@ Expected: PASS (`test_next58_safety_core_services` тестирует чисты
 Run: `.venv\Scripts\python.exe -m pytest <найденный файл> -p no:xdist --timeout=120 -q > test_out.txt 2>&1; Get-Content test_out.txt -Tail 5`
 Expected: PASS
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add backend/app/models/safety_core.py backend/app/models/models.py backend/app/models/ppe_registry.py backend/app/models/__init__.py
@@ -2121,7 +2123,7 @@ git commit -m "refactor(ppe): drop orphan family-B ORM classes + WarehousePPE (t
 - Modify: `backend/app/services/demo_bootstrap.py`
 - Test: `tests/test_demo_bootstrap_ppe.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/test_demo_bootstrap_ppe.py
@@ -2173,12 +2175,12 @@ async def test_seed_ppe_demo_idempotent(sessionmaker, data_factory):
     assert len(norms2) == len(norms)
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/test_demo_bootstrap_ppe.py -p no:xdist --timeout=240 -q > test_out.txt 2>&1; Get-Content test_out.txt -Tail 10`
 Expected: FAIL — `_seed_ppe_demo` не существует
 
-- [ ] **Step 3: Implement seed (`backend/app/services/demo_bootstrap.py`)**
+- [x] **Step 3: Implement seed (`backend/app/services/demo_bootstrap.py`)**
 
 Импорты: добавить `PPEIssue, PPEItem, PPENorm` в импорт из `app.models.models`; `from app.models.risk import RiskHazard`.
 
@@ -2254,12 +2256,12 @@ async def _seed_ppe_demo(session, tenant_db_id: str, person, position_id: str) -
 ```
 где `<demo_person>`/`<demo_position>` — фактические имена локальных переменных в функции (проверить по коду; если person создаётся списком — взять первого).
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/test_demo_bootstrap_ppe.py tests/test_demo_bootstrap_contractor_requirements.py -p no:xdist --timeout=240 -q > test_out.txt 2>&1; Get-Content test_out.txt -Tail 10`
 Expected: PASS (вкл. существующий contractor-seed тест — соседство не сломано)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/services/demo_bootstrap.py tests/test_demo_bootstrap_ppe.py
@@ -2274,16 +2276,16 @@ git commit -m "feat(ppe): demo-seed norms/sizes/issues covering all card statuse
 - Modify (при необходимости): `backend/tests/test_ppe_access_parity.py`
 - Никаких новых фич — только верификация.
 
-- [ ] **Step 1: Access parity**
+- [x] **Step 1: Access parity**
 
 Прочитать `backend/tests/test_ppe_access_parity.py`. Он проверяет `write_roles ⊆ read_roles` на уровне констант `_PPE_READ_ROLES`/`_PPE_WRITE_ROLES` — новые эндпоинты используют те же константы, тест уже покрывает. Если тест перечисляет эндпоинты поимённо — добавить новые (`/ppe/norms*`, `/ppe/issues/{id}/return|writeoff|replace`, `/ppe/employees/{id}/card|sizes`).
 
-- [ ] **Step 2: Контурный когорт**
+- [x] **Step 2: Контурный когорт**
 
 Run: `.venv\Scripts\python.exe -m pytest backend/tests/test_ppe_lifecycle.py backend/tests/test_sz01_ppe_766n_migration.py backend/tests/test_ppe_events.py backend/tests/test_ppe_access_parity.py backend/tests/test_ppe_error_contract.py backend/tests/test_ppeitem_table_exists.py backend/tests/test_wa01_ppe_stock_batch_migration.py backend/tests/test_next58_safety_core_services.py tests/api/test_ppe_norms_api.py tests/api/test_ppe_issue_operations_api.py tests/test_ppe_personal_card_766n.py tests/test_ppe_replacement_due_tick.py tests/test_demo_bootstrap_ppe.py -p no:xdist --timeout=240 -q > test_out.txt 2>&1; Get-Content test_out.txt -Tail 10`
 Expected: все PASS
 
-- [ ] **Step 3: Смежная регрессия (читатели статуса + соседние контуры)**
+- [x] **Step 3: Смежная регрессия (читатели статуса + соседние контуры)**
 
 Run: `.venv\Scripts\python.exe -m pytest tests -k "analytics or data_quality or operational_dashboard or outbox" -p no:xdist --timeout=300 -q > test_out.txt 2>&1; Get-Content test_out.txt -Tail 15`
 Expected: PASS (str-enum сравнения совместимы с VARCHAR-колонкой)
@@ -2292,7 +2294,7 @@ Expected: PASS (str-enum сравнения совместимы с VARCHAR-ко
 Run: `.venv\Scripts\python.exe -m pytest backend/tests -k "migration or downgrade or mapper" -p no:xdist --timeout=300 -q > test_out.txt 2>&1; Get-Content test_out.txt -Tail 15`
 Expected: PASS
 
-- [ ] **Step 4: Commit (если были правки access-parity)**
+- [x] **Step 4: Commit (если были правки access-parity)**
 
 ```bash
 git add backend/tests/test_ppe_access_parity.py

@@ -1,5 +1,7 @@
 # Медосмотры §9.2 — авто-контингент из штатки + документы 29н — Implementation Plan
 
+> **✅ РЕАЛИЗОВАНО И ВЛИТО — PR #651 (`71e3587`).** Проверено аудитом кода 2026-06-15: модель `MedicalFactor` + миграция `med02`, движок (`factors_for_hazards`/`required_exams_from_factors`), документы 29н (`build_contingent_register`/`build_named_list`), CRUD `/medical/factors`, эндпоинты register/named-list, demo-seed, тесты. Чекбоксы ниже отмечены пост-фактум.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Дать формальные документы приказа 29н (контингент + поименный список), авто-формируемые из штатного расписания (Position+Person × вредные факторы), и factor-driven путь в `compute_contingent` (сотрудник в контингенте без ручной нормы).
@@ -35,7 +37,7 @@
 - Modify: `backend/app/models/risk.py` (класс `RiskHazard`, ~стр.76)
 - Test: `backend/tests/test_medical_factor_model.py`
 
-- [ ] **Step 1: Написать падающий тест**
+- [x] **Step 1: Написать падающий тест**
 
 Create `backend/tests/test_medical_factor_model.py`:
 
@@ -61,12 +63,12 @@ def test_risk_hazard_has_medical_factor_code():
     assert "medical_factor_code" in RiskHazard.__table__.columns
 ```
 
-- [ ] **Step 2: Запустить — убедиться, что падает**
+- [x] **Step 2: Запустить — убедиться, что падает**
 
 Run: `python -m pytest backend/tests/test_medical_factor_model.py -v`
 Expected: FAIL — `ImportError: cannot import name 'MedicalFactor'`.
 
-- [ ] **Step 3: Добавить модель `MedicalFactor`**
+- [x] **Step 3: Добавить модель `MedicalFactor`**
 
 В `backend/app/models/models.py`, сразу после класса `MedicalNorm` (после его `__table_args__`, ~стр.900):
 
@@ -92,7 +94,7 @@ class MedicalFactor(TenantBaseModel):
     )
 ```
 
-- [ ] **Step 4: Добавить колонку в `RiskHazard`**
+- [x] **Step 4: Добавить колонку в `RiskHazard`**
 
 В `backend/app/models/risk.py`, в классе `RiskHazard`, сразу после `document_file_id` (~стр.76, перед `document_file` relationship):
 
@@ -103,17 +105,17 @@ class MedicalFactor(TenantBaseModel):
     medical_factor_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
 ```
 
-- [ ] **Step 5: Запустить тест — убедиться, что проходит**
+- [x] **Step 5: Запустить тест — убедиться, что проходит**
 
 Run: `python -m pytest backend/tests/test_medical_factor_model.py -v`
 Expected: PASS (2 passed).
 
-- [ ] **Step 6: Прогнать mapper-guard (регрессия маппинга)**
+- [x] **Step 6: Прогнать mapper-guard (регрессия маппинга)**
 
 Run: `python -m pytest backend/tests/test_orm_mapper_configuration.py -q`
 Expected: PASS — `configure_mappers()` зелёный с новой моделью.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/app/models/models.py backend/app/models/risk.py backend/tests/test_medical_factor_model.py
@@ -128,7 +130,7 @@ git commit -m "feat(medical): MedicalFactor 29н catalog model + RiskHazard.medi
 - Create: `backend/app/migrations/versions/20260613_med02_medical_factor_catalog.py`
 - Test: `backend/tests/test_medical_factor_migration.py`
 
-- [ ] **Step 1: Написать падающий тест**
+- [x] **Step 1: Написать падающий тест**
 
 Create `backend/tests/test_medical_factor_migration.py`:
 
@@ -153,12 +155,12 @@ def test_med02_has_upgrade_and_downgrade():
 
 > NB: модуль импортируется по точечному пути с цифрами — `importlib.import_module` это допускает (в отличие от `import` statement).
 
-- [ ] **Step 2: Запустить — убедиться, что падает**
+- [x] **Step 2: Запустить — убедиться, что падает**
 
 Run: `python -m pytest backend/tests/test_medical_factor_migration.py -v`
 Expected: FAIL — `ModuleNotFoundError` (файла миграции нет).
 
-- [ ] **Step 3: Написать миграцию**
+- [x] **Step 3: Написать миграцию**
 
 Create `backend/app/migrations/versions/20260613_med02_medical_factor_catalog.py`:
 
@@ -208,19 +210,19 @@ def downgrade() -> None:
     op.drop_table("medical_factor")
 ```
 
-- [ ] **Step 4: Запустить тест — убедиться, что проходит**
+- [x] **Step 4: Запустить тест — убедиться, что проходит**
 
 Run: `python -m pytest backend/tests/test_medical_factor_migration.py -v`
 Expected: PASS (2 passed).
 
-- [ ] **Step 5: Применить миграцию к свежей SQLite-БД (smoke)**
+- [x] **Step 5: Применить миграцию к свежей SQLite-БД (smoke)**
 
 Run (из `backend/`): `python -m pytest backend/tests/test_medical_factor_model.py -q`
 > Если в репо есть общий guard прогона миграций (`test_migrations_comprehensive_safety.py`), прогнать его:
 Run: `python -m pytest backend/tests/test_migrations_comprehensive_safety.py -q`
 Expected: PASS — цепочка `…→ed03→med02` одна голова, без сирот.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/app/migrations/versions/20260613_med02_medical_factor_catalog.py backend/tests/test_medical_factor_migration.py
@@ -235,7 +237,7 @@ git commit -m "feat(medical): med02 migration — medical_factor table + risk_ha
 - Modify: `backend/app/domains/medical/lifecycle.py` (после `resolve_required_kinds`, ~стр.128)
 - Test: `backend/tests/test_medical_factor_engine.py`
 
-- [ ] **Step 1: Написать падающие тесты**
+- [x] **Step 1: Написать падающие тесты**
 
 Create `backend/tests/test_medical_factor_engine.py`:
 
@@ -274,12 +276,12 @@ def test_worst_status_priority():
     assert worst_status([]) == "ok"
 ```
 
-- [ ] **Step 2: Запустить — убедиться, что падает**
+- [x] **Step 2: Запустить — убедиться, что падает**
 
 Run: `python -m pytest backend/tests/test_medical_factor_engine.py -v`
 Expected: FAIL — `ImportError` (функций нет).
 
-- [ ] **Step 3: Реализовать функции**
+- [x] **Step 3: Реализовать функции**
 
 В `backend/app/domains/medical/lifecycle.py`, после `resolve_required_kinds` (~стр.128), добавить:
 
@@ -325,12 +327,12 @@ def worst_status(statuses: Iterable[str]) -> str:
 
 > `MedicalExamKind` уже импортирован в начале `lifecycle.py`. `Iterable` уже импортирован (`from collections.abc import Iterable`).
 
-- [ ] **Step 4: Запустить тесты — убедиться, что проходят**
+- [x] **Step 4: Запустить тесты — убедиться, что проходят**
 
 Run: `python -m pytest backend/tests/test_medical_factor_engine.py -v`
 Expected: PASS (4 passed).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/domains/medical/lifecycle.py backend/tests/test_medical_factor_engine.py
@@ -345,7 +347,7 @@ git commit -m "feat(medical): pure factor-driven engine — factors_for_hazards/
 - Modify: `backend/app/domains/medical/service.py` (импорты, новый `_load_factor_catalog`, тело `compute_contingent` ~стр.173-225)
 - Test: `backend/tests/test_medical_contingent_factor.py`
 
-- [ ] **Step 1: Написать падающий тест**
+- [x] **Step 1: Написать падающий тест**
 
 Create `backend/tests/test_medical_contingent_factor.py`:
 
@@ -392,12 +394,12 @@ async def test_contingent_includes_factor_driven_person_without_norm(
 
 > **NB:** точные имена фикстур (`sessionmaker`/`data_factory`) и helper'ы `data_factory.tenant(...)` — сверить с `tests/conftest.py` репо; если API фабрики иной, адаптировать создание tenant/company. Суть теста — фактор без нормы даёт строку контингента.
 
-- [ ] **Step 2: Запустить — убедиться, что падает**
+- [x] **Step 2: Запустить — убедиться, что падает**
 
 Run: `python -m pytest backend/tests/test_medical_contingent_factor.py -v`
 Expected: FAIL — текущий `compute_contingent` возвращает `[]` при отсутствии норм.
 
-- [ ] **Step 3: Добавить загрузчик каталога + расширить `compute_contingent`**
+- [x] **Step 3: Добавить загрузчик каталога + расширить `compute_contingent`**
 
 В `backend/app/domains/medical/service.py`:
 
@@ -495,7 +497,7 @@ async def _load_factor_catalog(
     return items
 ```
 
-- [ ] **Step 4: Запустить новый тест + parity Среза-1**
+- [x] **Step 4: Запустить новый тест + parity Среза-1**
 
 Run: `python -m pytest backend/tests/test_medical_contingent_factor.py -v`
 Expected: PASS.
@@ -503,7 +505,7 @@ Expected: PASS.
 Run: `python -m pytest backend/tests/ -k "contingent or medical" -q`
 Expected: PASS — норм-путь и summary не сломаны (back-compat).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/domains/medical/service.py backend/tests/test_medical_contingent_factor.py
@@ -518,7 +520,7 @@ git commit -m "feat(medical): factor-driven path in compute_contingent (29н sta
 - Modify: `backend/app/domains/medical/service.py` (новые функции после `status_summary`, ~стр.247; импорт `EmploymentStatus`)
 - Test: `backend/tests/test_medical_documents_service.py`
 
-- [ ] **Step 1: Написать падающие тесты**
+- [x] **Step 1: Написать падающие тесты**
 
 Create `backend/tests/test_medical_documents_service.py`:
 
@@ -588,12 +590,12 @@ async def test_documents_empty_without_factor_mapping(sessionmaker, data_factory
 
 > **NB:** сверить фикстуры с `tests/conftest.py`; `full_name` формат — «Фамилия Имя» (см. реализацию ниже).
 
-- [ ] **Step 2: Запустить — убедиться, что падает**
+- [x] **Step 2: Запустить — убедиться, что падает**
 
 Run: `python -m pytest backend/tests/test_medical_documents_service.py -v`
 Expected: FAIL — `ImportError` (функций нет).
 
-- [ ] **Step 3: Реализовать сервисы документов**
+- [x] **Step 3: Реализовать сервисы документов**
 
 В `backend/app/domains/medical/service.py`:
 
@@ -731,12 +733,12 @@ async def build_named_list(
     return rows
 ```
 
-- [ ] **Step 4: Запустить тесты — убедиться, что проходят**
+- [x] **Step 4: Запустить тесты — убедиться, что проходят**
 
 Run: `python -m pytest backend/tests/test_medical_documents_service.py -v`
 Expected: PASS (3 passed).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/domains/medical/service.py backend/tests/test_medical_documents_service.py
@@ -752,7 +754,7 @@ git commit -m "feat(medical): 29н document builders — build_contingent_regist
 - Modify: `backend/app/api/routes/medical.py` (импорты схем + эндпоинты)
 - Test: `tests/api/test_medical_factors_api.py`, `tests/api/test_medical_documents.py`
 
-- [ ] **Step 1: Написать падающие API-тесты**
+- [x] **Step 1: Написать падающие API-тесты**
 
 Create `tests/api/test_medical_factors_api.py`:
 
@@ -818,12 +820,12 @@ async def test_register_and_named_list_endpoints(medical_client_with_staffing):
 
 > **NB фикстуры:** имена `medical_client` / `medical_readonly_client` / `medical_client_with_staffing` — выровнять по существующим фикстурам api-тестов (см. `tests/api/conftest.py` и существующий `tests/api/test_medical*` если есть). Если staffing-фикстуры нет — построить инлайн в тесте через сервисный seed (как в Task 5), затем дернуть эндпоинт.
 
-- [ ] **Step 2: Запустить — убедиться, что падает**
+- [x] **Step 2: Запустить — убедиться, что падает**
 
 Run: `python -m pytest tests/api/test_medical_factors_api.py tests/api/test_medical_documents.py -v`
 Expected: FAIL — 404 на новых маршрутах.
 
-- [ ] **Step 3: Добавить схемы**
+- [x] **Step 3: Добавить схемы**
 
 В конец `backend/app/schemas/medical.py`:
 
@@ -904,7 +906,7 @@ class NamedListPage(BaseModel):
 
 Добавить `Literal` в импорты `schemas/medical.py` (строка `from typing import ...` — если её нет, добавить `from typing import Literal`). Проверить, что `date` импортирован (да, `from datetime import date, datetime`).
 
-- [ ] **Step 4: Добавить эндпоинты + хелпер `_get_factor`**
+- [x] **Step 4: Добавить эндпоинты + хелпер `_get_factor`**
 
 В `backend/app/api/routes/medical.py`:
 
@@ -1063,12 +1065,12 @@ async def get_named_list(
 
 > **NB маршрутизация:** `/medical/contingent/register` зарегистрировать ДО существующего `/medical/contingent` не обязательно (пути не конфликтуют — разные суффиксы), но разместить рядом для читаемости.
 
-- [ ] **Step 5: Запустить API-тесты — убедиться, что проходят**
+- [x] **Step 5: Запустить API-тесты — убедиться, что проходят**
 
 Run: `python -m pytest tests/api/test_medical_factors_api.py tests/api/test_medical_documents.py -v`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/app/schemas/medical.py backend/app/api/routes/medical.py tests/api/test_medical_factors_api.py tests/api/test_medical_documents.py
@@ -1083,7 +1085,7 @@ git commit -m "feat(medical): API — /medical/factors CRUD + /contingent/regist
 - Modify: `backend/app/services/demo_bootstrap.py` (seed факторов + привязка demo-hazard + position_hazard)
 - Test: расширить `backend/tests/` существующий demo/seed-тест либо `backend/tests/test_medical_factor_seed.py`
 
-- [ ] **Step 1: Написать падающий seed-тест**
+- [x] **Step 1: Написать падающий seed-тест**
 
 Create `backend/tests/test_medical_factor_seed.py`:
 
@@ -1106,12 +1108,12 @@ async def test_demo_seed_populates_named_list(bootstrapped_tenant_session):
 
 > **NB:** сверить фикстуру bootstrap с репо (как тестируется `demo_bootstrap` сейчас). Если прямой фикстуры нет — вызвать `seed_demo_data`/эквивалент инлайн в тесте на чистом tenant, затем `build_named_list`.
 
-- [ ] **Step 2: Запустить — убедиться, что падает**
+- [x] **Step 2: Запустить — убедиться, что падает**
 
 Run: `python -m pytest backend/tests/test_medical_factor_seed.py -v`
 Expected: FAIL — demo-hazard `demo_general` не имеет `medical_factor_code`, фактора 29н нет → named list пуст.
 
-- [ ] **Step 3: Расширить demo-seed**
+- [x] **Step 3: Расширить demo-seed**
 
 В `backend/app/services/demo_bootstrap.py`:
 
@@ -1158,7 +1160,7 @@ Expected: FAIL — demo-hazard `demo_general` не имеет `medical_factor_co
 
 > **NB порядок:** `_seed_ppe_demo` создаёт `demo_general` hazard. Этот блок должен идти ПОСЛЕ него (hazard уже существует). Если порядок вызовов иной — продублировать lookup-or-create hazard здесь (идемпотентно).
 
-- [ ] **Step 4: Запустить seed-тест + полную медицинскую регрессию**
+- [x] **Step 4: Запустить seed-тест + полную медицинскую регрессию**
 
 Run: `python -m pytest backend/tests/test_medical_factor_seed.py -v`
 Expected: PASS.
@@ -1166,7 +1168,7 @@ Expected: PASS.
 Run: `python -m pytest backend/tests/ tests/api/ -k "medical or contingent or factor" -q`
 Expected: PASS — весь медицинский когорт зелёный (Срез-1 parity + §9.2).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/services/demo_bootstrap.py backend/tests/test_medical_factor_seed.py
@@ -1177,17 +1179,17 @@ git commit -m "feat(medical): demo-seed 29н factor + hazard mapping (factor-dri
 
 ## Финальная верификация (после всех задач)
 
-- [ ] **Контурный когорт §9.2 + parity Среза-1**
+- [x] **Контурный когорт §9.2 + parity Среза-1**
 
 Run: `python -m pytest backend/tests/ tests/api/ -k "medical or contingent or factor" -q`
 Expected: PASS, EXIT=0.
 
-- [ ] **Смежная регрессия (mapper, миграции, person_admission)**
+- [x] **Смежная регрессия (mapper, миграции, person_admission)**
 
 Run: `python -m pytest backend/tests/ -k "migration or downgrade or mapper or person_admission or dq_medical or calendar_medical" -q`
 Expected: PASS, EXIT=0. (На этой машине — через `.venv`, PowerShell→file; финальные summary добирать EXIT-кодом, [[py313_win_pytest_invocation]].)
 
-- [ ] **Holistic-review** через `superpowers:requesting-code-review` — спек-соответствие секция-в-секцию, 0 Critical/Important.
+- [x] **Holistic-review** через `superpowers:requesting-code-review` — спек-соответствие секция-в-секцию, 0 Critical/Important.
 
 ---
 

@@ -1,5 +1,7 @@
 # W2 Command Center UI Implementation Plan
 
+> **✅ РЕАЛИЗОВАНО И ВЛИТО — PR #658 (`18544e4`).** Все 6 задач выполнены: API-клиент + DTO, `CommandCenterPanel` + 7 тестов, Zustand-store, страница с 30-сек polling и visibilitychange, роут `/command-center` в группе `DASHBOARD_VIEW` + пункт навигации «Командный центр». Чекбоксы ниже отмечены пост-фактум по аудиту кода 2026-06-15.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a "Командный центр" page that surfaces the operational alerts aggregator (`GET /api/v1/operational/dashboard`) as severity-sorted category widgets, with polling refresh.
@@ -39,7 +41,7 @@
 **Files:**
 - Create: `frontend/src/api/operationalDashboard.ts`
 
-- [ ] **Step 1: Create the API module with types**
+- [x] **Step 1: Create the API module with types**
 
 ```ts
 import { apiClient } from "@/api/client";
@@ -94,12 +96,12 @@ export const operationalDashboardApi = {
 };
 ```
 
-- [ ] **Step 2: Verify it typechecks**
+- [x] **Step 2: Verify it typechecks**
 
 Run: `npm --prefix frontend run typecheck`
 Expected: PASS (no errors).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/src/api/operationalDashboard.ts
@@ -114,7 +116,7 @@ git commit -m "feat(w2): operational dashboard api client + DTO types"
 - Create: `frontend/src/__tests__/CommandCenterPanel.test.tsx`
 - Create: `frontend/src/components/operational/CommandCenterPanel.tsx`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/__tests__/CommandCenterPanel.test.tsx`:
 
@@ -231,12 +233,12 @@ describe("CommandCenterPanel", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend; npx vitest run src/__tests__/CommandCenterPanel.test.tsx`
 Expected: FAIL — cannot resolve `@/components/operational/CommandCenterPanel`.
 
-- [ ] **Step 3: Implement the panel**
+- [x] **Step 3: Implement the panel**
 
 Create `frontend/src/components/operational/CommandCenterPanel.tsx`:
 
@@ -475,12 +477,12 @@ export function CommandCenterPanel({ data, loading, error, onRefresh }: CommandC
 export default CommandCenterPanel;
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd frontend; npx vitest run src/__tests__/CommandCenterPanel.test.tsx`
 Expected: PASS (7 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/components/operational/CommandCenterPanel.tsx frontend/src/__tests__/CommandCenterPanel.test.tsx
@@ -494,7 +496,7 @@ git commit -m "feat(w2): CommandCenterPanel presentational component + unit test
 **Files:**
 - Create: `frontend/src/stores/operationalDashboard.ts`
 
-- [ ] **Step 1: Create the store**
+- [x] **Step 1: Create the store**
 
 ```ts
 import { create } from "zustand";
@@ -543,12 +545,12 @@ export const useOperationalDashboardStore = create<OperationalDashboardState>()(
 );
 ```
 
-- [ ] **Step 2: Verify it typechecks**
+- [x] **Step 2: Verify it typechecks**
 
 Run: `npm --prefix frontend run typecheck`
 Expected: PASS.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/src/stores/operationalDashboard.ts
@@ -562,7 +564,7 @@ git commit -m "feat(w2): operational dashboard store (zustand loader)"
 **Files:**
 - Create: `frontend/src/pages/operational/CommandCenterPage.tsx`
 
-- [ ] **Step 1: Create the page**
+- [x] **Step 1: Create the page**
 
 ```tsx
 import { useEffect } from "react";
@@ -609,12 +611,12 @@ export function CommandCenterPage() {
 export default CommandCenterPage;
 ```
 
-- [ ] **Step 2: Verify it typechecks**
+- [x] **Step 2: Verify it typechecks**
 
 Run: `npm --prefix frontend run typecheck`
 Expected: PASS.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/src/pages/operational/CommandCenterPage.tsx
@@ -630,7 +632,7 @@ git commit -m "feat(w2): CommandCenterPage with 30s polling + visibilitychange r
 - Modify: `frontend/src/router/routeGroups.tsx`
 - Modify: `frontend/src/router/navigationConfig.ts`
 
-- [ ] **Step 1: Register the lazy page**
+- [x] **Step 1: Register the lazy page**
 
 In `frontend/src/router/pageRegistry.tsx`, add after the `DashboardPage` export (line 4):
 
@@ -638,7 +640,7 @@ In `frontend/src/router/pageRegistry.tsx`, add after the `DashboardPage` export 
 export const CommandCenterPage = lazy(() => import("@/pages/operational/CommandCenterPage"));
 ```
 
-- [ ] **Step 2: Add the route to the DASHBOARD_VIEW group**
+- [x] **Step 2: Add the route to the DASHBOARD_VIEW group**
 
 In `frontend/src/router/routeGroups.tsx`, add `CommandCenterPage` to the import list from `@/router/pageRegistry` (keep alphabetical-ish, e.g. after `ClientPortalRequestsPage`):
 
@@ -667,7 +669,7 @@ So the group's routes array becomes:
       ]
 ```
 
-- [ ] **Step 3: Add the nav item**
+- [x] **Step 3: Add the nav item**
 
 In `frontend/src/router/navigationConfig.ts`, in the `"Документооборот"` group's `items` array, add right after the `"Центр внимания"` item (which uses `to: "/workspace/attention"`):
 
@@ -677,7 +679,7 @@ In `frontend/src/router/navigationConfig.ts`, in the `"Документообо�
 
 (`ShieldAlert` is already imported in this file — no new import needed.)
 
-- [ ] **Step 4: Verify typecheck + lint + existing tests**
+- [x] **Step 4: Verify typecheck + lint + existing tests**
 
 Run: `npm --prefix frontend run typecheck`
 Expected: PASS.
@@ -688,7 +690,7 @@ Expected: PASS (0 warnings).
 Run: `cd frontend; npx vitest run src/__tests__/CommandCenterPanel.test.tsx`
 Expected: PASS (7 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/router/pageRegistry.tsx frontend/src/router/routeGroups.tsx frontend/src/router/navigationConfig.ts
@@ -701,22 +703,22 @@ git commit -m "feat(w2): wire /command-center route + nav item (DASHBOARD_VIEW g
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Full frontend unit test run**
+- [x] **Step 1: Full frontend unit test run**
 
 Run: `cd frontend; npx vitest run`
 Expected: PASS — all tests green, including the new `CommandCenterPanel.test.tsx` and the untouched `HealthStatusPanel.test.tsx` (regression-sanity that Health UI is unaffected).
 
-- [ ] **Step 2: Build typecheck**
+- [x] **Step 2: Build typecheck**
 
 Run: `npm --prefix frontend run typecheck`
 Expected: PASS.
 
-- [ ] **Step 3: Lint**
+- [x] **Step 3: Lint**
 
 Run: `npm --prefix frontend run lint`
 Expected: PASS (0 warnings).
 
-- [ ] **Step 4: Confirm no stray changes**
+- [x] **Step 4: Confirm no stray changes**
 
 Run: `git status -s`
 Expected: clean working tree (all changes committed across Tasks 1–5).
