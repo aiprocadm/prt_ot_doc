@@ -639,13 +639,11 @@ class CalendarAggregatorService:
             if anchor is None:
                 continue
             is_overdue = bool(
-                permit.status == PermitStatus.ACTIVE
+                permit.status == PermitStatus.ACTIVE.value
                 and permit.valid_until is not None
                 and permit.valid_until < today
             )
-            status_value = (
-                permit.status.value if hasattr(permit.status, "value") else str(permit.status)
-            )
+            status_value = permit.status
             expected_at = anchor if include_fact else None
             actual_at = _coerce_dt(permit.issued_at) if include_fact else None
             days_to_due = _days_to_due(anchor, now) if include_sla else None
@@ -689,7 +687,7 @@ class CalendarAggregatorService:
         total = await self._count(base_count)
         overdue = await self._count(
             base_count.where(
-                Permit.status == PermitStatus.ACTIVE,
+                Permit.status == PermitStatus.ACTIVE.value,
                 Permit.valid_until < today,
             )
         )

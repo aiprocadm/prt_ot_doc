@@ -82,6 +82,10 @@ celery_app.conf.beat_schedule = {
         "task": "ppe.expiry.tick",
         "schedule": crontab(hour=4, minute=15),
     },
+    "permits-expiry-daily": {
+        "task": "permits.expiry.tick",
+        "schedule": crontab(hour=4, minute=30),
+    },
 }
 
 celery_app.conf.task_queues = (

@@ -355,7 +355,7 @@ class ExpiredPermitsRule(DataQualityRule):
         try:
             stmt = select(Permit).where(
                 Permit.tenant_id == self.tenant_id,
-                Permit.status == PermitStatus.ACTIVE,
+                Permit.status == PermitStatus.ACTIVE.value,
                 Permit.valid_until.is_not(None),
                 Permit.valid_until < today,
             )

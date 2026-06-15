@@ -258,7 +258,7 @@ async def issue_certificate(
             permit_type=normalized_permit_type,
             issued_at=computed_issued_at,
             valid_until=valid_until,
-            status=PermitStatus.ACTIVE if (valid_until is None or valid_until >= computed_issued_at) else PermitStatus.EXPIRED,
+            status=PermitStatus.ACTIVE.value if (valid_until is None or valid_until >= computed_issued_at) else PermitStatus.EXPIRED.value,
         )
         session.add(permit)
         await session.flush()
