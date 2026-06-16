@@ -372,3 +372,73 @@ async def test_flag_off_produces_no_headers(letterhead_fixture_disabled_auto):
         letterhead=None,
     )
     assert letterhead_fixture_disabled_auto.read_header_xml(document_bytes) == ""
+
+
+# ---------------------------------------------------------------------------
+# Task 6: DocGenerateRequest accepts letterhead override + metadata wiring
+# ---------------------------------------------------------------------------
+
+
+def test_generate_endpoint_accepts_letterhead_override():
+    """
+    Narrow unit test: verifies that DocGenerateRequest (a) accepts a
+    `letterhead` field without raising a ValidationError, (b) rejects
+    unknown extra fields (extra='forbid' still applies), and (c) the
+    letterhead payload survives .model_dump(mode='json') so metadata
+    assembly can stash it.
+
+    Full API client test is omitted — no `api_client` fixture exists in
+    this file and wiring a real authenticated client is out of scope here.
+    CI on Python 3.12.12 is the source of truth for test execution.
+    """
+    import pydantic
+
+    from app.api.routes.documents import DocGenerateRequest
+    from app.modules.branding.schemas import LetterheadOverride
+
+    # --- (a) valid payload with letterhead override is accepted ---
+    req = DocGenerateRequest(
+        template_code="some-tpl",
+        template_version=1,
+        company_id="company-abc",
+        letterhead=LetterheadOverride(
+            issuer={"kind": "company", "company_id": "issuer-xyz"},
+        ),
+    )
+    assert req.letterhead is not None
+    assert req.letterhead.issuer is not None
+    assert req.letterhead.issuer.company_id == "issuer-xyz"
+
+    # --- (b) disabled=True variant is accepted ---
+    req_disabled = DocGenerateRequest(
+        template_code="some-tpl",
+        template_version=1,
+        company_id="company-abc",
+        letterhead=LetterheadOverride(disabled=True),
+    )
+    assert req_disabled.letterhead.disabled is True
+
+    # --- (c) missing letterhead defaults to None (field is optional) ---
+    req_no_lh = DocGenerateRequest(
+        template_code="some-tpl",
+        template_version=1,
+        company_id="company-abc",
+    )
+    assert req_no_lh.letterhead is None
+
+    # --- (d) unknown extra field is still rejected (extra='forbid') ---
+    with pytest.raises(pydantic.ValidationError):
+        DocGenerateRequest(
+            template_code="some-tpl",
+            template_version=1,
+            company_id="company-abc",
+            unknown_extra_field="bad",
+        )
+
+    # --- (e) metadata-assembly simulation: model_dump carries letterhead + site_id ---
+    lh_dump = req.letterhead.model_dump(mode="json")
+    metadata: dict = {}
+    metadata["letterhead"] = lh_dump
+    metadata["site_id"] = getattr(req, "site_id", None)
+    assert metadata["letterhead"]["issuer"]["company_id"] == "issuer-xyz"
+    assert metadata["site_id"] is None  # DocGenerateRequest has no site_id field
