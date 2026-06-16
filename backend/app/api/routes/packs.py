@@ -742,6 +742,8 @@ async def run_pack(
                 person=person,
                 payload=payload,
             )
+            context["letterhead"] = payload.letterhead.model_dump(mode="json") if payload.letterhead else None
+            context["site_id"] = site.id if site else None
             for item in pack.items:
                 template = item.template
                 if template is None:
