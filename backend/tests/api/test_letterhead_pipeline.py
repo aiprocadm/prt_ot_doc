@@ -33,6 +33,7 @@ from app.models.models import (
     Template,
     TemplateVersion,
     TemplateVersionStatus,
+    Tenant,
     User,
 )
 from app.modules.headers.models import HeaderFooterPreset
@@ -158,6 +159,9 @@ async def db_session(db_engine):
 
 TENANT_ID = "t-letterhead-1"
 COMPANY_ID = "c-letterhead-1"
+# Task 8 additions: subject company (document owner) and managing company (letterhead issuer)
+SUBJECT_COMPANY_ID = "c-letterhead-subject"
+MANAGING_COMPANY_ID = "c-letterhead-managing"
 USER_ID = "u-letterhead-1"
 TEMPLATE_ID = "tmpl-letterhead-1"
 TEMPLATE_VERSION_ID = "tv-letterhead-1"
@@ -174,6 +178,18 @@ async def _seed(session, *, preset_enabled: bool = True) -> bytes:
     storage = FileStorageService.default()
     storage.clear()
     storage.put(TEMPLATE_STORAGE_KEY, docx_bytes)
+
+    # Tenant row — required so session.get(Tenant, tenant_id) returns a real object
+    # for BrandingService construction inside _generate_document_for_run.
+    tenant = Tenant(
+        id=TENANT_ID,
+        slug="test-tenant",
+        name="Test Tenant",
+        contact_email="tenant@example.com",
+        kind="customer",
+        settings={},
+    )
+    session.add(tenant)
 
     # HeaderFooterPreset — header_odd_xml references legal_name so it surfaces in output
     if preset_enabled:
@@ -209,15 +225,38 @@ async def _seed(session, *, preset_enabled: bool = True) -> bytes:
     )
     session.add(tv)
 
-    # Company with preferred_header_preset_code
+    # Primary company — used by existing tests (issuer = subject = same company).
+    # Note: Company has no `legal_name` column; the branding profile derives
+    # legal_name from company.name via BrandingService.build_profile().
     company = Company(
         id=COMPANY_ID,
         tenant_id=TENANT_ID,
         name="ООО Группа",
-        legal_name="ООО Группа",
         preferred_header_preset_code=PRESET_CODE if preset_enabled else None,
     )
     session.add(company)
+
+    # Subject company (Task 8): the company that owns the document (ООО Дочерняя).
+    # Its own preferred_header_preset_code is intentionally left unset so the only
+    # way headers appear is through an explicit issuer override to the managing company.
+    subject_company = Company(
+        id=SUBJECT_COMPANY_ID,
+        tenant_id=TENANT_ID,
+        name="ООО Дочерняя",
+        preferred_header_preset_code=None,
+    )
+    session.add(subject_company)
+
+    # Managing company (Task 8): the group-level company whose letterhead is used
+    # when the issuer override points at it.  Its preferred_header_preset_code is set
+    # so LetterheadResolver can discover the preset through the normal company path.
+    managing_company = Company(
+        id=MANAGING_COMPANY_ID,
+        tenant_id=TENANT_ID,
+        name="ООО Управляющая",
+        preferred_header_preset_code=PRESET_CODE if preset_enabled else None,
+    )
+    session.add(managing_company)
 
     # User
     user = User(
@@ -230,7 +269,8 @@ async def _seed(session, *, preset_enabled: bool = True) -> bytes:
     )
     session.add(user)
 
-    # PipelineRun
+    # PipelineRun — default subject company is COMPANY_ID; generate_and_fetch can
+    # update it before driving the pipeline (see _LetterheadFixture.generate_and_fetch).
     run = PipelineRun(
         id=RUN_ID,
         tenant_id=TENANT_ID,
@@ -260,11 +300,40 @@ class _LetterheadFixture:
         self._session = session
         self._monkeypatch = monkeypatch
         self._letterhead_auto = letterhead_auto
+        # Existing tests use issuer_company_id = the primary company
         self.issuer_company_id = COMPANY_ID
+        # Task 8: expose subject/managing company IDs and the preset code
+        self.subject_company_id = SUBJECT_COMPANY_ID
+        self.managing_company_id = MANAGING_COMPANY_ID
+        self.preset_code = PRESET_CODE
         self._stored: dict[str, bytes] = {}
+        # Snapshot for company_count_unchanged(); populated lazily on first call.
+        self._company_count_snapshot: int | None = None
 
     def read_header_xml(self, docx_bytes: bytes) -> str:
         return _read_header_xml(docx_bytes)
+
+    async def _snapshot_company_count(self) -> None:
+        """Record the current number of Company rows (called once during fixture setup)."""
+        from sqlalchemy import func, select as sa_select
+
+        from app.models.models import Company as _Company
+
+        result = await self._session.execute(sa_select(func.count()).select_from(_Company))
+        self._company_count_snapshot = result.scalar_one()
+
+    async def company_count_unchanged(self) -> bool:
+        """Return True iff the Company row count equals the snapshot taken at fixture setup.
+
+        This proves that the adhoc issuer path did NOT insert any Company row.
+        """
+        from sqlalchemy import func, select as sa_select
+
+        from app.models.models import Company as _Company
+
+        result = await self._session.execute(sa_select(func.count()).select_from(_Company))
+        current_count = result.scalar_one()
+        return current_count == self._company_count_snapshot
 
     async def generate_and_fetch(
         self,
@@ -272,7 +341,13 @@ class _LetterheadFixture:
         company_id: str,
         letterhead: dict[str, Any] | None,
     ) -> bytes:
-        """Drive _generate_document_for_run and return the stored DOCX bytes."""
+        """Drive _generate_document_for_run and return the stored DOCX bytes.
+
+        The ``company_id`` parameter controls which company is the *subject* of the
+        document (i.e. ``result_metadata["company_id"]``).  Callers may pass a
+        different company_id than the one seeded by default; the run row is updated
+        in-place before the pipeline executes so the pipeline picks it up.
+        """
         from app.tasks._core import _generate_document_for_run
 
         stored: dict[str, bytes] = {}
@@ -286,13 +361,16 @@ class _LetterheadFixture:
         session = self._session
         auto_flag = self._letterhead_auto
 
-        # If a letterhead override was provided, inject it into run metadata
+        # Update run metadata: set subject company_id and optional letterhead override.
+        run = await session.get(PipelineRun, RUN_ID)
+        meta = dict(run.result_metadata or {})
+        meta["company_id"] = company_id
         if letterhead is not None:
-            run = await session.get(PipelineRun, RUN_ID)
-            meta = dict(run.result_metadata or {})
             meta["letterhead"] = letterhead
-            run.result_metadata = meta
-            await session.flush()
+        run.result_metadata = meta
+        # Reset run to QUEUED so the pipeline doesn't short-circuit on DONE status.
+        run.status = PipelineRunStatus.QUEUED
+        await session.flush()
 
         @asynccontextmanager
         async def _fake_session_scope(**kwargs):
@@ -326,14 +404,19 @@ class _LetterheadFixture:
 async def letterhead_fixture(db_session, monkeypatch):
     """Fixture with doc_pipeline_letterhead_auto=True and a seeded letterhead preset."""
     await _seed(db_session, preset_enabled=True)
-    return _LetterheadFixture(db_session, monkeypatch, letterhead_auto=True)
+    fixture = _LetterheadFixture(db_session, monkeypatch, letterhead_auto=True)
+    # Take the company-count snapshot AFTER seeding so company_count_unchanged() has a baseline.
+    await fixture._snapshot_company_count()
+    return fixture
 
 
 @pytest.fixture()
 async def letterhead_fixture_disabled_auto(db_session, monkeypatch):
     """Fixture with doc_pipeline_letterhead_auto=False."""
     await _seed(db_session, preset_enabled=True)
-    return _LetterheadFixture(db_session, monkeypatch, letterhead_auto=False)
+    fixture = _LetterheadFixture(db_session, monkeypatch, letterhead_auto=False)
+    await fixture._snapshot_company_count()
+    return fixture
 
 
 # ---------------------------------------------------------------------------
@@ -511,3 +594,59 @@ def test_pack_run_request_accepts_letterhead():
     context_no_lh["site_id"] = None
     assert context_no_lh["letterhead"] is None
     assert context_no_lh["site_id"] is None
+
+
+# ---------------------------------------------------------------------------
+# Task 8: group-company override and adhoc issuer
+# ---------------------------------------------------------------------------
+
+
+async def test_override_to_other_group_company_uses_its_requisites(letterhead_fixture):
+    """Субъект документа — дочерняя компания, эмитент — управляющая компания группы.
+
+    The document is owned by 'ООО Дочерняя' (subject_company_id), but the
+    letterhead issuer is explicitly overridden to 'ООО Управляющая'
+    (managing_company_id).  The preset's {{ organization.legal_name }} placeholder
+    must render the managing company's legal name, and the subject company's name
+    must not appear in the header.
+
+    This exercises the group-of-companies support: a holding company's letterhead
+    is applied to documents generated for its subsidiaries.
+    """
+    document_bytes = await letterhead_fixture.generate_and_fetch(
+        company_id=letterhead_fixture.subject_company_id,
+        letterhead={
+            "issuer": {
+                "kind": "company",
+                "company_id": letterhead_fixture.managing_company_id,
+            }
+        },
+    )
+    headers_xml = letterhead_fixture.read_header_xml(document_bytes)
+    assert "ООО Управляющая" in headers_xml
+    assert "ООО Дочерняя" not in headers_xml
+
+
+async def test_adhoc_issuer_prints_inline_requisites_without_persisting(letterhead_fixture):
+    """Adhoc (one-off external) issuer — inline requisites appear in the header, no DB write.
+
+    The issuer is passed inline (kind='adhoc') with a legal_name and INN.  The
+    preset_code override tells the resolver which layout preset to use (adhoc has no
+    preferred_header_preset_code chain of its own).
+
+    After the pipeline runs, the company registry must be unchanged — the adhoc
+    path must NOT insert a Company row for the one-off issuer.
+    """
+    document_bytes = await letterhead_fixture.generate_and_fetch(
+        company_id=letterhead_fixture.subject_company_id,
+        letterhead={
+            "issuer": {
+                "kind": "adhoc",
+                "inline": {"legal_name": "ООО Разовая", "inn": "9900000000"},
+            },
+            "preset_code": letterhead_fixture.preset_code,
+        },
+    )
+    headers_xml = letterhead_fixture.read_header_xml(document_bytes)
+    assert "ООО Разовая" in headers_xml
+    assert await letterhead_fixture.company_count_unchanged()
