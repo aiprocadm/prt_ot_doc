@@ -16,10 +16,17 @@ from app.domains.work_permits.lifecycle import (
     is_work_type,
     validate_transition,
 )
+from app.domains.work_permits.service import (
+    add_member, cancel, close, create_work_permit, delete_draft, extend, issue,
+    list_events, list_members, remove_member, resume, suspend, update_work_permit,
+)
 
 __all__ = [
     "ALLOWED_TRANSITIONS", "EVENT_TYPES", "MEMBER_ROLES",
     "STATUS_CANCELLED", "STATUS_CLOSED", "STATUS_DRAFT", "STATUS_ISSUED", "STATUS_SUSPENDED",
     "WORK_PERMIT_STATUSES", "WORK_TYPES", "WorkPermitTransitionError",
     "is_member_role", "is_work_type", "validate_transition",
+    "add_member", "cancel", "close", "create_work_permit", "delete_draft", "extend",
+    "issue", "list_events", "list_members", "remove_member", "resume", "suspend",
+    "update_work_permit",
 ]
