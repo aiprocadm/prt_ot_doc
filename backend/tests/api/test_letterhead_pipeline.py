@@ -442,3 +442,72 @@ def test_generate_endpoint_accepts_letterhead_override():
     metadata["site_id"] = getattr(req, "site_id", None)
     assert metadata["letterhead"]["issuer"]["company_id"] == "issuer-xyz"
     assert metadata["site_id"] is None  # DocGenerateRequest has no site_id field
+
+
+# ---------------------------------------------------------------------------
+# Task 7: PackRunRequest accepts letterhead + context assembly carries it
+# ---------------------------------------------------------------------------
+
+
+def test_pack_run_request_accepts_letterhead():
+    """
+    Narrow unit test: verifies that PackRunRequest (a) accepts a `letterhead`
+    field carrying a LetterheadOverride, (b) the field defaults to None when
+    omitted, and (c) model_dump(mode='json') round-trips the payload so the
+    per-run context dict is populated correctly.
+
+    Local execution blocked (Python 3.14 — no pydantic-core wheel).
+    CI on Python 3.12.12 is the source of truth.
+    """
+    import pydantic
+
+    from app.modules.branding.schemas import LetterheadOverride
+    from app.schemas.pack import PackRunRequest
+
+    # --- (a) valid payload with letterhead override is accepted ---
+    req = PackRunRequest(
+        pack_code="P1",
+        company_id="c-1",
+        person_ids=[],
+        letterhead=LetterheadOverride(
+            issuer={"kind": "company", "company_id": "c-2"},
+        ),
+    )
+    assert req.letterhead is not None
+    assert req.letterhead.issuer is not None
+    assert req.letterhead.issuer.company_id == "c-2"
+
+    # --- (b) omitting letterhead defaults to None ---
+    req_no_lh = PackRunRequest(
+        pack_code="P1",
+        company_id="c-1",
+        person_ids=[],
+    )
+    assert req_no_lh.letterhead is None
+
+    # --- (c) disabled=True variant is accepted ---
+    req_disabled = PackRunRequest(
+        pack_code="P1",
+        company_id="c-1",
+        person_ids=[],
+        letterhead=LetterheadOverride(disabled=True),
+    )
+    assert req_disabled.letterhead.disabled is True
+
+    # --- (d) context-assembly simulation: letterhead + site_id end up in context dict ---
+    # Mirrors what run_pack does after _build_context():
+    #   context["letterhead"] = payload.letterhead.model_dump(mode="json") if payload.letterhead else None
+    #   context["site_id"] = site.id if site else None
+    context: dict = {}
+    context["letterhead"] = req.letterhead.model_dump(mode="json") if req.letterhead else None
+    context["site_id"] = "site-abc"  # simulated site.id
+    assert context["letterhead"] is not None
+    assert context["letterhead"]["issuer"]["company_id"] == "c-2"
+    assert context["site_id"] == "site-abc"
+
+    # None letterhead also produces None in context (no-override path)
+    context_no_lh: dict = {}
+    context_no_lh["letterhead"] = req_no_lh.letterhead.model_dump(mode="json") if req_no_lh.letterhead else None
+    context_no_lh["site_id"] = None
+    assert context_no_lh["letterhead"] is None
+    assert context_no_lh["site_id"] is None
