@@ -170,7 +170,11 @@ async def _transition(
 
 
 async def issue(session, *, tenant_id, work_permit_id, actor_user_id, photo_file_id=None, note=None):
-    # Task 4 inserts the brigade-readiness gate immediately before this transition.
+    from app.services.work_permit_admission import enforce_brigade_readiness
+
+    if await _get(session, tenant_id, work_permit_id) is None:
+        return None
+    await enforce_brigade_readiness(session, tenant_id=tenant_id, work_permit_id=work_permit_id)
     return await _transition(
         session, tenant_id=tenant_id, work_permit_id=work_permit_id, target=lc.STATUS_ISSUED,
         event_type="issued", actor_user_id=actor_user_id, photo_file_id=photo_file_id, note=note,

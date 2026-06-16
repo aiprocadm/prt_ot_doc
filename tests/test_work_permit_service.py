@@ -1,7 +1,8 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
+from app.domains.permits import service as permit_svc
 from app.domains.work_permits import lifecycle as lc
 from app.domains.work_permits import service as svc
 
@@ -25,6 +26,13 @@ async def test_create_add_member_issue_suspend_resume_close(sessionmaker, data_f
             person_id=person.id, role="foreman",
         )
         assert member.role == "foreman"
+
+        # brigade-readiness gate: member needs an active personal permit to issue
+        await permit_svc.create_permit(
+            session, tenant_id=person.tenant_id, person_id=person.id,
+            permit_type="hot_work", issued_at=date.today(),
+            valid_until=date.today() + timedelta(days=30),
+        )
 
         issued = await svc.issue(session, tenant_id=person.tenant_id, work_permit_id=wp.id, actor_user_id="u1")
         assert issued.status == lc.STATUS_ISSUED
