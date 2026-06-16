@@ -357,6 +357,8 @@ async def _generate_document_for_run(run_id: str, tenant_slug: str) -> tuple[str
                     letterhead_decision = None
                     if settings.doc_pipeline_letterhead_auto:
                         tenant = await session.get(Tenant, run.tenant_id)
+                        if tenant is None:
+                            raise ValueError("Tenant not found for letterhead resolution")
                         raw_letterhead = metadata.get("letterhead") or (run.context or {}).get("letterhead")
                         override = LetterheadOverride.model_validate(raw_letterhead) if raw_letterhead else None
                         issuer = (

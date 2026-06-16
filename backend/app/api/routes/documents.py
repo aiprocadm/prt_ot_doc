@@ -1402,7 +1402,8 @@ async def generate_document(
         if payload.letterhead is not None:
             metadata = dict(run.result_metadata or {})
             metadata["letterhead"] = payload.letterhead.model_dump(mode="json")
-            metadata["site_id"] = getattr(payload, "site_id", None)
+            # DocGenerateRequest has no site_id; single-doc generation derives site downstream.
+            metadata["site_id"] = None
             run.result_metadata = metadata
 
         if created_run:
