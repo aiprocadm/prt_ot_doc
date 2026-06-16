@@ -15,16 +15,18 @@ from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.domains.work_permits import lifecycle as lc
 from app.domains.work_permits import (
-    add_member, create_work_permit, delete_draft, list_events, list_members,
-    remove_member, update_work_permit,
+    add_member, cancel, close, create_work_permit, delete_draft, extend, issue,
+    list_events, list_members, remove_member, resume, suspend, update_work_permit,
 )
 from app.models.models import Person
 from app.models.tenanting import Tenant
 from app.models.work_permit import WorkPermit
 from app.schemas.work_permit import (
-    WorkPermitCreate, WorkPermitMemberCreate, WorkPermitMemberRead, WorkPermitPage,
-    WorkPermitRead, WorkPermitUpdate,
+    ReadinessReportRead, ViolationRead, WorkPermitActionRequest, WorkPermitCreate,
+    WorkPermitEventRead, WorkPermitExtendRequest, WorkPermitMemberCreate,
+    WorkPermitMemberRead, WorkPermitPage, WorkPermitRead, WorkPermitUpdate,
 )
+from app.services.work_permit_admission import WorkPermitBlocked, check_brigade_readiness
 
 router = APIRouter(prefix="/work-permits")
 
@@ -198,3 +200,118 @@ async def remove_member_endpoint(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "member not found")
     from fastapi import Response
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def _blocked_conflict(exc: WorkPermitBlocked) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=api_problem_detail(
+            code="WORK_PERMIT_BLOCKED",
+            message="brigade readiness failed",
+            error_type="work_permit",
+            details={"violations": [
+                {"person_id": v.person_id, "role": v.role, "code": v.code, "severity": v.severity}
+                for v in exc.violations
+            ]},
+        ),
+    )
+
+
+async def _action(session, tenant, wp_id, coro_factory):
+    await _get_or_404(session, tenant, wp_id)
+    try:
+        wp = await coro_factory()
+    except lc.WorkPermitTransitionError as exc:
+        raise _transition_conflict(exc) from exc
+    except WorkPermitBlocked as exc:
+        raise _blocked_conflict(exc) from exc
+    return await _permit_read(session, tenant, wp)
+
+
+@router.get("/{wp_id}/readiness", response_model=ReadinessReportRead)
+async def readiness(wp_id: str, tenant: TenantDep, session: SessionDep, access: ReaderAccess) -> ReadinessReportRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _get_or_404(session, tenant, wp_id)
+    report = await check_brigade_readiness(session, tenant_id=tenant.id, work_permit_id=wp_id)
+    return ReadinessReportRead(
+        ok=report.ok,
+        violations=[ViolationRead(person_id=v.person_id, role=v.role, code=v.code, severity=v.severity)
+                    for v in report.violations],
+    )
+
+
+@router.get("/{wp_id}/events", response_model=list[WorkPermitEventRead])
+async def events(wp_id: str, tenant: TenantDep, session: SessionDep, access: ReaderAccess) -> list[WorkPermitEventRead]:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _get_or_404(session, tenant, wp_id)
+    rows = await list_events(session, tenant_id=tenant.id, work_permit_id=wp_id)
+    return [WorkPermitEventRead(
+        id=str(e.id), event_type=e.event_type, at=e.at, actor_user_id=e.actor_user_id,
+        photo_file_id=e.photo_file_id, note=e.note,
+    ) for e in rows]
+
+
+@router.post("/{wp_id}/issue", response_model=WorkPermitRead)
+@audit_operation("update", "work_permit")
+async def issue_endpoint(wp_id: str, payload: WorkPermitActionRequest, tenant: TenantDep, session: SessionDep, access: WriterAccess) -> WorkPermitRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    if payload.photo_file_id:
+        await _ensure_file(session, tenant, payload.photo_file_id)
+    return await _action(session, tenant, wp_id, lambda: issue(
+        session, tenant_id=tenant.id, work_permit_id=wp_id,
+        actor_user_id=access.user.id if access else None,
+        photo_file_id=payload.photo_file_id, note=payload.note,
+    ))
+
+
+@router.post("/{wp_id}/suspend", response_model=WorkPermitRead)
+@audit_operation("update", "work_permit")
+async def suspend_endpoint(wp_id: str, payload: WorkPermitActionRequest, tenant: TenantDep, session: SessionDep, access: WriterAccess) -> WorkPermitRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    return await _action(session, tenant, wp_id, lambda: suspend(
+        session, tenant_id=tenant.id, work_permit_id=wp_id,
+        actor_user_id=access.user.id if access else None, note=payload.note,
+    ))
+
+
+@router.post("/{wp_id}/resume", response_model=WorkPermitRead)
+@audit_operation("update", "work_permit")
+async def resume_endpoint(wp_id: str, payload: WorkPermitActionRequest, tenant: TenantDep, session: SessionDep, access: WriterAccess) -> WorkPermitRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    return await _action(session, tenant, wp_id, lambda: resume(
+        session, tenant_id=tenant.id, work_permit_id=wp_id,
+        actor_user_id=access.user.id if access else None, note=payload.note,
+    ))
+
+
+@router.post("/{wp_id}/close", response_model=WorkPermitRead)
+@audit_operation("update", "work_permit")
+async def close_endpoint(wp_id: str, payload: WorkPermitActionRequest, tenant: TenantDep, session: SessionDep, access: WriterAccess) -> WorkPermitRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    if payload.photo_file_id:
+        await _ensure_file(session, tenant, payload.photo_file_id)
+    return await _action(session, tenant, wp_id, lambda: close(
+        session, tenant_id=tenant.id, work_permit_id=wp_id,
+        actor_user_id=access.user.id if access else None,
+        photo_file_id=payload.photo_file_id, note=payload.note,
+    ))
+
+
+@router.post("/{wp_id}/cancel", response_model=WorkPermitRead)
+@audit_operation("update", "work_permit")
+async def cancel_endpoint(wp_id: str, payload: WorkPermitActionRequest, tenant: TenantDep, session: SessionDep, access: WriterAccess) -> WorkPermitRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    return await _action(session, tenant, wp_id, lambda: cancel(
+        session, tenant_id=tenant.id, work_permit_id=wp_id,
+        actor_user_id=access.user.id if access else None, note=payload.note,
+    ))
+
+
+@router.post("/{wp_id}/extend", response_model=WorkPermitRead)
+@audit_operation("update", "work_permit")
+async def extend_endpoint(wp_id: str, payload: WorkPermitExtendRequest, tenant: TenantDep, session: SessionDep, access: WriterAccess) -> WorkPermitRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    return await _action(session, tenant, wp_id, lambda: extend(
+        session, tenant_id=tenant.id, work_permit_id=wp_id, planned_end=payload.planned_end,
+        actor_user_id=access.user.id if access else None,
+    ))

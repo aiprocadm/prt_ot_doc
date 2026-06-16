@@ -74,3 +74,49 @@ async def test_work_permits_tenant_isolated(async_client, make_auth_headers, dat
     assert (await async_client.get(f"{BASE}/{foreign_id}", headers=headers)).status_code == status.HTTP_404_NOT_FOUND
     listed = await async_client.get(BASE, headers=headers)
     assert all(item["id"] != foreign_id for item in listed.json()["items"])
+
+
+@pytest.mark.asyncio
+async def test_issue_blocked_then_allowed_with_permit(async_client, make_auth_headers, data_factory, sessionmaker):
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    person = await data_factory.create_person()
+    r = await async_client.post(BASE, headers=headers, json={"work_type": "height", "zone_text": "z"})
+    wp_id = r.json()["id"]
+    await async_client.post(f"{BASE}/{wp_id}/members", headers=headers, json={"person_id": str(person.id), "role": "foreman"})
+
+    # no personal permit yet → readiness not ok, issue 409 WORK_PERMIT_BLOCKED
+    rd = await async_client.get(f"{BASE}/{wp_id}/readiness", headers=headers)
+    assert rd.status_code == status.HTTP_200_OK and rd.json()["ok"] is False
+    blocked = await async_client.post(f"{BASE}/{wp_id}/issue", headers=headers, json={})
+    assert blocked.status_code == status.HTTP_409_CONFLICT
+
+    # seed an active personal permit, then issue succeeds
+    from datetime import date as _date, timedelta as _td
+    from app.domains.permits import service as permit_svc
+    async with sessionmaker() as session:
+        await permit_svc.create_permit(
+            session, tenant_id=person.tenant_id, person_id=person.id, permit_type="height",
+            issued_at=_date.today(), valid_until=_date.today() + _td(days=30),
+        )
+        await session.commit()
+
+    ok = await async_client.post(f"{BASE}/{wp_id}/issue", headers=headers, json={})
+    assert ok.status_code == status.HTTP_200_OK, ok.text
+    assert ok.json()["status"] == "issued"
+
+    # suspend → resume → close, events recorded
+    assert (await async_client.post(f"{BASE}/{wp_id}/suspend", headers=headers, json={})).json()["status"] == "suspended"
+    assert (await async_client.post(f"{BASE}/{wp_id}/resume", headers=headers, json={})).json()["status"] == "issued"
+    assert (await async_client.post(f"{BASE}/{wp_id}/close", headers=headers, json={})).json()["status"] == "closed"
+
+    ev = await async_client.get(f"{BASE}/{wp_id}/events", headers=headers)
+    assert [e["event_type"] for e in ev.json()] == ["issued", "suspended", "resumed", "closed"]
+
+
+@pytest.mark.asyncio
+async def test_close_from_draft_409(async_client, make_auth_headers, data_factory):
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    r = await async_client.post(BASE, headers=headers, json={"work_type": "height", "zone_text": "z"})
+    wp_id = r.json()["id"]
+    bad = await async_client.post(f"{BASE}/{wp_id}/close", headers=headers, json={})
+    assert bad.status_code == status.HTTP_409_CONFLICT
