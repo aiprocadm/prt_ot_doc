@@ -18,7 +18,9 @@ const statusColors: Record<string, "default" | "secondary" | "destructive"> = {
   error: "destructive",
   failed: "destructive",
   cancelled: "destructive",
-  archived: "destructive"
+  archived: "destructive",
+  issued: "default",
+  closed: "secondary"
 };
 
 /** Подписи для типичных статусов API; неизвестные значения показываем как есть. */
@@ -45,7 +47,9 @@ const statusLabelsRu: Record<string, string> = {
   dismissed: "Снято",
   suspended: "Приостановлен",
   terminated: "Прекращён",
-  on_leave: "В отпуске"
+  on_leave: "В отпуске",
+  issued: "Выдан",
+  closed: "Закрыт"
 };
 
 export const StatusBadge = ({ status }: { status?: string | null }) => {
