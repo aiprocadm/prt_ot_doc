@@ -66,6 +66,10 @@ async def _permit_read(session: AsyncSession, tenant: Tenant, wp: WorkPermit) ->
         planned_start=wp.planned_start, planned_end=wp.planned_end, status=str(wp.status),
         opened_at=wp.opened_at, closed_at=wp.closed_at, suspended_at=wp.suspended_at,
         members=[_member_schema(m) for m in members],
+        subdivision_text=wp.subdivision_text, content_text=wp.content_text,
+        conditions_text=wp.conditions_text, safety_systems=wp.safety_systems,
+        measures_before_text=wp.measures_before_text, measures_during_text=wp.measures_during_text,
+        special_conditions_text=wp.special_conditions_text, ppe_text=wp.ppe_text,
         created_at=wp.created_at, updated_at=wp.updated_at,
     )
 
@@ -125,6 +129,11 @@ async def create_work_permit_endpoint(
         number=payload.number, site_id=payload.site_id, equipment_text=payload.equipment_text,
         hazards_text=payload.hazards_text, measures_text=payload.measures_text,
         planned_start=payload.planned_start, planned_end=payload.planned_end,
+        subdivision_text=payload.subdivision_text, content_text=payload.content_text,
+        conditions_text=payload.conditions_text, safety_systems=payload.safety_systems,
+        measures_before_text=payload.measures_before_text,
+        measures_during_text=payload.measures_during_text,
+        special_conditions_text=payload.special_conditions_text, ppe_text=payload.ppe_text,
     )
     return await _permit_read(session, tenant, wp)
 
