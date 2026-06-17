@@ -79,3 +79,22 @@ async def test_cancel_and_extend(sessionmaker, data_factory):
         assert extended.planned_end == _now().replace(tzinfo=None)
         cancelled = await svc.cancel(session, tenant_id=person.tenant_id, work_permit_id=wp.id, actor_user_id="u1")
         assert cancelled.status == lc.STATUS_CANCELLED
+
+
+@pytest.mark.asyncio
+async def test_create_persists_782n_fields(sessionmaker, data_factory):
+    person = await data_factory.create_person()
+    async with sessionmaker() as session:
+        wp = await svc.create_work_permit(
+            session, tenant_id=person.tenant_id, work_type="height", zone_text="z",
+            content_text="монтаж", safety_systems=["fall_arrest"], ppe_text="каска",
+        )
+        assert wp.content_text == "монтаж"
+        assert wp.safety_systems == ["fall_arrest"]
+
+        updated = await svc.update_work_permit(
+            session, tenant_id=person.tenant_id, work_permit_id=wp.id,
+            conditions_text="высота 8м", safety_systems=["restraint", "access"],
+        )
+        assert updated.conditions_text == "высота 8м"
+        assert updated.safety_systems == ["restraint", "access"]
