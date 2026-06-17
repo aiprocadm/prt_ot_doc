@@ -72,7 +72,7 @@ const PermitsPage = () => {
         .includes(query)
   });
 
-  const onChanged = () => void reload();
+  const onChanged = useCallback(() => void reload(), [reload]);
 
   const columns: ColumnDef<PermitDto, unknown>[] = [
     {
