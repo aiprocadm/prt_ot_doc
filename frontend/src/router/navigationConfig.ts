@@ -82,6 +82,7 @@ export const MAIN_NAV_GROUPS: NavGroup[] = [
       { label: "Обучение", to: "/training", icon: GraduationCap, permission: PERMISSIONS.TRAINING_VIEW },
       { label: "Инструктажи", to: "/briefings", icon: GraduationCap, permission: PERMISSIONS.TRAINING_VIEW },
       { label: "Медосмотры/допуски", to: "/medical", icon: HeartPulse, permission: PERMISSIONS.MEDICAL_VIEW },
+      { label: "Личные допуски", to: "/permits", icon: ShieldCheck, permission: PERMISSIONS.PERMIT_VIEW },
       { label: "Инциденты/НС", to: "/incidents", icon: AlertTriangle, permission: PERMISSIONS.INCIDENT_VIEW },
       { label: "Проверки/предписания", to: "/inspections", icon: ClipboardCheck, permission: PERMISSIONS.INSPECTION_VIEW },
       { label: "Подготовка к проверке", to: "/audit-prep", icon: Archive, permission: PERMISSIONS.AUDIT_PREP_VIEW }
