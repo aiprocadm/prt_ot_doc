@@ -62,6 +62,7 @@ from app.api.routes import (
     training,
     training_next,
     webhooks,
+    work_permits,
     workspace,
 )
 from app.api.routes.files import router as legacy_files_router
@@ -110,6 +111,7 @@ COMPLIANCE_AND_ADMIN_ROUTER_REGISTRATIONS: tuple[RouterRegistration, ...] = (
     (npa.router, {"tags": ["npa"]}),
     (ppe.router, {"tags": ["ppe"]}),
     (permits.router, {"tags": ["permits"]}),
+    (work_permits.router, {"tags": ["work-permits"]}),
     (medical.router, {"tags": ["medical"]}),
     (journals.router, {"tags": ["journals"]}),
     (risk.router, {"tags": ["risks"]}),

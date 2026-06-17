@@ -14,6 +14,7 @@ from app.models.document import (
     DocumentVersion,
 )
 from app.models.file import File
+from app.models.work_permit import WorkPermit, WorkPermitEvent, WorkPermitMember
 from app.models.finance import (
     Contract,
     ContractStatus,
@@ -253,4 +254,7 @@ __all__ = [
     "CalendarPlanTask",
     "CalendarPlanTaskStatus",
     "SavedCalendarView",
+    "WorkPermit",
+    "WorkPermitMember",
+    "WorkPermitEvent",
 ]

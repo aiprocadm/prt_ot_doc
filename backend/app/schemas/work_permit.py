@@ -1,0 +1,121 @@
+"""Schemas for work permits (наряды-допуски)."""
+from __future__ import annotations
+
+from datetime import datetime
+
+from pydantic import field_validator
+
+from app.domains.work_permits import lifecycle as lc
+from app.schemas.base import BaseSchema
+
+
+class WorkPermitMemberCreate(BaseSchema):
+    person_id: str
+    role: str
+
+    @field_validator("role")
+    @classmethod
+    def _role(cls, v: str) -> str:
+        if not lc.is_member_role(v):
+            raise ValueError(f"invalid role: {v!r}")
+        return v
+
+
+class WorkPermitMemberRead(BaseSchema):
+    id: str
+    person_id: str
+    role: str
+    created_at: datetime
+
+
+class WorkPermitEventRead(BaseSchema):
+    id: str
+    event_type: str
+    at: datetime
+    actor_user_id: str | None
+    photo_file_id: str | None
+    note: str | None
+
+
+class WorkPermitCreate(BaseSchema):
+    work_type: str
+    zone_text: str
+    number: str | None = None
+    site_id: str | None = None
+    equipment_text: str | None = None
+    hazards_text: str | None = None
+    measures_text: str | None = None
+    planned_start: datetime | None = None
+    planned_end: datetime | None = None
+
+    @field_validator("work_type")
+    @classmethod
+    def _work_type(cls, v: str) -> str:
+        if not lc.is_work_type(v):
+            raise ValueError(f"invalid work_type: {v!r}")
+        return v
+
+
+class WorkPermitUpdate(BaseSchema):
+    work_type: str | None = None
+    zone_text: str | None = None
+    number: str | None = None
+    site_id: str | None = None
+    equipment_text: str | None = None
+    hazards_text: str | None = None
+    measures_text: str | None = None
+    planned_start: datetime | None = None
+    planned_end: datetime | None = None
+
+    @field_validator("work_type")
+    @classmethod
+    def _work_type(cls, v: str | None) -> str | None:
+        if v is not None and not lc.is_work_type(v):
+            raise ValueError(f"invalid work_type: {v!r}")
+        return v
+
+
+class WorkPermitRead(BaseSchema):
+    id: str
+    number: str | None
+    work_type: str
+    zone_text: str
+    site_id: str | None
+    equipment_text: str | None
+    hazards_text: str | None
+    measures_text: str | None
+    planned_start: datetime | None
+    planned_end: datetime | None
+    status: str
+    opened_at: datetime | None
+    closed_at: datetime | None
+    suspended_at: datetime | None
+    members: list[WorkPermitMemberRead]
+    created_at: datetime
+    updated_at: datetime
+
+
+class WorkPermitPage(BaseSchema):
+    items: list[WorkPermitRead]
+    total: int
+
+
+class WorkPermitActionRequest(BaseSchema):
+    photo_file_id: str | None = None
+    note: str | None = None
+
+
+class WorkPermitExtendRequest(BaseSchema):
+    planned_end: datetime
+
+
+class ViolationRead(BaseSchema):
+    person_id: str
+    role: str
+    code: str
+    severity: str
+
+
+class ReadinessReportRead(BaseSchema):
+    ok: bool
+    violations: list[ViolationRead]
