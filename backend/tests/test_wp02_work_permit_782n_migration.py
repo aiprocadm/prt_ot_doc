@@ -29,8 +29,8 @@ def test_wp02_chain_and_revision():
 def test_wp02_source_adds_and_drops_all_columns():
     src = MIG.read_text(encoding="utf-8")
     for col in NEW_COLUMNS:
-        assert f'add_column("work_permit"' in src or "add_column(\n" in src  # additive present
-        assert f'"{col}"' in src, f"missing column literal: {col}"
+        # ties each column to its own upgrade add_column call (not a global fallback)
+        assert f'add_column("work_permit", sa.Column("{col}"' in src, f"upgrade missing: {col}"
         assert f'drop_column("work_permit", "{col}")' in src, f"downgrade missing: {col}"
 
 
