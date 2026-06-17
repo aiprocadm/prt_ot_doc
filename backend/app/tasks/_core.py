@@ -79,6 +79,9 @@ from app.models.notifications import (
     ReminderEntityType,
     ReminderRule,
 )
+from app.modules.branding.letterhead import LetterheadResolver
+from app.modules.branding.schemas import IssuerRef, LetterheadOverride
+from app.modules.branding.service import BrandingService
 from app.modules.headers.engine import apply_headers_to_docx
 from app.modules.headers.repo import get_preset_by_code
 from app.modules.templates.passport import inject_passport
@@ -351,6 +354,32 @@ async def _generate_document_for_run(run_id: str, tenant_slug: str) -> tuple[str
                 )
                 try:
                     rendered_base = render_docx(template_bytes, context_payload)
+                    letterhead_decision = None
+                    if settings.doc_pipeline_letterhead_auto:
+                        tenant = await session.get(Tenant, run.tenant_id)
+                        if tenant is None:
+                            raise ValueError("Tenant not found for letterhead resolution")
+                        raw_letterhead = metadata.get("letterhead") or (run.context or {}).get("letterhead")
+                        override = LetterheadOverride.model_validate(raw_letterhead) if raw_letterhead else None
+                        issuer = (
+                            override.issuer
+                            if override is not None and override.issuer is not None
+                            else IssuerRef(kind="company", company_id=company.id)
+                        )
+                        resolver = LetterheadResolver(BrandingService(session, tenant))
+                        letterhead_decision = await resolver.resolve(
+                            issuer=issuer,
+                            site_id=metadata.get("site_id") or (run.context or {}).get("site_id"),
+                            doc={"title": template.name, "generated_at": now.isoformat()},
+                            override=override,
+                        )
+                    if letterhead_decision is not None and letterhead_decision.apply:
+                        rendered_base, _report = apply_headers_to_docx(
+                            docx_bytes=rendered_base,
+                            preset=letterhead_decision.preset,
+                            context=letterhead_decision.header_context,
+                            watermark_override=letterhead_decision.watermark,
+                        )
                     rendered = inject_passport(rendered_base, passport, visible=True)
                 except Exception as exc:
                     metrics.record_pipeline_stage_end(
@@ -411,6 +440,7 @@ async def _generate_document_for_run(run_id: str, tenant_slug: str) -> tuple[str
                         "pipeline_run_id": run.id,
                         "status": "generated",
                         "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+                        "letterhead": letterhead_decision.as_render_log() if letterhead_decision else {"applied": False},
                     },
                     integrity_hash=integrity_hash,
                     generated_at=datetime.now(tz=timezone.utc),

@@ -1,9 +1,9 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class BrandingContact(BaseModel):
@@ -69,6 +69,35 @@ class BrandingProfilePayload(BaseModel):
     palette: BrandingPalette = Field(default_factory=BrandingPalette)
     signatories: list[BrandingSignatory | dict[str, Any]] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class IssuerRef(BaseModel):
+    """Кто выпускает документ (чей бланк). Срез 1: company | adhoc."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["company", "contractor", "adhoc"] = "company"
+    company_id: str | None = None
+    inline: BrandingProfilePayload | None = None
+
+    @model_validator(mode="after")
+    def _check_kind(self) -> "IssuerRef":
+        if self.kind == "company" and not self.company_id:
+            raise ValueError("company_id is required for issuer kind=company")
+        if self.kind == "adhoc":
+            if self.inline is None or not self.inline.legal_name:
+                raise ValueError("inline.legal_name is required for issuer kind=adhoc")
+        return self
+
+
+class LetterheadOverride(BaseModel):
+    """Переопределение бланка в запросе генерации/пакета."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    issuer: IssuerRef | None = None
+    preset_code: str | None = None
+    disabled: bool = False
 
 
 class BrandingProfileRead(BaseModel):
