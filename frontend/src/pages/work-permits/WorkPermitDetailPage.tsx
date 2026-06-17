@@ -16,7 +16,6 @@ import { useAsyncResource } from "@/hooks/useAsyncResource";
 import {
   MEMBER_ROLE_LABELS,
   SAFETY_SYSTEM_LABELS,
-  STATUS_LABELS,
   WORK_TYPE_LABELS,
   labelOf,
 } from "@/lib/workPermitVocab";
