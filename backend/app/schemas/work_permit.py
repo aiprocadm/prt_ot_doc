@@ -47,12 +47,30 @@ class WorkPermitCreate(BaseSchema):
     measures_text: str | None = None
     planned_start: datetime | None = None
     planned_end: datetime | None = None
+    subdivision_text: str | None = None
+    content_text: str | None = None
+    conditions_text: str | None = None
+    safety_systems: list[str] | None = None
+    measures_before_text: str | None = None
+    measures_during_text: str | None = None
+    special_conditions_text: str | None = None
+    ppe_text: str | None = None
 
     @field_validator("work_type")
     @classmethod
     def _work_type(cls, v: str) -> str:
         if not lc.is_work_type(v):
             raise ValueError(f"invalid work_type: {v!r}")
+        return v
+
+    @field_validator("safety_systems")
+    @classmethod
+    def _safety_systems(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return v
+        for code in v:
+            if not lc.is_safety_system(code):
+                raise ValueError(f"invalid safety_system: {code!r}")
         return v
 
 
@@ -66,12 +84,30 @@ class WorkPermitUpdate(BaseSchema):
     measures_text: str | None = None
     planned_start: datetime | None = None
     planned_end: datetime | None = None
+    subdivision_text: str | None = None
+    content_text: str | None = None
+    conditions_text: str | None = None
+    safety_systems: list[str] | None = None
+    measures_before_text: str | None = None
+    measures_during_text: str | None = None
+    special_conditions_text: str | None = None
+    ppe_text: str | None = None
 
     @field_validator("work_type")
     @classmethod
     def _work_type(cls, v: str | None) -> str | None:
         if v is not None and not lc.is_work_type(v):
             raise ValueError(f"invalid work_type: {v!r}")
+        return v
+
+    @field_validator("safety_systems")
+    @classmethod
+    def _safety_systems(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return v
+        for code in v:
+            if not lc.is_safety_system(code):
+                raise ValueError(f"invalid safety_system: {code!r}")
         return v
 
 
@@ -91,6 +127,14 @@ class WorkPermitRead(BaseSchema):
     closed_at: datetime | None
     suspended_at: datetime | None
     members: list[WorkPermitMemberRead]
+    subdivision_text: str | None
+    content_text: str | None
+    conditions_text: str | None
+    safety_systems: list[str] | None
+    measures_before_text: str | None
+    measures_during_text: str | None
+    special_conditions_text: str | None
+    ppe_text: str | None
     created_at: datetime
     updated_at: datetime
 
