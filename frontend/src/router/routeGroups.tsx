@@ -63,6 +63,8 @@ import {
   TrendsPage,
   WarehousePage,
   WorkflowPage,
+  WorkPermitDetailPage,
+  WorkPermitsPage,
   WorkspaceAttentionPage,
   WorkspaceDataQualityPage
 } from "@/router/pageRegistry";
@@ -164,6 +166,13 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
     { permission: PERMISSIONS.FIRE_INSPECTIONS_VIEW, routes: [<Route key="/fire-inspections" path="/fire-inspections" element={<FireInspectionsPage />} />] },
     { permission: PERMISSIONS.REFERENCE_VIEW, routes: [<Route key="/reference" path="/reference" element={<ReferencePage />} />] },
     { permission: PERMISSIONS.CONTRACTOR_VIEW, routes: [<Route key="/contractors" path="/contractors" element={<ContractorsPage />} />] },
+    {
+      permission: PERMISSIONS.WORK_PERMIT_VIEW,
+      routes: [
+        <Route key="/work-permits" path="/work-permits" element={<WorkPermitsPage />} />,
+        <Route key="/work-permits/:id" path="/work-permits/:id" element={<WorkPermitDetailPage />} />
+      ]
+    },
     {
       permission: PERMISSIONS.ADMIN_MANAGE_ROLES,
       routes: [
