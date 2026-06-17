@@ -59,7 +59,7 @@ export const workPermitsApi = {
 
 export async function fetchAllPersons(): Promise<PersonOption[]> {
   const r = await apiClient.get<{ items: Array<Record<string, unknown>> }>("/persons", {
-    params: { limit: 500, offset: 0 },
+    params: { limit: 200, offset: 0 }, // server cap is le=200; >200 persons → Ф1 follow-up
   });
   return (r.data.items ?? []).map((p) => {
     const last = (p.last_name as string) ?? "";
