@@ -39,11 +39,19 @@ async def create_work_permit(
     number: str | None = None, site_id: str | None = None, equipment_text: str | None = None,
     hazards_text: str | None = None, measures_text: str | None = None,
     planned_start: datetime | None = None, planned_end: datetime | None = None,
+    subdivision_text: str | None = None, content_text: str | None = None,
+    conditions_text: str | None = None, safety_systems: list[str] | None = None,
+    measures_before_text: str | None = None, measures_during_text: str | None = None,
+    special_conditions_text: str | None = None, ppe_text: str | None = None,
 ) -> WorkPermit:
     wp = WorkPermit(
         tenant_id=tenant_id, work_type=work_type, zone_text=zone_text, number=number,
         site_id=site_id, equipment_text=equipment_text, hazards_text=hazards_text,
         measures_text=measures_text, planned_start=planned_start, planned_end=planned_end,
+        subdivision_text=subdivision_text, content_text=content_text,
+        conditions_text=conditions_text, safety_systems=safety_systems,
+        measures_before_text=measures_before_text, measures_during_text=measures_during_text,
+        special_conditions_text=special_conditions_text, ppe_text=ppe_text,
         status=lc.STATUS_DRAFT,
     )
     session.add(wp)
@@ -53,7 +61,10 @@ async def create_work_permit(
 
 
 _DRAFT_EDITABLE = ("number", "work_type", "zone_text", "site_id", "equipment_text",
-                   "hazards_text", "measures_text", "planned_start", "planned_end")
+                   "hazards_text", "measures_text", "planned_start", "planned_end",
+                   "subdivision_text", "content_text", "conditions_text", "safety_systems",
+                   "measures_before_text", "measures_during_text", "special_conditions_text",
+                   "ppe_text")
 
 
 async def update_work_permit(

@@ -55,7 +55,9 @@ export const PERMISSIONS = {
   ADMIN_OUTBOX_MANAGE: "admin.outbox_manage",
   DATA_QUALITY_VIEW: "data_quality.view",
   EMPLOYEE_CARD_VIEW: "employee_card.view",
-  CALENDAR_VIEW: "calendar.view"
+  CALENDAR_VIEW: "calendar.view",
+  WORK_PERMIT_VIEW: "work_permit.view",
+  WORK_PERMIT_MANAGE: "work_permit.manage",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

@@ -32,3 +32,14 @@ def test_value_validators():
     assert lc.is_work_type("nope") is False
     assert lc.is_member_role("foreman") is True
     assert lc.is_member_role("nope") is False
+
+
+def test_safety_system_vocabulary():
+    from app.domains.work_permits import lifecycle as lc
+
+    assert lc.is_safety_system("fall_arrest") is True
+    assert lc.is_safety_system("restraint") is True
+    assert lc.is_safety_system("nonsense") is False
+    assert lc.SAFETY_SYSTEMS == frozenset(
+        {"restraint", "positioning", "fall_arrest", "rescue_evacuation", "access"}
+    )

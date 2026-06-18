@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, Text, UniqueConstraint, func
+from sqlalchemy import DateTime, ForeignKey, Index, JSON, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import TenantBaseModel
@@ -21,6 +21,17 @@ class WorkPermit(TenantBaseModel):
     equipment_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     hazards_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     measures_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # секции официальной формы 782н (Ф1)
+    subdivision_text: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    content_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    conditions_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    safety_systems: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    measures_before_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    measures_during_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    special_conditions_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ppe_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     planned_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     planned_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")

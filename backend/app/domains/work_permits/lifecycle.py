@@ -30,6 +30,13 @@ EVENT_TYPES = frozenset({
     "issued", "suspended", "resumed", "closed", "cancelled", "extended",
 })
 
+# системы обеспечения безопасности работ на высоте (782н):
+# удерживающие / позиционирования / страховочные / для эвакуации и спасения /
+# для подъёма и спуска (доступа)
+SAFETY_SYSTEMS = frozenset({
+    "restraint", "positioning", "fall_arrest", "rescue_evacuation", "access",
+})
+
 ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
     STATUS_DRAFT: frozenset({STATUS_ISSUED, STATUS_CANCELLED}),
     STATUS_ISSUED: frozenset({STATUS_SUSPENDED, STATUS_CLOSED, STATUS_CANCELLED}),
@@ -62,3 +69,7 @@ def is_work_type(value: str) -> bool:
 
 def is_member_role(value: str) -> bool:
     return value in MEMBER_ROLES
+
+
+def is_safety_system(value: str) -> bool:
+    return value in SAFETY_SYSTEMS
