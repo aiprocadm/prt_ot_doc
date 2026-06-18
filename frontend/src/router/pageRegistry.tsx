@@ -21,6 +21,7 @@ export const InspectionPlansPage = lazy(() => import("@/pages/inspection-plans/I
 export const InspectionChecklistsPage = lazy(() => import("@/pages/inspection-checklists/InspectionChecklistsPage"));
 export const FindingsPage = lazy(() => import("@/pages/findings/FindingsPage"));
 export const PrescriptionsPage = lazy(() => import("@/pages/prescriptions/PrescriptionsPage"));
+export const PermitsPage = lazy(() => import("@/pages/permits/PermitsPage"));
 export const CorrectiveActionsPage = lazy(() => import("@/pages/corrective-actions/CorrectiveActionsPage"));
 export const InspectionPrepPackagesPage = lazy(() => import("@/pages/inspection-prep/InspectionPrepPackagesPage"));
 export const AuditPrepPage = lazy(() => import("@/pages/audit-prep/AuditPrepPage"));

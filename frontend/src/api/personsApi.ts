@@ -90,3 +90,11 @@ export async function fetchPersonsForCompany(companyId: string, listLimit = 200)
   const rows = (data.items ?? []).map((row) => normalizePersonRead(row));
   return rows.filter((p) => p.company_id === companyId);
 }
+
+/** Все сотрудники тенанта (для маппинга person_id→ФИО и выпадающего списка в форме допуска). */
+export async function fetchAllPersons(listLimit = 500): Promise<PersonDto[]> {
+  const { data } = await apiClient.get<PersonListResponse>("/persons", {
+    params: { limit: listLimit, offset: 0 }
+  });
+  return (data.items ?? []).map((row) => normalizePersonRead(row));
+}

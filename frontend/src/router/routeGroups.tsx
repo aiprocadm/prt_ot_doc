@@ -49,6 +49,7 @@ import {
   PortalRequestsPage,
   PpeDashboardPage,
   PpePage,
+  PermitsPage,
   PrescriptionsPage,
   ReferencePage,
   ReportsPage,
@@ -159,6 +160,10 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
         <Route key="/corrective-actions" path="/corrective-actions" element={<CorrectiveActionsPage />} />,
         <Route key="/inspection-prep/packages" path="/inspection-prep/packages" element={<InspectionPrepPackagesPage />} />
       ]
+    },
+    {
+      permission: PERMISSIONS.PERMIT_VIEW,
+      routes: [<Route key="/permits" path="/permits" element={<PermitsPage />} />]
     },
     { permission: PERMISSIONS.AUDIT_PREP_VIEW, routes: [<Route key="/audit-prep" path="/audit-prep" element={<AuditPrepPage />} />] },
     { permission: PERMISSIONS.FIRE_SAFETY_VIEW, routes: [<Route key="/fire-safety" path="/fire-safety" element={<FireSafetyPage />} />] },

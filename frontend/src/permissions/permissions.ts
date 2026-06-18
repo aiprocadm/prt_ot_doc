@@ -28,6 +28,8 @@ export const PERMISSIONS = {
   TRAINING_ASSIGN: "training.assign",
   TRAINING_COMPLETE: "training.complete",
   MEDICAL_VIEW: "medical.view",
+  PERMIT_VIEW: "permit.view",
+  PERMIT_MANAGE: "permit.manage",
   INCIDENT_VIEW: "incident.view",
   INCIDENT_CREATE: "incident.create",
   INSPECTION_VIEW: "inspection.view",
