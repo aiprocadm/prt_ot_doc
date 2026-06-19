@@ -1,6 +1,7 @@
 import { apiClient } from "@/api/client";
 import type {
-  ReadinessReportDto, WorkPermitDto, WorkPermitEventDto, WorkPermitMemberDto, WorkPermitPage,
+  ReadinessReportDto, WorkPermitBriefingDto, WorkPermitDto, WorkPermitEventDto,
+  WorkPermitMemberDto, WorkPermitPage, WorkPermitSignatureDto,
 } from "@/types/dto/workPermits";
 
 export interface PersonOption { id: string; label: string; }
@@ -54,6 +55,35 @@ export const workPermitsApi = {
   },
   async extend(id: string, planned_end: string): Promise<WorkPermitDto> {
     return (await apiClient.post<WorkPermitDto>(`${base}/${id}/extend`, { planned_end })).data;
+  },
+  async getBriefings(id: string): Promise<WorkPermitBriefingDto[]> {
+    return (await apiClient.get<WorkPermitBriefingDto[]>(`${base}/${id}/briefing`)).data;
+  },
+  async createBriefing(id: string, body: Record<string, unknown>): Promise<WorkPermitBriefingDto> {
+    return (await apiClient.post<WorkPermitBriefingDto>(`${base}/${id}/briefing`, body)).data;
+  },
+  async updateBriefing(
+    id: string, briefingId: string, body: Record<string, unknown>,
+  ): Promise<WorkPermitBriefingDto> {
+    return (await apiClient.patch<WorkPermitBriefingDto>(`${base}/${id}/briefing/${briefingId}`, body)).data;
+  },
+  async listSignatures(id: string): Promise<WorkPermitSignatureDto[]> {
+    return (await apiClient.get<WorkPermitSignatureDto[]>(`${base}/${id}/signatures`)).data;
+  },
+  async createPermitSignature(
+    id: string, body: { person_id: string; mode: "attested" | "code" },
+  ): Promise<WorkPermitSignatureDto> {
+    return (await apiClient.post<WorkPermitSignatureDto>(`${base}/${id}/signatures`, body)).data;
+  },
+  async createBriefingSignature(
+    id: string, briefingId: string, body: { person_id: string; mode: "attested" | "code" },
+  ): Promise<WorkPermitSignatureDto> {
+    return (await apiClient.post<WorkPermitSignatureDto>(
+      `${base}/${id}/briefing/${briefingId}/signatures`, body,
+    )).data;
+  },
+  async confirmSignatureCode(requestId: string, code: string): Promise<void> {
+    await apiClient.post(`/sign/pep/requests/${requestId}/confirm`, { code });
   },
 };
 
