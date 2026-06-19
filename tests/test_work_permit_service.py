@@ -98,3 +98,43 @@ async def test_create_persists_782n_fields(sessionmaker, data_factory):
         )
         assert updated.conditions_text == "высота 8м"
         assert updated.safety_systems == ["restraint", "access"]
+
+
+@pytest.mark.asyncio
+async def test_briefing_crud(sessionmaker, data_factory):
+    from app.domains.work_permits import (
+        create_briefing, create_work_permit, get_briefing, list_briefings, update_briefing,
+    )
+
+    person = await data_factory.create_person()
+    async with sessionmaker() as session:
+        wp = await create_work_permit(
+            session, tenant_id=person.tenant_id, work_type="height", zone_text="z",
+        )
+        br = await create_briefing(
+            session, tenant_id=person.tenant_id, work_permit_id=wp.id, topics_text="страховка",
+        )
+        assert br.work_permit_id == wp.id
+        assert br.topics_text == "страховка"
+
+        rows = await list_briefings(session, tenant_id=person.tenant_id, work_permit_id=wp.id)
+        assert [b.id for b in rows] == [br.id]
+
+        updated = await update_briefing(
+            session, tenant_id=person.tenant_id, briefing_id=br.id, topics_text="страховка + СИЗ",
+        )
+        assert updated.topics_text == "страховка + СИЗ"
+
+        again = await get_briefing(session, tenant_id=person.tenant_id, briefing_id=br.id)
+        assert again.topics_text == "страховка + СИЗ"
+
+
+@pytest.mark.asyncio
+async def test_create_briefing_unknown_permit_returns_none(sessionmaker, data_factory):
+    from app.domains.work_permits import create_briefing
+
+    person = await data_factory.create_person()
+    async with sessionmaker() as session:
+        assert await create_briefing(
+            session, tenant_id=person.tenant_id, work_permit_id="missing",
+        ) is None

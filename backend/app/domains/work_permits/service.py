@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.work_permits import lifecycle as lc
-from app.models.work_permit import WorkPermit, WorkPermitEvent, WorkPermitMember
+from app.models.work_permit import WorkPermit, WorkPermitBriefing, WorkPermitEvent, WorkPermitMember
 
 
 def _now() -> datetime:
@@ -234,3 +234,60 @@ async def extend(session, *, tenant_id, work_permit_id, planned_end, actor_user_
     await session.flush()
     await session.refresh(wp)
     return wp
+
+
+# --- целевой инструктаж (Ф2) ------------------------------------------------
+
+async def create_briefing(
+    session: AsyncSession, *, tenant_id: str, work_permit_id: str,
+    conducted_by_person_id: str | None = None, conducted_at: datetime | None = None,
+    topics_text: str | None = None,
+) -> WorkPermitBriefing | None:
+    wp = await _get(session, tenant_id, work_permit_id)
+    if wp is None:
+        return None
+    br = WorkPermitBriefing(
+        tenant_id=tenant_id, work_permit_id=work_permit_id,
+        conducted_by_person_id=conducted_by_person_id, conducted_at=conducted_at,
+        topics_text=topics_text,
+    )
+    session.add(br)
+    await session.flush()
+    await session.refresh(br)
+    return br
+
+
+async def list_briefings(
+    session: AsyncSession, *, tenant_id: str, work_permit_id: str,
+) -> list[WorkPermitBriefing]:
+    stmt = select(WorkPermitBriefing).where(
+        WorkPermitBriefing.tenant_id == tenant_id,
+        WorkPermitBriefing.work_permit_id == work_permit_id,
+    ).order_by(WorkPermitBriefing.created_at.asc())
+    return list((await session.execute(stmt)).scalars().all())
+
+
+async def get_briefing(
+    session: AsyncSession, *, tenant_id: str, briefing_id: str,
+) -> WorkPermitBriefing | None:
+    stmt = select(WorkPermitBriefing).where(
+        WorkPermitBriefing.id == briefing_id, WorkPermitBriefing.tenant_id == tenant_id,
+    )
+    return (await session.execute(stmt)).scalar_one_or_none()
+
+
+_BRIEFING_EDITABLE = ("conducted_by_person_id", "conducted_at", "topics_text")
+
+
+async def update_briefing(
+    session: AsyncSession, *, tenant_id: str, briefing_id: str, **fields,
+) -> WorkPermitBriefing | None:
+    br = await get_briefing(session, tenant_id=tenant_id, briefing_id=briefing_id)
+    if br is None:
+        return None
+    for key, value in fields.items():
+        if key in _BRIEFING_EDITABLE:
+            setattr(br, key, value)
+    await session.flush()
+    await session.refresh(br)
+    return br
