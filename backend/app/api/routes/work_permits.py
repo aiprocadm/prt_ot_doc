@@ -15,16 +15,20 @@ from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.domains.work_permits import lifecycle as lc
 from app.domains.work_permits import (
-    add_member, cancel, close, create_work_permit, delete_draft, extend, issue,
-    list_events, list_members, remove_member, resume, suspend, update_work_permit,
+    add_member, cancel, close, create_briefing, create_work_permit, delete_draft, extend,
+    get_briefing, issue, list_briefings, list_events, list_members, remove_member, resume,
+    suspend, update_briefing, update_work_permit,
 )
-from app.models.models import Person
+from app.domains.work_permits.signing import sign_briefing, sign_permit
+from app.models.models import Person, SignatureRequest
+from app.services.pep_signing import PepConflict, PepNotFound
 from app.models.tenanting import Tenant
 from app.models.work_permit import WorkPermit
 from app.schemas.work_permit import (
-    ReadinessReportRead, ViolationRead, WorkPermitActionRequest, WorkPermitCreate,
-    WorkPermitEventRead, WorkPermitExtendRequest, WorkPermitMemberCreate,
-    WorkPermitMemberRead, WorkPermitPage, WorkPermitRead, WorkPermitUpdate,
+    ReadinessReportRead, ViolationRead, WorkPermitActionRequest, WorkPermitBriefingCreate,
+    WorkPermitBriefingRead, WorkPermitBriefingUpdate, WorkPermitCreate, WorkPermitEventRead,
+    WorkPermitExtendRequest, WorkPermitMemberCreate, WorkPermitMemberRead, WorkPermitPage,
+    WorkPermitRead, WorkPermitSignatureCreate, WorkPermitSignatureRead, WorkPermitUpdate,
 )
 from app.services.work_permit_admission import WorkPermitBlocked, check_brigade_readiness
 
@@ -55,6 +59,37 @@ def _transition_conflict(exc: lc.WorkPermitTransitionError) -> HTTPException:
 
 def _member_schema(m) -> WorkPermitMemberRead:
     return WorkPermitMemberRead(id=str(m.id), person_id=str(m.person_id), role=m.role, created_at=m.created_at)
+
+
+def _briefing_read(br) -> WorkPermitBriefingRead:
+    return WorkPermitBriefingRead(
+        id=str(br.id), work_permit_id=str(br.work_permit_id),
+        conducted_by_person_id=str(br.conducted_by_person_id) if br.conducted_by_person_id else None,
+        conducted_at=br.conducted_at, topics_text=br.topics_text,
+        created_at=br.created_at, updated_at=br.updated_at,
+    )
+
+
+def _pep_to_http(exc: Exception) -> HTTPException:
+    if isinstance(exc, PepNotFound):
+        return HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=api_problem_detail(code="PEP_NOT_FOUND", message=str(exc), error_type="work_permit"),
+        )
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=api_problem_detail(code="PEP_CONFLICT", message=str(exc), error_type="work_permit"),
+    )
+
+
+def _signature_read(row: SignatureRequest, stream: str, *, confirm_code: str | None = None) -> WorkPermitSignatureRead:
+    return WorkPermitSignatureRead(
+        id=str(row.id), stream=stream, object_type=row.object_type, object_id=str(row.object_id),
+        purpose=row.purpose, status=row.status,
+        signer_person_id=str(row.signer_person_id) if row.signer_person_id else None,
+        signer_name=row.signer_name, content_hash=row.content_hash, signed_at=row.signed_at,
+        confirm_code=confirm_code,
+    )
 
 
 async def _permit_read(session: AsyncSession, tenant: Tenant, wp: WorkPermit) -> WorkPermitRead:
@@ -324,3 +359,125 @@ async def extend_endpoint(wp_id: str, payload: WorkPermitExtendRequest, tenant: 
         session, tenant_id=tenant.id, work_permit_id=wp_id, planned_end=payload.planned_end,
         actor_user_id=access.user.id if access else None,
     ))
+
+
+# --- Briefing endpoints (Ф2) -----------------------------------------------
+
+@router.post("/{wp_id}/briefing", response_model=WorkPermitBriefingRead, status_code=status.HTTP_201_CREATED)
+@audit_operation("update", "work_permit")
+async def create_briefing_endpoint(
+    wp_id: str, payload: WorkPermitBriefingCreate, tenant: TenantDep, session: SessionDep, access: WriterAccess
+) -> WorkPermitBriefingRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _get_or_404(session, tenant, wp_id)
+    if payload.conducted_by_person_id:
+        await _ensure_person(session, tenant, payload.conducted_by_person_id)
+    br = await create_briefing(
+        session, tenant_id=tenant.id, work_permit_id=wp_id,
+        conducted_by_person_id=payload.conducted_by_person_id,
+        conducted_at=payload.conducted_at, topics_text=payload.topics_text,
+    )
+    return _briefing_read(br)
+
+
+@router.get("/{wp_id}/briefing", response_model=list[WorkPermitBriefingRead])
+async def list_briefings_endpoint(
+    wp_id: str, tenant: TenantDep, session: SessionDep, access: ReaderAccess
+) -> list[WorkPermitBriefingRead]:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _get_or_404(session, tenant, wp_id)
+    rows = await list_briefings(session, tenant_id=tenant.id, work_permit_id=wp_id)
+    return [_briefing_read(b) for b in rows]
+
+
+@router.patch("/{wp_id}/briefing/{briefing_id}", response_model=WorkPermitBriefingRead)
+@audit_operation("update", "work_permit")
+async def update_briefing_endpoint(
+    wp_id: str, briefing_id: str, payload: WorkPermitBriefingUpdate,
+    tenant: TenantDep, session: SessionDep, access: WriterAccess,
+) -> WorkPermitBriefingRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _get_or_404(session, tenant, wp_id)
+    fields = payload.model_dump(exclude_unset=True)
+    if fields.get("conducted_by_person_id"):
+        await _ensure_person(session, tenant, fields["conducted_by_person_id"])
+    br = await update_briefing(session, tenant_id=tenant.id, briefing_id=briefing_id, **fields)
+    if br is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "briefing not found")
+    return _briefing_read(br)
+
+
+# --- Signature endpoints (Ф2) -----------------------------------------------
+
+@router.post("/{wp_id}/signatures", response_model=WorkPermitSignatureRead, status_code=status.HTTP_201_CREATED)
+@audit_operation("update", "work_permit")
+async def create_permit_signature_endpoint(
+    wp_id: str, payload: WorkPermitSignatureCreate, tenant: TenantDep, session: SessionDep, access: WriterAccess
+) -> WorkPermitSignatureRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _get_or_404(session, tenant, wp_id)
+    await _ensure_person(session, tenant, payload.person_id)
+    try:
+        req, code = await sign_permit(
+            session, tenant_id=str(tenant.id), work_permit_id=wp_id,
+            person_id=payload.person_id, mode=payload.mode,
+            requested_by=access.user.id if access else "system",
+        )
+    except (PepNotFound, PepConflict) as exc:
+        raise _pep_to_http(exc) from exc
+    return _signature_read(req, "permit", confirm_code=code)
+
+
+@router.post(
+    "/{wp_id}/briefing/{briefing_id}/signatures",
+    response_model=WorkPermitSignatureRead, status_code=status.HTTP_201_CREATED,
+)
+@audit_operation("update", "work_permit")
+async def create_briefing_signature_endpoint(
+    wp_id: str, briefing_id: str, payload: WorkPermitSignatureCreate,
+    tenant: TenantDep, session: SessionDep, access: WriterAccess,
+) -> WorkPermitSignatureRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _get_or_404(session, tenant, wp_id)
+    await _ensure_person(session, tenant, payload.person_id)
+    try:
+        req, code = await sign_briefing(
+            session, tenant_id=str(tenant.id), briefing_id=briefing_id,
+            person_id=payload.person_id, mode=payload.mode,
+            requested_by=access.user.id if access else "system",
+        )
+    except (PepNotFound, PepConflict) as exc:
+        raise _pep_to_http(exc) from exc
+    return _signature_read(req, "briefing", confirm_code=code)
+
+
+@router.get("/{wp_id}/signatures", response_model=list[WorkPermitSignatureRead])
+async def list_signatures_endpoint(
+    wp_id: str, tenant: TenantDep, session: SessionDep, access: ReaderAccess
+) -> list[WorkPermitSignatureRead]:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _get_or_404(session, tenant, wp_id)
+    permit_rows = (await session.execute(
+        select(SignatureRequest).where(
+            SignatureRequest.tenant_id == tenant.id,
+            SignatureRequest.signature_type == "pep",
+            SignatureRequest.object_type == "work_permit",
+            SignatureRequest.object_id == wp_id,
+        ).order_by(SignatureRequest.created_at.asc())
+    )).scalars().all()
+    briefings = await list_briefings(session, tenant_id=tenant.id, work_permit_id=wp_id)
+    briefing_ids = [b.id for b in briefings]
+    briefing_rows: list[SignatureRequest] = []
+    if briefing_ids:
+        briefing_rows = list((await session.execute(
+            select(SignatureRequest).where(
+                SignatureRequest.tenant_id == tenant.id,
+                SignatureRequest.signature_type == "pep",
+                SignatureRequest.object_type == "work_permit_briefing",
+                SignatureRequest.object_id.in_(briefing_ids),
+            ).order_by(SignatureRequest.created_at.asc())
+        )).scalars().all())
+    return (
+        [_signature_read(r, "permit") for r in permit_rows]
+        + [_signature_read(r, "briefing") for r in briefing_rows]
+    )
