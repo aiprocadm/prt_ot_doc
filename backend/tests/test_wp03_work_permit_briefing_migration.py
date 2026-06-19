@@ -29,3 +29,11 @@ def test_wp03_source_creates_and_drops_table():
     for col in NEW_COLUMNS:
         assert f'"{col}"' in src, f"missing column literal: {col}"
     assert 'drop_table("work_permit_briefing")' in src, "downgrade must drop the table"
+
+
+def test_model_has_briefing_columns():
+    from app.models.work_permit import WorkPermitBriefing
+
+    cols = set(WorkPermitBriefing.__table__.columns.keys())
+    assert NEW_COLUMNS.issubset(cols)
+    assert WorkPermitBriefing.__tablename__ == "work_permit_briefing"

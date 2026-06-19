@@ -79,3 +79,16 @@ class WorkPermitEvent(TenantBaseModel):
         ForeignKey("file.id", ondelete="SET NULL"), nullable=True
     )
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class WorkPermitBriefing(TenantBaseModel):
+    __tablename__ = "work_permit_briefing"
+
+    work_permit_id: Mapped[str] = mapped_column(
+        ForeignKey("work_permit.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    conducted_by_person_id: Mapped[str | None] = mapped_column(
+        ForeignKey("person.id", ondelete="SET NULL"), nullable=True
+    )
+    conducted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    topics_text: Mapped[str | None] = mapped_column(Text, nullable=True)
