@@ -226,7 +226,7 @@ async def resume(session, *, tenant_id, work_permit_id, actor_user_id, note=None
     )
 
 
-async def _signed_closing_kinds(
+async def signed_closing_kinds(
     session: AsyncSession, *, tenant_id: str, work_permit_id: str,
 ) -> set[str]:
     """Виды подписи закрытия ({"handover","acceptance"}) с хотя бы одной SIGNED-подписью.
@@ -267,7 +267,7 @@ async def close(session, *, tenant_id, work_permit_id, actor_user_id, photo_file
     if wp is None:
         return None
     lc.validate_transition(str(wp.status), lc.STATUS_CLOSED)  # FSM до гейта: draft/closed/cancelled → WorkPermitTransitionError
-    signed = await _signed_closing_kinds(session, tenant_id=tenant_id, work_permit_id=work_permit_id)
+    signed = await signed_closing_kinds(session, tenant_id=tenant_id, work_permit_id=work_permit_id)
     readiness = lc.closing_readiness(completion_text=wp.completion_text, signed_kinds=signed)
     if not readiness.can_close:
         raise lc.WorkPermitClosingIncomplete(readiness.missing)

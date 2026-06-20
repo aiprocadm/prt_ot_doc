@@ -20,14 +20,16 @@ from app.domains.work_permits import (
     list_events, list_members, remove_member, resume, suspend, update_admission, update_briefing,
     update_work_permit,
 )
-from app.domains.work_permits.signing import sign_briefing, sign_permit
+from app.domains.work_permits.service import record_completion, signed_closing_kinds
+from app.domains.work_permits.signing import sign_briefing, sign_closing, sign_permit
 from app.models.models import Person, SignatureRequest
 from app.services.pep_signing import PepConflict, PepNotFound
 from app.models.tenanting import Tenant
 from app.models.work_permit import WorkPermit
 from app.schemas.work_permit import (
     ReadinessReportRead, ViolationRead, WorkPermitActionRequest, WorkPermitBriefingCreate,
-    WorkPermitBriefingRead, WorkPermitBriefingUpdate, WorkPermitCreate,
+    WorkPermitBriefingRead, WorkPermitBriefingUpdate, WorkPermitClosingRecordCreate,
+    WorkPermitClosingSummary, WorkPermitCreate,
     WorkPermitDailyAdmissionCreate, WorkPermitDailyAdmissionRead, WorkPermitDailyAdmissionUpdate,
     WorkPermitEventRead, WorkPermitExtendRequest, WorkPermitMemberCreate, WorkPermitMemberRead,
     WorkPermitPage, WorkPermitRead, WorkPermitSignatureCreate, WorkPermitSignatureRead,
@@ -92,6 +94,26 @@ def _signature_read(row: SignatureRequest, stream: str, *, confirm_code: str | N
         signer_person_id=str(row.signer_person_id) if row.signer_person_id else None,
         signer_name=row.signer_name, content_hash=row.content_hash, signed_at=row.signed_at,
         confirm_code=confirm_code,
+    )
+
+
+async def _closing_summary(session: AsyncSession, tenant: Tenant, wp: WorkPermit) -> WorkPermitClosingSummary:
+    rows = (await session.execute(
+        select(SignatureRequest).where(
+            SignatureRequest.tenant_id == tenant.id,
+            SignatureRequest.signature_type == "pep",
+            SignatureRequest.object_type == "work_permit_closing",
+            SignatureRequest.object_id == wp.id,
+        ).order_by(SignatureRequest.created_at.asc())
+    )).scalars().all()
+    signed = await signed_closing_kinds(session, tenant_id=str(tenant.id), work_permit_id=str(wp.id))
+    readiness = lc.closing_readiness(completion_text=wp.completion_text, signed_kinds=signed)
+    return WorkPermitClosingSummary(
+        completion_text=wp.completion_text,
+        completion_recorded_at=wp.completion_recorded_at,
+        signatures=[_signature_read(r, "closing") for r in rows],
+        can_close=readiness.can_close,
+        missing=readiness.missing,
     )
 
 
@@ -344,11 +366,17 @@ async def close_endpoint(wp_id: str, payload: WorkPermitActionRequest, tenant: T
     TenantContextValidator.ensure_tenant_context(tenant)
     if payload.photo_file_id:
         await _ensure_file(session, tenant, payload.photo_file_id)
-    return await _action(session, tenant, wp_id, lambda: close(
-        session, tenant_id=tenant.id, work_permit_id=wp_id,
-        actor_user_id=access.user.id if access else None,
-        photo_file_id=payload.photo_file_id, note=payload.note,
-    ))
+    try:
+        return await _action(session, tenant, wp_id, lambda: close(
+            session, tenant_id=tenant.id, work_permit_id=wp_id,
+            actor_user_id=access.user.id if access else None,
+            photo_file_id=payload.photo_file_id, note=payload.note,
+        ))
+    except lc.WorkPermitClosingIncomplete as exc:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={"code": "WORK_PERMIT_CLOSING_INCOMPLETE", "missing": exc.missing},
+        ) from exc
 
 
 @router.post("/{wp_id}/cancel", response_model=WorkPermitRead)
@@ -562,3 +590,58 @@ async def list_signatures_endpoint(
         [_signature_read(r, "permit") for r in permit_rows]
         + [_signature_read(r, "briefing") for r in briefing_rows]
     )
+
+
+# --- Closing endpoints (Ф3b) -----------------------------------------------
+
+@router.post("/{wp_id}/closing", response_model=WorkPermitClosingSummary)
+@audit_operation("update", "work_permit")
+async def record_closing_endpoint(
+    wp_id: str, payload: WorkPermitClosingRecordCreate, tenant: TenantDep,
+    session: SessionDep, access: WriterAccess,
+) -> WorkPermitClosingSummary:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _get_or_404(session, tenant, wp_id)
+    try:
+        wp = await record_completion(
+            session, tenant_id=str(tenant.id), work_permit_id=wp_id,
+            completion_text=payload.completion_text,
+            actor_user_id=access.user.id if access else None,
+        )
+    except lc.WorkPermitTransitionError as exc:
+        raise _transition_conflict(exc) from exc
+    if wp is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "work permit not found")
+    return await _closing_summary(session, tenant, wp)
+
+
+@router.get("/{wp_id}/closing", response_model=WorkPermitClosingSummary)
+async def get_closing_endpoint(
+    wp_id: str, tenant: TenantDep, session: SessionDep, access: ReaderAccess,
+) -> WorkPermitClosingSummary:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    wp = await _get_or_404(session, tenant, wp_id)
+    return await _closing_summary(session, tenant, wp)
+
+
+@router.post(
+    "/{wp_id}/closing/signatures",
+    response_model=WorkPermitSignatureRead, status_code=status.HTTP_201_CREATED,
+)
+@audit_operation("update", "work_permit")
+async def create_closing_signature_endpoint(
+    wp_id: str, payload: WorkPermitSignatureCreate, tenant: TenantDep,
+    session: SessionDep, access: WriterAccess,
+) -> WorkPermitSignatureRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _get_or_404(session, tenant, wp_id)
+    await _ensure_person(session, tenant, payload.person_id)
+    try:
+        req, code = await sign_closing(
+            session, tenant_id=str(tenant.id), work_permit_id=wp_id,
+            person_id=payload.person_id, mode=payload.mode,
+            requested_by=access.user.id if access else "system",
+        )
+    except (PepNotFound, PepConflict) as exc:
+        raise _pep_to_http(exc) from exc
+    return _signature_read(req, "closing", confirm_code=code)
