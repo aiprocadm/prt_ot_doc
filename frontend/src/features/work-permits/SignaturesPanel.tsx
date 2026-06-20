@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { workPermitsApi } from "@/api/workPermits";
 import { Button } from "@/components/ui/button";
 import { Can } from "@/components/permissions/Can";
 import { SIGN_STATUS_LABELS, labelOf } from "@/lib/workPermitVocab";
@@ -76,6 +75,7 @@ export const SignaturesPanel = ({ title, signers, signatures, onSign, onConfirm 
                     {awaiting && sig ? (
                       <>
                         <input
+                          aria-label="Код подтверждения"
                           className="h-8 w-24 rounded-md border px-2 text-sm"
                           placeholder="код"
                           value={codeInput[sig.id] ?? ""}
