@@ -3,15 +3,13 @@ import { toast } from "sonner";
 
 import { workPermitsApi } from "@/api/workPermits";
 import { Button } from "@/components/ui/button";
-import {
-  CLOSING_MISSING_LABELS,
-  SIGN_STATUS_LABELS,
-  labelOf,
-} from "@/lib/workPermitVocab";
-import type { WorkPermitClosingSummaryDto, WorkPermitSignatureDto } from "@/types/dto/workPermits";
+import { CLOSING_MISSING_LABELS } from "@/lib/workPermitVocab";
+import type { WorkPermitClosingSummaryDto } from "@/types/dto/workPermits";
+import { SignaturesPanel, type SignerRow } from "./SignaturesPanel";
 
 interface Props {
   summary: WorkPermitClosingSummaryDto;
+  signers: SignerRow[];
   canManage: boolean;
   onClose: () => void;
   onRefresh: () => void;
@@ -21,15 +19,14 @@ interface Props {
 
 export const ClosingPanel = ({
   summary,
+  signers,
   canManage,
   onClose,
   onRefresh,
-  nameOf,
   workPermitId,
 }: Props) => {
   const [completionText, setCompletionText] = useState(summary.completion_text ?? "");
   const [savingAct, setSavingAct] = useState(false);
-  const [codeInput, setCodeInput] = useState<Record<string, string>>({});
 
   const handleRecordAct = async () => {
     if (!workPermitId) return;
@@ -62,20 +59,10 @@ export const ClosingPanel = ({
     }
   };
 
-  const handleConfirm = async (sig: WorkPermitSignatureDto) => {
-    const code = (codeInput[sig.id] ?? "").trim();
-    if (!code) {
-      toast.error("Введите код");
-      return;
-    }
-    try {
-      await workPermitsApi.confirmSignatureCode(sig.id, code);
-      toast.success("Подпись подтверждена");
-      setCodeInput((m) => ({ ...m, [sig.id]: "" }));
-      onRefresh();
-    } catch {
-      toast.error("Код неверный или истёк");
-    }
+  const handleConfirm = async (requestId: string, code: string) => {
+    await workPermitsApi.confirmSignatureCode(requestId, code);
+    toast.success("Подпись подтверждена");
+    onRefresh();
   };
 
   return (
@@ -104,64 +91,13 @@ export const ClosingPanel = ({
       </div>
 
       {/* Подписи закрытия */}
-      <div className="space-y-2">
-        <div className="text-sm font-medium">Подписи закрытия</div>
-        {summary.signatures.length === 0 && (
-          <p className="text-sm text-muted-foreground">Подписи ещё не запрошены</p>
-        )}
-        <ul className="space-y-2 text-sm">
-          {summary.signatures.map((sig) => {
-            const signed = sig.status === "signed";
-            const awaiting = sig.status === "awaiting_code";
-            const personLabel = sig.signer_person_id ? nameOf(sig.signer_person_id) : (sig.signer_name ?? "—");
-            return (
-              <li key={sig.id} className="flex flex-wrap items-center justify-between gap-2 border-b pb-1">
-                <span className="text-sm">{personLabel}</span>
-                <span className="flex items-center gap-2">
-                  <span className={signed ? "text-green-600" : "text-muted-foreground"}>
-                    {labelOf(SIGN_STATUS_LABELS, sig.status)}
-                  </span>
-                  {!signed && canManage && (
-                    <>
-                      {awaiting ? (
-                        <>
-                          <input
-                            aria-label="Код подтверждения"
-                            className="h-8 w-24 rounded-md border px-2 text-sm"
-                            placeholder="код"
-                            value={codeInput[sig.id] ?? ""}
-                            onChange={(e) => setCodeInput((m) => ({ ...m, [sig.id]: e.target.value }))}
-                          />
-                          <Button size="sm" variant="outline" onClick={() => void handleConfirm(sig)}>
-                            Подтвердить
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => sig.signer_person_id && void handleSign(sig.signer_person_id, "attested")}
-                          >
-                            Зафиксировать
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => sig.signer_person_id && void handleSign(sig.signer_person_id, "code")}
-                          >
-                            Запросить код
-                          </Button>
-                        </>
-                      )}
-                    </>
-                  )}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
+      <SignaturesPanel
+        title="Подписи закрытия (сдал / принял)"
+        signers={signers}
+        signatures={summary.signatures}
+        onSign={handleSign}
+        onConfirm={handleConfirm}
+      />
 
       {/* Кнопка закрытия + пояснение */}
       <div className="space-y-2 pt-1">

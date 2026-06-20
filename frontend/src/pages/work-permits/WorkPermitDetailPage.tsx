@@ -183,6 +183,11 @@ export default function WorkPermitDetailPage() {
     .map((m) => ({ personId: m.person_id, name: nameOf(m.person_id), roleLabel: labelOf(MEMBER_ROLE_LABELS, m.role) }));
   const permitSignatures = signatures.filter((s) => s.stream === "permit");
 
+  const CLOSING_ROLES = new Set(["foreman", "supervisor", "admitter"]);
+  const closingSigners: SignerRow[] = wp.members
+    .filter((m) => CLOSING_ROLES.has(m.role))
+    .map((m) => ({ personId: m.person_id, name: nameOf(m.person_id), roleLabel: labelOf(MEMBER_ROLE_LABELS, m.role) }));
+
   const signPermit = async (personId: string, mode: "attested" | "code") => {
     const res = await workPermitsApi.createPermitSignature(wp.id, { person_id: personId, mode });
     if (mode === "code" && res.confirm_code) toast.success(`Код для подписанта: ${res.confirm_code}`);
@@ -385,6 +390,7 @@ export default function WorkPermitDetailPage() {
             {(canManage) => (
               <ClosingPanel
                 summary={closingSummary}
+                signers={closingSigners}
                 canManage={canManage}
                 workPermitId={wp.id}
                 nameOf={nameOf}
