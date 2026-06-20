@@ -13,6 +13,8 @@ vi.mock("@/api/workPermits", () => ({
     get: (...a: unknown[]) => getMock(...a),
     readiness: () => Promise.resolve({ ok: true, violations: [] }),
     events: () => Promise.resolve([]),
+    getBriefings: () => Promise.resolve([]),
+    listSignatures: () => Promise.resolve([]),
   },
   fetchAllPersons: () => Promise.resolve([]),
 }));
@@ -81,5 +83,11 @@ describe("WorkPermitDetailPage", () => {
     renderAt();
     await screen.findByText(/монтаж/i);
     expect(screen.queryByRole("button", { name: /выдать/i })).not.toBeInTheDocument();
+  });
+
+  it("показывает панель подписей ответственных", async () => {
+    setRole([PERMISSIONS.WORK_PERMIT_VIEW, PERMISSIONS.WORK_PERMIT_MANAGE]);
+    renderAt();
+    expect(await screen.findByText(/подписи ответственных/i)).toBeInTheDocument();
   });
 });

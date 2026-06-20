@@ -58,3 +58,27 @@ export interface ReadinessReportDto {
   ok: boolean;
   violations: ViolationDto[];
 }
+
+export interface WorkPermitBriefingDto {
+  id: string;
+  work_permit_id: string;
+  conducted_by_person_id: string | null;
+  conducted_at: string | null;
+  topics_text: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkPermitSignatureDto {
+  id: string;
+  stream: string; // "permit" | "briefing"
+  object_type: string;
+  object_id: string;
+  purpose: string;
+  status: string;
+  signer_person_id: string | null;
+  signer_name: string | null;
+  content_hash: string | null;
+  signed_at: string | null;
+  confirm_code?: string | null;
+}

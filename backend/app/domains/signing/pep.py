@@ -11,7 +11,9 @@ import json
 from datetime import datetime
 from typing import Any
 
-PEP_PURPOSES = frozenset({"document", "acknowledgement", "ppe_issue", "briefing"})
+PEP_PURPOSES = frozenset(
+    {"document", "acknowledgement", "ppe_issue", "briefing", "work_permit", "work_permit_briefing"}
+)
 MAX_CONFIRM_ATTEMPTS = 5
 CONFIRM_TTL_MINUTES = 15
 

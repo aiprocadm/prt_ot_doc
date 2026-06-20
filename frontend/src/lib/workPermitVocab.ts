@@ -41,5 +41,13 @@ export const SAFETY_SYSTEM_LABELS: Record<string, string> = {
   access: "Системы для подъёма и спуска",
 };
 
+export const SIGN_STATUS_LABELS: Record<string, string> = {
+  created: "Создан",
+  awaiting_code: "Ожидает код",
+  signed: "Подписан",
+  declined: "Отклонён",
+  expired: "Код истёк",
+};
+
 export const labelOf = (map: Record<string, string>, code: string): string =>
   map[code] ?? code;

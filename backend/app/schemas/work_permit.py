@@ -163,3 +163,51 @@ class ViolationRead(BaseSchema):
 class ReadinessReportRead(BaseSchema):
     ok: bool
     violations: list[ViolationRead]
+
+
+class WorkPermitBriefingCreate(BaseSchema):
+    conducted_by_person_id: str | None = None
+    conducted_at: datetime | None = None
+    topics_text: str | None = None
+
+
+class WorkPermitBriefingUpdate(BaseSchema):
+    conducted_by_person_id: str | None = None
+    conducted_at: datetime | None = None
+    topics_text: str | None = None
+
+
+class WorkPermitBriefingRead(BaseSchema):
+    id: str
+    work_permit_id: str
+    conducted_by_person_id: str | None
+    conducted_at: datetime | None
+    topics_text: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class WorkPermitSignatureCreate(BaseSchema):
+    person_id: str
+    mode: str = "attested"
+
+    @field_validator("mode")
+    @classmethod
+    def _mode(cls, v: str) -> str:
+        if v not in ("attested", "code"):
+            raise ValueError(f"invalid mode: {v!r}")
+        return v
+
+
+class WorkPermitSignatureRead(BaseSchema):
+    id: str
+    stream: str
+    object_type: str
+    object_id: str
+    purpose: str
+    status: str
+    signer_person_id: str | None
+    signer_name: str | None
+    content_hash: str | None
+    signed_at: datetime | None
+    confirm_code: str | None = None
