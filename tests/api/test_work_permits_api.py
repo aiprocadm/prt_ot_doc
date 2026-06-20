@@ -110,7 +110,11 @@ async def test_issue_blocked_then_allowed_with_permit(async_client, make_auth_he
     assert (await async_client.post(f"{BASE}/{wp_id}/close", headers=headers, json={})).json()["status"] == "closed"
 
     ev = await async_client.get(f"{BASE}/{wp_id}/events", headers=headers)
-    assert [e["event_type"] for e in ev.json()] == ["issued", "suspended", "resumed", "closed"]
+    # member_added event is logged since Ф3a; core FSM events must be present in order
+    event_types = [e["event_type"] for e in ev.json()]
+    assert "member_added" in event_types
+    fsm_events = [t for t in event_types if t in {"issued", "suspended", "resumed", "closed"}]
+    assert fsm_events == ["issued", "suspended", "resumed", "closed"]
 
 
 @pytest.mark.asyncio

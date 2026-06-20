@@ -15,6 +15,7 @@ vi.mock("@/api/workPermits", () => ({
     events: () => Promise.resolve([]),
     getBriefings: () => Promise.resolve([]),
     listSignatures: () => Promise.resolve([]),
+    listAdmissions: () => Promise.resolve([]),
   },
   fetchAllPersons: () => Promise.resolve([]),
 }));
@@ -89,5 +90,11 @@ describe("WorkPermitDetailPage", () => {
     setRole([PERMISSIONS.WORK_PERMIT_VIEW, PERMISSIONS.WORK_PERMIT_MANAGE]);
     renderAt();
     expect(await screen.findByText(/подписи ответственных/i)).toBeInTheDocument();
+  });
+
+  it("показывает панель ежедневного допуска", async () => {
+    setRole([PERMISSIONS.WORK_PERMIT_VIEW, PERMISSIONS.WORK_PERMIT_MANAGE]);
+    renderAt();
+    expect(await screen.findByText(/ежедневный допуск/i)).toBeInTheDocument();
   });
 });

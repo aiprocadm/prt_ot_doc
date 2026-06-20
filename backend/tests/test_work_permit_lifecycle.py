@@ -43,3 +43,11 @@ def test_safety_system_vocabulary():
     assert lc.SAFETY_SYSTEMS == frozenset(
         {"restraint", "positioning", "fall_arrest", "rescue_evacuation", "access"}
     )
+
+
+def test_event_types_include_ops_journal():
+    from app.domains.work_permits import lifecycle as lc
+
+    assert {"admitted", "member_added", "member_removed"}.issubset(lc.EVENT_TYPES)
+    # существующие сохранены
+    assert {"issued", "suspended", "resumed", "closed", "cancelled", "extended"}.issubset(lc.EVENT_TYPES)
