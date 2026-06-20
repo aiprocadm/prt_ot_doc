@@ -377,6 +377,8 @@ async def create_briefing_endpoint(
         conducted_by_person_id=payload.conducted_by_person_id,
         conducted_at=payload.conducted_at, topics_text=payload.topics_text,
     )
+    if br is None:  # race: permit deleted between the check above and create
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "work permit not found")
     return _briefing_read(br)
 
 
@@ -401,9 +403,11 @@ async def update_briefing_endpoint(
     fields = payload.model_dump(exclude_unset=True)
     if fields.get("conducted_by_person_id"):
         await _ensure_person(session, tenant, fields["conducted_by_person_id"])
-    br = await update_briefing(session, tenant_id=tenant.id, briefing_id=briefing_id, **fields)
-    if br is None:
+    # briefing must belong to THIS permit (not just the same tenant)
+    existing = await get_briefing(session, tenant_id=tenant.id, briefing_id=briefing_id)
+    if existing is None or str(existing.work_permit_id) != wp_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "briefing not found")
+    br = await update_briefing(session, tenant_id=tenant.id, briefing_id=briefing_id, **fields)
     return _briefing_read(br)
 
 
@@ -440,6 +444,10 @@ async def create_briefing_signature_endpoint(
     TenantContextValidator.ensure_tenant_context(tenant)
     await _get_or_404(session, tenant, wp_id)
     await _ensure_person(session, tenant, payload.person_id)
+    # briefing must belong to THIS permit (not just the same tenant)
+    existing = await get_briefing(session, tenant_id=tenant.id, briefing_id=briefing_id)
+    if existing is None or str(existing.work_permit_id) != wp_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "briefing not found")
     try:
         req, code = await sign_briefing(
             session, tenant_id=str(tenant.id), briefing_id=briefing_id,

@@ -39,3 +39,21 @@ async def test_briefing_create_list_patch(async_client, make_auth_headers, data_
     )
     assert upd.status_code == 200
     assert upd.json()["topics_text"] == "страховка + эвакуация"
+
+
+@pytest.mark.asyncio
+async def test_briefing_patch_rejects_foreign_permit(async_client, make_auth_headers, data_factory):
+    """A briefing of permit A must not be editable via permit B's path (same tenant)."""
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    wp_a = await _make_permit(async_client, headers)
+    wp_b = await _make_permit(async_client, headers)
+
+    r = await async_client.post(
+        f"{BASE}/{wp_a}/briefing", headers=headers, json={"topics_text": "A"}
+    )
+    bid = r.json()["id"]
+
+    cross = await async_client.patch(
+        f"{BASE}/{wp_b}/briefing/{bid}", headers=headers, json={"topics_text": "hijack"}
+    )
+    assert cross.status_code == 404, cross.text
