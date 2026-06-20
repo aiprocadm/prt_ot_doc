@@ -5,7 +5,7 @@ const serverConfigured = Boolean(process.env.E2E_BASE_URL || process.env.E2E_STA
 const loginAsDefaultUser = async (page: Page) => {
   const tenant = process.env.E2E_TENANT ?? "demo";
   await page.goto("/auth/login", { waitUntil: "domcontentloaded" });
-  await page.getByLabel("Tenant").fill(tenant);
+  await page.getByLabel("Тенант").fill(tenant);
   await page.getByLabel("E-mail").fill(process.env.E2E_USER_EMAIL!);
   await page.getByLabel("Пароль").fill(process.env.E2E_USER_PASSWORD!);
   await page.getByRole("button", { name: "Войти" }).click();
