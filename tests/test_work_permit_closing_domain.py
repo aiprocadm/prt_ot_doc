@@ -31,3 +31,36 @@ async def test_closing_snapshot_is_deterministic(sessionmaker, data_factory):
         assert a == b
         assert a["work_permit_id"] == wp.id
         assert a["completion_text"] == "работы окончены, место сдано"
+
+
+from app.domains.work_permits.lifecycle import closing_readiness
+
+
+def test_readiness_all_present():
+    r = closing_readiness(completion_text="готово", signed_kinds={"handover", "acceptance"})
+    assert r.can_close is True
+    assert r.missing == []
+
+
+def test_readiness_missing_act():
+    r = closing_readiness(completion_text=None, signed_kinds={"handover", "acceptance"})
+    assert r.can_close is False
+    assert "completion_act" in r.missing
+
+
+def test_readiness_missing_handover():
+    r = closing_readiness(completion_text="готово", signed_kinds={"acceptance"})
+    assert r.can_close is False
+    assert "handover_signature" in r.missing
+
+
+def test_readiness_missing_acceptance():
+    r = closing_readiness(completion_text="готово", signed_kinds={"handover"})
+    assert r.can_close is False
+    assert "acceptance_signature" in r.missing
+
+
+def test_readiness_empty_text_is_missing_act():
+    r = closing_readiness(completion_text="   ", signed_kinds={"handover", "acceptance"})
+    assert r.can_close is False
+    assert "completion_act" in r.missing
