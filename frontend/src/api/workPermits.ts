@@ -1,7 +1,7 @@
 import { apiClient } from "@/api/client";
 import type {
-  ReadinessReportDto, WorkPermitBriefingDto, WorkPermitDto, WorkPermitEventDto,
-  WorkPermitMemberDto, WorkPermitPage, WorkPermitSignatureDto,
+  ReadinessReportDto, WorkPermitBriefingDto, WorkPermitDailyAdmissionDto, WorkPermitDto,
+  WorkPermitEventDto, WorkPermitMemberDto, WorkPermitPage, WorkPermitSignatureDto,
 } from "@/types/dto/workPermits";
 
 export interface PersonOption { id: string; label: string; }
@@ -84,6 +84,17 @@ export const workPermitsApi = {
   },
   async confirmSignatureCode(requestId: string, code: string): Promise<void> {
     await apiClient.post(`/sign/pep/requests/${requestId}/confirm`, { code });
+  },
+  async listAdmissions(id: string): Promise<WorkPermitDailyAdmissionDto[]> {
+    return (await apiClient.get<WorkPermitDailyAdmissionDto[]>(`${base}/${id}/admissions`)).data;
+  },
+  async createAdmission(id: string, body: Record<string, unknown>): Promise<WorkPermitDailyAdmissionDto> {
+    return (await apiClient.post<WorkPermitDailyAdmissionDto>(`${base}/${id}/admissions`, body)).data;
+  },
+  async updateAdmission(
+    id: string, admissionId: string, body: Record<string, unknown>,
+  ): Promise<WorkPermitDailyAdmissionDto> {
+    return (await apiClient.patch<WorkPermitDailyAdmissionDto>(`${base}/${id}/admissions/${admissionId}`, body)).data;
   },
 };
 
