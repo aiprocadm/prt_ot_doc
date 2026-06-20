@@ -15,9 +15,10 @@ from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.domains.work_permits import lifecycle as lc
 from app.domains.work_permits import (
-    add_member, cancel, close, create_briefing, create_work_permit, delete_draft, extend,
-    get_briefing, issue, list_briefings, list_events, list_members, remove_member, resume,
-    suspend, update_briefing, update_work_permit,
+    add_member, cancel, close, create_admission, create_briefing, create_work_permit,
+    delete_draft, extend, get_admission, get_briefing, issue, list_admissions, list_briefings,
+    list_events, list_members, remove_member, resume, suspend, update_admission, update_briefing,
+    update_work_permit,
 )
 from app.domains.work_permits.signing import sign_briefing, sign_permit
 from app.models.models import Person, SignatureRequest
@@ -26,9 +27,11 @@ from app.models.tenanting import Tenant
 from app.models.work_permit import WorkPermit
 from app.schemas.work_permit import (
     ReadinessReportRead, ViolationRead, WorkPermitActionRequest, WorkPermitBriefingCreate,
-    WorkPermitBriefingRead, WorkPermitBriefingUpdate, WorkPermitCreate, WorkPermitEventRead,
-    WorkPermitExtendRequest, WorkPermitMemberCreate, WorkPermitMemberRead, WorkPermitPage,
-    WorkPermitRead, WorkPermitSignatureCreate, WorkPermitSignatureRead, WorkPermitUpdate,
+    WorkPermitBriefingRead, WorkPermitBriefingUpdate, WorkPermitCreate,
+    WorkPermitDailyAdmissionCreate, WorkPermitDailyAdmissionRead, WorkPermitDailyAdmissionUpdate,
+    WorkPermitEventRead, WorkPermitExtendRequest, WorkPermitMemberCreate, WorkPermitMemberRead,
+    WorkPermitPage, WorkPermitRead, WorkPermitSignatureCreate, WorkPermitSignatureRead,
+    WorkPermitUpdate,
 )
 from app.services.work_permit_admission import WorkPermitBlocked, check_brigade_readiness
 
@@ -226,6 +229,7 @@ async def add_member_endpoint(
         member = await add_member(
             session, tenant_id=tenant.id, work_permit_id=wp_id,
             person_id=payload.person_id, role=payload.role,
+            actor_user_id=access.user.id if access else None,
         )
     except lc.WorkPermitTransitionError as exc:
         raise _transition_conflict(exc) from exc
@@ -239,7 +243,13 @@ async def remove_member_endpoint(
 ):
     TenantContextValidator.ensure_tenant_context(tenant)
     await _get_or_404(session, tenant, wp_id)
-    ok = await remove_member(session, tenant_id=tenant.id, work_permit_id=wp_id, member_id=member_id)
+    try:
+        ok = await remove_member(
+            session, tenant_id=tenant.id, work_permit_id=wp_id, member_id=member_id,
+            actor_user_id=access.user.id if access else None,
+        )
+    except lc.WorkPermitTransitionError as exc:
+        raise _transition_conflict(exc) from exc
     if not ok:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "member not found")
     from fastapi import Response
@@ -291,7 +301,7 @@ async def events(wp_id: str, tenant: TenantDep, session: SessionDep, access: Rea
     rows = await list_events(session, tenant_id=tenant.id, work_permit_id=wp_id)
     return [WorkPermitEventRead(
         id=str(e.id), event_type=e.event_type, at=e.at, actor_user_id=e.actor_user_id,
-        photo_file_id=e.photo_file_id, note=e.note,
+        photo_file_id=e.photo_file_id, note=e.note, meta=e.meta,
     ) for e in rows]
 
 
@@ -409,6 +419,69 @@ async def update_briefing_endpoint(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "briefing not found")
     br = await update_briefing(session, tenant_id=tenant.id, briefing_id=briefing_id, **fields)
     return _briefing_read(br)
+
+
+# --- Daily admission endpoints (Ф3a) ----------------------------------------
+
+def _admission_read(a) -> WorkPermitDailyAdmissionRead:
+    return WorkPermitDailyAdmissionRead(
+        id=str(a.id), work_permit_id=str(a.work_permit_id), admission_date=a.admission_date,
+        start_at=a.start_at, end_at=a.end_at,
+        admitted_by_person_id=str(a.admitted_by_person_id) if a.admitted_by_person_id else None,
+        note=a.note, created_at=a.created_at, updated_at=a.updated_at,
+    )
+
+
+@router.post("/{wp_id}/admissions", response_model=WorkPermitDailyAdmissionRead, status_code=status.HTTP_201_CREATED)
+@audit_operation("update", "work_permit")
+async def create_admission_endpoint(
+    wp_id: str, payload: WorkPermitDailyAdmissionCreate, tenant: TenantDep, session: SessionDep, access: WriterAccess
+) -> WorkPermitDailyAdmissionRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _get_or_404(session, tenant, wp_id)
+    if payload.admitted_by_person_id:
+        await _ensure_person(session, tenant, payload.admitted_by_person_id)
+    try:
+        adm = await create_admission(
+            session, tenant_id=tenant.id, work_permit_id=wp_id,
+            admission_date=payload.admission_date, start_at=payload.start_at, end_at=payload.end_at,
+            admitted_by_person_id=payload.admitted_by_person_id, note=payload.note,
+            actor_user_id=access.user.id if access else None,
+        )
+    except lc.WorkPermitTransitionError as exc:
+        raise _transition_conflict(exc) from exc
+    if adm is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "work permit not found")
+    return _admission_read(adm)
+
+
+@router.get("/{wp_id}/admissions", response_model=list[WorkPermitDailyAdmissionRead])
+async def list_admissions_endpoint(
+    wp_id: str, tenant: TenantDep, session: SessionDep, access: ReaderAccess
+) -> list[WorkPermitDailyAdmissionRead]:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _get_or_404(session, tenant, wp_id)
+    rows = await list_admissions(session, tenant_id=tenant.id, work_permit_id=wp_id)
+    return [_admission_read(a) for a in rows]
+
+
+@router.patch("/{wp_id}/admissions/{admission_id}", response_model=WorkPermitDailyAdmissionRead)
+@audit_operation("update", "work_permit")
+async def update_admission_endpoint(
+    wp_id: str, admission_id: str, payload: WorkPermitDailyAdmissionUpdate,
+    tenant: TenantDep, session: SessionDep, access: WriterAccess,
+) -> WorkPermitDailyAdmissionRead:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _get_or_404(session, tenant, wp_id)
+    fields = payload.model_dump(exclude_unset=True)
+    if fields.get("admitted_by_person_id"):
+        await _ensure_person(session, tenant, fields["admitted_by_person_id"])
+    # admission must belong to THIS permit (not just the same tenant)
+    existing = await get_admission(session, tenant_id=tenant.id, admission_id=admission_id)
+    if existing is None or str(existing.work_permit_id) != wp_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "admission not found")
+    adm = await update_admission(session, tenant_id=tenant.id, admission_id=admission_id, **fields)
+    return _admission_read(adm)
 
 
 # --- Signature endpoints (Ф2) -----------------------------------------------
