@@ -52,5 +52,16 @@ export const SIGN_STATUS_LABELS: Record<string, string> = {
   expired: "Код истёк",
 };
 
+export const CLOSING_KIND_LABELS: Record<string, string> = {
+  handover: "Сдал (производитель работ)",
+  acceptance: "Принял (ответственный/допускающий)",
+};
+
+export const CLOSING_MISSING_LABELS: Record<string, string> = {
+  completion_act: "не оформлен акт окончания работ",
+  handover_signature: "нет подписи «сдал»",
+  acceptance_signature: "нет подписи «принял»",
+};
+
 export const labelOf = (map: Record<string, string>, code: string): string =>
   map[code] ?? code;

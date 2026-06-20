@@ -84,6 +84,14 @@ export interface WorkPermitSignatureDto {
   confirm_code?: string | null;
 }
 
+export interface WorkPermitClosingSummaryDto {
+  completion_text: string | null;
+  completion_recorded_at: string | null;
+  signatures: WorkPermitSignatureDto[];
+  can_close: boolean;
+  missing: string[];
+}
+
 export interface WorkPermitDailyAdmissionDto {
   id: string;
   work_permit_id: string;
