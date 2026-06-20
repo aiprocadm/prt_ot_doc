@@ -134,9 +134,8 @@ class PepSigningService:
         if object_type == "work_permit_closing":
             wp = await self.session.get(WorkPermit, object_id)
             if wp is None or str(wp.tenant_id) != str(self.tenant_id):
-                raise PepNotFound("work_permit")
+                raise PepNotFound("work_permit_closing")
             return {
-                "work_permit_closing_id": wp.id,
                 "work_permit_id": wp.id,
                 "number": wp.number,
                 "completion_text": wp.completion_text,
