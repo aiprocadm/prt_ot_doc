@@ -67,7 +67,7 @@ export const DailyAdmissionPanel = ({ wp, onRefresh }: Props) => {
           {rows.map((a) => (
             <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 border-b pb-1">
               <span>
-                {new Date(a.admission_date).toLocaleDateString("ru-RU")}
+                {new Date(`${a.admission_date}T00:00:00`).toLocaleDateString("ru-RU")}
                 {a.start_at ? ` · с ${new Date(a.start_at).toLocaleTimeString("ru-RU")}` : ""}
                 {a.end_at ? ` · по ${new Date(a.end_at).toLocaleTimeString("ru-RU")}` : ""}
               </span>
