@@ -255,7 +255,7 @@ async def _signed_closing_kinds(
         )
     )).all()
     kinds: set[str] = set()
-    for person_id, role in role_rows:
+    for _person_id, role in role_rows:
         kind = lc.role_to_closing_kind(role)
         if kind:
             kinds.add(kind)
@@ -266,6 +266,7 @@ async def close(session, *, tenant_id, work_permit_id, actor_user_id, photo_file
     wp = await _get(session, tenant_id, work_permit_id)
     if wp is None:
         return None
+    lc.validate_transition(str(wp.status), lc.STATUS_CLOSED)  # FSM до гейта: draft/closed/cancelled → WorkPermitTransitionError
     signed = await _signed_closing_kinds(session, tenant_id=tenant_id, work_permit_id=work_permit_id)
     readiness = lc.closing_readiness(completion_text=wp.completion_text, signed_kinds=signed)
     if not readiness.can_close:
@@ -295,6 +296,10 @@ async def record_completion(
         raise lc.WorkPermitTransitionError(str(wp.status), "record_completion")
     wp.completion_text = completion_text
     wp.completion_recorded_at = _now()
+    await _log(
+        session, tenant_id=tenant_id, work_permit_id=work_permit_id,
+        event_type="completion_recorded", actor_user_id=actor_user_id,
+    )
     await session.flush()
     await session.refresh(wp)
     return wp

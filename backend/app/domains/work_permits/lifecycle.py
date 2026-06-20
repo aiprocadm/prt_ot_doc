@@ -30,7 +30,7 @@ MEMBER_ROLES = frozenset({
 
 EVENT_TYPES = frozenset({
     "issued", "suspended", "resumed", "closed", "cancelled", "extended",
-    "admitted", "member_added", "member_removed",
+    "admitted", "member_added", "member_removed", "completion_recorded",
 })
 
 # системы обеспечения безопасности работ на высоте (782н):

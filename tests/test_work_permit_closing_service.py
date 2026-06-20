@@ -114,6 +114,15 @@ async def test_cancel_not_gated(sessionmaker, data_factory):
 
 
 @pytest.mark.asyncio
+async def test_close_draft_is_transition_error_not_gate(sessionmaker, data_factory):
+    _tid, (person,) = await _persons(data_factory, "Solo")
+    async with sessionmaker() as session:
+        wp = await svc.create_work_permit(session, tenant_id=person.tenant_id, work_type="height", zone_text="z")
+        with pytest.raises(lc.WorkPermitTransitionError):
+            await svc.close(session, tenant_id=person.tenant_id, work_permit_id=wp.id, actor_user_id="u1")
+
+
+@pytest.mark.asyncio
 async def test_sign_closing_rejects_non_member(sessionmaker, data_factory):
     tid, (foreman, supervisor, outsider) = await _persons(data_factory, "Fore", "Super", "Out")
     async with sessionmaker() as session:
