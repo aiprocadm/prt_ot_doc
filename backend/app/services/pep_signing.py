@@ -28,6 +28,7 @@ from app.domains.signing.pep import (
 from app.models.approval_workflow import ApprovalInstanceStatus
 from app.models.document import DocumentVersion
 from app.models.models import ApprovalInstance, BriefingEntry, Person, PPEIssue, SignatureRequest
+from app.models.work_permit import WorkPermit, WorkPermitBriefing, WorkPermitMember
 from app.services.events import EventType
 from app.services.outbox import OutboxService
 
@@ -96,6 +97,39 @@ class PepSigningService:
                 "person_id": entry.person_id,
                 "briefing_template_id": entry.briefing_template_id,
                 "briefing_date": entry.briefing_date.isoformat() if entry.briefing_date else None,
+            }
+        if object_type == "work_permit":
+            wp = await self.session.get(WorkPermit, object_id)
+            if wp is None or str(wp.tenant_id) != str(self.tenant_id):
+                raise PepNotFound("work_permit")
+            members = (
+                await self.session.execute(
+                    select(WorkPermitMember)
+                    .where(
+                        WorkPermitMember.tenant_id == self.tenant_id,
+                        WorkPermitMember.work_permit_id == wp.id,
+                    )
+                    .order_by(WorkPermitMember.created_at.asc())
+                )
+            ).scalars().all()
+            return {
+                "work_permit_id": wp.id,
+                "number": wp.number,
+                "work_type": wp.work_type,
+                "zone_text": wp.zone_text,
+                "status": wp.status,
+                "members": [{"person_id": m.person_id, "role": m.role} for m in members],
+            }
+        if object_type == "work_permit_briefing":
+            br = await self.session.get(WorkPermitBriefing, object_id)
+            if br is None or str(br.tenant_id) != str(self.tenant_id):
+                raise PepNotFound("work_permit_briefing")
+            return {
+                "work_permit_briefing_id": br.id,
+                "work_permit_id": br.work_permit_id,
+                "conducted_by_person_id": br.conducted_by_person_id,
+                "conducted_at": br.conducted_at.isoformat() if br.conducted_at else None,
+                "topics_text": br.topics_text,
             }
         raise PepConflict(f"unsupported object_type: {object_type}")
 

@@ -103,140 +103,177 @@ def upgrade() -> None:
     # iter47 / next55). No-op on SQLite.
     bind = op.get_bind()
     if bind.dialect.name == "postgresql":
+        # ALL five new enum types must be created BEFORE the columns/tables that
+        # reference them. Every ENUM column below is declared with
+        # ``create_type=False`` (so add_column / create_table never emits an
+        # implicit CREATE TYPE), which means a missing explicit ``.create()``
+        # here yields ``type "<name>" does not exist`` on PG (SQLite tolerates
+        # it because enums degrade to VARCHAR). The original revision created
+        # only the first two; ``incidentpersonrole`` / ``incidentlogstage`` /
+        # ``incidentlogstatus`` were omitted, breaking
+        # ``CREATE TABLE incident_log`` / ``incident_person`` on PostgreSQL.
         postgresql.ENUM(*INCIDENT_TYPE_VALUES, name="incidenttype", create_type=False).create(bind, checkfirst=True)
         postgresql.ENUM(*INCIDENT_STAGE_VALUES, name="incidentstage", create_type=False).create(bind, checkfirst=True)
+        postgresql.ENUM(*INCIDENT_PERSON_ROLE_VALUES, name="incidentpersonrole", create_type=False).create(bind, checkfirst=True)
+        postgresql.ENUM(*INCIDENT_LOG_STAGE_VALUES, name="incidentlogstage", create_type=False).create(bind, checkfirst=True)
+        postgresql.ENUM(*INCIDENT_LOG_STATUS_VALUES, name="incidentlogstatus", create_type=False).create(bind, checkfirst=True)
     # ------------------------------------------------------------------
     # 1. Alter incident: add 6 missing business cols + 4 indexes.
     # ------------------------------------------------------------------
-    op.add_column(
-        "incident",
-        sa.Column(
-            "company_id",
-            sa.String(length=36),
-            sa.ForeignKey("company.id"),
-            nullable=False,
-        ),
-    )
-    op.add_column(
-        "incident",
-        sa.Column(
-            "site_id",
-            sa.String(length=36),
-            sa.ForeignKey("site.id"),
-            nullable=False,
-        ),
-    )
-    op.add_column(
-        "incident",
-        sa.Column(
-            "incident_type",
-            postgresql.ENUM(*INCIDENT_TYPE_VALUES, name="incidenttype", create_type=False),
-            nullable=False,
-            server_default="ACCIDENT",
-        ),
-    )
-    op.add_column(
-        "incident",
-        sa.Column(
-            "investigation_stage",
-            postgresql.ENUM(*INCIDENT_STAGE_VALUES, name="incidentstage", create_type=False),
-            nullable=False,
-            server_default="REGISTRATION",
-        ),
-    )
-    op.add_column(
-        "incident",
-        sa.Column("location_description", sa.String(length=255), nullable=True),
-    )
-    op.add_column(
-        "incident",
-        sa.Column(
-            "pack_id",
-            sa.String(length=36),
-            sa.ForeignKey("document_pack.id", ondelete="SET NULL"),
-            nullable=True,
-        ),
-    )
+    # Idempotency note (PG only): env.py runs migrations under AUTOCOMMIT, so a
+    # mid-migration failure (historically: the missing enum types above made the
+    # later CREATE TABLE incident_log fail) leaves the already-executed ALTERs
+    # committed. The docker entrypoint then re-runs ``upgrade heads`` on
+    # container restart, which retried this revision from the top and raised
+    # ``DuplicateColumnError: column "company_id" ... already exists`` — the
+    # perf-smoke failure. The enum fix above prevents the partial failure on
+    # fresh DBs, but per env.py's retry-safety contract the ALTER section must
+    # also self-heal on a volume already carrying the partial state. So on PG we
+    # skip ONLY the incident-alter block when ``company_id`` already exists
+    # (a prior partial attempt got that far), while STILL creating the
+    # incident_log / incident_person child tables below — those are what failed
+    # in the partial run and must be (re)created. SQLite never partial-applies
+    # (fresh DB per test) so the block always runs there.
+    _incident_already_altered = bind.dialect.name == "postgresql" and "company_id" in {
+        col["name"] for col in sa.inspect(bind).get_columns("incident")
+    }
+    if not _incident_already_altered:
+        op.add_column(
+            "incident",
+            sa.Column(
+                "company_id",
+                sa.String(length=36),
+                sa.ForeignKey("company.id"),
+                nullable=False,
+            ),
+        )
+        op.add_column(
+            "incident",
+            sa.Column(
+                "site_id",
+                sa.String(length=36),
+                sa.ForeignKey("site.id"),
+                nullable=False,
+            ),
+        )
+        op.add_column(
+            "incident",
+            sa.Column(
+                "incident_type",
+                postgresql.ENUM(*INCIDENT_TYPE_VALUES, name="incidenttype", create_type=False),
+                nullable=False,
+                server_default="ACCIDENT",
+            ),
+        )
+        op.add_column(
+            "incident",
+            sa.Column(
+                "investigation_stage",
+                postgresql.ENUM(*INCIDENT_STAGE_VALUES, name="incidentstage", create_type=False),
+                nullable=False,
+                server_default="REGISTRATION",
+            ),
+        )
+        op.add_column(
+            "incident",
+            sa.Column("location_description", sa.String(length=255), nullable=True),
+        )
+        op.add_column(
+            "incident",
+            sa.Column(
+                "pack_id",
+                sa.String(length=36),
+                sa.ForeignKey("document_pack.id", ondelete="SET NULL"),
+                nullable=True,
+            ),
+        )
 
-    # Column-level indexes (from model `index=True` flags).
-    op.create_index("ix_incident_company_id", "incident", ["company_id"], unique=False)
-    op.create_index("ix_incident_site_id", "incident", ["site_id"], unique=False)
-    op.create_index("ix_incident_pack_id", "incident", ["pack_id"], unique=False)
-    # Composite indexes (from model __table_args__).
-    op.create_index("ix_incident_company", "incident", ["tenant_id", "company_id"], unique=False)
-    op.create_index("ix_incident_site", "incident", ["tenant_id", "site_id"], unique=False)
-    op.create_index("ix_incident_status", "incident", ["tenant_id", "status"], unique=False)
-    op.create_index("ix_incident_occurred_at", "incident", ["occurred_at"], unique=False)
+        # Column-level indexes (from model `index=True` flags).
+        op.create_index("ix_incident_company_id", "incident", ["company_id"], unique=False)
+        op.create_index("ix_incident_site_id", "incident", ["site_id"], unique=False)
+        op.create_index("ix_incident_pack_id", "incident", ["pack_id"], unique=False)
+        # Composite indexes (from model __table_args__).
+        op.create_index("ix_incident_company", "incident", ["tenant_id", "company_id"], unique=False)
+        op.create_index("ix_incident_site", "incident", ["tenant_id", "site_id"], unique=False)
+        op.create_index("ix_incident_status", "incident", ["tenant_id", "status"], unique=False)
+        op.create_index("ix_incident_occurred_at", "incident", ["occurred_at"], unique=False)
+
+    # ``incident_log`` / ``incident_person`` are guarded by a table-existence
+    # check for the same AUTOCOMMIT retry-safety reason as the incident-alter
+    # block above: a prior partial attempt may have created one before failing.
+    _existing_tables = set(sa.inspect(bind).get_table_names())
 
     # ------------------------------------------------------------------
     # 2. Create incident_log table.
     # ------------------------------------------------------------------
-    op.create_table(
-        "incident_log",
-        sa.Column("id", sa.String(length=36), nullable=False),
-        sa.Column("tenant_id", sa.String(length=36), nullable=False),
-        sa.Column("incident_id", sa.String(length=36), nullable=False),
-        sa.Column("author_id", sa.String(length=36), nullable=True),
-        sa.Column(
-            "stage",
-            postgresql.ENUM(*INCIDENT_LOG_STAGE_VALUES, name="incidentlogstage", create_type=False),
-            nullable=False,
-        ),
-        sa.Column(
-            "status",
-            postgresql.ENUM(*INCIDENT_LOG_STATUS_VALUES, name="incidentlogstatus", create_type=False),
-            nullable=False,
-        ),
-        sa.Column("message", sa.Text(), nullable=False),
-        sa.Column("metadata_json", sa.JSON(), nullable=False, server_default=sa.text("'{}'")),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("version", sa.Integer(), nullable=False),
-        sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),
-        sa.ForeignKeyConstraint(["incident_id"], ["incident.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["author_id"], ["user.id"], ondelete="SET NULL"),
-        sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index(op.f("ix_incident_log_tenant_id"), "incident_log", ["tenant_id"], unique=False)
-    op.create_index("ix_incident_log_incident_id", "incident_log", ["incident_id"], unique=False)
-    op.create_index("ix_incident_log_author_id", "incident_log", ["author_id"], unique=False)
-    op.create_index("ix_incident_log_incident", "incident_log", ["tenant_id", "incident_id"], unique=False)
-    op.create_index("ix_incident_log_stage", "incident_log", ["tenant_id", "stage"], unique=False)
+    if "incident_log" not in _existing_tables:
+        op.create_table(
+            "incident_log",
+            sa.Column("id", sa.String(length=36), nullable=False),
+            sa.Column("tenant_id", sa.String(length=36), nullable=False),
+            sa.Column("incident_id", sa.String(length=36), nullable=False),
+            sa.Column("author_id", sa.String(length=36), nullable=True),
+            sa.Column(
+                "stage",
+                postgresql.ENUM(*INCIDENT_LOG_STAGE_VALUES, name="incidentlogstage", create_type=False),
+                nullable=False,
+            ),
+            sa.Column(
+                "status",
+                postgresql.ENUM(*INCIDENT_LOG_STATUS_VALUES, name="incidentlogstatus", create_type=False),
+                nullable=False,
+            ),
+            sa.Column("message", sa.Text(), nullable=False),
+            sa.Column("metadata_json", sa.JSON(), nullable=False, server_default=sa.text("'{}'")),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+            sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+            sa.Column("version", sa.Integer(), nullable=False),
+            sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),
+            sa.ForeignKeyConstraint(["incident_id"], ["incident.id"], ondelete="CASCADE"),
+            sa.ForeignKeyConstraint(["author_id"], ["user.id"], ondelete="SET NULL"),
+            sa.PrimaryKeyConstraint("id"),
+        )
+        op.create_index(op.f("ix_incident_log_tenant_id"), "incident_log", ["tenant_id"], unique=False)
+        op.create_index("ix_incident_log_incident_id", "incident_log", ["incident_id"], unique=False)
+        op.create_index("ix_incident_log_author_id", "incident_log", ["author_id"], unique=False)
+        op.create_index("ix_incident_log_incident", "incident_log", ["tenant_id", "incident_id"], unique=False)
+        op.create_index("ix_incident_log_stage", "incident_log", ["tenant_id", "stage"], unique=False)
 
     # ------------------------------------------------------------------
     # 3. Create incident_person table.
     # ------------------------------------------------------------------
-    op.create_table(
-        "incident_person",
-        sa.Column("id", sa.String(length=36), nullable=False),
-        sa.Column("tenant_id", sa.String(length=36), nullable=False),
-        sa.Column("incident_id", sa.String(length=36), nullable=False),
-        sa.Column("person_id", sa.String(length=36), nullable=False),
-        sa.Column(
-            "role",
-            postgresql.ENUM(*INCIDENT_PERSON_ROLE_VALUES, name="incidentpersonrole", create_type=False),
-            nullable=False,
-            server_default="VICTIM",
-        ),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("version", sa.Integer(), nullable=False),
-        sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),
-        sa.ForeignKeyConstraint(["incident_id"], ["incident.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["person_id"], ["person.id"], ondelete="RESTRICT"),
-        sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint(
-            "tenant_id",
-            "incident_id",
-            "person_id",
-            "role",
-            name="uq_incident_person_role",
-        ),
-    )
-    op.create_index(op.f("ix_incident_person_tenant_id"), "incident_person", ["tenant_id"], unique=False)
-    op.create_index("ix_incident_person_incident_id", "incident_person", ["incident_id"], unique=False)
-    op.create_index("ix_incident_person_person_id", "incident_person", ["person_id"], unique=False)
-    op.create_index("ix_incident_person_role", "incident_person", ["role"], unique=False)
+    if "incident_person" not in _existing_tables:
+        op.create_table(
+            "incident_person",
+            sa.Column("id", sa.String(length=36), nullable=False),
+            sa.Column("tenant_id", sa.String(length=36), nullable=False),
+            sa.Column("incident_id", sa.String(length=36), nullable=False),
+            sa.Column("person_id", sa.String(length=36), nullable=False),
+            sa.Column(
+                "role",
+                postgresql.ENUM(*INCIDENT_PERSON_ROLE_VALUES, name="incidentpersonrole", create_type=False),
+                nullable=False,
+                server_default="VICTIM",
+            ),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+            sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+            sa.Column("version", sa.Integer(), nullable=False),
+            sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),
+            sa.ForeignKeyConstraint(["incident_id"], ["incident.id"], ondelete="CASCADE"),
+            sa.ForeignKeyConstraint(["person_id"], ["person.id"], ondelete="RESTRICT"),
+            sa.PrimaryKeyConstraint("id"),
+            sa.UniqueConstraint(
+                "tenant_id",
+                "incident_id",
+                "person_id",
+                "role",
+                name="uq_incident_person_role",
+            ),
+        )
+        op.create_index(op.f("ix_incident_person_tenant_id"), "incident_person", ["tenant_id"], unique=False)
+        op.create_index("ix_incident_person_incident_id", "incident_person", ["incident_id"], unique=False)
+        op.create_index("ix_incident_person_person_id", "incident_person", ["person_id"], unique=False)
+        op.create_index("ix_incident_person_role", "incident_person", ["role"], unique=False)
 
 
 def downgrade() -> None:

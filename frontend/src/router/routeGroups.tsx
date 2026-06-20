@@ -20,6 +20,7 @@ import {
   ClientPortalHistoryPage,
   ClientPortalPackagesPage,
   ClientPortalRequestsPage,
+  CommandCenterPage,
   CompaniesPage,
   ContractorsPage,
   CorrectiveActionsPage,
@@ -48,6 +49,7 @@ import {
   PortalRequestsPage,
   PpeDashboardPage,
   PpePage,
+  PermitsPage,
   PrescriptionsPage,
   ReferencePage,
   ReportsPage,
@@ -62,6 +64,8 @@ import {
   TrendsPage,
   WarehousePage,
   WorkflowPage,
+  WorkPermitDetailPage,
+  WorkPermitsPage,
   WorkspaceAttentionPage,
   WorkspaceDataQualityPage
 } from "@/router/pageRegistry";
@@ -88,6 +92,7 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
         <Route key="/dashboard/training" path="/dashboard/training" element={<TrainingDashboardPage />} />,
         <Route key="/dashboard/ppe" path="/dashboard/ppe" element={<PpeDashboardPage />} />,
         <Route key="/dashboard/client-delivery" path="/dashboard/client-delivery" element={<ClientDeliveryDashboardPage />} />,
+        <Route key="/command-center" path="/command-center" element={<CommandCenterPage />} />,
         <Route key="/workspace/attention" path="/workspace/attention" element={<WorkspaceAttentionPage />} />
       ]
     },
@@ -156,12 +161,23 @@ export const buildProtectedRouteGroups = (): ReactElement[] => {
         <Route key="/inspection-prep/packages" path="/inspection-prep/packages" element={<InspectionPrepPackagesPage />} />
       ]
     },
+    {
+      permission: PERMISSIONS.PERMIT_VIEW,
+      routes: [<Route key="/permits" path="/permits" element={<PermitsPage />} />]
+    },
     { permission: PERMISSIONS.AUDIT_PREP_VIEW, routes: [<Route key="/audit-prep" path="/audit-prep" element={<AuditPrepPage />} />] },
     { permission: PERMISSIONS.FIRE_SAFETY_VIEW, routes: [<Route key="/fire-safety" path="/fire-safety" element={<FireSafetyPage />} />] },
     { permission: PERMISSIONS.FIRE_TRAINING_VIEW, routes: [<Route key="/fire-training" path="/fire-training" element={<FireTrainingPage />} />] },
     { permission: PERMISSIONS.FIRE_INSPECTIONS_VIEW, routes: [<Route key="/fire-inspections" path="/fire-inspections" element={<FireInspectionsPage />} />] },
     { permission: PERMISSIONS.REFERENCE_VIEW, routes: [<Route key="/reference" path="/reference" element={<ReferencePage />} />] },
     { permission: PERMISSIONS.CONTRACTOR_VIEW, routes: [<Route key="/contractors" path="/contractors" element={<ContractorsPage />} />] },
+    {
+      permission: PERMISSIONS.WORK_PERMIT_VIEW,
+      routes: [
+        <Route key="/work-permits" path="/work-permits" element={<WorkPermitsPage />} />,
+        <Route key="/work-permits/:id" path="/work-permits/:id" element={<WorkPermitDetailPage />} />
+      ]
+    },
     {
       permission: PERMISSIONS.ADMIN_MANAGE_ROLES,
       routes: [

@@ -497,7 +497,7 @@ class EmployeeCardService:
                 status=permit.status,
                 position_id=str(permit.position_id) if permit.position_id else None,
                 is_expired=bool(
-                    permit.status == PermitStatus.ACTIVE
+                    permit.status == PermitStatus.ACTIVE.value
                     and permit.valid_until is not None
                     and permit.valid_until < today
                 ),
@@ -518,7 +518,7 @@ class EmployeeCardService:
             .where(
                 Permit.tenant_id == self.tenant_id,
                 Permit.person_id == person.id,
-                Permit.status == PermitStatus.ACTIVE,
+                Permit.status == PermitStatus.ACTIVE.value,
             )
         )
         expired = await self._count(
@@ -527,7 +527,7 @@ class EmployeeCardService:
             .where(
                 Permit.tenant_id == self.tenant_id,
                 Permit.person_id == person.id,
-                Permit.status == PermitStatus.ACTIVE,
+                Permit.status == PermitStatus.ACTIVE.value,
                 Permit.valid_until.is_not(None),
                 Permit.valid_until < today,
             )

@@ -339,6 +339,7 @@ class Settings(BaseSettings):
     pdf_worker_concurrency: int = Field(2, alias="PDF_WORKER_CONCURRENCY")
     doc_pipeline_enable_qr: bool = Field(False, alias="DOC_PIPELINE_ENABLE_QR")
     doc_pipeline_enable_watermark: bool = Field(False, alias="DOC_PIPELINE_ENABLE_WATERMARK")
+    doc_pipeline_letterhead_auto: bool = Field(False, alias="DOC_PIPELINE_LETTERHEAD_AUTO")
     doc_pipeline_watermark_text: str = Field(
         "CONFIDENTIAL", alias="DOC_PIPELINE_WATERMARK_TEXT"
     )

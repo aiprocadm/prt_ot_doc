@@ -2,6 +2,7 @@ import { lazy } from "react";
 
 export const LoginPage = lazy(() => import("@/pages/auth/LoginPage"));
 export const DashboardPage = lazy(() => import("@/pages/dashboard/DashboardPage"));
+export const CommandCenterPage = lazy(() => import("@/pages/operational/CommandCenterPage"));
 export const CompaniesPage = lazy(() => import("@/pages/companies/CompaniesPage"));
 export const PersonsPage = lazy(() => import("@/pages/persons/PersonsPage"));
 export const EmployeeCardPage = lazy(() => import("@/pages/employees/EmployeeCardPage"));
@@ -20,6 +21,7 @@ export const InspectionPlansPage = lazy(() => import("@/pages/inspection-plans/I
 export const InspectionChecklistsPage = lazy(() => import("@/pages/inspection-checklists/InspectionChecklistsPage"));
 export const FindingsPage = lazy(() => import("@/pages/findings/FindingsPage"));
 export const PrescriptionsPage = lazy(() => import("@/pages/prescriptions/PrescriptionsPage"));
+export const PermitsPage = lazy(() => import("@/pages/permits/PermitsPage"));
 export const CorrectiveActionsPage = lazy(() => import("@/pages/corrective-actions/CorrectiveActionsPage"));
 export const InspectionPrepPackagesPage = lazy(() => import("@/pages/inspection-prep/InspectionPrepPackagesPage"));
 export const AuditPrepPage = lazy(() => import("@/pages/audit-prep/AuditPrepPage"));
@@ -59,5 +61,7 @@ export const WorkflowPage = lazy(() => import("@/pages/workflow/WorkflowPage"));
 export const WorkspaceAttentionPage = lazy(() => import("@/pages/workspace/WorkspaceAttentionPage"));
 export const WorkspaceDataQualityPage = lazy(() => import("@/pages/workspace/WorkspaceDataQualityPage"));
 export const SyncConflictHelpPage = lazy(() => import("@/pages/help/SyncConflictHelpPage"));
+export const WorkPermitsPage = lazy(() => import("@/pages/work-permits/WorkPermitsPage"));
+export const WorkPermitDetailPage = lazy(() => import("@/pages/work-permits/WorkPermitDetailPage"));
 export * from "@/router/pageRegistry/documents";
 export * from "@/router/pageRegistry/search";

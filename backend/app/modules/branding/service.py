@@ -18,6 +18,35 @@ from app.modules.headers.placeholders import render_placeholders
 from .schemas import BrandingProfilePayload, BrandingProfileRead, BrandingResolutionMeta
 
 
+def assemble_header_context(
+    *,
+    branding: BrandingProfilePayload,
+    company_ref: dict[str, Any],
+    site: Site | None,
+    doc: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    branch_name = branding.branch_label or (site.name if site is not None else None)
+    return {
+        "organization": branding.model_dump(),
+        "company": company_ref,
+        "branch": {"id": site.id, "name": branch_name, "address": site.address} if site else {},
+        "doc": doc or {},
+    }
+
+
+def build_adhoc_context(
+    *,
+    branding: BrandingProfilePayload,
+    doc: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return assemble_header_context(
+        branding=branding,
+        company_ref={"id": None, "name": branding.legal_name or branding.short_name},
+        site=None,
+        doc=doc,
+    )
+
+
 class BrandingService:
     def __init__(self, session: AsyncSession, tenant: Tenant) -> None:
         self.session = session
@@ -125,13 +154,12 @@ class BrandingService:
             if site.address:
                 payload.setdefault('service_notes', [site.address])
         branding = BrandingProfilePayload.model_validate(payload)
-        branch_name = branding.branch_label or (site.name if site is not None else None)
-        header_context = {
-            'organization': branding.model_dump(),
-            'company': {'id': company.id, 'name': company.name},
-            'branch': {'id': site.id, 'name': branch_name, 'address': site.address} if site else {},
-            'doc': {},
-        }
+        header_context = assemble_header_context(
+            branding=branding,
+            company_ref={"id": company.id, "name": company.name},
+            site=site,
+            doc={},
+        )
         reproducibility = {
             'tenant_id': str(self.tenant.id),
             'company_id': company.id,

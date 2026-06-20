@@ -1,5 +1,7 @@
 # ЭДО Срез-1: ПЭП внутренний контур — Implementation Plan
 
+> **✅ РЕАЛИЗОВАНО И ВЛИТО — PR #649 (`974cd30`) + чистка PR #650 (`a006d6e`).** Проверено аудитом кода 2026-06-15: домен `domains/signing/pep.py`, сервис `PepSigningService`, миграция `ed01`, роуты `/sign/pep/*`, все потребители + outbox-события + тесты, симуляция вычищена. Чекбоксы ниже отмечены пост-фактум.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Рабочая простая электронная подпись (ПЭП): hash содержимого, подтверждение разовым кодом для сотрудников без учётки, верификация, журнал; потребители — докфабрика (с гейтом согласования), СИЗ МБ-7, ознакомления, briefings; честная чистка симуляции ЭДО.
@@ -52,7 +54,7 @@
 - Create: `backend/app/domains/signing/pep.py`
 - Test: `backend/tests/test_pep_signing_domain.py`
 
-- [ ] **Step 1: Написать падающие unit-тесты**
+- [x] **Step 1: Написать падающие unit-тесты**
 
 ```python
 """PEP (simple e-signature) pure domain: canonical hash, FSM, confirm-code outcome.
@@ -164,12 +166,12 @@ def test_purposes_vocabulary():
     assert CONFIRM_TTL_MINUTES == 15
 ```
 
-- [ ] **Step 2: Убедиться, что тесты падают**
+- [x] **Step 2: Убедиться, что тесты падают**
 
 Run: `python -m pytest backend/tests/test_pep_signing_domain.py -p no:xdist --timeout=120 -q`
 Expected: FAIL/ERROR `ModuleNotFoundError: app.domains.signing`
 
-- [ ] **Step 3: Реализовать домен**
+- [x] **Step 3: Реализовать домен**
 
 `backend/app/domains/signing/__init__.py` — пустой файл.
 
@@ -264,12 +266,12 @@ def confirm_outcome(
     return ConfirmOutcome.WRONG_CODE
 ```
 
-- [ ] **Step 4: Тесты зелёные**
+- [x] **Step 4: Тесты зелёные**
 
 Run: `python -m pytest backend/tests/test_pep_signing_domain.py -p no:xdist --timeout=120 -q`
 Expected: PASS (все)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/domains/signing backend/tests/test_pep_signing_domain.py
@@ -285,7 +287,7 @@ git commit -m "feat(edo): чистый домен ПЭП — канонизац�
 - Create: `backend/app/migrations/versions/20260611_ed01_pep_signing_columns.py`
 - Test: `backend/tests/test_ed01_pep_signing_migration.py`
 
-- [ ] **Step 1: Написать guard-тест миграции (падающий)**
+- [x] **Step 1: Написать guard-тест миграции (падающий)**
 
 `backend/tests/test_ed01_pep_signing_migration.py` (стиль `test_sz02_drop_ppe_family_b_migration.py` — importlib + monkeypatch op):
 
@@ -386,12 +388,12 @@ def test_downgrade_drops_exactly_pep_columns(monkeypatch):
     assert {(t, c) for t, c in dropped} == {("signature_requests", c) for c in PEP_COLUMNS}
 ```
 
-- [ ] **Step 2: Убедиться, что guard падает**
+- [x] **Step 2: Убедиться, что guard падает**
 
 Run: `python -m pytest backend/tests/test_ed01_pep_signing_migration.py -p no:xdist --timeout=120 -q`
 Expected: FAIL (файла миграции нет)
 
-- [ ] **Step 3: Написать миграцию**
+- [x] **Step 3: Написать миграцию**
 
 `backend/app/migrations/versions/20260611_ed01_pep_signing_columns.py` (стиль sz01: диалект-гард `op.get_bind().dialect.name`, batch для SQLite):
 
@@ -477,7 +479,7 @@ def downgrade() -> None:
     op.drop_column(TABLE, "signer_person_id")
 ```
 
-- [ ] **Step 4: Обновить ORM-модель**
+- [x] **Step 4: Обновить ORM-модель**
 
 В `backend/app/models/models.py`: расширить enum (после класса `SignatureRequestStatus`, строка ~2900 — НЕ трогая существующие значения):
 
@@ -508,17 +510,17 @@ class SignatureRequestStatus(str, enum.Enum):
 
 И в той же модели `status` сменить длину: `String(16)` → `String(32)` (поле объявлено как `mapped_column(String(16), ...)` — найти в классе и заменить на `String(32)`).
 
-- [ ] **Step 5: Guard + mapper-конфигурация зелёные**
+- [x] **Step 5: Guard + mapper-конфигурация зелёные**
 
 Run: `python -m pytest backend/tests/test_ed01_pep_signing_migration.py backend/tests/test_orm_mapper_configuration.py -p no:xdist --timeout=300 -q`
 Expected: PASS
 
-- [ ] **Step 6: Миграционный когорт зелёный**
+- [x] **Step 6: Миграционный когорт зелёный**
 
 Run: `python -m pytest backend/tests -k "migration or downgrade or mapper" -p no:xdist --timeout=600 -q`
 Expected: PASS (как в Срезе-2-мини: ~102+ passed)
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/app/models/models.py backend/app/migrations/versions/20260611_ed01_pep_signing_columns.py backend/tests/test_ed01_pep_signing_migration.py
@@ -534,7 +536,7 @@ git commit -m "feat(edo): ed01 — ПЭП-колонки signature_requests + OR
 - Modify: `backend/app/services/outbox.py:45-76` (`_pipeline_for_event`)
 - Test: `backend/tests/test_pep_events_registration.py`
 
-- [ ] **Step 1: Падающий unit-тест**
+- [x] **Step 1: Падающий unit-тест**
 
 ```python
 """PEP events are first-class citizens of the outbox pipeline (sibling parity
@@ -580,12 +582,12 @@ def test_pipeline_routing():
     assert _pipeline_for_event("PEPDeclined") is PipelineType.DOCUMENT
 ```
 
-- [ ] **Step 2: Убедиться, что падает**
+- [x] **Step 2: Убедиться, что падает**
 
 Run: `python -m pytest backend/tests/test_pep_events_registration.py -p no:xdist --timeout=120 -q`
 Expected: FAIL (ImportError PEPSignedPayload)
 
-- [ ] **Step 3: Реализовать регистрацию**
+- [x] **Step 3: Реализовать регистрацию**
 
 В `backend/app/services/events.py`:
 
@@ -627,12 +629,12 @@ class PEPDeclinedPayload(BaseEventPayload):
 
 В `backend/app/services/outbox.py` `_pipeline_for_event` — добавить в существующий set с `EventType.DOCUMENT_SIGNED` (возвращающий `PipelineType.DOCUMENT`) два значения: `EventType.PEP_SIGNED, EventType.PEP_DECLINED`.
 
-- [ ] **Step 4: Тесты зелёные + outbox-регрессия**
+- [x] **Step 4: Тесты зелёные + outbox-регрессия**
 
 Run: `python -m pytest backend/tests/test_pep_events_registration.py backend/tests -k "outbox" -p no:xdist --timeout=300 -q`
 Expected: PASS (новые + ~22 outbox-теста)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/services/events.py backend/app/services/outbox.py backend/tests/test_pep_events_registration.py
@@ -647,7 +649,7 @@ git commit -m "feat(edo): события PEPSigned/PEPDeclined в outbox-пай�
 - Create: `backend/app/services/pep_signing.py`
 - Test: `tests/api/test_pep_signing_service.py` (DB-тесты: фикстуры `sessionmaker`/`data_factory` живут в корневом `tests/conftest.py` — НЕ в `backend/tests/`, урок Подрядчиков Среза-3)
 
-- [ ] **Step 1: Падающие DB-тесты ядра сервиса**
+- [x] **Step 1: Падающие DB-тесты ядра сервиса**
 
 ```python
 """PepSigningService: create/confirm/decline + builders (DB-level, no HTTP)."""
@@ -812,12 +814,12 @@ async def test_tenant_isolation_on_confirm(sessionmaker, data_factory):
 
 ПРИМЕЧАНИЕ исполнителю: если у `data_factory.ensure_tenant` нет параметра `slug` — посмотреть сигнатуру в `tests/conftest.py`/`TestDataFactory` и создать второй тенант принятым там способом (как в существующих tenant-isolation тестах, например `tests/api/test_ppe_norm_admission.py` или `test_contractor_*`).
 
-- [ ] **Step 2: Убедиться, что падают**
+- [x] **Step 2: Убедиться, что падают**
 
 Run: `python -m pytest tests/api/test_pep_signing_service.py -p no:xdist --timeout=300 -q`
 Expected: FAIL (ModuleNotFoundError app.services.pep_signing)
 
-- [ ] **Step 3: Реализовать сервис**
+- [x] **Step 3: Реализовать сервис**
 
 `backend/app/services/pep_signing.py`:
 
@@ -1088,12 +1090,12 @@ class PepSigningService:
 
 ПРИМЕЧАНИЕ исполнителю: проверь импорт `BriefingEntry`, `Person`, `PPEIssue` из `app.models.models` (так делают существующие сервисы), `DocumentVersion` — из `app.models.document`. Если поле `briefing_date` у BriefingEntry называется иначе — посмотреть класс и взять фактические поля (дата + template id + person id).
 
-- [ ] **Step 4: Тесты зелёные**
+- [x] **Step 4: Тесты зелёные**
 
 Run: `python -m pytest tests/api/test_pep_signing_service.py -p no:xdist --timeout=300 -q`
 Expected: PASS (9 тестов)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/services/pep_signing.py tests/api/test_pep_signing_service.py
@@ -1108,7 +1110,7 @@ git commit -m "feat(edo): PepSigningService — create/confirm/decline, разо
 - Modify: `backend/app/services/pep_signing.py` (заменить заглушки `_approval_gate`/`_dispatch_signed`, добавить `verify` и `create_attested`)
 - Test: `tests/api/test_pep_signing_consumers.py` (Create)
 
-- [ ] **Step 1: Падающие тесты гейта/диспетчера/verify**
+- [x] **Step 1: Падающие тесты гейта/диспетчера/verify**
 
 ```python
 """PEP consumers: approval gate (document), signed-dispatch (DocumentVersion,
@@ -1255,12 +1257,12 @@ async def test_verify_detects_content_drift(sessionmaker, data_factory):
         assert req.verification_result_json["match"] is False
 ```
 
-- [ ] **Step 2: Убедиться, что падают**
+- [x] **Step 2: Убедиться, что падают**
 
 Run: `python -m pytest tests/api/test_pep_signing_consumers.py -p no:xdist --timeout=300 -q`
 Expected: FAIL (гейт-noop пропускает RUNNING; signature_doc_ref не проставлен; verify отсутствует)
 
-- [ ] **Step 3: Реализовать гейт, диспетчер, verify, create_attested**
+- [x] **Step 3: Реализовать гейт, диспетчер, verify, create_attested**
 
 В `backend/app/services/pep_signing.py` заменить заглушки:
 
@@ -1363,12 +1365,12 @@ Expected: FAIL (гейт-noop пропускает RUNNING; signature_doc_ref н
         return req
 ```
 
-- [ ] **Step 4: Тесты зелёные (оба сервисных файла)**
+- [x] **Step 4: Тесты зелёные (оба сервисных файла)**
 
 Run: `python -m pytest tests/api/test_pep_signing_consumers.py tests/api/test_pep_signing_service.py -p no:xdist --timeout=300 -q`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/services/pep_signing.py tests/api/test_pep_signing_consumers.py
@@ -1384,7 +1386,7 @@ git commit -m "feat(edo): гейт согласования, диспетчер 
 - Modify: `backend/app/api/v1/route_groups.py` (импорт ~строка 12-30, регистрация ~строка 161-163)
 - Test: `tests/api/test_pep_signing_api.py`
 
-- [ ] **Step 1: Падающие API-тесты**
+- [x] **Step 1: Падающие API-тесты**
 
 `tests/api/test_pep_signing_api.py` — использовать фикстуры `async_client` + `make_auth_headers` (посмотреть точную сигнатуру `make_auth_headers` в `tests/conftest.py` и существующий API-тест, например `tests/api/test_contractor_documents_api.py`, и повторить паттерн заголовков):
 
@@ -1508,12 +1510,12 @@ async def test_acknowledgements_journal(async_client, sessionmaker, data_factory
 
 ПРИМЕЧАНИЕ исполнителю: точную форму `make_auth_headers`/полей `Document` сверить с conftest и существующими API-тестами; если у `Document` обязательны другие поля — добавить их по фактической модели.
 
-- [ ] **Step 2: Убедиться, что падают**
+- [x] **Step 2: Убедиться, что падают**
 
 Run: `python -m pytest tests/api/test_pep_signing_api.py -p no:xdist --timeout=300 -q`
 Expected: FAIL (404 на /sign/pep/requests — роутера нет)
 
-- [ ] **Step 3: Реализовать роутер**
+- [x] **Step 3: Реализовать роутер**
 
 `backend/app/api/routes/pep_signing.py` (зависимости и error-хелперы зеркалят `approval_orchestration.py` — посмотреть его шапку и взять те же импорты `SessionDep`/`TenantDep`/`EditorAccess`/`ReaderAccess`/`_correlation_id`/`api_problem_detail`; если они определены локально в том файле — продублировать определения локально, НЕ импортировать кросс-роутерно):
 
@@ -1664,12 +1666,12 @@ async def list_acknowledgements(session: SessionDep, tenant: TenantDep, _: Reade
 
 Регистрация в `backend/app/api/v1/route_groups.py`: добавить `pep_signing` в импорт из `app.api.routes` и в список групп строку `(pep_signing.router, {"tags": ["pep-signing"]}),` рядом с `approval_orchestration`.
 
-- [ ] **Step 4: Тесты зелёные**
+- [x] **Step 4: Тесты зелёные**
 
 Run: `python -m pytest tests/api/test_pep_signing_api.py -p no:xdist --timeout=300 -q`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/api/routes/pep_signing.py backend/app/api/v1/route_groups.py tests/api/test_pep_signing_api.py
@@ -1684,7 +1686,7 @@ git commit -m "feat(edo): API /sign/pep/* + /sign/acknowledgements"
 - Modify: `backend/app/modules/briefings/services.py:14-55` (метод `sign`)
 - Test: `tests/api/test_briefing_pep_parity.py` (Create)
 
-- [ ] **Step 1: Падающий parity-тест**
+- [x] **Step 1: Падающий parity-тест**
 
 ```python
 """Briefing signatures route through the PEP core (Срез-1: attested mode),
@@ -1770,12 +1772,12 @@ async def test_instructor_sign_pep_uses_user_signer(sessionmaker, data_factory):
 
 ПРИМЕЧАНИЕ исполнителю: проверь обязательные поля `BriefingEntry` (briefing_type/briefing_date/status) по модели — добавь минимально требуемые.
 
-- [ ] **Step 2: Убедиться, что падают**
+- [x] **Step 2: Убедиться, что падают**
 
 Run: `python -m pytest tests/api/test_briefing_pep_parity.py -p no:xdist --timeout=300 -q`
 Expected: FAIL (нет ПЭП-записей)
 
-- [ ] **Step 3: Реализовать sign через ядро**
+- [x] **Step 3: Реализовать sign через ядро**
 
 В `BriefingEntryService.sign` (`backend/app/modules/briefings/services.py`) — в ветке создания НОВОЙ подписи (после существующего early-return для existing), перед `session.add(signature)`:
 
@@ -1802,12 +1804,12 @@ Expected: FAIL (нет ПЭП-записей)
 
 (заменив существующее создание `BriefingSignature`; update-path для existing НЕ трогаем — повторный sign не создаёт второй ПЭП-записи).
 
-- [ ] **Step 4: Parity + существующие briefing-тесты зелёные**
+- [x] **Step 4: Parity + существующие briefing-тесты зелёные**
 
 Run: `python -m pytest tests/api/test_briefing_pep_parity.py backend/tests tests -k "briefing" -p no:xdist --timeout=600 -q`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/modules/briefings/services.py tests/api/test_briefing_pep_parity.py
@@ -1822,7 +1824,7 @@ git commit -m "feat(edo): briefing-подписи через ПЭП-ядро (at
 - Modify: `backend/app/api/routes/edo_workflow.py` (`create_signature` ~444-491, `sign_request` ~493, `sign_submit` ~506, `send_to_edo` ~561-618; импорт jobs ~строка 1-54)
 - Test: `backend/tests/test_edo_simulation_cleanup.py` (Create, часть 1)
 
-- [ ] **Step 1: Падающие guard-тесты чистки (часть 1)**
+- [x] **Step 1: Падающие guard-тесты чистки (часть 1)**
 
 `backend/tests/test_edo_simulation_cleanup.py` (герметичный: текст файлов, без импорта роутов — [[local_env_drift_windows]]):
 
@@ -1873,12 +1875,12 @@ def test_orchestration_refresh_is_honest():
     assert "SIGNATURE_PROVIDER_NOT_CONFIGURED" in src
 ```
 
-- [ ] **Step 2: Убедиться, что падают**
+- [x] **Step 2: Убедиться, что падают**
 
 Run: `python -m pytest backend/tests/test_edo_simulation_cleanup.py -p no:xdist --timeout=120 -q`
 Expected: FAIL (5/5)
 
-- [ ] **Step 3: Чистка edo_workflow.py**
+- [x] **Step 3: Чистка edo_workflow.py**
 
 1. Удалить из импортов `edo_status_simulation_job, send_edo_job` (оставить `process_inbound_webhook`).
 2. Добавить хелпер рядом с `_edo_unprocessable`:
@@ -1924,12 +1926,12 @@ def _provider_not_configured(kind: str) -> HTTPException:
 5. `sign_submit`: аналогично — INTERNAL через ядро, не-INTERNAL → `_provider_not_configured("signature")`. `sign_status`/GET `/signatures` оставить (читают историю v1).
 6. Импорты: добавить `from app.services.pep_signing import PepConflict, PepNotFound, PepSigningService`.
 
-- [ ] **Step 4: Первые 3 guard-теста зелёные, существующие тесты роутера не сломаны**
+- [x] **Step 4: Первые 3 guard-теста зелёные, существующие тесты роутера не сломаны**
 
 Run: `python -m pytest backend/tests/test_edo_simulation_cleanup.py::test_edo_workflow_router_does_not_schedule_simulation backend/tests/test_edo_simulation_cleanup.py::test_internal_signature_routes_through_pep_core backend/tests/test_edo_workflow_error_contract.py -p no:xdist --timeout=300 -q`
 Expected: PASS (остальные guard-тесты чистки падают до Task 9)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/api/routes/edo_workflow.py backend/tests/test_edo_simulation_cleanup.py
@@ -1948,7 +1950,7 @@ git commit -m "feat(edo): честная чистка edo_workflow — /edo/send
 - Modify: `backend/tests/test_document_jobs_required.py:38` (убрать удалённые jobs)
 - Test: `backend/tests/test_edo_simulation_cleanup.py` (остальные guard'ы из Task 8)
 
-- [ ] **Step 1: approval_orchestration.py — честные отказы**
+- [x] **Step 1: approval_orchestration.py — честные отказы**
 
 1. Добавить тот же хелпер `_provider_not_configured` (продублировать локально, как принято между роутерами).
 2. `create_sign_request` (POST /sign/requests): `signature_type` в `{"kep","unep","mchd"}` → `raise _provider_not_configured("signature")` ДО создания записи. (`pep` сюда не ходит — у него свой роутер.)
@@ -1956,24 +1958,24 @@ git commit -m "feat(edo): честная чистка edo_workflow — /edo/send
 4. `refresh_edo_status` (POST /edo/messages/{id}/refresh-status): заменить тело (инлайн-прогрессию "sent"/"delivered") на `raise _provider_not_configured("edo")`.
 5. `create_edo_message`: оставить (честная запись в реестре со статусом queued, без фейкового прогресса).
 
-- [ ] **Step 2: Удалить моки из modules**
+- [x] **Step 2: Удалить моки из modules**
 
 `backend/app/modules/sign/service.py`: удалить класс `MockSignatureProvider`; `SignatureRequestService.__init__`/`SignatureVerificationService.__init__` — параметр `provider` оставить, но default `None` теперь означает «не сконфигурирован»: в `create`/`refresh`/`verify` при `self.provider is None` → `raise HTTPException(status.HTTP_409_CONFLICT, "signature provider is not configured")` (создание записи при этом не происходит).
 
 `backend/app/modules/edo/service.py`: удалить класс `MockEdoOperator`; в сервисах default-оператор `None` (методы, требующие оператора, отсутствуют/не вызываются — `EdoWebhookService.ingest` и `EdoStatusProjectionService.apply_event` оператора не используют и остаются как есть).
 
-- [ ] **Step 3: Удалить jobs**
+- [x] **Step 3: Удалить jobs**
 
 В `backend/app/tasks/_core.py` удалить целиком `send_edo_job` и `edo_status_simulation_job` (декораторы включительно). Проверить grep-ом, что других вызовов нет: `grep -rn "edo_status_simulation_job\|send_edo_job" backend/app` → пусто. В `backend/app/tasks/__init__.py` (или где экспортируются задачи через `__getattr__`) убрать их из экспортов, если они там перечислены.
 
 В `backend/tests/test_document_jobs_required.py` убрать оба имени из списка required jobs (строка ~38).
 
-- [ ] **Step 4: Все guard-тесты чистки зелёные + регрессия роутеров**
+- [x] **Step 4: Все guard-тесты чистки зелёные + регрессия роутеров**
 
 Run: `python -m pytest backend/tests/test_edo_simulation_cleanup.py backend/tests/test_document_jobs_required.py backend/tests -k "approval_orchestration or edo_workflow or signing_v1 or next57" -p no:xdist --timeout=600 -q`
 Expected: PASS. Если существующие тесты пинят симуляционное поведение (фейковый refresh и т.п.) — обновить их ожидания на честные 409 (это сознательное изменение контракта по спеку §6).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/api/routes/approval_orchestration.py backend/app/modules/sign/service.py backend/app/modules/edo/service.py backend/app/tasks/_core.py backend/tests/test_document_jobs_required.py backend/tests/test_edo_simulation_cleanup.py
@@ -1986,22 +1988,22 @@ git commit -m "feat(edo): симуляция вычищена — честные
 
 **Files:** только запуск тестов; фиксы — точечно по падениям.
 
-- [ ] **Step 1: Контурный когорт**
+- [x] **Step 1: Контурный когорт**
 
 Run: `python -m pytest backend/tests/test_pep_signing_domain.py backend/tests/test_ed01_pep_signing_migration.py backend/tests/test_pep_events_registration.py backend/tests/test_edo_simulation_cleanup.py tests/api/test_pep_signing_service.py tests/api/test_pep_signing_consumers.py tests/api/test_pep_signing_api.py tests/api/test_briefing_pep_parity.py -p no:xdist --timeout=600 -q`
 Expected: PASS
 
-- [ ] **Step 2: Миграционный когорт**
+- [x] **Step 2: Миграционный когорт**
 
 Run: `python -m pytest backend/tests -k "migration or downgrade or mapper" -p no:xdist --timeout=900 -q`
 Expected: PASS
 
-- [ ] **Step 3: Смежная регрессия (подписи/approvals/briefings/документы/outbox/СИЗ-гейт)**
+- [x] **Step 3: Смежная регрессия (подписи/approvals/briefings/документы/outbox/СИЗ-гейт)**
 
 Run: `python -m pytest backend/tests tests -k "approval or briefing or outbox or ppe_lifecycle or ppe_norm_admission or document_jobs" -p no:xdist --timeout=900 -q`
 Expected: PASS (фиксы по падениям — только согласованные со спеком изменения контракта)
 
-- [ ] **Step 4: Commit (если были фиксы) + handoff**
+- [x] **Step 4: Commit (если были фиксы) + handoff**
 
 Обновить `AI_IMPLEMENTATION_REPORT.md` новым handoff-блоком (паттерн прошлых срезов), закоммитить.
 

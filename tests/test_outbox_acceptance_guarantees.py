@@ -86,6 +86,24 @@ async def test_poison_queue_guarantee_event_moves_to_dead_after_max_attempts(
 
     # Simulate multiple dispatch cycles (should try 3 times then move to poison queue)
     for cycle in range(1, 5):  # More cycles than max_attempts
+        # Each failed attempt schedules the next retry via exponential backoff
+        # (next_attempt_at = now + backoff). The processor only selects events whose
+        # next_attempt_at has elapsed. Because these cycles run back-to-back with no
+        # wall-clock delay, the (tiny but non-zero) backoff window may not have passed
+        # yet, so the event would be skipped and ``attempts`` would not advance — a
+        # timing race that flaked on slower/loaded CI runners. Force the scheduled
+        # retry to be due *now* so each cycle deterministically performs one attempt;
+        # this exercises the retry/poison-queue contract without depending on real time.
+        async with sessionmaker() as session:
+            due = await session.get(Outbox, event_id)
+            if (
+                due is not None
+                and due.next_attempt_at is not None
+                and due.status in (OutboxStatus.PENDING, OutboxStatus.FAILED)
+            ):
+                due.next_attempt_at = datetime.now(tz=timezone.utc) - timedelta(seconds=1)
+                await session.commit()
+
         async with sessionmaker() as session:
             processor = OutboxProcessor(session, dispatcher=dispatcher)
             processed = await processor.process_once()
@@ -221,6 +239,19 @@ async def test_poison_queue_and_dedup_combined_guarantee(
 
     # Try to process multiple times
     for _ in range(3):
+        # Force the backoff-scheduled retry to be due now (see the detailed note in
+        # test_poison_queue_guarantee_*): back-to-back cycles otherwise race the
+        # exponential-backoff window and can skip an attempt on slow CI runners.
+        async with sessionmaker() as session:
+            due = await session.get(Outbox, event_id)
+            if (
+                due is not None
+                and due.next_attempt_at is not None
+                and due.status in (OutboxStatus.PENDING, OutboxStatus.FAILED)
+            ):
+                due.next_attempt_at = datetime.now(tz=timezone.utc) - timedelta(seconds=1)
+                await session.commit()
+
         async with sessionmaker() as session:
             processor = OutboxProcessor(session, dispatcher=dispatcher)
             await processor.process_once()

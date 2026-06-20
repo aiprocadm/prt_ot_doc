@@ -102,9 +102,16 @@ def test_confirm_last_attempt_exhausts():
 
 
 def test_purposes_vocabulary():
-    assert PEP_PURPOSES == {"document", "acknowledgement", "ppe_issue", "briefing"}
+    assert {"document", "acknowledgement", "ppe_issue", "briefing"}.issubset(PEP_PURPOSES)
     assert CONFIRM_TTL_MINUTES == 15
     assert MAX_CONFIRM_ATTEMPTS == 5
+
+
+def test_pep_purposes_include_work_permit_streams():
+    from app.domains.signing.pep import PEP_PURPOSES
+
+    assert "work_permit" in PEP_PURPOSES
+    assert "work_permit_briefing" in PEP_PURPOSES
 
 
 def test_confirm_expires_at_exact_boundary():

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
@@ -20,6 +21,7 @@ from app.core.tenant_validation import TenantContextValidator
 from app.domains.prescriptions.lifecycle import (
     VERIFY_ROLES,
     InvalidTransition,
+    evidence_satisfied,
     is_overdue,
     is_terminal,
     requires_evidence,
@@ -32,7 +34,15 @@ from app.domains.prescriptions.service import (
 )
 from app.models.models import Incident, Inspection, Prescription, PrescriptionStatus, User
 from app.models.tenanting import Tenant
+from app.modules.files.models import (
+    FileEntityType,
+    FileLink,
+    FileLinkRole,
+    FileRecord,
+    FileStatus,
+)
 from app.schemas.prescriptions import (
+    EvidenceFileRef,
     PrescriptionCreate,
     PrescriptionPage,
     PrescriptionRead,
@@ -41,6 +51,11 @@ from app.schemas.prescriptions import (
     PrescriptionUpdate,
 )
 from app.services.audit import AuditService
+
+# A file is acceptable as evidence only once antivirus scanning has cleared it.
+_EVIDENCE_OK_FILE_STATUSES = frozenset({FileStatus.clean.value, FileStatus.ready.value})
+_EVIDENCE_ENTITY_TYPE = FileEntityType.prescription.value
+_EVIDENCE_ROLE = FileLinkRole.evidence.value
 
 router = APIRouter(tags=["prescriptions"])
 
@@ -60,6 +75,101 @@ def _to_read(record: Prescription, *, today: date) -> PrescriptionRead:
     return PrescriptionRead.model_validate(record).model_copy(
         update={"is_overdue": is_overdue(record.due_at, record.status, today)}
     )
+
+
+async def _list_evidence_files(
+    session: AsyncSession, *, tenant_id: str, prescription_id: str
+) -> list[EvidenceFileRef]:
+    """Evidence files linked to a prescription (FileLink role="evidence")."""
+    rows = (
+        await session.execute(
+            select(FileLink, FileRecord)
+            .join(FileRecord, FileRecord.id == FileLink.file_id)
+            .where(
+                FileLink.tenant_id == tenant_id,
+                FileLink.entity_type == _EVIDENCE_ENTITY_TYPE,
+                FileLink.entity_id == prescription_id,
+                FileLink.role == _EVIDENCE_ROLE,
+            )
+        )
+    ).all()
+    return [
+        EvidenceFileRef(
+            file_id=file_rec.id,
+            role=link.role,
+            status=file_rec.status,
+            display_name=file_rec.original_filename or Path(file_rec.object_key).name,
+            size=file_rec.size_bytes,
+        )
+        for link, file_rec in rows
+    ]
+
+
+async def _to_read_with_files(
+    session: AsyncSession, record: Prescription, *, tenant_id: str, today: date
+) -> PrescriptionRead:
+    """``_to_read`` plus the prescription's linked evidence files."""
+    files = await _list_evidence_files(
+        session, tenant_id=tenant_id, prescription_id=record.id
+    )
+    return _to_read(record, today=today).model_copy(update={"evidence_files": files})
+
+
+async def _collect_evidence_files(
+    session: AsyncSession, *, tenant_id: str, file_ids: list[str]
+) -> list[FileRecord]:
+    """Resolve evidence file ids, enforcing tenant ownership and clean AV status.
+
+    Raises 404 ``evidence_file_not_found`` for unknown/cross-tenant/deleted files
+    and 422 ``evidence_file_not_clean`` for files not yet cleared by antivirus.
+    """
+    records: list[FileRecord] = []
+    for file_id in file_ids:
+        record = await session.get(FileRecord, file_id)
+        if record is None or record.tenant_id != tenant_id or record.deleted_at is not None:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND,
+                detail=_error_detail("evidence_file_not_found", "Evidence file not found"),
+            )
+        if record.status not in _EVIDENCE_OK_FILE_STATUSES:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=_error_detail(
+                    "evidence_file_not_clean",
+                    "Evidence file is not antivirus-clean",
+                ),
+            )
+        records.append(record)
+    return records
+
+
+async def _link_evidence_files(
+    session: AsyncSession, *, tenant_id: str, prescription_id: str, records: list[FileRecord]
+) -> None:
+    """Attach validated files to a prescription via FileLink (idempotent)."""
+    for record in records:
+        already_linked = (
+            await session.execute(
+                select(FileLink.id).where(
+                    FileLink.tenant_id == tenant_id,
+                    FileLink.file_id == record.id,
+                    FileLink.entity_type == _EVIDENCE_ENTITY_TYPE,
+                    FileLink.entity_id == prescription_id,
+                    FileLink.role == _EVIDENCE_ROLE,
+                )
+            )
+        ).scalar_one_or_none()
+        if already_linked is not None:
+            continue
+        session.add(
+            FileLink(
+                tenant_id=tenant_id,
+                file_id=record.id,
+                entity_type=_EVIDENCE_ENTITY_TYPE,
+                entity_id=prescription_id,
+                role=_EVIDENCE_ROLE,
+            )
+        )
 
 
 def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:
@@ -307,7 +417,9 @@ async def get_prescription(
     TenantContextValidator.ensure_tenant_context(tenant)
 
     record = await _get_prescription(session, str(tenant.id), prescription_id)
-    return _to_read(record, today=datetime.now(timezone.utc).date())
+    return await _to_read_with_files(
+        session, record, tenant_id=str(tenant.id), today=datetime.now(timezone.utc).date()
+    )
 
 
 @router.patch("/prescriptions/{prescription_id}", response_model=PrescriptionRead)
@@ -376,7 +488,9 @@ async def transition_prescription(
 
     # Idempotent no-op: same state, no write, no audit row.
     if current == target:
-        return _to_read(record, today=datetime.now(timezone.utc).date())
+        return await _to_read_with_files(
+            session, record, tenant_id=str(tenant.id), today=datetime.now(timezone.utc).date()
+        )
 
     # Segregation of duties: only admin/owner may verify (повторная проверка).
     if target == PrescriptionStatus.VERIFIED:
@@ -390,9 +504,22 @@ async def transition_prescription(
                 ),
             )
 
-    # Evidence is required to mark a prescription completed (payload or stored).
+    # Validate any newly-supplied evidence files up front (tenant-owned + clean).
+    new_evidence_files = await _collect_evidence_files(
+        session, tenant_id=str(tenant.id), file_ids=payload.evidence_file_ids or []
+    )
+
+    # Evidence is required to complete: a textual note OR at least one file
+    # (newly supplied or already linked) satisfies it.
     effective_evidence = payload.evidence if payload.evidence is not None else record.evidence
-    if requires_evidence(target) and not (effective_evidence and effective_evidence.strip()):
+    has_text = bool(effective_evidence and effective_evidence.strip())
+    existing_file_count = len(
+        await _list_evidence_files(session, tenant_id=str(tenant.id), prescription_id=record.id)
+    )
+    total_file_count = existing_file_count + len(new_evidence_files)
+    if requires_evidence(target) and not evidence_satisfied(
+        has_text=has_text, file_count=total_file_count
+    ):
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=_error_detail(
@@ -403,6 +530,9 @@ async def transition_prescription(
     record.status = target
     if payload.evidence is not None:
         record.evidence = payload.evidence
+    await _link_evidence_files(
+        session, tenant_id=str(tenant.id), prescription_id=record.id, records=new_evidence_files
+    )
     if is_terminal(target):
         record.closed_at = datetime.now(timezone.utc)
 
@@ -421,9 +551,12 @@ async def transition_prescription(
             "from": current.value,
             "to": target.value,
             "evidence_present": bool(record.evidence),
+            "evidence_files_added": len(new_evidence_files),
             "note": payload.note,
         },
     )
     await session.commit()
     await session.refresh(record)
-    return _to_read(record, today=datetime.now(timezone.utc).date())
+    return await _to_read_with_files(
+        session, record, tenant_id=str(tenant.id), today=datetime.now(timezone.utc).date()
+    )

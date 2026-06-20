@@ -99,6 +99,7 @@ from app.services.documents import (
     InvalidStatusTransitionError,
 )
 from app.services.file_storage import FileStorageService
+from app.modules.branding.schemas import LetterheadOverride
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 from app.services.pipelines_orchestrator import DocumentPipelineOrchestrator
 from app.tasks import generate_document_batch_item_task, generate_document_task
@@ -255,6 +256,7 @@ class DocGenerateRequest(BaseModel):
     options: dict[str, Any] = Field(default_factory=dict)
     visible_passport: bool = Field(default=True)
     npa_binding_id: str | None = Field(default=None)
+    letterhead: LetterheadOverride | None = Field(default=None)
 
     @model_validator(mode="after")
     def _ensure_identifier(self) -> "DocGenerateRequest":
@@ -1395,6 +1397,13 @@ async def generate_document(
         if branding_generation:
             metadata = dict(run.result_metadata or {})
             metadata["branding"] = branding_generation
+            run.result_metadata = metadata
+
+        if payload.letterhead is not None:
+            metadata = dict(run.result_metadata or {})
+            metadata["letterhead"] = payload.letterhead.model_dump(mode="json")
+            # DocGenerateRequest has no site_id; single-doc generation derives site downstream.
+            metadata["site_id"] = None
             run.result_metadata = metadata
 
         if created_run:

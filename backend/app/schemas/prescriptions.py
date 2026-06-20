@@ -30,7 +30,18 @@ class PrescriptionTransition(BaseSchema):
 
     to: PrescriptionStatus
     evidence: str | None = Field(default=None, min_length=1)
+    evidence_file_ids: list[str] | None = Field(default=None)
     note: str | None = Field(default=None, min_length=1)
+
+
+class EvidenceFileRef(BaseSchema):
+    """A file attached to a prescription as evidence (FileLink role="evidence")."""
+
+    file_id: str
+    role: str
+    status: str
+    display_name: str | None = None
+    size: int | None = None
 
 
 class PrescriptionRead(BaseSchema):
@@ -46,6 +57,7 @@ class PrescriptionRead(BaseSchema):
     created_at: datetime
     updated_at: datetime
     is_overdue: bool = False
+    evidence_files: list[EvidenceFileRef] = Field(default_factory=list)
 
 
 class PrescriptionPage(BaseSchema):
