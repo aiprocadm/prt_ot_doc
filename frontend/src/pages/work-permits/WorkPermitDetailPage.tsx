@@ -10,6 +10,7 @@ import { Can } from "@/components/permissions/Can";
 import { Button } from "@/components/ui/button";
 import { BriefingPanel } from "@/features/work-permits/BriefingPanel";
 import { BrigadeMembersPanel } from "@/features/work-permits/BrigadeMembersPanel";
+import { DailyAdmissionPanel } from "@/features/work-permits/DailyAdmissionPanel";
 import { ReadinessPanel } from "@/features/work-permits/ReadinessPanel";
 import { SignaturesPanel, type SignerRow } from "@/features/work-permits/SignaturesPanel";
 import { WorkPermitEventsTimeline } from "@/features/work-permits/WorkPermitEventsTimeline";
@@ -357,6 +358,12 @@ export default function WorkPermitDetailPage() {
           onSign={signPermit}
           onConfirm={confirmSign}
         />
+      </div>
+
+      {/* Ежедневный допуск */}
+      <div className="rounded-md border p-3">
+        <div className="text-sm font-medium mb-2">Ежедневный допуск</div>
+        <DailyAdmissionPanel wp={wp} onRefresh={refreshSide} />
       </div>
 
       {/* Events log */}
