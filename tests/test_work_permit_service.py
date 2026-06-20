@@ -138,3 +138,51 @@ async def test_create_briefing_unknown_permit_returns_none(sessionmaker, data_fa
         assert await create_briefing(
             session, tenant_id=person.tenant_id, work_permit_id="missing",
         ) is None
+
+
+@pytest.mark.asyncio
+async def test_extend_logs_old_and_new_end(sessionmaker, data_factory):
+    from datetime import datetime, timezone
+    from app.domains.work_permits import create_work_permit, issue, extend, list_events
+
+    person = await data_factory.create_person()
+    async with sessionmaker() as session:
+        wp = await create_work_permit(
+            session, tenant_id=person.tenant_id, work_type="height", zone_text="z",
+            planned_end=datetime(2026, 6, 18, tzinfo=timezone.utc),
+        )
+        await issue(session, tenant_id=person.tenant_id, work_permit_id=wp.id, actor_user_id="u1")
+        new_end = datetime(2026, 6, 20, tzinfo=timezone.utc)
+        await extend(
+            session, tenant_id=person.tenant_id, work_permit_id=wp.id,
+            planned_end=new_end, actor_user_id="u1",
+        )
+        events = await list_events(session, tenant_id=person.tenant_id, work_permit_id=wp.id)
+        ext = [e for e in events if e.event_type == "extended"][-1]
+        assert ext.meta["new_end"].startswith("2026-06-20")
+        assert ext.meta["old_end"].startswith("2026-06-18")
+
+
+@pytest.mark.asyncio
+async def test_member_changes_are_logged(sessionmaker, data_factory):
+    from app.domains.work_permits import add_member, remove_member, create_work_permit, list_events
+
+    # Reuse person as the brigade member (same tenant, avoids second company creation)
+    person = await data_factory.create_person()
+    async with sessionmaker() as session:
+        wp = await create_work_permit(
+            session, tenant_id=person.tenant_id, work_type="height", zone_text="z",
+        )
+        m = await add_member(
+            session, tenant_id=person.tenant_id, work_permit_id=wp.id,
+            person_id=person.id, role="member", actor_user_id="u1",
+        )
+        await remove_member(
+            session, tenant_id=person.tenant_id, work_permit_id=wp.id,
+            member_id=m.id, actor_user_id="u1",
+        )
+        events = await list_events(session, tenant_id=person.tenant_id, work_permit_id=wp.id)
+        types = [e.event_type for e in events]
+        assert "member_added" in types and "member_removed" in types
+        added = [e for e in events if e.event_type == "member_added"][0]
+        assert added.meta == {"person_id": person.id, "role": "member"}

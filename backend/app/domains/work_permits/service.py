@@ -24,10 +24,12 @@ async def _get(session: AsyncSession, tenant_id: str, work_permit_id: str) -> Wo
 async def _log(
     session: AsyncSession, *, tenant_id: str, work_permit_id: str, event_type: str,
     actor_user_id: str | None, photo_file_id: str | None = None, note: str | None = None,
+    meta: dict | None = None,
 ) -> WorkPermitEvent:
     event = WorkPermitEvent(
         tenant_id=tenant_id, work_permit_id=work_permit_id, event_type=event_type,
         at=_now(), actor_user_id=actor_user_id, photo_file_id=photo_file_id, note=note,
+        meta=meta,
     )
     session.add(event)
     await session.flush()
@@ -103,6 +105,7 @@ _TERMINAL = (lc.STATUS_CLOSED, lc.STATUS_CANCELLED)
 
 async def add_member(
     session: AsyncSession, *, tenant_id: str, work_permit_id: str, person_id: str, role: str,
+    actor_user_id: str | None = None,
 ) -> WorkPermitMember | None:
     wp = await _get(session, tenant_id, work_permit_id)
     if wp is None:
@@ -115,11 +118,17 @@ async def add_member(
     session.add(member)
     await session.flush()
     await session.refresh(member)
+    await _log(
+        session, tenant_id=tenant_id, work_permit_id=work_permit_id,
+        event_type="member_added", actor_user_id=actor_user_id,
+        meta={"person_id": person_id, "role": role},
+    )
     return member
 
 
 async def remove_member(
     session: AsyncSession, *, tenant_id: str, work_permit_id: str, member_id: str,
+    actor_user_id: str | None = None,
 ) -> bool:
     stmt = select(WorkPermitMember).where(
         WorkPermitMember.id == member_id,
@@ -129,8 +138,17 @@ async def remove_member(
     member = (await session.execute(stmt)).scalar_one_or_none()
     if member is None:
         return False
+    wp = await _get(session, tenant_id, work_permit_id)
+    if wp is not None and wp.status in _TERMINAL:
+        raise lc.WorkPermitTransitionError(str(wp.status), "remove_member")
+    person_id, role = member.person_id, member.role
     await session.delete(member)
     await session.flush()
+    await _log(
+        session, tenant_id=tenant_id, work_permit_id=work_permit_id,
+        event_type="member_removed", actor_user_id=actor_user_id,
+        meta={"person_id": person_id, "role": role},
+    )
     return True
 
 
@@ -226,10 +244,15 @@ async def extend(session, *, tenant_id, work_permit_id, planned_end, actor_user_
         return None
     if wp.status not in (lc.STATUS_ISSUED, lc.STATUS_SUSPENDED):
         raise lc.WorkPermitTransitionError(str(wp.status), "extend")
+    old_end = wp.planned_end
     wp.planned_end = planned_end
     await _log(
         session, tenant_id=tenant_id, work_permit_id=work_permit_id,
         event_type="extended", actor_user_id=actor_user_id, note=note,
+        meta={
+            "old_end": old_end.isoformat() if old_end else None,
+            "new_end": planned_end.isoformat() if planned_end else None,
+        },
     )
     await session.flush()
     await session.refresh(wp)
