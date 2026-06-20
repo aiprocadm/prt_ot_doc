@@ -8,8 +8,10 @@ import { LoadingScreen } from "@/components/common/LoadingScreen";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { Can } from "@/components/permissions/Can";
 import { Button } from "@/components/ui/button";
+import { BriefingPanel } from "@/features/work-permits/BriefingPanel";
 import { BrigadeMembersPanel } from "@/features/work-permits/BrigadeMembersPanel";
 import { ReadinessPanel } from "@/features/work-permits/ReadinessPanel";
+import { SignaturesPanel, type SignerRow } from "@/features/work-permits/SignaturesPanel";
 import { WorkPermitEventsTimeline } from "@/features/work-permits/WorkPermitEventsTimeline";
 import { WorkPermitFormDialog } from "@/features/work-permits/WorkPermitFormDialog";
 import { useAsyncResource } from "@/hooks/useAsyncResource";
@@ -20,7 +22,7 @@ import {
   labelOf,
 } from "@/lib/workPermitVocab";
 import { PERMISSIONS } from "@/permissions/permissions";
-import type { ReadinessReportDto, WorkPermitDto, WorkPermitEventDto } from "@/types/dto/workPermits";
+import type { ReadinessReportDto, WorkPermitDto, WorkPermitEventDto, WorkPermitSignatureDto } from "@/types/dto/workPermits";
 
 // Actions available per status (excluding "Продлить" which needs a date input)
 const ACTIONS_BY_STATUS: Record<
@@ -72,6 +74,7 @@ export default function WorkPermitDetailPage() {
   const [persons, setPersons] = useState<PersonOption[]>([]);
   const [readiness, setReadiness] = useState<ReadinessReportDto | null>(null);
   const [events, setEvents] = useState<WorkPermitEventDto[]>([]);
+  const [signatures, setSignatures] = useState<WorkPermitSignatureDto[]>([]);
 
   // Extend dialog state
   const [extendOpen, setExtendOpen] = useState(false);
@@ -91,10 +94,11 @@ export default function WorkPermitDetailPage() {
     fetchAllPersons().then(setPersons).catch(() => undefined);
   }, []);
 
-  // Refresh side panels (readiness + events) when permit changes
+  // Refresh side panels (readiness + events + signatures) when permit changes
   const refreshSide = useCallback(() => {
     workPermitsApi.readiness(id).then(setReadiness).catch(() => undefined);
     workPermitsApi.events(id).then(setEvents).catch(() => undefined);
+    workPermitsApi.listSignatures(id).then(setSignatures).catch(() => undefined);
   }, [id]);
 
   useEffect(() => {
@@ -159,6 +163,23 @@ export default function WorkPermitDetailPage() {
     } catch {
       toast.error("Не удалось удалить наряд");
     }
+  };
+
+  const RESP_ROLES = new Set(["issuer", "supervisor", "admitter", "foreman"]);
+  const responsibleSigners: SignerRow[] = wp.members
+    .filter((m) => RESP_ROLES.has(m.role))
+    .map((m) => ({ personId: m.person_id, name: nameOf(m.person_id), roleLabel: labelOf(MEMBER_ROLE_LABELS, m.role) }));
+  const permitSignatures = signatures.filter((s) => s.stream === "permit");
+
+  const signPermit = async (personId: string, mode: "attested" | "code") => {
+    const res = await workPermitsApi.createPermitSignature(wp.id, { person_id: personId, mode });
+    if (mode === "code" && res.confirm_code) toast.success(`Код для подписанта: ${res.confirm_code}`);
+    refreshSide();
+  };
+  const confirmSign = async (requestId: string, code: string) => {
+    await workPermitsApi.confirmSignatureCode(requestId, code);
+    toast.success("Подпись подтверждена");
+    refreshSide();
   };
 
   const safetySystemsText =
@@ -319,6 +340,23 @@ export default function WorkPermitDetailPage() {
             {new Date(wp.suspended_at).toLocaleString("ru-RU")}
           </span>
         )}
+      </div>
+
+      {/* Целевой инструктаж */}
+      <div className="rounded-md border p-3">
+        <div className="text-sm font-medium mb-2">Целевой инструктаж</div>
+        <BriefingPanel wp={wp} nameOf={nameOf} signatures={signatures} onRefresh={refreshSide} />
+      </div>
+
+      {/* Подписи ответственных лиц */}
+      <div className="rounded-md border p-3">
+        <SignaturesPanel
+          title="Подписи ответственных"
+          signers={responsibleSigners}
+          signatures={permitSignatures}
+          onSign={signPermit}
+          onConfirm={confirmSign}
+        />
       </div>
 
       {/* Events log */}
