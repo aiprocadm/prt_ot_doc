@@ -31,6 +31,9 @@ export const EVENT_TYPE_LABELS: Record<string, string> = {
   closed: "Закрыт",
   cancelled: "Отменён",
   extended: "Продлён",
+  admitted: "Ежедневный допуск",
+  member_added: "Добавлен участник",
+  member_removed: "Удалён участник",
 };
 
 export const SAFETY_SYSTEM_LABELS: Record<string, string> = {

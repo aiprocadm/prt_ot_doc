@@ -1,7 +1,7 @@
 """Schemas for work permits (наряды-допуски)."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import field_validator
 
@@ -35,6 +35,7 @@ class WorkPermitEventRead(BaseSchema):
     actor_user_id: str | None
     photo_file_id: str | None
     note: str | None
+    meta: dict | None = None
 
 
 class WorkPermitCreate(BaseSchema):
@@ -211,3 +212,30 @@ class WorkPermitSignatureRead(BaseSchema):
     content_hash: str | None
     signed_at: datetime | None
     confirm_code: str | None = None
+
+
+class WorkPermitDailyAdmissionCreate(BaseSchema):
+    admission_date: date
+    start_at: datetime | None = None
+    end_at: datetime | None = None
+    admitted_by_person_id: str | None = None
+    note: str | None = None
+
+
+class WorkPermitDailyAdmissionUpdate(BaseSchema):
+    start_at: datetime | None = None
+    end_at: datetime | None = None
+    admitted_by_person_id: str | None = None
+    note: str | None = None
+
+
+class WorkPermitDailyAdmissionRead(BaseSchema):
+    id: str
+    work_permit_id: str
+    admission_date: date
+    start_at: datetime | None
+    end_at: datetime | None
+    admitted_by_person_id: str | None
+    note: str | None
+    created_at: datetime
+    updated_at: datetime

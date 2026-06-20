@@ -45,6 +45,7 @@ export interface WorkPermitEventDto {
   actor_user_id: string | null;
   photo_file_id: string | null;
   note: string | null;
+  meta: Record<string, string | null> | null;
 }
 
 export interface ViolationDto {
@@ -81,4 +82,16 @@ export interface WorkPermitSignatureDto {
   content_hash: string | null;
   signed_at: string | null;
   confirm_code?: string | null;
+}
+
+export interface WorkPermitDailyAdmissionDto {
+  id: string;
+  work_permit_id: string;
+  admission_date: string;
+  start_at: string | null;
+  end_at: string | null;
+  admitted_by_person_id: string | null;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
 }
