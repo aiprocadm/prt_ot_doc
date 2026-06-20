@@ -362,7 +362,7 @@ export default function WorkPermitDetailPage() {
       {/* Events log */}
       <div className="rounded-md border p-3">
         <div className="text-sm font-medium mb-2">Журнал событий</div>
-        <WorkPermitEventsTimeline events={events} />
+        <WorkPermitEventsTimeline events={events} nameOf={nameOf} />
       </div>
     </div>
   );
