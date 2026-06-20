@@ -79,7 +79,13 @@ async def test_work_permits_tenant_isolated(async_client, make_auth_headers, dat
 @pytest.mark.asyncio
 async def test_issue_blocked_then_allowed_with_permit(async_client, make_auth_headers, data_factory, sessionmaker):
     headers = await make_auth_headers(RoleEnum.ADMIN)
-    person = await data_factory.create_person()
+    # Создаём тенант+компанию явно, чтобы избежать UNIQUE (tenant_id, name) при
+    # создании двух персон в одном тенанте «test».
+    tenant = await data_factory.ensure_tenant()
+    company = await data_factory.create_company(tenant=tenant)
+    person = await data_factory.create_person(tenant=tenant, company=company, first_name="Fore", last_name="Man")
+    supervisor = await data_factory.create_person(tenant=tenant, company=company, first_name="Super", last_name="Visor")
+
     r = await async_client.post(BASE, headers=headers, json={"work_type": "height", "zone_text": "z"})
     wp_id = r.json()["id"]
     await async_client.post(f"{BASE}/{wp_id}/members", headers=headers, json={"person_id": str(person.id), "role": "foreman"})
@@ -104,10 +110,27 @@ async def test_issue_blocked_then_allowed_with_permit(async_client, make_auth_he
     assert ok.status_code == status.HTTP_200_OK, ok.text
     assert ok.json()["status"] == "issued"
 
-    # suspend → resume → close, events recorded
+    # suspend → resume, then closing gate: акт + подписи «сдал/принял» (Ф3b)
     assert (await async_client.post(f"{BASE}/{wp_id}/suspend", headers=headers, json={})).json()["status"] == "suspended"
     assert (await async_client.post(f"{BASE}/{wp_id}/resume", headers=headers, json={})).json()["status"] == "issued"
-    assert (await async_client.post(f"{BASE}/{wp_id}/close", headers=headers, json={})).json()["status"] == "closed"
+
+    # добавить supervisor в бригаду (foreman уже добавлен выше)
+    await async_client.post(f"{BASE}/{wp_id}/members", headers=headers,
+                            json={"person_id": str(supervisor.id), "role": "supervisor"})
+    # оформить акт закрытия
+    closing_r = await async_client.post(f"{BASE}/{wp_id}/closing", headers=headers,
+                                        json={"completion_text": "готово"})
+    assert closing_r.status_code == 200, closing_r.text
+    # подписи «сдал» (foreman=person) и «принял» (supervisor)
+    for pid in (str(person.id), str(supervisor.id)):
+        sig_r = await async_client.post(f"{BASE}/{wp_id}/closing/signatures", headers=headers,
+                                        json={"person_id": pid, "mode": "attested"})
+        assert sig_r.status_code == 201, sig_r.text
+
+    # теперь close должен пройти
+    close_r = await async_client.post(f"{BASE}/{wp_id}/close", headers=headers, json={})
+    assert close_r.status_code == 200, close_r.text
+    assert close_r.json()["status"] == "closed"
 
     ev = await async_client.get(f"{BASE}/{wp_id}/events", headers=headers)
     # member_added event is logged since Ф3a; core FSM events must be present in order
