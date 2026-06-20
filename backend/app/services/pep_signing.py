@@ -131,6 +131,20 @@ class PepSigningService:
                 "conducted_at": br.conducted_at.isoformat() if br.conducted_at else None,
                 "topics_text": br.topics_text,
             }
+        if object_type == "work_permit_closing":
+            wp = await self.session.get(WorkPermit, object_id)
+            if wp is None or str(wp.tenant_id) != str(self.tenant_id):
+                raise PepNotFound("work_permit")
+            return {
+                "work_permit_closing_id": wp.id,
+                "work_permit_id": wp.id,
+                "number": wp.number,
+                "completion_text": wp.completion_text,
+                "completion_recorded_at": (
+                    wp.completion_recorded_at.isoformat() if wp.completion_recorded_at else None
+                ),
+                "status": wp.status,
+            }
         raise PepConflict(f"unsupported object_type: {object_type}")
 
     async def _signer_name(
