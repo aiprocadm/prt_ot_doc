@@ -374,8 +374,13 @@ async def close_endpoint(wp_id: str, payload: WorkPermitActionRequest, tenant: T
         ))
     except lc.WorkPermitClosingIncomplete as exc:
         raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            detail={"code": "WORK_PERMIT_CLOSING_INCOMPLETE", "missing": exc.missing},
+            status_code=status.HTTP_409_CONFLICT,
+            detail=api_problem_detail(
+                code="WORK_PERMIT_CLOSING_INCOMPLETE",
+                message="closing requirements not met",
+                error_type="work_permit",
+                details={"missing": exc.missing},
+            ),
         ) from exc
 
 
@@ -634,7 +639,9 @@ async def create_closing_signature_endpoint(
     session: SessionDep, access: WriterAccess,
 ) -> WorkPermitSignatureRead:
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _get_or_404(session, tenant, wp_id)
+    wp = await _get_or_404(session, tenant, wp_id)
+    if wp.status not in (lc.STATUS_ISSUED, lc.STATUS_SUSPENDED):
+        raise _transition_conflict(lc.WorkPermitTransitionError(str(wp.status), "sign_closing"))
     await _ensure_person(session, tenant, payload.person_id)
     try:
         req, code = await sign_closing(

@@ -119,7 +119,7 @@ async def sign_closing(
     """Подпись закрытия наряда: подписант — член бригады с ролью из CLOSING_SIGNER_ROLES.
 
     Вид «сдал/принял» НЕ хранится в запросе — резолвится из роли члена при чтении
-    (см. service._signed_closing_kinds).
+    (см. service.signed_closing_kinds).
     """
     role = await _member_role(
         session, tenant_id=tenant_id, work_permit_id=work_permit_id,

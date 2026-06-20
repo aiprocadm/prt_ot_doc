@@ -119,7 +119,7 @@ async def test_close_gate_then_success(async_client, make_auth_headers, data_fac
     blocked = await async_client.post(f"{BASE}/{wp_id}/close", headers=headers, json={})
     assert blocked.status_code == 409, blocked.text
     detail = blocked.json()["detail"]
-    assert "missing" in detail
+    assert "missing" in detail.get("details", detail)
 
     # подписи сдал+принял (attested)
     for pid in (foreman_id, supervisor_id):
@@ -155,7 +155,7 @@ async def test_closing_signature_non_member_4xx(async_client, make_auth_headers,
         f"{BASE}/{wp_id}/closing/signatures", headers=headers,
         json={"person_id": str(outsider.id), "mode": "attested"},
     )
-    assert r.status_code in (409, 422), r.text
+    assert r.status_code == 409, r.text
 
 
 @pytest.mark.asyncio
@@ -171,6 +171,23 @@ async def test_closing_completion_text_empty_422(async_client, make_auth_headers
             json={"completion_text": bad_text},
         )
         assert r.status_code == 422, f"expected 422 for {bad_text!r}, got {r.status_code}: {r.text}"
+
+
+@pytest.mark.asyncio
+async def test_closing_signature_draft_status_409(async_client, make_auth_headers, data_factory, sessionmaker):
+    """Подпись закрытия на наряде в статусе draft → 409 (статус-гейт)."""
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    foreman, supervisor, tenant, company = await _make_two_persons_with_permits(data_factory, sessionmaker)
+
+    # Создаём наряд, добавляем foreman, но НЕ вызываем issue — остаётся draft
+    wp_id = await _make_permit(async_client, headers)
+    await _add_member(async_client, headers, wp_id, str(foreman.id), "foreman")
+
+    r = await async_client.post(
+        f"{BASE}/{wp_id}/closing/signatures", headers=headers,
+        json={"person_id": str(foreman.id), "mode": "attested"},
+    )
+    assert r.status_code == 409, r.text
 
 
 @pytest.mark.asyncio
