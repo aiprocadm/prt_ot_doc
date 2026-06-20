@@ -34,6 +34,7 @@ export const EVENT_TYPE_LABELS: Record<string, string> = {
   admitted: "Ежедневный допуск",
   member_added: "Добавлен участник",
   member_removed: "Удалён участник",
+  completion_recorded: "Оформлен акт окончания",
 };
 
 export const SAFETY_SYSTEM_LABELS: Record<string, string> = {

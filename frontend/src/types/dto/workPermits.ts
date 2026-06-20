@@ -72,7 +72,7 @@ export interface WorkPermitBriefingDto {
 
 export interface WorkPermitSignatureDto {
   id: string;
-  stream: string; // "permit" | "briefing"
+  stream: string; // "permit" | "briefing" | "closing"
   object_type: string;
   object_id: string;
   purpose: string;
