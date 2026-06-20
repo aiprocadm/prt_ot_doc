@@ -20,7 +20,8 @@ export const BrigadeMembersPanel = ({ wp, persons, nameOf, onRefresh }: Props) =
   const [selectedRole, setSelectedRole] = useState("member");
   const [adding, setAdding] = useState(false);
 
-  const canEdit = wp.status === "draft";
+  // Ф3a: состав бригады редактируется и в работе (issued/suspended), не только в черновике
+  const canEdit = wp.status === "draft" || wp.status === "issued" || wp.status === "suspended";
 
   const handleAdd = async () => {
     if (!selectedPersonId) {
