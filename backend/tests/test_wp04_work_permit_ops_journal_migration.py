@@ -35,3 +35,17 @@ def test_wp04_source_table_and_meta_column():
     # honest downgrade: both drop_column(meta) and drop_table(admission)
     assert 'drop_column("work_permit_event", "meta")' in src
     assert 'drop_table("work_permit_daily_admission")' in src
+
+
+def test_event_model_has_meta():
+    from app.models.work_permit import WorkPermitEvent
+
+    assert "meta" in WorkPermitEvent.__table__.columns.keys()
+
+
+def test_daily_admission_model_columns():
+    from app.models.work_permit import WorkPermitDailyAdmission
+
+    cols = set(WorkPermitDailyAdmission.__table__.columns.keys())
+    assert ADMISSION_COLUMNS.issubset(cols)
+    assert WorkPermitDailyAdmission.__tablename__ == "work_permit_daily_admission"

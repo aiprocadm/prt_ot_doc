@@ -1,9 +1,9 @@
 """Work-permit (наряд-допуск) models: document + brigade members + event log."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, JSON, String, Text, UniqueConstraint, func
+from sqlalchemy import Date, DateTime, ForeignKey, Index, JSON, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import TenantBaseModel
@@ -79,6 +79,7 @@ class WorkPermitEvent(TenantBaseModel):
         ForeignKey("file.id", ondelete="SET NULL"), nullable=True
     )
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
 class WorkPermitBriefing(TenantBaseModel):
@@ -92,3 +93,18 @@ class WorkPermitBriefing(TenantBaseModel):
     )
     conducted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     topics_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class WorkPermitDailyAdmission(TenantBaseModel):
+    __tablename__ = "work_permit_daily_admission"
+
+    work_permit_id: Mapped[str] = mapped_column(
+        ForeignKey("work_permit.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    admission_date: Mapped[date] = mapped_column(Date, nullable=False)
+    start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    admitted_by_person_id: Mapped[str | None] = mapped_column(
+        ForeignKey("person.id", ondelete="SET NULL"), nullable=True
+    )
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
