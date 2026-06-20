@@ -53,6 +53,24 @@ async def test_admission_rejected_when_not_issued(async_client, make_auth_header
 
 
 @pytest.mark.asyncio
+async def test_admission_patch_rejects_foreign_permit(async_client, make_auth_headers, data_factory):
+    """An admission of permit A must not be patchable via permit B's path (same tenant)."""
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    wp_a = await _issued_permit(async_client, headers)
+    wp_b = await _issued_permit(async_client, headers)
+
+    r = await async_client.post(
+        f"{BASE}/{wp_a}/admissions", headers=headers, json={"admission_date": "2026-06-18"}
+    )
+    aid = r.json()["id"]
+
+    cross = await async_client.patch(
+        f"{BASE}/{wp_b}/admissions/{aid}", headers=headers, json={"note": "hijack"}
+    )
+    assert cross.status_code == 404, cross.text
+
+
+@pytest.mark.asyncio
 async def test_member_add_emits_event_with_meta(async_client, make_auth_headers, data_factory):
     headers = await make_auth_headers(RoleEnum.ADMIN)
     wp_id = await _issued_permit(async_client, headers)
