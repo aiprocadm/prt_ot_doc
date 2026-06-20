@@ -14,14 +14,18 @@ def test_pep_purposes_has_closing():
 @pytest.mark.asyncio
 async def test_closing_snapshot_is_deterministic(sessionmaker, data_factory):
     from app.services.pep_signing import PepSigningService
+    from app.domains.work_permits import lifecycle as lc
     from app.domains.work_permits import service as svc
 
+    person = await data_factory.create_person()
     async with sessionmaker() as session:
-        person = await data_factory.create_person(session)
         wp = await svc.create_work_permit(
             session, tenant_id=person.tenant_id, work_type="height", zone_text="z",
             number="НД-1",
         )
+        # record_completion разрешён только в issued (после врезки гейта Ф3b)
+        wp.status = lc.STATUS_ISSUED
+        await session.flush()
         await svc.record_completion(
             session, tenant_id=person.tenant_id, work_permit_id=wp.id,
             completion_text="работы окончены, место сдано", actor_user_id="u1",
