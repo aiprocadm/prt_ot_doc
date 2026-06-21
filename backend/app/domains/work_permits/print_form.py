@@ -13,8 +13,8 @@ from docx import Document
 # --- RU vocab (зеркало lib/workPermitVocab.ts, но локально для чистого модуля) ---
 WORK_TYPE_LABELS = {
     "hot_work": "Огневые работы", "gas_hazardous": "Газоопасные работы",
-    "height": "Работа на высоте", "confined_space": "Работа в замкнутом пространстве",
-    "excavation": "Земляные работы", "electrical": "Электротехнические работы",
+    "height": "Работа на высоте", "confined_space": "Замкнутые пространства",
+    "excavation": "Земляные работы", "electrical": "Электроустановки",
 }
 MEMBER_ROLE_LABELS = {
     "issuer": "Выдающий наряд", "supervisor": "Ответственный руководитель",
@@ -22,15 +22,16 @@ MEMBER_ROLE_LABELS = {
     "observer": "Наблюдающий", "member": "Член бригады",
 }
 SAFETY_SYSTEM_LABELS = {
-    "restraint": "Удерживающие", "positioning": "Позиционирования",
-    "fall_arrest": "Страховочные", "rescue_evacuation": "Для эвакуации и спасения",
-    "access": "Для подъёма и спуска",
+    "restraint": "Удерживающие системы", "positioning": "Системы позиционирования",
+    "fall_arrest": "Страховочные системы", "rescue_evacuation": "Системы для эвакуации и спасения",
+    "access": "Системы для подъёма и спуска",
 }
 STATUS_LABELS = {
     "draft": "Черновик", "issued": "Выдан", "suspended": "Приостановлен",
     "closed": "Закрыт", "cancelled": "Отменён",
 }
 SIGN_GROUP_LABELS = {"permit": "Наряд", "briefing": "Целевой инструктаж", "closing": "Закрытие"}
+SIGN_MODE_LABELS = {"attested": "При оформителе", "code": "По коду"}
 
 
 def work_type_label(code: str) -> str:
@@ -89,14 +90,14 @@ class WorkPermitPrintData:
 
 
 def _kv(doc, label: str, value: str | None) -> None:
-    doc.add_paragraph(f"{label}: {value if value else '—'}")
+    doc.add_paragraph(f"{label}: {value if value is not None else '—'}")
 
 
 def build_work_permit_docx(data: WorkPermitPrintData) -> bytes:
     doc = Document()
     doc.add_heading(
-        "НАРЯД-ДОПУСК на производство работ повышенной опасности "
-        "(работа на высоте, Приказ Минтруда № 782н)", level=0,
+        f"НАРЯД-ДОПУСК на производство работ повышенной опасности "
+        f"({data.work_type_label}, Приказ Минтруда № 782н)", level=0,
     )
 
     # 1. Шапка
@@ -194,7 +195,7 @@ def build_work_permit_docx(data: WorkPermitPrintData) -> bytes:
             cells[1].text = s.fio
             cells[2].text = s.status_label
             cells[3].text = s.signed_at or "—"
-            cells[4].text = s.mode
+            cells[4].text = SIGN_MODE_LABELS.get(s.mode, s.mode)
             cells[5].text = s.hash_short
     else:
         doc.add_paragraph("Подписи отсутствуют")

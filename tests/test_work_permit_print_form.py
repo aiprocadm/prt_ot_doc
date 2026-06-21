@@ -68,3 +68,12 @@ def test_build_docx_empty_sections_do_not_crash():
     )
     out = build_work_permit_docx(data)  # не должно бросать
     assert isinstance(out, bytes) and len(out) > 0
+
+
+def test_label_dicts_cover_lifecycle_vocab():
+    from app.domains.work_permits import lifecycle as lc
+    from app.domains.work_permits import print_form as pf
+    assert set(pf.WORK_TYPE_LABELS) >= lc.WORK_TYPES
+    assert set(pf.MEMBER_ROLE_LABELS) >= lc.MEMBER_ROLES
+    assert set(pf.SAFETY_SYSTEM_LABELS) >= lc.SAFETY_SYSTEMS
+    assert set(pf.STATUS_LABELS) >= lc.WORK_PERMIT_STATUSES
