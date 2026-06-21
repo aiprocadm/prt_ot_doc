@@ -12,6 +12,7 @@ import { BriefingPanel } from "@/features/work-permits/BriefingPanel";
 import { BrigadeMembersPanel } from "@/features/work-permits/BrigadeMembersPanel";
 import { ClosingPanel } from "@/features/work-permits/ClosingPanel";
 import { DailyAdmissionPanel } from "@/features/work-permits/DailyAdmissionPanel";
+import { PrintButtons } from "@/features/work-permits/PrintButtons";
 import { ReadinessPanel } from "@/features/work-permits/ReadinessPanel";
 import { SignaturesPanel, type SignerRow } from "@/features/work-permits/SignaturesPanel";
 import { WorkPermitEventsTimeline } from "@/features/work-permits/WorkPermitEventsTimeline";
@@ -199,6 +200,20 @@ export default function WorkPermitDetailPage() {
     refreshSide();
   };
 
+  // Скачать печатный бланк (DOCX всегда; PDF best-effort — 503 если нет конвертера)
+  const handleDownload = async (fmt: "docx" | "pdf") => {
+    try {
+      await workPermitsApi.downloadPrint(wp.id, fmt, wp.number ?? undefined);
+    } catch (e: unknown) {
+      const status = (e as { response?: { status?: number } })?.response?.status;
+      if (fmt === "pdf" && status === 503) {
+        toast.error("PDF-конвертер недоступен, скачайте DOCX");
+      } else {
+        toast.error("Не удалось скачать документ");
+      }
+    }
+  };
+
   const safetySystemsText =
     (wp.safety_systems ?? []).map((c) => SAFETY_SYSTEM_LABELS[c] ?? c).join(", ") || null;
 
@@ -281,6 +296,9 @@ export default function WorkPermitDetailPage() {
           </div>
         </Can>
       </div>
+
+      {/* Печать бланка наряда */}
+      <PrintButtons onDownload={(fmt) => void handleDownload(fmt)} />
 
       {/* Main content grid */}
       <div className="grid gap-4 md:grid-cols-2">
