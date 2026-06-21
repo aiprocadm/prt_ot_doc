@@ -15,6 +15,7 @@ from app.core.errors import api_problem_detail
 from app.core.security import AccessContext, abac
 from app.core.tenant_validation import TenantContextValidator
 from app.domains.work_permits import lifecycle as lc
+from app.domains.work_permits import profiles as wp_profiles
 from app.domains.work_permits import (
     add_member, cancel, close, create_admission, create_briefing, create_work_permit,
     delete_draft, extend, get_admission, get_briefing, issue, list_admissions, list_briefings,
@@ -132,6 +133,7 @@ async def _permit_read(session: AsyncSession, tenant: Tenant, wp: WorkPermit) ->
         conditions_text=wp.conditions_text, safety_systems=wp.safety_systems,
         measures_before_text=wp.measures_before_text, measures_during_text=wp.measures_during_text,
         special_conditions_text=wp.special_conditions_text, ppe_text=wp.ppe_text,
+        type_specific=wp.type_specific,
         created_at=wp.created_at, updated_at=wp.updated_at,
     )
 
@@ -196,6 +198,7 @@ async def create_work_permit_endpoint(
         measures_before_text=payload.measures_before_text,
         measures_during_text=payload.measures_during_text,
         special_conditions_text=payload.special_conditions_text, ppe_text=payload.ppe_text,
+        type_specific=payload.type_specific,
     )
     return await _permit_read(session, tenant, wp)
 
@@ -221,6 +224,13 @@ async def update_work_permit_endpoint(
         ))).scalar_one_or_none()
         if ok is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "site not found")
+    if "type_specific" in fields:
+        effective_type = fields.get("work_type") or (
+            await _get_or_404(session, tenant, wp_id)).work_type
+        try:
+            wp_profiles.validate_type_specific(effective_type, fields["type_specific"])
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
     try:
         wp = await update_work_permit(session, tenant_id=tenant.id, work_permit_id=wp_id, **fields)
     except lc.WorkPermitTransitionError as exc:
