@@ -62,9 +62,23 @@ class SignatureLine:
 
 
 @dataclass
+class StructuredTable:
+    headers: list[str]
+    rows: list[list[str]]
+
+
+@dataclass
+class StructuredSection:
+    title: str
+    kv: list[tuple[str, str]]
+    table: "StructuredTable | None"
+
+
+@dataclass
 class WorkPermitPrintData:
     number: str
     work_type_label: str
+    legal_reference: str
     status_label: str
     org_header: str
     subdivision: str | None
@@ -75,7 +89,7 @@ class WorkPermitPrintData:
     conditions_text: str | None
     equipment_text: str | None
     hazards_text: str | None
-    safety_systems_labels: list[str]
+    structured_section: "StructuredSection | None"
     measures_before: str | None
     measures_during: str | None
     special_conditions: str | None
@@ -97,7 +111,7 @@ def build_work_permit_docx(data: WorkPermitPrintData) -> bytes:
     doc = Document()
     doc.add_heading(
         f"НАРЯД-ДОПУСК на производство работ повышенной опасности "
-        f"({data.work_type_label}, Приказ Минтруда № 782н)", level=0,
+        f"({data.work_type_label}, {data.legal_reference})", level=0,
     )
 
     # 1. Шапка
@@ -129,12 +143,26 @@ def build_work_permit_docx(data: WorkPermitPrintData) -> bytes:
     _kv(doc, "Условия проведения", data.conditions_text)
     _kv(doc, "Оборудование", data.equipment_text)
     _kv(doc, "Опасные факторы", data.hazards_text)
-    _kv(doc, "Системы обеспечения безопасности",
-        ", ".join(data.safety_systems_labels) if data.safety_systems_labels else None)
     _kv(doc, "Мероприятия до начала работ", data.measures_before)
     _kv(doc, "Мероприятия в процессе работ", data.measures_during)
     _kv(doc, "Особые условия", data.special_conditions)
     _kv(doc, "Средства индивидуальной защиты", data.ppe_text)
+
+    # 3b. Структурная секция вида работ (системы безопасности / газоанализ / …)
+    sec = data.structured_section
+    if sec is not None:
+        doc.add_heading(sec.title, level=1)
+        for label, value in sec.kv:
+            _kv(doc, label, value)
+        if sec.table is not None and sec.table.rows:
+            tbl = doc.add_table(rows=1, cols=len(sec.table.headers))
+            tbl.style = "Table Grid"
+            for i, h in enumerate(sec.table.headers):
+                tbl.rows[0].cells[i].text = h
+            for row in sec.table.rows:
+                cells = tbl.add_row().cells
+                for i, val in enumerate(row):
+                    cells[i].text = str(val)
 
     # 4. Целевой инструктаж
     doc.add_heading("Целевой инструктаж", level=1)

@@ -6,7 +6,8 @@ from io import BytesIO
 from docx import Document
 
 from app.domains.work_permits.print_form import (
-    SignatureLine, WorkPermitPrintData, build_work_permit_docx,
+    SignatureLine, StructuredSection, StructuredTable, WorkPermitPrintData,
+    build_work_permit_docx,
 )
 
 
@@ -22,12 +23,15 @@ def _all_text(doc_bytes: bytes) -> str:
 
 def _sample() -> WorkPermitPrintData:
     return WorkPermitPrintData(
-        number="НД-7", work_type_label="Работа на высоте", status_label="Выдан",
-        org_header="ООО Ромашка", subdivision="Цех №1",
+        number="НД-7", work_type_label="Работа на высоте",
+        legal_reference="Приказ Минтруда России от 16.11.2020 № 782н",
+        status_label="Выдан", org_header="ООО Ромашка", subdivision="Цех №1",
         planned_start="2026-06-20 08:00", planned_end="2026-06-20 18:00",
         zone_text="фасад корпуса А", content_text="монтаж", conditions_text="ясно",
         equipment_text="люлька", hazards_text="высота 12 м",
-        safety_systems_labels=["Удерживающие", "Страховочные"],
+        structured_section=StructuredSection(
+            title="Системы обеспечения безопасности (782н)",
+            kv=[("Системы", "Удерживающие, Страховочные")], table=None),
         measures_before="ограждение", measures_during="наблюдение",
         special_conditions="—", ppe_text="каска, строп",
         members=[("Производитель работ", "Иванов И.И."), ("Допускающий", "Петров П.П.")],
@@ -51,22 +55,38 @@ def test_build_docx_contains_core_fields():
     text = _all_text(build_work_permit_docx(_sample()))
     assert "НД-7" in text
     assert "Иванов И.И." in text
-    assert "Удерживающие" in text          # метка системы безопасности
+    assert "№ 782н" in text
+    assert "Удерживающие, Страховочные" in text
     assert "работы окончены, место сдано" in text
-    assert "a1b2c3d4e5f6a7b8" in text       # хэш ПЭП в блоке подписей
-    assert "Сдал" in text                    # роль закрытия
+    assert "a1b2c3d4e5f6a7b8" in text
+    assert "Сдал" in text
+
+
+def test_build_docx_renders_structured_table():
+    data = _sample()
+    data.structured_section = StructuredSection(
+        title="Анализ воздушной среды (902н)",
+        kv=[("Вентиляция", "Принудительная")],
+        table=StructuredTable(headers=["Параметр", "Значение"], rows=[["Кислород", "20.9"]]),
+    )
+    text = _all_text(build_work_permit_docx(data))
+    assert "Анализ воздушной среды (902н)" in text
+    assert "Вентиляция" in text and "Принудительная" in text
+    assert "Кислород" in text and "20.9" in text
 
 
 def test_build_docx_empty_sections_do_not_crash():
     data = WorkPermitPrintData(
-        number="НД-8", work_type_label="Работа на высоте", status_label="Черновик",
-        org_header="ООО Ромашка", subdivision=None, planned_start=None, planned_end=None,
-        zone_text="зона", content_text=None, conditions_text=None, equipment_text=None,
-        hazards_text=None, safety_systems_labels=[], measures_before=None, measures_during=None,
+        number="НД-8", work_type_label="Работа на высоте",
+        legal_reference="Приказ Минтруда России от 16.11.2020 № 782н",
+        status_label="Черновик", org_header="ООО Ромашка", subdivision=None,
+        planned_start=None, planned_end=None, zone_text="зона", content_text=None,
+        conditions_text=None, equipment_text=None, hazards_text=None,
+        structured_section=None, measures_before=None, measures_during=None,
         special_conditions=None, ppe_text=None, members=[], briefing=None,
         daily_admissions=[], extensions=[], completion=None, closed_at=None, signatures=[],
     )
-    out = build_work_permit_docx(data)  # не должно бросать
+    out = build_work_permit_docx(data)
     assert isinstance(out, bytes) and len(out) > 0
 
 
