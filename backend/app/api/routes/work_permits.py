@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Annotated, Literal
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, select
@@ -36,6 +37,7 @@ from app.schemas.work_permit import (
     WorkPermitUpdate,
 )
 from app.services.work_permit_admission import WorkPermitBlocked, check_brigade_readiness
+from app.services.work_permit_print import PdfRendererUnavailable, render_work_permit
 
 router = APIRouter(prefix="/work-permits")
 
@@ -665,19 +667,16 @@ async def create_closing_signature_endpoint(
 
 # --- Print endpoint (Ф4) -----------------------------------------------------
 
-from app.services.work_permit_print import PdfRendererUnavailable, render_work_permit  # noqa: E402
-
-
 @router.get("/{wp_id}/print")
 async def print_work_permit_endpoint(
     wp_id: str, tenant: TenantDep, session: SessionDep, access: ReaderAccess,
-    format: Literal["docx", "pdf"] = Query("docx"),
+    fmt: Literal["docx", "pdf"] = Query("docx", alias="format"),
 ) -> Response:
     TenantContextValidator.ensure_tenant_context(tenant)
     await _get_or_404(session, tenant, wp_id)
     try:
         rendered = await render_work_permit(
-            session, tenant=tenant, permit_id=wp_id, fmt=format,
+            session, tenant=tenant, permit_id=wp_id, fmt=fmt,
         )
     except PdfRendererUnavailable as exc:
         raise HTTPException(
@@ -688,10 +687,10 @@ async def print_work_permit_endpoint(
                 error_type="work_permit",
             ),
         ) from exc
+    # defensive: _get_or_404 уже отсёк отсутствующий наряд; None здесь — параллельное удаление
     if rendered is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "work permit not found")
-    from urllib.parse import quote as _quote
-    encoded_name = _quote(rendered.filename, safe="")
+    encoded_name = quote(rendered.filename, safe="")
     content_disposition = f"attachment; filename*=UTF-8''{encoded_name}"
     return Response(
         content=rendered.content,
