@@ -5,6 +5,8 @@ All values are the canonical VARCHAR strings stored in the DB (see migration wp0
 """
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+
 STATUS_DRAFT = "draft"
 STATUS_ISSUED = "issued"
 STATUS_SUSPENDED = "suspended"
@@ -28,7 +30,7 @@ MEMBER_ROLES = frozenset({
 
 EVENT_TYPES = frozenset({
     "issued", "suspended", "resumed", "closed", "cancelled", "extended",
-    "admitted", "member_added", "member_removed",
+    "admitted", "member_added", "member_removed", "completion_recorded",
 })
 
 # системы обеспечения безопасности работ на высоте (782н):
@@ -74,3 +76,62 @@ def is_member_role(value: str) -> bool:
 
 def is_safety_system(value: str) -> bool:
     return value in SAFETY_SYSTEMS
+
+
+# Роли подписи закрытия (782н): "сдал" — производитель работ; "принял" —
+# ответственный руководитель ИЛИ допускающий.
+HANDOVER_ROLES = frozenset({"foreman"})
+ACCEPTANCE_ROLES = frozenset({"supervisor", "admitter"})
+CLOSING_SIGNER_ROLES = HANDOVER_ROLES | ACCEPTANCE_ROLES
+
+
+def role_to_closing_kind(role: str) -> str | None:
+    """Вид подписи закрытия по роли члена бригады, либо None если роль не подписывает закрытие."""
+    if role in HANDOVER_ROLES:
+        return "handover"
+    if role in ACCEPTANCE_ROLES:
+        return "acceptance"
+    return None
+
+
+@dataclass(frozen=True)
+class ClosingReadiness:
+    can_close: bool
+    missing: list[str] = field(default_factory=list)
+
+
+def closing_readiness(*, completion_text: str | None, signed_kinds: set[str]) -> ClosingReadiness:
+    """Готовность наряда к закрытию: акт оформлен + есть SIGNED «сдал» и «принял».
+
+    Чистая функция (без I/O). ``signed_kinds`` — множество видов закрытия
+    ({"handover","acceptance"}), у которых есть SIGNED-подпись.
+    """
+    missing: list[str] = []
+    if not (completion_text and completion_text.strip()):
+        missing.append("completion_act")
+    if "handover" not in signed_kinds:
+        missing.append("handover_signature")
+    if "acceptance" not in signed_kinds:
+        missing.append("acceptance_signature")
+    return ClosingReadiness(can_close=not missing, missing=missing)
+
+
+class WorkPermitClosingIncomplete(Exception):
+    """close вызван до готовности гейта закрытия (maps to HTTP 409)."""
+
+    def __init__(self, missing: list[str]) -> None:
+        self.missing = missing
+        super().__init__(f"closing requirements not met: {missing}")
+
+
+class WorkPermitCompletionLocked(Exception):
+    """record_completion вызван после появления SIGNED-подписи закрытия (maps to HTTP 409).
+
+    Акт окончания нельзя править после первой подписи закрытия: подписи подписывают
+    канонический снимок (pep_signing._build_content), включающий completion_text и
+    completion_recorded_at — правка инвалидировала бы уже собранные подписи (verify()
+    поймал бы рассогласование хэша уже постфактум, на закрытом наряде).
+    """
+
+    def __init__(self) -> None:
+        super().__init__("completion act is locked: closing signatures already collected")

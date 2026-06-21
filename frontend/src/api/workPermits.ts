@@ -1,6 +1,7 @@
 import { apiClient } from "@/api/client";
 import type {
-  ReadinessReportDto, WorkPermitBriefingDto, WorkPermitDailyAdmissionDto, WorkPermitDto,
+  ReadinessReportDto, WorkPermitBriefingDto, WorkPermitClosingSummaryDto,
+  WorkPermitDailyAdmissionDto, WorkPermitDto,
   WorkPermitEventDto, WorkPermitMemberDto, WorkPermitPage, WorkPermitSignatureDto,
 } from "@/types/dto/workPermits";
 
@@ -84,6 +85,17 @@ export const workPermitsApi = {
   },
   async confirmSignatureCode(requestId: string, code: string): Promise<void> {
     await apiClient.post(`/sign/pep/requests/${requestId}/confirm`, { code });
+  },
+  async getClosing(id: string): Promise<WorkPermitClosingSummaryDto> {
+    return (await apiClient.get<WorkPermitClosingSummaryDto>(`${base}/${id}/closing`)).data;
+  },
+  async recordCompletion(id: string, completionText: string): Promise<WorkPermitClosingSummaryDto> {
+    return (await apiClient.post<WorkPermitClosingSummaryDto>(`${base}/${id}/closing`, { completion_text: completionText })).data;
+  },
+  async createClosingSignature(
+    id: string, personId: string, mode: "attested" | "code",
+  ): Promise<WorkPermitSignatureDto> {
+    return (await apiClient.post<WorkPermitSignatureDto>(`${base}/${id}/closing/signatures`, { person_id: personId, mode })).data;
   },
   async listAdmissions(id: string): Promise<WorkPermitDailyAdmissionDto[]> {
     return (await apiClient.get<WorkPermitDailyAdmissionDto[]>(`${base}/${id}/admissions`)).data;

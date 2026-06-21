@@ -214,6 +214,25 @@ class WorkPermitSignatureRead(BaseSchema):
     confirm_code: str | None = None
 
 
+class WorkPermitClosingRecordCreate(BaseSchema):
+    completion_text: str
+
+    @field_validator("completion_text")
+    @classmethod
+    def _completion_text(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("completion_text must not be empty or whitespace-only")
+        return v
+
+
+class WorkPermitClosingSummary(BaseSchema):
+    completion_text: str | None
+    completion_recorded_at: datetime | None
+    signatures: list[WorkPermitSignatureRead]
+    can_close: bool
+    missing: list[str]
+
+
 class WorkPermitDailyAdmissionCreate(BaseSchema):
     admission_date: date
     start_at: datetime | None = None

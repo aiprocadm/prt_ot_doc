@@ -38,6 +38,8 @@ class WorkPermit(TenantBaseModel):
     opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     suspended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completion_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    completion_recorded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "number", name="uq_work_permit_tenant_number"),

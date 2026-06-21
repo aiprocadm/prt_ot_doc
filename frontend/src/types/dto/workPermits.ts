@@ -72,7 +72,7 @@ export interface WorkPermitBriefingDto {
 
 export interface WorkPermitSignatureDto {
   id: string;
-  stream: string; // "permit" | "briefing"
+  stream: string; // "permit" | "briefing" | "closing"
   object_type: string;
   object_id: string;
   purpose: string;
@@ -82,6 +82,14 @@ export interface WorkPermitSignatureDto {
   content_hash: string | null;
   signed_at: string | null;
   confirm_code?: string | null;
+}
+
+export interface WorkPermitClosingSummaryDto {
+  completion_text: string | null;
+  completion_recorded_at: string | null;
+  signatures: WorkPermitSignatureDto[];
+  can_close: boolean;
+  missing: string[];
 }
 
 export interface WorkPermitDailyAdmissionDto {

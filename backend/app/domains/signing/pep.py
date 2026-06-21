@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Any
 
 PEP_PURPOSES = frozenset(
-    {"document", "acknowledgement", "ppe_issue", "briefing", "work_permit", "work_permit_briefing"}
+    {"document", "acknowledgement", "ppe_issue", "briefing", "work_permit", "work_permit_briefing", "work_permit_closing"}
 )
 MAX_CONFIRM_ATTEMPTS = 5
 CONFIRM_TTL_MINUTES = 15

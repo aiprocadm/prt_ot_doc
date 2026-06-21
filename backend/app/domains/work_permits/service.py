@@ -226,7 +226,70 @@ async def resume(session, *, tenant_id, work_permit_id, actor_user_id, note=None
     )
 
 
+async def signed_closing_kinds(
+    session: AsyncSession, *, tenant_id: str, work_permit_id: str,
+) -> set[str]:
+    """Виды подписи закрытия ({"handover","acceptance"}) с хотя бы одной SIGNED-подписью.
+
+    SIGNED closing-подпись валидна, только если её подписант — действующий член
+    бригады наряда с подписывающей закрытие ролью (роль резолвится «на сейчас»).
+    """
+    from app.models.models import SignatureRequest
+
+    rows = (await session.execute(
+        select(SignatureRequest.signer_person_id).where(
+            SignatureRequest.tenant_id == tenant_id,
+            SignatureRequest.object_type == "work_permit_closing",
+            SignatureRequest.object_id == work_permit_id,
+            SignatureRequest.status == "signed",
+        )
+    )).scalars().all()
+    signed_person_ids = {p for p in rows if p}
+    if not signed_person_ids:
+        return set()
+    role_rows = (await session.execute(
+        select(WorkPermitMember.person_id, WorkPermitMember.role).where(
+            WorkPermitMember.tenant_id == tenant_id,
+            WorkPermitMember.work_permit_id == work_permit_id,
+            WorkPermitMember.person_id.in_(tuple(signed_person_ids)),
+        )
+    )).all()
+    kinds: set[str] = set()
+    for _person_id, role in role_rows:
+        kind = lc.role_to_closing_kind(role)
+        if kind:
+            kinds.add(kind)
+    return kinds
+
+
+async def _has_signed_closing_signature(
+    session: AsyncSession, *, tenant_id: str, work_permit_id: str,
+) -> bool:
+    """Есть ли хотя бы одна SIGNED-подпись закрытия наряда (любого подписанта).
+
+    Шире, чем signed_closing_kinds: НЕ фильтрует по текущему членству/роли — любая
+    SIGNED-подпись подписала канонический снимок акта, и её хэш сломала бы любая
+    правка акта (даже снятым из бригады подписантом)."""
+    from app.models.models import SignatureRequest
+
+    stmt = select(SignatureRequest.id).where(
+        SignatureRequest.tenant_id == tenant_id,
+        SignatureRequest.object_type == "work_permit_closing",
+        SignatureRequest.object_id == work_permit_id,
+        SignatureRequest.status == "signed",
+    ).limit(1)
+    return (await session.execute(stmt)).scalars().first() is not None
+
+
 async def close(session, *, tenant_id, work_permit_id, actor_user_id, photo_file_id=None, note=None):
+    wp = await _get(session, tenant_id, work_permit_id)
+    if wp is None:
+        return None
+    lc.validate_transition(str(wp.status), lc.STATUS_CLOSED)  # FSM до гейта: draft/closed/cancelled → WorkPermitTransitionError
+    signed = await signed_closing_kinds(session, tenant_id=tenant_id, work_permit_id=work_permit_id)
+    readiness = lc.closing_readiness(completion_text=wp.completion_text, signed_kinds=signed)
+    if not readiness.can_close:
+        raise lc.WorkPermitClosingIncomplete(readiness.missing)
     return await _transition(
         session, tenant_id=tenant_id, work_permit_id=work_permit_id, target=lc.STATUS_CLOSED,
         event_type="closed", actor_user_id=actor_user_id, photo_file_id=photo_file_id, note=note,
@@ -238,6 +301,29 @@ async def cancel(session, *, tenant_id, work_permit_id, actor_user_id, note=None
         session, tenant_id=tenant_id, work_permit_id=work_permit_id, target=lc.STATUS_CANCELLED,
         event_type="cancelled", actor_user_id=actor_user_id, note=note,
     )
+
+
+async def record_completion(
+    session: AsyncSession, *, tenant_id: str, work_permit_id: str,
+    completion_text: str, actor_user_id: str | None = None,
+) -> WorkPermit | None:
+    """Оформить/обновить акт окончания работ (idempotent upsert). Только в issued."""
+    wp = await _get(session, tenant_id, work_permit_id)
+    if wp is None:
+        return None
+    if wp.status != lc.STATUS_ISSUED:
+        raise lc.WorkPermitTransitionError(str(wp.status), "record_completion")
+    if await _has_signed_closing_signature(session, tenant_id=tenant_id, work_permit_id=work_permit_id):
+        raise lc.WorkPermitCompletionLocked()
+    wp.completion_text = completion_text
+    wp.completion_recorded_at = _now()
+    await _log(
+        session, tenant_id=tenant_id, work_permit_id=work_permit_id,
+        event_type="completion_recorded", actor_user_id=actor_user_id,
+    )
+    await session.flush()
+    await session.refresh(wp)
+    return wp
 
 
 async def extend(session, *, tenant_id, work_permit_id, planned_end, actor_user_id, note=None):

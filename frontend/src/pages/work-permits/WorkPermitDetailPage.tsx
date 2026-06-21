@@ -10,6 +10,7 @@ import { Can } from "@/components/permissions/Can";
 import { Button } from "@/components/ui/button";
 import { BriefingPanel } from "@/features/work-permits/BriefingPanel";
 import { BrigadeMembersPanel } from "@/features/work-permits/BrigadeMembersPanel";
+import { ClosingPanel } from "@/features/work-permits/ClosingPanel";
 import { DailyAdmissionPanel } from "@/features/work-permits/DailyAdmissionPanel";
 import { ReadinessPanel } from "@/features/work-permits/ReadinessPanel";
 import { SignaturesPanel, type SignerRow } from "@/features/work-permits/SignaturesPanel";
@@ -23,7 +24,7 @@ import {
   labelOf,
 } from "@/lib/workPermitVocab";
 import { PERMISSIONS } from "@/permissions/permissions";
-import type { ReadinessReportDto, WorkPermitDto, WorkPermitEventDto, WorkPermitSignatureDto } from "@/types/dto/workPermits";
+import type { ReadinessReportDto, WorkPermitClosingSummaryDto, WorkPermitDto, WorkPermitEventDto, WorkPermitSignatureDto } from "@/types/dto/workPermits";
 
 // Actions available per status (excluding "Продлить" which needs a date input)
 const ACTIONS_BY_STATUS: Record<
@@ -76,6 +77,7 @@ export default function WorkPermitDetailPage() {
   const [readiness, setReadiness] = useState<ReadinessReportDto | null>(null);
   const [events, setEvents] = useState<WorkPermitEventDto[]>([]);
   const [signatures, setSignatures] = useState<WorkPermitSignatureDto[]>([]);
+  const [closingSummary, setClosingSummary] = useState<WorkPermitClosingSummaryDto | null>(null);
 
   // Extend dialog state
   const [extendOpen, setExtendOpen] = useState(false);
@@ -95,11 +97,12 @@ export default function WorkPermitDetailPage() {
     fetchAllPersons().then(setPersons).catch(() => undefined);
   }, []);
 
-  // Refresh side panels (readiness + events + signatures) when permit changes
+  // Refresh side panels (readiness + events + signatures + closing) when permit changes
   const refreshSide = useCallback(() => {
     workPermitsApi.readiness(id).then(setReadiness).catch(() => undefined);
     workPermitsApi.events(id).then(setEvents).catch(() => undefined);
     workPermitsApi.listSignatures(id).then(setSignatures).catch(() => undefined);
+    workPermitsApi.getClosing(id).then(setClosingSummary).catch(() => undefined);
   }, [id]);
 
   useEffect(() => {
@@ -125,6 +128,14 @@ export default function WorkPermitDetailPage() {
       const data = getResponseData(e);
       if (data?.code === "WORK_PERMIT_BLOCKED") {
         toast.error("Бригада не готова — наряд нельзя выдать. Проверьте панель готовности.");
+        refreshSide();
+      } else if (data?.code === "WORK_PERMIT_CLOSING_INCOMPLETE") {
+        const missing = Array.isArray(data.missing)
+          ? (data.missing as string[])
+          : [];
+        const { CLOSING_MISSING_LABELS } = await import("@/lib/workPermitVocab");
+        const reasons = missing.map((k) => CLOSING_MISSING_LABELS[k] ?? k).join("; ");
+        toast.error(`Не выполнены условия закрытия: ${reasons || "проверьте панель закрытия"}`);
         refreshSide();
       } else if (data?.code === "WORK_PERMIT_TRANSITION_INVALID") {
         toast.error("Действие недоступно в текущем статусе");
@@ -171,6 +182,11 @@ export default function WorkPermitDetailPage() {
     .filter((m) => RESP_ROLES.has(m.role))
     .map((m) => ({ personId: m.person_id, name: nameOf(m.person_id), roleLabel: labelOf(MEMBER_ROLE_LABELS, m.role) }));
   const permitSignatures = signatures.filter((s) => s.stream === "permit");
+
+  const CLOSING_ROLES = new Set(["foreman", "supervisor", "admitter"]);
+  const closingSigners: SignerRow[] = wp.members
+    .filter((m) => CLOSING_ROLES.has(m.role))
+    .map((m) => ({ personId: m.person_id, name: nameOf(m.person_id), roleLabel: labelOf(MEMBER_ROLE_LABELS, m.role) }));
 
   const signPermit = async (personId: string, mode: "attested" | "code") => {
     const res = await workPermitsApi.createPermitSignature(wp.id, { person_id: personId, mode });
@@ -365,6 +381,26 @@ export default function WorkPermitDetailPage() {
         <div className="text-sm font-medium mb-2">Ежедневный допуск</div>
         <DailyAdmissionPanel wp={wp} onRefresh={refreshSide} />
       </div>
+
+      {/* Закрытие наряда (Ф3b) — только для issued / suspended / closed */}
+      {["issued", "suspended", "closed"].includes(wp.status) && closingSummary && (
+        <div className="rounded-md border p-3">
+          <div className="text-sm font-medium mb-2">Закрытие наряда</div>
+          <Can permission={PERMISSIONS.WORK_PERMIT_MANAGE}>
+            {(canManage) => (
+              <ClosingPanel
+                summary={closingSummary}
+                signers={closingSigners}
+                canManage={canManage}
+                workPermitId={wp.id}
+                nameOf={nameOf}
+                onRefresh={refreshSide}
+                onClose={() => void runAction("close")}
+              />
+            )}
+          </Can>
+        </div>
+      )}
 
       {/* Events log */}
       <div className="rounded-md border p-3">

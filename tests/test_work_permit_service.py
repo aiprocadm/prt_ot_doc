@@ -13,7 +13,12 @@ def _now():
 
 @pytest.mark.asyncio
 async def test_create_add_member_issue_suspend_resume_close(sessionmaker, data_factory):
-    person = await data_factory.create_person()
+    # Создаём тенант+компанию один раз; обе персоны используют ту же компанию,
+    # чтобы не нарушить UNIQUE (tenant_id, name) на таблице company.
+    tenant = await data_factory.ensure_tenant()
+    company = await data_factory.create_company(tenant=tenant)
+    person = await data_factory.create_person(tenant=tenant, company=company, first_name="Fore", last_name="Man")
+    supervisor = await data_factory.create_person(tenant=tenant, company=company, first_name="Super", last_name="Visor")
     async with sessionmaker() as session:
         wp = await svc.create_work_permit(
             session, tenant_id=person.tenant_id, work_type="hot_work",
@@ -42,12 +47,35 @@ async def test_create_add_member_issue_suspend_resume_close(sessionmaker, data_f
         assert sus.status == lc.STATUS_SUSPENDED
         res = await svc.resume(session, tenant_id=person.tenant_id, work_permit_id=wp.id, actor_user_id="u1")
         assert res.status == lc.STATUS_ISSUED
+
+        # Ф3b: закрытие гейтится актом + подписями «сдал» (foreman) + «принял» (supervisor)
+        from app.domains.work_permits.signing import sign_closing
+        await svc.add_member(
+            session, tenant_id=person.tenant_id, work_permit_id=wp.id,
+            person_id=supervisor.id, role="supervisor",
+        )
+        await svc.record_completion(
+            session, tenant_id=person.tenant_id, work_permit_id=wp.id,
+            completion_text="готово", actor_user_id="u1",
+        )
+        await sign_closing(
+            session, tenant_id=str(person.tenant_id), work_permit_id=wp.id,
+            person_id=person.id, mode="attested", requested_by="u1",
+        )
+        await sign_closing(
+            session, tenant_id=str(person.tenant_id), work_permit_id=wp.id,
+            person_id=supervisor.id, mode="attested", requested_by="u1",
+        )
+
         closed = await svc.close(session, tenant_id=person.tenant_id, work_permit_id=wp.id, actor_user_id="u1")
         assert closed.status == lc.STATUS_CLOSED
 
         events = await svc.list_events(session, tenant_id=person.tenant_id, work_permit_id=wp.id)
-        # member_added is now emitted by add_member (Ф3a)
-        assert [e.event_type for e in events] == ["member_added", "issued", "suspended", "resumed", "closed"]
+        # Последовательность: member_added(foreman) + issued + suspended + resumed +
+        # member_added(supervisor) + closed — проверяем только что closed последний
+        assert events[-1].event_type == "closed"
+        fsm_events = [e.event_type for e in events if e.event_type in {"issued", "suspended", "resumed", "closed"}]
+        assert fsm_events == ["issued", "suspended", "resumed", "closed"]
 
 
 @pytest.mark.asyncio

@@ -10,6 +10,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domains.work_permits.lifecycle import CLOSING_SIGNER_ROLES
 from app.domains.work_permits.service import get_briefing
 from app.models.models import SignatureRequest
 from app.models.work_permit import WorkPermitMember
@@ -108,4 +109,25 @@ async def sign_briefing(
     return await _dispatch(
         session, tenant_id=tenant_id, object_type="work_permit_briefing", object_id=briefing_id,
         purpose="work_permit_briefing", person_id=person_id, mode=mode, requested_by=requested_by,
+    )
+
+
+async def sign_closing(
+    session: AsyncSession, *, tenant_id: str, work_permit_id: str,
+    person_id: str, mode: str, requested_by: str,
+) -> tuple[SignatureRequest, str | None]:
+    """Подпись закрытия наряда: подписант — член бригады с ролью из CLOSING_SIGNER_ROLES.
+
+    Вид «сдал/принял» НЕ хранится в запросе — резолвится из роли члена при чтении
+    (см. service.signed_closing_kinds).
+    """
+    role = await _member_role(
+        session, tenant_id=tenant_id, work_permit_id=work_permit_id,
+        person_id=person_id, allowed_roles=CLOSING_SIGNER_ROLES,
+    )
+    if role is None:
+        raise WorkPermitSignerError("person is not a closing-signer member of this permit")
+    return await _dispatch(
+        session, tenant_id=tenant_id, object_type="work_permit_closing", object_id=work_permit_id,
+        purpose="work_permit_closing", person_id=person_id, mode=mode, requested_by=requested_by,
     )
