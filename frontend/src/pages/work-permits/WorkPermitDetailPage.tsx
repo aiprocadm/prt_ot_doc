@@ -12,6 +12,7 @@ import { BriefingPanel } from "@/features/work-permits/BriefingPanel";
 import { BrigadeMembersPanel } from "@/features/work-permits/BrigadeMembersPanel";
 import { ClosingPanel } from "@/features/work-permits/ClosingPanel";
 import { DailyAdmissionPanel } from "@/features/work-permits/DailyAdmissionPanel";
+import { PrintButtons } from "@/features/work-permits/PrintButtons";
 import { ReadinessPanel } from "@/features/work-permits/ReadinessPanel";
 import { SignaturesPanel, type SignerRow } from "@/features/work-permits/SignaturesPanel";
 import { WorkPermitEventsTimeline } from "@/features/work-permits/WorkPermitEventsTimeline";
@@ -21,6 +22,8 @@ import {
   MEMBER_ROLE_LABELS,
   SAFETY_SYSTEM_LABELS,
   WORK_TYPE_LABELS,
+  VENTILATION_LABELS,
+  GAS_PARAMETER_LABELS,
   labelOf,
 } from "@/lib/workPermitVocab";
 import { PERMISSIONS } from "@/permissions/permissions";
@@ -199,6 +202,20 @@ export default function WorkPermitDetailPage() {
     refreshSide();
   };
 
+  // Скачать печатный бланк (DOCX всегда; PDF best-effort — 503 если нет конвертера)
+  const handleDownload = async (fmt: "docx" | "pdf") => {
+    try {
+      await workPermitsApi.downloadPrint(wp.id, fmt, wp.number ?? undefined);
+    } catch (e: unknown) {
+      const status = (e as { response?: { status?: number } })?.response?.status;
+      if (fmt === "pdf" && status === 503) {
+        toast.error("PDF-конвертер недоступен, скачайте DOCX");
+      } else {
+        toast.error("Не удалось скачать документ");
+      }
+    }
+  };
+
   const safetySystemsText =
     (wp.safety_systems ?? []).map((c) => SAFETY_SYSTEM_LABELS[c] ?? c).join(", ") || null;
 
@@ -282,6 +299,9 @@ export default function WorkPermitDetailPage() {
         </Can>
       </div>
 
+      {/* Печать бланка наряда */}
+      <PrintButtons onDownload={(fmt) => void handleDownload(fmt)} />
+
       {/* Main content grid */}
       <div className="grid gap-4 md:grid-cols-2">
         {/* Left: permit details */}
@@ -295,6 +315,17 @@ export default function WorkPermitDetailPage() {
           <Section title="Мероприятия в процессе" value={wp.measures_during_text} />
           <Section title="Особые условия" value={wp.special_conditions_text} />
           <Section title="СИЗ" value={wp.ppe_text} />
+          {wp.work_type === "confined_space" && wp.type_specific ? (
+            <div className="text-sm">
+              <div className="font-medium">Анализ воздушной среды и вентиляция (902н)</div>
+              {(wp.type_specific as { ventilation?: string }).ventilation ? (
+                <div>Вентиляция: {VENTILATION_LABELS[(wp.type_specific as { ventilation: string }).ventilation] ?? "—"}</div>
+              ) : null}
+              {((wp.type_specific as { gas_analysis?: Array<{ parameter: string; value: string }> }).gas_analysis ?? []).map((m, i) => (
+                <div key={i}>{GAS_PARAMETER_LABELS[m.parameter] ?? m.parameter}: {m.value}</div>
+              ))}
+            </div>
+          ) : null}
           {!wp.content_text &&
             !wp.conditions_text &&
             !wp.hazards_text &&

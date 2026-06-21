@@ -19,10 +19,18 @@ import { workPermitsApi } from "@/api/workPermits";
 import type { WorkPermitDto } from "@/types/dto/workPermits";
 import {
   SAFETY_SYSTEM_CODES,
+  GAS_PARAMETER_CODES,
+  VENTILATION_CODES,
   workPermitSchema,
   type WorkPermitFormValues,
 } from "@/types/forms/workPermits";
-import { SAFETY_SYSTEM_LABELS, WORK_TYPE_LABELS } from "@/lib/workPermitVocab";
+import {
+  SAFETY_SYSTEM_LABELS,
+  WORK_TYPE_LABELS,
+  LEGAL_REFERENCE_LABELS,
+  GAS_PARAMETER_LABELS,
+  VENTILATION_LABELS,
+} from "@/lib/workPermitVocab";
 import { applyApiFieldErrorsToForm, isApiError } from "@/utils/apiFormErrors";
 
 const EMPTY: WorkPermitFormValues = {
@@ -41,6 +49,7 @@ const EMPTY: WorkPermitFormValues = {
   measures_during_text: "",
   special_conditions_text: "",
   ppe_text: "",
+  type_specific: null,
 };
 
 interface Props {
@@ -77,6 +86,7 @@ export const WorkPermitFormDialog = ({ trigger, initialData, onSubmitted }: Prop
         measures_during_text: initialData.measures_during_text ?? "",
         special_conditions_text: initialData.special_conditions_text ?? "",
         ppe_text: initialData.ppe_text ?? "",
+        type_specific: (initialData.type_specific as WorkPermitFormValues["type_specific"]) ?? null,
       });
     } else {
       form.reset(EMPTY);
@@ -99,6 +109,7 @@ export const WorkPermitFormDialog = ({ trigger, initialData, onSubmitted }: Prop
     ppe_text: v.ppe_text || null,
     planned_start: v.planned_start ? new Date(v.planned_start).toISOString() : null,
     planned_end: v.planned_end ? new Date(v.planned_end).toISOString() : null,
+    type_specific: v.work_type === "confined_space" ? (v.type_specific ?? null) : null,
   });
 
   const onSubmit = async (v: WorkPermitFormValues) => {
@@ -128,7 +139,10 @@ export const WorkPermitFormDialog = ({ trigger, initialData, onSubmitted }: Prop
       <DialogContent className="max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{initialData ? "Редактировать наряд" : "Новый наряд-допуск"}</DialogTitle>
-          <DialogDescription>Работа на высоте (форма 782н)</DialogDescription>
+          <DialogDescription>
+            {WORK_TYPE_LABELS[form.watch("work_type")] ?? "Наряд-допуск"} ·{" "}
+            {LEGAL_REFERENCE_LABELS[form.watch("work_type")] ?? ""}
+          </DialogDescription>
         </DialogHeader>
         <form
           className="space-y-4"
@@ -193,21 +207,48 @@ export const WorkPermitFormDialog = ({ trigger, initialData, onSubmitted }: Prop
             <textarea id="hazards_text" className={ta} {...form.register("hazards_text")} />
           </div>
 
-          <div className="space-y-1">
-            <Label>Системы обеспечения безопасности</Label>
-            <div className="flex flex-wrap gap-3">
-              {SAFETY_SYSTEM_CODES.map((code) => (
-                <label key={code} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={selected.has(code)}
-                    onChange={() => toggleSystem(code)}
-                  />
-                  {SAFETY_SYSTEM_LABELS[code]}
-                </label>
-              ))}
+          {form.watch("work_type") === "height" && (
+            <div className="space-y-1">
+              <Label>Системы обеспечения безопасности</Label>
+              <div className="flex flex-wrap gap-3">
+                {SAFETY_SYSTEM_CODES.map((code) => (
+                  <label key={code} className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={selected.has(code)} onChange={() => toggleSystem(code)} />
+                    {SAFETY_SYSTEM_LABELS[code]}
+                  </label>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
+
+          {form.watch("work_type") === "confined_space" && (
+            <div className="space-y-2">
+              <Label>Анализ воздушной среды и вентиляция (902н)</Label>
+              <div className="space-y-1">
+                <Label htmlFor="ventilation" className="text-xs">Вентиляция</Label>
+                <select
+                  id="ventilation"
+                  className="h-10 w-full rounded-md border px-3"
+                  value={(form.watch("type_specific")?.ventilation as string) ?? ""}
+                  onChange={(e) =>
+                    form.setValue("type_specific", {
+                      ...(form.watch("type_specific") ?? {}),
+                      ventilation: (e.target.value || undefined) as never,
+                    })
+                  }
+                >
+                  <option value="">—</option>
+                  {VENTILATION_CODES.map((c) => (
+                    <option key={c} value={c}>{VENTILATION_LABELS[c]}</option>
+                  ))}
+                </select>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Параметры замеров: {GAS_PARAMETER_CODES.map((c) => GAS_PARAMETER_LABELS[c]).join(", ")}.
+                Изоляция коммуникаций и средства эвакуации — в полях «Мероприятия» / «Особые условия».
+              </p>
+            </div>
+          )}
 
           <div className="space-y-1">
             <Label htmlFor="measures_before_text">Мероприятия до начала работ</Label>

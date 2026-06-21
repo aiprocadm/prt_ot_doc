@@ -3,9 +3,10 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 
 from app.domains.work_permits import lifecycle as lc
+from app.domains.work_permits import profiles as wp_profiles
 from app.schemas.base import BaseSchema
 
 
@@ -56,6 +57,7 @@ class WorkPermitCreate(BaseSchema):
     measures_during_text: str | None = None
     special_conditions_text: str | None = None
     ppe_text: str | None = None
+    type_specific: dict | None = None
 
     @field_validator("work_type")
     @classmethod
@@ -73,6 +75,14 @@ class WorkPermitCreate(BaseSchema):
             if not lc.is_safety_system(code):
                 raise ValueError(f"invalid safety_system: {code!r}")
         return v
+
+    @model_validator(mode="after")
+    def _type_specific(self):
+        try:
+            wp_profiles.validate_type_specific(self.work_type, self.type_specific)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        return self
 
 
 class WorkPermitUpdate(BaseSchema):
@@ -93,6 +103,7 @@ class WorkPermitUpdate(BaseSchema):
     measures_during_text: str | None = None
     special_conditions_text: str | None = None
     ppe_text: str | None = None
+    type_specific: dict | None = None
 
     @field_validator("work_type")
     @classmethod
@@ -136,6 +147,7 @@ class WorkPermitRead(BaseSchema):
     measures_during_text: str | None
     special_conditions_text: str | None
     ppe_text: str | None
+    type_specific: dict | None
     created_at: datetime
     updated_at: datetime
 

@@ -29,6 +29,7 @@ export interface WorkPermitDto {
   measures_during_text: string | null;
   special_conditions_text: string | null;
   ppe_text: string | null;
+  type_specific: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
 }
