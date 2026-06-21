@@ -55,6 +55,8 @@ async def test_render_docx_includes_members_and_signature(sessionmaker, data_fac
         assert "НД-7" in text
         assert "Ivan" in text                  # ФИО члена бригады зарезолвлено
         assert "работы окончены" in text
+        assert "Подписано" in text          # статус закрывающей подписи в таблице
+        assert "Сдал" in text                # роль закрытия (handover) производителя работ
 
 
 @pytest.mark.asyncio

@@ -1,9 +1,12 @@
 """Ф4: загрузка наряда+связей+подписей, сборка печатного снимка, опц. бланк и PDF."""
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 from sqlalchemy import select
+
+logger = logging.getLogger(__name__)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -35,7 +38,7 @@ class RenderedDoc:
 
 
 def _fmt_dt(value) -> str | None:
-    return value.isoformat(sep=" ", timespec="minutes") if value else None
+    return value.strftime("%Y-%m-%d %H:%M") if value else None
 
 
 def _closing_kind_label(role: str | None) -> str:
@@ -106,7 +109,7 @@ async def render_work_permit(
             SignatureRequest.object_type.in_(
                 ("work_permit", "work_permit_briefing", "work_permit_closing")
             ),
-            SignatureRequest.object_id.in_(tuple(sig_object_ids)),
+            SignatureRequest.object_id.in_(sig_object_ids),
         ).order_by(SignatureRequest.created_at.asc())
     )).scalars().all()
 
@@ -136,6 +139,9 @@ async def render_work_permit(
             role_label = pf.member_role_label(member_role_by_person.get(str(s.signer_person_id), ""))
 
         signer = fio(s.signer_person_id) if s.signer_person_id else (s.signer_name or "—")
+        # эвристика режима: confirm_code_hash проставлен только в code-flow и не
+        # очищается после подписи; attested-подписи его не имеют. Хрупко — при смене
+        # семантики confirm_code_hash потребуется явный атрибут режима.
         mode = "code" if s.confirm_code_hash else "attested"
         sig_lines.append(pf.SignatureLine(
             group=group,
@@ -223,8 +229,8 @@ async def render_work_permit(
                     context=decision.header_context,
                     watermark_override=decision.watermark,
                 )
-        except Exception:  # best-effort: бланк не должен ронять печать
-            pass
+        except Exception as exc:  # best-effort: бланк не должен ронять печать
+            logger.warning("work-permit print: letterhead failed: %s", exc, exc_info=True)
 
     base_name = f"work-permit-{(wp.number or wp.id)}"
 
