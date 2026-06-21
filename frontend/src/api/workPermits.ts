@@ -108,14 +108,14 @@ export const workPermitsApi = {
   ): Promise<WorkPermitDailyAdmissionDto> {
     return (await apiClient.patch<WorkPermitDailyAdmissionDto>(`${base}/${id}/admissions/${admissionId}`, body)).data;
   },
-  async downloadPrint(id: string, fmt: "docx" | "pdf"): Promise<void> {
+  async downloadPrint(id: string, fmt: "docx" | "pdf", nameHint?: string): Promise<void> {
     const { data } = await apiClient.get<Blob>(`${base}/${id}/print`, {
       params: { format: fmt }, responseType: "blob",
     });
     const url = URL.createObjectURL(data);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `work-permit-${id}.${fmt}`;
+    a.download = `work-permit-${nameHint ?? id}.${fmt}`;
     a.click();
     URL.revokeObjectURL(url);
   },
