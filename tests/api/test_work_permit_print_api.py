@@ -9,7 +9,7 @@ BASE = "/api/v1/work-permits"
 
 
 @pytest.mark.asyncio
-async def test_print_docx_returns_file(async_client, make_auth_headers, data_factory):
+async def test_print_docx_returns_file(async_client, make_auth_headers):
     headers = await make_auth_headers(RoleEnum.ADMIN)
     r = await async_client.post(
         f"{BASE}", headers=headers,
