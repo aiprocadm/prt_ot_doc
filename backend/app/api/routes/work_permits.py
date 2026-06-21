@@ -2,9 +2,9 @@
 """Endpoints for work permits (наряды-допуски)."""
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -661,3 +661,40 @@ async def create_closing_signature_endpoint(
     except (PepNotFound, PepConflict) as exc:
         raise _pep_to_http(exc) from exc
     return _signature_read(req, "closing", confirm_code=code)
+
+
+# --- Print endpoint (Ф4) -----------------------------------------------------
+
+from app.services.work_permit_print import PdfRendererUnavailable, render_work_permit  # noqa: E402
+
+
+@router.get("/{wp_id}/print")
+async def print_work_permit_endpoint(
+    wp_id: str, tenant: TenantDep, session: SessionDep, access: ReaderAccess,
+    format: Literal["docx", "pdf"] = Query("docx"),
+) -> Response:
+    TenantContextValidator.ensure_tenant_context(tenant)
+    await _get_or_404(session, tenant, wp_id)
+    try:
+        rendered = await render_work_permit(
+            session, tenant=tenant, permit_id=wp_id, fmt=format,
+        )
+    except PdfRendererUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=api_problem_detail(
+                code="PDF_RENDERER_UNAVAILABLE",
+                message="PDF converter is unavailable",
+                error_type="work_permit",
+            ),
+        ) from exc
+    if rendered is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "work permit not found")
+    from urllib.parse import quote as _quote
+    encoded_name = _quote(rendered.filename, safe="")
+    content_disposition = f"attachment; filename*=UTF-8''{encoded_name}"
+    return Response(
+        content=rendered.content,
+        media_type=rendered.media_type,
+        headers={"Content-Disposition": content_disposition},
+    )
