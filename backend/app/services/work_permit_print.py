@@ -1,12 +1,11 @@
 """Ф4: загрузка наряда+связей+подписей, сборка печатного снимка, опц. бланк и PDF."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
 
 from sqlalchemy import select
-
-logger = logging.getLogger(__name__)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -20,6 +19,8 @@ from app.models.work_permit import (
     WorkPermitEvent,
     WorkPermitMember,
 )
+
+logger = logging.getLogger(__name__)
 
 _DOCX_MEDIA = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 _PDF_MEDIA = "application/pdf"
@@ -239,13 +240,17 @@ async def render_work_permit(
             from app.modules.pdf.convert import convert_docx_bytes
             from app.modules.pdf.service_pool import LibreOfficePool
 
-            pdf_bytes, _sha = convert_docx_bytes(
+            # soffice — синхронный subprocess (до 45с): уводим в поток, чтобы не
+            # блокировать event loop FastAPI для конкурентных запросов.
+            pdf_bytes, _sha = await asyncio.to_thread(
+                convert_docx_bytes,
                 source_bytes=docx_bytes,
                 timeout_s=_PDF_TIMEOUT_S,
                 pool=LibreOfficePool(),
                 passport=None,
             )
         except Exception as exc:  # soffice отсутствует / таймаут / сбой конвертации
+            logger.warning("work-permit print: PDF conversion failed: %s", exc, exc_info=True)
             raise PdfRendererUnavailable(str(exc)) from exc
         return RenderedDoc(content=pdf_bytes, filename=f"{base_name}.pdf", media_type=_PDF_MEDIA)
 
