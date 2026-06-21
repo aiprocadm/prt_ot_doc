@@ -140,6 +140,35 @@ async def test_close_gate_then_success(async_client, make_auth_headers, data_fac
 
 
 @pytest.mark.asyncio
+async def test_closing_act_locked_after_signature_409(async_client, make_auth_headers, data_factory, sessionmaker):
+    """Правка акта окончания после первой SIGNED-подписи закрытия → 409 (защита подписи)."""
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    foreman, supervisor, _t, _c = await _make_two_persons_with_permits(data_factory, sessionmaker)
+    wp_id = await _issued_permit(async_client, headers, str(foreman.id), str(supervisor.id))
+
+    r = await async_client.post(
+        f"{BASE}/{wp_id}/closing", headers=headers, json={"completion_text": "готово"}
+    )
+    assert r.status_code == 200, r.text
+
+    rs = await async_client.post(
+        f"{BASE}/{wp_id}/closing/signatures", headers=headers,
+        json={"person_id": str(foreman.id), "mode": "attested"},
+    )
+    assert rs.status_code == 201, rs.text
+
+    # правка акта после подписи → 409
+    blocked = await async_client.post(
+        f"{BASE}/{wp_id}/closing", headers=headers, json={"completion_text": "новый текст"}
+    )
+    assert blocked.status_code == 409, blocked.text
+
+    # акт не изменился
+    s = (await async_client.get(f"{BASE}/{wp_id}/closing", headers=headers)).json()
+    assert s["completion_text"] == "готово"
+
+
+@pytest.mark.asyncio
 async def test_closing_signature_non_member_4xx(async_client, make_auth_headers, data_factory, sessionmaker):
     """Подпись закрытия от не-члена бригады → 4xx."""
     headers = await make_auth_headers(RoleEnum.ADMIN)

@@ -262,6 +262,25 @@ async def signed_closing_kinds(
     return kinds
 
 
+async def _has_signed_closing_signature(
+    session: AsyncSession, *, tenant_id: str, work_permit_id: str,
+) -> bool:
+    """Есть ли хотя бы одна SIGNED-подпись закрытия наряда (любого подписанта).
+
+    Шире, чем signed_closing_kinds: НЕ фильтрует по текущему членству/роли — любая
+    SIGNED-подпись подписала канонический снимок акта, и её хэш сломала бы любая
+    правка акта (даже снятым из бригады подписантом)."""
+    from app.models.models import SignatureRequest
+
+    stmt = select(SignatureRequest.id).where(
+        SignatureRequest.tenant_id == tenant_id,
+        SignatureRequest.object_type == "work_permit_closing",
+        SignatureRequest.object_id == work_permit_id,
+        SignatureRequest.status == "signed",
+    ).limit(1)
+    return (await session.execute(stmt)).scalars().first() is not None
+
+
 async def close(session, *, tenant_id, work_permit_id, actor_user_id, photo_file_id=None, note=None):
     wp = await _get(session, tenant_id, work_permit_id)
     if wp is None:
@@ -294,6 +313,8 @@ async def record_completion(
         return None
     if wp.status != lc.STATUS_ISSUED:
         raise lc.WorkPermitTransitionError(str(wp.status), "record_completion")
+    if await _has_signed_closing_signature(session, tenant_id=tenant_id, work_permit_id=work_permit_id):
+        raise lc.WorkPermitCompletionLocked()
     wp.completion_text = completion_text
     wp.completion_recorded_at = _now()
     await _log(

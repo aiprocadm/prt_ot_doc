@@ -615,6 +615,15 @@ async def record_closing_endpoint(
         )
     except lc.WorkPermitTransitionError as exc:
         raise _transition_conflict(exc) from exc
+    except lc.WorkPermitCompletionLocked as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=api_problem_detail(
+                code="WORK_PERMIT_COMPLETION_LOCKED",
+                message="completion act is locked by closing signatures",
+                error_type="work_permit",
+            ),
+        ) from exc
     if wp is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "work permit not found")
     return await _closing_summary(session, tenant, wp)

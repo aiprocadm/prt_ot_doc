@@ -122,3 +122,16 @@ class WorkPermitClosingIncomplete(Exception):
     def __init__(self, missing: list[str]) -> None:
         self.missing = missing
         super().__init__(f"closing requirements not met: {missing}")
+
+
+class WorkPermitCompletionLocked(Exception):
+    """record_completion вызван после появления SIGNED-подписи закрытия (maps to HTTP 409).
+
+    Акт окончания нельзя править после первой подписи закрытия: подписи подписывают
+    канонический снимок (pep_signing._build_content), включающий completion_text и
+    completion_recorded_at — правка инвалидировала бы уже собранные подписи (verify()
+    поймал бы рассогласование хэша уже постфактум, на закрытом наряде).
+    """
+
+    def __init__(self) -> None:
+        super().__init__("completion act is locked: closing signatures already collected")

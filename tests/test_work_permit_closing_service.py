@@ -62,6 +62,32 @@ async def test_record_completion_upsert(sessionmaker, data_factory):
 
 
 @pytest.mark.asyncio
+async def test_record_completion_locked_after_closing_signature(sessionmaker, data_factory):
+    """Появилась SIGNED-подпись закрытия → правка акта запрещена (защита подписанного снимка).
+
+    Канонический снимок подписи закрытия (pep_signing._build_content) включает
+    completion_text И completion_recorded_at, поэтому любой повторный record_completion
+    инвалидировал бы уже собранную подпись — должен бросать WorkPermitCompletionLocked.
+    """
+    tid, (foreman, supervisor) = await _persons(data_factory, "Fore", "Super")
+    async with sessionmaker() as session:
+        wp = await _build_issued_permit(session, tenant_id=tid, foreman_id=foreman.id, supervisor_id=supervisor.id)
+        await svc.record_completion(
+            session, tenant_id=tid, work_permit_id=wp.id, completion_text="готово", actor_user_id="u1",
+        )
+        await sign_closing(session, tenant_id=tid, work_permit_id=wp.id,
+                           person_id=foreman.id, mode="attested", requested_by="u1")
+        with pytest.raises(lc.WorkPermitCompletionLocked):
+            await svc.record_completion(
+                session, tenant_id=tid, work_permit_id=wp.id,
+                completion_text="изменённый текст", actor_user_id="u1",
+            )
+        # текст акта не изменился
+        await session.refresh(wp)
+        assert wp.completion_text == "готово"
+
+
+@pytest.mark.asyncio
 async def test_record_completion_rejects_non_issued(sessionmaker, data_factory):
     _tid, (person,) = await _persons(data_factory, "Solo")
     async with sessionmaker() as session:
