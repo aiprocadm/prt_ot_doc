@@ -27,6 +27,7 @@ class WorkPermit(TenantBaseModel):
     content_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     conditions_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     safety_systems: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    type_specific: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     measures_before_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     measures_during_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     special_conditions_text: Mapped[str | None] = mapped_column(Text, nullable=True)

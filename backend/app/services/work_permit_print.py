@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.domains.work_permits import lifecycle as lc
 from app.domains.work_permits import print_form as pf
+from app.domains.work_permits import profiles as wp_profiles
 from app.models.models import Person, SignatureRequest, Tenant
 from app.models.work_permit import (
     WorkPermit,
@@ -158,6 +159,7 @@ async def render_work_permit(
     data = pf.WorkPermitPrintData(
         number=wp.number or str(wp.id),
         work_type_label=pf.work_type_label(wp.work_type),
+        legal_reference=wp_profiles.legal_reference(wp.work_type),
         status_label=pf.status_label(str(wp.status)),
         org_header=tenant.name or tenant.slug,
         subdivision=wp.subdivision_text,
@@ -168,7 +170,8 @@ async def render_work_permit(
         conditions_text=wp.conditions_text,
         equipment_text=wp.equipment_text,
         hazards_text=wp.hazards_text,
-        safety_systems_labels=[pf.safety_system_label(c) for c in (wp.safety_systems or [])],
+        structured_section=wp_profiles.build_structured_section(
+            wp.work_type, safety_systems=wp.safety_systems, type_specific=wp.type_specific),
         measures_before=wp.measures_before_text,
         measures_during=wp.measures_during_text,
         special_conditions=wp.special_conditions_text,

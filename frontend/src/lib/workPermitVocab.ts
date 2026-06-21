@@ -64,5 +64,27 @@ export const CLOSING_MISSING_LABELS: Record<string, string> = {
   acceptance_signature: "нет подписи «принял»",
 };
 
+export const LEGAL_REFERENCE_LABELS: Record<string, string> = {
+  height: "Приказ Минтруда № 782н",
+  confined_space: "Приказ Минтруда № 902н",
+  electrical: "Приказ Минтруда № 903н",
+  hot_work: "Постановление Правительства РФ № 1479 (ППР)",
+  gas_hazardous: "Правила газоопасных работ",
+  excavation: "Правила земляных работ",
+};
+
+export const GAS_PARAMETER_LABELS: Record<string, string> = {
+  oxygen: "Кислород (O₂), %",
+  flammable: "Горючие газы и пары, % НКПР",
+  harmful: "Вредные вещества, мг/м³",
+};
+
+export const VENTILATION_LABELS: Record<string, string> = {
+  natural: "Естественная",
+  forced: "Принудительная",
+  none: "Не применяется",
+  not_required: "Не требуется",
+};
+
 export const labelOf = (map: Record<string, string>, code: string): string =>
   map[code] ?? code;

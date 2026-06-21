@@ -268,3 +268,18 @@ async def test_daily_admission_list_and_update(sessionmaker, data_factory):
         )
         # SQLite stores DateTime(timezone=True) as naive — compare tz-stripped (repo convention)
         assert upd.end_at == end.replace(tzinfo=None)
+
+
+@pytest.mark.asyncio
+async def test_create_and_edit_persists_type_specific(sessionmaker, data_factory):
+    tenant = await data_factory.ensure_tenant()
+    tid = str(tenant.id)
+    async with sessionmaker() as session:
+        wp = await svc.create_work_permit(
+            session, tenant_id=tid, work_type="confined_space", zone_text="колодец",
+            type_specific={"ventilation": "forced"})
+        assert wp.type_specific == {"ventilation": "forced"}
+        edited = await svc.update_work_permit(
+            session, tenant_id=tid, work_permit_id=wp.id,
+            type_specific={"ventilation": "natural"})
+        assert edited.type_specific == {"ventilation": "natural"}

@@ -47,6 +47,7 @@ async def create_work_permit(
     conditions_text: str | None = None, safety_systems: list[str] | None = None,
     measures_before_text: str | None = None, measures_during_text: str | None = None,
     special_conditions_text: str | None = None, ppe_text: str | None = None,
+    type_specific: dict | None = None,
 ) -> WorkPermit:
     wp = WorkPermit(
         tenant_id=tenant_id, work_type=work_type, zone_text=zone_text, number=number,
@@ -56,6 +57,7 @@ async def create_work_permit(
         conditions_text=conditions_text, safety_systems=safety_systems,
         measures_before_text=measures_before_text, measures_during_text=measures_during_text,
         special_conditions_text=special_conditions_text, ppe_text=ppe_text,
+        type_specific=type_specific,
         status=lc.STATUS_DRAFT,
     )
     session.add(wp)
@@ -68,7 +70,7 @@ _DRAFT_EDITABLE = ("number", "work_type", "zone_text", "site_id", "equipment_tex
                    "hazards_text", "measures_text", "planned_start", "planned_end",
                    "subdivision_text", "content_text", "conditions_text", "safety_systems",
                    "measures_before_text", "measures_during_text", "special_conditions_text",
-                   "ppe_text")
+                   "ppe_text", "type_specific")
 
 
 async def update_work_permit(

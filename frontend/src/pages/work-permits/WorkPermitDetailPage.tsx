@@ -22,6 +22,8 @@ import {
   MEMBER_ROLE_LABELS,
   SAFETY_SYSTEM_LABELS,
   WORK_TYPE_LABELS,
+  VENTILATION_LABELS,
+  GAS_PARAMETER_LABELS,
   labelOf,
 } from "@/lib/workPermitVocab";
 import { PERMISSIONS } from "@/permissions/permissions";
@@ -313,6 +315,17 @@ export default function WorkPermitDetailPage() {
           <Section title="Мероприятия в процессе" value={wp.measures_during_text} />
           <Section title="Особые условия" value={wp.special_conditions_text} />
           <Section title="СИЗ" value={wp.ppe_text} />
+          {wp.work_type === "confined_space" && wp.type_specific ? (
+            <div className="text-sm">
+              <div className="font-medium">Анализ воздушной среды и вентиляция (902н)</div>
+              {(wp.type_specific as { ventilation?: string }).ventilation ? (
+                <div>Вентиляция: {VENTILATION_LABELS[(wp.type_specific as { ventilation: string }).ventilation] ?? "—"}</div>
+              ) : null}
+              {((wp.type_specific as { gas_analysis?: Array<{ parameter: string; value: string }> }).gas_analysis ?? []).map((m, i) => (
+                <div key={i}>{GAS_PARAMETER_LABELS[m.parameter] ?? m.parameter}: {m.value}</div>
+              ))}
+            </div>
+          ) : null}
           {!wp.content_text &&
             !wp.conditions_text &&
             !wp.hazards_text &&
