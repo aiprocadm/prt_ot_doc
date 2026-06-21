@@ -203,7 +203,7 @@ export default function WorkPermitDetailPage() {
   // Скачать печатный бланк (DOCX всегда; PDF best-effort — 503 если нет конвертера)
   const handleDownload = async (fmt: "docx" | "pdf") => {
     try {
-      await workPermitsApi.downloadPrint(wp.id, fmt);
+      await workPermitsApi.downloadPrint(wp.id, fmt, wp.number ?? undefined);
     } catch (e: unknown) {
       const status = (e as { response?: { status?: number } })?.response?.status;
       if (fmt === "pdf" && status === 503) {
