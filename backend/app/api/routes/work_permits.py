@@ -215,7 +215,7 @@ async def update_work_permit_endpoint(
     wp_id: str, payload: WorkPermitUpdate, tenant: TenantDep, session: SessionDep, access: WriterAccess
 ) -> WorkPermitRead:
     TenantContextValidator.ensure_tenant_context(tenant)
-    await _get_or_404(session, tenant, wp_id)
+    wp_existing = await _get_or_404(session, tenant, wp_id)
     fields = payload.model_dump(exclude_unset=True)
     if "site_id" in fields and fields["site_id"]:
         from app.models.models import Site
@@ -224,9 +224,17 @@ async def update_work_permit_endpoint(
         ))).scalar_one_or_none()
         if ok is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "site not found")
+    # type_specific валиден только для профиля своего вида. Эффективный вид =
+    # новый work_type (если меняется) ИЛИ текущий. При смене вида на профиль без
+    # структурной секции (не confined_env) устаревший type_specific стирается —
+    # иначе на наряде осел бы JSON, который валидатор create/update отвергает.
+    effective_type = fields.get("work_type") or wp_existing.work_type
+    if (
+        "work_type" in fields and "type_specific" not in fields
+        and wp_profiles.profile_for(effective_type).structured_kind != "confined_env"
+    ):
+        fields["type_specific"] = None
     if "type_specific" in fields:
-        effective_type = fields.get("work_type") or (
-            await _get_or_404(session, tenant, wp_id)).work_type
         try:
             wp_profiles.validate_type_specific(effective_type, fields["type_specific"])
         except ValueError as exc:

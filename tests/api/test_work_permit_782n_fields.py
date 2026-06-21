@@ -79,3 +79,25 @@ async def test_patch_confined_space_invalid_type_specific(async_client, make_aut
         json={"type_specific": {"ventilation": "turbo"}},
     )
     assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_patch_work_type_to_height_clears_stale_type_specific(async_client, make_auth_headers):
+    headers = await make_auth_headers(RoleEnum.ADMIN)
+    # Confined permit carrying a valid type_specific section.
+    create_body = {
+        "work_type": "confined_space", "zone_text": "колодец",
+        "type_specific": {"ventilation": "forced"},
+    }
+    cr = await async_client.post(BASE, headers=headers, json=create_body)
+    assert cr.status_code == 201, cr.text
+    wp_id = cr.json()["id"]
+    assert cr.json()["type_specific"] == {"ventilation": "forced"}
+    # Switching to height (a profile without its own type_specific section) WITHOUT
+    # resending type_specific must clear the now-invalid stale section, not keep it.
+    r = await async_client.patch(
+        f"{BASE}/{wp_id}", headers=headers, json={"work_type": "height"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["work_type"] == "height"
+    assert r.json()["type_specific"] is None
