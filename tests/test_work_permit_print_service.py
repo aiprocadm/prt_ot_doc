@@ -66,3 +66,24 @@ async def test_render_unknown_permit_returns_none(sessionmaker, data_factory):
         rendered = await render_work_permit(session, tenant=tenant, permit_id="missing-id",
                                             fmt="docx", with_letterhead=False)
         assert rendered is None
+
+
+@pytest.mark.asyncio
+async def test_render_confined_space_uses_902n_and_gas_table(sessionmaker, data_factory):
+    tenant, (foreman,) = await _persons(data_factory, "Sidor")
+    tid = str(tenant.id)
+    async with sessionmaker() as session:
+        wp = await svc.create_work_permit(
+            session, tenant_id=tid, work_type="confined_space", zone_text="колодец К-12",
+            number="НД-ОЗП-1",
+            type_specific={"gas_analysis": [{"parameter": "oxygen", "value": "20.9", "norm": "≥ 20"}],
+                           "ventilation": "forced"})
+        await svc.add_member(session, tenant_id=tid, work_permit_id=wp.id,
+                             person_id=foreman.id, role="foreman")
+        rendered = await render_work_permit(session, tenant=tenant, permit_id=wp.id,
+                                            fmt="docx", with_letterhead=False)
+        text = _docx_text(rendered.content)
+        assert "902н" in text
+        assert "Принудительная" in text
+        assert "Кислород" in text and "20.9" in text
+        assert "782н" not in text
