@@ -19,7 +19,7 @@
 ### Решения пользователя (brainstorming 2026-06-22)
 1. **Следующий вид:** огневые работы (1479).
 2. **Содержание структурной секции (вариант A):** структурируем юридически-различимое и табличное — (а) чек-лист первичных средств пожаротушения, (б) таблица замеров концентрации горючих паров/газов; прозу мер (подготовка/очистка места, контроль после работ) оставляем в generic-полях `measures_*`/`special_conditions_text`, как для ОЗП.
-3. **Фронтенд:** полный паритет с ОЗП — чек-лист средств + построчный редактор замеров (переиспользование редактора замеров ОЗП) + показ на деталь-странице.
+3. **Фронтенд:** буквальный паритет с ОЗП — на форме чек-лист средств пожаротушения + подсказка по параметрам замеров (как у ОЗП сейчас: вентиляция-select + подсказка). Сами замеры `gas_analysis` задаются через API/seed и показываются read-only на деталь-странице. Построчный редактор замеров на форме остаётся отложенным для обоих видов (уточнено 2026-06-22 после сверки кода: такого редактора нет ни у одного вида).
 4. **Demo-seed:** да, лёгкий идемпотентный.
 
 ## 2. Профиль `hot_work` (`domains/work_permits/profiles.py`)
@@ -78,16 +78,17 @@ Generic-колонка `type_specific JSON` на `work_permit` (уже есть,
 
 Итог: **единственный изменяемый файл бэкенда — `profiles.py`** (+ тесты).
 
-## 5. Фронтенд (полный паритет с ОЗП)
+## 5. Фронтенд (буквальный паритет с ОЗП)
+
+Реальное состояние ОЗП-формы (сверено по коду 2026-06-22): `<select>` вентиляции + текст-подсказка; `gas_analysis` НЕ редактируется на форме, задаётся через API/seed и показывается read-only на деталь-странице (`WorkPermitDetailPage.tsx:318-328`). Огневые делаем по тому же образцу — без построчного редактора замеров (отложен для обоих видов).
 
 - `lib/workPermitVocab.ts`: += `FIRE_FIGHTING_MEANS_LABELS` (код→рус-метка); `GAS_PARAMETER_LABELS` переиспользуется.
+- `types/forms/workPermits.ts`: текущая `type_specific: confinedEnvSchema.nullable()` не покрывает огневую форму. += `FIRE_FIGHTING_MEANS_CODES` + `fireSafetySchema` (`fire_fighting_means: array(enum).optional()` + `gas_analysis: array(gasMeasurementSchema).optional()`); `type_specific` расширяем до надмножества ключей обоих видов (zod `confinedEnvSchema.merge(fireSafetySchema)` или эквивалент), чтобы форма обоих видов проходила клиентскую валидацию — серверная `validate_type_specific` остаётся источником истины по виду.
 - `features/work-permits/WorkPermitFormDialog.tsx`:
-  - ветка структурной секции по `work_type`: `height` → чекбоксы `safety_systems` (как есть); `confined_space` → редактор замеров + select вентиляции (как есть); **`hot_work` → чек-лист средств пожаротушения (чекбоксы по `FIRE_FIGHTING_MEANS_LABELS`) + редактор строк замеров**; прочие → ничего.
-  - **Обобщение редактора замеров:** построчный редактор `gas_analysis` сейчас встроен в `confined_space`-ветку; выносим его в общий под-блок/хелпер, используемый и `confined_space`, и `hot_work` (DRY; единственная разница — заголовок).
+  - ветка структурной секции по `work_type`: `height` → чекбоксы `safety_systems` (как есть); `confined_space` → select вентиляции + подсказка (как есть); **`hot_work` → чек-лист средств пожаротушения (чекбоксы по `FIRE_FIGHTING_MEANS_CODES`, паттерн `toggleSystem`, пишет в `type_specific.fire_fighting_means`) + текст-подсказка по параметрам замеров**; прочие → ничего.
+  - `toBody` строка 112 сейчас: `type_specific: v.work_type === "confined_space" ? (v.type_specific ?? null) : null` → **обобщаем** на оба вида: `["confined_space","hot_work"].includes(v.work_type) ? (v.type_specific ?? null) : null`; прочие → `null`.
   - `DialogDescription` — динамическое по `work_type` (label + приказ), механизм уже есть.
-  - form-values `type_specific` уже сериализуется в `toBody`; огневой payload (`fire_fighting_means` + `gas_analysis`) добавляется в ту же ветку.
-- `pages/work-permits/WorkPermitDetailPage.tsx`: для `hot_work` показ секции огневых (список средств + таблица замеров), рядом с существующей ОЗП-секцией.
-- `types/forms/workPermits.ts` + `types/dto/workPermits.ts`: `type_specific` уже типизирован; точечно расширить форму огневых, если требуется union по виду.
+- `pages/work-permits/WorkPermitDetailPage.tsx`: для `hot_work` read-only блок (средства через `FIRE_FIGHTING_MEANS_LABELS` + замеры через `GAS_PARAMETER_LABELS`), по образцу существующего `confined_space`-блока (строки 318-328).
 
 ## 6. Demo-seed (лёгкий, идемпотентный)
 
@@ -98,7 +99,7 @@ Generic-колонка `type_specific JSON` на `work_permit` (уже есть,
 - **profiles** (unit, чистый): `legal_reference("hot_work")` = строка 1479; `validate_type_specific("hot_work", …)` accept (валидный fire-payload) / reject (неизвестный ключ; плохой код средства; плохой `parameter` замера; непустой payload для `None`-вида); `build_structured_section("hot_work", …)` для `fire_safety` (средства + таблица; только средства; только замеры; пусто→None); **guard-полнота реестра** `set(PROFILES) == lifecycle.WORK_TYPES` (уже есть — не должна сломаться); регресс ОЗП-валидации после выноса хелпера.
 - **schemas** (422-матрица): `hot_work` create с валидным `type_specific` (ок) / невалидным (422); `type_specific` для `None`-вида → 422.
 - **print-service**: огневой наряд → DOCX содержит «1479» в шапке + строку средств пожаротушения + таблицу замеров; **высота (782н + системы безопасности) и ОЗП (902н + газоанализ) не регрессировали**.
-- **frontend** (vitest): форма рендерит огневую секцию при `work_type=hot_work` (чек-лист средств + редактор замеров) и скрывает `safety_systems`/ОЗП-блок; деталь-страница показывает средства+замеры.
+- **frontend** (vitest): форма рендерит огневую секцию при `work_type=hot_work` (чек-лист средств пожаротушения + подсказка) и скрывает `safety_systems`/ОЗП-блок; деталь-страница показывает средства (+ замеры read-only, если заданы).
 
 Прогон локально (Win + Py3.13.7/.venv; канон Py3.12.12 = CI, выключен — [[ci_disabled_actions_off]]); сигнал — EXIT-код / маркер `===RC=$LASTEXITCODE===` ([[py313_win_pytest_invocation]]). Фронт — `npm run build` + vitest.
 
@@ -107,6 +108,7 @@ Generic-колонка `type_specific JSON` на `work_permit` (уже есть,
 - Глубокий тираж электро (903н, +группы электробезопасности бригады) / газоопасных / земляных — остаются профили-заглушки (`legal_reference` есть, `structured_kind=None`, generic-поля).
 - Пиксель-точную типографику официального бланка 1479 (как и у 782н/902н — полный юр-значимый наряд, но не факсимиле формы).
 - Авто-контроль места после огневых работ (наблюдение N часов) как отдельную сущность/таймер — прозой в `special_conditions_text`.
+- **Построчный редактор замеров `gas_analysis` на форме** (для обоих видов — огневые и ОЗП) — остаётся отложенным; замеры задаются через API/seed, на форме редактируется только чек-лист средств (огневые) / вентиляция (ОЗП), read-only показ на деталь-странице.
 - Конфигурируемость профилей по тенанту (жёсткие по приказам — YAGNI).
 
 ## 9. Ветка и merge
