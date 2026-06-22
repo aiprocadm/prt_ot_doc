@@ -293,7 +293,11 @@ async def workspace_attention(
                     Task.status.in_(open_statuses),
                     Task.due_at.is_not(None),
                     Task.due_at < now,
-                    Task.assignee_id == access.user.id if _worker_like_role(access.user.role.value) else True,
+                    (
+                        Task.assignee_id == access.user.id
+                        if _worker_like_role(access.user.role.value)
+                        else True
+                    ),
                 )
             )
         ).scalar_one()
@@ -310,7 +314,11 @@ async def workspace_attention(
                     Task.due_at.is_not(None),
                     Task.due_at >= now,
                     Task.due_at <= soon_threshold,
-                    Task.assignee_id == access.user.id if _worker_like_role(access.user.role.value) else True,
+                    (
+                        Task.assignee_id == access.user.id
+                        if _worker_like_role(access.user.role.value)
+                        else True
+                    ),
                 )
             )
         ).scalar_one()
@@ -324,7 +332,10 @@ async def workspace_attention(
                 .select_from(ComplianceDeadline)
                 .where(
                     ComplianceDeadline.tenant_id == tenant.id,
-                    or_(ComplianceDeadline.status == "overdue", and_(ComplianceDeadline.status == "due", ComplianceDeadline.due_at < now)),
+                    or_(
+                        ComplianceDeadline.status == "overdue",
+                        and_(ComplianceDeadline.status == "due", ComplianceDeadline.due_at < now),
+                    ),
                 )
             )
         ).scalar_one()
@@ -361,10 +372,16 @@ async def workspace_attention(
     )
 
     candidate_tasks = (
-        await session.execute(
-            task_stmt.order_by(Task.due_at.asc().nulls_last(), Task.created_at.desc()).limit(limit)
+        (
+            await session.execute(
+                task_stmt.order_by(Task.due_at.asc().nulls_last(), Task.created_at.desc()).limit(
+                    limit
+                )
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     blockers = await _readiness_blockers(session=session, tenant=tenant, now=now)
 
@@ -438,14 +455,20 @@ async def workspace_task_inbox(
     if _worker_like_role(access.user.role.value):
         stmt = stmt.where(Task.assignee_id == access.user.id)
 
-    total = int((await session.execute(select(func.count()).select_from(stmt.subquery()))).scalar_one() or 0)
+    total = int(
+        (await session.execute(select(func.count()).select_from(stmt.subquery()))).scalar_one() or 0
+    )
     rows = (
-        await session.execute(
-            stmt.order_by(Task.due_at.asc().nulls_last(), Task.created_at.desc())
-            .offset(offset)
-            .limit(limit)
+        (
+            await session.execute(
+                stmt.order_by(Task.due_at.asc().nulls_last(), Task.created_at.desc())
+                .offset(offset)
+                .limit(limit)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     items: list[TaskInboxItem] = []
     for item in rows:
@@ -501,15 +524,23 @@ async def role_workspace_summary(
     role = access.user.role.value if hasattr(access.user.role, "value") else str(access.user.role)
     open_statuses_task = [TaskStatus.OPEN, TaskStatus.IN_PROGRESS]
 
-    task_stmt = select(func.count()).select_from(Task).where(
-        Task.tenant_id == tenant.id,
-        Task.status.in_(open_statuses_task),
+    task_stmt = (
+        select(func.count())
+        .select_from(Task)
+        .where(
+            Task.tenant_id == tenant.id,
+            Task.status.in_(open_statuses_task),
+        )
     )
-    overdue_task_stmt = select(func.count()).select_from(Task).where(
-        Task.tenant_id == tenant.id,
-        Task.status.in_(open_statuses_task),
-        Task.due_at.is_not(None),
-        Task.due_at < now,
+    overdue_task_stmt = (
+        select(func.count())
+        .select_from(Task)
+        .where(
+            Task.tenant_id == tenant.id,
+            Task.status.in_(open_statuses_task),
+            Task.due_at.is_not(None),
+            Task.due_at < now,
+        )
     )
     # Scope by role
     if role in _MANAGER_ROLES and role not in _SAFETY_ROLES and role not in _HR_ROLES:
@@ -525,13 +556,18 @@ async def role_workspace_summary(
         open_incidents = int(
             (
                 await session.execute(
-                    select(func.count()).select_from(Incident).where(
+                    select(func.count())
+                    .select_from(Incident)
+                    .where(
                         Incident.tenant_id == tenant.id,
                         Incident.deleted_at.is_(None),
-                        Incident.status.in_([IncidentStatus.REPORTED, IncidentStatus.INVESTIGATING]),
+                        Incident.status.in_(
+                            [IncidentStatus.REPORTED, IncidentStatus.INVESTIGATING]
+                        ),
                     )
                 )
-            ).scalar_one() or 0
+            ).scalar_one()
+            or 0
         )
 
     # Inspections (open/scheduled) — safety roles
@@ -540,13 +576,18 @@ async def role_workspace_summary(
         open_inspections = int(
             (
                 await session.execute(
-                    select(func.count()).select_from(Inspection).where(
+                    select(func.count())
+                    .select_from(Inspection)
+                    .where(
                         Inspection.tenant_id == tenant.id,
                         Inspection.deleted_at.is_(None),
-                        Inspection.status.in_([InspectionStatus.PLANNED, InspectionStatus.IN_PROGRESS]),
+                        Inspection.status.in_(
+                            [InspectionStatus.PLANNED, InspectionStatus.IN_PROGRESS]
+                        ),
                     )
                 )
-            ).scalar_one() or 0
+            ).scalar_one()
+            or 0
         )
 
     # Overdue training — HR roles
@@ -555,7 +596,9 @@ async def role_workspace_summary(
         overdue_training = int(
             (
                 await session.execute(
-                    select(func.count()).select_from(TrainingEnrollment).where(
+                    select(func.count())
+                    .select_from(TrainingEnrollment)
+                    .where(
                         TrainingEnrollment.tenant_id == tenant.id,
                         TrainingEnrollment.deleted_at.is_(None),
                         TrainingEnrollment.status.in_(["assigned", "in_progress"]),
@@ -563,7 +606,8 @@ async def role_workspace_summary(
                         TrainingEnrollment.due_at < now,
                     )
                 )
-            ).scalar_one() or 0
+            ).scalar_one()
+            or 0
         )
 
     # Expired issued PPE — safety / HR
@@ -572,7 +616,9 @@ async def role_workspace_summary(
         expired_ppe = int(
             (
                 await session.execute(
-                    select(func.count()).select_from(PPEIssue).where(
+                    select(func.count())
+                    .select_from(PPEIssue)
+                    .where(
                         PPEIssue.tenant_id == tenant.id,
                         PPEIssue.deleted_at.is_(None),
                         PPEIssue.status == PPEIssueStatus.ISSUED,
@@ -580,14 +626,17 @@ async def role_workspace_summary(
                         PPEIssue.expires_at < now,
                     )
                 )
-            ).scalar_one() or 0
+            ).scalar_one()
+            or 0
         )
 
     # Overdue compliance deadlines
     overdue_deadlines = int(
         (
             await session.execute(
-                select(func.count()).select_from(ComplianceDeadline).where(
+                select(func.count())
+                .select_from(ComplianceDeadline)
+                .where(
                     ComplianceDeadline.tenant_id == tenant.id,
                     or_(
                         ComplianceDeadline.status == "overdue",
@@ -595,7 +644,8 @@ async def role_workspace_summary(
                     ),
                 )
             )
-        ).scalar_one() or 0
+        ).scalar_one()
+        or 0
     )
 
     recs: list[str] = []
@@ -630,8 +680,10 @@ async def role_workspace_summary(
 # PHASE 1.1: Role-Based Workspaces - User Workspace Config
 # ---------------------------------------------------------------------------
 
+
 class WorkspaceConfig(BaseModel):
     """Role-specific workspace configuration for authenticated user."""
+
     role: str
     workspace_type: str
     primary_modules: list[str] = Field(default_factory=list)
@@ -645,8 +697,21 @@ _ROLE_WORKSPACE_MAPPING: dict[str, dict[str, object]] = {
     "owner": {
         "workspace_type": "executive",
         "dashboard_route": "/dashboard",
-        "primary_modules": ["dashboard", "risk", "incidents", "inspections", "training", "ppe", "documents"],
-        "kpis_enabled": ["overdue_tasks", "critical_obligations", "incidents_open", "training_status"],
+        "primary_modules": [
+            "dashboard",
+            "risk",
+            "incidents",
+            "inspections",
+            "training",
+            "ppe",
+            "documents",
+        ],
+        "kpis_enabled": [
+            "overdue_tasks",
+            "critical_obligations",
+            "incidents_open",
+            "training_status",
+        ],
         "quick_actions": [
             {"label": "Create Document", "route": "/documents/wizard"},
             {"label": "View Tasks", "route": "/tasks"},
@@ -656,8 +721,21 @@ _ROLE_WORKSPACE_MAPPING: dict[str, dict[str, object]] = {
     "admin": {
         "workspace_type": "admin",
         "dashboard_route": "/dashboard",
-        "primary_modules": ["dashboard", "admin", "rbac_abac", "tenancy", "risk", "incidents", "documents"],
-        "kpis_enabled": ["overdue_tasks", "critical_obligations", "incidents_open", "readiness_blockers"],
+        "primary_modules": [
+            "dashboard",
+            "admin",
+            "rbac_abac",
+            "tenancy",
+            "risk",
+            "incidents",
+            "documents",
+        ],
+        "kpis_enabled": [
+            "overdue_tasks",
+            "critical_obligations",
+            "incidents_open",
+            "readiness_blockers",
+        ],
         "quick_actions": [
             {"label": "Manage Users", "route": "/admin/users"},
             {"label": "View Tasks", "route": "/tasks"},
@@ -667,7 +745,15 @@ _ROLE_WORKSPACE_MAPPING: dict[str, dict[str, object]] = {
     "ot_pb_lead": {
         "workspace_type": "safety_lead",
         "dashboard_route": "/dashboard",
-        "primary_modules": ["dashboard", "risk", "incidents", "inspections", "ppe", "documents", "tasks"],
+        "primary_modules": [
+            "dashboard",
+            "risk",
+            "incidents",
+            "inspections",
+            "ppe",
+            "documents",
+            "tasks",
+        ],
         "kpis_enabled": ["overdue_tasks", "open_incidents", "open_inspections", "expired_ppe"],
         "quick_actions": [
             {"label": "New Incident", "route": "/incidents"},

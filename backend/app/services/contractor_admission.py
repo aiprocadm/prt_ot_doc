@@ -11,6 +11,7 @@ load_document_checklist        — per-requirement collection status for one emp
 enforce_contractor_admission   — load + evaluate (doc-aware) + raise for BLOCKED employees
 notify_readiness               — load + evaluate (doc-aware) + enqueue outbox for non-ALLOWED
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -46,12 +47,18 @@ async def _load_requirements(
     session: AsyncSession, tenant_ids: set[str]
 ) -> dict[str, list[lc.DocumentRequirement]]:
     """Active document requirements grouped by tenant id."""
-    rows = (await session.execute(
-        select(ContractorDocumentRequirement).where(
-            ContractorDocumentRequirement.tenant_id.in_(tenant_ids),
-            ContractorDocumentRequirement.deleted_at.is_(None),
+    rows = (
+        (
+            await session.execute(
+                select(ContractorDocumentRequirement).where(
+                    ContractorDocumentRequirement.tenant_id.in_(tenant_ids),
+                    ContractorDocumentRequirement.deleted_at.is_(None),
+                )
+            )
         )
-    )).scalars().all()
+        .scalars()
+        .all()
+    )
     by_tenant: dict[str, list[lc.DocumentRequirement]] = {}
     for r in rows:
         by_tenant.setdefault(r.tenant_id, []).append(
@@ -61,7 +68,9 @@ async def _load_requirements(
 
 
 async def evaluate_with_documents(
-    session: AsyncSession, *, employees: list[ContractorEmployee],
+    session: AsyncSession,
+    *,
+    employees: list[ContractorEmployee],
 ) -> list[lc.EmployeeVerdict]:
     """Canonical doc-aware verdict path: load requirements + active documents, fold them in.
 
@@ -76,20 +85,26 @@ async def evaluate_with_documents(
 
     emp_ids = [e.id for e in employees]
     contractor_ids = list({e.contractor_id for e in employees})
-    docs = (await session.execute(
-        select(ContractorDocument).where(
-            ContractorDocument.tenant_id.in_(tenant_ids),
-            ContractorDocument.deleted_at.is_(None),
-            ContractorDocument.status == "active",
-            or_(
-                ContractorDocument.employee_id.in_(emp_ids),
-                and_(
-                    ContractorDocument.employee_id.is_(None),
-                    ContractorDocument.contractor_id.in_(contractor_ids),
-                ),
-            ),
+    docs = (
+        (
+            await session.execute(
+                select(ContractorDocument).where(
+                    ContractorDocument.tenant_id.in_(tenant_ids),
+                    ContractorDocument.deleted_at.is_(None),
+                    ContractorDocument.status == "active",
+                    or_(
+                        ContractorDocument.employee_id.in_(emp_ids),
+                        and_(
+                            ContractorDocument.employee_id.is_(None),
+                            ContractorDocument.contractor_id.in_(contractor_ids),
+                        ),
+                    ),
+                )
+            )
         )
-    )).scalars().all()
+        .scalars()
+        .all()
+    )
 
     emp_docs: dict[str, list[ContractorDocument]] = {}
     company_docs: dict[str, list[ContractorDocument]] = {}
@@ -102,7 +117,8 @@ async def evaluate_with_documents(
     today = datetime.now(timezone.utc).date()
     return [
         lc.evaluate_employee(
-            e, today,
+            e,
+            today,
             requirements=reqs_by_tenant.get(e.tenant_id, []),
             employee_docs=emp_docs.get(e.id, []),
             company_docs=company_docs.get(e.contractor_id, []),
@@ -112,7 +128,9 @@ async def evaluate_with_documents(
 
 
 async def load_document_checklist(
-    session: AsyncSession, *, employee: ContractorEmployee,
+    session: AsyncSession,
+    *,
+    employee: ContractorEmployee,
 ) -> list[dict[str, object]]:
     """Per-requirement collection status for one employee (feeds the guided-collection UI).
 
@@ -124,20 +142,26 @@ async def load_document_checklist(
     reqs_by_tenant = await _load_requirements(session, {employee.tenant_id})
     requirements = reqs_by_tenant.get(employee.tenant_id, [])
 
-    docs = (await session.execute(
-        select(ContractorDocument).where(
-            ContractorDocument.tenant_id == employee.tenant_id,
-            ContractorDocument.deleted_at.is_(None),
-            ContractorDocument.status == "active",
-            or_(
-                ContractorDocument.employee_id == employee.id,
-                and_(
-                    ContractorDocument.employee_id.is_(None),
-                    ContractorDocument.contractor_id == employee.contractor_id,
-                ),
-            ),
+    docs = (
+        (
+            await session.execute(
+                select(ContractorDocument).where(
+                    ContractorDocument.tenant_id == employee.tenant_id,
+                    ContractorDocument.deleted_at.is_(None),
+                    ContractorDocument.status == "active",
+                    or_(
+                        ContractorDocument.employee_id == employee.id,
+                        and_(
+                            ContractorDocument.employee_id.is_(None),
+                            ContractorDocument.contractor_id == employee.contractor_id,
+                        ),
+                    ),
+                )
+            )
         )
-    )).scalars().all()
+        .scalars()
+        .all()
+    )
     employee_docs = [d for d in docs if d.employee_id is not None]
     company_docs = [d for d in docs if d.employee_id is None]
 
@@ -147,17 +171,22 @@ async def load_document_checklist(
         candidates = [d for d in pool if d.doc_type == req.doc_type]
         st = requirement_status(candidates, today)
         best = best_document(candidates, today)
-        items.append({
-            "doc_type": req.doc_type,
-            "scope": req.scope,
-            "mandatory": req.mandatory,
-            "status": st.value,
-            "satisfied_by": (
-                {"document_id": best.id,
-                 "valid_until": best.valid_until.isoformat() if best.valid_until else None}
-                if best is not None else None
-            ),
-        })
+        items.append(
+            {
+                "doc_type": req.doc_type,
+                "scope": req.scope,
+                "mandatory": req.mandatory,
+                "status": st.value,
+                "satisfied_by": (
+                    {
+                        "document_id": best.id,
+                        "valid_until": best.valid_until.isoformat() if best.valid_until else None,
+                    }
+                    if best is not None
+                    else None
+                ),
+            }
+        )
     return items
 
 

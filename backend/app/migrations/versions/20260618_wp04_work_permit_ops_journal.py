@@ -5,6 +5,7 @@ and a nullable JSON `meta` column on work_permit_event for structured extend /
 crew-change details. Table names LITERAL (AST-audit blindspot). Honest downgrade
 drops the column then the table.
 """
+
 from __future__ import annotations
 
 import sqlalchemy as sa
@@ -41,7 +42,8 @@ def upgrade() -> None:
     )
     op.create_index(
         "ix_work_permit_daily_admission_permit",
-        "work_permit_daily_admission", ["work_permit_id"],
+        "work_permit_daily_admission",
+        ["work_permit_id"],
     )
     op.add_column("work_permit_event", sa.Column("meta", sa.JSON(), nullable=True))
 

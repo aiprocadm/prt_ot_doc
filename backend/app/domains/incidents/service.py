@@ -40,7 +40,9 @@ async def _get_company(session: AsyncSession, tenant_id: str, company_id: str) -
 
 
 async def _get_site(session: AsyncSession, tenant_id: str, site_id: str) -> Site:
-    stmt = select(Site).where(Site.id == site_id, Site.tenant_id == tenant_id, Site.deleted_at.is_(None))
+    stmt = select(Site).where(
+        Site.id == site_id, Site.tenant_id == tenant_id, Site.deleted_at.is_(None)
+    )
     site = (await session.execute(stmt)).scalar_one_or_none()
     if site is None:
         raise ValueError("Site not found")
@@ -49,7 +51,9 @@ async def _get_site(session: AsyncSession, tenant_id: str, site_id: str) -> Site
 
 async def _get_pack(session: AsyncSession, tenant_id: str, pack_id: str) -> DocumentPack:
     stmt = select(DocumentPack).where(
-        DocumentPack.id == pack_id, DocumentPack.tenant_id == tenant_id, DocumentPack.deleted_at.is_(None)
+        DocumentPack.id == pack_id,
+        DocumentPack.tenant_id == tenant_id,
+        DocumentPack.deleted_at.is_(None),
     )
     pack = (await session.execute(stmt)).scalar_one_or_none()
     if pack is None:
@@ -62,7 +66,9 @@ async def _get_persons(
 ) -> list[Person]:
     if not person_ids:
         return []
-    stmt = select(Person).where(Person.id.in_(person_ids), Person.tenant_id == tenant_id, Person.deleted_at.is_(None))
+    stmt = select(Person).where(
+        Person.id.in_(person_ids), Person.tenant_id == tenant_id, Person.deleted_at.is_(None)
+    )
     persons = list((await session.execute(stmt)).scalars().all())
     missing = set(person_ids) - {person.id for person in persons}
     if missing:
@@ -100,7 +106,6 @@ async def _replace_victims(
                 role=IncidentPersonRole.VICTIM,
             )
         )
-
 
 
 async def register_incident(
@@ -145,7 +150,9 @@ async def register_incident(
     )
     session.add(incident)
     await session.flush()
-    await _replace_victims(session, tenant_id=tenant_id, incident=incident, victim_ids=[p.id for p in victims])
+    await _replace_victims(
+        session, tenant_id=tenant_id, incident=incident, victim_ids=[p.id for p in victims]
+    )
     return incident
 
 
@@ -171,13 +178,24 @@ async def update_incident(
     elif "pack_id" in updates and updates["pack_id"] is None:
         incident.pack_id = None
 
-    for key in {"title", "description", "incident_type", "occurred_at", "severity", "status", "investigation_stage", "location_description"}:
+    for key in {
+        "title",
+        "description",
+        "incident_type",
+        "occurred_at",
+        "severity",
+        "status",
+        "investigation_stage",
+        "location_description",
+    }:
         if key in updates:
             setattr(incident, key, updates[key])
 
     if victim_ids is not None:
         await _get_persons(session, tenant_id, victim_ids, company_id=incident.company_id)
-        await _replace_victims(session, tenant_id=tenant_id, incident=incident, victim_ids=victim_ids)
+        await _replace_victims(
+            session, tenant_id=tenant_id, incident=incident, victim_ids=victim_ids
+        )
 
     await session.flush()
     return incident
@@ -303,7 +321,9 @@ async def add_inspection_result(
 ) -> InspectionResult:
     file: File | None = None
     if file_id:
-        stmt = select(File).where(File.id == file_id, File.tenant_id == tenant_id, File.deleted_at.is_(None))
+        stmt = select(File).where(
+            File.id == file_id, File.tenant_id == tenant_id, File.deleted_at.is_(None)
+        )
         file = (await session.execute(stmt)).scalar_one_or_none()
         if file is None:
             raise ValueError("File not found")

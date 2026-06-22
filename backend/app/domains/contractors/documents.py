@@ -4,6 +4,7 @@ A document with NO ``valid_until`` is open-ended → OK (not MISSING). This is t
 deliberate difference from admission requirements, where a missing deadline means
 "required but unknown". Here, absence of an expiry date is a legitimate state.
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence

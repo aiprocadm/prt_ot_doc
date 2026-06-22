@@ -95,9 +95,7 @@ def _bootstrap_env() -> None:
     # crypt stub for Windows / slim containers (passlib import).
     import types
 
-    sys.modules.setdefault(
-        "crypt", types.SimpleNamespace(crypt=lambda secret, salt: "mocked")
-    )
+    sys.modules.setdefault("crypt", types.SimpleNamespace(crypt=lambda secret, salt: "mocked"))
 
 
 def _load_model_columns() -> dict[str, set[str]]:
@@ -165,11 +163,7 @@ def _column_names_in(nodes: Iterable[ast.AST]) -> list[str]:
     found: list[str] = []
     for root in nodes:
         for node in ast.walk(root):
-            if (
-                isinstance(node, ast.Call)
-                and _call_target_endswith(node, "Column")
-                and node.args
-            ):
+            if isinstance(node, ast.Call) and _call_target_endswith(node, "Column") and node.args:
                 name = _string_arg(node.args[0])
                 if name:
                     found.append(name)
@@ -225,9 +219,7 @@ def _table_creating_helpers(
             continue
         creates_table = False
         for inner in ast.walk(func):
-            if isinstance(inner, ast.Call) and _call_target_endswith(
-                inner, "create_table"
-            ):
+            if isinstance(inner, ast.Call) and _call_target_endswith(inner, "create_table"):
                 # Either direct op.create_table or recursive helper-of-helper.
                 if (
                     isinstance(inner.func, ast.Attribute)
@@ -324,11 +316,7 @@ def _parse_migration(path: Path) -> dict[str, object]:
         if not isinstance(node, ast.Call):
             continue
         # Local helper that wraps op.create_table?
-        if (
-            isinstance(node.func, ast.Name)
-            and node.func.id in helpers
-            and node.args
-        ):
+        if isinstance(node.func, ast.Name) and node.func.id in helpers and node.args:
             table_name = _string_arg(node.args[0])
             if table_name:
                 # Columns passed positionally to the helper.
@@ -563,7 +551,14 @@ def _format_summary(drift: dict[str, dict[str, object]]) -> str:
         "",
     ]
     # Sort by descending fix-priority.
-    priority = ["critical", "business", "mixin", "stale_migration_column", "rename", "unloaded_model"]
+    priority = [
+        "critical",
+        "business",
+        "mixin",
+        "stale_migration_column",
+        "rename",
+        "unloaded_model",
+    ]
     for sev in priority:
         tables = buckets.get(sev, [])
         if not tables:
@@ -601,9 +596,7 @@ def _collect_migration_columns_via_alembic() -> dict[str, set[str]] | None:
         return None
 
     cfg = Config(str(BACKEND_ROOT / "app" / "migrations" / "alembic.ini"))
-    cfg.set_main_option(
-        "script_location", str(BACKEND_ROOT / "app" / "migrations")
-    )
+    cfg.set_main_option("script_location", str(BACKEND_ROOT / "app" / "migrations"))
     cfg.set_main_option("sqlalchemy.url", f"sqlite:///{tmp_db}")
 
     try:
@@ -632,7 +625,14 @@ def main(argv: Iterable[str] | None = None) -> int:
     )
     parser.add_argument(
         "--severity",
-        choices=["critical", "business", "mixin", "rename", "unloaded_model", "stale_migration_column"],
+        choices=[
+            "critical",
+            "business",
+            "mixin",
+            "rename",
+            "unloaded_model",
+            "stale_migration_column",
+        ],
         action="append",
         help=(
             "Filter output to one or more severity levels. Repeat the flag "
@@ -656,17 +656,13 @@ def main(argv: Iterable[str] | None = None) -> int:
     if args.use_alembic:
         migration_columns = _collect_migration_columns_via_alembic()
         if migration_columns is None:
-            print(
-                "Alembic mode failed; falling back to AST parser.", file=sys.stderr
-            )
+            print("Alembic mode failed; falling back to AST parser.", file=sys.stderr)
     if migration_columns is None:
         migration_columns, _per_file = _collect_migration_columns()
     drift = _diff(model_columns, migration_columns)
 
     if args.severity:
-        drift = {
-            t: e for t, e in drift.items() if e.get("severity") in set(args.severity)
-        }
+        drift = {t: e for t, e in drift.items() if e.get("severity") in set(args.severity)}
 
     if args.json:
         print(json.dumps(drift, indent=2, sort_keys=True))
@@ -677,9 +673,7 @@ def main(argv: Iterable[str] | None = None) -> int:
 
     # Exit non-zero only for severities that demand a fix (critical/business).
     # Mixin/rename/unloaded_model are informational unless the caller filters.
-    actionable = {
-        t for t, e in drift.items() if e.get("severity") in {"critical", "business"}
-    }
+    actionable = {t for t, e in drift.items() if e.get("severity") in {"critical", "business"}}
     return 1 if actionable else 0
 
 

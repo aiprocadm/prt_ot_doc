@@ -27,7 +27,6 @@ from httpx import AsyncClient
 from app.models.models import RiskMap, RiskMethodology, RoleEnum
 from tests.utils.factories import TestDataFactory
 
-
 # -----------------------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------------------
@@ -40,9 +39,7 @@ async def _seed_api_token(
     name: str = "ci-token",
 ) -> dict:
     payload: dict = {"name": name, "scopes": ["read"]}
-    response = await async_client.post(
-        "/api/v1/api-tokens", json=payload, headers=headers
-    )
+    response = await async_client.post("/api/v1/api-tokens", json=payload, headers=headers)
     assert response.status_code == status.HTTP_201_CREATED, response.text
     return response.json()
 
@@ -61,9 +58,7 @@ async def _seed_methodology_via_api(
             {"name": "high", "max": 25},
         ],
     }
-    response = await async_client.post(
-        "/api/v1/risk/methodologies", json=payload, headers=headers
-    )
+    response = await async_client.post("/api/v1/risk/methodologies", json=payload, headers=headers)
     assert response.status_code == status.HTTP_200_OK, response.text
     return response.json()
 
@@ -331,9 +326,7 @@ async def test_risk_maps_hit_returns_304(
         company_id = str(company.id)
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
-    first = await async_client.get(
-        f"/api/v1/risk/maps?company_id={company_id}", headers=headers
-    )
+    first = await async_client.get(f"/api/v1/risk/maps?company_id={company_id}", headers=headers)
     assert first.status_code == status.HTTP_200_OK
     etag = first.headers["ETag"]
 
@@ -396,9 +389,7 @@ async def test_risk_maps_empty_list_stable_etag(
         company_id = str(company.id)
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
-    first = await async_client.get(
-        f"/api/v1/risk/maps?company_id={company_id}", headers=headers
-    )
+    first = await async_client.get(f"/api/v1/risk/maps?company_id={company_id}", headers=headers)
     assert first.status_code == status.HTTP_200_OK
     assert first.json() == []
     etag = first.headers["ETag"]

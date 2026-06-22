@@ -21,7 +21,9 @@ def upgrade() -> None:
         "notification_channel_settings",
         sa.Column("user_id", sa.String(length=36), nullable=False),
         sa.Column("email_enabled", sa.Boolean(), nullable=False, server_default=sa.text("true")),
-        sa.Column("telegram_enabled", sa.Boolean(), nullable=False, server_default=sa.text("false")),
+        sa.Column(
+            "telegram_enabled", sa.Boolean(), nullable=False, server_default=sa.text("false")
+        ),
         sa.Column("inapp_enabled", sa.Boolean(), nullable=False, server_default=sa.text("true")),
         sa.Column("email", sa.String(length=255), nullable=True),
         sa.Column("telegram_chat_id", sa.String(length=255), nullable=True),
@@ -34,23 +36,50 @@ def upgrade() -> None:
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("tenant_id", "user_id", name="uq_notification_channel_settings_tenant_user"),
+        sa.UniqueConstraint(
+            "tenant_id", "user_id", name="uq_notification_channel_settings_tenant_user"
+        ),
     )
 
     op.create_table(
         "notifications",
         sa.Column("user_id", sa.String(length=36), nullable=False),
-        sa.Column("channel", sa.Enum("email", "telegram", "inapp", name="notificationchannel"), nullable=False),
-        sa.Column("type", sa.Enum(
-            "JobStatusChanged", "DocumentGenerated", "DocumentExported", "DocumentSigned",
-            "TrainingDueSoon", "TrainingOverdue", "TrainingCompleted", "PPEExpirySoon", "PPEIssueCreated",
-            "MedicalDueSoon", "PermitExpirySoon", "InspectionPlanned", "InspectionOverdue", "IncidentAssigned", "CADueSoon",
-            name="notificationtype"
-        ), nullable=False),
+        sa.Column(
+            "channel",
+            sa.Enum("email", "telegram", "inapp", name="notificationchannel"),
+            nullable=False,
+        ),
+        sa.Column(
+            "type",
+            sa.Enum(
+                "JobStatusChanged",
+                "DocumentGenerated",
+                "DocumentExported",
+                "DocumentSigned",
+                "TrainingDueSoon",
+                "TrainingOverdue",
+                "TrainingCompleted",
+                "PPEExpirySoon",
+                "PPEIssueCreated",
+                "MedicalDueSoon",
+                "PermitExpirySoon",
+                "InspectionPlanned",
+                "InspectionOverdue",
+                "IncidentAssigned",
+                "CADueSoon",
+                name="notificationtype",
+            ),
+            nullable=False,
+        ),
         sa.Column("title", sa.Text(), nullable=False),
         sa.Column("body", sa.Text(), nullable=False),
         sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-        sa.Column("status", sa.Enum("queued", "sent", "failed", "canceled", "read", name="notificationstatus"), nullable=False, server_default="queued"),
+        sa.Column(
+            "status",
+            sa.Enum("queued", "sent", "failed", "canceled", "read", name="notificationstatus"),
+            nullable=False,
+            server_default="queued",
+        ),
         sa.Column("dedup_key", sa.String(length=255), nullable=False),
         sa.Column("scheduled_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("sent_at", sa.DateTime(timezone=True), nullable=True),
@@ -65,7 +94,11 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_notifications_queue", "notifications", ["tenant_id", "user_id", "status", "scheduled_at"])
+    op.create_index(
+        "ix_notifications_queue",
+        "notifications",
+        ["tenant_id", "user_id", "status", "scheduled_at"],
+    )
     op.create_index(
         "ix_notifications_dedup_active",
         "notifications",
@@ -79,7 +112,21 @@ def upgrade() -> None:
         sa.Column("code", sa.String(length=128), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("is_enabled", sa.Boolean(), nullable=False, server_default=sa.text("true")),
-        sa.Column("entity_type", sa.Enum("training", "ppe", "medical", "permit", "inspection", "incident", "document_job", "edo", name="reminderentitytype"), nullable=False),
+        sa.Column(
+            "entity_type",
+            sa.Enum(
+                "training",
+                "ppe",
+                "medical",
+                "permit",
+                "inspection",
+                "incident",
+                "document_job",
+                "edo",
+                name="reminderentitytype",
+            ),
+            nullable=False,
+        ),
         sa.Column("date_field", sa.String(length=64), nullable=False),
         sa.Column("schedule", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column("recipients", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
@@ -102,7 +149,12 @@ def upgrade() -> None:
         sa.Column("entity_type", sa.String(length=64), nullable=False),
         sa.Column("entity_id", sa.String(length=36), nullable=False),
         sa.Column("assignee_id", sa.String(length=36), nullable=True),
-        sa.Column("status", sa.Enum("open", "in_progress", "done", "canceled", "overdue", name="plantaskstatus_v2"), nullable=False, server_default="open"),
+        sa.Column(
+            "status",
+            sa.Enum("open", "in_progress", "done", "canceled", "overdue", name="plantaskstatus_v2"),
+            nullable=False,
+            server_default="open",
+        ),
         sa.Column("due_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("tenant_id", sa.String(length=36), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
@@ -113,7 +165,11 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_plan_tasks_assignee_status_due", "plan_tasks", ["tenant_id", "assignee_id", "status", "due_at"])
+    op.create_index(
+        "ix_plan_tasks_assignee_status_due",
+        "plan_tasks",
+        ["tenant_id", "assignee_id", "status", "due_at"],
+    )
 
 
 def downgrade() -> None:

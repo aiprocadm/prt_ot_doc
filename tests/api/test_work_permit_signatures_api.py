@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+
 from app.models.models import RoleEnum
 
 BASE = "/api/v1/work-permits"

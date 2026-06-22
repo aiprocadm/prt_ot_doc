@@ -15,20 +15,47 @@ _AuthDep = Depends(rbac())
 
 
 @router.get("/deadlines")
-async def list_deadlines(tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), _: AccessContext = _AuthDep):
-    items = (await session.execute(select(ComplianceDeadline).where(ComplianceDeadline.tenant_id == tenant.id).order_by(ComplianceDeadline.due_at.asc()))).scalars().all()
+async def list_deadlines(
+    tenant: Tenant = Depends(get_tenant_record),
+    session: AsyncSession = Depends(get_session),
+    _: AccessContext = _AuthDep,
+):
+    items = (
+        (
+            await session.execute(
+                select(ComplianceDeadline)
+                .where(ComplianceDeadline.tenant_id == tenant.id)
+                .order_by(ComplianceDeadline.due_at.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
     return {"items": items, "total": len(items)}
 
 
 @router.post("/deadlines/recompute")
 @audit_operation("recompute", "compliance_deadline")
-async def recompute(tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), _: AccessContext = _AuthDep):
+async def recompute(
+    tenant: Tenant = Depends(get_tenant_record),
+    session: AsyncSession = Depends(get_session),
+    _: AccessContext = _AuthDep,
+):
     count = await ComplianceDeadlineService().recompute_for_certificates(session, tenant.id)
     return {"created": count}
 
 
 @router.get("/persons/{person_id}/summary")
-async def person_summary(person_id: str, tenant: Tenant = Depends(get_tenant_record), session: AsyncSession = Depends(get_session), _: AccessContext = _AuthDep):
-    stmt = select(ComplianceDeadline.status, func.count()).where(ComplianceDeadline.tenant_id == tenant.id, ComplianceDeadline.person_id == person_id).group_by(ComplianceDeadline.status)
+async def person_summary(
+    person_id: str,
+    tenant: Tenant = Depends(get_tenant_record),
+    session: AsyncSession = Depends(get_session),
+    _: AccessContext = _AuthDep,
+):
+    stmt = (
+        select(ComplianceDeadline.status, func.count())
+        .where(ComplianceDeadline.tenant_id == tenant.id, ComplianceDeadline.person_id == person_id)
+        .group_by(ComplianceDeadline.status)
+    )
     rows = (await session.execute(stmt)).all()
     return {"person_id": person_id, "statuses": {status: count for status, count in rows}}

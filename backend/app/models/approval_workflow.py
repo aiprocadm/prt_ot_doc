@@ -118,10 +118,14 @@ class ApprovalRoute(TenantBaseModel, SoftDeleteMixin):
     code: Mapped[str] = mapped_column(String(128), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    applies_to: Mapped[ApprovalRouteAppliesTo] = mapped_column(Enum(ApprovalRouteAppliesTo), nullable=False, default=ApprovalRouteAppliesTo.DOCUMENT)
+    applies_to: Mapped[ApprovalRouteAppliesTo] = mapped_column(
+        Enum(ApprovalRouteAppliesTo), nullable=False, default=ApprovalRouteAppliesTo.DOCUMENT
+    )
     conditions_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    status: Mapped[ApprovalRouteStatus] = mapped_column(Enum(ApprovalRouteStatus), nullable=False, default=ApprovalRouteStatus.DRAFT)
+    status: Mapped[ApprovalRouteStatus] = mapped_column(
+        Enum(ApprovalRouteStatus), nullable=False, default=ApprovalRouteStatus.DRAFT
+    )
     rules_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
@@ -139,8 +143,12 @@ class ApprovalRoute(TenantBaseModel, SoftDeleteMixin):
 class ApprovalRequest(TenantBaseModel):
     __tablename__ = "approval_requests"
 
-    document_version_id: Mapped[str] = mapped_column(ForeignKey("documentversion.id"), nullable=False, index=True)
-    route_id: Mapped[str] = mapped_column(ForeignKey("approval_routes.id"), nullable=False, index=True)
+    document_version_id: Mapped[str] = mapped_column(
+        ForeignKey("documentversion.id"), nullable=False, index=True
+    )
+    route_id: Mapped[str] = mapped_column(
+        ForeignKey("approval_routes.id"), nullable=False, index=True
+    )
     status: Mapped[ApprovalRequestStatus] = mapped_column(
         native_enum(ApprovalRequestStatus), nullable=False, default=ApprovalRequestStatus.DRAFT
     )
@@ -160,9 +168,15 @@ class ApprovalRequest(TenantBaseModel):
 class ApprovalDecision(TenantBaseModel):
     __tablename__ = "approval_decisions"
 
-    request_id: Mapped[str | None] = mapped_column(ForeignKey("approval_requests.id"), nullable=True, index=True)
-    approval_instance_id: Mapped[str | None] = mapped_column(ForeignKey("approval_instances.id"), nullable=True, index=True)
-    approval_instance_step_id: Mapped[str | None] = mapped_column(ForeignKey("approval_instance_steps.id"), nullable=True, index=True)
+    request_id: Mapped[str | None] = mapped_column(
+        ForeignKey("approval_requests.id"), nullable=True, index=True
+    )
+    approval_instance_id: Mapped[str | None] = mapped_column(
+        ForeignKey("approval_instances.id"), nullable=True, index=True
+    )
+    approval_instance_step_id: Mapped[str | None] = mapped_column(
+        ForeignKey("approval_instance_steps.id"), nullable=True, index=True
+    )
     step_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
     actor_user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     decision: Mapped[str] = mapped_column(String(16), nullable=False)
@@ -178,7 +192,9 @@ class EdoMessage(TenantBaseModel):
     __tablename__ = "edo_messages"
 
     direction: Mapped[EdoDirection] = mapped_column(native_enum(EdoDirection), nullable=False)
-    document_version_id: Mapped[str | None] = mapped_column(ForeignKey("documentversion.id"), nullable=True, index=True)
+    document_version_id: Mapped[str | None] = mapped_column(
+        ForeignKey("documentversion.id"), nullable=True, index=True
+    )
     provider_code: Mapped[str] = mapped_column(String(64), nullable=False)
     entity_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
     entity_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
@@ -193,7 +209,9 @@ class EdoMessage(TenantBaseModel):
     response_payload_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     protocol_file_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    status: Mapped[str] = mapped_column(String(16), nullable=False, default=EdoMessageStatus.DRAFT.value)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=EdoMessageStatus.DRAFT.value
+    )
     payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
 
     __table_args__ = (
@@ -205,7 +223,9 @@ class EdoMessage(TenantBaseModel):
 class EdoReceipt(TenantBaseModel):
     __tablename__ = "edo_receipts"
 
-    edo_message_id: Mapped[str] = mapped_column(ForeignKey("edo_messages.id", ondelete="CASCADE"), nullable=False, index=True)
+    edo_message_id: Mapped[str] = mapped_column(
+        ForeignKey("edo_messages.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     receipt_type: Mapped[str] = mapped_column(String(64), nullable=False)
     s3_key: Mapped[str] = mapped_column(String(512), nullable=False)
 
@@ -213,8 +233,8 @@ class EdoReceipt(TenantBaseModel):
 class EdoStatusHistory(TenantBaseModel):
     __tablename__ = "edo_status_history"
 
-    edo_message_id: Mapped[str] = mapped_column(ForeignKey("edo_messages.id", ondelete="CASCADE"), nullable=False, index=True)
+    edo_message_id: Mapped[str] = mapped_column(
+        ForeignKey("edo_messages.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     status: Mapped[EdoStatus] = mapped_column(native_enum(EdoStatus), nullable=False)
     raw_payload_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
-
-

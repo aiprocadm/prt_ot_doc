@@ -5,11 +5,13 @@ The stub only filled active_packages_count; workers_total was always 0.
 
 Fixture pattern: sessionmaker / data_factory — same as test_contractor_admission_service.py.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from sqlalchemy import select
 
 from app.modules.contractors.models import (
     ComplianceStatus,
@@ -18,12 +20,11 @@ from app.modules.contractors.models import (
 )
 from app.modules.projections.models import ContractorReadinessReadModel
 from app.modules.projections.services import ContractorReadinessProjectionService
-from sqlalchemy import select
-
 
 # ---------------------------------------------------------------------------
 # Helpers (mirrored from test_contractor_admission_service.py)
 # ---------------------------------------------------------------------------
+
 
 def _now_utc() -> datetime:
     return datetime.now(tz=timezone.utc)
@@ -122,12 +123,12 @@ async def test_readiness_projection_fills_worker_columns(sessionmaker, data_fact
     assert row.workers_total == 2, f"workers_total should be 2, got {row.workers_total}"
     assert row.workers_ready == 1, f"workers_ready should be 1, got {row.workers_ready}"
     assert row.workers_blocked == 1, f"workers_blocked should be 1, got {row.workers_blocked}"
-    assert row.overdue_items_count >= 1, (
-        f"overdue_items_count should be >= 1 (blocked worker has >=1 violation), got {row.overdue_items_count}"
-    )
-    assert row.readiness_status == "blocked", (
-        f"readiness_status should be 'blocked' (any BLOCKED → blocked), got {row.readiness_status!r}"
-    )
+    assert (
+        row.overdue_items_count >= 1
+    ), f"overdue_items_count should be >= 1 (blocked worker has >=1 violation), got {row.overdue_items_count}"
+    assert (
+        row.readiness_status == "blocked"
+    ), f"readiness_status should be 'blocked' (any BLOCKED → blocked), got {row.readiness_status!r}"
 
 
 @pytest.mark.asyncio
@@ -241,6 +242,6 @@ async def test_readiness_projection_missing_docs_stays_zero(sessionmaker, data_f
         ).scalar_one_or_none()
 
     assert row is not None
-    assert row.missing_docs_count == 0, (
-        f"missing_docs_count must stay 0 (deferred to later slice), got {row.missing_docs_count}"
-    )
+    assert (
+        row.missing_docs_count == 0
+    ), f"missing_docs_count must stay 0 (deferred to later slice), got {row.missing_docs_count}"

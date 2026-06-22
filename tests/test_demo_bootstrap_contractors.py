@@ -47,7 +47,9 @@ async def test_contractors_feature_seeded_and_enabled(
     async def fake_ensure_default_packs(session, *, tenant_slug: str) -> None:
         return None
 
-    monkeypatch.setattr("app.services.demo_bootstrap.ensure_default_packs", fake_ensure_default_packs)
+    monkeypatch.setattr(
+        "app.services.demo_bootstrap.ensure_default_packs", fake_ensure_default_packs
+    )
 
     await bootstrap_demo_tenant(_make_settings())
 
@@ -80,7 +82,9 @@ async def test_contractors_demo_employees_seeded(
     async def fake_ensure_default_packs(session, *, tenant_slug: str) -> None:
         return None
 
-    monkeypatch.setattr("app.services.demo_bootstrap.ensure_default_packs", fake_ensure_default_packs)
+    monkeypatch.setattr(
+        "app.services.demo_bootstrap.ensure_default_packs", fake_ensure_default_packs
+    )
 
     await bootstrap_demo_tenant(_make_settings())
 
@@ -98,7 +102,9 @@ async def test_contractors_demo_employees_seeded(
                 )
             )
         ).scalar_one_or_none()
-        assert registry is not None, "ContractorRegistry 'Демо-подрядчик' must exist after bootstrap"
+        assert (
+            registry is not None
+        ), "ContractorRegistry 'Демо-подрядчик' must exist after bootstrap"
         assert registry.status == "active"
 
         employee_count = (
@@ -106,16 +112,22 @@ async def test_contractors_demo_employees_seeded(
                 select(func.count()).where(ContractorEmployee.contractor_id == registry.id)
             )
         ).scalar_one()
-        assert employee_count >= 2, (
-            f"Expected at least 2 demo ContractorEmployee rows, got {employee_count}"
-        )
+        assert (
+            employee_count >= 2
+        ), f"Expected at least 2 demo ContractorEmployee rows, got {employee_count}"
 
         # Verify the two demo employees by name.
         employees = (
-            await session.execute(
-                select(ContractorEmployee).where(ContractorEmployee.contractor_id == registry.id)
+            (
+                await session.execute(
+                    select(ContractorEmployee).where(
+                        ContractorEmployee.contractor_id == registry.id
+                    )
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         names = {e.full_name for e in employees}
         assert "Готовый Иван" in names, "Expected demo employee 'Готовый Иван'"
         assert "Просроченный Пётр" in names, "Expected demo employee 'Просроченный Пётр'"
@@ -131,7 +143,9 @@ async def test_contractors_bootstrap_is_idempotent(
     async def fake_ensure_default_packs(session, *, tenant_slug: str) -> None:
         return None
 
-    monkeypatch.setattr("app.services.demo_bootstrap.ensure_default_packs", fake_ensure_default_packs)
+    monkeypatch.setattr(
+        "app.services.demo_bootstrap.ensure_default_packs", fake_ensure_default_packs
+    )
 
     settings = _make_settings()
 
@@ -155,9 +169,9 @@ async def test_contractors_bootstrap_is_idempotent(
                 )
             )
         ).scalar_one()
-        assert registry_count == 1, (
-            f"Expected exactly 1 ContractorRegistry after double-bootstrap, got {registry_count}"
-        )
+        assert (
+            registry_count == 1
+        ), f"Expected exactly 1 ContractorRegistry after double-bootstrap, got {registry_count}"
 
         registry = (
             await session.execute(
@@ -173,16 +187,14 @@ async def test_contractors_bootstrap_is_idempotent(
                 select(func.count()).where(ContractorEmployee.contractor_id == registry.id)
             )
         ).scalar_one()
-        assert employee_count == 2, (
-            f"Expected exactly 2 ContractorEmployee rows after double-bootstrap, got {employee_count}"
-        )
+        assert (
+            employee_count == 2
+        ), f"Expected exactly 2 ContractorEmployee rows after double-bootstrap, got {employee_count}"
 
         # Feature row should also not be duplicated (unique constraint enforced, but verify query).
         feature_count = (
-            await session.execute(
-                select(func.count()).where(Feature.code == "contractors")
-            )
+            await session.execute(select(func.count()).where(Feature.code == "contractors"))
         ).scalar_one()
-        assert feature_count == 1, (
-            f"Expected exactly 1 Feature(code='contractors') after double-bootstrap, got {feature_count}"
-        )
+        assert (
+            feature_count == 1
+        ), f"Expected exactly 1 Feature(code='contractors') after double-bootstrap, got {feature_count}"

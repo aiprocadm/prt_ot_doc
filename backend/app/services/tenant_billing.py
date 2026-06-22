@@ -26,14 +26,18 @@ class QuotasService:
             return {}
         return (await self.billing_service.get_context(tenant)).limits
 
-    async def check_quota(self, tenant: Tenant, action: str, delta: int = 1, context: dict[str, Any] | None = None) -> None:
+    async def check_quota(
+        self, tenant: Tenant, action: str, delta: int = 1, context: dict[str, Any] | None = None
+    ) -> None:
         meta = dict(context or {})
         meta.setdefault("delta", delta)
         try:
             await self.billing_service.check_quota(tenant, action, meta)
         except HTTPException as exc:
             if isinstance(exc.detail, dict) and exc.detail.get("code") == "QUOTA_EXCEEDED":
-                raise QuotaExceeded(code="QUOTA_EXCEEDED", details=exc.detail.get("details", {})) from exc
+                raise QuotaExceeded(
+                    code="QUOTA_EXCEEDED", details=exc.detail.get("details", {})
+                ) from exc
             raise
 
 
@@ -61,19 +65,41 @@ class UsageCountersService:
     def __init__(self, billing_service: BillingService) -> None:
         self.billing_service = billing_service
 
-    async def inc_generation(self, tenant_id: str, count: int = 1, period: int | None = None, ref_id: str | None = None) -> None:
-        await self.billing_service.add_usage(tenant_id=tenant_id, docs_generated=count, period_yyyymm=period or current_period_yyyymm(), ref_id=ref_id)
+    async def inc_generation(
+        self, tenant_id: str, count: int = 1, period: int | None = None, ref_id: str | None = None
+    ) -> None:
+        await self.billing_service.add_usage(
+            tenant_id=tenant_id,
+            docs_generated=count,
+            period_yyyymm=period or current_period_yyyymm(),
+            ref_id=ref_id,
+        )
 
-    async def inc_edo_outgoing(self, tenant_id: str, count: int = 1, period: int | None = None, ref_id: str | None = None) -> None:
-        await self.billing_service.add_usage(tenant_id=tenant_id, edo_outgoing=count, period_yyyymm=period or current_period_yyyymm(), ref_id=ref_id)
+    async def inc_edo_outgoing(
+        self, tenant_id: str, count: int = 1, period: int | None = None, ref_id: str | None = None
+    ) -> None:
+        await self.billing_service.add_usage(
+            tenant_id=tenant_id,
+            edo_outgoing=count,
+            period_yyyymm=period or current_period_yyyymm(),
+            ref_id=ref_id,
+        )
 
-    async def set_snapshot_active_workers(self, tenant_id: str, value: int, period: int | None = None) -> None:
-        usage = await self.billing_service.ensure_usage_row(tenant_id=tenant_id, period_yyyymm=period or current_period_yyyymm())
+    async def set_snapshot_active_workers(
+        self, tenant_id: str, value: int, period: int | None = None
+    ) -> None:
+        usage = await self.billing_service.ensure_usage_row(
+            tenant_id=tenant_id, period_yyyymm=period or current_period_yyyymm()
+        )
         usage.active_workers = value
         await self.billing_service.session.flush()
 
-    async def update_s3_bytes_used(self, tenant_id: str, bytes_used: int, period: int | None = None) -> None:
-        usage = await self.billing_service.ensure_usage_row(tenant_id=tenant_id, period_yyyymm=period or current_period_yyyymm())
+    async def update_s3_bytes_used(
+        self, tenant_id: str, bytes_used: int, period: int | None = None
+    ) -> None:
+        usage = await self.billing_service.ensure_usage_row(
+            tenant_id=tenant_id, period_yyyymm=period or current_period_yyyymm()
+        )
         usage.s3_bytes_used = max(int(bytes_used), 0)
         await self.billing_service.add_billing_event(
             tenant_id=tenant_id,

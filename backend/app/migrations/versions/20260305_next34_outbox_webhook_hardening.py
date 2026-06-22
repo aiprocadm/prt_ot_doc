@@ -21,7 +21,9 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     with op.batch_alter_table("webhook_endpoints", schema=None) as batch:
         batch.add_column(sa.Column("name", sa.String(length=255), nullable=True))
-        batch.add_column(sa.Column("timeout_ms", sa.Integer(), nullable=False, server_default="5000"))
+        batch.add_column(
+            sa.Column("timeout_ms", sa.Integer(), nullable=False, server_default="5000")
+        )
 
     with op.batch_alter_table("webhook_deliveries", schema=None) as batch:
         batch.add_column(sa.Column("request_headers", sa.JSON(), nullable=True))

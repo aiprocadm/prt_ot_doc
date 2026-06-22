@@ -64,6 +64,7 @@ from app.models.models import (
     Tenant,
     User,
 )
+from app.modules.branding.schemas import LetterheadOverride
 from app.schemas.document import (
     DocumentBatchRunRead,
     DocumentCompanySummaryRead,
@@ -99,7 +100,6 @@ from app.services.documents import (
     InvalidStatusTransitionError,
 )
 from app.services.file_storage import FileStorageService
-from app.modules.branding.schemas import LetterheadOverride
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 from app.services.pipelines_orchestrator import DocumentPipelineOrchestrator
 from app.tasks import generate_document_batch_item_task, generate_document_task
@@ -144,7 +144,9 @@ def _documents_conflict(
 ) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_409_CONFLICT,
-        detail=api_problem_detail(code=code, message=message, error_type="documents", details=details),
+        detail=api_problem_detail(
+            code=code, message=message, error_type="documents", details=details
+        ),
     )
 
 
@@ -155,14 +157,23 @@ def _documents_forbidden(*, code: str, message: str) -> HTTPException:
     )
 
 
-def _documents_payload_too_large(message: str, *, code: str = "DOCUMENT_PAYLOAD_TOO_LARGE") -> HTTPException:
+def _documents_payload_too_large(
+    message: str, *, code: str = "DOCUMENT_PAYLOAD_TOO_LARGE"
+) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
         detail=api_problem_detail(code=code, message=message, error_type="documents"),
     )
 
 
-def _dispatch_celery_task(task, *, args: list[str], kwargs: dict[str, str], task_id: str | None = None, headers: dict[str, str] | None = None) -> None:
+def _dispatch_celery_task(
+    task,
+    *,
+    args: list[str],
+    kwargs: dict[str, str],
+    task_id: str | None = None,
+    headers: dict[str, str] | None = None,
+) -> None:
     task.apply_async(args=args, kwargs=kwargs, task_id=task_id, headers=headers)
 
 
@@ -205,8 +216,6 @@ ReadAccessDep = Depends(
     )
 )
 StatusAccessDep = Depends(rbac(_DOCUMENT_STATUS_ROLES))
-
-
 
 
 class GenerateTemplateRef(BaseModel):
@@ -314,11 +323,19 @@ class TemplateResolveResponse(BaseModel):
 
 
 def _map_document_status(document: Document) -> str:
-    if document.job and document.job.status in {DocumentJobStatus.QUEUED, DocumentJobStatus.PROCESSING}:
+    if document.job and document.job.status in {
+        DocumentJobStatus.QUEUED,
+        DocumentJobStatus.PROCESSING,
+    }:
         return "generating"
     if document.job and document.job.status == DocumentJobStatus.FAILED:
         return "error"
-    if document.status in {DocumentStatus.GENERATED, DocumentStatus.APPROVED, DocumentStatus.SIGNED, DocumentStatus.ARCHIVED}:
+    if document.status in {
+        DocumentStatus.GENERATED,
+        DocumentStatus.APPROVED,
+        DocumentStatus.SIGNED,
+        DocumentStatus.ARCHIVED,
+    }:
         return "ready"
     if document.status == DocumentStatus.REVOKED:
         return "error"
@@ -352,7 +369,11 @@ def _build_file_link(
         name=name or f"document-{document_id}",
         mime_type=file_record.mime if file_record is not None else "application/octet-stream",
         size=file_record.size if file_record is not None else 0,
-        created_at=file_record.created_at if file_record is not None else (created_at or datetime.now(timezone.utc)),
+        created_at=(
+            file_record.created_at
+            if file_record is not None
+            else (created_at or datetime.now(timezone.utc))
+        ),
     )
 
 
@@ -364,14 +385,20 @@ def _resolve_latest_version(document: Document) -> DocumentVersion | None:
 
 def _build_document_history(document: Document) -> list[DocumentHistoryEntryRead]:
     history: list[DocumentHistoryEntryRead] = []
-    for version in sorted(document.versions, key=lambda item: (item.version_number, item.created_at), reverse=True):
+    for version in sorted(
+        document.versions, key=lambda item: (item.version_number, item.created_at), reverse=True
+    ):
         history.append(
             DocumentHistoryEntryRead(
                 id=version.id,
                 created_at=version.created_at,
                 updated_at=version.updated_at,
                 document_id=version.document_id,
-                status=version.status.value if isinstance(version.status, DocumentVersionStatus) else str(version.status),
+                status=(
+                    version.status.value
+                    if isinstance(version.status, DocumentVersionStatus)
+                    else str(version.status)
+                ),
                 storage=_build_file_link(
                     file_record=version.file,
                     document_id=document.id,
@@ -397,8 +424,14 @@ def _build_document_ui_read(document: Document) -> DocumentUiRead:
                 error_type="server",
             ),
         )
-    template_name = (document.template.name if document.template else None) or f"Document {document.id[:8]}"
-    template_type = (document.template.domain if document.template else None) or (document.template.code if document.template else None) or "document"
+    template_name = (
+        document.template.name if document.template else None
+    ) or f"Document {document.id[:8]}"
+    template_type = (
+        (document.template.domain if document.template else None)
+        or (document.template.code if document.template else None)
+        or "document"
+    )
     return DocumentUiRead(
         id=document.id,
         created_at=document.created_at,
@@ -421,7 +454,8 @@ def _build_document_ui_read(document: Document) -> DocumentUiRead:
             file_record=current_file,
             document_id=document.id,
             download_path=f"/api/v1/documents/{document.id}/download",
-            storage_key=document.storage_key or (latest_version.file_key if latest_version else None),
+            storage_key=document.storage_key
+            or (latest_version.file_key if latest_version else None),
             created_at=document.updated_at,
         ),
         history=_build_document_history(document),
@@ -487,14 +521,14 @@ async def list_documents(
             or_(
                 Document.id.ilike(pattern),
                 Document.company.has(Company.name.ilike(pattern)),
-                Document.template.has(or_(Template.name.ilike(pattern), Template.code.ilike(pattern))),
+                Document.template.has(
+                    or_(Template.name.ilike(pattern), Template.code.ilike(pattern))
+                ),
             )
         )
     if type_value:
         stmt = stmt.where(
-            Document.template.has(
-                or_(Template.domain == type_value, Template.code == type_value)
-            )
+            Document.template.has(or_(Template.domain == type_value, Template.code == type_value))
         )
     if status_value == "generating":
         stmt = stmt.where(
@@ -528,9 +562,13 @@ async def list_documents(
     rows = list(
         (
             await session.execute(
-                stmt.order_by(Document.updated_at.desc()).offset((page - 1) * page_size).limit(page_size)
+                stmt.order_by(Document.updated_at.desc())
+                .offset((page - 1) * page_size)
+                .limit(page_size)
             )
-        ).scalars().all()
+        )
+        .scalars()
+        .all()
     )
 
     items: list[DocumentUiRead] = []
@@ -539,7 +577,9 @@ async def list_documents(
             action="read document",
             company_id=document.company_id,
             document_id=document.id,
-            document_status=document.status.value if hasattr(document.status, "value") else str(document.status),
+            document_status=(
+                document.status.value if hasattr(document.status, "value") else str(document.status)
+            ),
             document_owner_id=document.created_by,
             site_id=document.site_id,
             site_company_id=document.company_id,
@@ -573,7 +613,9 @@ async def get_document(
 ) -> DocumentUiRead:
     access.ensure_tenant_access(tenant.id, action="read document")
     document = (
-        await session.execute(_document_read_query(str(tenant.id)).where(Document.id == document_id))
+        await session.execute(
+            _document_read_query(str(tenant.id)).where(Document.id == document_id)
+        )
     ).scalar_one_or_none()
     if document is None:
         raise _documents_not_found(code="DOCUMENT_NOT_FOUND", message="Document not found")
@@ -581,7 +623,9 @@ async def get_document(
         action="read document",
         company_id=document.company_id,
         document_id=document.id,
-        document_status=document.status.value if hasattr(document.status, "value") else str(document.status),
+        document_status=(
+            document.status.value if hasattr(document.status, "value") else str(document.status)
+        ),
         document_owner_id=document.created_by,
         site_id=document.site_id,
         site_company_id=document.company_id,
@@ -598,7 +642,9 @@ async def get_document_readiness_endpoint(
 ) -> DocumentReadinessRead:
     access.ensure_tenant_access(tenant.id, action="read document")
     document = (
-        await session.execute(_document_read_query(str(tenant.id)).where(Document.id == document_id))
+        await session.execute(
+            _document_read_query(str(tenant.id)).where(Document.id == document_id)
+        )
     ).scalar_one_or_none()
     if document is None:
         raise _documents_not_found(code="DOCUMENT_NOT_FOUND", message="Document not found")
@@ -606,7 +652,9 @@ async def get_document_readiness_endpoint(
         action="read document",
         company_id=document.company_id,
         document_id=document.id,
-        document_status=document.status.value if hasattr(document.status, "value") else str(document.status),
+        document_status=(
+            document.status.value if hasattr(document.status, "value") else str(document.status)
+        ),
         document_owner_id=document.created_by,
         site_id=document.site_id,
         site_company_id=document.company_id,
@@ -642,12 +690,18 @@ async def check_document_quality(payload: DocumentQualityCheckRequest) -> Qualit
 
 @router.post("/mapping:validate")
 async def validate_document_mapping(payload: DocumentMappingValidateRequest) -> dict[str, Any]:
-    mapping_values = {str(value).strip() for value in payload.mapping.values() if str(value).strip()}
+    mapping_values = {
+        str(value).strip() for value in payload.mapping.values() if str(value).strip()
+    }
     missing_required = sorted(
-        field for field in payload.required_template_fields if str(field).strip() and str(field).strip() not in mapping_values
+        field
+        for field in payload.required_template_fields
+        if str(field).strip() and str(field).strip() not in mapping_values
     )
     unmapped_source = sorted(
-        source for source in payload.source_fields if str(source).strip() and not str(payload.mapping.get(source, "")).strip()
+        source
+        for source in payload.source_fields
+        if str(source).strip() and not str(payload.mapping.get(source, "")).strip()
     )
     return {
         "ok": len(missing_required) == 0,
@@ -673,7 +727,9 @@ async def compare_document_versions_endpoint(
 ) -> DocumentVersionCompareRead:
     access.ensure_tenant_access(tenant.id, action="read document")
     document = (
-        await session.execute(_document_read_query(str(tenant.id)).where(Document.id == document_id))
+        await session.execute(
+            _document_read_query(str(tenant.id)).where(Document.id == document_id)
+        )
     ).scalar_one_or_none()
     if document is None:
         raise _documents_not_found(code="DOCUMENT_NOT_FOUND", message="Document not found")
@@ -681,7 +737,9 @@ async def compare_document_versions_endpoint(
         action="read document",
         company_id=document.company_id,
         document_id=document.id,
-        document_status=document.status.value if hasattr(document.status, "value") else str(document.status),
+        document_status=(
+            document.status.value if hasattr(document.status, "value") else str(document.status)
+        ),
         document_owner_id=document.created_by,
         site_id=document.site_id,
         site_company_id=document.company_id,
@@ -695,7 +753,9 @@ async def compare_document_versions_endpoint(
             right_version_id=right_version_id,
         )
     except ValueError:
-        raise _documents_not_found(code="DOCUMENT_VERSION_NOT_FOUND", message="Version not found") from None
+        raise _documents_not_found(
+            code="DOCUMENT_VERSION_NOT_FOUND", message="Version not found"
+        ) from None
 
     left_data = dict(left_v.data_json or {})
     right_data = dict(right_v.data_json or {})
@@ -729,7 +789,9 @@ async def get_document_dependency_map_endpoint(
 ) -> DocumentDependencyMapRead:
     access.ensure_tenant_access(tenant.id, action="read document")
     document = (
-        await session.execute(_document_read_query(str(tenant.id)).where(Document.id == document_id))
+        await session.execute(
+            _document_read_query(str(tenant.id)).where(Document.id == document_id)
+        )
     ).scalar_one_or_none()
     if document is None:
         raise _documents_not_found(code="DOCUMENT_NOT_FOUND", message="Document not found")
@@ -737,7 +799,9 @@ async def get_document_dependency_map_endpoint(
         action="read document",
         company_id=document.company_id,
         document_id=document.id,
-        document_status=document.status.value if hasattr(document.status, "value") else str(document.status),
+        document_status=(
+            document.status.value if hasattr(document.status, "value") else str(document.status)
+        ),
         document_owner_id=document.created_by,
         site_id=document.site_id,
         site_company_id=document.company_id,
@@ -769,7 +833,9 @@ async def get_document_status(
     session: AsyncSession = SessionDep,
     access: AccessContext = ReadAccessDep,
 ) -> DocumentUiRead:
-    return await get_document(document_id=document_id, tenant=tenant, session=session, access=access)
+    return await get_document(
+        document_id=document_id, tenant=tenant, session=session, access=access
+    )
 
 
 @router.get("/{document_id}/download")
@@ -782,7 +848,9 @@ async def download_document(
 ) -> Response:
     access.ensure_tenant_access(tenant.id, action="download document")
     document = (
-        await session.execute(_document_read_query(str(tenant.id)).where(Document.id == document_id))
+        await session.execute(
+            _document_read_query(str(tenant.id)).where(Document.id == document_id)
+        )
     ).scalar_one_or_none()
     if document is None:
         raise _documents_not_found(code="DOCUMENT_NOT_FOUND", message="Document not found")
@@ -790,7 +858,9 @@ async def download_document(
         action="download document",
         company_id=document.company_id,
         document_id=document.id,
-        document_status=document.status.value if hasattr(document.status, "value") else str(document.status),
+        document_status=(
+            document.status.value if hasattr(document.status, "value") else str(document.status)
+        ),
         document_owner_id=document.created_by,
         site_id=document.site_id,
         site_company_id=document.company_id,
@@ -798,22 +868,35 @@ async def download_document(
 
     latest_version = _resolve_latest_version(document)
     current_file = document.file or (latest_version.file if latest_version else None)
-    storage_key = document.storage_key or (current_file.storage_key if current_file else None) or (latest_version.file_key if latest_version else None)
+    storage_key = (
+        document.storage_key
+        or (current_file.storage_key if current_file else None)
+        or (latest_version.file_key if latest_version else None)
+    )
     if not storage_key:
-        raise _documents_not_found(code="DOCUMENT_FILE_NOT_FOUND", message="Document file not found")
+        raise _documents_not_found(
+            code="DOCUMENT_FILE_NOT_FOUND", message="Document file not found"
+        )
 
     try:
         payload = storage.download(storage_key)
     except KeyError as exc:
-        raise _documents_not_found(code="DOCUMENT_FILE_NOT_FOUND", message="Document file not found") from exc
+        raise _documents_not_found(
+            code="DOCUMENT_FILE_NOT_FOUND", message="Document file not found"
+        ) from exc
 
-    filename = (current_file.original_name if current_file and current_file.original_name else f"document-{document.id}.bin").replace('"', "")
+    filename = (
+        current_file.original_name
+        if current_file and current_file.original_name
+        else f"document-{document.id}.bin"
+    ).replace('"', "")
     media_type = current_file.mime if current_file else "application/octet-stream"
     return Response(
         content=payload,
         media_type=media_type,
         headers={"Content-Disposition": f'inline; filename="{filename}"'},
     )
+
 
 def _serialize_payload(payload: dict[str, Any]) -> str:
     try:
@@ -856,9 +939,7 @@ def _parse_xlsx_payload(file: UploadFile) -> list[dict[str, Any]]:
     headers = [str(cell).strip() if cell is not None else "" for cell in rows[0]]
     data_rows = []
     for row in rows[1:]:
-        entry = {
-            header: value for header, value in zip(headers, row) if header
-        }
+        entry = {header: value for header, value in zip(headers, row) if header}
         if any(value is not None and value != "" for value in entry.values()):
             data_rows.append(entry)
     return data_rows
@@ -874,15 +955,20 @@ def _apply_naming_pattern(pattern: str | None, row: dict[str, Any], row_index: i
 
     return pattern.format_map(_SafeDict(row_index=row_index, **row))
 
+
 def _extract_branding_generation_metadata(payload: DocGenerateRequest) -> dict[str, Any] | None:
-    branding_preview = payload.data.get("branding_preview") if isinstance(payload.data, dict) else None
+    branding_preview = (
+        payload.data.get("branding_preview") if isinstance(payload.data, dict) else None
+    )
     if not isinstance(branding_preview, dict):
         return None
     data = branding_preview.get("data") if isinstance(branding_preview.get("data"), dict) else {}
     doc = data.get("doc") if isinstance(data.get("doc"), dict) else {}
     reproducibility = payload.data.get("reproducibility")
     if not isinstance(reproducibility, dict):
-        reproducibility = data.get("reproducibility") if isinstance(data.get("reproducibility"), dict) else {}
+        reproducibility = (
+            data.get("reproducibility") if isinstance(data.get("reproducibility"), dict) else {}
+        )
     return {
         "site_id": payload.data.get("siteId") or data.get("branch", {}).get("id"),
         "preset_code": branding_preview.get("preset_code") or payload.data.get("headerPreset"),
@@ -940,7 +1026,11 @@ def _template_matches_request(
             metadata.get("category"),
             metadata.get("template_type"),
             *((metadata.get("tags") or []) if isinstance(metadata.get("tags"), list) else []),
-            *((metadata.get("case_types") or []) if isinstance(metadata.get("case_types"), list) else []),
+            *(
+                (metadata.get("case_types") or [])
+                if isinstance(metadata.get("case_types"), list)
+                else []
+            ),
         ]
     )
     checks = [payload.case_type, payload.document_type, payload.category]
@@ -1183,18 +1273,30 @@ async def _resolve_run(
     if existing is not None:
         metadata = existing.result_metadata or {}
         if existing.template_id != template.id:
-            raise _documents_conflict("Idempotency key already used", code="DOCUMENT_IDEMPOTENCY_KEY_CONFLICT")
+            raise _documents_conflict(
+                "Idempotency key already used", code="DOCUMENT_IDEMPOTENCY_KEY_CONFLICT"
+            )
         if existing.template_version_id != template_version.id:
-            raise _documents_conflict("Idempotency key already used", code="DOCUMENT_IDEMPOTENCY_KEY_CONFLICT")
+            raise _documents_conflict(
+                "Idempotency key already used", code="DOCUMENT_IDEMPOTENCY_KEY_CONFLICT"
+            )
         if metadata.get("company_id") != company.id:
-            raise _documents_conflict("Idempotency key already used", code="DOCUMENT_IDEMPOTENCY_KEY_CONFLICT")
+            raise _documents_conflict(
+                "Idempotency key already used", code="DOCUMENT_IDEMPOTENCY_KEY_CONFLICT"
+            )
         expected_person = person.id if person else None
         if metadata.get("person_id") != expected_person:
-            raise _documents_conflict("Idempotency key already used", code="DOCUMENT_IDEMPOTENCY_KEY_CONFLICT")
+            raise _documents_conflict(
+                "Idempotency key already used", code="DOCUMENT_IDEMPOTENCY_KEY_CONFLICT"
+            )
         if metadata.get("payload_hash") != payload_hash:
-            raise _documents_conflict("Idempotency key already used", code="DOCUMENT_IDEMPOTENCY_KEY_CONFLICT")
+            raise _documents_conflict(
+                "Idempotency key already used", code="DOCUMENT_IDEMPOTENCY_KEY_CONFLICT"
+            )
         if existing.context != context:
-            raise _documents_conflict("Idempotency key already used", code="DOCUMENT_IDEMPOTENCY_KEY_CONFLICT")
+            raise _documents_conflict(
+                "Idempotency key already used", code="DOCUMENT_IDEMPOTENCY_KEY_CONFLICT"
+            )
         if existing.status == PipelineRunStatus.ERROR:
             raise _documents_conflict(
                 "Idempotency key refers to a failed generation task",
@@ -1275,11 +1377,21 @@ async def generate_document(
             "options": options,
         }
     try:
-        payload_for_checks = payload.data if isinstance(payload, DocGenerateRequest) else (payload.data.payload or {})
+        payload_for_checks = (
+            payload.data
+            if isinstance(payload, DocGenerateRequest)
+            else (payload.data.payload or {})
+        )
         enforce_mapping_constraints(payload_for_checks, field="data")
-        _ensure_payload_size(payload_for_checks, limit=settings.document_payload_max_bytes, field="data")
+        _ensure_payload_size(
+            payload_for_checks, limit=settings.document_payload_max_bytes, field="data"
+        )
     except PayloadConstraintError as exc:
-        p_code = "DOCUMENT_PAYLOAD_TOO_LARGE" if exc.status_code == 413 else "DOCUMENT_PAYLOAD_CONSTRAINT"
+        p_code = (
+            "DOCUMENT_PAYLOAD_TOO_LARGE"
+            if exc.status_code == 413
+            else "DOCUMENT_PAYLOAD_CONSTRAINT"
+        )
         raise HTTPException(
             exc.status_code,
             detail=api_problem_detail(code=p_code, message=str(exc), error_type="documents"),
@@ -1306,23 +1418,29 @@ async def generate_document(
 
     created_run = False
     try:
-        if engine_payload is not None or (isinstance(payload, DocGenerateRequest) and (payload.inline_data is not None or payload.input_source_id is not None)):
+        if engine_payload is not None or (
+            isinstance(payload, DocGenerateRequest)
+            and (payload.inline_data is not None or payload.input_source_id is not None)
+        ):
             orchestrator = DocumentPipelineOrchestrator(session)
             if engine_payload is None:
                 legacy_payload = payload
                 engine_payload = {
                     "template_code": legacy_payload.template_code,
                     "template_version": legacy_payload.template_version,
-                    "pipeline_profile_id": legacy_payload.pipeline_profile_id or _DEFAULT_DOCUMENT_PIPELINE_PROFILE,
+                    "pipeline_profile_id": legacy_payload.pipeline_profile_id
+                    or _DEFAULT_DOCUMENT_PIPELINE_PROFILE,
                     "input_source_id": legacy_payload.input_source_id,
                     "inline_data": legacy_payload.inline_data or {},
                     "options": legacy_payload.options or {},
                 }
-            request_hash = compute_request_hash({
-                "tenant_id": str(tenant.id),
-                "endpoint": "documents.generate",
-                **engine_payload,
-            })
+            request_hash = compute_request_hash(
+                {
+                    "tenant_id": str(tenant.id),
+                    "endpoint": "documents.generate",
+                    **engine_payload,
+                }
+            )
             if record.request_hash and record.request_hash != request_hash:
                 raise HTTPException(
                     status.HTTP_409_CONFLICT,
@@ -1351,12 +1469,16 @@ async def generate_document(
                     "document_version_id": None,
                 }
                 await BillingService(session).add_usage(tenant_id=str(tenant.id), docs_generated=1)
-                await idempotency.store_success(record, status_code=status.HTTP_202_ACCEPTED, body=body)
+                await idempotency.store_success(
+                    record, status_code=status.HTTP_202_ACCEPTED, body=body
+                )
                 await session.commit()
                 response.status_code = status.HTTP_202_ACCEPTED
                 return TaskAcceptedResponse(**body)
             await session.commit()
-            return await idempotency.respond_from_store(record, model=TaskAcceptedResponse, response=response)
+            return await idempotency.respond_from_store(
+                record, model=TaskAcceptedResponse, response=response
+            )
 
         if not isinstance(payload, DocGenerateRequest):
             raise _documents_bad_request("legacy mode requires old payload shape")
@@ -1583,7 +1705,11 @@ async def generate_document_batch(
                 field="data",
             )
         except PayloadConstraintError as exc:
-            p_code = "DOCUMENT_PAYLOAD_TOO_LARGE" if exc.status_code == 413 else "DOCUMENT_PAYLOAD_CONSTRAINT"
+            p_code = (
+                "DOCUMENT_PAYLOAD_TOO_LARGE"
+                if exc.status_code == 413
+                else "DOCUMENT_PAYLOAD_CONSTRAINT"
+            )
             raise HTTPException(
                 exc.status_code,
                 detail=api_problem_detail(code=p_code, message=str(exc), error_type="documents"),
@@ -1723,9 +1849,7 @@ async def get_generation_task_status(
     if outputs:
         metadata.setdefault("outputs", outputs)
 
-    pipeline_status = (
-        run.status.value if hasattr(run.status, "value") else str(run.status)
-    )
+    pipeline_status = run.status.value if hasattr(run.status, "value") else str(run.status)
     metadata.setdefault("pipeline_status", pipeline_status)
     orchestration = dict(metadata.get("orchestration") or {})
     state = orchestration.get("state")
@@ -1736,9 +1860,7 @@ async def get_generation_task_status(
     metadata["orchestration"] = orchestration
 
     document_id = metadata.get("document_id") or outputs.get("document_id")
-    document_version_id = metadata.get("document_version_id") or outputs.get(
-        "document_version_id"
-    )
+    document_version_id = metadata.get("document_version_id") or outputs.get("document_version_id")
 
     return TaskStatusResponse(
         task_id=run.id,
@@ -1766,7 +1888,9 @@ async def update_document_status(
     access.ensure_abac(
         action="manage document status",
         document_id=document.id,
-        document_status=document.status.value if hasattr(document.status, "value") else str(document.status),
+        document_status=(
+            document.status.value if hasattr(document.status, "value") else str(document.status)
+        ),
         document_owner_id=document.created_by,
         site_id=document.site_id,
         site_company_id=document.company_id,

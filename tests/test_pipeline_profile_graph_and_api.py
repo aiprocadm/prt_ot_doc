@@ -22,7 +22,13 @@ def test_graph_validator_requires_branch_default() -> None:
 
 
 def test_safe_eval_condition_whitelist() -> None:
-    assert safe_eval_condition("ctx.get('count', 0) >= 2 and 'pdf' in ctx.get('artifacts', [])", {"count": 2, "artifacts": ["docx", "pdf"]}) is True
+    assert (
+        safe_eval_condition(
+            "ctx.get('count', 0) >= 2 and 'pdf' in ctx.get('artifacts', [])",
+            {"count": 2, "artifacts": ["docx", "pdf"]},
+        )
+        is True
+    )
     with pytest.raises(ValueError, match="unsafe"):
         safe_eval_condition("__import__('os').system('echo hacked')", {})
 
@@ -39,7 +45,11 @@ async def test_pipeline_profile_put_activate_and_runs_filters(async_client, make
             "name": "Builder Profile",
             "graph": {
                 "nodes": [
-                    {"id": "render", "type": "render_docx", "config": {"template_code": "builder-profile-v2"}},
+                    {
+                        "id": "render",
+                        "type": "render_docx",
+                        "config": {"template_code": "builder-profile-v2"},
+                    },
                     {"id": "pdf", "type": "convert_pdf"},
                 ],
                 "edges": [{"from": "render", "to": "pdf"}],
@@ -57,7 +67,9 @@ async def test_pipeline_profile_put_activate_and_runs_filters(async_client, make
     assert updated.status_code == 200
     assert updated.json()["name"] == "Builder Profile Updated"
 
-    activated = await client.post(f"/api/v1/pipelines/profiles/{profile_id}:activate", headers=tenant_headers)
+    activated = await client.post(
+        f"/api/v1/pipelines/profiles/{profile_id}:activate", headers=tenant_headers
+    )
     assert activated.status_code == 200
     assert activated.json()["is_active"] is True
 
@@ -69,6 +81,8 @@ async def test_pipeline_profile_put_activate_and_runs_filters(async_client, make
     )
     assert run_resp.status_code == 202
 
-    runs_resp = await client.get("/api/v1/pipelines/runs", headers=tenant_headers, params={"q": "builder-profile-v2"})
+    runs_resp = await client.get(
+        "/api/v1/pipelines/runs", headers=tenant_headers, params={"q": "builder-profile-v2"}
+    )
     assert runs_resp.status_code == 200
     assert any(r["run_id"] == run_resp.json()["run_id"] for r in runs_resp.json())

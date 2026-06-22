@@ -67,7 +67,11 @@ async def test_index_file_record_idempotent_by_sha256(sessionmaker) -> None:
         await index_file_record(session, tenant_id=tenant_id, file_id=file_rec.id)
         await session.flush()
 
-        refreshed = (await session.execute(select(FileContentIndex).where(FileContentIndex.file_id == file_rec.id))).scalar_one()
+        refreshed = (
+            await session.execute(
+                select(FileContentIndex).where(FileContentIndex.file_id == file_rec.id)
+            )
+        ).scalar_one()
         assert refreshed.attempts == 2
         assert refreshed.status == FileContentIndexStatus.indexed.value
 

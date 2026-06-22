@@ -25,6 +25,7 @@ def _slugify_segment(value: str) -> str:
     result = "".join(allowed).strip("-_")
     return result or "unknown"
 
+
 try:  # pragma: no cover - optional dependency during docs builds
     import magic  # type: ignore[import-not-found]
 except Exception:  # pragma: no cover - graceful degradation if libmagic is unavailable

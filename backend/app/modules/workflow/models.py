@@ -4,7 +4,7 @@ import enum
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON
@@ -55,16 +55,26 @@ class WorkflowDefinition(TenantBaseModel, SoftDeleteMixin):
 class WorkflowDefinitionVersion(TenantBaseModel, SoftDeleteMixin):
     __tablename__ = "workflow_definition_versions"
 
-    definition_id: Mapped[str] = mapped_column(ForeignKey("workflow_definitions.id", ondelete="CASCADE"), nullable=False, index=True)
+    definition_id: Mapped[str] = mapped_column(
+        ForeignKey("workflow_definitions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     version_no: Mapped[int] = mapped_column(Integer, nullable=False)
-    status: Mapped[WorkflowDefinitionStatus] = mapped_column(native_enum(WorkflowDefinitionStatus, name="workflowdefinitionstatus"), nullable=False, default=WorkflowDefinitionStatus.DRAFT)
+    status: Mapped[WorkflowDefinitionStatus] = mapped_column(
+        native_enum(WorkflowDefinitionStatus, name="workflowdefinitionstatus"),
+        nullable=False,
+        default=WorkflowDefinitionStatus.DRAFT,
+    )
     graph_json: Mapped[dict[str, Any]] = mapped_column(JSONBType, nullable=False, default=dict)
-    variables_schema: Mapped[dict[str, Any]] = mapped_column(JSONBType, nullable=False, default=dict)
+    variables_schema: Mapped[dict[str, Any]] = mapped_column(
+        JSONBType, nullable=False, default=dict
+    )
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
-        UniqueConstraint("tenant_id", "definition_id", "version_no", name="uq_workflow_definition_version"),
+        UniqueConstraint(
+            "tenant_id", "definition_id", "version_no", name="uq_workflow_definition_version"
+        ),
         Index("ix_workflow_definition_version_tenant_status", "tenant_id", "status"),
     )
 
@@ -72,11 +82,21 @@ class WorkflowDefinitionVersion(TenantBaseModel, SoftDeleteMixin):
 class WorkflowInstance(TenantBaseModel, SoftDeleteMixin):
     __tablename__ = "workflow_instances"
 
-    definition_id: Mapped[str] = mapped_column(ForeignKey("workflow_definitions.id", ondelete="RESTRICT"), nullable=False, index=True)
-    definition_version_id: Mapped[str] = mapped_column(ForeignKey("workflow_definition_versions.id", ondelete="RESTRICT"), nullable=False, index=True)
+    definition_id: Mapped[str] = mapped_column(
+        ForeignKey("workflow_definitions.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    definition_version_id: Mapped[str] = mapped_column(
+        ForeignKey("workflow_definition_versions.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
     entity_type: Mapped[str] = mapped_column(String(64), nullable=False)
     entity_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    status: Mapped[WorkflowInstanceStatus] = mapped_column(native_enum(WorkflowInstanceStatus, name="workflowinstancestatus"), nullable=False, default=WorkflowInstanceStatus.RUNNING)
+    status: Mapped[WorkflowInstanceStatus] = mapped_column(
+        native_enum(WorkflowInstanceStatus, name="workflowinstancestatus"),
+        nullable=False,
+        default=WorkflowInstanceStatus.RUNNING,
+    )
     current_node_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     started_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -92,12 +112,18 @@ class WorkflowInstance(TenantBaseModel, SoftDeleteMixin):
 class WorkflowTask(TenantBaseModel, SoftDeleteMixin):
     __tablename__ = "workflow_tasks"
 
-    instance_id: Mapped[str] = mapped_column(ForeignKey("workflow_instances.id", ondelete="CASCADE"), nullable=False, index=True)
+    instance_id: Mapped[str] = mapped_column(
+        ForeignKey("workflow_instances.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     node_id: Mapped[str] = mapped_column(String(128), nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     assignee_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     assignee_role_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    status: Mapped[WorkflowTaskStatus] = mapped_column(native_enum(WorkflowTaskStatus, name="workflowtaskstatus"), nullable=False, default=WorkflowTaskStatus.OPEN)
+    status: Mapped[WorkflowTaskStatus] = mapped_column(
+        native_enum(WorkflowTaskStatus, name="workflowtaskstatus"),
+        nullable=False,
+        default=WorkflowTaskStatus.OPEN,
+    )
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     delegated_from_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
@@ -112,10 +138,16 @@ class WorkflowTask(TenantBaseModel, SoftDeleteMixin):
 class WorkflowTimelineEvent(TenantBaseModel):
     __tablename__ = "workflow_timeline_events"
 
-    instance_id: Mapped[str] = mapped_column(ForeignKey("workflow_instances.id", ondelete="CASCADE"), nullable=False, index=True)
+    instance_id: Mapped[str] = mapped_column(
+        ForeignKey("workflow_instances.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     node_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
     actor_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     payload: Mapped[dict[str, Any]] = mapped_column(JSONBType, nullable=False, default=dict)
 
-    __table_args__ = (Index("ix_workflow_timeline_tenant_instance_created", "tenant_id", "instance_id", "created_at"),)
+    __table_args__ = (
+        Index(
+            "ix_workflow_timeline_tenant_instance_created", "tenant_id", "instance_id", "created_at"
+        ),
+    )

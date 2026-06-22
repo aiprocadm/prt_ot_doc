@@ -16,6 +16,7 @@ vi.mock("@/api/workPermits", () => ({
     getBriefings: () => Promise.resolve([]),
     listSignatures: () => Promise.resolve([]),
     listAdmissions: () => Promise.resolve([]),
+    getClosing: () => Promise.resolve(null),
   },
   fetchAllPersons: () => Promise.resolve([]),
 }));

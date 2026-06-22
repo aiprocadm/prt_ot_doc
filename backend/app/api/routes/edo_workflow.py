@@ -33,7 +33,12 @@ from app.models.workflow import (
 from app.services.billing import BillingService
 from app.services.idempotency import IdempotencyService, normalize_idempotency_key
 from app.services.outbox import OutboxService
-from app.services.pep_signing import PepApprovalRequired, PepConflict, PepNotFound, PepSigningService
+from app.services.pep_signing import (
+    PepApprovalRequired,
+    PepConflict,
+    PepNotFound,
+    PepSigningService,
+)
 from app.services.provider_registry import provider_response_meta
 from app.tasks import process_inbound_webhook
 
@@ -46,7 +51,9 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | N
     return getattr(tenant, "id", None)
 
 
-AccessDep = Depends(abac(_tenant_resource_id, required_roles=["admin", "employee"], action="manage edo"))
+AccessDep = Depends(
+    abac(_tenant_resource_id, required_roles=["admin", "employee"], action="manage edo")
+)
 
 
 def _edo_unprocessable(message: str) -> HTTPException:
@@ -191,7 +198,9 @@ def _request_hash(*, request: Request, tenant: Tenant, user_id: str | None, body
         "tenant": str(tenant.id),
         "body": body,
     }
-    return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()
 
 
 def _correlation_id(request: Request, response: Response) -> str:
@@ -215,8 +224,12 @@ async def _idempotent_or_replay(
     if key_header is None:
         return None, None
     key = normalize_idempotency_key(key_header)
-    service = IdempotencyService(session=session, tenant_id=str(tenant.id), endpoint=request.url.path)
-    digest = _request_hash(request=request, tenant=tenant, user_id=user_id, body=model.model_dump(mode="json"))
+    service = IdempotencyService(
+        session=session, tenant_id=str(tenant.id), endpoint=request.url.path
+    )
+    digest = _request_hash(
+        request=request, tenant=tenant, user_id=user_id, body=model.model_dump(mode="json")
+    )
     record, created = await service.acquire(
         key=key,
         request_hash=digest,
@@ -257,9 +270,24 @@ async def create_approval_route(
 
 
 @router.get("/approvals/routes")
-async def list_approval_routes(session: AsyncSession = SessionDep, tenant: Tenant = TenantDep, _: AccessContext = AccessDep):
-    rows = (await session.execute(select(ApprovalRoute).where(ApprovalRoute.tenant_id == str(tenant.id)))).scalars().all()
-    return {"items": [{"id": row.id, "code": row.code, "name": row.name, "version": row.version} for row in rows]}
+async def list_approval_routes(
+    session: AsyncSession = SessionDep, tenant: Tenant = TenantDep, _: AccessContext = AccessDep
+):
+    rows = (
+        (
+            await session.execute(
+                select(ApprovalRoute).where(ApprovalRoute.tenant_id == str(tenant.id))
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return {
+        "items": [
+            {"id": row.id, "code": row.code, "name": row.name, "version": row.version}
+            for row in rows
+        ]
+    }
 
 
 @router.patch("/approvals/routes/{route_id}")
@@ -284,7 +312,12 @@ async def update_approval_route(
     route.version = payload.version
     route.is_active = payload.is_active
     await session.flush()
-    return {"id": route.id, "version": route.version, "is_active": route.is_active, "correlation_id": cid}
+    return {
+        "id": route.id,
+        "version": route.version,
+        "is_active": route.is_active,
+        "correlation_id": cid,
+    }
 
 
 @router.post("/approvals/requests")
@@ -300,7 +333,12 @@ async def start_approval_request(
     _correlation_id(request, response)
     await BillingService(session).assert_allowed(tenant, "edo.send")
     idem_service, replay = await _idempotent_or_replay(
-        request=request, response=response, session=session, tenant=tenant, user_id=str(access.user.id), model=payload
+        request=request,
+        response=response,
+        session=session,
+        tenant=tenant,
+        user_id=str(access.user.id),
+        model=payload,
     )
     if replay is not None:
         return replay
@@ -337,12 +375,20 @@ async def start_approval_request(
     await OutboxService(session).enqueue(
         tenant_id=str(tenant.id),
         event_type="approval.started",
-        payload={"tenant_id": str(tenant.id), "event_id": str(uuid4()), "metadata": {"request_id": approval_request.id}},
+        payload={
+            "tenant_id": str(tenant.id),
+            "event_id": str(uuid4()),
+            "metadata": {"request_id": approval_request.id},
+        },
         destination="internal://approval",
         idempotency_key=f"approval.started:{approval_request.id}",
     )
     await session.flush()
-    body = {"id": approval_request.id, "status": approval_request.status.value, "correlation_id": get_trace_id(request)}
+    body = {
+        "id": approval_request.id,
+        "status": approval_request.status.value,
+        "correlation_id": get_trace_id(request),
+    }
     if idem_service is not None:
         record = getattr(request.state, "idempotency_record", None)
         if record is not None:
@@ -373,8 +419,19 @@ async def list_approval_instances(
     stmt = select(ApprovalRequest).where(ApprovalRequest.tenant_id == str(tenant.id))
     if document_version_id:
         stmt = stmt.where(ApprovalRequest.document_version_id == document_version_id)
-    items = (await session.execute(stmt.order_by(ApprovalRequest.created_at.desc()))).scalars().all()
-    return {"items": [{"id": row.id, "status": row.status.value, "document_version_id": row.document_version_id} for row in items]}
+    items = (
+        (await session.execute(stmt.order_by(ApprovalRequest.created_at.desc()))).scalars().all()
+    )
+    return {
+        "items": [
+            {
+                "id": row.id,
+                "status": row.status.value,
+                "document_version_id": row.document_version_id,
+            }
+            for row in items
+        ]
+    }
 
 
 @router.get("/approvals/tasks")
@@ -390,8 +447,15 @@ async def list_approval_tasks(
         stmt = stmt.where(ApprovalDecision.actor_user_id == access.user.id)
     if status_filter:
         stmt = stmt.where(ApprovalDecision.decision == ApprovalDecisionType(status_filter))
-    items = (await session.execute(stmt.order_by(ApprovalDecision.created_at.desc()))).scalars().all()
-    return {"items": [{"id": row.id, "request_id": row.request_id, "decision": row.decision.value} for row in items]}
+    items = (
+        (await session.execute(stmt.order_by(ApprovalDecision.created_at.desc()))).scalars().all()
+    )
+    return {
+        "items": [
+            {"id": row.id, "request_id": row.request_id, "decision": row.decision.value}
+            for row in items
+        ]
+    }
 
 
 @router.post("/approvals/requests/{request_id}/decide")
@@ -439,7 +503,11 @@ async def decide_approval_request(
     await outbox.enqueue(
         tenant_id=str(tenant.id),
         event_type="approval.decision_made",
-        payload={"tenant_id": str(tenant.id), "event_id": str(uuid4()), "metadata": {"request_id": approval_request.id}},
+        payload={
+            "tenant_id": str(tenant.id),
+            "event_id": str(uuid4()),
+            "metadata": {"request_id": approval_request.id},
+        },
         destination="internal://approval",
         idempotency_key=f"approval.decision:{decision.id}",
     )
@@ -447,12 +515,20 @@ async def decide_approval_request(
         await outbox.enqueue(
             tenant_id=str(tenant.id),
             event_type="approval.completed",
-            payload={"tenant_id": str(tenant.id), "event_id": str(uuid4()), "metadata": {"request_id": approval_request.id}},
+            payload={
+                "tenant_id": str(tenant.id),
+                "event_id": str(uuid4()),
+                "metadata": {"request_id": approval_request.id},
+            },
             destination="internal://approval",
             idempotency_key=f"approval.completed:{approval_request.id}",
         )
     await session.flush()
-    return {"status": approval_request.status.value, "current_step_index": approval_request.current_step_index, "correlation_id": cid}
+    return {
+        "status": approval_request.status.value,
+        "current_step_index": approval_request.current_step_index,
+        "correlation_id": cid,
+    }
 
 
 @router.post("/signatures")
@@ -508,7 +584,14 @@ async def sign_request(
     tenant: Tenant = TenantDep,
     access: AccessContext = AccessDep,
 ):
-    return await create_signature(SignatureCreate(document_version_id=payload.document_version_id, type=payload.kind), request, response, session, tenant, access)
+    return await create_signature(
+        SignatureCreate(document_version_id=payload.document_version_id, type=payload.kind),
+        request,
+        response,
+        session,
+        tenant,
+        access,
+    )
 
 
 @router.post("/sign/submit")
@@ -559,27 +642,48 @@ async def sign_status(
     # Легаси-таблица signatures дропнута (ed02); живой источник — signature_requests
     # (ПЭП-ядро). Статус в БД — VARCHAR (ed01), отдаём строку без .value.
     items = (
-        await session.execute(
-            select(SignatureRequest).where(
-                SignatureRequest.tenant_id == str(tenant.id),
-                SignatureRequest.object_type == "document_version",
-                SignatureRequest.object_id == document_version_id,
+        (
+            await session.execute(
+                select(SignatureRequest).where(
+                    SignatureRequest.tenant_id == str(tenant.id),
+                    SignatureRequest.object_type == "document_version",
+                    SignatureRequest.object_id == document_version_id,
+                )
             )
         )
-    ).scalars().all()
-    return {"items": [{"id": row.id, "status": str(getattr(row.status, "value", row.status)), "kind": "pep"} for row in items]}
+        .scalars()
+        .all()
+    )
+    return {
+        "items": [
+            {"id": row.id, "status": str(getattr(row.status, "value", row.status)), "kind": "pep"}
+            for row in items
+        ]
+    }
 
 
 @router.get("/signatures")
-async def list_signatures(document_version_id: str | None = None, session: AsyncSession = SessionDep, tenant: Tenant = TenantDep, _: AccessContext = AccessDep):
+async def list_signatures(
+    document_version_id: str | None = None,
+    session: AsyncSession = SessionDep,
+    tenant: Tenant = TenantDep,
+    _: AccessContext = AccessDep,
+):
     stmt = select(SignatureRequest).where(
         SignatureRequest.tenant_id == str(tenant.id),
         SignatureRequest.object_type == "document_version",
     )
     if document_version_id:
         stmt = stmt.where(SignatureRequest.object_id == document_version_id)
-    items = (await session.execute(stmt.order_by(SignatureRequest.created_at.desc()))).scalars().all()
-    return {"items": [{"id": row.id, "status": str(getattr(row.status, "value", row.status)), "type": "pep"} for row in items]}
+    items = (
+        (await session.execute(stmt.order_by(SignatureRequest.created_at.desc()))).scalars().all()
+    )
+    return {
+        "items": [
+            {"id": row.id, "status": str(getattr(row.status, "value", row.status)), "type": "pep"}
+            for row in items
+        ]
+    }
 
 
 @router.post("/edo/send")
@@ -590,11 +694,16 @@ async def send_to_edo(
     response: Response,
     session: AsyncSession = SessionDep,
     tenant: Tenant = TenantDep,
-    access: AccessContext = AccessDep
+    access: AccessContext = AccessDep,
 ):
     _correlation_id(request, response)
     idem_service, replay = await _idempotent_or_replay(
-        request=request, response=response, session=session, tenant=tenant, user_id=str(access.user.id), model=payload
+        request=request,
+        response=response,
+        session=session,
+        tenant=tenant,
+        user_id=str(access.user.id),
+        model=payload,
     )
     if replay is not None:
         return replay
@@ -670,7 +779,11 @@ async def edo_webhook(
         await session.flush()
     except Exception:
         await session.rollback()
-        return {"status": "duplicate", "correlation_id": cid, **provider_response_meta(provider_code)}
+        return {
+            "status": "duplicate",
+            "correlation_id": cid,
+            **provider_response_meta(provider_code),
+        }
 
     process_inbound_webhook.delay(
         source="edo",

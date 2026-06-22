@@ -22,7 +22,9 @@ async def _seed_contractor(sessionmaker, data_factory) -> tuple[str, str]:
         session.add(contractor)
         await session.flush()
         emp = ContractorEmployee(
-            tenant_id=str(tenant.id), contractor_id=str(contractor.id), full_name="Doc Worker",
+            tenant_id=str(tenant.id),
+            contractor_id=str(contractor.id),
+            full_name="Doc Worker",
         )
         session.add(emp)
         await session.commit()
@@ -30,7 +32,9 @@ async def _seed_contractor(sessionmaker, data_factory) -> tuple[str, str]:
 
 
 @pytest.mark.asyncio
-async def test_create_and_get_document(async_client: AsyncClient, sessionmaker, data_factory, make_auth_headers):
+async def test_create_and_get_document(
+    async_client: AsyncClient, sessionmaker, data_factory, make_auth_headers
+):
     contractor_id, _emp = await _seed_contractor(sessionmaker, data_factory)
     headers = await make_auth_headers(RoleEnum.ADMIN)
 
@@ -55,7 +59,9 @@ async def test_create_and_get_document(async_client: AsyncClient, sessionmaker, 
 
 
 @pytest.mark.asyncio
-async def test_metadata_only_document_without_file(async_client, sessionmaker, data_factory, make_auth_headers):
+async def test_metadata_only_document_without_file(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
     contractor_id, _emp = await _seed_contractor(sessionmaker, data_factory)
     headers = await make_auth_headers(RoleEnum.ADMIN)
     resp = await async_client.post(
@@ -69,7 +75,9 @@ async def test_metadata_only_document_without_file(async_client, sessionmaker, d
 
 
 @pytest.mark.asyncio
-async def test_invalid_doc_type_returns_422(async_client, sessionmaker, data_factory, make_auth_headers):
+async def test_invalid_doc_type_returns_422(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
     contractor_id, _emp = await _seed_contractor(sessionmaker, data_factory)
     headers = await make_auth_headers(RoleEnum.ADMIN)
     resp = await async_client.post(
@@ -81,28 +89,39 @@ async def test_invalid_doc_type_returns_422(async_client, sessionmaker, data_fac
 
 
 @pytest.mark.asyncio
-async def test_employee_mismatch_returns_422(async_client, sessionmaker, data_factory, make_auth_headers):
+async def test_employee_mismatch_returns_422(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
     contractor_id, _emp = await _seed_contractor(sessionmaker, data_factory)
     _other_contractor, other_emp = await _seed_contractor(sessionmaker, data_factory)
     headers = await make_auth_headers(RoleEnum.ADMIN)
     resp = await async_client.post(
         "/api/v1/contractors/documents",
         headers=headers,
-        json={"contractor_id": contractor_id, "employee_id": other_emp, "doc_type": "medical_cert", "title": "x"},
+        json={
+            "contractor_id": contractor_id,
+            "employee_id": other_emp,
+            "doc_type": "medical_cert",
+            "title": "x",
+        },
     )
     assert resp.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY, resp.text
 
 
 @pytest.mark.asyncio
-async def test_list_filters_by_contractor(async_client, sessionmaker, data_factory, make_auth_headers):
+async def test_list_filters_by_contractor(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
     contractor_id, _emp = await _seed_contractor(sessionmaker, data_factory)
     headers = await make_auth_headers(RoleEnum.ADMIN)
     await async_client.post(
-        "/api/v1/contractors/documents", headers=headers,
+        "/api/v1/contractors/documents",
+        headers=headers,
         json={"contractor_id": contractor_id, "doc_type": "sro", "title": "A"},
     )
     resp = await async_client.get(
-        f"/api/v1/contractors/documents?contractor_id={contractor_id}", headers=headers,
+        f"/api/v1/contractors/documents?contractor_id={contractor_id}",
+        headers=headers,
     )
     assert resp.status_code == status.HTTP_200_OK, resp.text
     body = resp.json()
@@ -115,13 +134,16 @@ async def test_patch_and_soft_delete(async_client, sessionmaker, data_factory, m
     contractor_id, _emp = await _seed_contractor(sessionmaker, data_factory)
     headers = await make_auth_headers(RoleEnum.ADMIN)
     created = await async_client.post(
-        "/api/v1/contractors/documents", headers=headers,
+        "/api/v1/contractors/documents",
+        headers=headers,
         json={"contractor_id": contractor_id, "doc_type": "license", "title": "Old"},
     )
     doc_id = created.json()["id"]
 
     patched = await async_client.patch(
-        f"/api/v1/contractors/documents/{doc_id}", headers=headers, json={"title": "New"},
+        f"/api/v1/contractors/documents/{doc_id}",
+        headers=headers,
+        json={"title": "New"},
     )
     assert patched.status_code == status.HTTP_200_OK, patched.text
     assert patched.json()["title"] == "New"
@@ -133,13 +155,16 @@ async def test_patch_and_soft_delete(async_client, sessionmaker, data_factory, m
 
 
 @pytest.mark.asyncio
-async def test_cross_tenant_document_is_404(async_client, sessionmaker, data_factory, make_auth_headers):
+async def test_cross_tenant_document_is_404(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
     """A document created in tenant A is 404 to tenant B (tenant isolation)."""
     contractor_id, _emp = await _seed_contractor(sessionmaker, data_factory)
     # tenant A = default "test" tenant
     headers_a = await make_auth_headers(RoleEnum.ADMIN)
     created = await async_client.post(
-        "/api/v1/contractors/documents", headers=headers_a,
+        "/api/v1/contractors/documents",
+        headers=headers_a,
         json={"contractor_id": contractor_id, "doc_type": "license", "title": "Secret"},
     )
     assert created.status_code == status.HTTP_201_CREATED, created.text
@@ -147,7 +172,9 @@ async def test_cross_tenant_document_is_404(async_client, sessionmaker, data_fac
 
     # tenant B = "acme"; use a distinct email to avoid the cross-tenant user-lookup
     # collision documented in conftest.py (make_auth_headers docstring).
-    headers_b = await make_auth_headers(RoleEnum.ADMIN, tenant="acme", email="admin-acme@example.com")
+    headers_b = await make_auth_headers(
+        RoleEnum.ADMIN, tenant="acme", email="admin-acme@example.com"
+    )
     resp = await async_client.get(f"/api/v1/contractors/documents/{doc_id}", headers=headers_b)
     assert resp.status_code == status.HTTP_404_NOT_FOUND, resp.text
 
@@ -157,44 +184,59 @@ async def test_patch_can_unlink_file(async_client, sessionmaker, data_factory, m
     contractor_id, _emp = await _seed_contractor(sessionmaker, data_factory)
     headers = await make_auth_headers(RoleEnum.ADMIN)
     created = await async_client.post(
-        "/api/v1/contractors/documents", headers=headers,
-        json={"contractor_id": contractor_id, "doc_type": "license", "title": "Doc", "file_id": "file-123"},
+        "/api/v1/contractors/documents",
+        headers=headers,
+        json={
+            "contractor_id": contractor_id,
+            "doc_type": "license",
+            "title": "Doc",
+            "file_id": "file-123",
+        },
     )
     assert created.status_code == status.HTTP_201_CREATED, created.text
     doc_id = created.json()["id"]
     assert created.json()["file_id"] == "file-123"
 
     patched = await async_client.patch(
-        f"/api/v1/contractors/documents/{doc_id}", headers=headers, json={"file_id": None},
+        f"/api/v1/contractors/documents/{doc_id}",
+        headers=headers,
+        json={"file_id": None},
     )
     assert patched.status_code == status.HTTP_200_OK, patched.text
     assert patched.json()["file_id"] is None
 
 
 @pytest.mark.asyncio
-async def test_expiring_endpoint_flags_due_soon_and_overdue(async_client, sessionmaker, data_factory, make_auth_headers):
+async def test_expiring_endpoint_flags_due_soon_and_overdue(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
     contractor_id, _emp = await _seed_contractor(sessionmaker, data_factory)
     headers = await make_auth_headers(RoleEnum.ADMIN)
 
     async def _mk(title, days):
         return await async_client.post(
-            "/api/v1/contractors/documents", headers=headers,
+            "/api/v1/contractors/documents",
+            headers=headers,
             json={
-                "contractor_id": contractor_id, "doc_type": "training_cert", "title": title,
+                "contractor_id": contractor_id,
+                "doc_type": "training_cert",
+                "title": title,
                 "valid_until": (TODAY + timedelta(days=days)).isoformat(),
             },
         )
 
-    await _mk("Future", 90)     # OK — excluded
-    await _mk("Soon", 10)       # DUE_SOON — included
-    await _mk("Past", -5)       # OVERDUE — included
+    await _mk("Future", 90)  # OK — excluded
+    await _mk("Soon", 10)  # DUE_SOON — included
+    await _mk("Past", -5)  # OVERDUE — included
     await async_client.post(
-        "/api/v1/contractors/documents", headers=headers,
+        "/api/v1/contractors/documents",
+        headers=headers,
         json={"contractor_id": contractor_id, "doc_type": "other", "title": "Open"},
     )
 
     resp = await async_client.get(
-        f"/api/v1/contractors/documents/expiring?contractor_id={contractor_id}", headers=headers,
+        f"/api/v1/contractors/documents/expiring?contractor_id={contractor_id}",
+        headers=headers,
     )
     assert resp.status_code == status.HTTP_200_OK, resp.text
     body = resp.json()

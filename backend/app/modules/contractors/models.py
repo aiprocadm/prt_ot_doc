@@ -45,21 +45,32 @@ class ContractorEmployee(TenantBaseModel, SoftDeleteMixin):
     __tablename__ = "contractor_employees"
 
     contractor_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("contractor_registry.id", ondelete="CASCADE"), nullable=False, index=True
+        String(36),
+        ForeignKey("contractor_registry.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     position: Mapped[str | None] = mapped_column(String(255), nullable=True)
     personnel_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
     access_status: Mapped[ComplianceStatus] = mapped_column(
-        Enum(ComplianceStatus, name="contractor_access_status"), nullable=False, default=ComplianceStatus.PENDING
+        Enum(ComplianceStatus, name="contractor_access_status"),
+        nullable=False,
+        default=ComplianceStatus.PENDING,
     )
     training_status: Mapped[ComplianceStatus] = mapped_column(
-        Enum(ComplianceStatus, name="contractor_training_status"), nullable=False, default=ComplianceStatus.PENDING
+        Enum(ComplianceStatus, name="contractor_training_status"),
+        nullable=False,
+        default=ComplianceStatus.PENDING,
     )
     medical_status: Mapped[ComplianceStatus] = mapped_column(
-        Enum(ComplianceStatus, name="contractor_medical_status"), nullable=False, default=ComplianceStatus.PENDING
+        Enum(ComplianceStatus, name="contractor_medical_status"),
+        nullable=False,
+        default=ComplianceStatus.PENDING,
     )
-    last_training_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_training_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     next_medical_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
@@ -73,14 +84,22 @@ class ContractorIncident(TenantBaseModel, SoftDeleteMixin):
     __tablename__ = "contractor_incidents"
 
     contractor_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("contractor_registry.id", ondelete="CASCADE"), nullable=False, index=True
+        String(36),
+        ForeignKey("contractor_registry.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     employee_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("contractor_employees.id", ondelete="SET NULL"), nullable=True, index=True
+        String(36),
+        ForeignKey("contractor_employees.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     incident_type: Mapped[str] = mapped_column(String(64), nullable=False)
     severity: Mapped[IncidentSeverity] = mapped_column(
-        Enum(IncidentSeverity, name="contractor_incident_severity"), nullable=False, default=IncidentSeverity.MEDIUM
+        Enum(IncidentSeverity, name="contractor_incident_severity"),
+        nullable=False,
+        default=IncidentSeverity.MEDIUM,
     )
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="open")
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -96,11 +115,17 @@ class ContractorDocument(TenantBaseModel, SoftDeleteMixin):
     __tablename__ = "contractor_documents"
 
     contractor_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("contractor_registry.id", ondelete="CASCADE"), nullable=False, index=True
+        String(36),
+        ForeignKey("contractor_registry.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     # SET NULL: an employee document survives the employee being removed (kept as a contractor-level record).
     employee_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("contractor_employees.id", ondelete="SET NULL"), nullable=True, index=True
+        String(36),
+        ForeignKey("contractor_employees.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     # doc_type/status are VARCHAR (validated at the schema layer), NOT PG enums — avoids the
     # enum-label-parity migration class entirely (PR #635–#638).
@@ -138,6 +163,4 @@ class ContractorDocumentRequirement(TenantBaseModel, SoftDeleteMixin):
     scope: Mapped[str] = mapped_column(String(16), nullable=False)  # "company" | "employee"
     mandatory: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=sa_true())
 
-    __table_args__ = (
-        Index("ix_contractor_doc_req_tenant_type", "tenant_id", "doc_type"),
-    )
+    __table_args__ = (Index("ix_contractor_doc_req_tenant_type", "tenant_id", "doc_type"),)

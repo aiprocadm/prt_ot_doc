@@ -18,7 +18,9 @@ from tests.utils.factories import TestDataFactory
 
 
 @pytest.mark.asyncio
-async def test_incident_flow(async_client, make_auth_headers, sessionmaker, data_factory: TestDataFactory):
+async def test_incident_flow(
+    async_client, make_auth_headers, sessionmaker, data_factory: TestDataFactory
+):
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         company = await data_factory.create_company(tenant=tenant, session=session)
@@ -45,7 +47,9 @@ async def test_incident_flow(async_client, make_auth_headers, sessionmaker, data
     assert created["incident_type"] == IncidentType.ACCIDENT.value
     assert victim.id in created["victim_ids"]
 
-    list_response = await async_client.get(f"/api/v1/incidents?company_id={company.id}", headers=headers)
+    list_response = await async_client.get(
+        f"/api/v1/incidents?company_id={company.id}", headers=headers
+    )
     assert list_response.status_code == status.HTTP_200_OK
     assert list_response.json()["total"] >= 1
 
@@ -79,7 +83,11 @@ async def test_incident_flow(async_client, make_auth_headers, sessionmaker, data
     assert len(logs_list.json()) >= 1
 
     async with sessionmaker() as session:
-        outbox = (await session.execute(select(Outbox).where(Outbox.event_type == "IncidentCreated"))).scalars().all()
+        outbox = (
+            (await session.execute(select(Outbox).where(Outbox.event_type == "IncidentCreated")))
+            .scalars()
+            .all()
+        )
         assert any(item.payload.get("incident_id") == created["id"] for item in outbox)
 
 
@@ -111,7 +119,9 @@ async def test_incident_capa_deadline_enforcement(
         "description": "Test for CAPA deadlines",
         "location_description": "Test Site",
     }
-    incident_resp = await async_client.post("/api/v1/incidents", json=incident_payload, headers=headers)
+    incident_resp = await async_client.post(
+        "/api/v1/incidents", json=incident_payload, headers=headers
+    )
     assert incident_resp.status_code == status.HTTP_201_CREATED
     incident_id = incident_resp.json()["id"]
 

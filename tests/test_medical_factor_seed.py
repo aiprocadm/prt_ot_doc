@@ -1,4 +1,5 @@
 """§9.2 demo seed: the named list is non-empty factor-driven after seeding."""
+
 from datetime import date
 
 import pytest
@@ -17,8 +18,12 @@ async def test_seed_medical_factor_demo_populates_named_list(sessionmaker, data_
         session.add(pos)
         await session.flush()
         await data_factory.create_person(
-            tenant=tenant, company=company, session=session,
-            position_id=pos.id, first_name="Иван", last_name="Петров",
+            tenant=tenant,
+            company=company,
+            session=session,
+            position_id=pos.id,
+            first_name="Иван",
+            last_name="Петров",
         )
         await _seed_medical_factor_demo(session, str(tenant.id), str(pos.id))
         await session.commit()

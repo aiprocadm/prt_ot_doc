@@ -16,7 +16,15 @@ from app.models.notifications import (
 )
 
 
-def build_dedup_key(*, tenant_id: str, user_id: str, type: NotificationType, entity_type: str | None, entity_id: str | None, bucket: str) -> str:
+def build_dedup_key(
+    *,
+    tenant_id: str,
+    user_id: str,
+    type: NotificationType,
+    entity_type: str | None,
+    entity_id: str | None,
+    bucket: str,
+) -> str:
     return f"{tenant_id}:{user_id}:{type.value}:{entity_type or '-'}:{entity_id or '-'}:{bucket}"
 
 
@@ -82,7 +90,9 @@ async def send_notification(
     if dedup_key:
         existing = (
             await session.execute(
-                select(Notification).where(Notification.dedup_key == dedup_key, Notification.deleted_at.is_(None))
+                select(Notification).where(
+                    Notification.dedup_key == dedup_key, Notification.deleted_at.is_(None)
+                )
             )
         ).scalar_one_or_none()
         if existing:
@@ -98,7 +108,8 @@ async def send_notification(
         payload=payload,
         priority=priority,
         status=NotificationStatus.QUEUED,
-        dedup_key=dedup_key or build_dedup_key(
+        dedup_key=dedup_key
+        or build_dedup_key(
             tenant_id=tenant_id,
             user_id=user_id,
             type=type,

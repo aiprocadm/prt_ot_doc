@@ -1,9 +1,7 @@
 """Tests for operational dashboard module."""
 
 import pytest
-from datetime import datetime, timedelta
 from fastapi import status
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.modules.operational_dashboard import (
@@ -12,7 +10,6 @@ from app.modules.operational_dashboard import (
     OperationalDashboardResponse,
     OperationalDashboardService,
 )
-from tests.conftest import authenticated_client
 
 API_PREFIX = "/api/v1"
 
@@ -21,9 +18,7 @@ API_PREFIX = "/api/v1"
 class TestOperationalDashboardService:
     """Tests for OperationalDashboardService."""
 
-    async def test_dashboard_endpoint_missing_tenant_header(
-        self, async_client, auth_headers
-    ):
+    async def test_dashboard_endpoint_missing_tenant_header(self, async_client, auth_headers):
         """Tenant-scoped routing requires slug/UUID headers before RBAC/dashboard logic."""
         headers = {"Authorization": auth_headers["Authorization"]}
 
@@ -76,9 +71,7 @@ class TestOperationalDashboardService:
         # Status can be ok, caution, warning, or critical depending on test data
         assert data["status"] in ["ok", "caution", "warning", "critical"]
 
-    async def test_dashboard_alert_count_by_severity(
-        self, authenticated_client, auth_headers
-    ):
+    async def test_dashboard_alert_count_by_severity(self, authenticated_client, auth_headers):
         """Test that alert_count is properly organized by severity."""
         response = await authenticated_client.get(
             f"{API_PREFIX}/operational/dashboard", headers=auth_headers
@@ -96,16 +89,12 @@ class TestOperationalDashboardService:
             assert count >= 0
 
     @pytest.mark.asyncio
-    async def test_service_get_dashboard_returns_response(
-        self, test_db_session
-    ):
+    async def test_service_get_dashboard_returns_response(self, test_db_session):
         """Test that service.get_dashboard() returns OperationalDashboardResponse."""
         service = OperationalDashboardService(get_settings())
         tenant_id = "test_tenant"
 
-        dashboard = await service.get_dashboard(
-            tenant_id=tenant_id, db=test_db_session
-        )
+        dashboard = await service.get_dashboard(tenant_id=tenant_id, db=test_db_session)
 
         assert isinstance(dashboard, OperationalDashboardResponse)
         assert dashboard.tenant_id == tenant_id
@@ -113,32 +102,24 @@ class TestOperationalDashboardService:
         assert isinstance(dashboard.alerts, list)
 
     @pytest.mark.asyncio
-    async def test_service_handles_empty_alerts(
-        self, test_db_session
-    ):
+    async def test_service_handles_empty_alerts(self, test_db_session):
         """Test that service handles scenario with no alerts."""
         service = OperationalDashboardService(get_settings())
         tenant_id = "test_tenant_empty"
 
-        dashboard = await service.get_dashboard(
-            tenant_id=tenant_id, db=test_db_session
-        )
+        dashboard = await service.get_dashboard(tenant_id=tenant_id, db=test_db_session)
 
         assert dashboard.status == "ok"
         assert len(dashboard.alerts) == 0
         assert dashboard.alert_count == {} or all(v == 0 for v in dashboard.alert_count.values())
 
     @pytest.mark.asyncio
-    async def test_service_aggregates_multiple_alert_types(
-        self, test_db_session
-    ):
+    async def test_service_aggregates_multiple_alert_types(self, test_db_session):
         """Test that service attempts to aggregate multiple alert types."""
         service = OperationalDashboardService(get_settings())
         tenant_id = "test_tenant"
 
-        dashboard = await service.get_dashboard(
-            tenant_id=tenant_id, db=test_db_session
-        )
+        dashboard = await service.get_dashboard(tenant_id=tenant_id, db=test_db_session)
 
         # Verify that service tried to get different alert types
         # (even if no data exists, service should attempt all checks)

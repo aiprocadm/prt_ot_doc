@@ -1,4 +1,5 @@
 """Risk endpoints: register listing and risk engine helpers."""
+
 from __future__ import annotations
 
 import json
@@ -90,9 +91,7 @@ def _risk_bad_request(message: str) -> HTTPException:
     )
 
 
-async def _get_tenant_entity(
-    session: AsyncSession, model: type, tenant_id: str, entity_id: str
-):
+async def _get_tenant_entity(session: AsyncSession, model: type, tenant_id: str, entity_id: str):
     record = await session.get(model, entity_id)
     if record is None or getattr(record, "tenant_id", None) != tenant_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Entity not found")
@@ -431,8 +430,7 @@ async def create_methodology(
         await session.execute(
             select(RiskMethodology).where(
                 RiskMethodology.tenant_id == tenant_id,
-                (RiskMethodology.name == payload.name)
-                | (RiskMethodology.code == code),
+                (RiskMethodology.name == payload.name) | (RiskMethodology.code == code),
             )
         )
     ).scalar_one_or_none()
@@ -478,7 +476,9 @@ async def list_methodologies(
             await session.execute(
                 select(RiskMethodology).where(RiskMethodology.tenant_id == tenant_id)
             )
-        ).scalars().all()
+        )
+        .scalars()
+        .all()
     )
     etag = compute_list_etag(
         tenant_id=tenant_id,
@@ -513,9 +513,7 @@ async def get_methodology(
     methodology_id: str, session: SessionDep, tenant: TenantDep, _: EditorAccess
 ) -> MethodologyOut:
     tenant_id = str(tenant.id)
-    record = await _get_tenant_entity(
-        session, RiskMethodology, tenant_id, methodology_id
-    )
+    record = await _get_tenant_entity(session, RiskMethodology, tenant_id, methodology_id)
     definition = record.definition or {}
     return MethodologyOut(
         id=record.id,
@@ -537,9 +535,7 @@ async def update_methodology(
     _: AdminAccess,
 ) -> MethodologyOut:
     tenant_id = str(tenant.id)
-    record = await _get_tenant_entity(
-        session, RiskMethodology, tenant_id, methodology_id
-    )
+    record = await _get_tenant_entity(session, RiskMethodology, tenant_id, methodology_id)
 
     if payload.name and payload.name != record.name:
         duplicate = (
@@ -600,9 +596,7 @@ async def delete_methodology(
     methodology_id: str, session: SessionDep, tenant: TenantDep, _: AdminAccess
 ) -> None:
     tenant_id = str(tenant.id)
-    record = await _get_tenant_entity(
-        session, RiskMethodology, tenant_id, methodology_id
-    )
+    record = await _get_tenant_entity(session, RiskMethodology, tenant_id, methodology_id)
     await session.delete(record)
     await session.commit()
     return {"ok": True}
@@ -690,9 +684,7 @@ async def set_matrix(
         )
         cells = await rebuild_matrix_from_methodology(session, tenant_id, methodology)
     else:
-        await session.execute(
-            delete(RiskMatrixCell).where(RiskMatrixCell.tenant_id == tenant_id)
-        )
+        await session.execute(delete(RiskMatrixCell).where(RiskMatrixCell.tenant_id == tenant_id))
         cells = [
             RiskMatrixCell(
                 tenant_id=tenant_id,
@@ -725,9 +717,7 @@ async def save_risk_map(
     if payload.position_id:
         await _get_tenant_entity(session, Position, tenant_id, payload.position_id)
     if payload.document_pack_id:
-        await _get_tenant_entity(
-            session, DocumentPack, tenant_id, payload.document_pack_id
-        )
+        await _get_tenant_entity(session, DocumentPack, tenant_id, payload.document_pack_id)
 
     matrix = await recalc_risk_map(
         session,
@@ -794,9 +784,7 @@ async def list_risk_maps(
 ) -> list[RiskMapOut] | Response:
     tenant_id = str(tenant.id)
     await _get_tenant_entity(session, Company, tenant_id, company_id)
-    stmt = select(RiskMap).where(
-        RiskMap.tenant_id == tenant_id, RiskMap.company_id == company_id
-    )
+    stmt = select(RiskMap).where(RiskMap.tenant_id == tenant_id, RiskMap.company_id == company_id)
     if site_id:
         stmt = stmt.where(RiskMap.site_id == site_id)
     if position_id:
@@ -837,7 +825,9 @@ async def list_risk_maps(
     ]
 
 
-@engine_router.post("/assess", response_model=RiskAssessmentResponse, status_code=status.HTTP_200_OK)
+@engine_router.post(
+    "/assess", response_model=RiskAssessmentResponse, status_code=status.HTTP_200_OK
+)
 async def assess(
     payload: AssessIn,
     request: Request,
@@ -885,9 +875,7 @@ async def assess(
     if payload.employee_id:
         await _get_tenant_entity(session, Person, tenant_id, payload.employee_id)
     if payload.document_pack_id:
-        await _get_tenant_entity(
-            session, DocumentPack, tenant_id, payload.document_pack_id
-        )
+        await _get_tenant_entity(session, DocumentPack, tenant_id, payload.document_pack_id)
 
     if payload.items:
         items_payload = payload.items
@@ -905,13 +893,17 @@ async def assess(
 
     hazard_codes = [item.hazard_code for item in items_payload]
     hazards = (
-        await session.execute(
-            select(RiskHazard).where(
-                RiskHazard.tenant_id == tenant_id,
-                RiskHazard.code.in_(hazard_codes),
+        (
+            await session.execute(
+                select(RiskHazard).where(
+                    RiskHazard.tenant_id == tenant_id,
+                    RiskHazard.code.in_(hazard_codes),
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     hazard_lookup = {hazard.code: hazard for hazard in hazards}
     missing = [code for code in hazard_codes if code not in hazard_lookup]
     if missing:
@@ -975,9 +967,7 @@ async def assess(
             severity_after, likelihood_after = severity_before, max(1, likelihood_before - 1)
     else:
         severity_after, likelihood_after = severity_before, likelihood_before
-    score_after, band_after = await score_band(
-        session, tenant_id, severity_after, likelihood_after
-    )
+    score_after, band_after = await score_band(session, tenant_id, severity_after, likelihood_after)
 
     controls_json = json.dumps(payload.controls, ensure_ascii=False)
     created_by = payload.created_by or auth.sub
@@ -1340,7 +1330,9 @@ async def list_risk_cards(
         stmt = stmt.where(RiskCard.position_id == position_id)
     if employee_id:
         stmt = stmt.where(RiskCard.employee_id == employee_id)
-    records = list((await session.execute(stmt.order_by(RiskCard.created_at.desc()))).scalars().all())
+    records = list(
+        (await session.execute(stmt.order_by(RiskCard.created_at.desc()))).scalars().all()
+    )
     etag = compute_list_etag(
         tenant_id=tenant_id,
         items=records,
@@ -1411,7 +1403,9 @@ async def list_action_plans(
     if employee_id:
         stmt = stmt.where(RiskActionPlan.employee_id == employee_id)
 
-    records = list((await session.execute(stmt.order_by(RiskActionPlan.created_at.desc()))).scalars().all())
+    records = list(
+        (await session.execute(stmt.order_by(RiskActionPlan.created_at.desc()))).scalars().all()
+    )
     etag = compute_list_etag(
         tenant_id=tenant_id,
         items=records,

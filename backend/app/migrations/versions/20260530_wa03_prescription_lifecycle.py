@@ -18,6 +18,7 @@ Revision ID: 20260530_wa03_prescription_lifecycle
 Revises: 20260530_wa02_featureenablement_drop_feature_fk
 Create Date: 2026-05-30 00:00:00.000000
 """
+
 from __future__ import annotations
 
 import sqlalchemy as sa
@@ -30,18 +31,14 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "inspection_prescription", sa.Column("evidence", sa.Text(), nullable=True)
-    )
+    op.add_column("inspection_prescription", sa.Column("evidence", sa.Text(), nullable=True))
     op.add_column(
         "inspection_prescription",
         sa.Column("closed_at", sa.DateTime(timezone=True), nullable=True),
     )
     bind = op.get_bind()
     if bind.dialect.name == "postgresql":
-        op.execute(
-            "ALTER TYPE prescriptionstatus ADD VALUE IF NOT EXISTS 'verified'"
-        )
+        op.execute("ALTER TYPE prescriptionstatus ADD VALUE IF NOT EXISTS 'verified'")
 
 
 def downgrade() -> None:

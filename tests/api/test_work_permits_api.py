@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
-
 import pytest
 from fastapi import status
 
@@ -11,13 +9,21 @@ BASE = "/api/v1/work-permits"
 
 
 @pytest.mark.asyncio
-async def test_work_permit_crud_and_members(async_client, make_auth_headers, data_factory, sessionmaker):
+async def test_work_permit_crud_and_members(
+    async_client, make_auth_headers, data_factory, sessionmaker
+):
     headers = await make_auth_headers(RoleEnum.ADMIN)
     person = await data_factory.create_person()
 
-    r = await async_client.post(BASE, headers=headers, json={
-        "work_type": "hot_work", "zone_text": "Цех 1", "number": "НД-100",
-    })
+    r = await async_client.post(
+        BASE,
+        headers=headers,
+        json={
+            "work_type": "hot_work",
+            "zone_text": "Цех 1",
+            "number": "НД-100",
+        },
+    )
     assert r.status_code == status.HTTP_201_CREATED, r.text
     wp_id = r.json()["id"]
     assert r.json()["status"] == "draft"
@@ -30,9 +36,14 @@ async def test_work_permit_crud_and_members(async_client, make_auth_headers, dat
     assert r.status_code == status.HTTP_200_OK
     assert r.json()["zone_text"] == "Цех 2"
 
-    r = await async_client.post(f"{BASE}/{wp_id}/members", headers=headers, json={
-        "person_id": str(person.id), "role": "foreman",
-    })
+    r = await async_client.post(
+        f"{BASE}/{wp_id}/members",
+        headers=headers,
+        json={
+            "person_id": str(person.id),
+            "role": "foreman",
+        },
+    )
     assert r.status_code == status.HTTP_201_CREATED, r.text
     member_id = r.json()["id"]
 
@@ -46,11 +57,18 @@ async def test_work_permit_crud_and_members(async_client, make_auth_headers, dat
 @pytest.mark.asyncio
 async def test_create_member_unknown_person_404(async_client, make_auth_headers, data_factory):
     headers = await make_auth_headers(RoleEnum.ADMIN)
-    r = await async_client.post(BASE, headers=headers, json={"work_type": "height", "zone_text": "z"})
+    r = await async_client.post(
+        BASE, headers=headers, json={"work_type": "height", "zone_text": "z"}
+    )
     wp_id = r.json()["id"]
-    r = await async_client.post(f"{BASE}/{wp_id}/members", headers=headers, json={
-        "person_id": "missing", "role": "member",
-    })
+    r = await async_client.post(
+        f"{BASE}/{wp_id}/members",
+        headers=headers,
+        json={
+            "person_id": "missing",
+            "role": "member",
+        },
+    )
     assert r.status_code == status.HTTP_404_NOT_FOUND
 
 
@@ -62,33 +80,50 @@ async def test_invalid_work_type_422(async_client, make_auth_headers, data_facto
 
 
 @pytest.mark.asyncio
-async def test_work_permits_tenant_isolated(async_client, make_auth_headers, data_factory, sessionmaker):
+async def test_work_permits_tenant_isolated(
+    async_client, make_auth_headers, data_factory, sessionmaker
+):
     headers = await make_auth_headers(RoleEnum.ADMIN)  # tenant "test"
     from app.models.work_permit import WorkPermit
+
     async with sessionmaker() as session:
         other = await data_factory.ensure_tenant(slug="other", session=session)
         wp = WorkPermit(tenant_id=other.id, work_type="height", zone_text="чужая", status="draft")
         session.add(wp)
         await session.commit()
         foreign_id = str(wp.id)
-    assert (await async_client.get(f"{BASE}/{foreign_id}", headers=headers)).status_code == status.HTTP_404_NOT_FOUND
+    assert (
+        await async_client.get(f"{BASE}/{foreign_id}", headers=headers)
+    ).status_code == status.HTTP_404_NOT_FOUND
     listed = await async_client.get(BASE, headers=headers)
     assert all(item["id"] != foreign_id for item in listed.json()["items"])
 
 
 @pytest.mark.asyncio
-async def test_issue_blocked_then_allowed_with_permit(async_client, make_auth_headers, data_factory, sessionmaker):
+async def test_issue_blocked_then_allowed_with_permit(
+    async_client, make_auth_headers, data_factory, sessionmaker
+):
     headers = await make_auth_headers(RoleEnum.ADMIN)
     # Создаём тенант+компанию явно, чтобы избежать UNIQUE (tenant_id, name) при
     # создании двух персон в одном тенанте «test».
     tenant = await data_factory.ensure_tenant()
     company = await data_factory.create_company(tenant=tenant)
-    person = await data_factory.create_person(tenant=tenant, company=company, first_name="Fore", last_name="Man")
-    supervisor = await data_factory.create_person(tenant=tenant, company=company, first_name="Super", last_name="Visor")
+    person = await data_factory.create_person(
+        tenant=tenant, company=company, first_name="Fore", last_name="Man"
+    )
+    supervisor = await data_factory.create_person(
+        tenant=tenant, company=company, first_name="Super", last_name="Visor"
+    )
 
-    r = await async_client.post(BASE, headers=headers, json={"work_type": "height", "zone_text": "z"})
+    r = await async_client.post(
+        BASE, headers=headers, json={"work_type": "height", "zone_text": "z"}
+    )
     wp_id = r.json()["id"]
-    await async_client.post(f"{BASE}/{wp_id}/members", headers=headers, json={"person_id": str(person.id), "role": "foreman"})
+    await async_client.post(
+        f"{BASE}/{wp_id}/members",
+        headers=headers,
+        json={"person_id": str(person.id), "role": "foreman"},
+    )
 
     # no personal permit yet → readiness not ok, issue 409 WORK_PERMIT_BLOCKED
     rd = await async_client.get(f"{BASE}/{wp_id}/readiness", headers=headers)
@@ -97,12 +132,19 @@ async def test_issue_blocked_then_allowed_with_permit(async_client, make_auth_he
     assert blocked.status_code == status.HTTP_409_CONFLICT
 
     # seed an active personal permit, then issue succeeds
-    from datetime import date as _date, timedelta as _td
+    from datetime import date as _date
+    from datetime import timedelta as _td
+
     from app.domains.permits import service as permit_svc
+
     async with sessionmaker() as session:
         await permit_svc.create_permit(
-            session, tenant_id=person.tenant_id, person_id=person.id, permit_type="height",
-            issued_at=_date.today(), valid_until=_date.today() + _td(days=30),
+            session,
+            tenant_id=person.tenant_id,
+            person_id=person.id,
+            permit_type="height",
+            issued_at=_date.today(),
+            valid_until=_date.today() + _td(days=30),
         )
         await session.commit()
 
@@ -111,20 +153,31 @@ async def test_issue_blocked_then_allowed_with_permit(async_client, make_auth_he
     assert ok.json()["status"] == "issued"
 
     # suspend → resume, then closing gate: акт + подписи «сдал/принял» (Ф3b)
-    assert (await async_client.post(f"{BASE}/{wp_id}/suspend", headers=headers, json={})).json()["status"] == "suspended"
-    assert (await async_client.post(f"{BASE}/{wp_id}/resume", headers=headers, json={})).json()["status"] == "issued"
+    assert (await async_client.post(f"{BASE}/{wp_id}/suspend", headers=headers, json={})).json()[
+        "status"
+    ] == "suspended"
+    assert (await async_client.post(f"{BASE}/{wp_id}/resume", headers=headers, json={})).json()[
+        "status"
+    ] == "issued"
 
     # добавить supervisor в бригаду (foreman уже добавлен выше)
-    await async_client.post(f"{BASE}/{wp_id}/members", headers=headers,
-                            json={"person_id": str(supervisor.id), "role": "supervisor"})
+    await async_client.post(
+        f"{BASE}/{wp_id}/members",
+        headers=headers,
+        json={"person_id": str(supervisor.id), "role": "supervisor"},
+    )
     # оформить акт закрытия
-    closing_r = await async_client.post(f"{BASE}/{wp_id}/closing", headers=headers,
-                                        json={"completion_text": "готово"})
+    closing_r = await async_client.post(
+        f"{BASE}/{wp_id}/closing", headers=headers, json={"completion_text": "готово"}
+    )
     assert closing_r.status_code == 200, closing_r.text
     # подписи «сдал» (foreman=person) и «принял» (supervisor)
     for pid in (str(person.id), str(supervisor.id)):
-        sig_r = await async_client.post(f"{BASE}/{wp_id}/closing/signatures", headers=headers,
-                                        json={"person_id": pid, "mode": "attested"})
+        sig_r = await async_client.post(
+            f"{BASE}/{wp_id}/closing/signatures",
+            headers=headers,
+            json={"person_id": pid, "mode": "attested"},
+        )
         assert sig_r.status_code == 201, sig_r.text
 
     # теперь close должен пройти
@@ -143,7 +196,9 @@ async def test_issue_blocked_then_allowed_with_permit(async_client, make_auth_he
 @pytest.mark.asyncio
 async def test_close_from_draft_409(async_client, make_auth_headers, data_factory):
     headers = await make_auth_headers(RoleEnum.ADMIN)
-    r = await async_client.post(BASE, headers=headers, json={"work_type": "height", "zone_text": "z"})
+    r = await async_client.post(
+        BASE, headers=headers, json={"work_type": "height", "zone_text": "z"}
+    )
     wp_id = r.json()["id"]
     bad = await async_client.post(f"{BASE}/{wp_id}/close", headers=headers, json={})
     assert bad.status_code == status.HTTP_409_CONFLICT

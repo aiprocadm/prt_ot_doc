@@ -54,7 +54,6 @@ from app.api.helpers.etag import (
 from app.models.models import RoleEnum
 from tests.utils.factories import TestDataFactory
 
-
 # =============================================================================
 # Helper unit contracts
 # =============================================================================
@@ -116,7 +115,11 @@ def test_build_not_modified_headers_accepts_cache_control_override() -> None:
     so 200 and 304 paths can be kept in sync at callsites."""
     headers = build_not_modified_headers('"xyz"', cache_control="private, no-store")
 
-    assert headers == {"ETag": '"xyz"', "Cache-Control": "private, no-store", "Vary": DEFAULT_LIST_VARY}
+    assert headers == {
+        "ETag": '"xyz"',
+        "Cache-Control": "private, no-store",
+        "Vary": DEFAULT_LIST_VARY,
+    }
 
 
 def test_build_not_modified_headers_cache_control_is_keyword_only() -> None:
@@ -188,9 +191,7 @@ async def test_companies_endpoint_emits_unified_cache_control_on_304(
     first = await async_client.get("/api/v1/companies", headers=headers)
     etag = first.headers["ETag"]
 
-    second = await async_client.get(
-        "/api/v1/companies", headers={**headers, "If-None-Match": etag}
-    )
+    second = await async_client.get("/api/v1/companies", headers={**headers, "If-None-Match": etag})
     assert second.status_code == status.HTTP_304_NOT_MODIFIED
     assert second.headers["Cache-Control"] == DEFAULT_LIST_CACHE_CONTROL
     assert second.headers["ETag"] == etag
@@ -222,9 +223,7 @@ async def test_sites_endpoint_emits_unified_cache_control_on_200_and_304(
     assert first.headers["Cache-Control"] == DEFAULT_LIST_CACHE_CONTROL
     etag = first.headers["ETag"]
 
-    second = await async_client.get(
-        "/api/v1/sites", headers={**headers, "If-None-Match": etag}
-    )
+    second = await async_client.get("/api/v1/sites", headers={**headers, "If-None-Match": etag})
     assert second.status_code == status.HTTP_304_NOT_MODIFIED
     assert second.headers["Cache-Control"] == DEFAULT_LIST_CACHE_CONTROL
     # The 200 and 304 paths must emit byte-identical Cache-Control.
@@ -262,9 +261,7 @@ async def test_etag_value_unaffected_by_cache_control_addition(
     # (RFC 7232 § 2.3 syntax).
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
-        await data_factory.create_company(
-            tenant=tenant, name="EtagShape Co", session=session
-        )
+        await data_factory.create_company(tenant=tenant, name="EtagShape Co", session=session)
         await session.commit()
     headers = await make_auth_headers(RoleEnum.ADMIN)
     response = await async_client.get("/api/v1/companies", headers=headers)

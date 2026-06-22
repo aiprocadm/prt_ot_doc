@@ -2,6 +2,7 @@
 FSM transitions, evidence-on-complete, admin/owner-only verification,
 closed_at stamping, and PATCH no longer moving status.
 """
+
 from __future__ import annotations
 
 from datetime import date
@@ -20,9 +21,7 @@ async def _seed_company_site(sessionmaker, data_factory) -> tuple[str, str]:
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         company = await data_factory.create_company(tenant=tenant, session=session)
-        site = await data_factory.create_site(
-            tenant=tenant, company=company, session=session
-        )
+        site = await data_factory.create_site(tenant=tenant, company=company, session=session)
         await session.commit()
         return company.id, site.id
 
@@ -120,9 +119,7 @@ async def test_verify_forbidden_for_non_admin_403(
     admin = await make_auth_headers(RoleEnum.ADMIN)
     pid = await _seed_prescription(async_client, admin, company_id, site_id)
     await _transition(async_client, pid, admin, PrescriptionStatus.IN_PROGRESS.value)
-    await _transition(
-        async_client, pid, admin, PrescriptionStatus.COMPLETED.value, evidence="ok"
-    )
+    await _transition(async_client, pid, admin, PrescriptionStatus.COMPLETED.value, evidence="ok")
 
     lm = await make_auth_headers(RoleEnum.LINE_MANAGER)
     r = await _transition(async_client, pid, lm, PrescriptionStatus.VERIFIED.value)
@@ -138,9 +135,7 @@ async def test_failed_verification_rework_completed_to_in_progress(
     headers = await make_auth_headers(RoleEnum.ADMIN)
     pid = await _seed_prescription(async_client, headers, company_id, site_id)
     await _transition(async_client, pid, headers, PrescriptionStatus.IN_PROGRESS.value)
-    await _transition(
-        async_client, pid, headers, PrescriptionStatus.COMPLETED.value, evidence="ok"
-    )
+    await _transition(async_client, pid, headers, PrescriptionStatus.COMPLETED.value, evidence="ok")
 
     r = await _transition(
         async_client, pid, headers, PrescriptionStatus.IN_PROGRESS.value, note="rework"
@@ -151,9 +146,7 @@ async def test_failed_verification_rework_completed_to_in_progress(
 
 
 @pytest.mark.asyncio
-async def test_cancel_stamps_closed_at(
-    async_client, sessionmaker, data_factory, make_auth_headers
-):
+async def test_cancel_stamps_closed_at(async_client, sessionmaker, data_factory, make_auth_headers):
     company_id, site_id = await _seed_company_site(sessionmaker, data_factory)
     headers = await make_auth_headers(RoleEnum.ADMIN)
     pid = await _seed_prescription(async_client, headers, company_id, site_id)
@@ -192,12 +185,16 @@ async def test_transition_writes_audit_row(
 
     async with sessionmaker() as session:
         logs = (
-            await session.execute(
-                select(AuditLog).where(
-                    AuditLog.object_type == "prescription",
-                    AuditLog.object_id == pid,
-                    AuditLog.action == "transition",
+            (
+                await session.execute(
+                    select(AuditLog).where(
+                        AuditLog.object_type == "prescription",
+                        AuditLog.object_id == pid,
+                        AuditLog.action == "transition",
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert logs

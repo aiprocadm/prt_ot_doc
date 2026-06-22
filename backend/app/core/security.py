@@ -325,18 +325,30 @@ class AccessContext:
             raise policy_forbidden(f"Project scope mismatch for {action}")
 
         contractor_id = attributes.get("contractor_id")
-        if contractor_id and actor.contractor_ids and str(contractor_id) not in actor.contractor_ids:
+        if (
+            contractor_id
+            and actor.contractor_ids
+            and str(contractor_id) not in actor.contractor_ids
+        ):
             raise policy_forbidden(f"Contractor scope mismatch for {action}")
 
-        status_value = str(attributes.get("status") or attributes.get("document_status") or "").lower()
+        status_value = str(
+            attributes.get("status") or attributes.get("document_status") or ""
+        ).lower()
         role_set = {value.lower() for value in self.to_auth_context().roles}
-        if status_value in {"archived", "signed"} and "admin" not in role_set and "owner" not in role_set:
+        if (
+            status_value in {"archived", "signed"}
+            and "admin" not in role_set
+            and "owner" not in role_set
+        ):
             if "update" in action.lower() or "manage" in action.lower():
                 raise policy_forbidden(f"Status '{status_value}' is immutable for {action}")
 
         if str(attributes.get("risk_level") or "").lower() == "high":
             privileged = {"ot_head", "ot_pb_lead", "admin", "owner"}
-            if any(token in action.lower() for token in ("approve", "sign")) and not role_set.intersection(privileged):
+            if any(
+                token in action.lower() for token in ("approve", "sign")
+            ) and not role_set.intersection(privileged):
                 raise policy_forbidden(f"High risk action denied for {action}")
 
         self.ensure_site_access(

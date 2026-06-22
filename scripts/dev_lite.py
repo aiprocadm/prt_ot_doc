@@ -64,9 +64,13 @@ def parse_semver(text: str) -> tuple[int, int, int]:
     return major, minor, patch
 
 
-def assert_min_version(current: tuple[int, int, int], minimum: tuple[int, int, int], label: str) -> None:
+def assert_min_version(
+    current: tuple[int, int, int], minimum: tuple[int, int, int], label: str
+) -> None:
     if current < minimum:
-        raise RuntimeError(f"{label} {current[0]}.{current[1]}.{current[2]} is unsupported; need {minimum[0]}.{minimum[1]}+")
+        raise RuntimeError(
+            f"{label} {current[0]}.{current[1]}.{current[2]} is unsupported; need {minimum[0]}.{minimum[1]}+"
+        )
 
 
 def run_checked(cmd: list[str], cwd: Path | None = None, env: dict[str, str] | None = None) -> None:
@@ -112,7 +116,11 @@ def free_port(port: int) -> bool:
         ]
     else:
         # lsof is common on macOS/Linux; pkill by PID list is best-effort.
-        cmd = ["bash", "-lc", f"pids=$(lsof -tiTCP:{port} -sTCP:LISTEN 2>/dev/null || true); [ -n \"$pids\" ] && kill -TERM $pids || true"]
+        cmd = [
+            "bash",
+            "-lc",
+            f'pids=$(lsof -tiTCP:{port} -sTCP:LISTEN 2>/dev/null || true); [ -n "$pids" ] && kill -TERM $pids || true',
+        ]
     subprocess.run(cmd, check=False, capture_output=True, text=True)
     for _ in range(10):
         if not is_port_busy(port):
@@ -158,7 +166,18 @@ def ensure_python_deps(venv_python: Path) -> None:
         or (ROOT_DIR / "requirements-dev.txt").stat().st_mtime > REQ_STAMP.stat().st_mtime
     ):
         run_checked([str(venv_python), "-m", "pip", "install", "--upgrade", "pip"])
-        run_checked([str(venv_python), "-m", "pip", "install", "-r", "requirements.txt", "-r", "requirements-dev.txt"])
+        run_checked(
+            [
+                str(venv_python),
+                "-m",
+                "pip",
+                "install",
+                "-r",
+                "requirements.txt",
+                "-r",
+                "requirements-dev.txt",
+            ]
+        )
         REQ_STAMP.touch()
     else:
         print("Python dependencies are up to date (.venv).")
@@ -214,7 +233,9 @@ def preflight() -> None:
     npm_version_text = command_output([npm, "--version"])
     assert_min_version(parse_semver(npm_version_text), (9, 0, 0), "npm")
 
-    print(f"Preflight OK: Python {py_version_text}, Node {node_version_text}, npm {npm_version_text}")
+    print(
+        f"Preflight OK: Python {py_version_text}, Node {node_version_text}, npm {npm_version_text}"
+    )
 
 
 def build_runtime_env(venv_python: Path) -> dict[str, str]:
@@ -256,7 +277,9 @@ def main() -> int:
             if args.auto_kill_ports:
                 print(f"{label} port {port} is busy; attempting to stop occupying process...")
                 if not free_port(port):
-                    raise RuntimeError(f"{label} port {port} is still busy after auto-kill attempt.")
+                    raise RuntimeError(
+                        f"{label} port {port} is still busy after auto-kill attempt."
+                    )
             else:
                 raise RuntimeError(
                     f"{label} port {port} is already in use. Stop existing process or rerun with --auto-kill-ports."
@@ -276,7 +299,9 @@ def main() -> int:
     print("\nBackend:  http://localhost:8000")
     print("Frontend: http://localhost:5173\n")
 
-    backend = subprocess.Popen([str(venv_python), "./scripts/run_backend_lite.py"], cwd=ROOT_DIR, env=env)
+    backend = subprocess.Popen(
+        [str(venv_python), "./scripts/run_backend_lite.py"], cwd=ROOT_DIR, env=env
+    )
     frontend: subprocess.Popen[str] | None = None
 
     def stop_all() -> None:

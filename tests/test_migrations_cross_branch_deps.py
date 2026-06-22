@@ -115,18 +115,18 @@ RUNTIME_GUARDED_TABLE_REFS: dict[str, frozenset[str]] = {
 class Violation:
     """A single dependency from one migration that no predecessor creates."""
 
-    migration: str          # revision id of the migration that has the bad ref
-    file: str               # repo-relative path
+    migration: str  # revision id of the migration that has the bad ref
+    file: str  # repo-relative path
     table: str
-    column: str | None      # None → table-level dep, str → column-level dep
-    why: str                # one-line explanation
+    column: str | None  # None → table-level dep, str → column-level dep
+    why: str  # one-line explanation
 
 
 @dataclass
 class Migration:
     revision: str
     path: Path
-    down_revision: tuple[str, ...]      # () for the root migration
+    down_revision: tuple[str, ...]  # () for the root migration
     depends_on: tuple[str, ...]
     creates_tables: set[str] = field(default_factory=set)
     # (table, column) pairs created here (incl. cols added by create_table)
@@ -324,9 +324,7 @@ def _column_name_from_add_column(call: ast.Call) -> str | None:
                 and func.attr == "Column"
                 and isinstance(func.value, ast.Name)
                 and func.value.id == "sa"
-            ) or (
-                isinstance(func, ast.Name) and func.id == "Column"
-            )
+            ) or (isinstance(func, ast.Name) and func.id == "Column")
             if is_col and arg.args:
                 name = _str_const(arg.args[0])
                 if name:
@@ -438,7 +436,9 @@ def _collect_table_helpers(
 # ---------------------------------------------------------------------------
 
 
-def _parse_revision_metadata(tree: ast.Module) -> tuple[str | None, tuple[str, ...], tuple[str, ...]]:
+def _parse_revision_metadata(
+    tree: ast.Module,
+) -> tuple[str | None, tuple[str, ...], tuple[str, ...]]:
     """Return (revision_id, down_revisions, depends_on)."""
     assigns = _module_assigns(tree)
     rev = _str_const(assigns.get("revision"))
@@ -482,9 +482,7 @@ def _walk_upgrade(tree: ast.Module) -> Iterable[tuple[ast.AST, str | None]]:
     yield from walk(func.body, None)
 
 
-def _record_helper_call(
-    m: Migration, table: str, call: ast.Call, helper_columns: set[str]
-) -> None:
+def _record_helper_call(m: Migration, table: str, call: ast.Call, helper_columns: set[str]) -> None:
     """Register a table as created via a local helper. Columns are the union
     of caller-supplied ``sa.Column`` args + helper-internal contributions."""
     m.creates_tables.add(table)
@@ -584,7 +582,11 @@ def _record_for_loop_create_table(
                 source = iter_elt.elts[idx]
                 if isinstance(source, (ast.List, ast.Tuple)):
                     for col_elt in source.elts:
-                        if isinstance(col_elt, ast.Call) and _is_sa_column(col_elt) and col_elt.args:
+                        if (
+                            isinstance(col_elt, ast.Call)
+                            and _is_sa_column(col_elt)
+                            and col_elt.args
+                        ):
                             cname = _str_const(col_elt.args[0])
                             if cname:
                                 m.creates_columns.add((table_name, cname))
@@ -919,25 +921,29 @@ def _audit(migrations: dict[str, Migration]) -> list[Violation]:
                 continue
             creators = table_creators.get(t, set())
             if not creators:
-                violations.append(Violation(
-                    migration=m.revision,
-                    file=str(m.path.relative_to(REPO_ROOT)),
-                    table=t,
-                    column=None,
-                    why=f"no migration in the entire repo creates table {t!r}",
-                ))
+                violations.append(
+                    Violation(
+                        migration=m.revision,
+                        file=str(m.path.relative_to(REPO_ROOT)),
+                        table=t,
+                        column=None,
+                        why=f"no migration in the entire repo creates table {t!r}",
+                    )
+                )
             elif not (creators & scope):
-                violations.append(Violation(
-                    migration=m.revision,
-                    file=str(m.path.relative_to(REPO_ROOT)),
-                    table=t,
-                    column=None,
-                    why=(
-                        f"table {t!r} created by {sorted(creators)!r}; "
-                        f"none are in down_revision/depends_on closure of "
-                        f"{m.revision!r}. Fix: declare depends_on=(<creator>,)."
-                    ),
-                ))
+                violations.append(
+                    Violation(
+                        migration=m.revision,
+                        file=str(m.path.relative_to(REPO_ROOT)),
+                        table=t,
+                        column=None,
+                        why=(
+                            f"table {t!r} created by {sorted(creators)!r}; "
+                            f"none are in down_revision/depends_on closure of "
+                            f"{m.revision!r}. Fix: declare depends_on=(<creator>,)."
+                        ),
+                    )
+                )
 
         for t, col in sorted(m.refs_columns):
             if t in ALEMBIC_INTERNAL_TABLES or t in guarded:
@@ -949,29 +955,33 @@ def _audit(migrations: dict[str, Migration]) -> list[Violation]:
                 continue
             col_creators = column_creators.get((t, col), set())
             if not col_creators:
-                violations.append(Violation(
-                    migration=m.revision,
-                    file=str(m.path.relative_to(REPO_ROOT)),
-                    table=t,
-                    column=col,
-                    why=(
-                        f"no migration in the entire repo creates column "
-                        f"{t}.{col}. Either a column-add migration is missing, "
-                        f"or this reference is a typo."
-                    ),
-                ))
+                violations.append(
+                    Violation(
+                        migration=m.revision,
+                        file=str(m.path.relative_to(REPO_ROOT)),
+                        table=t,
+                        column=col,
+                        why=(
+                            f"no migration in the entire repo creates column "
+                            f"{t}.{col}. Either a column-add migration is missing, "
+                            f"or this reference is a typo."
+                        ),
+                    )
+                )
             elif not (col_creators & scope):
-                violations.append(Violation(
-                    migration=m.revision,
-                    file=str(m.path.relative_to(REPO_ROOT)),
-                    table=t,
-                    column=col,
-                    why=(
-                        f"column {t}.{col} created by {sorted(col_creators)!r}; "
-                        f"none are in down_revision/depends_on closure of "
-                        f"{m.revision!r}. Fix: declare depends_on=(<creator>,)."
-                    ),
-                ))
+                violations.append(
+                    Violation(
+                        migration=m.revision,
+                        file=str(m.path.relative_to(REPO_ROOT)),
+                        table=t,
+                        column=col,
+                        why=(
+                            f"column {t}.{col} created by {sorted(col_creators)!r}; "
+                            f"none are in down_revision/depends_on closure of "
+                            f"{m.revision!r}. Fix: declare depends_on=(<creator>,)."
+                        ),
+                    )
+                )
 
     return violations
 
@@ -1024,8 +1034,7 @@ def test_no_cross_branch_uncreated_dependencies() -> None:
             f"Found {len(violations)} cross-branch / missing dependency violation(s) "
             "in alembic migrations. Each one will cause `alembic upgrade head` to "
             "fail on a fresh Postgres database under at least one valid topological "
-            "ordering of the DAG.\n\n"
-            + "\n".join(lines)
+            "ordering of the DAG.\n\n" + "\n".join(lines)
         )
 
 

@@ -464,7 +464,9 @@ class PolicyEngine:
                 allowed_modules.update(MODULE_PERMISSIONS.get(role, set()))
             if module not in allowed_modules:
                 return Decision(
-                    False, "module_access_denied", audit_meta={"module": module, "resource": normalized_resource}
+                    False,
+                    "module_access_denied",
+                    audit_meta={"module": module, "resource": normalized_resource},
                 )
 
         # Owner/admin are super-users: once module + tenant checks pass they

@@ -24,10 +24,7 @@ import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-import pytest
-
 from app.api.helpers.etag import compute_list_etag
-
 
 # -----------------------------------------------------------------------------
 # Test doubles
@@ -153,7 +150,8 @@ def test_items_can_be_any_iterable_with_id_and_updated_at() -> None:
 
     etag_gen = compute_list_etag(tenant_id="t", items=gen(), scalars=[])
     etag_list = compute_list_etag(
-        tenant_id="t", items=[_Row(id="r1", updated_at=dt), _Row(id="r2", updated_at=dt)],
+        tenant_id="t",
+        items=[_Row(id="r1", updated_at=dt), _Row(id="r2", updated_at=dt)],
         scalars=[],
     )
     assert etag_gen == etag_list

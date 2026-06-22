@@ -82,7 +82,9 @@ def test_production_disables_openapi_docs_even_when_env_requests_true() -> None:
 
 
 @pytest.mark.anyio
-async def test_production_create_app_exposes_no_openapi_routes(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_production_create_app_exposes_no_openapi_routes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     settings = Settings.model_validate(_PRODUCTION_LIKE)
     monkeypatch.setattr("app.core.config.get_settings", lambda: settings)
     app = create_app(settings)

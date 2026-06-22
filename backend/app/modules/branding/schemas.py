@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from typing import Any, Literal
@@ -127,8 +126,6 @@ class BrandingPreviewRequest(BaseModel):
     watermark_override: dict[str, Any] | None = None
 
 
-
-
 class BrandingGenerationHistoryItem(BaseModel):
     pipeline_run_id: str
     company_id: str
@@ -146,6 +143,7 @@ class BrandingGenerationHistoryItem(BaseModel):
 
 class BrandingGenerationHistoryResponse(BaseModel):
     items: list[BrandingGenerationHistoryItem] = Field(default_factory=list)
+
 
 class BrandingPreviewResponse(BaseModel):
     profile: BrandingProfileRead

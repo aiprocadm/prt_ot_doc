@@ -8,6 +8,7 @@ Covers:
   GET /api/v1/contractors/employees/{id}/readiness
     - ready employee → 200 allowed
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -18,7 +19,6 @@ from httpx import AsyncClient
 
 from app.models.models import RoleEnum
 from app.modules.contractors.models import ComplianceStatus, ContractorEmployee, ContractorRegistry
-
 
 # ---------------------------------------------------------------------------
 # Helpers

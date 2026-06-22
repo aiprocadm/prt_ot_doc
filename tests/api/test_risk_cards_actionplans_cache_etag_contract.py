@@ -25,10 +25,9 @@ import pytest
 from fastapi import status
 from httpx import AsyncClient
 
-from app.models.risk import RiskActionPlan, RiskAssessment, RiskCard, RiskHazard
 from app.models.models import RoleEnum
+from app.models.risk import RiskActionPlan, RiskAssessment, RiskCard, RiskHazard
 from tests.utils.factories import TestDataFactory
-
 
 # -----------------------------------------------------------------------------
 # Helpers
@@ -103,9 +102,7 @@ async def test_risk_cards_hit_returns_304(
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         company = await data_factory.create_company(tenant=tenant, session=session)
-        await _seed_risk_chain(
-            session, tenant_id=str(tenant.id), company_id=str(company.id)
-        )
+        await _seed_risk_chain(session, tenant_id=str(tenant.id), company_id=str(company.id))
         await session.commit()
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
@@ -128,9 +125,7 @@ async def test_risk_cards_miss_with_bogus_etag(
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         company = await data_factory.create_company(tenant=tenant, session=session)
-        await _seed_risk_chain(
-            session, tenant_id=str(tenant.id), company_id=str(company.id)
-        )
+        await _seed_risk_chain(session, tenant_id=str(tenant.id), company_id=str(company.id))
         await session.commit()
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
@@ -150,11 +145,15 @@ async def test_risk_cards_etag_distinct_per_company_filter(
         company_a = await data_factory.create_company(tenant=tenant, name="A Co", session=session)
         company_b = await data_factory.create_company(tenant=tenant, name="B Co", session=session)
         await _seed_risk_chain(
-            session, tenant_id=str(tenant.id), company_id=str(company_a.id),
+            session,
+            tenant_id=str(tenant.id),
+            company_id=str(company_a.id),
             hazard_code_suffix="a",
         )
         await _seed_risk_chain(
-            session, tenant_id=str(tenant.id), company_id=str(company_b.id),
+            session,
+            tenant_id=str(tenant.id),
+            company_id=str(company_b.id),
             hazard_code_suffix="b",
         )
         await session.commit()
@@ -176,11 +175,15 @@ async def test_risk_cards_etag_distinct_per_assessment_filter(
         tenant = await data_factory.ensure_tenant(session=session)
         company = await data_factory.create_company(tenant=tenant, session=session)
         assessment_a, _, _ = await _seed_risk_chain(
-            session, tenant_id=str(tenant.id), company_id=str(company.id),
+            session,
+            tenant_id=str(tenant.id),
+            company_id=str(company.id),
             hazard_code_suffix="ax",
         )
         await _seed_risk_chain(
-            session, tenant_id=str(tenant.id), company_id=str(company.id),
+            session,
+            tenant_id=str(tenant.id),
+            company_id=str(company.id),
             hazard_code_suffix="bx",
         )
         await session.commit()
@@ -227,9 +230,7 @@ async def test_risk_action_plans_hit_returns_304(
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         company = await data_factory.create_company(tenant=tenant, session=session)
-        await _seed_risk_chain(
-            session, tenant_id=str(tenant.id), company_id=str(company.id)
-        )
+        await _seed_risk_chain(session, tenant_id=str(tenant.id), company_id=str(company.id))
         await session.commit()
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
@@ -252,9 +253,7 @@ async def test_risk_action_plans_miss_with_bogus_etag(
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         company = await data_factory.create_company(tenant=tenant, session=session)
-        await _seed_risk_chain(
-            session, tenant_id=str(tenant.id), company_id=str(company.id)
-        )
+        await _seed_risk_chain(session, tenant_id=str(tenant.id), company_id=str(company.id))
         await session.commit()
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
@@ -274,11 +273,15 @@ async def test_risk_action_plans_etag_distinct_per_assessment_filter(
         tenant = await data_factory.ensure_tenant(session=session)
         company = await data_factory.create_company(tenant=tenant, session=session)
         assessment_a, _, _ = await _seed_risk_chain(
-            session, tenant_id=str(tenant.id), company_id=str(company.id),
+            session,
+            tenant_id=str(tenant.id),
+            company_id=str(company.id),
             hazard_code_suffix="pa",
         )
         await _seed_risk_chain(
-            session, tenant_id=str(tenant.id), company_id=str(company.id),
+            session,
+            tenant_id=str(tenant.id),
+            company_id=str(company.id),
             hazard_code_suffix="pb",
         )
         await session.commit()

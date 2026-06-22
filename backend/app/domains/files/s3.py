@@ -258,7 +258,9 @@ def ensure_bucket() -> None:
 def put_object(*, data: bytes | BinaryIO, mime: str, key: str, size: int | None = None) -> str:
     """Upload object to S3 under provided key and return resulting ETag."""
 
-    payload_size = size if size is not None else (len(data) if isinstance(data, (bytes, bytearray)) else None)
+    payload_size = (
+        size if size is not None else (len(data) if isinstance(data, (bytes, bytearray)) else None)
+    )
 
     settings = get_settings()
     if _using_memory_backend():
@@ -482,8 +484,6 @@ def stream_object(*, key: str) -> Iterator[BinaryIO]:
             )
 
 
-
-
 def generate_presigned_put_url(
     key: str,
     *,
@@ -519,6 +519,8 @@ def generate_presigned_put_url(
         raise S3OperationError.from_client_error(
             "generate_presigned_url", exc, bucket=bucket_name, key=key
         ) from exc
+
+
 def generate_presigned_get_url(
     key: str,
     *,

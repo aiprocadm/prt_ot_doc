@@ -44,6 +44,7 @@ logger = logging.getLogger(__name__)
 DocumentJob = PipelineRun
 DocumentJobStatus = PipelineRunStatus
 
+
 class PipelineService:
     """Coordinate template rendering and PDF conversion for document jobs."""
 
@@ -93,7 +94,10 @@ class PipelineService:
         session_tenant_slug = None
         if isinstance(session_info, dict):
             session_tenant_id = str(session_info.get("tenant_id") or "").strip() or None
-            session_tenant_slug = str(session_info.get("tenant_slug") or session_info.get("tenant") or "").strip() or None
+            session_tenant_slug = (
+                str(session_info.get("tenant_slug") or session_info.get("tenant") or "").strip()
+                or None
+            )
         if session_tenant_slug and session_tenant_id is None:
             raise ValueError("Session tenant_id is missing; tenant session contract is incomplete")
         if session_tenant_id and session_tenant_id != tenant_identifier:
@@ -622,9 +626,7 @@ class PipelineService:
 
             layout_started = datetime.now(tz=timezone.utc)
             if header_text or footer_text:
-                docx_bytes = DocxService.set_headers_footers(
-                    docx_bytes, header_text, footer_text
-                )
+                docx_bytes = DocxService.set_headers_footers(docx_bytes, header_text, footer_text)
                 outputs = self._record_stage(
                     outputs,
                     stage="layout_apply",
@@ -656,9 +658,7 @@ class PipelineService:
                 stage=PipelineStage.STORED_S3,
             )
             try:
-                self.storage.put(
-                    docx_key, docx_bytes, content_type=self.DOCX_CONTENT_TYPE
-                )
+                self.storage.put(docx_key, docx_bytes, content_type=self.DOCX_CONTENT_TYPE)
             except Exception as exc:
                 self.metrics.record_pipeline_stage_end(
                     pipeline=PipelineType.DOCUMENT,
@@ -917,9 +917,7 @@ class PipelineService:
                 stage=PipelineStage.STORED_S3,
             )
             try:
-                self.storage.put(
-                    pdf_key, pdf_bytes, content_type="application/pdf"
-                )
+                self.storage.put(pdf_key, pdf_bytes, content_type="application/pdf")
             except Exception as exc:
                 self.metrics.record_pipeline_stage_end(
                     pipeline=PipelineType.DOCUMENT,

@@ -198,7 +198,9 @@ def scan_migration_columns_with_defaults(
     A column's presence is recorded the first time it's seen in a migration;
     once any migration declares ``server_default`` for it, the flag stays True.
     """
-    out: dict[str, dict[str, dict[str, bool]]] = defaultdict(lambda: defaultdict(lambda: {"has_server_default": False}))
+    out: dict[str, dict[str, dict[str, bool]]] = defaultdict(
+        lambda: defaultdict(lambda: {"has_server_default": False})
+    )
 
     for path in migration_paths:
         try:
@@ -286,7 +288,9 @@ def main(argv: list[str] | None = None) -> int:
     for (table, col), meta in drift.items():
         by_table[table].append((col, meta["default_repr"]))
 
-    print(f"Model default-without-server_default candidates: {len(drift)} cols / {len(by_table)} tables")
+    print(
+        f"Model default-without-server_default candidates: {len(drift)} cols / {len(by_table)} tables"
+    )
     if args.verbose or len(drift) <= 80:
         for table in sorted(by_table):
             cols = sorted(by_table[table])

@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy import func, select
 
-from app.models.models import Outbox, OutboxStatus, Tenant, WebhookDelivery
+from app.models.models import Outbox, OutboxStatus, Tenant
 from app.services.outbox import OutboxProcessor
 
 
@@ -63,6 +63,7 @@ async def test_poison_queue_guarantee_event_moves_to_dead_after_max_attempts(
     monkeypatch.setenv("OUTBOX_MAX_ATTEMPTS", "3")
     monkeypatch.setenv("OUTBOX_RETRY_BACKOFF_SECONDS", "0.01")
     from app.core.config import get_settings
+
     get_settings.cache_clear()  # type: ignore[attr-defined]
 
     async with sessionmaker() as session:
@@ -106,7 +107,7 @@ async def test_poison_queue_guarantee_event_moves_to_dead_after_max_attempts(
 
         async with sessionmaker() as session:
             processor = OutboxProcessor(session, dispatcher=dispatcher)
-            processed = await processor.process_once()
+            await processor.process_once()
 
         async with sessionmaker() as session:
             current_event = await session.get(Outbox, event_id)
@@ -161,7 +162,6 @@ async def test_deduplication_guarantee_same_idempotency_key_prevents_duplicate_d
         # cannot discard it (a flush-only event1 shares the transaction that the
         # IntegrityError rolls back, which would leave 0 rows, not 1).
         await session.commit()
-        event1_id = event1.id
 
         # Attempt to add duplicate with same key (should fail or be ignored)
         event2 = Outbox(
@@ -176,11 +176,9 @@ async def test_deduplication_guarantee_same_idempotency_key_prevents_duplicate_d
         session.add(event2)
         try:
             await session.commit()
-            duplicate_inserted = True
         except Exception:
             # Expected: unique constraint on (tenant_id, idempotency_key)
             await session.rollback()
-            duplicate_inserted = False
 
     # Verify deduplication guarantee
     async with sessionmaker() as session:
@@ -215,6 +213,7 @@ async def test_poison_queue_and_dedup_combined_guarantee(
     monkeypatch.setenv("OUTBOX_MAX_ATTEMPTS", "2")
     monkeypatch.setenv("OUTBOX_RETRY_BACKOFF_SECONDS", "0.01")
     from app.core.config import get_settings
+
     get_settings.cache_clear()  # type: ignore[attr-defined]
 
     dispatcher = PoisonQueueAcceptanceDispatcher()

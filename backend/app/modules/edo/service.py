@@ -26,19 +26,30 @@ class EdoMessageService:
     использующие оператора напрямую, работают и без него.
     """
 
-    def __init__(self, session: AsyncSession, tenant_id: str, operator: EdoOperatorAdapter | None = None) -> None:
+    def __init__(
+        self, session: AsyncSession, tenant_id: str, operator: EdoOperatorAdapter | None = None
+    ) -> None:
         self.session = session
         self.tenant_id = tenant_id
         self.operator = operator
 
 
 class EdoWebhookService:
-    def __init__(self, session: AsyncSession, tenant_id: str, operator: EdoOperatorAdapter | None = None) -> None:
+    def __init__(
+        self, session: AsyncSession, tenant_id: str, operator: EdoOperatorAdapter | None = None
+    ) -> None:
         self.session = session
         self.tenant_id = tenant_id
         self.operator = operator
 
-    async def ingest(self, *, operator_code: str, dedupe_key: str, headers_json: dict[str, Any], payload_json: dict[str, Any]) -> EdoWebhookInbox:
+    async def ingest(
+        self,
+        *,
+        operator_code: str,
+        dedupe_key: str,
+        headers_json: dict[str, Any],
+        payload_json: dict[str, Any],
+    ) -> EdoWebhookInbox:
         inbox = EdoWebhookInbox(
             tenant_id=self.tenant_id,
             operator_code=operator_code,
@@ -57,7 +68,13 @@ class EdoStatusProjectionService:
         self.session = session
         self.tenant_id = tenant_id
 
-    async def apply_event(self, message: EdoMessage, event_status: str, payload: dict[str, Any], dedupe_key: str | None) -> EdoStatusEvent:
+    async def apply_event(
+        self,
+        message: EdoMessage,
+        event_status: str,
+        payload: dict[str, Any],
+        dedupe_key: str | None,
+    ) -> EdoStatusEvent:
         event = EdoStatusEvent(
             tenant_id=self.tenant_id,
             edo_message_id=message.id,

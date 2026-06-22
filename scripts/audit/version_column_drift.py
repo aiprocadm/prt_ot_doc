@@ -115,9 +115,7 @@ def _module_string_seqs(tree: ast.Module) -> dict[str, list[str]]:
     return result
 
 
-def _resolve_iter(
-    iter_node: ast.expr, module_constants: dict[str, list[str]]
-) -> list[str] | None:
+def _resolve_iter(iter_node: ast.expr, module_constants: dict[str, list[str]]) -> list[str] | None:
     """Resolve a ``for`` loop's ``iter`` to a list of constant strings.
 
     Returns ``None`` when the iterable can't be statically resolved
@@ -173,9 +171,7 @@ def _enclosing_for_bindings(
     return bindings
 
 
-def _helper_creates_version(
-    functions: dict[str, ast.FunctionDef], helper_name: str
-) -> bool:
+def _helper_creates_version(functions: dict[str, ast.FunctionDef], helper_name: str) -> bool:
     """True if the helper's body has a literal sa.Column("version", ...).
 
     For e.g. next46's ``_create_table``/``_create_soft_table`` which both
@@ -228,10 +224,7 @@ def _find_versioned_tables() -> dict[str, str]:
         for sub in node.body:
             if (
                 isinstance(sub, ast.Assign)
-                and any(
-                    isinstance(t, ast.Name) and t.id == "__tablename__"
-                    for t in sub.targets
-                )
+                and any(isinstance(t, ast.Name) and t.id == "__tablename__" for t in sub.targets)
                 and isinstance(sub.value, ast.Constant)
                 and isinstance(sub.value.value, str)
             ):
@@ -258,18 +251,15 @@ def _migration_creates_version(path: Path) -> set[str]:
         return set()
     functions = _all_functions(tree)
     helpers = _table_creating_helpers(functions)
-    helpers_creating_version = {
-        h for h in helpers if _helper_creates_version(functions, h)
-    }
+    helpers_creating_version = {h for h in helpers if _helper_creates_version(functions, h)}
     tables_with_version: set[str] = set()
     for node in ast.walk(upgrade_fn):
         if not isinstance(node, ast.Call):
             continue
         func = node.func
         # Direct op.create_table("foo", sa.Column("version", ...), ...)
-        is_create = (
-            (isinstance(func, ast.Attribute) and func.attr == "create_table")
-            or (isinstance(func, ast.Name) and func.id == "create_table")
+        is_create = (isinstance(func, ast.Attribute) and func.attr == "create_table") or (
+            isinstance(func, ast.Name) and func.id == "create_table"
         )
         if is_create and node.args:
             first = node.args[0]
@@ -279,9 +269,8 @@ def _migration_creates_version(path: Path) -> set[str]:
                     if not isinstance(col_call, ast.Call):
                         continue
                     cf = col_call.func
-                    ends_column = (
-                        (isinstance(cf, ast.Attribute) and cf.attr == "Column")
-                        or (isinstance(cf, ast.Name) and cf.id == "Column")
+                    ends_column = (isinstance(cf, ast.Attribute) and cf.attr == "Column") or (
+                        isinstance(cf, ast.Name) and cf.id == "Column"
                     )
                     if not ends_column or not col_call.args:
                         continue
@@ -312,9 +301,8 @@ def _migration_creates_version(path: Path) -> set[str]:
         if not isinstance(node, ast.Call):
             continue
         func = node.func
-        is_add = (
-            (isinstance(func, ast.Attribute) and func.attr == "add_column")
-            or (isinstance(func, ast.Name) and func.id == "add_column")
+        is_add = (isinstance(func, ast.Attribute) and func.attr == "add_column") or (
+            isinstance(func, ast.Name) and func.id == "add_column"
         )
         if not is_add or len(node.args) < 2:
             continue
@@ -415,9 +403,8 @@ def _all_migration_tables(path: Path) -> set[str]:
             continue
         func = node.func
         # Direct op.create_table("t", ...).
-        if (
-            (isinstance(func, ast.Attribute) and func.attr == "create_table")
-            or (isinstance(func, ast.Name) and func.id == "create_table")
+        if (isinstance(func, ast.Attribute) and func.attr == "create_table") or (
+            isinstance(func, ast.Name) and func.id == "create_table"
         ):
             if (
                 node.args

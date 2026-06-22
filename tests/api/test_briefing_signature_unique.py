@@ -7,6 +7,7 @@ Unique-индекс uq_briefing_signatures_entry_signer ловит второй 
 
 Окно гонки моделируется monkeypatch'ем existing-check'а (_find_existing → None).
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -21,9 +22,7 @@ from app.modules.briefings.services import BriefingEntryService, BriefingSignatu
 def test_orm_declares_unique_index_matching_migration():
     """ORM↔migration parity: индекс объявлен в __table_args__ модели."""
     table = BriefingSignature.__table__
-    matches = [
-        idx for idx in table.indexes if idx.name == "uq_briefing_signatures_entry_signer"
-    ]
+    matches = [idx for idx in table.indexes if idx.name == "uq_briefing_signatures_entry_signer"]
     assert len(matches) == 1
     idx = matches[0]
     assert idx.unique is True
@@ -32,7 +31,9 @@ def test_orm_declares_unique_index_matching_migration():
 
 async def _entry(session, data_factory, *, code: str):
     tenant = await data_factory.ensure_tenant(session=session)
-    company = await data_factory.create_company(tenant=tenant, session=session, name=f"BRF UQ {code}")
+    company = await data_factory.create_company(
+        tenant=tenant, session=session, name=f"BRF UQ {code}"
+    )
     person = await data_factory.create_person(tenant=tenant, company=company, session=session)
     journal = BriefingJournal(
         tenant_id=tenant.id,
@@ -79,13 +80,17 @@ async def test_service_race_duplicate_raises_conflict_not_second_row(
 
     async with sessionmaker() as session:
         rows = (
-            await session.execute(
-                select(BriefingSignature).where(
-                    BriefingSignature.briefing_entry_id == entry_id,
-                    BriefingSignature.signer_type == "employee",
+            (
+                await session.execute(
+                    select(BriefingSignature).where(
+                        BriefingSignature.briefing_entry_id == entry_id,
+                        BriefingSignature.signer_type == "employee",
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert len(rows) == 1, "гонка не должна оставить второй ряд"
 
 
@@ -122,13 +127,17 @@ async def test_api_race_duplicate_returns_409_not_500(
 
     async with sessionmaker() as session:
         rows = (
-            await session.execute(
-                select(BriefingSignature).where(
-                    BriefingSignature.briefing_entry_id == entry_id,
-                    BriefingSignature.signer_type == "employee",
+            (
+                await session.execute(
+                    select(BriefingSignature).where(
+                        BriefingSignature.briefing_entry_id == entry_id,
+                        BriefingSignature.signer_type == "employee",
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert len(rows) == 1
 
 

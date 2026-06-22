@@ -5,6 +5,7 @@ OPEN -> IN_PROGRESS -> COMPLETED -> VERIFIED (terminal); COMPLETED -> IN_PROGRES
 on a failed re-inspection; CANCELLED reachable only from OPEN/IN_PROGRESS;
 VERIFIED/CANCELLED terminal. A self-transition is an idempotent no-op.
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -34,9 +35,7 @@ class InvalidTransition(Exception):
     def __init__(self, current: PrescriptionStatus, target: PrescriptionStatus) -> None:
         self.current = current
         self.target = target
-        super().__init__(
-            f"Cannot transition prescription from {current.value} to {target.value}"
-        )
+        super().__init__(f"Cannot transition prescription from {current.value} to {target.value}")
 
 
 def validate_transition(current: PrescriptionStatus, target: PrescriptionStatus) -> None:
@@ -81,5 +80,7 @@ def closure_rate(counts: Mapping[PrescriptionStatus, int]) -> float:
     total = sum(counts.values())
     if total == 0:
         return 0.0
-    closed = counts.get(PrescriptionStatus.VERIFIED, 0) + counts.get(PrescriptionStatus.COMPLETED, 0)
+    closed = counts.get(PrescriptionStatus.VERIFIED, 0) + counts.get(
+        PrescriptionStatus.COMPLETED, 0
+    )
     return closed / total

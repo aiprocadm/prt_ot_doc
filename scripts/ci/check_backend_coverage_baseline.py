@@ -17,7 +17,9 @@ def pct(numerator: float, denominator: float) -> float:
     return (numerator / denominator) * 100.0
 
 
-def collect_module_stats(coverage: dict[str, Any], patterns: list[str]) -> tuple[float, float, int, int]:
+def collect_module_stats(
+    coverage: dict[str, Any], patterns: list[str]
+) -> tuple[float, float, int, int]:
     files = coverage.get("files", {})
     statements = covered_lines = branches = covered_branches = 0
 
@@ -36,7 +38,9 @@ def collect_module_stats(coverage: dict[str, Any], patterns: list[str]) -> tuple
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Fail CI when backend coverage regresses below baseline.")
+    parser = argparse.ArgumentParser(
+        description="Fail CI when backend coverage regresses below baseline."
+    )
     parser.add_argument(
         "--coverage-json",
         default="artifacts/coverage.json",
@@ -59,18 +63,26 @@ def main() -> int:
     totals = coverage.get("totals", {})
 
     overall_line = float(totals.get("percent_covered", 0.0))
-    overall_branch = pct(float(totals.get("covered_branches", 0.0)), float(totals.get("num_branches", 0.0)))
+    overall_branch = pct(
+        float(totals.get("covered_branches", 0.0)), float(totals.get("num_branches", 0.0))
+    )
 
     min_overall = baseline.get("overall", {})
     min_line = float(min_overall.get("line_percent", 0.0))
     min_branch = float(min_overall.get("branch_percent", 0.0))
 
     if overall_line < min_line:
-        errors.append(f"overall line coverage {overall_line:.2f}% is below baseline {min_line:.2f}%")
+        errors.append(
+            f"overall line coverage {overall_line:.2f}% is below baseline {min_line:.2f}%"
+        )
     if overall_branch < min_branch:
-        errors.append(f"overall branch coverage {overall_branch:.2f}% is below baseline {min_branch:.2f}%")
+        errors.append(
+            f"overall branch coverage {overall_branch:.2f}% is below baseline {min_branch:.2f}%"
+        )
 
-    print(f"[coverage] overall line={overall_line:.2f}% (min {min_line:.2f}%), branch={overall_branch:.2f}% (min {min_branch:.2f}%)")
+    print(
+        f"[coverage] overall line={overall_line:.2f}% (min {min_line:.2f}%), branch={overall_branch:.2f}% (min {min_branch:.2f}%)"
+    )
 
     for module_name, module_cfg in baseline.get("modules", {}).items():
         patterns = list(module_cfg.get("patterns", []))

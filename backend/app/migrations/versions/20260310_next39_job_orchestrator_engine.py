@@ -34,7 +34,10 @@ def upgrade() -> None:
 
     op.add_column("document_jobs", sa.Column("input_payload_json", sa.JSON(), nullable=True))
     op.add_column("document_jobs", sa.Column("output_payload_json", sa.JSON(), nullable=True))
-    op.add_column("document_jobs", sa.Column("current_step_index", sa.Integer(), nullable=False, server_default="0"))
+    op.add_column(
+        "document_jobs",
+        sa.Column("current_step_index", sa.Integer(), nullable=False, server_default="0"),
+    )
     op.create_index("ix_document_jobs_tenant_updated", "document_jobs", ["tenant_id", "updated_at"])
 
     op.add_column("document_job_steps", sa.Column("step_key", sa.String(length=64), nullable=True))

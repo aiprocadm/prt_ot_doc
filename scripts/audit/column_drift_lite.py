@@ -46,7 +46,6 @@ import ast
 import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Iterable
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MODELS_DIR = REPO_ROOT / "backend" / "app" / "models"
@@ -178,9 +177,8 @@ def _column_name(call: ast.Call) -> str | None:
     """If ``call`` is ``sa.Column("name", ...)`` or ``Column("name", ...)``,
     return ``"name"``; otherwise ``None``."""
     func = call.func
-    is_col = (
-        (isinstance(func, ast.Attribute) and func.attr == "Column")
-        or (isinstance(func, ast.Name) and func.id == "Column")
+    is_col = (isinstance(func, ast.Attribute) and func.attr == "Column") or (
+        isinstance(func, ast.Name) and func.id == "Column"
     )
     if not is_col or not call.args:
         return None
@@ -243,9 +241,7 @@ def _discover_model_files() -> list[Path]:
     (mixin/base classes whose bases don't match ``VERSIONED_BASES`` anyway).
     Sorted for deterministic iteration order.
     """
-    return sorted(
-        p for p in MODELS_DIR.glob("*.py") if p.name not in _MODELS_SKIP_FILES
-    )
+    return sorted(p for p in MODELS_DIR.glob("*.py") if p.name not in _MODELS_SKIP_FILES)
 
 
 def _versioned_models_in_tree(tree: ast.Module) -> dict[str, ModelInfo]:
@@ -310,9 +306,7 @@ def find_versioned_models() -> dict[str, ModelInfo]:
 # ---------------------------------------------------------------------------
 
 
-def _helper_injected_columns(
-    functions: dict[str, ast.FunctionDef], helper_name: str
-) -> set[str]:
+def _helper_injected_columns(functions: dict[str, ast.FunctionDef], helper_name: str) -> set[str]:
     """All column names a helper transitively injects.
 
     Walks helper body for ``sa.Column("<name>", ...)`` literals and recurses
@@ -372,10 +366,7 @@ def _function_return_literals(func: ast.FunctionDef) -> set[str]:
     literals: set[str] = set()
     for node in ast.walk(func):
         if isinstance(node, ast.Return):
-            if (
-                isinstance(node.value, ast.Constant)
-                and isinstance(node.value.value, str)
-            ):
+            if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
                 literals.add(node.value.value)
     return literals
 
@@ -404,9 +395,7 @@ def _resolve_dynamic_name_from_assignments(
     for node in ast.walk(scope_fn):
         if not isinstance(node, ast.Assign):
             continue
-        if not any(
-            isinstance(t, ast.Name) and t.id == var_name for t in node.targets
-        ):
+        if not any(isinstance(t, ast.Name) and t.id == var_name for t in node.targets):
             continue
         if not isinstance(node.value, ast.Call):
             continue
@@ -457,9 +446,8 @@ def collect_migration_columns(verbose: bool = False) -> dict[str, set[str]]:
                 continue
             func = node.func
             # ---- Direct op.create_table("t", sa.Column("c", ...), ...) ----
-            is_create = (
-                (isinstance(func, ast.Attribute) and func.attr == "create_table")
-                or (isinstance(func, ast.Name) and func.id == "create_table")
+            is_create = (isinstance(func, ast.Attribute) and func.attr == "create_table") or (
+                isinstance(func, ast.Name) and func.id == "create_table"
             )
             if is_create and node.args:
                 first = node.args[0]
@@ -483,9 +471,8 @@ def collect_migration_columns(verbose: bool = False) -> dict[str, set[str]]:
                 # Columns the helper injects (e.g. _base_columns()).
                 per_table[tname].update(helper_cols_map.get(func.id, set()))
             # ---- Direct op.add_column("t", sa.Column("c", ...)) ----
-            is_add = (
-                (isinstance(func, ast.Attribute) and func.attr == "add_column")
-                or (isinstance(func, ast.Name) and func.id == "add_column")
+            is_add = (isinstance(func, ast.Attribute) and func.attr == "add_column") or (
+                isinstance(func, ast.Name) and func.id == "add_column"
             )
             if is_add and len(node.args) >= 2:
                 col_arg = node.args[1]
@@ -502,15 +489,16 @@ def collect_migration_columns(verbose: bool = False) -> dict[str, set[str]]:
                         for tn in candidates:
                             per_table[tn].add(col)
             # ---- op.rename_table("old", "new") ----
-            is_rename = (
-                (isinstance(func, ast.Attribute) and func.attr == "rename_table")
-                or (isinstance(func, ast.Name) and func.id == "rename_table")
+            is_rename = (isinstance(func, ast.Attribute) and func.attr == "rename_table") or (
+                isinstance(func, ast.Name) and func.id == "rename_table"
             )
             if is_rename and len(node.args) >= 2:
                 a, b = node.args[0], node.args[1]
                 if (
-                    isinstance(a, ast.Constant) and isinstance(a.value, str)
-                    and isinstance(b, ast.Constant) and isinstance(b.value, str)
+                    isinstance(a, ast.Constant)
+                    and isinstance(a.value, str)
+                    and isinstance(b, ast.Constant)
+                    and isinstance(b.value, str)
                 ):
                     renames[a.value] = b.value
 
@@ -519,9 +507,8 @@ def collect_migration_columns(verbose: bool = False) -> dict[str, set[str]]:
             if not isinstance(node, ast.Call):
                 continue
             func = node.func
-            is_drop = (
-                (isinstance(func, ast.Attribute) and func.attr == "drop_column")
-                or (isinstance(func, ast.Name) and func.id == "drop_column")
+            is_drop = (isinstance(func, ast.Attribute) and func.attr == "drop_column") or (
+                isinstance(func, ast.Name) and func.id == "drop_column"
             )
             if not is_drop or len(node.args) < 2:
                 continue
@@ -539,16 +526,17 @@ def collect_migration_columns(verbose: bool = False) -> dict[str, set[str]]:
             if not isinstance(node, ast.Call):
                 continue
             func = node.func
-            is_alter = (
-                (isinstance(func, ast.Attribute) and func.attr == "alter_column")
-                or (isinstance(func, ast.Name) and func.id == "alter_column")
+            is_alter = (isinstance(func, ast.Attribute) and func.attr == "alter_column") or (
+                isinstance(func, ast.Name) and func.id == "alter_column"
             )
             if not is_alter or len(node.args) < 2:
                 continue
             tname_arg, col_arg = node.args[0], node.args[1]
             if not (
-                isinstance(tname_arg, ast.Constant) and isinstance(tname_arg.value, str)
-                and isinstance(col_arg, ast.Constant) and isinstance(col_arg.value, str)
+                isinstance(tname_arg, ast.Constant)
+                and isinstance(tname_arg.value, str)
+                and isinstance(col_arg, ast.Constant)
+                and isinstance(col_arg.value, str)
             ):
                 continue
             new_name = _extract_alter_rename_kwarg(node)
@@ -568,7 +556,10 @@ def collect_migration_columns(verbose: bool = False) -> dict[str, set[str]]:
                 if not (
                     isinstance(ctx, ast.Call)
                     and (
-                        (isinstance(ctx.func, ast.Attribute) and ctx.func.attr == "batch_alter_table")
+                        (
+                            isinstance(ctx.func, ast.Attribute)
+                            and ctx.func.attr == "batch_alter_table"
+                        )
                         or (isinstance(ctx.func, ast.Name) and ctx.func.id == "batch_alter_table")
                     )
                     and ctx.args
@@ -578,9 +569,7 @@ def collect_migration_columns(verbose: bool = False) -> dict[str, set[str]]:
                 if isinstance(first, ast.Constant) and isinstance(first.value, str):
                     tnames: list[str] = [first.value]
                 elif isinstance(first, ast.Name):
-                    tnames = _resolve_dynamic_name_from_assignments(
-                        first.id, upgrade_fn, functions
-                    )
+                    tnames = _resolve_dynamic_name_from_assignments(first.id, upgrade_fn, functions)
                     if not tnames:
                         continue
                 else:
@@ -592,7 +581,11 @@ def collect_migration_columns(verbose: bool = False) -> dict[str, set[str]]:
                     if not isinstance(f, ast.Attribute):
                         continue
                     # batch.add_column(sa.Column("col", ...))
-                    if f.attr == "add_column" and inner.args and isinstance(inner.args[0], ast.Call):
+                    if (
+                        f.attr == "add_column"
+                        and inner.args
+                        and isinstance(inner.args[0], ast.Call)
+                    ):
                         col = _column_name(inner.args[0])
                         if col is not None:
                             for tn in tnames:
@@ -626,7 +619,7 @@ def collect_migration_columns(verbose: bool = False) -> dict[str, set[str]]:
 
     if verbose:
         sample = sorted(per_table.items())[:5]
-        print(f"[verbose] migrations scanned; sample of first 5 tables:")
+        print("[verbose] migrations scanned; sample of first 5 tables:")
         for t, cols in sample:
             print(f"  {t}: {len(cols)} cols")
 
@@ -681,8 +674,12 @@ def main() -> int:
         print(f"  bases: {sorted(info.bases)}")
         print(f"  model cols ({len(info.columns)}): {sorted(info.columns)}")
         print(f"  migration cols ({len(mig)}): {sorted(mig)}")
-        print(f"  model_business - migration_business: {sorted(model_business - mig_business) or '(none)'}")
-        print(f"  migration_business - model_business: {sorted(mig_business - model_business) or '(none)'}")
+        print(
+            f"  model_business - migration_business: {sorted(model_business - mig_business) or '(none)'}"
+        )
+        print(
+            f"  migration_business - model_business: {sorted(mig_business - model_business) or '(none)'}"
+        )
         return 0
 
     drift = compute_drift(models, migration_cols)

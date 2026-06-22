@@ -1,7 +1,7 @@
 """Health check module for operational visibility."""
 
+from .schemas import HealthCheckComprehensiveResponse, HealthCheckItem
 from .service import HealthCheckService
-from .schemas import HealthCheckItem, HealthCheckComprehensiveResponse
 
 __all__ = [
     "HealthCheckService",

@@ -47,7 +47,18 @@ def test_assert_tenant_key_accepts_new_prefix() -> None:
 
 @pytest.mark.asyncio
 async def test_signed_url_blocked_for_infected() -> None:
-    rec = FileRecord(id="f1", tenant_id="t1", bucket="ptd", object_key="tenant/t1/2026/03/03/f1/a.txt", content_type="text/plain", size_bytes=1, sha256="a" * 64, status=FileStatus.infected.value, av_result_json={}, metadata_json={})
+    rec = FileRecord(
+        id="f1",
+        tenant_id="t1",
+        bucket="ptd",
+        object_key="tenant/t1/2026/03/03/f1/a.txt",
+        content_type="text/plain",
+        size_bytes=1,
+        sha256="a" * 64,
+        status=FileStatus.infected.value,
+        av_result_json={},
+        metadata_json={},
+    )
     svc = FileService(session=DummySession(rec), tenant_id="t1")
     with pytest.raises(HTTPException) as exc:
         await svc.get_signed_download_url(file_id="f1", purpose="download")
@@ -55,10 +66,23 @@ async def test_signed_url_blocked_for_infected() -> None:
 
 
 @pytest.mark.asyncio
-async def test_create_upload_session_dedupe_returns_existing(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_create_upload_session_dedupe_returns_existing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from app.core.config import get_settings
 
-    existing = FileRecord(id="existing", tenant_id="t1", bucket="ptd", object_key="t1/2026/03/03/existing/a.txt", content_type="text/plain", size_bytes=1, sha256="b" * 64, status=FileStatus.clean.value, av_result_json={}, metadata_json={})
+    existing = FileRecord(
+        id="existing",
+        tenant_id="t1",
+        bucket="ptd",
+        object_key="t1/2026/03/03/existing/a.txt",
+        content_type="text/plain",
+        size_bytes=1,
+        sha256="b" * 64,
+        status=FileStatus.clean.value,
+        av_result_json={},
+        metadata_json={},
+    )
     session = DummySession(None, dedupe=existing)
     svc = FileService(session=session, tenant_id="t1")
 
@@ -77,10 +101,24 @@ async def test_create_upload_session_dedupe_returns_existing(monkeypatch: pytest
 
 
 @pytest.mark.asyncio
-async def test_create_upload_session_dedupe_merges_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_create_upload_session_dedupe_merges_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from app.core.config import get_settings
 
-    existing = FileRecord(id="existing", tenant_id="t1", bucket="ptd", object_key="t1/2026/03/03/existing/a.txt", content_type="text/plain", size_bytes=1, sha256="b" * 64, status=FileStatus.clean.value, av_result_json={}, metadata_json={"old": "1"}, tags={"old": "1"})
+    existing = FileRecord(
+        id="existing",
+        tenant_id="t1",
+        bucket="ptd",
+        object_key="t1/2026/03/03/existing/a.txt",
+        content_type="text/plain",
+        size_bytes=1,
+        sha256="b" * 64,
+        status=FileStatus.clean.value,
+        av_result_json={},
+        metadata_json={"old": "1"},
+        tags={"old": "1"},
+    )
     session = DummySession(None, dedupe=existing)
     svc = FileService(session=session, tenant_id="t1")
 
@@ -102,7 +140,18 @@ async def test_create_upload_session_dedupe_merges_metadata(monkeypatch: pytest.
 
 @pytest.mark.asyncio
 async def test_signed_url_rejects_cross_tenant_object_key() -> None:
-    rec = FileRecord(id="f1", tenant_id="t1", bucket="ptd", object_key="tenant/t2/2026/03/03/f1/a.txt", content_type="text/plain", size_bytes=1, sha256="a" * 64, status=FileStatus.clean.value, av_result_json={}, metadata_json={})
+    rec = FileRecord(
+        id="f1",
+        tenant_id="t1",
+        bucket="ptd",
+        object_key="tenant/t2/2026/03/03/f1/a.txt",
+        content_type="text/plain",
+        size_bytes=1,
+        sha256="a" * 64,
+        status=FileStatus.clean.value,
+        av_result_json={},
+        metadata_json={},
+    )
     svc = FileService(session=DummySession(rec), tenant_id="t1")
     with pytest.raises(HTTPException) as exc:
         await svc.get_signed_download_url(file_id="f1", purpose="download")

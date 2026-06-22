@@ -40,12 +40,18 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | No
 
 DepartmentReadAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_DEPARTMENT_READ_ROLES, action="read departments")),
+    Depends(
+        abac(_tenant_resource_id, required_roles=_DEPARTMENT_READ_ROLES, action="read departments")
+    ),
 ]
 
 DepartmentWriteAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_DEPARTMENT_WRITE_ROLES, action="manage departments")),
+    Depends(
+        abac(
+            _tenant_resource_id, required_roles=_DEPARTMENT_WRITE_ROLES, action="manage departments"
+        )
+    ),
 ]
 
 

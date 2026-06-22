@@ -34,6 +34,12 @@ fix = true
 select = ["E", "F", "I"]
 ignore = ["E501"]
 
+[tool.ruff.lint.per-file-ignores]
+# tests/conftest.py deliberately sets os.environ and stubs sys.modules BEFORE
+# importing the app (settings are read at import time), so its imports cannot
+# sit at the top of the file — E402 there is intentional, not a defect.
+"tests/conftest.py" = ["E402"]
+
 [tool.black]
 line-length = 100
 target-version = ["py312"]

@@ -4,6 +4,7 @@ Additive. One non-null boolean column (server_default false) on briefing_templat
 to opt a briefing type into code-flow signing. Round-trip-safe: downgrade drops it.
 Table/column names are LITERAL (AST-audit blindspot).
 """
+
 from __future__ import annotations
 
 import sqlalchemy as sa

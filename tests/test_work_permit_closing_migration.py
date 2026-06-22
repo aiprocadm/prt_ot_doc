@@ -1,4 +1,5 @@
 """wp05 guard: цепочка от истинного head, состав колонок, honest downgrade."""
+
 from __future__ import annotations
 
 import importlib.util

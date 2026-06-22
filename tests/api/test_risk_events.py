@@ -5,7 +5,6 @@ from fastapi import status
 from sqlalchemy import select
 
 from app.models.models import Outbox, OutboxStatus, RoleEnum, Site
-from app.models.risk import RiskHazard
 from tests.utils.factories import TestDataFactory
 
 

@@ -40,8 +40,12 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.text("CURRENT_TIMESTAMP"),
         ),
-        sa.Column("document_id", sa.String(length=36), sa.ForeignKey("document.id"), nullable=False),
-        sa.Column("template_id", sa.String(length=36), sa.ForeignKey("template.id"), nullable=False),
+        sa.Column(
+            "document_id", sa.String(length=36), sa.ForeignKey("document.id"), nullable=False
+        ),
+        sa.Column(
+            "template_id", sa.String(length=36), sa.ForeignKey("template.id"), nullable=False
+        ),
         sa.Column(
             "template_version_id",
             sa.String(length=36),
@@ -97,7 +101,9 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.text("CURRENT_TIMESTAMP"),
         ),
-        sa.Column("template_id", sa.String(length=36), sa.ForeignKey("template.id"), nullable=False),
+        sa.Column(
+            "template_id", sa.String(length=36), sa.ForeignKey("template.id"), nullable=False
+        ),
         sa.Column(
             "template_version_id",
             sa.String(length=36),

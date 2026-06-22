@@ -1,4 +1,5 @@
 """wp06 guard: цепочка от wp05, колонка type_specific, honest downgrade."""
+
 from __future__ import annotations
 
 import importlib.util

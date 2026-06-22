@@ -67,9 +67,7 @@ def main() -> int:
         if not cells:
             continue
         if len(cells) != len(headers):
-            errors.append(
-                f"Line {row_idx + 1}: expected {len(headers)} columns, got {len(cells)}"
-            )
+            errors.append(f"Line {row_idx + 1}: expected {len(headers)} columns, got {len(cells)}")
             continue
 
         row = dict(zip(headers, cells, strict=True))

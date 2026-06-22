@@ -53,10 +53,10 @@ async def ws_events_stub(
         stmt = stmt.where(Outbox.created_at >= since)
 
     rows = (
-        await session.execute(
-            stmt.order_by(Outbox.created_at.desc()).limit(limit)
-        )
-    ).scalars().all()
+        (await session.execute(stmt.order_by(Outbox.created_at.desc()).limit(limit)))
+        .scalars()
+        .all()
+    )
 
     items = [
         WsEventItem(
@@ -66,7 +66,9 @@ async def ws_events_stub(
             destination=row.destination,
             attempts=int(row.attempts or 0),
             created_at=row.created_at,
-            payload_keys=sorted((row.payload or {}).keys()) if isinstance(row.payload, dict) else [],
+            payload_keys=(
+                sorted((row.payload or {}).keys()) if isinstance(row.payload, dict) else []
+            ),
         )
         for row in rows
     ]

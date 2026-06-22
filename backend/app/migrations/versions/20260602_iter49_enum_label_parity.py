@@ -25,6 +25,7 @@ written before this change under the old name-binding behavior may hold UPPER
 strings (role, document.status) and would need a one-time UPDATE backfill. Fresh-PG
 (the canonical target) is unaffected.
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -50,14 +51,28 @@ ADD_VALUES: dict[str, tuple[str, ...]] = {
     "documentstatus": ("archived", "draft", "review", "signed"),
     "notificationchannel": ("webhook",),
     "notificationtype": (
-        "ApprovalDeadline", "BillingLimitWarning", "EdoStatusChanged",
-        "IncidentCreated", "InspectionCreated", "IntegrationError",
-        "MedicalOverdue", "PPEOverdue", "PackageRunCompleted",
-        "PackageRunFailed", "PrescriptionOverdue",
+        "ApprovalDeadline",
+        "BillingLimitWarning",
+        "EdoStatusChanged",
+        "IncidentCreated",
+        "InspectionCreated",
+        "IntegrationError",
+        "MedicalOverdue",
+        "PPEOverdue",
+        "PackageRunCompleted",
+        "PackageRunFailed",
+        "PrescriptionOverdue",
     ),
     "roleenum": (
-        "auditor_ro", "clerk", "client", "executor", "inspector_contractor",
-        "manager", "ot_head", "student", "teacher",
+        "auditor_ro",
+        "clerk",
+        "client",
+        "executor",
+        "inspector_contractor",
+        "manager",
+        "ot_head",
+        "student",
+        "teacher",
     ),
 }
 

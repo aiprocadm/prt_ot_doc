@@ -11,7 +11,7 @@ from app.domains.signing.pep import PepStatus
 from app.models.models import BriefingEntry, BriefingSignature, BriefingTemplate, SignatureRequest
 from app.services.events import EventType
 from app.services.outbox import OutboxService
-from app.services.pep_signing import PepConflict, PepSigningService
+from app.services.pep_signing import PepSigningService
 
 
 class BriefingSignatureConflict(Exception):
@@ -58,7 +58,10 @@ class BriefingEntryService:
             if signer_user_id and existing.signer_user_id != signer_user_id:
                 existing.signer_user_id = signer_user_id
             if signature_payload:
-                existing.signature_payload = {**(existing.signature_payload or {}), **signature_payload}
+                existing.signature_payload = {
+                    **(existing.signature_payload or {}),
+                    **signature_payload,
+                }
             await session.flush()
             return existing
 
@@ -68,9 +71,7 @@ class BriefingEntryService:
         # PEP-запись создаётся без указания подписанта (допустимо для attested-режима).
         employee_person_id = entry.person_id if signer_type == "employee" else None
         pep_signer_user_id = (
-            signer_user_id
-            if signer_type == "instructor" or employee_person_id is None
-            else None
+            signer_user_id if signer_type == "instructor" or employee_person_id is None else None
         )
         pep_req = await PepSigningService(session, str(entry.tenant_id)).create_attested(
             object_type="briefing_entry",
@@ -107,9 +108,7 @@ class BriefingEntryService:
             ) from exc
         return signature
 
-    async def requires_signature_code(
-        self, session: AsyncSession, entry: BriefingEntry
-    ) -> bool:
+    async def requires_signature_code(self, session: AsyncSession, entry: BriefingEntry) -> bool:
         """Код-flow для employee включается флагом шаблона при наличии person_id."""
         if entry.person_id is None or not entry.briefing_template_id:
             return False
@@ -141,17 +140,21 @@ class BriefingEntryService:
         self, session: AsyncSession, entry: BriefingEntry
     ) -> SignatureRequest | None:
         return (
-            await session.execute(
-                select(SignatureRequest).where(
-                    SignatureRequest.tenant_id == entry.tenant_id,
-                    SignatureRequest.object_type == "briefing_entry",
-                    SignatureRequest.object_id == entry.id,
-                    SignatureRequest.purpose == "briefing",
-                    SignatureRequest.signer_person_id == entry.person_id,
-                    SignatureRequest.status == PepStatus.AWAITING_CODE.value,
+            (
+                await session.execute(
+                    select(SignatureRequest).where(
+                        SignatureRequest.tenant_id == entry.tenant_id,
+                        SignatureRequest.object_type == "briefing_entry",
+                        SignatureRequest.object_id == entry.id,
+                        SignatureRequest.purpose == "briefing",
+                        SignatureRequest.signer_person_id == entry.person_id,
+                        SignatureRequest.status == PepStatus.AWAITING_CODE.value,
+                    )
                 )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
 
     async def confirm_code(
         self, session: AsyncSession, entry: BriefingEntry, code: str
@@ -168,9 +171,7 @@ class BriefingEntryService:
 
         req = await self._find_pending_request(session, entry)
         if req is None:
-            raise NoPendingCodeRequest(
-                f"no pending code request for entry={entry.id}"
-            )
+            raise NoPendingCodeRequest(f"no pending code request for entry={entry.id}")
 
         await PepSigningService(session, str(entry.tenant_id)).confirm(req.id, code=code)
 
@@ -195,7 +196,17 @@ class BriefingEntryService:
         return signature
 
     async def complete(self, session: AsyncSession, entry: BriefingEntry) -> BriefingEntry:
-        rows = (await session.execute(select(BriefingSignature.signer_type).where(BriefingSignature.briefing_entry_id == entry.id))).scalars().all()
+        rows = (
+            (
+                await session.execute(
+                    select(BriefingSignature.signer_type).where(
+                        BriefingSignature.briefing_entry_id == entry.id
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
         if "employee" not in rows or "instructor" not in rows:
             raise ValueError("Both signatures are required")
         if entry.briefing_template_id:
@@ -210,7 +221,9 @@ class BriefingEntryService:
         await session.flush()
         return entry
 
-    async def list_overdue(self, session: AsyncSession, *, tenant_id: str, now: datetime | None = None) -> list[BriefingEntry]:
+    async def list_overdue(
+        self, session: AsyncSession, *, tenant_id: str, now: datetime | None = None
+    ) -> list[BriefingEntry]:
         resolved_now = now or datetime.now(timezone.utc)
         stmt = select(BriefingEntry).where(
             BriefingEntry.tenant_id == tenant_id,
@@ -219,7 +232,9 @@ class BriefingEntryService:
             BriefingEntry.valid_until < resolved_now,
             BriefingEntry.status != "completed",
         )
-        return list((await session.execute(stmt.order_by(BriefingEntry.valid_until.asc()))).scalars().all())
+        return list(
+            (await session.execute(stmt.order_by(BriefingEntry.valid_until.asc()))).scalars().all()
+        )
 
     async def notify_overdue(
         self,

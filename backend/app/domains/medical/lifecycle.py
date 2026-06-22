@@ -2,14 +2,18 @@
 
 No DB / no app-service imports (only the enum types from app.models.models).
 """
+
 from __future__ import annotations
 
 import enum
 from collections.abc import Iterable
 from datetime import date, timedelta
 
-from app.domains.shared import ContingentItemStatus, classify  # re-export (back-compat)
-
+# Re-exported so consumers can do ``from app.domains.medical.lifecycle import
+# classify, ContingentItemStatus`` (the canonical contingent helpers live in
+# app.domains.shared). Not referenced inside this module — hence the noqa —
+# but the re-export contract is pinned by test_medical_lifecycle_reexports_shared.
+from app.domains.shared import ContingentItemStatus, classify  # noqa: F401
 from app.models.models import (
     MedicalExamKind,
     MedicalFitness,
@@ -185,9 +189,7 @@ def requires_suspension(fitness: MedicalFitness) -> bool:
     return fitness == MedicalFitness.UNFIT
 
 
-def suspension_action(
-    has_active_suspension: bool, new_fitness: MedicalFitness
-) -> SuspensionAction:
+def suspension_action(has_active_suspension: bool, new_fitness: MedicalFitness) -> SuspensionAction:
     """Decide OPEN (newly unfit), LIFT (now fit/with-restrictions while suspended), or NONE."""
     if not has_active_suspension and new_fitness == MedicalFitness.UNFIT:
         return SuspensionAction.OPEN

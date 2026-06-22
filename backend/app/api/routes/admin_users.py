@@ -94,7 +94,10 @@ async def list_admin_users(
         base_where.append(User.company_id == company_id)
 
     total = int(
-        await session.scalar(select(func.count()).select_from(select(User).where(*base_where).subquery())) or 0
+        await session.scalar(
+            select(func.count()).select_from(select(User).where(*base_where).subquery())
+        )
+        or 0
     )
     rows = list(
         (
@@ -143,7 +146,7 @@ async def get_user_roles(
     correlation_id: str = Depends(get_correlation_id),
 ) -> UserRolesResponse:
     TenantContextValidator.ensure_tenant_context(tenant)
-    
+
     result = await session.execute(
         select(User)
         .options(selectinload(User.roles))
@@ -168,7 +171,7 @@ async def assign_user_roles(
     correlation_id: str = Depends(get_correlation_id),
 ) -> UserRolesResponse:
     TenantContextValidator.ensure_tenant_context(tenant)
-    
+
     result = await session.execute(
         select(User)
         .options(selectinload(User.roles))
@@ -209,10 +212,12 @@ async def assign_user_attributes(
     correlation_id: str = Depends(get_correlation_id),
 ) -> UserAttributesResponse:
     TenantContextValidator.ensure_tenant_context(tenant)
-    
+
     user = (
         await session.execute(
-            select(User).where(User.id == user_id, User.tenant_id == tenant.id, User.deleted_at.is_(None))
+            select(User).where(
+                User.id == user_id, User.tenant_id == tenant.id, User.deleted_at.is_(None)
+            )
         )
     ).scalar_one_or_none()
     if user is None:

@@ -66,11 +66,15 @@ def _match_condition(cond: dict[str, Any], attrs: dict[str, Any], scope: dict[st
     op = str(cond.get("op") or "eq")
     left = _read_attr(attr, attrs, scope)
     raw = cond.get("value")
-    right = _read_attr(raw, attrs, scope) if isinstance(raw, str) and raw.startswith("$scope.") else raw
+    right = (
+        _read_attr(raw, attrs, scope) if isinstance(raw, str) and raw.startswith("$scope.") else raw
+    )
     return _op_eval(op=op, left=left, right=right)
 
 
-def _match_policy_conditions(conditions: dict[str, Any], attrs: dict[str, Any], scope: dict[str, Any]) -> bool:
+def _match_policy_conditions(
+    conditions: dict[str, Any], attrs: dict[str, Any], scope: dict[str, Any]
+) -> bool:
     all_conditions = conditions.get("all") or []
     any_conditions = conditions.get("any") or []
     all_ok = all(_match_condition(cond, attrs, scope) for cond in all_conditions)
@@ -119,7 +123,9 @@ def _get_cached_policies(ctx: PolicyContext) -> tuple[AuthzPolicy, ...]:
     return ()
 
 
-def evaluate(subject: Subject, action: str, resource: Resource, context: PolicyContext | None = None) -> Decision:
+def evaluate(
+    subject: Subject, action: str, resource: Resource, context: PolicyContext | None = None
+) -> Decision:
     actor = _to_actor(subject)
     ctx = dict(resource.attrs)
     if context:
@@ -140,10 +146,16 @@ def evaluate(subject: Subject, action: str, resource: Resource, context: PolicyC
     if {str(role).lower() for role in subject.roles} & {"owner", "admin"}:
         explicit_permissions.add(normalized_permission)
     if normalized_permission not in explicit_permissions:
-        return Decision(allow=False, reason="missing_permission", audit_fields={"permission": normalized_permission})
+        return Decision(
+            allow=False,
+            reason="missing_permission",
+            audit_fields={"permission": normalized_permission},
+        )
 
     # fallback static policy engine (deny-by-default)
-    result = policy_engine.authorize(actor=actor, action=action, resource=resource.resource_type, ctx=ctx)
+    result = policy_engine.authorize(
+        actor=actor, action=action, resource=resource.resource_type, ctx=ctx
+    )
 
     # ABAC dynamic policies (best-effort; deny override)
     matched_policy_id: str | None = None
@@ -156,7 +168,9 @@ def evaluate(subject: Subject, action: str, resource: Resource, context: PolicyC
         ]
         applicable.sort(key=lambda item: item.priority)
         matched: list[AuthzPolicy] = [
-            rule for rule in applicable if _match_policy_conditions(rule.conditions_json or {}, ctx, context.abac_scopes or {})
+            rule
+            for rule in applicable
+            if _match_policy_conditions(rule.conditions_json or {}, ctx, context.abac_scopes or {})
         ]
         if matched:
             top_priority = matched[0].priority
@@ -164,7 +178,9 @@ def evaluate(subject: Subject, action: str, resource: Resource, context: PolicyC
             deny_rule = next((item for item in top if (item.effect or "").lower() == "deny"), None)
             if deny_rule is not None:
                 return Decision(allow=False, reason="policy_deny", matched_policy_id=deny_rule.id)
-            allow_rule = next((item for item in top if (item.effect or "").lower() == "allow"), None)
+            allow_rule = next(
+                (item for item in top if (item.effect or "").lower() == "allow"), None
+            )
             if allow_rule is not None:
                 return Decision(allow=True, reason="policy_allow", matched_policy_id=allow_rule.id)
 
@@ -172,9 +188,15 @@ def evaluate(subject: Subject, action: str, resource: Resource, context: PolicyC
         allow=result.allowed,
         reason=result.reason,
         matched_policy_id=matched_policy_id,
-        audit_fields={"resource": resource.resource_type, "requested_action": action, **result.audit_meta},
+        audit_fields={
+            "resource": resource.resource_type,
+            "requested_action": action,
+            **result.audit_meta,
+        },
     )
 
 
-def authorize(subject: Subject, action: str, resource: Resource, context: PolicyContext | None = None) -> Decision:
+def authorize(
+    subject: Subject, action: str, resource: Resource, context: PolicyContext | None = None
+) -> Decision:
     return evaluate(subject, action, resource, context)

@@ -1,5 +1,6 @@
 """Briefing signatures route through the PEP core (Срез-1: attested mode),
 while the briefing service contract stays unchanged."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone

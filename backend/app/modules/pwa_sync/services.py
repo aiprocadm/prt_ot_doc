@@ -29,7 +29,9 @@ class OfflineSyncService:
                 return row
         return None
 
-    async def _apply_evidence_case_batch(self, session: AsyncSession, batch: OfflineSyncBatch) -> None:
+    async def _apply_evidence_case_batch(
+        self, session: AsyncSession, batch: OfflineSyncBatch
+    ) -> None:
         payload = batch.payload or {}
         operation = str(payload.get("operation") or "create")
         evidence_case_id = str(payload.get("evidence_case_id") or payload.get("id") or "")
@@ -144,7 +146,9 @@ class OfflineSyncService:
         await session.flush()
         return batch
 
-    async def commit_media(self, session: AsyncSession, media: OfflineMediaQueue) -> OfflineMediaQueue:
+    async def commit_media(
+        self, session: AsyncSession, media: OfflineMediaQueue
+    ) -> OfflineMediaQueue:
         media.upload_status = "uploaded"
         await session.flush()
         return media

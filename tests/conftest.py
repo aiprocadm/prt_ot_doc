@@ -21,6 +21,7 @@ os.environ.setdefault("REDIS_RESULT_URL", "cache+memory://")
 os.environ.setdefault("RATE_LIMIT_STORAGE_URI", "memory://")
 os.environ.setdefault("S3_ENDPOINT", "http://localhost")
 
+
 # bootstrap() rejects empty strings; a bare ``SECRET_KEY=`` in the user env would
 # override Pydantic defaults and break test app creation — normalize for pytest.
 def _ensure_nonblank(name: str, value: str) -> None:
@@ -121,26 +122,32 @@ async def app_fixture():
         # protection tests in tests/test_audit_log_immutability.py would fail with
         # "DID NOT RAISE". The error message contains "immutable" to match the
         # tests' `pytest.raises(Exception, match="immutable|audit")` regex.
-        await conn.execute(text(
-            "CREATE TRIGGER IF NOT EXISTS auditlog_no_update "
-            "BEFORE UPDATE ON auditlog "
-            "FOR EACH ROW BEGIN "
-            "SELECT RAISE(ABORT, 'auditlog is immutable'); "
-            "END"
-        ))
-        await conn.execute(text(
-            "CREATE TRIGGER IF NOT EXISTS auditlog_no_delete "
-            "BEFORE DELETE ON auditlog "
-            "FOR EACH ROW BEGIN "
-            "SELECT RAISE(ABORT, 'auditlog is immutable'); "
-            "END"
-        ))
+        await conn.execute(
+            text(
+                "CREATE TRIGGER IF NOT EXISTS auditlog_no_update "
+                "BEFORE UPDATE ON auditlog "
+                "FOR EACH ROW BEGIN "
+                "SELECT RAISE(ABORT, 'auditlog is immutable'); "
+                "END"
+            )
+        )
+        await conn.execute(
+            text(
+                "CREATE TRIGGER IF NOT EXISTS auditlog_no_delete "
+                "BEFORE DELETE ON auditlog "
+                "FOR EACH ROW BEGIN "
+                "SELECT RAISE(ABORT, 'auditlog is immutable'); "
+                "END"
+            )
+        )
 
     TestSession = async_sessionmaker(bind=engine, expire_on_commit=False)
 
     seed_tenants = {"test", "acme", "beta", "gamma", "delta", "zeta", "epsilon"}
 
-    async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as shared_session:
+    async with AsyncSessionLocal(
+        tenant="public", include_public=False, create_schema=False
+    ) as shared_session:
         shared_existing = set((await shared_session.execute(select(Tenant.slug))).scalars().all())
         for slug in seed_tenants:
             if slug in shared_existing:
@@ -170,7 +177,9 @@ async def app_fixture():
                     id=(shared.id if shared is not None else None),
                     slug=slug,
                     name=(shared.name if shared is not None else slug.title()),
-                    contact_email=(shared.contact_email if shared is not None else f"{slug}@example.com"),
+                    contact_email=(
+                        shared.contact_email if shared is not None else f"{slug}@example.com"
+                    ),
                 )
             )
         await seed_session.commit()
@@ -216,7 +225,9 @@ async def app_fixture():
             filters = [Tenant.slug == info.slug, Tenant.code == info.slug]
             if len(info.slug) == 36:
                 filters.append(Tenant.id == str(UUID(info.slug)))
-            tenant = (await session.execute(select(Tenant).where(or_(*filters)))).scalar_one_or_none()
+            tenant = (
+                await session.execute(select(Tenant).where(or_(*filters)))
+            ).scalar_one_or_none()
             if tenant is None or not tenant.is_active:
                 raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found")
             return tenant
@@ -312,9 +323,7 @@ async def make_auth_headers(
             else:
                 tenant = await data_factory.ensure_tenant(session=session)
             result = await session.execute(
-                select(User).where(
-                    User.email == candidate_email, User.tenant_id == tenant.id
-                )
+                select(User).where(User.email == candidate_email, User.tenant_id == tenant.id)
             )
             user = result.scalar_one_or_none()
             if user is None:
@@ -346,13 +355,14 @@ async def make_auth_headers(
             await session.commit()
             await session.refresh(user)
             user_id = user.id
-            token_tenant_id = user.tenant_id
             company_claim = company_claim or (
                 str(user.company_id) if getattr(user, "company_id", None) else None
             )
 
         request_tenant_id = str(tenant.id)
-        async with AsyncSessionLocal(tenant="public", include_public=False, create_schema=False) as public_session:
+        async with AsyncSessionLocal(
+            tenant="public", include_public=False, create_schema=False
+        ) as public_session:
             public_tenant = (
                 await public_session.execute(select(Tenant).where(Tenant.slug == tenant.slug))
             ).scalar_one_or_none()
@@ -387,12 +397,15 @@ async def auth_headers(make_auth_headers) -> dict[str, str]:
 
 
 @pytest_asyncio.fixture()
-async def authenticated_client(async_client: AsyncClient, auth_headers: dict[str, str]) -> AsyncClient:
+async def authenticated_client(
+    async_client: AsyncClient, auth_headers: dict[str, str]
+) -> AsyncClient:
     async_client.headers.update(auth_headers)
     yield async_client
 
 
 # Multi-tenant test fixtures for audit tests
+
 
 @pytest.fixture()
 async def test_db_session(sessionmaker):
@@ -441,7 +454,7 @@ async def test_companies_multi_tenant(sessionmaker, data_factory: TestDataFactor
                 session.add(tenant)
                 await session.commit()
                 await session.refresh(tenant)
-            
+
             # Create a company in this tenant
             company = await data_factory.create_company(
                 tenant=tenant,
@@ -450,12 +463,14 @@ async def test_companies_multi_tenant(sessionmaker, data_factory: TestDataFactor
             )
             companies[tenant_slug] = company
             await session.commit()
-    
+
     yield companies
 
 
 @pytest.fixture()
-async def test_employees_multi_tenant(sessionmaker, data_factory: TestDataFactory, test_companies_multi_tenant):
+async def test_employees_multi_tenant(
+    sessionmaker, data_factory: TestDataFactory, test_companies_multi_tenant
+):
     """Create test persons (employees) in multiple tenants."""
     employees = {}
     for tenant_slug in ["acme", "beta"]:
@@ -487,7 +502,7 @@ async def test_templates_multi_tenant(sessionmaker, data_factory: TestDataFactor
             # Fetch tenant
             result = await session.execute(select(Tenant).where(Tenant.slug == tenant_slug))
             tenant = result.scalar_one_or_none()
-            
+
             # Create template
             template = await data_factory.create_template(
                 tenant=tenant,
@@ -497,5 +512,5 @@ async def test_templates_multi_tenant(sessionmaker, data_factory: TestDataFactor
             )
             templates[tenant_slug] = template
             await session.commit()
-    
+
     yield templates

@@ -1,4 +1,5 @@
 """I/O service for prescription escalation + closure-rate (TZ-3.4-V12-01)."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -12,9 +13,7 @@ from app.services.events import EventType
 from app.services.outbox import OutboxService
 
 
-async def list_overdue(
-    session: AsyncSession, *, tenant_id: str, today: date
-) -> list[Prescription]:
+async def list_overdue(session: AsyncSession, *, tenant_id: str, today: date) -> list[Prescription]:
     """Tenant-scoped prescriptions past their deadline and not yet closed."""
     stmt = (
         select(Prescription)

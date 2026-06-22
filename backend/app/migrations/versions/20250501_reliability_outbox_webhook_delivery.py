@@ -69,7 +69,9 @@ def upgrade() -> None:
         sa.Column("id", sa.String(), nullable=False),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("subscription_id", "event_id", name="uq_webhook_delivery_subscription_event"),
+        sa.UniqueConstraint(
+            "subscription_id", "event_id", name="uq_webhook_delivery_subscription_event"
+        ),
     )
     op.create_index(
         "ix_webhook_delivery_lookup",

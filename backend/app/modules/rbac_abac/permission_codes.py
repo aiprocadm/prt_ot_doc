@@ -85,37 +85,48 @@ MODULE_PERMISSIONS: tuple[str, ...] = (
 # Default modules per role (for filtering UI navigation)
 ROLE_MODULE_DEFAULTS: dict[str, list[str]] = {
     "owner": [
-        "risk", "ppe", "training", "medical", "incidents", "inspections",
-        "documents", "tasks", "templates", "audit", "admin", "branding",
-        "masterdata", "billing", "contractors", "compliance", "briefings", "sout"
+        "risk",
+        "ppe",
+        "training",
+        "medical",
+        "incidents",
+        "inspections",
+        "documents",
+        "tasks",
+        "templates",
+        "audit",
+        "admin",
+        "branding",
+        "masterdata",
+        "billing",
+        "contractors",
+        "compliance",
+        "briefings",
+        "sout",
     ],
     "admin": [
-        "risk", "ppe", "training", "medical", "incidents", "inspections",
-        "documents", "tasks", "templates", "audit", "admin", "branding",
-        "masterdata", "contractors", "compliance"
+        "risk",
+        "ppe",
+        "training",
+        "medical",
+        "incidents",
+        "inspections",
+        "documents",
+        "tasks",
+        "templates",
+        "audit",
+        "admin",
+        "branding",
+        "masterdata",
+        "contractors",
+        "compliance",
     ],
-    "ot_pb_lead": [
-        "risk", "ppe", "incidents", "inspections", "documents", "tasks", "contractors"
-    ],
-    "ot_specialist": [
-        "risk", "ppe", "incidents", "documents", "tasks"
-    ],
-    "hr": [
-        "training", "medical", "masterdata", "documents", "tasks"
-    ],
-    "teacher": [
-        "training", "briefings", "documents"
-    ],
-    "student": [
-        "training", "documents"
-    ],
-    "manager": [
-        "tasks", "documents", "incidents"
-    ],
-    "worker": [
-        "tasks", "documents"
-    ],
-    "auditor_ro": [
-        "audit", "documents", "risk", "incidents", "compliance"
-    ],
+    "ot_pb_lead": ["risk", "ppe", "incidents", "inspections", "documents", "tasks", "contractors"],
+    "ot_specialist": ["risk", "ppe", "incidents", "documents", "tasks"],
+    "hr": ["training", "medical", "masterdata", "documents", "tasks"],
+    "teacher": ["training", "briefings", "documents"],
+    "student": ["training", "documents"],
+    "manager": ["tasks", "documents", "incidents"],
+    "worker": ["tasks", "documents"],
+    "auditor_ro": ["audit", "documents", "risk", "incidents", "compliance"],
 }

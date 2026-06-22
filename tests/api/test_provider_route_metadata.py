@@ -5,7 +5,9 @@ from fastapi import status
 
 
 @pytest.mark.asyncio
-async def test_edo_send_returns_409_provider_not_configured(async_client, sessionmaker, make_auth_headers, data_factory):
+async def test_edo_send_returns_409_provider_not_configured(
+    async_client, sessionmaker, make_auth_headers, data_factory
+):
     """Честный контракт: /edo/send без настроенного провайдера → 409 EDO_PROVIDER_NOT_CONFIGURED.
 
     Прежний тест проверял 200 + provider_mode (симуляция). После чистки симуляции
@@ -30,7 +32,9 @@ async def test_edo_send_returns_409_provider_not_configured(async_client, sessio
 
 
 @pytest.mark.asyncio
-async def test_sign_requests_non_pep_returns_409_provider_not_configured(async_client, sessionmaker, make_auth_headers, data_factory):
+async def test_sign_requests_non_pep_returns_409_provider_not_configured(
+    async_client, sessionmaker, make_auth_headers, data_factory
+):
     """Честный контракт: POST /sign/requests с signature_type != "pep" → 409 SIGNATURE_PROVIDER_NOT_CONFIGURED.
 
     Оркестратор принимает только ПЭП-тип; все внешние провайдеры подписи

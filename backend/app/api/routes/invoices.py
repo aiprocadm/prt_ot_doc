@@ -36,21 +36,27 @@ ReadAccess = Annotated[
 
 WriteAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_INVOICE_WRITE_ROLES, action="manage invoices")),
+    Depends(
+        abac(_tenant_resource_id, required_roles=_INVOICE_WRITE_ROLES, action="manage invoices")
+    ),
 ]
 
 
 def _invoice_bad_request(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail=api_problem_detail(code="INVOICE_VALIDATION_ERROR", message=message, error_type="invoices"),
+        detail=api_problem_detail(
+            code="INVOICE_VALIDATION_ERROR", message=message, error_type="invoices"
+        ),
     )
 
 
 def _invoice_unprocessable(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        detail=api_problem_detail(code="INVOICE_VALIDATION_ERROR", message=message, error_type="invoices"),
+        detail=api_problem_detail(
+            code="INVOICE_VALIDATION_ERROR", message=message, error_type="invoices"
+        ),
     )
 
 

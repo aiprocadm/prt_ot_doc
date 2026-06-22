@@ -170,7 +170,9 @@ async def _hit_flow(
         if access_token:
             resolved_headers.setdefault("Authorization", f"Bearer {access_token}")
 
-        response = await client.request(method=method, url=path, headers=resolved_headers, json=body)
+        response = await client.request(
+            method=method, url=path, headers=resolved_headers, json=body
+        )
         status_code = response.status_code
         if response.status_code != expected_status:
             break
@@ -233,14 +235,24 @@ async def main_async() -> int:
     # then injected as ``Authorization: Bearer <jwt>`` into every probe — this
     # keeps the load loop measuring the target endpoint's latency, not the
     # per-call login overhead.
-    parser.add_argument("--access-token", default=None,
-                        help="Precomputed JWT to send as Authorization: Bearer header.")
-    parser.add_argument("--login-url", default="/api/v1/auth/login",
-                        help="POST endpoint that exchanges email/password for access_token.")
-    parser.add_argument("--login-email", default=None,
-                        help="Login email used to obtain --access-token (mutually exclusive).")
-    parser.add_argument("--login-password", default=None,
-                        help="Login password matching --login-email.")
+    parser.add_argument(
+        "--access-token",
+        default=None,
+        help="Precomputed JWT to send as Authorization: Bearer header.",
+    )
+    parser.add_argument(
+        "--login-url",
+        default="/api/v1/auth/login",
+        help="POST endpoint that exchanges email/password for access_token.",
+    )
+    parser.add_argument(
+        "--login-email",
+        default=None,
+        help="Login email used to obtain --access-token (mutually exclusive).",
+    )
+    parser.add_argument(
+        "--login-password", default=None, help="Login password matching --login-email."
+    )
     args = parser.parse_args()
 
     if args.access_token and (args.login_email or args.login_password):
@@ -353,9 +365,7 @@ async def main_async() -> int:
         f"min={summary.min_ms:.1f} p50={summary.p50_ms:.1f} "
         f"p95={summary.p95_ms:.1f} p99={summary.p99_ms:.1f} max={summary.max_ms:.1f}"
     )
-    print(
-        f"throughput_rps={summary.throughput_rps:.2f} error_rate={summary.error_rate:.4f}"
-    )
+    print(f"throughput_rps={summary.throughput_rps:.2f} error_rate={summary.error_rate:.4f}")
 
     if args.output_json:
         output_path = Path(args.output_json)

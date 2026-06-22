@@ -86,9 +86,9 @@ async def test_pack_archive_collects_files(async_client, make_auth_headers, sess
 
     async with sessionmaker() as session:
         stored = list(
-            (await session.scalars(
-                select(StoredFile).where(StoredFile.pack_id == "pack-zip")
-            )).all()
+            (
+                await session.scalars(select(StoredFile).where(StoredFile.pack_id == "pack-zip"))
+            ).all()
         )
         assert len(stored) == 2
         assert all(record.scan_status == FileScanStatus.CLEAN for record in stored)

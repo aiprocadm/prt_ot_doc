@@ -3,6 +3,7 @@
 Revision ID: 20260409_next64
 Revises: 20260408_next63_expand_alembic_version_num
 """
+
 from __future__ import annotations
 
 from typing import Union
@@ -35,11 +36,23 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("tenant_id", "code", name="uq_workflow_definition_tenant_code"),
     )
-    op.create_index("ix_workflow_definition_tenant_entity", "workflow_definitions", ["tenant_id", "entity_type"], unique=False)
-    op.create_index(op.f("ix_workflow_definitions_tenant_id"), "workflow_definitions", ["tenant_id"], unique=False)
+    op.create_index(
+        "ix_workflow_definition_tenant_entity",
+        "workflow_definitions",
+        ["tenant_id", "entity_type"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_workflow_definitions_tenant_id"),
+        "workflow_definitions",
+        ["tenant_id"],
+        unique=False,
+    )
 
     workflow_definition_status = postgresql.ENUM(
-        "draft", "published", "archived",
+        "draft",
+        "published",
+        "archived",
         name="workflowdefinitionstatus",
         create_type=False,
     )
@@ -62,14 +75,35 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["definition_id"], ["workflow_definitions.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("tenant_id", "definition_id", "version_no", name="uq_workflow_definition_version"),
+        sa.UniqueConstraint(
+            "tenant_id", "definition_id", "version_no", name="uq_workflow_definition_version"
+        ),
     )
-    op.create_index("ix_workflow_definition_version_tenant_status", "workflow_definition_versions", ["tenant_id", "status"], unique=False)
-    op.create_index(op.f("ix_workflow_definition_versions_definition_id"), "workflow_definition_versions", ["definition_id"], unique=False)
-    op.create_index(op.f("ix_workflow_definition_versions_tenant_id"), "workflow_definition_versions", ["tenant_id"], unique=False)
+    op.create_index(
+        "ix_workflow_definition_version_tenant_status",
+        "workflow_definition_versions",
+        ["tenant_id", "status"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_workflow_definition_versions_definition_id"),
+        "workflow_definition_versions",
+        ["definition_id"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_workflow_definition_versions_tenant_id"),
+        "workflow_definition_versions",
+        ["tenant_id"],
+        unique=False,
+    )
 
     workflow_instance_status = postgresql.ENUM(
-        "running", "waiting", "completed", "failed", "canceled",
+        "running",
+        "waiting",
+        "completed",
+        "failed",
+        "canceled",
         name="workflowinstancestatus",
         create_type=False,
     )
@@ -92,19 +126,50 @@ def upgrade() -> None:
         sa.Column("version", sa.Integer(), nullable=False),
         sa.Column("id", sa.String(length=36), nullable=False),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(["definition_id"], ["workflow_definitions.id"], ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(["definition_version_id"], ["workflow_definition_versions.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(
+            ["definition_id"], ["workflow_definitions.id"], ondelete="RESTRICT"
+        ),
+        sa.ForeignKeyConstraint(
+            ["definition_version_id"], ["workflow_definition_versions.id"], ondelete="RESTRICT"
+        ),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_workflow_instance_tenant_entity", "workflow_instances", ["tenant_id", "entity_type", "entity_id"], unique=False)
-    op.create_index("ix_workflow_instance_tenant_status", "workflow_instances", ["tenant_id", "status"], unique=False)
-    op.create_index(op.f("ix_workflow_instances_definition_id"), "workflow_instances", ["definition_id"], unique=False)
-    op.create_index(op.f("ix_workflow_instances_definition_version_id"), "workflow_instances", ["definition_version_id"], unique=False)
-    op.create_index(op.f("ix_workflow_instances_tenant_id"), "workflow_instances", ["tenant_id"], unique=False)
+    op.create_index(
+        "ix_workflow_instance_tenant_entity",
+        "workflow_instances",
+        ["tenant_id", "entity_type", "entity_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_workflow_instance_tenant_status",
+        "workflow_instances",
+        ["tenant_id", "status"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_workflow_instances_definition_id"),
+        "workflow_instances",
+        ["definition_id"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_workflow_instances_definition_version_id"),
+        "workflow_instances",
+        ["definition_version_id"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_workflow_instances_tenant_id"), "workflow_instances", ["tenant_id"], unique=False
+    )
 
     workflow_task_status = postgresql.ENUM(
-        "open", "completed", "reassigned", "delegated", "escalated", "canceled",
+        "open",
+        "completed",
+        "reassigned",
+        "delegated",
+        "escalated",
+        "canceled",
         name="workflowtaskstatus",
         create_type=False,
     )
@@ -131,10 +196,24 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_workflow_task_tenant_assignee_status", "workflow_tasks", ["tenant_id", "assignee_user_id", "status"], unique=False)
-    op.create_index("ix_workflow_task_tenant_role_status", "workflow_tasks", ["tenant_id", "assignee_role_code", "status"], unique=False)
-    op.create_index(op.f("ix_workflow_tasks_instance_id"), "workflow_tasks", ["instance_id"], unique=False)
-    op.create_index(op.f("ix_workflow_tasks_tenant_id"), "workflow_tasks", ["tenant_id"], unique=False)
+    op.create_index(
+        "ix_workflow_task_tenant_assignee_status",
+        "workflow_tasks",
+        ["tenant_id", "assignee_user_id", "status"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_workflow_task_tenant_role_status",
+        "workflow_tasks",
+        ["tenant_id", "assignee_role_code", "status"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_workflow_tasks_instance_id"), "workflow_tasks", ["instance_id"], unique=False
+    )
+    op.create_index(
+        op.f("ix_workflow_tasks_tenant_id"), "workflow_tasks", ["tenant_id"], unique=False
+    )
 
     op.create_table(
         "workflow_timeline_events",
@@ -152,12 +231,30 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_workflow_timeline_tenant_instance_created", "workflow_timeline_events", ["tenant_id", "instance_id", "created_at"], unique=False)
-    op.create_index(op.f("ix_workflow_timeline_events_instance_id"), "workflow_timeline_events", ["instance_id"], unique=False)
-    op.create_index(op.f("ix_workflow_timeline_events_tenant_id"), "workflow_timeline_events", ["tenant_id"], unique=False)
+    op.create_index(
+        "ix_workflow_timeline_tenant_instance_created",
+        "workflow_timeline_events",
+        ["tenant_id", "instance_id", "created_at"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_workflow_timeline_events_instance_id"),
+        "workflow_timeline_events",
+        ["instance_id"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_workflow_timeline_events_tenant_id"),
+        "workflow_timeline_events",
+        ["tenant_id"],
+        unique=False,
+    )
 
     notification_priority = postgresql.ENUM(
-        "low", "medium", "high", "critical",
+        "low",
+        "medium",
+        "high",
+        "critical",
         name="notificationpriority",
         create_type=False,
     )
@@ -166,7 +263,9 @@ def upgrade() -> None:
         batch.add_column(sa.Column("digest_mode", sa.String(length=32), nullable=True))
         batch.add_column(sa.Column("channel_preferences", sa.JSON(), nullable=True))
     with op.batch_alter_table("notifications") as batch:
-        batch.add_column(sa.Column("priority", notification_priority, nullable=False, server_default="medium"))
+        batch.add_column(
+            sa.Column("priority", notification_priority, nullable=False, server_default="medium")
+        )
     op.create_table(
         "npa_revision",
         sa.Column("act_id", sa.String(length=36), nullable=False),
@@ -195,9 +294,15 @@ def downgrade() -> None:
         batch.drop_column("channel_preferences")
         batch.drop_column("digest_mode")
     sa.Enum(name="notificationpriority").drop(op.get_bind(), checkfirst=True)
-    op.drop_index(op.f("ix_workflow_timeline_events_tenant_id"), table_name="workflow_timeline_events")
-    op.drop_index(op.f("ix_workflow_timeline_events_instance_id"), table_name="workflow_timeline_events")
-    op.drop_index("ix_workflow_timeline_tenant_instance_created", table_name="workflow_timeline_events")
+    op.drop_index(
+        op.f("ix_workflow_timeline_events_tenant_id"), table_name="workflow_timeline_events"
+    )
+    op.drop_index(
+        op.f("ix_workflow_timeline_events_instance_id"), table_name="workflow_timeline_events"
+    )
+    op.drop_index(
+        "ix_workflow_timeline_tenant_instance_created", table_name="workflow_timeline_events"
+    )
     op.drop_table("workflow_timeline_events")
     op.drop_index(op.f("ix_workflow_tasks_tenant_id"), table_name="workflow_tasks")
     op.drop_index(op.f("ix_workflow_tasks_instance_id"), table_name="workflow_tasks")
@@ -206,15 +311,24 @@ def downgrade() -> None:
     op.drop_table("workflow_tasks")
     sa.Enum(name="workflowtaskstatus").drop(op.get_bind(), checkfirst=True)
     op.drop_index(op.f("ix_workflow_instances_tenant_id"), table_name="workflow_instances")
-    op.drop_index(op.f("ix_workflow_instances_definition_version_id"), table_name="workflow_instances")
+    op.drop_index(
+        op.f("ix_workflow_instances_definition_version_id"), table_name="workflow_instances"
+    )
     op.drop_index(op.f("ix_workflow_instances_definition_id"), table_name="workflow_instances")
     op.drop_index("ix_workflow_instance_tenant_status", table_name="workflow_instances")
     op.drop_index("ix_workflow_instance_tenant_entity", table_name="workflow_instances")
     op.drop_table("workflow_instances")
     sa.Enum(name="workflowinstancestatus").drop(op.get_bind(), checkfirst=True)
-    op.drop_index(op.f("ix_workflow_definition_versions_tenant_id"), table_name="workflow_definition_versions")
-    op.drop_index(op.f("ix_workflow_definition_versions_definition_id"), table_name="workflow_definition_versions")
-    op.drop_index("ix_workflow_definition_version_tenant_status", table_name="workflow_definition_versions")
+    op.drop_index(
+        op.f("ix_workflow_definition_versions_tenant_id"), table_name="workflow_definition_versions"
+    )
+    op.drop_index(
+        op.f("ix_workflow_definition_versions_definition_id"),
+        table_name="workflow_definition_versions",
+    )
+    op.drop_index(
+        "ix_workflow_definition_version_tenant_status", table_name="workflow_definition_versions"
+    )
     op.drop_table("workflow_definition_versions")
     sa.Enum(name="workflowdefinitionstatus").drop(op.get_bind(), checkfirst=True)
     op.drop_index(op.f("ix_workflow_definitions_tenant_id"), table_name="workflow_definitions")

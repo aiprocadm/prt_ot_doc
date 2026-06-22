@@ -1,4 +1,5 @@
 """HTTP contract: BriefingTemplate.require_signature_code CRUD + code-flow cycle."""
+
 from __future__ import annotations
 
 import itertools
@@ -6,7 +7,13 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.models.models import BriefingEntry, BriefingJournal, BriefingTemplate, RoleEnum, SignatureRequest
+from app.models.models import (
+    BriefingEntry,
+    BriefingJournal,
+    BriefingTemplate,
+    RoleEnum,
+    SignatureRequest,
+)
 
 _counter = itertools.count(1)
 
@@ -17,18 +24,29 @@ async def _entry_with_template(session, data_factory, *, require_code: bool):
     company = await data_factory.create_company(tenant=tenant, session=session, name="BRF CF API")
     person = await data_factory.create_person(tenant=tenant, company=company, session=session)
     template = BriefingTemplate(
-        tenant_id=tenant.id, code=f"BRF-CF-API-T-{n}", title="CF", briefing_type="primary",
+        tenant_id=tenant.id,
+        code=f"BRF-CF-API-T-{n}",
+        title="CF",
+        briefing_type="primary",
         require_signature_code=require_code,
     )
     journal = BriefingJournal(
-        tenant_id=tenant.id, code=f"BRF-CF-API-J-{n}", title="CF", journal_type="workplace", status="active"
+        tenant_id=tenant.id,
+        code=f"BRF-CF-API-J-{n}",
+        title="CF",
+        journal_type="workplace",
+        status="active",
     )
     session.add_all([template, journal])
     await session.flush()
     entry = BriefingEntry(
-        tenant_id=tenant.id, person_id=person.id, briefing_journal_id=journal.id,
-        briefing_template_id=template.id, briefing_type="primary",
-        briefing_date=datetime.now(tz=timezone.utc), status="assigned",
+        tenant_id=tenant.id,
+        person_id=person.id,
+        briefing_journal_id=journal.id,
+        briefing_template_id=template.id,
+        briefing_type="primary",
+        briefing_date=datetime.now(tz=timezone.utc),
+        status="assigned",
     )
     session.add(entry)
     await session.commit()
@@ -118,7 +136,8 @@ async def test_confirm_code_without_pending_returns_409(
 
     resp = await async_client.post(
         f"/api/v1/briefings/entries/{entry.id}/confirm-code",
-        json={"code": "123456"}, headers=headers,
+        json={"code": "123456"},
+        headers=headers,
     )
     assert resp.status_code == 409, resp.text
 
@@ -139,7 +158,8 @@ async def test_confirm_code_wrong_code_returns_409_and_persists_attempt(
 
     wrong = await async_client.post(
         f"/api/v1/briefings/entries/{entry.id}/confirm-code",
-        json={"code": "000000"}, headers=headers,
+        json={"code": "000000"},
+        headers=headers,
     )
     assert wrong.status_code == 409, wrong.text
 
@@ -152,6 +172,7 @@ async def test_confirm_code_wrong_code_returns_409_and_persists_attempt(
     # верный код после неверного всё ещё проходит
     ok = await async_client.post(
         f"/api/v1/briefings/entries/{entry.id}/confirm-code",
-        json={"code": pending["confirm_code"]}, headers=headers,
+        json={"code": pending["confirm_code"]},
+        headers=headers,
     )
     assert ok.status_code == 200, ok.text

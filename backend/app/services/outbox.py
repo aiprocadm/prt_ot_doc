@@ -192,7 +192,10 @@ class OutboxService:
                 for target in destinations:
                     merged_headers = self._merge_headers(target.headers, headers)
                     if target.endpoint_id:
-                        merged_headers = {**(merged_headers or {}), "X-Webhook-Endpoint-Id": target.endpoint_id}
+                        merged_headers = {
+                            **(merged_headers or {}),
+                            "X-Webhook-Endpoint-Id": target.endpoint_id,
+                        }
                     existing = None
                     if key:
                         existing = await self._find_existing(
@@ -277,11 +280,15 @@ class OutboxService:
         destination: str,
         idempotency_key: str,
     ) -> Outbox | None:
-        stmt = select(Outbox).where(
-            Outbox.tenant_id == tenant_id,
-            Outbox.destination == destination,
-            Outbox.idempotency_key == idempotency_key,
-        ).limit(1)
+        stmt = (
+            select(Outbox)
+            .where(
+                Outbox.tenant_id == tenant_id,
+                Outbox.destination == destination,
+                Outbox.idempotency_key == idempotency_key,
+            )
+            .limit(1)
+        )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -624,7 +631,9 @@ class OutboxProcessor:
         )
 
     async def _already_delivered(self, entry: Outbox) -> bool:
-        subscription_id = (entry.headers or {}).get("X-Webhook-Endpoint-Id") or (entry.headers or {}).get("X-Webhook-Subscription-Id")
+        subscription_id = (entry.headers or {}).get("X-Webhook-Endpoint-Id") or (
+            entry.headers or {}
+        ).get("X-Webhook-Subscription-Id")
         event_id = str((entry.payload or {}).get("event_id") or entry.id)
         if not subscription_id:
             return False
@@ -644,7 +653,9 @@ class OutboxProcessor:
         status_code: int | None = None,
         error: dict[str, Any] | None = None,
     ) -> None:
-        subscription_id = (entry.headers or {}).get("X-Webhook-Endpoint-Id") or (entry.headers or {}).get("X-Webhook-Subscription-Id")
+        subscription_id = (entry.headers or {}).get("X-Webhook-Endpoint-Id") or (
+            entry.headers or {}
+        ).get("X-Webhook-Subscription-Id")
         event_id = str((entry.payload or {}).get("event_id") or entry.id)
         if not subscription_id:
             return

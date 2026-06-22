@@ -28,16 +28,22 @@ def upgrade() -> None:
             server_default=sa.text("'{}'::jsonb"),
         ),
     )
-    op.create_index("ix_files_tenant_entity", "files", ["tenant_id", "entity_type", "entity_id"], unique=False)
+    op.create_index(
+        "ix_files_tenant_entity", "files", ["tenant_id", "entity_type", "entity_id"], unique=False
+    )
     op.drop_index("ix_files_tenant_created_at", table_name="files")
-    op.create_index("ix_files_tenant_updated_at", "files", ["tenant_id", "updated_at"], unique=False)
+    op.create_index(
+        "ix_files_tenant_updated_at", "files", ["tenant_id", "updated_at"], unique=False
+    )
     op.execute("CREATE INDEX ix_files_tags_gin ON files USING GIN (tags)")
 
 
 def downgrade() -> None:
     op.drop_index("ix_files_tags_gin", table_name="files")
     op.drop_index("ix_files_tenant_updated_at", table_name="files")
-    op.create_index("ix_files_tenant_created_at", "files", ["tenant_id", "created_at"], unique=False)
+    op.create_index(
+        "ix_files_tenant_created_at", "files", ["tenant_id", "created_at"], unique=False
+    )
     op.drop_index("ix_files_tenant_entity", table_name="files")
     op.drop_column("files", "tags")
     op.drop_column("files", "entity_id")

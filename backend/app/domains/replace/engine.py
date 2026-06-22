@@ -55,7 +55,10 @@ class ReplaceEngine:
             if patch.rolled_back_at:
                 item["rolled_back_at"] = patch.rolled_back_at.isoformat()
             payload.append(item)
-        self._storage_path.write_text(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str, indent=2), encoding="utf-8")
+        self._storage_path.write_text(
+            json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str, indent=2),
+            encoding="utf-8",
+        )
 
     @staticmethod
     def _iter_paths(value: Any, prefix: str = "") -> dict[str, Any]:
@@ -79,18 +82,18 @@ class ReplaceEngine:
         i = 0
         while i < len(path):
             char = path[i]
-            if char == '.':
+            if char == ".":
                 if current:
                     tokens.append(current)
                     current = ""
                 i += 1
                 continue
-            if char == '[':
+            if char == "[":
                 if current:
                     tokens.append(current)
                     current = ""
-                end = path.index(']', i)
-                tokens.append(int(path[i + 1:end]))
+                end = path.index("]", i)
+                tokens.append(int(path[i + 1 : end]))
                 i = end + 1
                 continue
             current += char
@@ -140,7 +143,9 @@ class ReplaceEngine:
         return True
 
     @classmethod
-    def _build_diff(cls, before: dict[str, Any], after: dict[str, Any], replacements: dict[str, str]) -> list[dict[str, Any]]:
+    def _build_diff(
+        cls, before: dict[str, Any], after: dict[str, Any], replacements: dict[str, str]
+    ) -> list[dict[str, Any]]:
         diff: list[dict[str, Any]] = []
         before_paths = cls._iter_paths(before)
         after_paths = cls._iter_paths(after)
@@ -152,18 +157,31 @@ class ReplaceEngine:
             if after_value is None and key in after_paths:
                 after_value = after_paths[key]
             if before_value != after_value:
-                diff.append({"key": key, "before": before_value, "after": after_value, "replacement": replacement})
+                diff.append(
+                    {
+                        "key": key,
+                        "before": before_value,
+                        "after": after_value,
+                        "replacement": replacement,
+                    }
+                )
         return diff
 
     @staticmethod
     def _fingerprint(payload: dict[str, Any]) -> str:
-        return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+        return hashlib.sha256(
+            json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
+        ).hexdigest()
 
-    def _make_patch(self, context: dict[str, Any], replacements: dict[str, str], *, mode: str) -> ReplacePatch:
+    def _make_patch(
+        self, context: dict[str, Any], replacements: dict[str, str], *, mode: str
+    ) -> ReplacePatch:
         before = copy.deepcopy(context)
         after = self.apply(context, replacements)
         diff = self._build_diff(before, after, replacements)
-        patch_id = self._fingerprint({"before": before, "after": after, "replacements": replacements, "mode": mode})
+        patch_id = self._fingerprint(
+            {"before": before, "after": after, "replacements": replacements, "mode": mode}
+        )
         existing = self._patches.get(patch_id)
         if existing is not None:
             return self.get_patch(patch_id) or existing
@@ -193,7 +211,13 @@ class ReplaceEngine:
                 "after_fingerprint": summary["target_fingerprint_after"],
             },
             diff=diff,
-            history=[{"at": created_at.isoformat(), "action": mode, "status": "applied" if mode == "apply" else "planned"}],
+            history=[
+                {
+                    "at": created_at.isoformat(),
+                    "action": mode,
+                    "status": "applied" if mode == "apply" else "planned",
+                }
+            ],
             summary=summary,
         )
         self._patches[patch_id] = patch
@@ -218,13 +242,25 @@ class ReplaceEngine:
         patch = self._patches[patch_id]
         if patch.status == "rolled_back":
             if not any(item.get("action") == "rollback_noop" for item in patch.history):
-                patch.history.append({"at": datetime.now(tz=timezone.utc).isoformat(), "action": "rollback_noop", "status": patch.status})
+                patch.history.append(
+                    {
+                        "at": datetime.now(tz=timezone.utc).isoformat(),
+                        "action": "rollback_noop",
+                        "status": patch.status,
+                    }
+                )
                 self._persist()
             return copy.deepcopy(patch.before)
         patch.status = "rolled_back"
         patch.rolled_back_at = datetime.now(tz=timezone.utc)
-        patch.audit = {**patch.audit, "rolled_back": True, "rolled_back_at": patch.rolled_back_at.isoformat()}
-        patch.history.append({"at": patch.rolled_back_at.isoformat(), "action": "rollback", "status": patch.status})
+        patch.audit = {
+            **patch.audit,
+            "rolled_back": True,
+            "rolled_back_at": patch.rolled_back_at.isoformat(),
+        }
+        patch.history.append(
+            {"at": patch.rolled_back_at.isoformat(), "action": "rollback", "status": patch.status}
+        )
         self._persist()
         return copy.deepcopy(patch.before)
 

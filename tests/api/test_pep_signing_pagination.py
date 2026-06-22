@@ -1,4 +1,5 @@
 """Пагинация журнала GET /sign/pep/requests: limit/offset, total, стабильная сортировка."""
+
 from __future__ import annotations
 
 import pytest
@@ -7,7 +8,9 @@ from sqlalchemy import select
 from app.models.models import PPEIssue, RoleEnum, SignatureRequest
 
 
-async def _world_with_requests(async_client, sessionmaker, data_factory, make_auth_headers, *, count: int):
+async def _world_with_requests(
+    async_client, sessionmaker, data_factory, make_auth_headers, *, count: int
+):
     """Тенант + person + N ППЭ-выдач → N ПЭП-запросов через HTTP. Возвращает (headers, ids)."""
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
@@ -16,8 +19,11 @@ async def _world_with_requests(async_client, sessionmaker, data_factory, make_au
         issues = []
         for i in range(count):
             issue = PPEIssue(
-                tenant_id=tenant.id, person_id=person.id,
-                item_name=f"Каска page-{i}", quantity=1, status="issued",
+                tenant_id=tenant.id,
+                person_id=person.id,
+                item_name=f"Каска page-{i}",
+                quantity=1,
+                status="issued",
             )
             session.add(issue)
             issues.append(issue)
@@ -29,8 +35,10 @@ async def _world_with_requests(async_client, sessionmaker, data_factory, make_au
         resp = await async_client.post(
             "/api/v1/sign/pep/requests",
             json={
-                "object_type": "ppe_issue", "object_id": issue_id,
-                "purpose": "ppe_issue", "signer_person_id": person.id,
+                "object_type": "ppe_issue",
+                "object_id": issue_id,
+                "purpose": "ppe_issue",
+                "signer_person_id": person.id,
             },
             headers=headers,
         )
@@ -84,12 +92,11 @@ async def test_journal_stable_sort_created_desc_id_desc(
     )
     async with sessionmaker() as session:
         rows = (
-            await session.execute(select(SignatureRequest).where(SignatureRequest.id.in_(ids)))
-        ).scalars().all()
-    expected = [
-        row.id
-        for row in sorted(rows, key=lambda r: (r.created_at, r.id), reverse=True)
-    ]
+            (await session.execute(select(SignatureRequest).where(SignatureRequest.id.in_(ids))))
+            .scalars()
+            .all()
+        )
+    expected = [row.id for row in sorted(rows, key=lambda r: (r.created_at, r.id), reverse=True)]
     listed = await async_client.get("/api/v1/sign/pep/requests", headers=headers)
     got = [item["id"] for item in listed.json()["items"] if item["id"] in set(ids)]
     assert got == expected

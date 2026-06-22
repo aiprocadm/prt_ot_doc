@@ -2,11 +2,19 @@
 """Contractor document-requirement policy CRUD + isolation + feature-gate + checklist."""
 from __future__ import annotations
 
+from datetime import date, datetime, timedelta, timezone
+
 import pytest
 from fastapi import status
 from httpx import AsyncClient
 
 from app.models.models import RoleEnum
+from app.modules.contractors.models import (
+    ComplianceStatus,
+    ContractorDocument,
+    ContractorEmployee,
+    ContractorRegistry,
+)
 
 BASE = "/api/v1/contractors/document-requirements"
 
@@ -16,7 +24,8 @@ async def test_create_list_delete_requirement(async_client: AsyncClient, make_au
     headers = await make_auth_headers(RoleEnum.ADMIN)
 
     resp = await async_client.post(
-        BASE, headers=headers,
+        BASE,
+        headers=headers,
         json={"doc_type": "sro", "scope": "company", "mandatory": True},
     )
     assert resp.status_code == status.HTTP_201_CREATED, resp.text
@@ -49,7 +58,8 @@ async def test_duplicate_requirement_returns_409(async_client, make_auth_headers
 async def test_invalid_scope_returns_422(async_client, make_auth_headers):
     headers = await make_auth_headers(RoleEnum.ADMIN)
     resp = await async_client.post(
-        BASE, headers=headers,
+        BASE,
+        headers=headers,
         json={"doc_type": "sro", "scope": "bogus", "mandatory": True},
     )
     assert resp.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY, resp.text
@@ -59,7 +69,8 @@ async def test_invalid_scope_returns_422(async_client, make_auth_headers):
 async def test_reader_cannot_create_requirement(async_client, make_auth_headers):
     headers = await make_auth_headers(RoleEnum.INSPECTOR_CONTRACTOR)
     resp = await async_client.post(
-        BASE, headers=headers,
+        BASE,
+        headers=headers,
         json={"doc_type": "sro", "scope": "company", "mandatory": True},
     )
     assert resp.status_code == status.HTTP_403_FORBIDDEN, resp.text
@@ -68,15 +79,6 @@ async def test_reader_cannot_create_requirement(async_client, make_auth_headers)
 # ---------------------------------------------------------------------------
 # Document checklist (wizard deliverable)
 # ---------------------------------------------------------------------------
-
-from datetime import date, datetime, timedelta, timezone
-
-from app.modules.contractors.models import (
-    ComplianceStatus,
-    ContractorDocument,
-    ContractorEmployee,
-    ContractorRegistry,
-)
 
 TODAY = date.today()
 
@@ -95,23 +97,39 @@ async def _seed_employee(sessionmaker, data_factory) -> tuple[str, str, str]:
 
 
 @pytest.mark.asyncio
-async def test_checklist_reports_status_and_satisfied_by(async_client, sessionmaker, data_factory, make_auth_headers):
+async def test_checklist_reports_status_and_satisfied_by(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
     tid, contractor_id, emp_id = await _seed_employee(sessionmaker, data_factory)
     headers = await make_auth_headers(RoleEnum.ADMIN)
 
     # one company rule (satisfied) + one employee rule (missing)
-    await async_client.post(BASE, headers=headers, json={"doc_type": "sro", "scope": "company", "mandatory": True})
-    await async_client.post(BASE, headers=headers, json={"doc_type": "medical_cert", "scope": "employee", "mandatory": True})
+    await async_client.post(
+        BASE, headers=headers, json={"doc_type": "sro", "scope": "company", "mandatory": True}
+    )
+    await async_client.post(
+        BASE,
+        headers=headers,
+        json={"doc_type": "medical_cert", "scope": "employee", "mandatory": True},
+    )
 
     # satisfying company document
     async with sessionmaker() as session:
-        session.add(ContractorDocument(
-            tenant_id=tid, contractor_id=contractor_id, doc_type="sro", title="СРО",
-            valid_until=TODAY + timedelta(days=90), status="active",
-        ))
+        session.add(
+            ContractorDocument(
+                tenant_id=tid,
+                contractor_id=contractor_id,
+                doc_type="sro",
+                title="СРО",
+                valid_until=TODAY + timedelta(days=90),
+                status="active",
+            )
+        )
         await session.commit()
 
-    resp = await async_client.get(f"/api/v1/contractors/employees/{emp_id}/document-checklist", headers=headers)
+    resp = await async_client.get(
+        f"/api/v1/contractors/employees/{emp_id}/document-checklist", headers=headers
+    )
     assert resp.status_code == status.HTTP_200_OK, resp.text
     items = {i["doc_type"]: i for i in resp.json()["items"]}
     assert items["sro"]["status"] == "ok"
@@ -134,9 +152,13 @@ async def _seed_ready_employee_db(sessionmaker, data_factory) -> tuple[str, str]
         await session.flush()
         now = datetime.now(timezone.utc)
         emp = ContractorEmployee(
-            tenant_id=tid, contractor_id=contractor.id, full_name="Admit Worker",
-            access_status=ComplianceStatus.VALID, training_status=ComplianceStatus.VALID,
-            medical_status=ComplianceStatus.VALID, last_training_at=now,
+            tenant_id=tid,
+            contractor_id=contractor.id,
+            full_name="Admit Worker",
+            access_status=ComplianceStatus.VALID,
+            training_status=ComplianceStatus.VALID,
+            medical_status=ComplianceStatus.VALID,
+            last_training_at=now,
             next_medical_at=now + timedelta(days=200),
         )
         session.add(emp)
@@ -145,11 +167,17 @@ async def _seed_ready_employee_db(sessionmaker, data_factory) -> tuple[str, str]
 
 
 @pytest.mark.asyncio
-async def test_admit_blocked_by_missing_mandatory_document(async_client, sessionmaker, data_factory, make_auth_headers):
+async def test_admit_blocked_by_missing_mandatory_document(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
     _tid, emp_id = await _seed_ready_employee_db(sessionmaker, data_factory)
     headers = await make_auth_headers(RoleEnum.ADMIN)
     # base 3 dims are clear; add a mandatory employee document rule with no document
-    await async_client.post(BASE, headers=headers, json={"doc_type": "medical_cert", "scope": "employee", "mandatory": True})
+    await async_client.post(
+        BASE,
+        headers=headers,
+        json={"doc_type": "medical_cert", "scope": "employee", "mandatory": True},
+    )
 
     resp = await async_client.post(f"/api/v1/contractors/employees/{emp_id}/admit", headers=headers)
     assert resp.status_code == status.HTTP_409_CONFLICT, resp.text
@@ -160,18 +188,35 @@ async def test_admit_blocked_by_missing_mandatory_document(async_client, session
 
 
 @pytest.mark.asyncio
-async def test_admit_passes_when_document_present(async_client, sessionmaker, data_factory, make_auth_headers):
+async def test_admit_passes_when_document_present(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
     tid, emp_id = await _seed_ready_employee_db(sessionmaker, data_factory)
     headers = await make_auth_headers(RoleEnum.ADMIN)
-    await async_client.post(BASE, headers=headers, json={"doc_type": "medical_cert", "scope": "employee", "mandatory": True})
+    await async_client.post(
+        BASE,
+        headers=headers,
+        json={"doc_type": "medical_cert", "scope": "employee", "mandatory": True},
+    )
     async with sessionmaker() as session:
         from sqlalchemy import select as _select
-        emp = (await session.execute(_select(ContractorEmployee).where(ContractorEmployee.id == emp_id))).scalar_one()
-        session.add(ContractorDocument(
-            tenant_id=tid, contractor_id=emp.contractor_id, employee_id=emp_id,
-            doc_type="medical_cert", title="Медзаключение",
-            valid_until=TODAY + timedelta(days=90), status="active",
-        ))
+
+        emp = (
+            await session.execute(
+                _select(ContractorEmployee).where(ContractorEmployee.id == emp_id)
+            )
+        ).scalar_one()
+        session.add(
+            ContractorDocument(
+                tenant_id=tid,
+                contractor_id=emp.contractor_id,
+                employee_id=emp_id,
+                doc_type="medical_cert",
+                title="Медзаключение",
+                valid_until=TODAY + timedelta(days=90),
+                status="active",
+            )
+        )
         await session.commit()
 
     resp = await async_client.post(f"/api/v1/contractors/employees/{emp_id}/admit", headers=headers)

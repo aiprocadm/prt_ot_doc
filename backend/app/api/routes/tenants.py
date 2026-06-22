@@ -32,7 +32,9 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 _MANAGEMENT_ROLES = [RoleEnum.ADMIN.value, RoleEnum.CLIENT_ADMIN.value]
 
 
-def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | None:  # pragma: no cover - fastapi wiring
+def _tenant_resource_id(
+    tenant: Tenant = Depends(get_tenant_record),
+) -> str | None:  # pragma: no cover - fastapi wiring
     return getattr(tenant, "id", None)
 
 
@@ -185,7 +187,9 @@ async def patch_tenant_quotas_admin_endpoint(
     credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
     access=Depends(abac(_tenant_resource_id, required_roles=_MANAGEMENT_ROLES, action="write")),
 ) -> TenantQuotaRead:
-    return await patch_tenant_quotas_endpoint(tenant_id, payload, session, tenant, credentials, access)
+    return await patch_tenant_quotas_endpoint(
+        tenant_id, payload, session, tenant, credentials, access
+    )
 
 
 @router.get("/{tenant_id}", response_model=TenantRead)
@@ -198,6 +202,10 @@ async def get_tenant_endpoint(
     current_tenant = tenant
     tenant = await session.get(Tenant, tenant_id)
     _ = access
-    if tenant is None or tenant.slug != session.info.get("tenant") or tenant.id != current_tenant.id:
+    if (
+        tenant is None
+        or tenant.slug != session.info.get("tenant")
+        or tenant.id != current_tenant.id
+    ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found")
     return TenantRead.model_validate(tenant)

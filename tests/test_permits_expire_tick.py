@@ -11,9 +11,13 @@ async def test_expire_due_idempotent(sessionmaker, data_factory):
     person = await data_factory.create_person()
     async with sessionmaker() as session:
         permit = await svc.create_permit(
-            session, tenant_id=person.tenant_id, person_id=person.id,
-            permit_type="a", issued_at=date.today() - timedelta(days=5),
-            valid_until=date.today() + timedelta(days=5), position_id=None,
+            session,
+            tenant_id=person.tenant_id,
+            person_id=person.id,
+            permit_type="a",
+            issued_at=date.today() - timedelta(days=5),
+            valid_until=date.today() + timedelta(days=5),
+            position_id=None,
         )
         permit.valid_until = date.today() - timedelta(days=1)
         permit.status = lc.PERMIT_STATUS_ACTIVE

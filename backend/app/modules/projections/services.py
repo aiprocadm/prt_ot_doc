@@ -5,6 +5,7 @@ from datetime import date
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domains.contractors.lifecycle import ReadinessStatus as ContractorReadinessStatus
 from app.models.finance import Contract, Order
 from app.models.models import (
     NPA,
@@ -17,7 +18,6 @@ from app.models.models import (
     Site,
 )
 from app.models.notifications import PlanTask
-from app.domains.contractors.lifecycle import ReadinessStatus as ContractorReadinessStatus
 from app.modules.client_portal.services import SafePortalPayloadService
 from app.modules.contractors.models import ContractorEmployee, ContractorRegistry
 from app.modules.projections.models import (
@@ -39,7 +39,9 @@ class PackageProjectionService:
         self.tenant_id = tenant_id
 
     async def rebuild(self) -> int:
-        return await ProjectionOrchestrator(self.session, self.tenant_id).rebuild_package_projection()
+        return await ProjectionOrchestrator(
+            self.session, self.tenant_id
+        ).rebuild_package_projection()
 
 
 class PersonComplianceProjectionService:
@@ -48,7 +50,9 @@ class PersonComplianceProjectionService:
         self.tenant_id = tenant_id
 
     async def rebuild(self) -> int:
-        return await ProjectionOrchestrator(self.session, self.tenant_id).rebuild_person_projection()
+        return await ProjectionOrchestrator(
+            self.session, self.tenant_id
+        ).rebuild_person_projection()
 
 
 class SiteSafetyProjectionService:
@@ -60,18 +64,26 @@ class SiteSafetyProjectionService:
         persons_by_site = (
             await self.session.execute(
                 select(Person.site_id, func.count(Person.id))
-                .where(Person.tenant_id == self.tenant_id, Person.deleted_at.is_(None), Person.site_id.is_not(None))
+                .where(
+                    Person.tenant_id == self.tenant_id,
+                    Person.deleted_at.is_(None),
+                    Person.site_id.is_not(None),
+                )
                 .group_by(Person.site_id)
             )
         ).all()
         incidents_by_site = (
             await self.session.execute(
-                select(Incident.site_id, func.count(Incident.id)).where(Incident.tenant_id == self.tenant_id).group_by(Incident.site_id)
+                select(Incident.site_id, func.count(Incident.id))
+                .where(Incident.tenant_id == self.tenant_id)
+                .group_by(Incident.site_id)
             )
         ).all()
         inspections_by_site = (
             await self.session.execute(
-                select(Inspection.site_id, func.count(Inspection.id)).where(Inspection.tenant_id == self.tenant_id).group_by(Inspection.site_id)
+                select(Inspection.site_id, func.count(Inspection.id))
+                .where(Inspection.tenant_id == self.tenant_id)
+                .group_by(Inspection.site_id)
             )
         ).all()
 
@@ -84,7 +96,10 @@ class SiteSafetyProjectionService:
         for site_id in all_sites:
             row = (
                 await self.session.execute(
-                    select(SiteSafetyReadModel).where(SiteSafetyReadModel.tenant_id == self.tenant_id, SiteSafetyReadModel.site_id == site_id)
+                    select(SiteSafetyReadModel).where(
+                        SiteSafetyReadModel.tenant_id == self.tenant_id,
+                        SiteSafetyReadModel.site_id == site_id,
+                    )
                 )
             ).scalar_one_or_none()
             if row is None:
@@ -112,35 +127,49 @@ class ContractorReadinessProjectionService:
         # registry id that ContractorEmployee.contractor_id references, so we must
         # iterate registries and join packages through ContractorRegistry.company_id.
         registries = (
-            await self.session.execute(
-                select(ContractorRegistry).where(
-                    ContractorRegistry.tenant_id == self.tenant_id,
-                    ContractorRegistry.deleted_at.is_(None),
+            (
+                await self.session.execute(
+                    select(ContractorRegistry).where(
+                        ContractorRegistry.tenant_id == self.tenant_id,
+                        ContractorRegistry.deleted_at.is_(None),
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         # Active package runs counted per client company (for the company→contractor join below).
         package_runs = (
-            await self.session.execute(
-                select(ClientPackageRun).where(ClientPackageRun.tenant_id == self.tenant_id)
+            (
+                await self.session.execute(
+                    select(ClientPackageRun).where(ClientPackageRun.tenant_id == self.tenant_id)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         packages_by_company: dict[str, int] = {}
         for run in package_runs:
             if not run.client_company_id:
                 continue
-            packages_by_company[run.client_company_id] = packages_by_company.get(run.client_company_id, 0) + 1
+            packages_by_company[run.client_company_id] = (
+                packages_by_company.get(run.client_company_id, 0) + 1
+            )
 
         # Non-deleted employees grouped by contractor (registry) id.
         employees = (
-            await self.session.execute(
-                select(ContractorEmployee).where(
-                    ContractorEmployee.tenant_id == self.tenant_id,
-                    ContractorEmployee.deleted_at.is_(None),
+            (
+                await self.session.execute(
+                    select(ContractorEmployee).where(
+                        ContractorEmployee.tenant_id == self.tenant_id,
+                        ContractorEmployee.deleted_at.is_(None),
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         employees_by_contractor: dict[str, list[ContractorEmployee]] = {}
         for emp in employees:
             employees_by_contractor.setdefault(emp.contractor_id, []).append(emp)
@@ -157,8 +186,12 @@ class ContractorReadinessProjectionService:
             verdicts = [verdict_by_emp[e.id] for e in contractor_employees]
 
             workers_total = len(verdicts)
-            workers_ready = sum(1 for v in verdicts if v.status is ContractorReadinessStatus.ALLOWED)
-            workers_blocked = sum(1 for v in verdicts if v.status is ContractorReadinessStatus.BLOCKED)
+            workers_ready = sum(
+                1 for v in verdicts if v.status is ContractorReadinessStatus.ALLOWED
+            )
+            workers_blocked = sum(
+                1 for v in verdicts if v.status is ContractorReadinessStatus.BLOCKED
+            )
             # "training" in violations covers overdue / expired / absent last_training_at —
             # not only the literally-missing sub-case the column name might suggest.
             missing_training_count = sum(1 for v in verdicts if "training" in v.violations)
@@ -184,7 +217,9 @@ class ContractorReadinessProjectionService:
                 )
             ).scalar_one_or_none()
             if row is None:
-                row = ContractorReadinessReadModel(tenant_id=self.tenant_id, contractor_id=contractor_id)
+                row = ContractorReadinessReadModel(
+                    tenant_id=self.tenant_id, contractor_id=contractor_id
+                )
                 self.session.add(row)
 
             row.company_id = registry.company_id
@@ -212,7 +247,15 @@ class ClientPortalProjectionService:
         self.tenant_id = tenant_id
 
     async def rebuild(self) -> int:
-        runs = (await self.session.execute(select(ClientPackageRun).where(ClientPackageRun.tenant_id == self.tenant_id))).scalars().all()
+        runs = (
+            (
+                await self.session.execute(
+                    select(ClientPackageRun).where(ClientPackageRun.tenant_id == self.tenant_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
         count = 0
         for run in runs:
             row = (
@@ -241,7 +284,11 @@ class ClientPortalProjectionService:
                 {
                     "progress_percent": 0,
                     "status": str(run.status),
-                    "internal_notes": (run.qc_report_json or {}).get("internal_notes") if run.qc_report_json else None,
+                    "internal_notes": (
+                        (run.qc_report_json or {}).get("internal_notes")
+                        if run.qc_report_json
+                        else None
+                    ),
                 }
             )
             count += 1
@@ -255,12 +302,23 @@ class ProjectionOrchestrator:
         self.tenant_id = tenant_id
 
     async def rebuild_package_projection(self) -> int:
-        runs = (await self.session.execute(select(ClientPackageRun).where(ClientPackageRun.tenant_id == self.tenant_id))).scalars().all()
+        runs = (
+            (
+                await self.session.execute(
+                    select(ClientPackageRun).where(ClientPackageRun.tenant_id == self.tenant_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
         count = 0
         for run in runs:
             row = (
                 await self.session.execute(
-                    select(PackageReadModel).where(PackageReadModel.tenant_id == self.tenant_id, PackageReadModel.package_id == run.id)
+                    select(PackageReadModel).where(
+                        PackageReadModel.tenant_id == self.tenant_id,
+                        PackageReadModel.package_id == run.id,
+                    )
                 )
             ).scalar_one_or_none()
             if row is None:
@@ -277,12 +335,25 @@ class ProjectionOrchestrator:
         return count
 
     async def rebuild_person_projection(self) -> int:
-        persons = (await self.session.execute(select(Person).where(Person.tenant_id == self.tenant_id, Person.deleted_at.is_(None)))).scalars().all()
+        persons = (
+            (
+                await self.session.execute(
+                    select(Person).where(
+                        Person.tenant_id == self.tenant_id, Person.deleted_at.is_(None)
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
         count = 0
         for person in persons:
             row = (
                 await self.session.execute(
-                    select(PersonComplianceReadModel).where(PersonComplianceReadModel.tenant_id == self.tenant_id, PersonComplianceReadModel.person_id == person.id)
+                    select(PersonComplianceReadModel).where(
+                        PersonComplianceReadModel.tenant_id == self.tenant_id,
+                        PersonComplianceReadModel.person_id == person.id,
+                    )
                 )
             ).scalar_one_or_none()
             if row is None:
@@ -291,11 +362,12 @@ class ProjectionOrchestrator:
             row.company_id = person.company_id
             row.site_id = person.site_id
             row.readiness_status = "unknown"
-            row.search_text = " ".join(filter(None, [person.last_name, person.first_name, person.middle_name]))
+            row.search_text = " ".join(
+                filter(None, [person.last_name, person.first_name, person.middle_name])
+            )
             count += 1
         await self.session.commit()
         return count
-
 
     async def rebuild_person_compliance_projection(self) -> int:
         return await self.rebuild_person_projection()
@@ -311,62 +383,120 @@ class ProjectionOrchestrator:
 
     async def rebuild_search_index(self) -> int:
         persons = (
-            await self.session.execute(
-                select(Person).where(Person.tenant_id == self.tenant_id, Person.deleted_at.is_(None))
+            (
+                await self.session.execute(
+                    select(Person).where(
+                        Person.tenant_id == self.tenant_id, Person.deleted_at.is_(None)
+                    )
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         companies = (
-            await self.session.execute(
-                select(Company).where(Company.tenant_id == self.tenant_id, Company.deleted_at.is_(None))
+            (
+                await self.session.execute(
+                    select(Company).where(
+                        Company.tenant_id == self.tenant_id, Company.deleted_at.is_(None)
+                    )
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         sites = (
-            await self.session.execute(
-                select(Site).where(Site.tenant_id == self.tenant_id, Site.deleted_at.is_(None))
+            (
+                await self.session.execute(
+                    select(Site).where(Site.tenant_id == self.tenant_id, Site.deleted_at.is_(None))
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         incidents = (
-            await self.session.execute(
-                select(Incident).where(Incident.tenant_id == self.tenant_id, Incident.deleted_at.is_(None))
+            (
+                await self.session.execute(
+                    select(Incident).where(
+                        Incident.tenant_id == self.tenant_id, Incident.deleted_at.is_(None)
+                    )
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         inspections = (
-            await self.session.execute(
-                select(Inspection).where(Inspection.tenant_id == self.tenant_id, Inspection.deleted_at.is_(None))
+            (
+                await self.session.execute(
+                    select(Inspection).where(
+                        Inspection.tenant_id == self.tenant_id, Inspection.deleted_at.is_(None)
+                    )
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         prescriptions = (
-            await self.session.execute(
-                select(Prescription).where(
-                    Prescription.tenant_id == self.tenant_id, Prescription.deleted_at.is_(None)
+            (
+                await self.session.execute(
+                    select(Prescription).where(
+                        Prescription.tenant_id == self.tenant_id, Prescription.deleted_at.is_(None)
+                    )
                 )
             )
-        ).scalars().all()
-        npa_items = (await self.session.execute(select(NPA).where(NPA.tenant_id == self.tenant_id))).scalars().all()
+            .scalars()
+            .all()
+        )
+        npa_items = (
+            (await self.session.execute(select(NPA).where(NPA.tenant_id == self.tenant_id)))
+            .scalars()
+            .all()
+        )
         contracts = (
-            await self.session.execute(
-                select(Contract).where(Contract.tenant_id == self.tenant_id, Contract.deleted_at.is_(None))
-            )
-        ).scalars().all()
-        orders = (
-            await self.session.execute(
-                select(Order).where(Order.tenant_id == self.tenant_id, Order.deleted_at.is_(None))
-            )
-        ).scalars().all()
-        plan_tasks = (
-            await self.session.execute(
-                select(PlanTask).where(PlanTask.tenant_id == self.tenant_id, PlanTask.deleted_at.is_(None))
-            )
-        ).scalars().all()
-        workflow_tasks = (
-            await self.session.execute(
-                select(WorkflowTask).where(
-                    WorkflowTask.tenant_id == self.tenant_id,
-                    WorkflowTask.deleted_at.is_(None),
-                    WorkflowTask.status == WorkflowTaskStatus.OPEN,
+            (
+                await self.session.execute(
+                    select(Contract).where(
+                        Contract.tenant_id == self.tenant_id, Contract.deleted_at.is_(None)
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
+        orders = (
+            (
+                await self.session.execute(
+                    select(Order).where(
+                        Order.tenant_id == self.tenant_id, Order.deleted_at.is_(None)
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        plan_tasks = (
+            (
+                await self.session.execute(
+                    select(PlanTask).where(
+                        PlanTask.tenant_id == self.tenant_id, PlanTask.deleted_at.is_(None)
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        workflow_tasks = (
+            (
+                await self.session.execute(
+                    select(WorkflowTask).where(
+                        WorkflowTask.tenant_id == self.tenant_id,
+                        WorkflowTask.deleted_at.is_(None),
+                        WorkflowTask.status == WorkflowTaskStatus.OPEN,
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
         count = 0
 
         async def upsert_entry(
@@ -411,18 +541,35 @@ class ProjectionOrchestrator:
             count += 1
 
         for person in persons:
-            title = " ".join(filter(None, [person.last_name, person.first_name, person.middle_name]))
+            title = " ".join(
+                filter(None, [person.last_name, person.first_name, person.middle_name])
+            )
             await upsert_entry(
                 entity_type="person",
                 entity_id=person.id,
                 title=title,
                 subtitle=person.personnel_number,
-                status=person.employment_status.value if hasattr(person.employment_status, "value") else str(person.employment_status),
+                status=(
+                    person.employment_status.value
+                    if hasattr(person.employment_status, "value")
+                    else str(person.employment_status)
+                ),
                 route=f"/persons/{person.id}",
                 preview_payload={"email": person.email, "phone": person.phone},
-                tags_json={"company_id": person.company_id, "site_id": getattr(person, "site_id", None)},
+                tags_json={
+                    "company_id": person.company_id,
+                    "site_id": getattr(person, "site_id", None),
+                },
                 search_text=" ".join(
-                    filter(None, [title, person.personnel_number or "", person.email or "", person.phone or ""])
+                    filter(
+                        None,
+                        [
+                            title,
+                            person.personnel_number or "",
+                            person.email or "",
+                            person.phone or "",
+                        ],
+                    )
                 ),
             )
         for company in companies:
@@ -432,9 +579,20 @@ class ProjectionOrchestrator:
                 title=company.name,
                 subtitle=company.inn or company.ogrn,
                 route=f"/companies/{company.id}",
-                preview_payload={"director": company.director, "activity_type": company.activity_type},
+                preview_payload={
+                    "director": company.director,
+                    "activity_type": company.activity_type,
+                },
                 search_text=" ".join(
-                    filter(None, [company.name, company.inn or "", company.ogrn or "", company.contact_email or ""])
+                    filter(
+                        None,
+                        [
+                            company.name,
+                            company.inn or "",
+                            company.ogrn or "",
+                            company.contact_email or "",
+                        ],
+                    )
                 ),
             )
         for site in sites:
@@ -454,11 +612,30 @@ class ProjectionOrchestrator:
                 entity_id=incident.id,
                 title=incident.title,
                 subtitle=incident.location_description,
-                status=incident.status.value if hasattr(incident.status, "value") else str(incident.status),
+                status=(
+                    incident.status.value
+                    if hasattr(incident.status, "value")
+                    else str(incident.status)
+                ),
                 route=f"/incidents?id={incident.id}",
                 tags_json={"company_id": incident.company_id, "site_id": incident.site_id},
-                preview_payload={"severity": str(incident.severity.value if hasattr(incident.severity, "value") else incident.severity)},
-                search_text=" ".join(filter(None, [incident.title, incident.description or "", incident.location_description or ""])),
+                preview_payload={
+                    "severity": str(
+                        incident.severity.value
+                        if hasattr(incident.severity, "value")
+                        else incident.severity
+                    )
+                },
+                search_text=" ".join(
+                    filter(
+                        None,
+                        [
+                            incident.title,
+                            incident.description or "",
+                            incident.location_description or "",
+                        ],
+                    )
+                ),
             )
         for inspection in inspections:
             await upsert_entry(
@@ -466,20 +643,38 @@ class ProjectionOrchestrator:
                 entity_id=inspection.id,
                 title=inspection.authority,
                 subtitle=inspection.purpose,
-                status=inspection.status.value if hasattr(inspection.status, "value") else str(inspection.status),
+                status=(
+                    inspection.status.value
+                    if hasattr(inspection.status, "value")
+                    else str(inspection.status)
+                ),
                 route=f"/inspections?id={inspection.id}",
                 tags_json={"company_id": inspection.company_id, "site_id": inspection.site_id},
-                preview_payload={"inspection_type": str(inspection.inspection_type.value if hasattr(inspection.inspection_type, "value") else inspection.inspection_type)},
+                preview_payload={
+                    "inspection_type": str(
+                        inspection.inspection_type.value
+                        if hasattr(inspection.inspection_type, "value")
+                        else inspection.inspection_type
+                    )
+                },
             )
         for prescription in prescriptions:
             await upsert_entry(
                 entity_type="prescription",
                 entity_id=prescription.id,
-                title=(prescription.description or "")[:120] or f"Prescription {prescription.id[:8]}",
+                title=(prescription.description or "")[:120]
+                or f"Prescription {prescription.id[:8]}",
                 subtitle=prescription.description,
-                status=prescription.status.value if hasattr(prescription.status, "value") else str(prescription.status),
+                status=(
+                    prescription.status.value
+                    if hasattr(prescription.status, "value")
+                    else str(prescription.status)
+                ),
                 route=f"/prescriptions?id={prescription.id}",
-                preview_payload={"inspection_id": prescription.inspection_id, "incident_id": prescription.incident_id},
+                preview_payload={
+                    "inspection_id": prescription.inspection_id,
+                    "incident_id": prescription.incident_id,
+                },
                 search_text=prescription.description,
             )
         for item in npa_items:
@@ -490,7 +685,9 @@ class ProjectionOrchestrator:
                 subtitle=item.title,
                 status=item.status.value if hasattr(item.status, "value") else str(item.status),
                 route=f"/npa?selected={item.id}",
-                preview_payload={"edition_date": item.edition_date.isoformat() if item.edition_date else None},
+                preview_payload={
+                    "edition_date": item.edition_date.isoformat() if item.edition_date else None
+                },
                 search_text=f"{item.code} {item.title}",
             )
         for contract in contracts:
@@ -499,10 +696,23 @@ class ProjectionOrchestrator:
                 entity_id=contract.id,
                 title=contract.title,
                 subtitle=contract.contract_number or contract.counterparty_name,
-                status=contract.status.value if hasattr(contract.status, "value") else str(contract.status),
+                status=(
+                    contract.status.value
+                    if hasattr(contract.status, "value")
+                    else str(contract.status)
+                ),
                 route=f"/contracts/{contract.id}",
                 tags_json={"company_id": contract.company_id, "site_id": contract.site_id},
-                search_text=" ".join(filter(None, [contract.title, contract.contract_number or "", contract.counterparty_name])),
+                search_text=" ".join(
+                    filter(
+                        None,
+                        [
+                            contract.title,
+                            contract.contract_number or "",
+                            contract.counterparty_name,
+                        ],
+                    )
+                ),
             )
         for order in orders:
             await upsert_entry(
@@ -524,7 +734,11 @@ class ProjectionOrchestrator:
                 status=task.status.value if hasattr(task.status, "value") else str(task.status),
                 route=f"/tasks?task={task.id}",
                 preview_payload={"entity_type": task.entity_type, "entity_id": task.entity_id},
-                search_text=" ".join(filter(None, [task.title, task.description or "", task.entity_type, task.entity_id])),
+                search_text=" ".join(
+                    filter(
+                        None, [task.title, task.description or "", task.entity_type, task.entity_id]
+                    )
+                ),
             )
         for task in workflow_tasks:
             await upsert_entry(
@@ -534,16 +748,50 @@ class ProjectionOrchestrator:
                 subtitle=task.node_id,
                 status=task.status.value if hasattr(task.status, "value") else str(task.status),
                 route=f"/workflow?task={task.id}",
-                preview_payload={"instance_id": task.instance_id, "assignee_role_code": task.assignee_role_code},
-                search_text=" ".join(filter(None, [task.title, task.node_id, task.assignee_role_code or "", task.assignee_user_id or ""])),
+                preview_payload={
+                    "instance_id": task.instance_id,
+                    "assignee_role_code": task.assignee_role_code,
+                },
+                search_text=" ".join(
+                    filter(
+                        None,
+                        [
+                            task.title,
+                            task.node_id,
+                            task.assignee_role_code or "",
+                            task.assignee_user_id or "",
+                        ],
+                    )
+                ),
             )
         await self.session.commit()
         return count
 
     async def rebuild_dashboard_snapshot(self, snapshot_date: date) -> DashboardKpiSnapshot:
-        packages_total = int(await self.session.scalar(select(func.count()).select_from(PackageReadModel).where(PackageReadModel.tenant_id == self.tenant_id)) or 0)
-        incidents_open = int(await self.session.scalar(select(func.count()).select_from(Incident).where(Incident.tenant_id == self.tenant_id)) or 0)
-        inspections_open = int(await self.session.scalar(select(func.count()).select_from(Inspection).where(Inspection.tenant_id == self.tenant_id)) or 0)
+        packages_total = int(
+            await self.session.scalar(
+                select(func.count())
+                .select_from(PackageReadModel)
+                .where(PackageReadModel.tenant_id == self.tenant_id)
+            )
+            or 0
+        )
+        incidents_open = int(
+            await self.session.scalar(
+                select(func.count())
+                .select_from(Incident)
+                .where(Incident.tenant_id == self.tenant_id)
+            )
+            or 0
+        )
+        inspections_open = int(
+            await self.session.scalar(
+                select(func.count())
+                .select_from(Inspection)
+                .where(Inspection.tenant_id == self.tenant_id)
+            )
+            or 0
+        )
         snapshot = (
             await self.session.execute(
                 select(DashboardKpiSnapshot).where(
@@ -555,7 +803,12 @@ class ProjectionOrchestrator:
             )
         ).scalar_one_or_none()
         if snapshot is None:
-            snapshot = DashboardKpiSnapshot(tenant_id=self.tenant_id, scope_type="tenant", scope_id=None, snapshot_date=snapshot_date)
+            snapshot = DashboardKpiSnapshot(
+                tenant_id=self.tenant_id,
+                scope_type="tenant",
+                scope_id=None,
+                snapshot_date=snapshot_date,
+            )
             self.session.add(snapshot)
         snapshot.payload = {
             "packages_total": packages_total,

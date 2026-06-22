@@ -20,12 +20,11 @@ ppe/issues, prescriptions).
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date
 
 import pytest
 from fastapi import status
 from httpx import AsyncClient
-from sqlalchemy import select
 
 from app.models.models import (
     PrescriptionStatus,
@@ -33,7 +32,6 @@ from app.models.models import (
 )
 from app.schemas.ppe import PPEItemCategory
 from tests.utils.factories import TestDataFactory
-
 
 # -----------------------------------------------------------------------------
 # Helpers
@@ -127,9 +125,7 @@ async def test_ppe_items_hit_returns_304(
     assert first.status_code == status.HTTP_200_OK
     etag = first.headers["ETag"]
 
-    second = await async_client.get(
-        "/api/v1/ppe/items", headers={**headers, "If-None-Match": etag}
-    )
+    second = await async_client.get("/api/v1/ppe/items", headers={**headers, "If-None-Match": etag})
     assert second.status_code == status.HTTP_304_NOT_MODIFIED
     assert second.headers["ETag"] == etag
     assert second.content == b""
@@ -204,9 +200,7 @@ async def test_ppe_items_empty_list_stable_etag(
     etag = first.headers["ETag"]
     assert etag
 
-    second = await async_client.get(
-        "/api/v1/ppe/items", headers={**headers, "If-None-Match": etag}
-    )
+    second = await async_client.get("/api/v1/ppe/items", headers={**headers, "If-None-Match": etag})
     assert second.status_code == status.HTTP_304_NOT_MODIFIED
 
 
@@ -223,7 +217,11 @@ async def test_ppe_issues_hit_returns_304(
         tenant = await data_factory.ensure_tenant(session=session)
         company = await data_factory.create_company(tenant=tenant, session=session)
         person = await data_factory.create_person(
-            tenant=tenant, company=company, first_name="Issue", last_name="Recipient", session=session
+            tenant=tenant,
+            company=company,
+            first_name="Issue",
+            last_name="Recipient",
+            session=session,
         )
         await session.commit()
         person_id = str(person.id)
@@ -261,9 +259,7 @@ async def test_ppe_issues_etag_distinct_per_person_filter(
     await _seed_ppe_issue(async_client, headers, person_id=person_id, item_id=item["id"])
 
     unfiltered = await async_client.get("/api/v1/ppe/issues", headers=headers)
-    filtered = await async_client.get(
-        f"/api/v1/ppe/issues?person_id={person_id}", headers=headers
-    )
+    filtered = await async_client.get(f"/api/v1/ppe/issues?person_id={person_id}", headers=headers)
     assert unfiltered.headers["ETag"] != filtered.headers["ETag"]
 
 
@@ -286,9 +282,7 @@ async def test_ppe_issues_etag_distinct_per_active_only_flag(
     await _seed_ppe_issue(async_client, headers, person_id=person_id, item_id=item["id"])
 
     all_issues = await async_client.get("/api/v1/ppe/issues", headers=headers)
-    active_only = await async_client.get(
-        "/api/v1/ppe/issues?active_only=true", headers=headers
-    )
+    active_only = await async_client.get("/api/v1/ppe/issues?active_only=true", headers=headers)
     assert all_issues.headers["ETag"] != active_only.headers["ETag"]
 
 

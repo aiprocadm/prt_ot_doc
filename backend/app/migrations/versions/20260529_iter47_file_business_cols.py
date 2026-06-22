@@ -85,10 +85,12 @@ def upgrade() -> None:
     # server_default so existing rows satisfy the constraint.
     bind = op.get_bind()
     if bind.dialect.name == "postgresql":
-        postgresql.ENUM(*FILE_KIND_VALUES, name="file_kind", create_type=False).create(bind, checkfirst=True)
-        postgresql.ENUM(*FILE_SCAN_STATUS_VALUES, name="file_scan_status", create_type=False).create(
+        postgresql.ENUM(*FILE_KIND_VALUES, name="file_kind", create_type=False).create(
             bind, checkfirst=True
         )
+        postgresql.ENUM(
+            *FILE_SCAN_STATUS_VALUES, name="file_scan_status", create_type=False
+        ).create(bind, checkfirst=True)
     op.add_column(
         "file",
         sa.Column("original_name", sa.String(length=255), nullable=True),

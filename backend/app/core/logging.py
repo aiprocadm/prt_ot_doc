@@ -90,10 +90,7 @@ def _scrub_value(value: Any, *, key: str | None = None, depth: int = 0) -> Any:
         return sanitized
 
     if isinstance(value, Sequence) and not isinstance(value, (bytes, bytearray, str)):
-        return [
-            _scrub_value(item, key=key, depth=depth + 1)
-            for item in value
-        ]
+        return [_scrub_value(item, key=key, depth=depth + 1) for item in value]
 
     if key and key.lower() in _SENSITIVE_KEYS:
         return _REDACTED

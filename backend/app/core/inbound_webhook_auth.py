@@ -19,7 +19,9 @@ _SIGNATURE_HEADERS = (
 )
 
 
-def verify_inbound_webhook_body_hmac(*, settings: Settings, raw_body: bytes, request: Request) -> None:
+def verify_inbound_webhook_body_hmac(
+    *, settings: Settings, raw_body: bytes, request: Request
+) -> None:
     """If ``INBOUND_WEBHOOK_HMAC_SECRET`` is set, require a matching hex HMAC-SHA256 of the raw body."""
 
     secret = (getattr(settings, "inbound_webhook_hmac_secret", None) or "").strip()
@@ -51,7 +53,9 @@ def verify_inbound_webhook_body_hmac(*, settings: Settings, raw_body: bytes, req
         received = received.split("=", 1)[1].strip()
 
     expected = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
-    if len(received) != len(expected) or not hmac.compare_digest(received.lower(), expected.lower()):
+    if len(received) != len(expected) or not hmac.compare_digest(
+        received.lower(), expected.lower()
+    ):
         logger.warning(
             "inbound_webhook.signature_mismatch",
             extra={"path": request.url.path},

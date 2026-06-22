@@ -55,9 +55,7 @@ class TestCalendarAggregatorService:
         data_factory: TestDataFactory,
     ) -> None:
         tenant = await data_factory.ensure_tenant(session=test_db_session)
-        service = CalendarAggregatorService(
-            tenant_id=str(tenant.id), db=test_db_session
-        )
+        service = CalendarAggregatorService(tenant_id=str(tenant.id), db=test_db_session)
         response = await service.list_events()
         assert response.total == 0
         assert response.overdue_count == 0
@@ -72,15 +70,9 @@ class TestCalendarAggregatorService:
         test_db_session: AsyncSession,
         data_factory: TestDataFactory,
     ) -> None:
-        tenant_a = await data_factory.ensure_tenant(
-            slug="cal-tenant-a", session=test_db_session
-        )
-        tenant_b = await data_factory.ensure_tenant(
-            slug="cal-tenant-b", session=test_db_session
-        )
-        company_a = await data_factory.create_company(
-            tenant=tenant_a, session=test_db_session
-        )
+        tenant_a = await data_factory.ensure_tenant(slug="cal-tenant-a", session=test_db_session)
+        tenant_b = await data_factory.ensure_tenant(slug="cal-tenant-b", session=test_db_session)
+        company_a = await data_factory.create_company(tenant=tenant_a, session=test_db_session)
         person_a = await data_factory.create_person(
             tenant=tenant_a,
             company=company_a,
@@ -102,16 +94,12 @@ class TestCalendarAggregatorService:
         )
         await test_db_session.commit()
 
-        service_other = CalendarAggregatorService(
-            tenant_id=str(tenant_b.id), db=test_db_session
-        )
+        service_other = CalendarAggregatorService(tenant_id=str(tenant_b.id), db=test_db_session)
         response = await service_other.list_events()
         assert response.total == 0
         assert response.items == []
 
-        service_owner = CalendarAggregatorService(
-            tenant_id=str(tenant_a.id), db=test_db_session
-        )
+        service_owner = CalendarAggregatorService(tenant_id=str(tenant_a.id), db=test_db_session)
         owned = await service_owner.list_events()
         assert owned.total == 1
         assert owned.items[0].source_type == "medical_exam"
@@ -122,9 +110,7 @@ class TestCalendarAggregatorService:
         data_factory: TestDataFactory,
     ) -> None:
         tenant = await data_factory.ensure_tenant(session=test_db_session)
-        company = await data_factory.create_company(
-            tenant=tenant, session=test_db_session
-        )
+        company = await data_factory.create_company(tenant=tenant, session=test_db_session)
         site = await data_factory.create_site(
             tenant=tenant, company=company, session=test_db_session
         )
@@ -363,9 +349,7 @@ class TestCalendarAggregatorService:
 
         await test_db_session.commit()
 
-        service = CalendarAggregatorService(
-            tenant_id=str(tenant.id), db=test_db_session
-        )
+        service = CalendarAggregatorService(tenant_id=str(tenant.id), db=test_db_session)
         response = await service.list_events()
 
         # Sanity checks: total is the sum of per-source counts, and items
@@ -389,12 +373,8 @@ class TestCalendarAggregatorService:
         assert per_source["calendar_event"].count == 1
         assert per_source["calendar_event"].overdue_count == 0
 
-        assert response.total == sum(
-            row.count for row in response.by_source
-        )
-        assert response.overdue_count == sum(
-            row.overdue_count for row in response.by_source
-        )
+        assert response.total == sum(row.count for row in response.by_source)
+        assert response.overdue_count == sum(row.overdue_count for row in response.by_source)
 
         # Items are sorted ascending by starts_at.
         starts = [item.starts_at for item in response.items]
@@ -407,9 +387,7 @@ class TestCalendarAggregatorService:
         # Russian-localized titles for the human-readable streams.
         types = {item.source_type for item in response.items}
         assert {"medical_exam", "ppe_issue", "permit", "training_session"} <= types
-        med_titles = [
-            item.title for item in response.items if item.source_type == "medical_exam"
-        ]
+        med_titles = [item.title for item in response.items if item.source_type == "medical_exam"]
         assert any(title.startswith("Медосмотр:") for title in med_titles)
 
     async def test_filters_by_source_type_and_person(
@@ -418,9 +396,7 @@ class TestCalendarAggregatorService:
         data_factory: TestDataFactory,
     ) -> None:
         tenant = await data_factory.ensure_tenant(session=test_db_session)
-        company = await data_factory.create_company(
-            tenant=tenant, session=test_db_session
-        )
+        company = await data_factory.create_company(tenant=tenant, session=test_db_session)
         person_alpha = await data_factory.create_person(
             tenant=tenant,
             company=company,
@@ -467,9 +443,7 @@ class TestCalendarAggregatorService:
         )
         await test_db_session.commit()
 
-        service = CalendarAggregatorService(
-            tenant_id=str(tenant.id), db=test_db_session
-        )
+        service = CalendarAggregatorService(tenant_id=str(tenant.id), db=test_db_session)
         # Person filter restricts to alpha's two events (medical + permit).
         only_alpha = await service.list_events(person_id=person_alpha.id)
         assert {item.source_type for item in only_alpha.items} == {
@@ -485,9 +459,7 @@ class TestCalendarAggregatorService:
         assert len(only_alpha_medical.items) == 1
         assert only_alpha_medical.items[0].source_type == "medical_exam"
         # by_source only contains the requested source.
-        assert {row.source_type for row in only_alpha_medical.by_source} == {
-            "medical_exam"
-        }
+        assert {row.source_type for row in only_alpha_medical.by_source} == {"medical_exam"}
 
     async def test_filters_by_date_range(
         self,
@@ -495,9 +467,7 @@ class TestCalendarAggregatorService:
         data_factory: TestDataFactory,
     ) -> None:
         tenant = await data_factory.ensure_tenant(session=test_db_session)
-        company = await data_factory.create_company(
-            tenant=tenant, session=test_db_session
-        )
+        company = await data_factory.create_company(tenant=tenant, session=test_db_session)
         person = await data_factory.create_person(
             tenant=tenant,
             company=company,
@@ -530,9 +500,7 @@ class TestCalendarAggregatorService:
         )
         await test_db_session.commit()
 
-        service = CalendarAggregatorService(
-            tenant_id=str(tenant.id), db=test_db_session
-        )
+        service = CalendarAggregatorService(tenant_id=str(tenant.id), db=test_db_session)
         within_window = await service.list_events(
             from_at=now,
             to_at=now + timedelta(days=14),
@@ -547,9 +515,7 @@ class TestCalendarAggregatorService:
         data_factory: TestDataFactory,
     ) -> None:
         tenant = await data_factory.ensure_tenant(session=test_db_session)
-        service = CalendarAggregatorService(
-            tenant_id=str(tenant.id), db=test_db_session
-        )
+        service = CalendarAggregatorService(tenant_id=str(tenant.id), db=test_db_session)
         with pytest.raises(ValueError):
             await service.list_events(source_types=["nonexistent"])
 
@@ -570,9 +536,7 @@ class TestCalendarEventsEndpoint:
             await session.commit()
 
         headers = _cal_headers(await make_auth_headers(RoleEnum.ADMIN))
-        response = await async_client.get(
-            f"{API_PREFIX}/calendar/events", headers=headers
-        )
+        response = await async_client.get(f"{API_PREFIX}/calendar/events", headers=headers)
         assert response.status_code == status.HTTP_200_OK, response.text
         body = response.json()
         assert body["total"] == 0
@@ -589,9 +553,7 @@ class TestCalendarEventsEndpoint:
     ) -> None:
         async with sessionmaker() as session:
             tenant = await data_factory.ensure_tenant(session=session)
-            company = await data_factory.create_company(
-                tenant=tenant, session=session
-            )
+            company = await data_factory.create_company(tenant=tenant, session=session)
             person = await data_factory.create_person(
                 tenant=tenant,
                 company=company,
@@ -656,9 +618,7 @@ class TestCalendarEventsEndpoint:
             await session.commit()
 
         headers = _cal_headers(await make_auth_headers(RoleEnum.STUDENT))
-        response = await async_client.get(
-            f"{API_PREFIX}/calendar/events", headers=headers
-        )
+        response = await async_client.get(f"{API_PREFIX}/calendar/events", headers=headers)
         assert response.status_code in {
             status.HTTP_401_UNAUTHORIZED,
             status.HTTP_403_FORBIDDEN,
@@ -675,9 +635,7 @@ class TestCalendarPlanFactComparison:
         data_factory: TestDataFactory,
     ) -> None:
         tenant = await data_factory.ensure_tenant(session=test_db_session)
-        company = await data_factory.create_company(
-            tenant=tenant, session=test_db_session
-        )
+        company = await data_factory.create_company(tenant=tenant, session=test_db_session)
         person = await data_factory.create_person(
             tenant=tenant,
             company=company,
@@ -698,9 +656,7 @@ class TestCalendarPlanFactComparison:
         )
         await test_db_session.commit()
 
-        service = CalendarAggregatorService(
-            tenant_id=str(tenant.id), db=test_db_session
-        )
+        service = CalendarAggregatorService(tenant_id=str(tenant.id), db=test_db_session)
         # Default keeps wire payload identical to the legacy contract.
         response = await service.list_events(source_types=["medical_exam"])
         assert response.total == 1
@@ -715,17 +671,13 @@ class TestCalendarPlanFactComparison:
         data_factory: TestDataFactory,
     ) -> None:
         tenant = await data_factory.ensure_tenant(session=test_db_session)
-        company = await data_factory.create_company(
-            tenant=tenant, session=test_db_session
-        )
+        company = await data_factory.create_company(tenant=tenant, session=test_db_session)
         site = await data_factory.create_site(
             tenant=tenant, company=company, session=test_db_session
         )
         today = date.today()
         scheduled_day = today - timedelta(days=10)
-        finished_dt = datetime.combine(
-            today - timedelta(days=7), datetime.min.time(), timezone.utc
-        )
+        finished_dt = datetime.combine(today - timedelta(days=7), datetime.min.time(), timezone.utc)
         test_db_session.add_all(
             [
                 Inspection(
@@ -752,12 +704,8 @@ class TestCalendarPlanFactComparison:
         )
         await test_db_session.commit()
 
-        service = CalendarAggregatorService(
-            tenant_id=str(tenant.id), db=test_db_session
-        )
-        response = await service.list_events(
-            source_types=["inspection"], include_fact=True
-        )
+        service = CalendarAggregatorService(tenant_id=str(tenant.id), db=test_db_session)
+        response = await service.list_events(source_types=["inspection"], include_fact=True)
         items = {item.title: item for item in response.items}
         assert "Проверка: Внутренний аудит" in items
         completed = items["Проверка: Внутренний аудит"]
@@ -779,9 +727,7 @@ class TestCalendarPlanFactComparison:
         data_factory: TestDataFactory,
     ) -> None:
         tenant = await data_factory.ensure_tenant(session=test_db_session)
-        company = await data_factory.create_company(
-            tenant=tenant, session=test_db_session
-        )
+        company = await data_factory.create_company(tenant=tenant, session=test_db_session)
         person = await data_factory.create_person(
             tenant=tenant,
             company=company,
@@ -820,12 +766,8 @@ class TestCalendarPlanFactComparison:
         )
         await test_db_session.commit()
 
-        service = CalendarAggregatorService(
-            tenant_id=str(tenant.id), db=test_db_session
-        )
-        response = await service.list_events(
-            source_types=["training_session"], include_fact=True
-        )
+        service = CalendarAggregatorService(tenant_id=str(tenant.id), db=test_db_session)
+        response = await service.list_events(source_types=["training_session"], include_fact=True)
         statuses = {item.status: item for item in response.items}
         completed = statuses["completed"]
         assert completed.expected_at is not None
@@ -841,9 +783,7 @@ class TestCalendarPlanFactComparison:
         data_factory: TestDataFactory,
     ) -> None:
         tenant = await data_factory.ensure_tenant(session=test_db_session)
-        company = await data_factory.create_company(
-            tenant=tenant, session=test_db_session
-        )
+        company = await data_factory.create_company(tenant=tenant, session=test_db_session)
         person = await data_factory.create_person(
             tenant=tenant,
             company=company,
@@ -878,12 +818,8 @@ class TestCalendarPlanFactComparison:
         )
         await test_db_session.commit()
 
-        service = CalendarAggregatorService(
-            tenant_id=str(tenant.id), db=test_db_session
-        )
-        response = await service.list_events(
-            source_types=["ppe_issue"], include_fact=True
-        )
+        service = CalendarAggregatorService(tenant_id=str(tenant.id), db=test_db_session)
+        response = await service.list_events(source_types=["ppe_issue"], include_fact=True)
         by_name = {item.title: item for item in response.items}
         returned = by_name["СИЗ: Каска"]
         assert returned.actual_at is not None
@@ -903,12 +839,8 @@ class TestCalendarPlanFactComparison:
     ) -> None:
         async with sessionmaker() as session:
             tenant = await data_factory.ensure_tenant(session=session)
-            company = await data_factory.create_company(
-                tenant=tenant, session=session
-            )
-            site = await data_factory.create_site(
-                tenant=tenant, company=company, session=session
-            )
+            company = await data_factory.create_company(tenant=tenant, session=session)
+            site = await data_factory.create_site(tenant=tenant, company=company, session=session)
             today = date.today()
             session.add(
                 Inspection(
@@ -962,9 +894,7 @@ class TestCalendarSlaTracking:
         data_factory: TestDataFactory,
     ) -> None:
         tenant = await data_factory.ensure_tenant(session=test_db_session)
-        company = await data_factory.create_company(
-            tenant=tenant, session=test_db_session
-        )
+        company = await data_factory.create_company(tenant=tenant, session=test_db_session)
         person = await data_factory.create_person(
             tenant=tenant,
             company=company,
@@ -985,9 +915,7 @@ class TestCalendarSlaTracking:
         )
         await test_db_session.commit()
 
-        service = CalendarAggregatorService(
-            tenant_id=str(tenant.id), db=test_db_session
-        )
+        service = CalendarAggregatorService(tenant_id=str(tenant.id), db=test_db_session)
         # Without `include_sla` the wire payload stays identical to the
         # pre-vNext-CAL-01 contract.
         response = await service.list_events(source_types=["medical_exam"])
@@ -1001,9 +929,7 @@ class TestCalendarSlaTracking:
         data_factory: TestDataFactory,
     ) -> None:
         tenant = await data_factory.ensure_tenant(session=test_db_session)
-        company = await data_factory.create_company(
-            tenant=tenant, session=test_db_session
-        )
+        company = await data_factory.create_company(tenant=tenant, session=test_db_session)
         person = await data_factory.create_person(
             tenant=tenant,
             company=company,
@@ -1054,15 +980,9 @@ class TestCalendarSlaTracking:
         )
         await test_db_session.commit()
 
-        service = CalendarAggregatorService(
-            tenant_id=str(tenant.id), db=test_db_session
-        )
-        response = await service.list_events(
-            source_types=["medical_exam"], include_sla=True
-        )
-        by_type = {
-            item.extra["exam_type"]: item for item in response.items
-        }
+        service = CalendarAggregatorService(tenant_id=str(tenant.id), db=test_db_session)
+        response = await service.list_events(source_types=["medical_exam"], include_sla=True)
+        by_type = {item.extra["exam_type"]: item for item in response.items}
 
         critical = by_type["critical"]
         assert critical.days_to_due is not None
@@ -1124,15 +1044,9 @@ class TestCalendarSlaTracking:
         )
         await test_db_session.commit()
 
-        service = CalendarAggregatorService(
-            tenant_id=str(tenant.id), db=test_db_session
-        )
-        response = await service.list_events(
-            source_types=["compliance_deadline"], include_sla=True
-        )
-        by_entity = {
-            item.extra["entity_id"]: item for item in response.items
-        }
+        service = CalendarAggregatorService(tenant_id=str(tenant.id), db=test_db_session)
+        response = await service.list_events(source_types=["compliance_deadline"], include_sla=True)
+        by_entity = {item.extra["entity_id"]: item for item in response.items}
         assert by_entity["ent-critical"].sla_band == "critical"
         assert by_entity["ent-warning"].sla_band == "warning"
         assert by_entity["ent-ok"].sla_band == "ok"
@@ -1145,9 +1059,7 @@ class TestCalendarSlaTracking:
         # Both flags are independent; turning on both populates plan/fact
         # *and* SLA fields side-by-side without interference.
         tenant = await data_factory.ensure_tenant(session=test_db_session)
-        company = await data_factory.create_company(
-            tenant=tenant, session=test_db_session
-        )
+        company = await data_factory.create_company(tenant=tenant, session=test_db_session)
         site = await data_factory.create_site(
             tenant=tenant, company=company, session=test_db_session
         )
@@ -1166,9 +1078,7 @@ class TestCalendarSlaTracking:
         )
         await test_db_session.commit()
 
-        service = CalendarAggregatorService(
-            tenant_id=str(tenant.id), db=test_db_session
-        )
+        service = CalendarAggregatorService(tenant_id=str(tenant.id), db=test_db_session)
         response = await service.list_events(
             source_types=["inspection"], include_fact=True, include_sla=True
         )
@@ -1192,9 +1102,7 @@ class TestCalendarSlaTracking:
     ) -> None:
         async with sessionmaker() as session:
             tenant = await data_factory.ensure_tenant(session=session)
-            company = await data_factory.create_company(
-                tenant=tenant, session=session
-            )
+            company = await data_factory.create_company(tenant=tenant, session=session)
             person = await data_factory.create_person(
                 tenant=tenant,
                 company=company,

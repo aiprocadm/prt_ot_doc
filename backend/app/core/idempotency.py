@@ -1,4 +1,5 @@
 """Helpers for idempotent HTTP request handling."""
+
 from __future__ import annotations
 
 import hashlib
@@ -95,7 +96,14 @@ async def idempotency_dependency(request: Request) -> Response | None:
     if record is None:
         return None
     if record.request_hash and record.request_hash != fingerprint:
-        raise HTTPException(status.HTTP_409_CONFLICT, {"code":"IDEMPOTENCY_CONFLICT","type":"idempotency","message":"Idempotency key conflict"})
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            {
+                "code": "IDEMPOTENCY_CONFLICT",
+                "type": "idempotency",
+                "message": "Idempotency key conflict",
+            },
+        )
     payload = None
     status_code = record.status_code or status.HTTP_200_OK
     if record.response_body:
@@ -145,7 +153,14 @@ async def store_idempotent_response(request: Request, response: Response) -> Non
             if record is None:
                 return None
             if record.request_hash and record.request_hash != fingerprint:
-                raise HTTPException(status.HTTP_409_CONFLICT, {"code":"IDEMPOTENCY_CONFLICT","type":"idempotency","message":"Idempotency key conflict"})
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    {
+                        "code": "IDEMPOTENCY_CONFLICT",
+                        "type": "idempotency",
+                        "message": "Idempotency key conflict",
+                    },
+                )
 
             record.request_hash = fingerprint
             record.status = IdempotencyStatus.SUCCEEDED
@@ -157,10 +172,19 @@ async def store_idempotent_response(request: Request, response: Response) -> Non
                 except Exception:
                     body = None
             if body and len(body.encode("utf-8")) > MAX_STORED_BODY_BYTES:
-                raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, {"code":"RESOURCES_EXCEEDED","type":"resource","message":"Idempotent response body too large"})
+                raise HTTPException(
+                    status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    {
+                        "code": "RESOURCES_EXCEEDED",
+                        "type": "resource",
+                        "message": "Idempotent response body too large",
+                    },
+                )
             if body:
                 record.response_body = body
-            record.response_headers = {"Content-Type": getattr(response, "media_type", "application/json")}
+            record.response_headers = {
+                "Content-Type": getattr(response, "media_type", "application/json")
+            }
             await session.commit()
     except Exception:  # pragma: no cover - best-effort persistence
         logger.debug("app.idempotency.store_failed", exc_info=True)

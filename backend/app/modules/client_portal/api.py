@@ -32,12 +32,24 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> UUID | N
 
 PortalAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=["admin", "employee", "client_admin", "client_user"], action="access client portal")),
+    Depends(
+        abac(
+            _tenant_resource_id,
+            required_roles=["admin", "employee", "client_admin", "client_user"],
+            action="access client portal",
+        )
+    ),
 ]
 
 PortalInternalAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=["admin", "employee"], action="manage client portal requests")),
+    Depends(
+        abac(
+            _tenant_resource_id,
+            required_roles=["admin", "employee"],
+            action="manage client portal requests",
+        )
+    ),
 ]
 
 
@@ -119,7 +131,8 @@ async def package_details(
     row = (
         await session.execute(
             select(ClientPortalReadModel).where(
-                ClientPortalReadModel.tenant_id == str(tenant.id), ClientPortalReadModel.package_id == package_id
+                ClientPortalReadModel.tenant_id == str(tenant.id),
+                ClientPortalReadModel.package_id == package_id,
             )
         )
     ).scalar_one_or_none()
@@ -175,7 +188,17 @@ async def list_requests(
     *,
     access: PortalAccess,
 ):
-    return (await session.execute(select(PortalRequest).where(PortalRequest.tenant_id == str(tenant.id), PortalRequest.deleted_at.is_(None)))).scalars().all()
+    return (
+        (
+            await session.execute(
+                select(PortalRequest).where(
+                    PortalRequest.tenant_id == str(tenant.id), PortalRequest.deleted_at.is_(None)
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
 
 
 @router.post("/requests", status_code=status.HTTP_201_CREATED)
@@ -209,10 +232,27 @@ async def get_request(
     *,
     access: PortalAccess,
 ):
-    req = (await session.execute(select(PortalRequest).where(PortalRequest.id == request_id, PortalRequest.tenant_id == str(tenant.id)))).scalar_one_or_none()
+    req = (
+        await session.execute(
+            select(PortalRequest).where(
+                PortalRequest.id == request_id, PortalRequest.tenant_id == str(tenant.id)
+            )
+        )
+    ).scalar_one_or_none()
     if req is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Request not found")
-    msgs = (await session.execute(select(PortalRequestMessage).where(PortalRequestMessage.portal_request_id == request_id, PortalRequestMessage.tenant_id == str(tenant.id)))).scalars().all()
+    msgs = (
+        (
+            await session.execute(
+                select(PortalRequestMessage).where(
+                    PortalRequestMessage.portal_request_id == request_id,
+                    PortalRequestMessage.tenant_id == str(tenant.id),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
     return {"request": req, "messages": msgs}
 
 
@@ -225,10 +265,21 @@ async def create_request_message(
     *,
     access: PortalAccess,
 ):
-    req = (await session.execute(select(PortalRequest).where(PortalRequest.id == request_id, PortalRequest.tenant_id == str(tenant.id)))).scalar_one_or_none()
+    req = (
+        await session.execute(
+            select(PortalRequest).where(
+                PortalRequest.id == request_id, PortalRequest.tenant_id == str(tenant.id)
+            )
+        )
+    ).scalar_one_or_none()
     if req is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Request not found")
-    msg = PortalRequestMessage(tenant_id=str(tenant.id), portal_request_id=request_id, body=payload.body, author_role=payload.author_role)
+    msg = PortalRequestMessage(
+        tenant_id=str(tenant.id),
+        portal_request_id=request_id,
+        body=payload.body,
+        author_role=payload.author_role,
+    )
     session.add(msg)
     await session.commit()
     await session.refresh(msg)
@@ -242,7 +293,17 @@ async def internal_requests(
     *,
     access: PortalInternalAccess,
 ):
-    return (await session.execute(select(PortalRequest).where(PortalRequest.tenant_id == str(tenant.id), PortalRequest.deleted_at.is_(None)))).scalars().all()
+    return (
+        (
+            await session.execute(
+                select(PortalRequest).where(
+                    PortalRequest.tenant_id == str(tenant.id), PortalRequest.deleted_at.is_(None)
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
 
 
 @internal_router.get("/{request_id}")
@@ -253,7 +314,13 @@ async def internal_request_by_id(
     *,
     access: PortalInternalAccess,
 ):
-    req = (await session.execute(select(PortalRequest).where(PortalRequest.id == request_id, PortalRequest.tenant_id == str(tenant.id)))).scalar_one_or_none()
+    req = (
+        await session.execute(
+            select(PortalRequest).where(
+                PortalRequest.id == request_id, PortalRequest.tenant_id == str(tenant.id)
+            )
+        )
+    ).scalar_one_or_none()
     if req is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Request not found")
     return req
@@ -268,7 +335,13 @@ async def internal_request_patch(
     *,
     access: PortalInternalAccess,
 ):
-    req = (await session.execute(select(PortalRequest).where(PortalRequest.id == request_id, PortalRequest.tenant_id == str(tenant.id)))).scalar_one_or_none()
+    req = (
+        await session.execute(
+            select(PortalRequest).where(
+                PortalRequest.id == request_id, PortalRequest.tenant_id == str(tenant.id)
+            )
+        )
+    ).scalar_one_or_none()
     if req is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Request not found")
     if payload.status:

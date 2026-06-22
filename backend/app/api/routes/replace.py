@@ -47,11 +47,19 @@ def _tenant_resource_id(tenant: Tenant = Depends(get_tenant_record)) -> str | No
 
 ReaderAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_REPLACE_READ_ROLES, action="read replace reports")),
+    Depends(
+        abac(_tenant_resource_id, required_roles=_REPLACE_READ_ROLES, action="read replace reports")
+    ),
 ]
 EditorAccess = Annotated[
     AccessContext,
-    Depends(abac(_tenant_resource_id, required_roles=_REPLACE_WRITE_ROLES, action="manage document replace")),
+    Depends(
+        abac(
+            _tenant_resource_id,
+            required_roles=_REPLACE_WRITE_ROLES,
+            action="manage document replace",
+        )
+    ),
 ]
 
 _RUNS: dict[str, dict] = {}
@@ -62,14 +70,18 @@ _FILES: dict[str, bytes] = {}
 def _replace_bad_request(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail=api_problem_detail(code="REPLACE_BAD_REQUEST", message=message, error_type="replace"),
+        detail=api_problem_detail(
+            code="REPLACE_BAD_REQUEST", message=message, error_type="replace"
+        ),
     )
 
 
 def _replace_unprocessable(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        detail=api_problem_detail(code="REPLACE_VALIDATION_ERROR", message=message, error_type="replace"),
+        detail=api_problem_detail(
+            code="REPLACE_VALIDATION_ERROR", message=message, error_type="replace"
+        ),
     )
 
 
@@ -145,7 +157,13 @@ def _to_options(payload: ReplaceOptionsPayload) -> ReplaceOptions:
     )
 
 
-def _request_hash(docx_bytes: bytes, replace_map: dict[str, str], options: ReplaceOptionsPayload, mode: str, ref: str = "") -> str:
+def _request_hash(
+    docx_bytes: bytes,
+    replace_map: dict[str, str],
+    options: ReplaceOptionsPayload,
+    mode: str,
+    ref: str = "",
+) -> str:
     payload = {
         "docx_sha256": hashlib.sha256(docx_bytes).hexdigest(),
         "map": sorted(replace_map.items()),
@@ -153,7 +171,9 @@ def _request_hash(docx_bytes: bytes, replace_map: dict[str, str], options: Repla
         "mode": mode,
         "ref": ref,
     }
-    return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+    return hashlib.sha256(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
 
 
 def _require_tenant(request: Request) -> None:
@@ -188,12 +208,16 @@ async def _load_idempotency_response(
     return idempotency, record, created, None
 
 
-def _build_report(run_id: str, hits: list[dict], mapping: dict[str, str], max_samples: int) -> tuple[str, dict]:
+def _build_report(
+    run_id: str, hits: list[dict], mapping: dict[str, str], max_samples: int
+) -> tuple[str, dict]:
     by_pair: dict[str, int] = {}
     for source, target in mapping.items():
         by_pair[f"{source}->{target}"] = 0
     for hit in hits:
-        by_pair[f"{hit['from']}->{hit['to']}"] = by_pair.get(f"{hit['from']}->{hit['to']}", 0) + hit["match_count"]
+        by_pair[f"{hit['from']}->{hit['to']}"] = (
+            by_pair.get(f"{hit['from']}->{hit['to']}", 0) + hit["match_count"]
+        )
     summary = {
         "matches": sum(item["match_count"] for item in hits),
         "files": 1,
@@ -224,7 +248,11 @@ async def replace_dry_run(
     _require_tenant(request)
     if not docx_file or not replace_map:
         raise _replace_bad_request("docx_file and replace_map are required")
-    options_payload = ReplaceOptionsPayload.model_validate_json(options_json) if options_json else ReplaceOptionsPayload()
+    options_payload = (
+        ReplaceOptionsPayload.model_validate_json(options_json)
+        if options_json
+        else ReplaceOptionsPayload()
+    )
     docx_bytes = await docx_file.read()
     mapping = _parse_map(await replace_map.read())
     req_hash = _request_hash(docx_bytes, mapping, options_payload, "dry-run")
@@ -238,12 +266,33 @@ async def replace_dry_run(
     )
     if cached is not None:
         return cached
-    result = replace_docx_bytes(docx_bytes, mapping, _to_options(options_payload), apply_changes=False)
+    result = replace_docx_bytes(
+        docx_bytes, mapping, _to_options(options_payload), apply_changes=False
+    )
     run_id = str(uuid4())
-    hits = [ReplaceDiffItem.model_validate({"from": h.from_text, "to": h.to_text, "part": h.part, "location": h.location, "before": h.before, "after": h.after, "context": h.context, "match_count": h.match_count}).model_dump(by_alias=True) for h in result.hits]
+    hits = [
+        ReplaceDiffItem.model_validate(
+            {
+                "from": h.from_text,
+                "to": h.to_text,
+                "part": h.part,
+                "location": h.location,
+                "before": h.before,
+                "after": h.after,
+                "context": h.context,
+                "match_count": h.match_count,
+            }
+        ).model_dump(by_alias=True)
+        for h in result.hits
+    ]
     report_id, data = _build_report(run_id, hits, mapping, options_payload.max_preview_samples)
     _RUNS[run_id] = {"id": run_id, "mode": "dry_run", "report_id": report_id, "status": "succeeded"}
-    response = {"job_id": run_id, "report_id": report_id, "summary": data["summary"], "preview_samples": data["preview_samples"]}
+    response = {
+        "job_id": run_id,
+        "report_id": report_id,
+        "summary": data["summary"],
+        "preview_samples": data["preview_samples"],
+    }
     await idempotency.store_success(record, status_code=status.HTTP_202_ACCEPTED, body=response)
     await session.commit()
     return ReplaceDryRunResponse(**response)
@@ -268,7 +317,11 @@ async def replace_apply(
     _require_tenant(request)
     if not docx_file or not replace_map:
         raise _replace_bad_request("docx_file and replace_map are required")
-    options_payload = ReplaceOptionsPayload.model_validate_json(options_json) if options_json else ReplaceOptionsPayload(dry_run=False)
+    options_payload = (
+        ReplaceOptionsPayload.model_validate_json(options_json)
+        if options_json
+        else ReplaceOptionsPayload(dry_run=False)
+    )
     docx_bytes = await docx_file.read()
     mapping = _parse_map(await replace_map.read())
     req_hash = _request_hash(docx_bytes, mapping, options_payload, "apply")
@@ -282,7 +335,9 @@ async def replace_apply(
     )
     if cached is not None:
         return cached
-    result = replace_docx_bytes(docx_bytes, mapping, _to_options(options_payload), apply_changes=True)
+    result = replace_docx_bytes(
+        docx_bytes, mapping, _to_options(options_payload), apply_changes=True
+    )
     run_id = str(uuid4())
     result_file_id = f"result:{run_id}.docx"
     _FILES[result_file_id] = result.docx_bytes
@@ -290,17 +345,49 @@ async def replace_apply(
     if backup:
         backup_file_id = f"backup:{run_id}.docx"
         _FILES[backup_file_id] = docx_bytes
-    hits = [ReplaceDiffItem.model_validate({"from": h.from_text, "to": h.to_text, "part": h.part, "location": h.location, "before": h.before, "after": h.after, "context": h.context, "match_count": h.match_count}).model_dump(by_alias=True) for h in result.hits]
+    hits = [
+        ReplaceDiffItem.model_validate(
+            {
+                "from": h.from_text,
+                "to": h.to_text,
+                "part": h.part,
+                "location": h.location,
+                "before": h.before,
+                "after": h.after,
+                "context": h.context,
+                "match_count": h.match_count,
+            }
+        ).model_dump(by_alias=True)
+        for h in result.hits
+    ]
     report_id, _ = _build_report(run_id, hits, mapping, options_payload.max_preview_samples)
-    _RUNS[run_id] = {"id": run_id, "mode": "apply", "backup_file_id": backup_file_id, "result_file_id": result_file_id, "report_id": report_id, "status": "succeeded"}
-    response = {"job_id": run_id, "result_file_id": result_file_id, "backup_file_id": backup_file_id, "report_id": report_id}
+    _RUNS[run_id] = {
+        "id": run_id,
+        "mode": "apply",
+        "backup_file_id": backup_file_id,
+        "result_file_id": result_file_id,
+        "report_id": report_id,
+        "status": "succeeded",
+    }
+    response = {
+        "job_id": run_id,
+        "result_file_id": result_file_id,
+        "backup_file_id": backup_file_id,
+        "report_id": report_id,
+    }
     await idempotency.store_success(record, status_code=status.HTTP_202_ACCEPTED, body=response)
     await session.commit()
     return ReplaceApplyResponse(**response)
 
 
-@router.post(":rollback", response_model=ReplaceRollbackResponse, status_code=status.HTTP_202_ACCEPTED)
-@router.post("/{replace_run_id}/rollback", response_model=ReplaceRollbackResponse, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    ":rollback", response_model=ReplaceRollbackResponse, status_code=status.HTTP_202_ACCEPTED
+)
+@router.post(
+    "/{replace_run_id}/rollback",
+    response_model=ReplaceRollbackResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 @audit_operation("rollback", "document_replace")
 async def replace_rollback(
     request: Request,
@@ -336,7 +423,12 @@ async def replace_rollback(
     run_id = str(uuid4())
     restored_file_id = f"restored:{run_id}.docx"
     _FILES[restored_file_id] = _FILES[backup_file_id]
-    _RUNS[run_id] = {"id": run_id, "mode": "rollback", "restored_file_id": restored_file_id, "status": "succeeded"}
+    _RUNS[run_id] = {
+        "id": run_id,
+        "mode": "rollback",
+        "restored_file_id": restored_file_id,
+        "status": "succeeded",
+    }
     response = {"job_id": run_id, "restored_file_id": restored_file_id}
     await idempotency.store_success(record, status_code=status.HTTP_202_ACCEPTED, body=response)
     await session.commit()
@@ -370,7 +462,10 @@ async def get_replace_report_csv(
     if not report:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Report not found")
     buff = StringIO()
-    writer = csv.DictWriter(buff, fieldnames=["from", "to", "part", "location", "before", "after", "context", "match_count"])
+    writer = csv.DictWriter(
+        buff,
+        fieldnames=["from", "to", "part", "location", "before", "after", "context", "match_count"],
+    )
     writer.writeheader()
     writer.writerows(report["rows"])
     return StreamingResponse(BytesIO(buff.getvalue().encode("utf-8")), media_type="text/csv")

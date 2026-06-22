@@ -98,9 +98,7 @@ async def list_outbox(
             destination=entry.destination,
             status=entry.status,
             attempts=entry.attempts,
-            next_attempt_at=entry.next_attempt_at.isoformat()
-            if entry.next_attempt_at
-            else None,
+            next_attempt_at=entry.next_attempt_at.isoformat() if entry.next_attempt_at else None,
             sent_at=entry.sent_at.isoformat() if entry.sent_at else None,
             created_at=entry.created_at.isoformat(),
             updated_at=entry.updated_at.isoformat(),
@@ -262,5 +260,3 @@ async def retry_outbox_entry(
         attempts=entry.attempts,
         next_attempt_at=entry.next_attempt_at.isoformat() if entry.next_attempt_at else None,
     )
-
-

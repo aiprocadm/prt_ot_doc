@@ -27,7 +27,9 @@ from tests.utils.factories import TestDataFactory
 
 
 @pytest.mark.asyncio
-async def test_reports_kpi_endpoint(async_client, make_auth_headers, sessionmaker, data_factory: TestDataFactory) -> None:
+async def test_reports_kpi_endpoint(
+    async_client, make_auth_headers, sessionmaker, data_factory: TestDataFactory
+) -> None:
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         company = await data_factory.create_company(tenant=tenant, session=session)

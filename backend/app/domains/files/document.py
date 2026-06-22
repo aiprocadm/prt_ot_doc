@@ -12,13 +12,21 @@ from app.services.file_storage import FileStorageService
 class DocumentService:
     storage: FileStorageService
 
-    def save(self, key: str, data: bytes, *, content_type: str | None = None, quarantined: bool = False) -> dict[str, Any]:
-        meta = self.storage.upload(key, BytesIO(data), content_type=content_type, quarantined=quarantined)
+    def save(
+        self, key: str, data: bytes, *, content_type: str | None = None, quarantined: bool = False
+    ) -> dict[str, Any]:
+        meta = self.storage.upload(
+            key, BytesIO(data), content_type=content_type, quarantined=quarantined
+        )
         return {
             "key": key,
             "sha256": hashlib.sha256(data).hexdigest(),
             "storage": meta.to_dict(),
-            "audit": {"operation": "save", "quarantined": quarantined, "content_type": content_type},
+            "audit": {
+                "operation": "save",
+                "quarantined": quarantined,
+                "content_type": content_type,
+            },
         }
 
     def load(self, key: str) -> bytes:
@@ -36,5 +44,8 @@ class DocumentService:
             "signed_url": self.storage.create_signed_url(key, download_name=download_name),
             "meta": meta,
             "download_name": download_name,
-            "audit": {"operation": "signed_download", "quarantined": bool(meta.get("quarantined", False))},
+            "audit": {
+                "operation": "signed_download",
+                "quarantined": bool(meta.get("quarantined", False)),
+            },
         }

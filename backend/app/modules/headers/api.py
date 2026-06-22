@@ -29,7 +29,9 @@ from app.services.idempotency import IdempotencyService, normalize_idempotency_k
 router = APIRouter()
 
 
-@router.post("/layout-presets", response_model=HeaderFooterPresetRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/layout-presets", response_model=HeaderFooterPresetRead, status_code=status.HTTP_201_CREATED
+)
 async def create_layout_preset(
     payload: HeaderFooterPresetCreate,
     session: AsyncSession = Depends(get_session),
@@ -52,7 +54,13 @@ async def list_layout_presets(
     access: AccessContext = Depends(rbac()),
 ) -> LayoutPresetList:
     _ = access
-    stmt = select(HeaderFooterPreset).where(HeaderFooterPreset.tenant_id == str(tenant.id), HeaderFooterPreset.deleted_at.is_(None)).order_by(HeaderFooterPreset.updated_at.desc())
+    stmt = (
+        select(HeaderFooterPreset)
+        .where(
+            HeaderFooterPreset.tenant_id == str(tenant.id), HeaderFooterPreset.deleted_at.is_(None)
+        )
+        .order_by(HeaderFooterPreset.updated_at.desc())
+    )
     if search:
         stmt = stmt.where(HeaderFooterPreset.name.ilike(f"%{search}%"))
     rows = (await session.execute(stmt)).scalars().all()
@@ -92,7 +100,9 @@ async def patch_layout_preset(
     return HeaderFooterPresetRead.model_validate(row)
 
 
-@router.delete("/layout-presets/{preset_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+@router.delete(
+    "/layout-presets/{preset_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None
+)
 async def delete_layout_preset(
     preset_id: str,
     session: AsyncSession = Depends(get_session),
@@ -124,9 +134,18 @@ async def apply_headers(
     if version is None or version.tenant_id != str(tenant.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Document version not found")
 
-    service = IdempotencyService(session=session, tenant_id=str(tenant.id), endpoint="documents.apply_headers")
-    request_hash = hashlib.sha256(json.dumps(payload.model_dump(), sort_keys=True).encode("utf-8")).hexdigest()
-    record, created = await service.acquire(key=key, request_hash=request_hash, method="POST", path=f"/documents/{document_version_id}/apply-headers")
+    service = IdempotencyService(
+        session=session, tenant_id=str(tenant.id), endpoint="documents.apply_headers"
+    )
+    request_hash = hashlib.sha256(
+        json.dumps(payload.model_dump(), sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    record, created = await service.acquire(
+        key=key,
+        request_hash=request_hash,
+        method="POST",
+        path=f"/documents/{document_version_id}/apply-headers",
+    )
     if not created and record.status.value == "succeeded":
         return await service.respond_from_store(record, model=ApplyHeadersAccepted)
 
@@ -145,10 +164,25 @@ async def apply_headers(
     )
     session.add(job)
     await session.flush()
-    session.add(DocumentJobStep(tenant_id=str(tenant.id), job_id=job.id, step_code="apply_headers", status=JobStepStatus.QUEUED.value, input_ref={"document_version_id": document_version_id, "preset_code": payload.preset_code, "context": payload.data or {}, "watermark_override": payload.watermark_override}))
+    session.add(
+        DocumentJobStep(
+            tenant_id=str(tenant.id),
+            job_id=job.id,
+            step_code="apply_headers",
+            status=JobStepStatus.QUEUED.value,
+            input_ref={
+                "document_version_id": document_version_id,
+                "preset_code": payload.preset_code,
+                "context": payload.data or {},
+                "watermark_override": payload.watermark_override,
+            },
+        )
+    )
     await session.flush()
 
-    celery_app.send_task("app.tasks.apply_headers_job", kwargs={"job_id": job.id, "tenant_slug": tenant.slug})
+    celery_app.send_task(
+        "app.tasks.apply_headers_job", kwargs={"job_id": job.id, "tenant_slug": tenant.slug}
+    )
     result = ApplyHeadersAccepted(job_id=job.id)
     await service.store_success(record, status_code=202, body=result.model_dump())
     await session.commit()

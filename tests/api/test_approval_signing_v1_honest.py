@@ -12,6 +12,7 @@
   * Читатели edo_envelopes: после DROP (ed02) — честные {"items": []} / 404.
   * ЭДО-вебхуки: провайдер не сконфигурирован → 409.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -48,10 +49,14 @@ async def test_sign_request_foreign_provider_409_and_writes_nothing(
 
     async with sessionmaker() as session:
         rows = (
-            await session.execute(
-                select(SignatureRequest).where(SignatureRequest.object_id == version.id)
+            (
+                await session.execute(
+                    select(SignatureRequest).where(SignatureRequest.object_id == version.id)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert rows == [], "409 не должен оставлять записей в signature_requests"
 
 
@@ -163,7 +168,9 @@ async def test_sign_submit_internal_then_readers_return_string_status(
         f"{BASE}/sign/status", params={"document_version_id": version.id}, headers=headers
     )
     assert sign_status.status_code == status.HTTP_200_OK, sign_status.text
-    assert any(item["id"] == rid and item["status"] == "signed" for item in sign_status.json()["items"])
+    assert any(
+        item["id"] == rid and item["status"] == "signed" for item in sign_status.json()["items"]
+    )
 
 
 @pytest.mark.asyncio

@@ -11,7 +11,9 @@ from tests.test_packs_run import _prepare_pack_environment
 
 
 @pytest.mark.anyio
-async def test_list_packs_pagination(async_client: AsyncClient, sessionmaker, make_auth_headers) -> None:
+async def test_list_packs_pagination(
+    async_client: AsyncClient, sessionmaker, make_auth_headers
+) -> None:
     async with sessionmaker() as session:
         data = await _prepare_pack_environment(session, persons_count=1, items_count=1)
         tenant = data.tenant
@@ -44,7 +46,9 @@ async def test_list_packs_pagination(async_client: AsyncClient, sessionmaker, ma
 
 
 @pytest.mark.anyio
-async def test_pack_run_idempotency_conflict(async_client: AsyncClient, sessionmaker, make_auth_headers, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_pack_run_idempotency_conflict(
+    async_client: AsyncClient, sessionmaker, make_auth_headers, monkeypatch: pytest.MonkeyPatch
+) -> None:
     async with sessionmaker() as session:
         data = await _prepare_pack_environment(session, persons_count=1, items_count=1)
     tenant = data.tenant
@@ -53,16 +57,17 @@ async def test_pack_run_idempotency_conflict(async_client: AsyncClient, sessionm
     pack = data.pack
     company = data.company
     headers = {**await make_auth_headers(), **dict(async_client.headers)}
+
     class StubResult:
         def __init__(self, task_id: str) -> None:
             self.id = task_id
 
-    def fake_apply_async(*, args: list[str], kwargs: dict[str, str], task_id: str, headers: dict[str, str]):
+    def fake_apply_async(
+        *, args: list[str], kwargs: dict[str, str], task_id: str, headers: dict[str, str]
+    ):
         return StubResult(task_id)
 
-    monkeypatch.setattr(
-        "app.api.routes.packs.generate_document_task.apply_async", fake_apply_async
-    )
+    monkeypatch.setattr("app.api.routes.packs.generate_document_task.apply_async", fake_apply_async)
 
     idem_key = f"pack-{uuid.uuid4()}"
     payload = {

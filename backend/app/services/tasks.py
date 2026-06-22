@@ -17,14 +17,9 @@ from app.models.models import (
     Company,
     DocumentPack,
     DocumentPackItem,
-    MedicalExam,
     Person,
     PipelineRun,
-    PPEIssue,
-    PPEIssueStatus,
     Site,
-    Training,
-    TrainingStatus,
 )
 from app.schemas.pack import PackGenerateRequest
 from app.services.audit import AuditService
@@ -38,9 +33,7 @@ from app.services.pipeline import PipelineService
 logger = logging.getLogger(__name__)
 
 
-def _pipeline_run_coroutine(
-    run_id: str, tenant_slug: str
-) -> Coroutine[None, None, str]:
+def _pipeline_run_coroutine(run_id: str, tenant_slug: str) -> Coroutine[None, None, str]:
     async def _run() -> str:
         async with AsyncSessionLocal(tenant=tenant_slug) as session:
             stmt = (
@@ -76,11 +69,7 @@ def _pipeline_run_coroutine(
 
 
 def _execute_pipeline_run(run_id: str, tenant_slug: str, *, task_name: str) -> str:
-    queue = (
-        celery_settings.celery.pdf_queue
-        or celery_app.conf.task_default_queue
-        or "default"
-    )
+    queue = celery_settings.celery.pdf_queue or celery_app.conf.task_default_queue or "default"
     metrics = get_metrics()
     metrics.record_celery_enqueue(queue=queue, task=task_name)
 
@@ -239,14 +228,18 @@ async def _load_pack(
     pack_code: str,
 ) -> DocumentPack:
     await ensure_default_packs(session, tenant_slug=tenant_slug)
-    stmt = select(DocumentPack).where(
-        DocumentPack.code == pack_code,
-        DocumentPack.tenant_id.in_(tenant_scope),
-        DocumentPack.is_active.is_(True),
-        DocumentPack.deleted_at.is_(None),
-    ).options(
-        selectinload(DocumentPack.items).selectinload(DocumentPackItem.template),
-        selectinload(DocumentPack.items).selectinload(DocumentPackItem.template_version),
+    stmt = (
+        select(DocumentPack)
+        .where(
+            DocumentPack.code == pack_code,
+            DocumentPack.tenant_id.in_(tenant_scope),
+            DocumentPack.is_active.is_(True),
+            DocumentPack.deleted_at.is_(None),
+        )
+        .options(
+            selectinload(DocumentPack.items).selectinload(DocumentPackItem.template),
+            selectinload(DocumentPack.items).selectinload(DocumentPackItem.template_version),
+        )
     )
     pack = (await session.execute(stmt)).scalar_one_or_none()
     if pack is None:
@@ -364,9 +357,7 @@ async def _generate_pack_coroutine(
             company=company,
             person_ids=request.person_ids,
         )
-        await _enforce_person_invariants(
-            session, tenant_scope=tenant_scope, persons=persons
-        )
+        await _enforce_person_invariants(session, tenant_scope=tenant_scope, persons=persons)
 
         pack = await _load_pack(
             session,
@@ -432,10 +423,7 @@ async def _generate_pack_coroutine(
             "documents": documents_payload,
             "data": request.data,
             "naming": {
-                **{
-                    k: (v.isoformat() if isinstance(v, date) else v)
-                    for k, v in naming.items()
-                },
+                **{k: (v.isoformat() if isinstance(v, date) else v) for k, v in naming.items()},
             },
         }
         outbox = OutboxService(session)
@@ -478,20 +466,14 @@ async def _generate_pack_coroutine(
 def _execute_pack_generation(
     *, tenant_slug: str, tenant_id: str | None, payload: dict[str, object], task_name: str
 ) -> dict[str, object]:
-    queue = (
-        celery_settings.celery.pdf_queue
-        or celery_app.conf.task_default_queue
-        or "default"
-    )
+    queue = celery_settings.celery.pdf_queue or celery_app.conf.task_default_queue or "default"
     metrics = get_metrics()
     metrics.record_celery_enqueue(queue=queue, task=task_name)
 
     started = perf_counter()
     try:
         result = asyncio.run(
-            _generate_pack_coroutine(
-                tenant_slug=tenant_slug, tenant_id=tenant_id, payload=payload
-            )
+            _generate_pack_coroutine(tenant_slug=tenant_slug, tenant_id=tenant_id, payload=payload)
         )
     except Exception as exc:  # noqa: BLE001 - propagate Celery failure
         duration = perf_counter() - started

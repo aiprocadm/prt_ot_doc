@@ -1,4 +1,5 @@
 """Endpoints for personal permits (личные допуски): CRUD + lifecycle operations."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -143,9 +144,13 @@ async def create_permit_endpoint(
     if payload.position_id:
         await _ensure_position(session, tenant, payload.position_id)
     permit = await create_permit(
-        session, tenant_id=tenant.id, person_id=payload.person_id,
-        permit_type=payload.permit_type, issued_at=payload.issued_at,
-        valid_until=payload.valid_until, position_id=payload.position_id,
+        session,
+        tenant_id=tenant.id,
+        person_id=payload.person_id,
+        permit_type=payload.permit_type,
+        issued_at=payload.issued_at,
+        valid_until=payload.valid_until,
+        position_id=payload.position_id,
     )
     return _permit_schema(permit)
 
@@ -161,7 +166,11 @@ async def get_permit(
 @router.patch("/{permit_id}", response_model=PermitRead)
 @audit_operation("update", "permit")
 async def update_permit_endpoint(
-    permit_id: str, payload: PermitUpdate, tenant: TenantDep, session: SessionDep, access: WriterAccess
+    permit_id: str,
+    payload: PermitUpdate,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: WriterAccess,
 ) -> PermitRead:
     TenantContextValidator.ensure_tenant_context(tenant)
     await _get_permit_or_404(session, tenant, permit_id)  # fast-fail before any other work
@@ -171,7 +180,9 @@ async def update_permit_endpoint(
         await _ensure_position(session, tenant, new_position_id)
     try:
         permit = await update_permit(
-            session, tenant_id=tenant.id, permit_id=permit_id,
+            session,
+            tenant_id=tenant.id,
+            permit_id=permit_id,
             permit_type=fields.get("permit_type"),
             valid_until=fields.get("valid_until"),
             position_id=fields.get("position_id"),
@@ -188,7 +199,11 @@ async def update_permit_endpoint(
 @router.post("/{permit_id}/extend", response_model=PermitRead)
 @audit_operation("update", "permit")
 async def extend_permit_endpoint(
-    permit_id: str, payload: PermitExtend, tenant: TenantDep, session: SessionDep, access: WriterAccess
+    permit_id: str,
+    payload: PermitExtend,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: WriterAccess,
 ) -> PermitRead:
     TenantContextValidator.ensure_tenant_context(tenant)
     try:

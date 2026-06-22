@@ -61,23 +61,23 @@ depends_on: str | Sequence[str] | None = None
 # Tables inheriting VersionedMixin whose creator migration omitted ``version``.
 # Alphabetical for a readable future drift diff.
 _VERSION_TABLES: tuple[str, ...] = (
-    "approval_decisions",      # ApprovalDecision
-    "approval_requests",       # ApprovalRequest
-    "document_artifacts",      # DocumentArtifact
-    "document_job_steps",      # DocumentJobStep
-    "document_jobs",           # DocumentJob
-    "edo_messages",            # EdoMessage
-    "edo_receipts",            # EdoReceipt
-    "edo_status_history",      # EdoStatusHistory
+    "approval_decisions",  # ApprovalDecision
+    "approval_requests",  # ApprovalRequest
+    "document_artifacts",  # DocumentArtifact
+    "document_job_steps",  # DocumentJobStep
+    "document_jobs",  # DocumentJob
+    "edo_messages",  # EdoMessage
+    "edo_receipts",  # EdoReceipt
+    "edo_status_history",  # EdoStatusHistory
     "notification_templates",  # NotificationTemplate
-    "outbox_events",           # OutboxEvent
-    "pdf_conversion_runs",     # PdfConversionRun
+    "outbox_events",  # OutboxEvent
+    "pdf_conversion_runs",  # PdfConversionRun
 )
 
 # SoftDeleteMixin tables missing ``deleted_at``.
 _DELETED_AT_TABLES: tuple[str, ...] = (
-    "incident",   # Incident
-    "ppeissue",   # PPEIssue
+    "incident",  # Incident
+    "ppeissue",  # PPEIssue
 )
 
 

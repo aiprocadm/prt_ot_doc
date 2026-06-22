@@ -79,7 +79,11 @@ depends_on: str | Sequence[str] | None = None
 
 INCIDENT_TYPE_VALUES = ("ACCIDENT", "MICROTRAUMA", "NEAR_MISS", "UNSAFE_CONDITION")
 INCIDENT_STAGE_VALUES = (
-    "REGISTRATION", "INVESTIGATION", "ACTION_PLAN", "FOLLOW_UP", "CLOSED",
+    "REGISTRATION",
+    "INVESTIGATION",
+    "ACTION_PLAN",
+    "FOLLOW_UP",
+    "CLOSED",
 )
 INCIDENT_PERSON_ROLE_VALUES = ("VICTIM", "WITNESS", "PARTICIPANT")
 # IncidentLog reuses IncidentStage Python class but declares a separate PG
@@ -87,12 +91,20 @@ INCIDENT_PERSON_ROLE_VALUES = ("VICTIM", "WITNESS", "PARTICIPANT")
 # in full rather than aliased so the migration is self-explanatory and
 # AST analyzers (pin tests) can read the values directly.
 INCIDENT_LOG_STAGE_VALUES = (
-    "REGISTRATION", "INVESTIGATION", "ACTION_PLAN", "FOLLOW_UP", "CLOSED",
+    "REGISTRATION",
+    "INVESTIGATION",
+    "ACTION_PLAN",
+    "FOLLOW_UP",
+    "CLOSED",
 )
 # IncidentLog.status uses IncidentStatus Python class with a separate PG
 # enum name. Values match model:2267-2272.
 INCIDENT_LOG_STATUS_VALUES = (
-    "REPORTED", "INVESTIGATING", "ACTIONS", "CLOSED", "CANCELLED",
+    "REPORTED",
+    "INVESTIGATING",
+    "ACTIONS",
+    "CLOSED",
+    "CANCELLED",
 )
 
 
@@ -112,11 +124,21 @@ def upgrade() -> None:
         # only the first two; ``incidentpersonrole`` / ``incidentlogstage`` /
         # ``incidentlogstatus`` were omitted, breaking
         # ``CREATE TABLE incident_log`` / ``incident_person`` on PostgreSQL.
-        postgresql.ENUM(*INCIDENT_TYPE_VALUES, name="incidenttype", create_type=False).create(bind, checkfirst=True)
-        postgresql.ENUM(*INCIDENT_STAGE_VALUES, name="incidentstage", create_type=False).create(bind, checkfirst=True)
-        postgresql.ENUM(*INCIDENT_PERSON_ROLE_VALUES, name="incidentpersonrole", create_type=False).create(bind, checkfirst=True)
-        postgresql.ENUM(*INCIDENT_LOG_STAGE_VALUES, name="incidentlogstage", create_type=False).create(bind, checkfirst=True)
-        postgresql.ENUM(*INCIDENT_LOG_STATUS_VALUES, name="incidentlogstatus", create_type=False).create(bind, checkfirst=True)
+        postgresql.ENUM(*INCIDENT_TYPE_VALUES, name="incidenttype", create_type=False).create(
+            bind, checkfirst=True
+        )
+        postgresql.ENUM(*INCIDENT_STAGE_VALUES, name="incidentstage", create_type=False).create(
+            bind, checkfirst=True
+        )
+        postgresql.ENUM(
+            *INCIDENT_PERSON_ROLE_VALUES, name="incidentpersonrole", create_type=False
+        ).create(bind, checkfirst=True)
+        postgresql.ENUM(
+            *INCIDENT_LOG_STAGE_VALUES, name="incidentlogstage", create_type=False
+        ).create(bind, checkfirst=True)
+        postgresql.ENUM(
+            *INCIDENT_LOG_STATUS_VALUES, name="incidentlogstatus", create_type=False
+        ).create(bind, checkfirst=True)
     # ------------------------------------------------------------------
     # 1. Alter incident: add 6 missing business cols + 4 indexes.
     # ------------------------------------------------------------------
@@ -193,7 +215,9 @@ def upgrade() -> None:
         op.create_index("ix_incident_site_id", "incident", ["site_id"], unique=False)
         op.create_index("ix_incident_pack_id", "incident", ["pack_id"], unique=False)
         # Composite indexes (from model __table_args__).
-        op.create_index("ix_incident_company", "incident", ["tenant_id", "company_id"], unique=False)
+        op.create_index(
+            "ix_incident_company", "incident", ["tenant_id", "company_id"], unique=False
+        )
         op.create_index("ix_incident_site", "incident", ["tenant_id", "site_id"], unique=False)
         op.create_index("ix_incident_status", "incident", ["tenant_id", "status"], unique=False)
         op.create_index("ix_incident_occurred_at", "incident", ["occurred_at"], unique=False)
@@ -215,12 +239,16 @@ def upgrade() -> None:
             sa.Column("author_id", sa.String(length=36), nullable=True),
             sa.Column(
                 "stage",
-                postgresql.ENUM(*INCIDENT_LOG_STAGE_VALUES, name="incidentlogstage", create_type=False),
+                postgresql.ENUM(
+                    *INCIDENT_LOG_STAGE_VALUES, name="incidentlogstage", create_type=False
+                ),
                 nullable=False,
             ),
             sa.Column(
                 "status",
-                postgresql.ENUM(*INCIDENT_LOG_STATUS_VALUES, name="incidentlogstatus", create_type=False),
+                postgresql.ENUM(
+                    *INCIDENT_LOG_STATUS_VALUES, name="incidentlogstatus", create_type=False
+                ),
                 nullable=False,
             ),
             sa.Column("message", sa.Text(), nullable=False),
@@ -233,11 +261,19 @@ def upgrade() -> None:
             sa.ForeignKeyConstraint(["author_id"], ["user.id"], ondelete="SET NULL"),
             sa.PrimaryKeyConstraint("id"),
         )
-        op.create_index(op.f("ix_incident_log_tenant_id"), "incident_log", ["tenant_id"], unique=False)
-        op.create_index("ix_incident_log_incident_id", "incident_log", ["incident_id"], unique=False)
+        op.create_index(
+            op.f("ix_incident_log_tenant_id"), "incident_log", ["tenant_id"], unique=False
+        )
+        op.create_index(
+            "ix_incident_log_incident_id", "incident_log", ["incident_id"], unique=False
+        )
         op.create_index("ix_incident_log_author_id", "incident_log", ["author_id"], unique=False)
-        op.create_index("ix_incident_log_incident", "incident_log", ["tenant_id", "incident_id"], unique=False)
-        op.create_index("ix_incident_log_stage", "incident_log", ["tenant_id", "stage"], unique=False)
+        op.create_index(
+            "ix_incident_log_incident", "incident_log", ["tenant_id", "incident_id"], unique=False
+        )
+        op.create_index(
+            "ix_incident_log_stage", "incident_log", ["tenant_id", "stage"], unique=False
+        )
 
     # ------------------------------------------------------------------
     # 3. Create incident_person table.
@@ -251,7 +287,9 @@ def upgrade() -> None:
             sa.Column("person_id", sa.String(length=36), nullable=False),
             sa.Column(
                 "role",
-                postgresql.ENUM(*INCIDENT_PERSON_ROLE_VALUES, name="incidentpersonrole", create_type=False),
+                postgresql.ENUM(
+                    *INCIDENT_PERSON_ROLE_VALUES, name="incidentpersonrole", create_type=False
+                ),
                 nullable=False,
                 server_default="VICTIM",
             ),
@@ -270,9 +308,15 @@ def upgrade() -> None:
                 name="uq_incident_person_role",
             ),
         )
-        op.create_index(op.f("ix_incident_person_tenant_id"), "incident_person", ["tenant_id"], unique=False)
-        op.create_index("ix_incident_person_incident_id", "incident_person", ["incident_id"], unique=False)
-        op.create_index("ix_incident_person_person_id", "incident_person", ["person_id"], unique=False)
+        op.create_index(
+            op.f("ix_incident_person_tenant_id"), "incident_person", ["tenant_id"], unique=False
+        )
+        op.create_index(
+            "ix_incident_person_incident_id", "incident_person", ["incident_id"], unique=False
+        )
+        op.create_index(
+            "ix_incident_person_person_id", "incident_person", ["person_id"], unique=False
+        )
         op.create_index("ix_incident_person_role", "incident_person", ["role"], unique=False)
 
 

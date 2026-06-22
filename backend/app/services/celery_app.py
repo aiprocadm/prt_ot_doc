@@ -27,11 +27,7 @@ celery_app = Celery(
     broker=settings.redis.broker_url,
     backend=settings.redis.result_url,
 )
-default_queue = (
-    settings.celery.worker_queues[0]
-    if settings.celery.worker_queues
-    else "default"
-)
+default_queue = settings.celery.worker_queues[0] if settings.celery.worker_queues else "default"
 pdf_queue = settings.celery.pdf_queue
 
 celery_app.conf.update(
@@ -42,9 +38,7 @@ celery_app.conf.update(
     worker_max_tasks_per_child=100,
     task_always_eager=settings.celery_eager,
     task_eager_propagates=settings.celery_eager,
-    broker_transport_options={
-        "visibility_timeout": max(settings.celery.task_time_limit * 2, 600)
-    },
+    broker_transport_options={"visibility_timeout": max(settings.celery.task_time_limit * 2, 600)},
     beat_scheduler="celery.beat:PersistentScheduler",
     task_default_queue=default_queue,
     task_default_exchange="app.tasks",
@@ -127,10 +121,13 @@ def route_task_by_tenant(name, args, kwargs, options, task=None, **kw):
     return None
 
 
-celery_app.conf.task_routes = (route_task_by_tenant, {
-    "app.tasks.*": {"queue": default_queue},
-    "worker.tasks.*": {"queue": default_queue},
-})
+celery_app.conf.task_routes = (
+    route_task_by_tenant,
+    {
+        "app.tasks.*": {"queue": default_queue},
+        "worker.tasks.*": {"queue": default_queue},
+    },
+)
 
 
 _TASK_CONTEXT_TOKENS: dict[
@@ -174,7 +171,9 @@ def _on_task_prerun(
                 or headers.get("X-Request-Id")
             )
 
-    trace_identifier = (trace_header_value or correlation_header_value or task_id).strip() or task_id
+    trace_identifier = (
+        trace_header_value or correlation_header_value or task_id
+    ).strip() or task_id
     trace_token = set_trace_id(trace_identifier)
     correlation_token = CorrelationIDManager.set(
         (correlation_header_value or trace_identifier).strip() or trace_identifier

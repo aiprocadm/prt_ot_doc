@@ -381,8 +381,7 @@
       "samples",
       "scripts",
       "seed",
-      "tests",
-      "Создание платформы по ОТ"
+      "tests"
     ]
   },
   "findings": {

@@ -7,24 +7,32 @@ from app.modules.projections.models import ExportJob, PackageReadModel, SearchIn
 
 
 @pytest.mark.anyio
-async def test_analytics_and_trends_endpoints(async_client, sessionmaker, data_factory, make_auth_headers):
+async def test_analytics_and_trends_endpoints(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
     async with sessionmaker() as session:  # type: AsyncSession
         tenant = await data_factory.ensure_tenant(session=session)
         session.add(PackageReadModel(tenant_id=tenant.id, package_id="pkg-1", status="in_progress"))
         await session.commit()
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
-    response = await async_client.get("/api/v1/analytics/dashboard/executive", headers={**headers, "X-Tenant": "test"})
+    response = await async_client.get(
+        "/api/v1/analytics/dashboard/executive", headers={**headers, "X-Tenant": "test"}
+    )
     assert response.status_code == 200
     assert "dashboard" in response.json()
 
-    trend = await async_client.get("/api/v1/analytics/trends/incidents", headers={**headers, "X-Tenant": "test"})
+    trend = await async_client.get(
+        "/api/v1/analytics/trends/incidents", headers={**headers, "X-Tenant": "test"}
+    )
     assert trend.status_code == 200
     assert trend.json()["metric"] == "incidents"
 
 
 @pytest.mark.anyio
-async def test_search_over_projection_index(async_client, sessionmaker, data_factory, make_auth_headers):
+async def test_search_over_projection_index(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
     async with sessionmaker() as session:  # type: AsyncSession
         tenant = await data_factory.ensure_tenant(session=session)
         session.add(
@@ -40,7 +48,11 @@ async def test_search_over_projection_index(async_client, sessionmaker, data_fac
         await session.commit()
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
-    response = await async_client.get("/api/v1/search", params={"q": "Иван", "entity_types": "person"}, headers={**headers, "X-Tenant": "test"})
+    response = await async_client.get(
+        "/api/v1/search",
+        params={"q": "Иван", "entity_types": "person"},
+        headers={**headers, "X-Tenant": "test"},
+    )
     assert response.status_code == 200
     payload = response.json()
     assert payload["items"]
@@ -54,19 +66,31 @@ async def test_export_center_idempotent_creation(async_client, sessionmaker, dat
         await session.commit()
 
     headers = {"Idempotency-Key": "same-export"}
-    body = {"export_type": "training_matrix", "scope_json": {"scope": "tenant"}, "filters_json": {"status": "all"}}
-    r1 = await async_client.post("/api/v1/exports", json=body, headers={**headers, "X-Tenant": "test"})
+    body = {
+        "export_type": "training_matrix",
+        "scope_json": {"scope": "tenant"},
+        "filters_json": {"status": "all"},
+    }
+    r1 = await async_client.post(
+        "/api/v1/exports", json=body, headers={**headers, "X-Tenant": "test"}
+    )
     assert r1.status_code == 201
-    r2 = await async_client.post("/api/v1/exports", json=body, headers={**headers, "X-Tenant": "test"})
+    r2 = await async_client.post(
+        "/api/v1/exports", json=body, headers={**headers, "X-Tenant": "test"}
+    )
     assert r2.status_code == 201
     assert r1.json()["id"] == r2.json()["id"]
 
-    details = await async_client.get(f"/api/v1/exports/{r1.json()['id']}", headers={"X-Tenant": "test"})
+    details = await async_client.get(
+        f"/api/v1/exports/{r1.json()['id']}", headers={"X-Tenant": "test"}
+    )
     assert details.status_code == 200
 
 
 @pytest.mark.anyio
-async def test_client_portal_internal_requests_patch(async_client, sessionmaker, data_factory, make_auth_headers):
+async def test_client_portal_internal_requests_patch(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
     async with sessionmaker() as session:  # type: AsyncSession
         await data_factory.ensure_tenant(session=session)
         session.add(
@@ -120,35 +144,43 @@ async def test_client_user_cannot_patch_internal_portal_requests(async_client, m
 
 
 @pytest.mark.anyio
-async def test_search_returns_extended_facets(async_client, sessionmaker, data_factory, make_auth_headers):
+async def test_search_returns_extended_facets(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
     async with sessionmaker() as session:  # type: AsyncSession
         tenant = await data_factory.ensure_tenant(session=session)
-        session.add_all([
-            SearchIndexEntry(
-                tenant_id=tenant.id,
-                entity_type="incident",
-                entity_id="incident-1",
-                title="Near miss",
-                status="reported",
-                tags_json={"company_id": "company-1", "site_id": "site-1"},
-                route="/incidents/incident-1",
-                search_text="Near miss reported",
-            ),
-            SearchIndexEntry(
-                tenant_id=tenant.id,
-                entity_type="incident",
-                entity_id="incident-2",
-                title="Another miss",
-                status="closed",
-                tags_json={"company_id": "company-1", "site_id": "site-2"},
-                route="/incidents/incident-2",
-                search_text="Another miss closed",
-            ),
-        ])
+        session.add_all(
+            [
+                SearchIndexEntry(
+                    tenant_id=tenant.id,
+                    entity_type="incident",
+                    entity_id="incident-1",
+                    title="Near miss",
+                    status="reported",
+                    tags_json={"company_id": "company-1", "site_id": "site-1"},
+                    route="/incidents/incident-1",
+                    search_text="Near miss reported",
+                ),
+                SearchIndexEntry(
+                    tenant_id=tenant.id,
+                    entity_type="incident",
+                    entity_id="incident-2",
+                    title="Another miss",
+                    status="closed",
+                    tags_json={"company_id": "company-1", "site_id": "site-2"},
+                    route="/incidents/incident-2",
+                    search_text="Another miss closed",
+                ),
+            ]
+        )
         await session.commit()
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
-    response = await async_client.get("/api/v1/search", params={"q": "miss", "entity_types": "incident"}, headers={**headers, "X-Tenant": "test"})
+    response = await async_client.get(
+        "/api/v1/search",
+        params={"q": "miss", "entity_types": "incident"},
+        headers={**headers, "X-Tenant": "test"},
+    )
     assert response.status_code == 200
     facets = response.json()["facets"]
     assert facets["status_counts"]["reported"] == 1
@@ -157,10 +189,14 @@ async def test_search_returns_extended_facets(async_client, sessionmaker, data_f
 
 
 @pytest.mark.anyio
-async def test_analytics_extended_dashboards(async_client, sessionmaker, data_factory, make_auth_headers):
+async def test_analytics_extended_dashboards(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
     async with sessionmaker() as session:  # type: AsyncSession
         tenant = await data_factory.ensure_tenant(session=session)
-        session.add(PackageReadModel(tenant_id=tenant.id, package_id="pkg-analytics", status="in_progress"))
+        session.add(
+            PackageReadModel(tenant_id=tenant.id, package_id="pkg-analytics", status="in_progress")
+        )
         await session.commit()
 
     for endpoint in [
@@ -178,37 +214,56 @@ async def test_analytics_extended_dashboards(async_client, sessionmaker, data_fa
 
 
 @pytest.mark.anyio
-async def test_search_returns_total_and_extended_filters(async_client, sessionmaker, data_factory, make_auth_headers):
+async def test_search_returns_total_and_extended_filters(
+    async_client, sessionmaker, data_factory, make_auth_headers
+):
     async with sessionmaker() as session:  # type: AsyncSession
         tenant = await data_factory.ensure_tenant(session=session)
-        session.add_all([
-            SearchIndexEntry(
-                tenant_id=tenant.id,
-                entity_type="incident",
-                entity_id="incident-prj-1",
-                title="Critical near miss",
-                status="reported",
-                tags_json={"company_id": "company-1", "site_id": "site-1", "project_id": "project-1", "risk_level": "high"},
-                route="/incidents/incident-prj-1",
-                search_text="Critical near miss high risk project one",
-            ),
-            SearchIndexEntry(
-                tenant_id=tenant.id,
-                entity_type="incident",
-                entity_id="incident-prj-2",
-                title="Near miss archive",
-                status="closed",
-                tags_json={"company_id": "company-1", "site_id": "site-2", "project_id": "project-2", "risk_level": "low"},
-                route="/incidents/incident-prj-2",
-                search_text="Near miss archive low risk project two",
-            ),
-        ])
+        session.add_all(
+            [
+                SearchIndexEntry(
+                    tenant_id=tenant.id,
+                    entity_type="incident",
+                    entity_id="incident-prj-1",
+                    title="Critical near miss",
+                    status="reported",
+                    tags_json={
+                        "company_id": "company-1",
+                        "site_id": "site-1",
+                        "project_id": "project-1",
+                        "risk_level": "high",
+                    },
+                    route="/incidents/incident-prj-1",
+                    search_text="Critical near miss high risk project one",
+                ),
+                SearchIndexEntry(
+                    tenant_id=tenant.id,
+                    entity_type="incident",
+                    entity_id="incident-prj-2",
+                    title="Near miss archive",
+                    status="closed",
+                    tags_json={
+                        "company_id": "company-1",
+                        "site_id": "site-2",
+                        "project_id": "project-2",
+                        "risk_level": "low",
+                    },
+                    route="/incidents/incident-prj-2",
+                    search_text="Near miss archive low risk project two",
+                ),
+            ]
+        )
         await session.commit()
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
     response = await async_client.get(
         "/api/v1/search",
-        params={"q": "near miss", "entity_types": "incident", "project_id": "project-1", "risk_level": "high"},
+        params={
+            "q": "near miss",
+            "entity_types": "incident",
+            "project_id": "project-1",
+            "risk_level": "high",
+        },
         headers={**headers, "X-Tenant": "test"},
     )
     assert response.status_code == 200

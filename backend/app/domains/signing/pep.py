@@ -3,6 +3,7 @@
 Канонизация подписываемого содержимого, SHA-256, FSM запроса подписи и
 исход проверки разового кода. Без I/O — по образцу domains/ppe/lifecycle.py.
 """
+
 from __future__ import annotations
 
 import enum
@@ -12,7 +13,15 @@ from datetime import datetime
 from typing import Any
 
 PEP_PURPOSES = frozenset(
-    {"document", "acknowledgement", "ppe_issue", "briefing", "work_permit", "work_permit_briefing", "work_permit_closing"}
+    {
+        "document",
+        "acknowledgement",
+        "ppe_issue",
+        "briefing",
+        "work_permit",
+        "work_permit_briefing",
+        "work_permit_closing",
+    }
 )
 MAX_CONFIRM_ATTEMPTS = 5
 CONFIRM_TTL_MINUTES = 15

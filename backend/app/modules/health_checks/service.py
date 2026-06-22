@@ -41,9 +41,7 @@ class HealthCheckCache:
             return None
         return result
 
-    def set(
-        self, tenant_id: str, result: HealthCheckComprehensiveResponse
-    ) -> None:
+    def set(self, tenant_id: str, result: HealthCheckComprehensiveResponse) -> None:
         """Cache a result."""
         self.cache[tenant_id] = (datetime.utcnow(), result)
 

@@ -16,7 +16,11 @@ from app.services.idempotency import IdempotencyService, normalize_idempotency_k
 router = APIRouter()
 
 
-@router.post("/{file_id}/convert:pdf", response_model=ConvertPdfAccepted, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/{file_id}/convert:pdf",
+    response_model=ConvertPdfAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 async def convert_file_to_pdf(
     file_id: str,
     payload: ConvertPdfRequest,
@@ -34,7 +38,9 @@ async def convert_file_to_pdf(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="idempotency_key_required")
 
     normalized_key = normalize_idempotency_key(idempotency_key)
-    request_hash = compute_request_hash({"file_id": file_id, "payload": payload.model_dump(mode="json")})
+    request_hash = compute_request_hash(
+        {"file_id": file_id, "payload": payload.model_dump(mode="json")}
+    )
     idem = IdempotencyService(
         session=session,
         tenant_id=str(tenant.id),
@@ -75,7 +81,9 @@ async def convert_file_to_pdf(
         output_file_id=None,
         status_url=f"/api/v1/files/pdf-runs/{run.id}",
     )
-    await idem.store_success(record, status_code=status.HTTP_202_ACCEPTED, body=body.model_dump(mode="json"))
+    await idem.store_success(
+        record, status_code=status.HTTP_202_ACCEPTED, body=body.model_dump(mode="json")
+    )
     await session.commit()
     return body
 

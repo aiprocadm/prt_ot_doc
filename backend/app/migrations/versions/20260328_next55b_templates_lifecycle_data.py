@@ -37,7 +37,6 @@ without refactoring env.py's outer-transaction wrapper.
 
 from alembic import op  # noqa: F401  -- kept for parity / future use
 
-
 revision = "20260328_next55b"
 down_revision = "20260328_next55"
 branch_labels = None

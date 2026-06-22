@@ -53,7 +53,12 @@ class DummyAccess:
 
 @pytest.mark.parametrize(
     ("chunks", "expected"),
-    [([b"hello", b" ", b"world"], "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9")],
+    [
+        (
+            [b"hello", b" ", b"world"],
+            "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9",
+        )
+    ],
 )
 def test_compute_sha256_stream(chunks: list[bytes], expected: str) -> None:
     assert compute_sha256_stream(chunks) == expected
@@ -61,7 +66,18 @@ def test_compute_sha256_stream(chunks: list[bytes], expected: str) -> None:
 
 @pytest.mark.asyncio
 async def test_download_blocked_if_not_clean() -> None:
-    rec = FileRecord(id="f1", tenant_id="t1", bucket="main", object_key="a", content_type="text/plain", size_bytes=1, sha256="a" * 64, status=FileStatus.scanning.value, av_result_json={}, metadata_json={})
+    rec = FileRecord(
+        id="f1",
+        tenant_id="t1",
+        bucket="main",
+        object_key="a",
+        content_type="text/plain",
+        size_bytes=1,
+        sha256="a" * 64,
+        status=FileStatus.scanning.value,
+        av_result_json={},
+        metadata_json={},
+    )
     session = DummySession(rec)
     svc = FileService(session=session, tenant_id="t1")
 
@@ -73,7 +89,18 @@ async def test_download_blocked_if_not_clean() -> None:
 
 @pytest.mark.asyncio
 async def test_link_and_unlink_file() -> None:
-    rec = FileRecord(id="f2", tenant_id="t1", bucket="main", object_key="a", content_type="text/plain", size_bytes=1, sha256="b" * 64, status=FileStatus.clean.value, av_result_json={}, metadata_json={})
+    rec = FileRecord(
+        id="f2",
+        tenant_id="t1",
+        bucket="main",
+        object_key="a",
+        content_type="text/plain",
+        size_bytes=1,
+        sha256="b" * 64,
+        status=FileStatus.clean.value,
+        av_result_json={},
+        metadata_json={},
+    )
     session = DummySession(rec)
     svc = FileService(session=session, tenant_id="t1")
 
@@ -89,12 +116,27 @@ async def test_link_and_unlink_file() -> None:
 
 @pytest.mark.asyncio
 async def test_download_creates_log(monkeypatch: pytest.MonkeyPatch) -> None:
-    rec = FileRecord(id="f3", tenant_id="t1", bucket="main", object_key="k", content_type="text/plain", size_bytes=1, sha256="c" * 64, status=FileStatus.clean.value, av_result_json={}, metadata_json={})
+    rec = FileRecord(
+        id="f3",
+        tenant_id="t1",
+        bucket="main",
+        object_key="k",
+        content_type="text/plain",
+        size_bytes=1,
+        sha256="c" * 64,
+        status=FileStatus.clean.value,
+        av_result_json={},
+        metadata_json={},
+    )
     session = DummySession(rec)
     svc = FileService(session=session, tenant_id="t1")
 
-    monkeypatch.setattr("app.modules.files.storage.presign_get", lambda *, key, expires_in: "http://signed")
-    url = await svc.get_signed_download_url(file_id="f3", purpose="ui_preview", ip="127.0.0.1", user_agent="pytest")
+    monkeypatch.setattr(
+        "app.modules.files.storage.presign_get", lambda *, key, expires_in: "http://signed"
+    )
+    url = await svc.get_signed_download_url(
+        file_id="f3", purpose="ui_preview", ip="127.0.0.1", user_agent="pytest"
+    )
 
     assert url == "http://signed"
     assert any(isinstance(item, FileDownloadLog) for item in session.added)
@@ -125,7 +167,18 @@ def test_build_artifact_name_supports_flags_and_sanitizes() -> None:
 async def test_create_upload_session_validates_limits(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.core.config import get_settings
 
-    rec = FileRecord(id="f4", tenant_id="t1", bucket="main", object_key="a", content_type="text/plain", size_bytes=1, sha256="d" * 64, status=FileStatus.clean.value, av_result_json={}, metadata_json={})
+    rec = FileRecord(
+        id="f4",
+        tenant_id="t1",
+        bucket="main",
+        object_key="a",
+        content_type="text/plain",
+        size_bytes=1,
+        sha256="d" * 64,
+        status=FileStatus.clean.value,
+        av_result_json={},
+        metadata_json={},
+    )
     session = DummySession(rec)
     svc = FileService(session=session, tenant_id="t1")
 
@@ -139,7 +192,9 @@ async def test_create_upload_session_validates_limits(monkeypatch: pytest.Monkey
     assert exc.value.status_code == 413
 
     with pytest.raises(HTTPException) as exc2:
-        await svc.create_upload_session(filename="a.pdf", content_type="application/pdf", size_bytes=5)
+        await svc.create_upload_session(
+            filename="a.pdf", content_type="application/pdf", size_bytes=5
+        )
 
     assert exc2.value.status_code == 415
 
@@ -156,23 +211,41 @@ async def test_create_upload_session_uses_tenant_prefix(monkeypatch: pytest.Monk
     monkeypatch.setenv("FILE_ALLOWED_MIME", "text/plain")
     get_settings.cache_clear()  # type: ignore[attr-defined]
 
-    monkeypatch.setattr("app.modules.files.service.s3.generate_presigned_put_url", lambda key, **kwargs: "http://put")
-    rec, _url, _ttl = await svc.create_upload_session(filename="a.txt", content_type="text/plain", size_bytes=1)
+    monkeypatch.setattr(
+        "app.modules.files.service.s3.generate_presigned_put_url",
+        lambda key, **kwargs: "http://put",
+    )
+    rec, _url, _ttl = await svc.create_upload_session(
+        filename="a.txt", content_type="text/plain", size_bytes=1
+    )
     assert rec.object_key.startswith("tenants/tenant-xyz/")
     get_settings.cache_clear()  # type: ignore[attr-defined]
 
 
 @pytest.mark.asyncio
 async def test_av_scan_infected_moves_to_quarantine(monkeypatch: pytest.MonkeyPatch) -> None:
-    rec = FileRecord(id="f5", tenant_id="t1", bucket="main", object_key="tenant/t1/uploads/a.txt", content_type="text/plain", size_bytes=1, sha256="e" * 64, status=FileStatus.scanning.value, av_result_json={}, metadata_json={})
+    rec = FileRecord(
+        id="f5",
+        tenant_id="t1",
+        bucket="main",
+        object_key="tenant/t1/uploads/a.txt",
+        content_type="text/plain",
+        size_bytes=1,
+        sha256="e" * 64,
+        status=FileStatus.scanning.value,
+        av_result_json={},
+        metadata_json={},
+    )
     session = DummySession(rec)
     svc = FileService(session=session, tenant_id="t1")
 
     class _Body:
         def __enter__(self):
             return self
+
         def __exit__(self, exc_type, exc, tb):
             return False
+
         def read(self):
             return b"bad"
 
@@ -191,7 +264,18 @@ async def test_av_scan_infected_moves_to_quarantine(monkeypatch: pytest.MonkeyPa
 
 @pytest.mark.asyncio
 async def test_finalize_upload_emits_file_uploaded_event(monkeypatch: pytest.MonkeyPatch) -> None:
-    rec = FileRecord(id="f7", tenant_id="t1", bucket="main", object_key="tenant/t1/uploads/a.txt", content_type="text/plain", size_bytes=1, sha256="0" * 64, status=FileStatus.uploaded.value, av_result_json={}, metadata_json={})
+    rec = FileRecord(
+        id="f7",
+        tenant_id="t1",
+        bucket="main",
+        object_key="tenant/t1/uploads/a.txt",
+        content_type="text/plain",
+        size_bytes=1,
+        sha256="0" * 64,
+        status=FileStatus.uploaded.value,
+        av_result_json={},
+        metadata_json={},
+    )
     session = DummySession(rec)
     svc = FileService(session=session, tenant_id="t1")
     events: list[str] = []
@@ -206,7 +290,10 @@ async def test_finalize_upload_emits_file_uploaded_event(monkeypatch: pytest.Mon
         def read(self):
             return b"safe"
 
-    monkeypatch.setattr("app.modules.files.service.s3.head_object", lambda *, key: {"size": 4, "content_type": "text/plain"})
+    monkeypatch.setattr(
+        "app.modules.files.service.s3.head_object",
+        lambda *, key: {"size": 4, "content_type": "text/plain"},
+    )
     monkeypatch.setattr("app.modules.files.service.s3.stream_object", lambda *, key: _Body())
     monkeypatch.setattr("app.modules.files.service.av_scan_file_job.delay", lambda *_args: None)
 
@@ -223,7 +310,18 @@ async def test_finalize_upload_emits_file_uploaded_event(monkeypatch: pytest.Mon
 
 @pytest.mark.asyncio
 async def test_av_scan_error_creates_error_result(monkeypatch: pytest.MonkeyPatch) -> None:
-    rec = FileRecord(id="f8", tenant_id="t1", bucket="main", object_key="tenant/t1/uploads/a.txt", content_type="text/plain", size_bytes=1, sha256="1" * 64, status=FileStatus.scanning.value, av_result_json={}, metadata_json={})
+    rec = FileRecord(
+        id="f8",
+        tenant_id="t1",
+        bucket="main",
+        object_key="tenant/t1/uploads/a.txt",
+        content_type="text/plain",
+        size_bytes=1,
+        sha256="1" * 64,
+        status=FileStatus.scanning.value,
+        av_result_json={},
+        metadata_json={},
+    )
     session = DummySession(rec)
     svc = FileService(session=session, tenant_id="t1")
 
@@ -266,20 +364,33 @@ class DummySessionWithVersion(DummySession):
 
 
 @pytest.mark.asyncio
-async def test_create_new_version_upload_session_uses_tenant_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_create_new_version_upload_session_uses_tenant_prefix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from app.core.config import get_settings
     from app.modules.files.models import FileVersion
 
     rec = FileRecord(
-        id="f6", tenant_id="t1", bucket="main", object_key="tenant/t1/uploads/a.txt",
-        content_type="text/plain", size_bytes=1, sha256="f" * 64, status=FileStatus.ready.value, av_result_json={}, metadata_json={}
+        id="f6",
+        tenant_id="t1",
+        bucket="main",
+        object_key="tenant/t1/uploads/a.txt",
+        content_type="text/plain",
+        size_bytes=1,
+        sha256="f" * 64,
+        status=FileStatus.ready.value,
+        av_result_json={},
+        metadata_json={},
     )
     session = DummySessionWithVersion(rec)
     svc = FileService(session=session, tenant_id="t1")
 
     monkeypatch.setenv("FILE_ALLOWED_MIME", "text/plain")
     get_settings.cache_clear()  # type: ignore[attr-defined]
-    monkeypatch.setattr("app.modules.files.service.s3.generate_presigned_put_url", lambda key, **kwargs: f"http://put/{key}")
+    monkeypatch.setattr(
+        "app.modules.files.service.s3.generate_presigned_put_url",
+        lambda key, **kwargs: f"http://put/{key}",
+    )
 
     version, upload_url, _ = await svc.create_new_version_upload_session(
         file_id="f6", filename="next.txt", content_type="text/plain", size_bytes=10
@@ -304,7 +415,18 @@ def test_mask_pii_for_indexing() -> None:
 
 @pytest.mark.asyncio
 async def test_link_output_requires_clean() -> None:
-    rec = FileRecord(id="f9", tenant_id="t1", bucket="main", object_key="a", content_type="text/plain", size_bytes=1, sha256="f" * 64, status=FileStatus.scanning.value, av_result_json={}, metadata_json={})
+    rec = FileRecord(
+        id="f9",
+        tenant_id="t1",
+        bucket="main",
+        object_key="a",
+        content_type="text/plain",
+        size_bytes=1,
+        sha256="f" * 64,
+        status=FileStatus.scanning.value,
+        av_result_json={},
+        metadata_json={},
+    )
     session = DummySession(rec)
     svc = FileService(session=session, tenant_id="t1")
 
@@ -347,7 +469,9 @@ def test_extract_company_id_from_metadata_or_tags() -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("role", ["client_admin", "client_user"])
-async def test_client_roles_company_scope_allow_and_deny_on_download(role: str, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_client_roles_company_scope_allow_and_deny_on_download(
+    role: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     rec = FileRecord(
         id="f10",
         tenant_id="t1",
@@ -363,7 +487,9 @@ async def test_client_roles_company_scope_allow_and_deny_on_download(role: str, 
     session = DummySession(rec)
     svc = FileService(session=session, tenant_id="t1")
     audits: list[str] = []
-    monkeypatch.setattr("app.modules.files.storage.presign_get", lambda *, key, expires_in: "http://signed")
+    monkeypatch.setattr(
+        "app.modules.files.storage.presign_get", lambda *, key, expires_in: "http://signed"
+    )
 
     async def _audit_capture(self, **kwargs):  # type: ignore[no-untyped-def]
         audits.append(kwargs["action"])
@@ -394,7 +520,9 @@ async def test_client_roles_company_scope_allow_and_deny_on_download(role: str, 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("role", ["client_admin", "client_user"])
-async def test_client_roles_company_scope_allow_and_deny_on_delete(role: str, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_client_roles_company_scope_allow_and_deny_on_delete(
+    role: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     rec = FileRecord(
         id="f11",
         tenant_id="t1",
@@ -439,7 +567,9 @@ async def test_client_roles_company_scope_allow_and_deny_on_delete(role: str, mo
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("role", ["client_admin", "client_user"])
-async def test_client_roles_company_scope_deny_on_finalize_and_link(role: str, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_client_roles_company_scope_deny_on_finalize_and_link(
+    role: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     rec = FileRecord(
         id="f12",
         tenant_id="t1",

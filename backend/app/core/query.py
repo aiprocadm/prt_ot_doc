@@ -1,4 +1,5 @@
 """Utilities for parsing pagination, sorting and filtering query params."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

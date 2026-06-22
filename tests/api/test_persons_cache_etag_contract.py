@@ -41,9 +41,7 @@ async def test_persons_hit_returns_304_with_same_etag(
     assert first.status_code == status.HTTP_200_OK
     etag = first.headers["ETag"]
 
-    second = await async_client.get(
-        "/api/v1/persons", headers={**headers, "If-None-Match": etag}
-    )
+    second = await async_client.get("/api/v1/persons", headers={**headers, "If-None-Match": etag})
     assert second.status_code == status.HTTP_304_NOT_MODIFIED
     assert second.headers["ETag"] == etag
     assert second.content == b""
@@ -153,8 +151,10 @@ async def test_persons_etag_distinct_per_page(
         )
         for i in range(5):
             await data_factory.create_person(
-                tenant=tenant, company=company,
-                first_name=f"Page{i}", last_name=f"User{i}",
+                tenant=tenant,
+                company=company,
+                first_name=f"Page{i}",
+                last_name=f"User{i}",
                 session=session,
             )
         await session.commit()
@@ -179,8 +179,10 @@ async def test_persons_etag_distinct_per_limit(
         )
         for i in range(3):
             await data_factory.create_person(
-                tenant=tenant, company=company,
-                first_name=f"Lim{i}", last_name=f"Test{i}",
+                tenant=tenant,
+                company=company,
+                first_name=f"Lim{i}",
+                last_name=f"Test{i}",
                 session=session,
             )
         await session.commit()

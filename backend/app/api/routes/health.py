@@ -197,11 +197,7 @@ async def health_comprehensive(
             skip_slow=skip_slow,
         )
 
-        code = (
-            status.HTTP_200_OK
-            if result.status == "ok"
-            else status.HTTP_503_SERVICE_UNAVAILABLE
-        )
+        code = status.HTTP_200_OK if result.status == "ok" else status.HTTP_503_SERVICE_UNAVAILABLE
         return JSONResponse(status_code=code, content=result.model_dump(mode="json"))
     except Exception as e:
         logger.exception("health.comprehensive_failed")

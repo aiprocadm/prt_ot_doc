@@ -1,4 +1,5 @@
 """End-to-end tests for domain packages (site access, incident, inspection prep, training)."""
+
 from __future__ import annotations
 
 import pytest
@@ -158,7 +159,6 @@ async def test_package_tenant_isolation_e2e(
     async with sessionmaker() as session:
         tenant_a = await data_factory.ensure_tenant(session=session)
         company_a = await data_factory.create_company(tenant=tenant_a, session=session)
-        tenant_a_id = str(tenant_a.id)
 
     headers = await make_auth_headers(RoleEnum.ADMIN)
 

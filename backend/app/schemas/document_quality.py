@@ -32,4 +32,3 @@ class QualityReport(BaseModel):
     release_blocked: bool
     summary: dict[str, int]
     issues: list[QualityIssue] = Field(default_factory=list)
-

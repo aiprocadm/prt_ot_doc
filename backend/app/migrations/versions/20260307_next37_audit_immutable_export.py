@@ -15,7 +15,10 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("auditlog", sa.Column("actor_type", sa.String(length=16), nullable=False, server_default="user"))
+    op.add_column(
+        "auditlog",
+        sa.Column("actor_type", sa.String(length=16), nullable=False, server_default="user"),
+    )
     op.add_column("auditlog", sa.Column("actor_email", sa.String(length=320), nullable=True))
     op.add_column("auditlog", sa.Column("parent_type", sa.String(length=64), nullable=True))
     op.add_column("auditlog", sa.Column("parent_id", sa.String(length=128), nullable=True))
@@ -25,7 +28,9 @@ def upgrade() -> None:
     op.drop_index("ix_auditlog_action", table_name="auditlog")
     op.drop_index("ix_auditlog_object", table_name="auditlog")
     op.create_index("ix_auditlog_action", "auditlog", ["action", "when"], unique=False)
-    op.create_index("ix_auditlog_object", "auditlog", ["object_type", "object_id", "when"], unique=False)
+    op.create_index(
+        "ix_auditlog_object", "auditlog", ["object_type", "object_id", "when"], unique=False
+    )
     op.create_index("ix_auditlog_actor", "auditlog", ["user_id", "when"], unique=False)
 
     op.execute(
@@ -64,7 +69,12 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_audit_export_job_tenant_status", "audit_export_job", ["tenant_id", "status"], unique=False)
+    op.create_index(
+        "ix_audit_export_job_tenant_status",
+        "audit_export_job",
+        ["tenant_id", "status"],
+        unique=False,
+    )
 
 
 def downgrade() -> None:

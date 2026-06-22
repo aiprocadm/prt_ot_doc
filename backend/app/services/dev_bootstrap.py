@@ -51,7 +51,9 @@ async def bootstrap_admin_user(settings: Settings) -> None:
     if not settings.admin_bootstrap:
         return
     if settings.app_env not in {"development", "test"}:
-        logger.warning("admin.bootstrap.skipped", extra={"reason": "not-dev", "env": settings.app_env})
+        logger.warning(
+            "admin.bootstrap.skipped", extra={"reason": "not-dev", "env": settings.app_env}
+        )
         return
     if not settings.admin_password.strip():
         logger.warning("admin.bootstrap.skipped", extra={"reason": "empty-password"})
@@ -62,7 +64,9 @@ async def bootstrap_admin_user(settings: Settings) -> None:
     tenant_id: str
     tenant_schema_name: str
     async with session_scope(tenant="public") as session:
-        tenant = (await session.execute(select(Tenant).where(Tenant.slug == tenant_slug))).scalar_one_or_none()
+        tenant = (
+            await session.execute(select(Tenant).where(Tenant.slug == tenant_slug))
+        ).scalar_one_or_none()
         if tenant is None:
             tenant = Tenant(
                 slug=tenant_slug,

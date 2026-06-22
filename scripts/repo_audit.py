@@ -86,24 +86,38 @@ CANONICAL_LAYOUT: tuple[CanonicalSection, ...] = (
 
 BACKEND_PATHS: tuple[CanonicalPath, ...] = (
     CanonicalPath("ASGI entrypoint", "backend/app/main.py", "Uvicorn/FastAPI runtime entrypoint."),
-    CanonicalPath("App factory", "backend/app/api/app.py", "Application factory and middleware wiring."),
+    CanonicalPath(
+        "App factory", "backend/app/api/app.py", "Application factory and middleware wiring."
+    ),
     CanonicalPath("API router", "backend/app/api/v1/router.py", "Top-level v1 router composition."),
     CanonicalPath("CLI entrypoint", "backend/app/cli/main.py", "Operator CLI commands."),
     CanonicalPath("Worker entrypoint", "backend/app/worker.py", "Celery worker bootstrap."),
-    CanonicalPath("Alembic config", "backend/app/migrations/alembic.ini", "Database migration configuration."),
+    CanonicalPath(
+        "Alembic config", "backend/app/migrations/alembic.ini", "Database migration configuration."
+    ),
 )
 
 FRONTEND_PATHS: tuple[CanonicalPath, ...] = (
-    CanonicalPath("Package manifest", "frontend/package.json", "Single active frontend package manifest."),
+    CanonicalPath(
+        "Package manifest", "frontend/package.json", "Single active frontend package manifest."
+    ),
     CanonicalPath("Vite config", "frontend/vite.config.ts", "Frontend bundler/runtime config."),
-    CanonicalPath("TypeScript config", "frontend/tsconfig.json", "Application TypeScript project config."),
-    CanonicalPath("Node TS config", "frontend/tsconfig.node.json", "Node-side TS config for build tooling."),
+    CanonicalPath(
+        "TypeScript config", "frontend/tsconfig.json", "Application TypeScript project config."
+    ),
+    CanonicalPath(
+        "Node TS config", "frontend/tsconfig.node.json", "Node-side TS config for build tooling."
+    ),
     CanonicalPath("React entrypoint", "frontend/src/main.tsx", "Browser bootstrap for the SPA."),
-    CanonicalPath("Route tree", "frontend/src/router/AppRouter.tsx", "Canonical route composition."),
+    CanonicalPath(
+        "Route tree", "frontend/src/router/AppRouter.tsx", "Canonical route composition."
+    ),
 )
 
 REQUIRED_DOCS: tuple[CanonicalPath, ...] = (
-    CanonicalPath("Architecture", "docs/ARCHITECTURE.md", "Architecture overview and layering expectations."),
+    CanonicalPath(
+        "Architecture", "docs/ARCHITECTURE.md", "Architecture overview and layering expectations."
+    ),
     CanonicalPath("Project structure", "docs/PROJECT_STRUCTURE.md", "Canonical repository layout."),
     CanonicalPath("Setup", "docs/SETUP.md", "Reproducible local setup and startup."),
     CanonicalPath("Backend", "docs/BACKEND.md", "Backend runtime/modules overview."),
@@ -112,17 +126,35 @@ REQUIRED_DOCS: tuple[CanonicalPath, ...] = (
     CanonicalPath("API overview", "docs/API_OVERVIEW.md", "Public/internal API map."),
     CanonicalPath("Domain model", "docs/DOMAIN_MODEL.md", "Key entities and relationships."),
     CanonicalPath("Document core", "docs/DOCUMENT_CORE.md", "Generation/template/branding flow."),
-    CanonicalPath("Integrations", "docs/INTEGRATIONS.md", "Webhooks/API/provider integration notes."),
+    CanonicalPath(
+        "Integrations", "docs/INTEGRATIONS.md", "Webhooks/API/provider integration notes."
+    ),
     CanonicalPath("Security", "docs/SECURITY.md", "Security, tenancy, authz guidance."),
-    CanonicalPath("Observability", "docs/OBSERVABILITY.md", "Health/readiness/metrics/logging/tracing foundation."),
+    CanonicalPath(
+        "Observability",
+        "docs/OBSERVABILITY.md",
+        "Health/readiness/metrics/logging/tracing foundation.",
+    ),
     CanonicalPath("Testing", "docs/TESTING.md", "Test strategy and command matrix."),
-    CanonicalPath("Coverage matrix", "docs/audit/TZ_COVERAGE_MATRIX.md", "TZ-to-code/test coverage mapping."),
-    CanonicalPath("Acceptance matrix", "ACCEPTANCE_TEST_MATRIX.md", "Acceptance scenarios to checks mapping."),
+    CanonicalPath(
+        "Coverage matrix", "docs/audit/TZ_COVERAGE_MATRIX.md", "TZ-to-code/test coverage mapping."
+    ),
+    CanonicalPath(
+        "Acceptance matrix", "ACCEPTANCE_TEST_MATRIX.md", "Acceptance scenarios to checks mapping."
+    ),
     CanonicalPath("Gap report", "GAP_REPORT.md", "Open/closed implementation gaps."),
     CanonicalPath("Release readiness", "RELEASE_READINESS.md", "Go-live readiness summary."),
-    CanonicalPath("Known limitations", "KNOWN_LIMITATIONS.md", "Residual limitations and follow-up notes."),
-    CanonicalPath("Path renames", "CHANGED_PATHS_AND_RENAMES.md", "Documented structural changes/deprecations."),
-    CanonicalPath("Workflows and events", "docs/WORKFLOWS_AND_EVENTS.md", "Cross-module workflow/event map."),
+    CanonicalPath(
+        "Known limitations", "KNOWN_LIMITATIONS.md", "Residual limitations and follow-up notes."
+    ),
+    CanonicalPath(
+        "Path renames",
+        "CHANGED_PATHS_AND_RENAMES.md",
+        "Documented structural changes/deprecations.",
+    ),
+    CanonicalPath(
+        "Workflows and events", "docs/WORKFLOWS_AND_EVENTS.md", "Cross-module workflow/event map."
+    ),
 )
 
 LEGACY_PATH_PAIRS: tuple[LegacyPathPair, ...] = (
@@ -152,9 +184,24 @@ ROOT_EXPECTATIONS: tuple[ExistenceCheck, ...] = (
     ExistenceCheck("Backend root", "backend", True, "Canonical backend source root."),
     ExistenceCheck("Frontend root", "frontend", True, "Canonical frontend source root."),
     ExistenceCheck("Docs root", "docs", True, "Repository documentation root."),
-    ExistenceCheck("Root package.json", "package.json", False, "A repo-root frontend manifest should not exist."),
-    ExistenceCheck("Frontend package.json", "frontend/package.json", True, "The active frontend package manifest must exist here."),
-    ExistenceCheck("Compatibility shim", "app/__init__.py", True, "Legacy `app.*` imports are intentionally supported through this shim."),
+    ExistenceCheck(
+        "Root package.json",
+        "package.json",
+        False,
+        "A repo-root frontend manifest should not exist.",
+    ),
+    ExistenceCheck(
+        "Frontend package.json",
+        "frontend/package.json",
+        True,
+        "The active frontend package manifest must exist here.",
+    ),
+    ExistenceCheck(
+        "Compatibility shim",
+        "app/__init__.py",
+        True,
+        "Legacy `app.*` imports are intentionally supported through this shim.",
+    ),
 )
 
 
@@ -212,9 +259,13 @@ def build_inventory() -> dict[str, list[str]]:
             "backend/app/worker.py",
             "backend/app/cli/main.py",
         ),
-        "frontend_entrypoints": find_files("frontend/src/main.tsx", "frontend/src/router/AppRouter.tsx"),
+        "frontend_entrypoints": find_files(
+            "frontend/src/main.tsx", "frontend/src/router/AppRouter.tsx"
+        ),
         "repo_level_directories": sorted(
-            path.name for path in REPO_ROOT.iterdir() if path.is_dir() and path.name not in EXCLUDED_PARTS
+            path.name
+            for path in REPO_ROOT.iterdir()
+            if path.is_dir() and path.name not in EXCLUDED_PARTS
         ),
     }
 
@@ -260,9 +311,7 @@ def build_doc_alignment() -> dict[str, object]:
         "docs/WORKFLOWS_AND_EVENTS.md",
     ]
     return {
-        "readme_mentions": {
-            path: (path in readme_text) for path in canonical_links
-        },
+        "readme_mentions": {path: (path in readme_text) for path in canonical_links},
         "docs_index_mentions": {
             path: (path.removeprefix("docs/") in docs_index_text) for path in canonical_links
         },
@@ -289,7 +338,9 @@ def build_root_expectations() -> list[dict[str, object]]:
 def build_findings(inventory: dict[str, list[str]]) -> list[str]:
     required_docs_present = len(existing(REQUIRED_DOCS))
     required_docs_expected = len(REQUIRED_DOCS)
-    duplicate_frontend_roots = [path for path in inventory["package_jsons"] if path != "frontend/package.json"]
+    duplicate_frontend_roots = [
+        path for path in inventory["package_jsons"] if path != "frontend/package.json"
+    ]
     return [
         f"Active frontend manifest count: **{len(inventory['package_jsons'])}**.",
         f"Unexpected extra frontend manifests: **{', '.join(duplicate_frontend_roots) if duplicate_frontend_roots else 'none'}**.",
@@ -358,29 +409,34 @@ def render_markdown(payload: dict[str, object]) -> str:
         f"- Backend root: `{payload['canonical_roots']['backend_root']}`.",
         f"- Frontend root: `{payload['canonical_roots']['frontend_root']}`.",
         f"- Repository docs root: `{payload['canonical_roots']['docs_root']}` plus root release/audit reports.",
-        "- Tests roots: " + ", ".join(f"`{item}`" for item in payload["canonical_roots"]["tests_roots"]) + ".",
+        "- Tests roots: "
+        + ", ".join(f"`{item}`" for item in payload["canonical_roots"]["tests_roots"])
+        + ".",
         "",
         "## Canonical layout sections",
     ]
     for section in payload["canonical_layout"]:
         lines.append(f"- **{section['label']}:** {section['description']}")
-        lines.extend(
-            f"  - `{item['path']}` exists={item['exists']}" for item in section["paths"]
-        )
-    lines.extend([
-        "",
-        "## Active backend entrypoints and configs",
-    ])
+        lines.extend(f"  - `{item['path']}` exists={item['exists']}" for item in section["paths"])
     lines.extend(
-        f"- **{item['label']}:** `{item['path']}` — {item['description']}" for item in payload["backend_paths"]
+        [
+            "",
+            "## Active backend entrypoints and configs",
+        ]
+    )
+    lines.extend(
+        f"- **{item['label']}:** `{item['path']}` — {item['description']}"
+        for item in payload["backend_paths"]
     )
     lines.extend(["", "## Active frontend entrypoints and configs"])
     lines.extend(
-        f"- **{item['label']}:** `{item['path']}` — {item['description']}" for item in payload["frontend_paths"]
+        f"- **{item['label']}:** `{item['path']}` — {item['description']}"
+        for item in payload["frontend_paths"]
     )
     lines.extend(["", "## Required docs present in the canonical documentation set"])
     lines.extend(
-        f"- **{item['label']}:** `{item['path']}` — {item['description']}" for item in payload["required_docs"]
+        f"- **{item['label']}:** `{item['path']}` — {item['description']}"
+        for item in payload["required_docs"]
     )
     lines.extend(["", "## Root expectations"])
     for item in payload["root_expectations"]:
@@ -421,13 +477,17 @@ def render_markdown(payload: dict[str, object]) -> str:
         )
     lines.extend(["", "## Consistency watchlist"])
     lines.extend(f"- {item}" for item in payload["consistency_watchlist"])
-    lines.extend(["", "## Machine-readable artifact", "- JSON snapshot: `docs/audit/REPOSITORY_AUDIT.json`."])
+    lines.extend(
+        ["", "## Machine-readable artifact", "- JSON snapshot: `docs/audit/REPOSITORY_AUDIT.json`."]
+    )
     return "\n".join(lines) + "\n"
 
 
 def write_outputs(payload: dict[str, object]) -> None:
     MARKDOWN_OUTPUT.write_text(render_markdown(payload), encoding="utf-8")
-    JSON_OUTPUT.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    JSON_OUTPUT.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
 
 
 def main() -> None:

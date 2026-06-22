@@ -15,14 +15,33 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("document_jobs", sa.Column("kind", sa.String(length=32), nullable=False, server_default="pipeline"))
+    op.add_column(
+        "document_jobs",
+        sa.Column("kind", sa.String(length=32), nullable=False, server_default="pipeline"),
+    )
     op.add_column("document_jobs", sa.Column("preset_id", sa.String(length=36), nullable=True))
-    op.add_column("document_jobs", sa.Column("input_sha256", sa.String(length=64), nullable=False, server_default=""))
-    op.add_column("document_jobs", sa.Column("request_hash", sa.String(length=128), nullable=False, server_default=""))
-    op.add_column("document_jobs", sa.Column("idempotency_key", sa.String(length=128), nullable=False, server_default=""))
-    op.add_column("document_jobs", sa.Column("result_document_version_id", sa.String(length=36), nullable=True))
-    op.add_column("document_jobs", sa.Column("cancel_requested_at", sa.DateTime(timezone=True), nullable=True))
-    op.create_index("ix_document_jobs_tenant_idempotency", "document_jobs", ["tenant_id", "idempotency_key"])
+    op.add_column(
+        "document_jobs",
+        sa.Column("input_sha256", sa.String(length=64), nullable=False, server_default=""),
+    )
+    op.add_column(
+        "document_jobs",
+        sa.Column("request_hash", sa.String(length=128), nullable=False, server_default=""),
+    )
+    op.add_column(
+        "document_jobs",
+        sa.Column("idempotency_key", sa.String(length=128), nullable=False, server_default=""),
+    )
+    op.add_column(
+        "document_jobs",
+        sa.Column("result_document_version_id", sa.String(length=36), nullable=True),
+    )
+    op.add_column(
+        "document_jobs", sa.Column("cancel_requested_at", sa.DateTime(timezone=True), nullable=True)
+    )
+    op.create_index(
+        "ix_document_jobs_tenant_idempotency", "document_jobs", ["tenant_id", "idempotency_key"]
+    )
 
     op.add_column("document_job_steps", sa.Column("input_ref", sa.JSON(), nullable=True))
     op.add_column("document_job_steps", sa.Column("output_ref", sa.JSON(), nullable=True))

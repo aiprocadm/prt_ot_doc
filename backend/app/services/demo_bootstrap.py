@@ -13,54 +13,97 @@ from app.domains.packs.seeder import ensure_default_packs
 from app.models.feature import Feature
 from app.models.finance import Department
 from app.models.models import (
-    BriefingEntry, BriefingJournal, BriefingTemplate,
-    Company, MedicalExamKind, MedicalFactor, MedicalNorm, Person, Position,
-    PositionHazardLink, PPEIssue, PPEItem, PPENorm, Site, Tenant, TrainingCourse,
+    BriefingEntry,
+    BriefingJournal,
+    BriefingTemplate,
+    Company,
+    MedicalExamKind,
+    MedicalFactor,
+    MedicalNorm,
+    Person,
+    Position,
+    PositionHazardLink,
+    PPEIssue,
+    PPEItem,
+    PPENorm,
+    Site,
+    Tenant,
+    TrainingCourse,
 )
 from app.models.risk import RiskHazard
 from app.modules.contractors.models import (
-    ComplianceStatus, ContractorDocument, ContractorDocumentRequirement,
-    ContractorEmployee, ContractorRegistry,
+    ComplianceStatus,
+    ContractorDocument,
+    ContractorDocumentRequirement,
+    ContractorEmployee,
+    ContractorRegistry,
 )
 
 logger = logging.getLogger(__name__)
 
 
-async def _seed_contractor_documents(session, tenant_db_id: str, contractor_id: str, employee_id: str) -> None:
+async def _seed_contractor_documents(
+    session, tenant_db_id: str, contractor_id: str, employee_id: str
+) -> None:
     """Seed 3 demo documents: valid (org), expiring (employee), expired (employee)."""
     today = date.today()
-    session.add(ContractorDocument(
-        tenant_id=tenant_db_id, contractor_id=contractor_id, doc_type="sro",
-        title="СРО допуск (демо)", valid_until=today + timedelta(days=180), status="active",
-    ))
-    session.add(ContractorDocument(
-        tenant_id=tenant_db_id, contractor_id=contractor_id, employee_id=employee_id,
-        doc_type="medical_cert", title="Медзаключение (истекает)",
-        valid_until=today + timedelta(days=15), status="active",
-    ))
-    session.add(ContractorDocument(
-        tenant_id=tenant_db_id, contractor_id=contractor_id, employee_id=employee_id,
-        doc_type="access_permit", title="Допуск на объект (просрочен)",
-        valid_until=today - timedelta(days=5), status="active",
-    ))
+    session.add(
+        ContractorDocument(
+            tenant_id=tenant_db_id,
+            contractor_id=contractor_id,
+            doc_type="sro",
+            title="СРО допуск (демо)",
+            valid_until=today + timedelta(days=180),
+            status="active",
+        )
+    )
+    session.add(
+        ContractorDocument(
+            tenant_id=tenant_db_id,
+            contractor_id=contractor_id,
+            employee_id=employee_id,
+            doc_type="medical_cert",
+            title="Медзаключение (истекает)",
+            valid_until=today + timedelta(days=15),
+            status="active",
+        )
+    )
+    session.add(
+        ContractorDocument(
+            tenant_id=tenant_db_id,
+            contractor_id=contractor_id,
+            employee_id=employee_id,
+            doc_type="access_permit",
+            title="Допуск на объект (просрочен)",
+            valid_until=today - timedelta(days=5),
+            status="active",
+        )
+    )
 
 
 async def _seed_contractor_requirements(session, tenant_db_id: str) -> None:
     """Seed 2 admission document requirements (idempotent on tenant+doc_type+scope)."""
     wanted = [("sro", "company"), ("medical_cert", "employee")]
     for doc_type, scope in wanted:
-        existing = (await session.execute(
-            select(ContractorDocumentRequirement).where(
-                ContractorDocumentRequirement.tenant_id == tenant_db_id,
-                ContractorDocumentRequirement.doc_type == doc_type,
-                ContractorDocumentRequirement.scope == scope,
-                ContractorDocumentRequirement.deleted_at.is_(None),
+        existing = (
+            await session.execute(
+                select(ContractorDocumentRequirement).where(
+                    ContractorDocumentRequirement.tenant_id == tenant_db_id,
+                    ContractorDocumentRequirement.doc_type == doc_type,
+                    ContractorDocumentRequirement.scope == scope,
+                    ContractorDocumentRequirement.deleted_at.is_(None),
+                )
             )
-        )).scalar_one_or_none()
+        ).scalar_one_or_none()
         if existing is None:
-            session.add(ContractorDocumentRequirement(
-                tenant_id=tenant_db_id, doc_type=doc_type, scope=scope, mandatory=True,
-            ))
+            session.add(
+                ContractorDocumentRequirement(
+                    tenant_id=tenant_db_id,
+                    doc_type=doc_type,
+                    scope=scope,
+                    mandatory=True,
+                )
+            )
 
 
 async def _seed_ppe_demo(session, tenant_db_id: str, person, position_id: str) -> None:
@@ -70,18 +113,31 @@ async def _seed_ppe_demo(session, tenant_db_id: str, person, position_id: str) -
     Card outcome: каска=ok (активная выдача), перчатки=overdue (просрочена),
     очки=missing (норма без выдачи).
     """
-    hazard = (await session.execute(select(RiskHazard).where(
-        RiskHazard.tenant_id == tenant_db_id, RiskHazard.code == "demo_general",
-    ))).scalar_one_or_none()
+    hazard = (
+        await session.execute(
+            select(RiskHazard).where(
+                RiskHazard.tenant_id == tenant_db_id,
+                RiskHazard.code == "demo_general",
+            )
+        )
+    ).scalar_one_or_none()
     if hazard is None:
-        hazard = RiskHazard(tenant_id=tenant_db_id, code="demo_general", title="Общие производственные факторы")
+        hazard = RiskHazard(
+            tenant_id=tenant_db_id, code="demo_general", title="Общие производственные факторы"
+        )
         session.add(hazard)
         await session.flush()
 
     async def _ensure_item(name: str, wear_days: int) -> PPEItem:
-        item = (await session.execute(select(PPEItem).where(
-            PPEItem.tenant_id == tenant_db_id, PPEItem.name == name, PPEItem.deleted_at.is_(None),
-        ))).scalar_one_or_none()
+        item = (
+            await session.execute(
+                select(PPEItem).where(
+                    PPEItem.tenant_id == tenant_db_id,
+                    PPEItem.name == name,
+                    PPEItem.deleted_at.is_(None),
+                )
+            )
+        ).scalar_one_or_none()
         if item is None:
             item = PPEItem(tenant_id=tenant_db_id, name=name, default_wear_days=wear_days)
             session.add(item)
@@ -93,38 +149,79 @@ async def _seed_ppe_demo(session, tenant_db_id: str, person, position_id: str) -
     glasses = await _ensure_item("Очки защитные (демо)", 365)
 
     for item, qty, interval in ((helmet, 1, 730), (gloves, 2, 90), (glasses, 1, 365)):
-        existing = (await session.execute(select(PPENorm).where(
-            PPENorm.tenant_id == tenant_db_id,
-            PPENorm.position_id == position_id,
-            PPENorm.hazard_id == hazard.id,
-            PPENorm.item_name == item.name,
-        ))).scalar_one_or_none()
+        existing = (
+            await session.execute(
+                select(PPENorm).where(
+                    PPENorm.tenant_id == tenant_db_id,
+                    PPENorm.position_id == position_id,
+                    PPENorm.hazard_id == hazard.id,
+                    PPENorm.item_name == item.name,
+                )
+            )
+        ).scalar_one_or_none()
         if existing is None:
-            session.add(PPENorm(
-                tenant_id=tenant_db_id, position_id=position_id, hazard_id=hazard.id,
-                item_id=item.id, item_name=item.name, quantity=qty, interval_days=interval,
-            ))
+            session.add(
+                PPENorm(
+                    tenant_id=tenant_db_id,
+                    position_id=position_id,
+                    hazard_id=hazard.id,
+                    item_id=item.id,
+                    item_name=item.name,
+                    quantity=qty,
+                    interval_days=interval,
+                )
+            )
 
     if not person.ppe_sizes:
-        person.ppe_sizes = {"height": 178, "clothing_size": "52-54", "shoe_size": "43", "headgear_size": "58"}
+        person.ppe_sizes = {
+            "height": 178,
+            "clothing_size": "52-54",
+            "shoe_size": "43",
+            "headgear_size": "58",
+        }
 
     now = datetime.now(timezone.utc)
-    existing_issue = (await session.execute(select(PPEIssue).where(
-        PPEIssue.tenant_id == tenant_db_id, PPEIssue.person_id == person.id,
-        PPEIssue.deleted_at.is_(None),
-    ))).scalars().first()
+    existing_issue = (
+        (
+            await session.execute(
+                select(PPEIssue).where(
+                    PPEIssue.tenant_id == tenant_db_id,
+                    PPEIssue.person_id == person.id,
+                    PPEIssue.deleted_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .first()
+    )
     if existing_issue is None:
-        session.add(PPEIssue(  # активная, с сертификатом → строка ok
-            tenant_id=tenant_db_id, person_id=person.id, item_id=helmet.id,
-            item_name=helmet.name, quantity=1, issued_at=now,
-            expires_at=now + timedelta(days=700), wear_days=730, status="issued",
-            certificate_no="ЕАЭС RU С-RU.ДЕМО.В.00001/26",
-        ))
-        session.add(PPEIssue(  # просроченная → строка overdue
-            tenant_id=tenant_db_id, person_id=person.id, item_id=gloves.id,
-            item_name=gloves.name, quantity=2, issued_at=now - timedelta(days=120),
-            expires_at=now - timedelta(days=30), wear_days=90, status="issued",
-        ))
+        session.add(
+            PPEIssue(  # активная, с сертификатом → строка ok
+                tenant_id=tenant_db_id,
+                person_id=person.id,
+                item_id=helmet.id,
+                item_name=helmet.name,
+                quantity=1,
+                issued_at=now,
+                expires_at=now + timedelta(days=700),
+                wear_days=730,
+                status="issued",
+                certificate_no="ЕАЭС RU С-RU.ДЕМО.В.00001/26",
+            )
+        )
+        session.add(
+            PPEIssue(  # просроченная → строка overdue
+                tenant_id=tenant_db_id,
+                person_id=person.id,
+                item_id=gloves.id,
+                item_name=gloves.name,
+                quantity=2,
+                issued_at=now - timedelta(days=120),
+                expires_at=now - timedelta(days=30),
+                wear_days=90,
+                status="issued",
+            )
+        )
         # очки: норма есть, выдачи нет → строка missing
 
 
@@ -132,33 +229,58 @@ async def _seed_medical_factor_demo(session, tenant_db_id: str, position_id: str
     """§9.2: seed one 29н factor, map the demo hazard to it, and link the hazard to
     the demo position — so the demo контингент/поименный список are non-empty
     factor-driven (no manual MedicalNorm needed). Idempotent (lookup-or-create each)."""
-    hazard = (await session.execute(select(RiskHazard).where(
-        RiskHazard.tenant_id == tenant_db_id, RiskHazard.code == "demo_general",
-    ))).scalar_one_or_none()
+    hazard = (
+        await session.execute(
+            select(RiskHazard).where(
+                RiskHazard.tenant_id == tenant_db_id,
+                RiskHazard.code == "demo_general",
+            )
+        )
+    ).scalar_one_or_none()
     if hazard is None:
-        hazard = RiskHazard(tenant_id=tenant_db_id, code="demo_general",
-                            title="Общие производственные факторы")
+        hazard = RiskHazard(
+            tenant_id=tenant_db_id, code="demo_general", title="Общие производственные факторы"
+        )
         session.add(hazard)
         await session.flush()
     if not hazard.medical_factor_code:
         hazard.medical_factor_code = "4.4"
-    factor = (await session.execute(select(MedicalFactor).where(
-        MedicalFactor.tenant_id == tenant_db_id, MedicalFactor.code == "4.4",
-    ))).scalar_one_or_none()
+    factor = (
+        await session.execute(
+            select(MedicalFactor).where(
+                MedicalFactor.tenant_id == tenant_db_id,
+                MedicalFactor.code == "4.4",
+            )
+        )
+    ).scalar_one_or_none()
     if factor is None:
-        session.add(MedicalFactor(
-            tenant_id=tenant_db_id, code="4.4", name="Шум", category="factor",
-            exam_kinds=[MedicalExamKind.PERIODIC.value], periodicity_months=12,
-        ))
-    link = (await session.execute(select(PositionHazardLink).where(
-        PositionHazardLink.tenant_id == tenant_db_id,
-        PositionHazardLink.position_id == position_id,
-        PositionHazardLink.hazard_id == hazard.id,
-    ))).scalar_one_or_none()
+        session.add(
+            MedicalFactor(
+                tenant_id=tenant_db_id,
+                code="4.4",
+                name="Шум",
+                category="factor",
+                exam_kinds=[MedicalExamKind.PERIODIC.value],
+                periodicity_months=12,
+            )
+        )
+    link = (
+        await session.execute(
+            select(PositionHazardLink).where(
+                PositionHazardLink.tenant_id == tenant_db_id,
+                PositionHazardLink.position_id == position_id,
+                PositionHazardLink.hazard_id == hazard.id,
+            )
+        )
+    ).scalar_one_or_none()
     if link is None:
-        session.add(PositionHazardLink(
-            tenant_id=tenant_db_id, position_id=position_id, hazard_id=hazard.id,
-        ))
+        session.add(
+            PositionHazardLink(
+                tenant_id=tenant_db_id,
+                position_id=position_id,
+                hazard_id=hazard.id,
+            )
+        )
 
 
 async def _seed_briefing_code_flow_demo(session, tenant_db_id: str, person) -> None:
@@ -166,55 +288,85 @@ async def _seed_briefing_code_flow_demo(session, tenant_db_id: str, person) -> N
     (require_signature_code=True) + a journal + one assigned entry for the demo
     person, so the code-flow (sign-employee → confirm-code) is demoable out-of-box.
     Idempotent (lookup-or-create each)."""
-    template = (await session.execute(select(BriefingTemplate).where(
-        BriefingTemplate.tenant_id == tenant_db_id,
-        BriefingTemplate.code == "demo-primary-code",
-    ))).scalar_one_or_none()
+    template = (
+        await session.execute(
+            select(BriefingTemplate).where(
+                BriefingTemplate.tenant_id == tenant_db_id,
+                BriefingTemplate.code == "demo-primary-code",
+            )
+        )
+    ).scalar_one_or_none()
     if template is None:
         template = BriefingTemplate(
-            tenant_id=tenant_db_id, code="demo-primary-code",
-            title="Вводный инструктаж (с кодом)", briefing_type="primary",
+            tenant_id=tenant_db_id,
+            code="demo-primary-code",
+            title="Вводный инструктаж (с кодом)",
+            briefing_type="primary",
             require_signature_code=True,
         )
         session.add(template)
         await session.flush()
-    journal = (await session.execute(select(BriefingJournal).where(
-        BriefingJournal.tenant_id == tenant_db_id,
-        BriefingJournal.code == "demo-brf-journal",
-    ))).scalar_one_or_none()
+    journal = (
+        await session.execute(
+            select(BriefingJournal).where(
+                BriefingJournal.tenant_id == tenant_db_id,
+                BriefingJournal.code == "demo-brf-journal",
+            )
+        )
+    ).scalar_one_or_none()
     if journal is None:
         journal = BriefingJournal(
-            tenant_id=tenant_db_id, code="demo-brf-journal",
-            title="Журнал инструктажей (демо)", journal_type="workplace", status="active",
+            tenant_id=tenant_db_id,
+            code="demo-brf-journal",
+            title="Журнал инструктажей (демо)",
+            journal_type="workplace",
+            status="active",
         )
         session.add(journal)
         await session.flush()
-    entry = (await session.execute(select(BriefingEntry).where(
-        BriefingEntry.tenant_id == tenant_db_id,
-        BriefingEntry.briefing_journal_id == journal.id,
-        BriefingEntry.person_id == person.id,
-        BriefingEntry.briefing_template_id == template.id,
-    ))).scalar_one_or_none()
+    entry = (
+        await session.execute(
+            select(BriefingEntry).where(
+                BriefingEntry.tenant_id == tenant_db_id,
+                BriefingEntry.briefing_journal_id == journal.id,
+                BriefingEntry.person_id == person.id,
+                BriefingEntry.briefing_template_id == template.id,
+            )
+        )
+    ).scalar_one_or_none()
     if entry is None:
-        session.add(BriefingEntry(
-            tenant_id=tenant_db_id, person_id=person.id,
-            briefing_journal_id=journal.id, briefing_template_id=template.id,
-            briefing_type="primary",
-            briefing_date=datetime.now(timezone.utc), status="assigned",
-        ))
+        session.add(
+            BriefingEntry(
+                tenant_id=tenant_db_id,
+                person_id=person.id,
+                briefing_journal_id=journal.id,
+                briefing_template_id=template.id,
+                briefing_type="primary",
+                briefing_date=datetime.now(timezone.utc),
+                status="assigned",
+            )
+        )
 
 
 async def _seed_work_permit_confined_demo(session, tenant_db_id: str, person) -> None:
     """Демо-наряд ОЗП (902н) с газоанализом — печатается «из коробки». Идемпотентно."""
     from app.models.work_permit import WorkPermit, WorkPermitMember
 
-    wp = (await session.execute(select(WorkPermit).where(
-        WorkPermit.tenant_id == tenant_db_id, WorkPermit.number == "WP-OZP-DEMO",
-    ))).scalar_one_or_none()
+    wp = (
+        await session.execute(
+            select(WorkPermit).where(
+                WorkPermit.tenant_id == tenant_db_id,
+                WorkPermit.number == "WP-OZP-DEMO",
+            )
+        )
+    ).scalar_one_or_none()
     if wp is None:
         wp = WorkPermit(
-            tenant_id=tenant_db_id, number="WP-OZP-DEMO", work_type="confined_space",
-            zone_text="Колодец К-12, насосная станция", status="draft",
+            tenant_id=tenant_db_id,
+            number="WP-OZP-DEMO",
+            work_type="confined_space",
+            zone_text="Колодец К-12, насосная станция",
+            status="draft",
             type_specific={
                 "gas_analysis": [{"parameter": "oxygen", "value": "20.9", "norm": "≥ 20"}],
                 "ventilation": "forced",
@@ -222,14 +374,22 @@ async def _seed_work_permit_confined_demo(session, tenant_db_id: str, person) ->
         )
         session.add(wp)
         await session.flush()
-    member = (await session.execute(select(WorkPermitMember).where(
-        WorkPermitMember.tenant_id == tenant_db_id,
-        WorkPermitMember.work_permit_id == wp.id, WorkPermitMember.person_id == person.id,
-        WorkPermitMember.role == "foreman",
-    ))).scalar_one_or_none()
+    member = (
+        await session.execute(
+            select(WorkPermitMember).where(
+                WorkPermitMember.tenant_id == tenant_db_id,
+                WorkPermitMember.work_permit_id == wp.id,
+                WorkPermitMember.person_id == person.id,
+                WorkPermitMember.role == "foreman",
+            )
+        )
+    ).scalar_one_or_none()
     if member is None:
-        session.add(WorkPermitMember(
-            tenant_id=tenant_db_id, work_permit_id=wp.id, person_id=person.id, role="foreman"))
+        session.add(
+            WorkPermitMember(
+                tenant_id=tenant_db_id, work_permit_id=wp.id, person_id=person.id, role="foreman"
+            )
+        )
 
 
 async def bootstrap_demo_tenant(settings: Settings) -> None:
@@ -238,7 +398,9 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
     if not settings.demo_bootstrap:
         return
     if settings.app_env not in {"development", "test"}:
-        logger.warning("demo.bootstrap.skipped", extra={"reason": "not-dev", "env": settings.app_env})
+        logger.warning(
+            "demo.bootstrap.skipped", extra={"reason": "not-dev", "env": settings.app_env}
+        )
         return
 
     tenant_slug = settings.demo_tenant_id.strip() or "demo"
@@ -246,7 +408,9 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
     site_name = settings.demo_site_name.strip() or "Площадка Север"
 
     async with session_scope(tenant="public") as session:
-        tenant = (await session.execute(select(Tenant).where(Tenant.slug == tenant_slug))).scalar_one_or_none()
+        tenant = (
+            await session.execute(select(Tenant).where(Tenant.slug == tenant_slug))
+        ).scalar_one_or_none()
         if tenant is None:
             tenant = Tenant(
                 slug=tenant_slug,
@@ -283,29 +447,57 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
     # session_scope(tenant="demo") would otherwise short-circuit to the shared
     # schema and read training_course from public instead of tenant_demo.
     async with session_scope(tenant=tenant_slug, schema_name=tenant_schema_name) as session:
-        company = (await session.execute(select(Company).where(Company.name == company_name))).scalar_one_or_none()
+        company = (
+            await session.execute(select(Company).where(Company.name == company_name))
+        ).scalar_one_or_none()
         if company is None:
             company = Company(tenant_id=tenant_db_id, name=company_name, legal_address="г. Москва")
             session.add(company)
             await session.flush()
 
-        site = (await session.execute(select(Site).where(Site.company_id == company.id, Site.name == site_name))).scalar_one_or_none()
+        site = (
+            await session.execute(
+                select(Site).where(Site.company_id == company.id, Site.name == site_name)
+            )
+        ).scalar_one_or_none()
         if site is None:
-            site = Site(tenant_id=tenant_db_id, company_id=company.id, name=site_name, address="Москва, Тестовая 1")
+            site = Site(
+                tenant_id=tenant_db_id,
+                company_id=company.id,
+                name=site_name,
+                address="Москва, Тестовая 1",
+            )
             session.add(site)
             await session.flush()
 
         department = (
-            await session.execute(select(Department).where(Department.company_id == company.id, Department.name == "Производство"))
+            await session.execute(
+                select(Department).where(
+                    Department.company_id == company.id, Department.name == "Производство"
+                )
+            )
         ).scalar_one_or_none()
         if department is None:
-            session.add(Department(tenant_id=tenant_db_id, company_id=company.id, name="Производство", code="DEMO-PROD"))
+            session.add(
+                Department(
+                    tenant_id=tenant_db_id,
+                    company_id=company.id,
+                    name="Производство",
+                    code="DEMO-PROD",
+                )
+            )
 
         position = (
-            await session.execute(select(Position).where(Position.company_id == company.id, Position.name == "Мастер участка"))
+            await session.execute(
+                select(Position).where(
+                    Position.company_id == company.id, Position.name == "Мастер участка"
+                )
+            )
         ).scalar_one_or_none()
         if position is None:
-            position = Position(tenant_id=tenant_db_id, company_id=company.id, name="Мастер участка")
+            position = Position(
+                tenant_id=tenant_db_id, company_id=company.id, name="Мастер участка"
+            )
             session.add(position)
             await session.flush()
 
@@ -332,7 +524,9 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
             await session.flush()
 
         course = (
-            await session.execute(select(TrainingCourse).where(TrainingCourse.title == "Вводный инструктаж (демо)"))
+            await session.execute(
+                select(TrainingCourse).where(TrainingCourse.title == "Вводный инструктаж (демо)")
+            )
         ).scalar_one_or_none()
         if course is None:
             session.add(
@@ -425,4 +619,7 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
             await _seed_work_permit_confined_demo(session, tenant_db_id, person)
 
         await ensure_default_packs(session, tenant_slug=tenant_slug)
-        logger.info("demo.bootstrap.done", extra={"tenant": tenant_slug, "company": company_name, "site": site_name})
+        logger.info(
+            "demo.bootstrap.done",
+            extra={"tenant": tenant_slug, "company": company_name, "site": site_name},
+        )

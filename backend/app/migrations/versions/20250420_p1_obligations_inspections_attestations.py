@@ -93,9 +93,13 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_attestation_person", "attestation", ["tenant_id", "person_id"], unique=False)
+    op.create_index(
+        "ix_attestation_person", "attestation", ["tenant_id", "person_id"], unique=False
+    )
     op.create_index("ix_attestation_status", "attestation", ["tenant_id", "status"], unique=False)
-    op.create_index("ix_attestation_expires", "attestation", ["tenant_id", "expires_at"], unique=False)
+    op.create_index(
+        "ix_attestation_expires", "attestation", ["tenant_id", "expires_at"], unique=False
+    )
 
     op.create_table(
         "inspection_prescription",
@@ -111,7 +115,9 @@ def upgrade() -> None:
         sa.Column("version", sa.Integer(), nullable=False),
         sa.Column("id", sa.String(length=36), nullable=False),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(["inspection_id"], ["regulatory_inspection.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["inspection_id"], ["regulatory_inspection.id"], ondelete="CASCADE"
+        ),
         sa.ForeignKeyConstraint(["incident_id"], ["incident.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(["assignee_id"], ["user.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),

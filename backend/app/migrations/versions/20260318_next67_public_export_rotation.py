@@ -19,7 +19,9 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("api_key", sa.Column("last_rotated_at", sa.DateTime(timezone=True), nullable=True))
+    op.add_column(
+        "api_key", sa.Column("last_rotated_at", sa.DateTime(timezone=True), nullable=True)
+    )
     op.add_column(
         "export_schedules",
         sa.Column("schema_version", sa.String(length=32), nullable=False, server_default="v1"),

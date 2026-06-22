@@ -86,7 +86,7 @@ async def test_workspace_config_returns_correct_role(
     role_value: str,
 ):
     """Verify workspace config reflects user's assigned role."""
-    user = await create_test_user(
+    await create_test_user(
         session=test_db_session,
         tenant_id=str(test_tenant.id),
         email=f"user.{role_value}@example.com",

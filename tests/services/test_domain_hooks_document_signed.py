@@ -46,9 +46,7 @@ async def test_signed_document_creates_followup_task(
 
 
 @pytest.mark.asyncio
-async def test_followup_task_is_idempotent(
-    sessionmaker, data_factory: TestDataFactory
-) -> None:
+async def test_followup_task_is_idempotent(sessionmaker, data_factory: TestDataFactory) -> None:
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
         document, _ = await data_factory.create_document(

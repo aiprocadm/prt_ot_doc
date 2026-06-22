@@ -45,7 +45,17 @@ class NamingRuleEngine:
     TOKEN_ALIASES: dict[str, str] = {
         "yyyymmdd": "date",
     }
-    ALLOWED_TOKENS: set[str] = {"org", "unit", "project", "client", "doc", "topic", "version", "date", "flags"}
+    ALLOWED_TOKENS: set[str] = {
+        "org",
+        "unit",
+        "project",
+        "client",
+        "doc",
+        "topic",
+        "version",
+        "date",
+        "flags",
+    }
 
     def _resolve_token_value(self, key: str, payload: dict[str, Any]) -> str:
         normalized = key.strip().lower()
@@ -126,7 +136,9 @@ class SourceImportService:
                 row_payload = {columns[index]: values[index] for index in range(len(columns))}
                 rows.append(self._normalize_row(row_payload))
             return columns, rows
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "source type is not supported in this build")
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "source type is not supported in this build"
+        )
 
     def _norm_col(self, column: str | None) -> str:
         return (column or "").strip().lower()
@@ -155,12 +167,21 @@ class MappingValidationService:
         known = set(columns)
         for target, source in mapping.items():
             if isinstance(source, str) and source.strip().lower() not in known:
-                raise HTTPException(status.HTTP_400_BAD_REQUEST, f"missing source column for mapping {target}")
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST, f"missing source column for mapping {target}"
+                )
             if isinstance(source, dict):
-                if source.get("type") == "column" and str(source.get("value", "")).strip().lower() not in known:
-                    raise HTTPException(status.HTTP_400_BAD_REQUEST, f"missing source column for mapping {target}")
+                if (
+                    source.get("type") == "column"
+                    and str(source.get("value", "")).strip().lower() not in known
+                ):
+                    raise HTTPException(
+                        status.HTTP_400_BAD_REQUEST, f"missing source column for mapping {target}"
+                    )
                 if source.get("type") not in {"column", "literal"}:
-                    raise HTTPException(status.HTTP_400_BAD_REQUEST, "invalid computed mapping type")
+                    raise HTTPException(
+                        status.HTTP_400_BAD_REQUEST, "invalid computed mapping type"
+                    )
 
     def apply(self, mapping: dict[str, Any], row: dict[str, Any]) -> dict[str, Any]:
         result: dict[str, Any] = {}
@@ -220,12 +241,19 @@ class PackageService:
         )
         return list((await self.session.execute(stmt)).scalars().all())
 
-    async def add_item(self, tenant_id: str, preset: PackagePresetConfig, payload: PackagePresetItemCreate) -> PackagePresetItem:
+    async def add_item(
+        self, tenant_id: str, preset: PackagePresetConfig, payload: PackagePresetItemCreate
+    ) -> PackagePresetItem:
         tv = await self.session.get(TemplateVersion, payload.template_version_id)
         if tv is None or str(tv.tenant_id) != str(tenant_id):
             raise HTTPException(status.HTTP_404_NOT_FOUND, "template version not found")
-        if tv.deleted_at is not None or tv.status in {TemplateVersionStatus.ARCHIVED, TemplateVersionStatus.DEPRECATED}:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "template version is invalid for package")
+        if tv.deleted_at is not None or tv.status in {
+            TemplateVersionStatus.ARCHIVED,
+            TemplateVersionStatus.DEPRECATED,
+        }:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, "template version is invalid for package"
+            )
         replace_mode = payload.replace_mode
         if replace_mode == "dry-run":
             replace_mode = "preview"
@@ -255,7 +283,9 @@ class PackageService:
         await self.session.flush()
         return item
 
-    async def get_item(self, tenant_id: str, preset_id: str, item_id: str) -> PackagePresetItem | None:
+    async def get_item(
+        self, tenant_id: str, preset_id: str, item_id: str
+    ) -> PackagePresetItem | None:
         stmt = select(PackagePresetItem).where(
             PackagePresetItem.tenant_id == tenant_id,
             PackagePresetItem.package_preset_id == preset_id,
@@ -280,7 +310,11 @@ class PackRunService:
         rows: list[dict[str, Any]],
     ) -> PackRun:
         preset = await self.session.get(PackagePresetConfig, payload.package_preset_id)
-        if preset is None or str(preset.tenant_id) != str(tenant_id) or preset.deleted_at is not None:
+        if (
+            preset is None
+            or str(preset.tenant_id) != str(tenant_id)
+            or preset.deleted_at is not None
+        ):
             raise HTTPException(status.HTTP_404_NOT_FOUND, "package preset not found")
         if preset.status != PackageEntityStatus.ACTIVE and preset.status != "active":
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "package preset must be active")
@@ -348,7 +382,9 @@ class PackRunService:
         return run
 
 
-async def ensure_template_version_deletable(session: AsyncSession, tenant_id: str, template_version_id: str) -> None:
+async def ensure_template_version_deletable(
+    session: AsyncSession, tenant_id: str, template_version_id: str
+) -> None:
     usage = (
         await session.execute(
             select(TemplateUsage).where(

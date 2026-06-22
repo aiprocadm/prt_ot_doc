@@ -14,7 +14,6 @@ from app.models.document import (
     DocumentVersion,
 )
 from app.models.file import File
-from app.models.work_permit import WorkPermit, WorkPermitEvent, WorkPermitMember
 from app.models.finance import (
     Contract,
     ContractStatus,
@@ -133,6 +132,7 @@ from app.models.safety_core import (
     SafetyRiskMap,
     SafetyRiskMethodology,
 )
+from app.models.work_permit import WorkPermit, WorkPermitEvent, WorkPermitMember
 
 __all__ = [
     "Document",

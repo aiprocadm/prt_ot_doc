@@ -3,6 +3,7 @@
 No I/O / no sqlalchemy imports — mirrors ``domains/permits/lifecycle.py``.
 All values are the canonical VARCHAR strings stored in the DB (see migration wp01).
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -13,32 +14,68 @@ STATUS_SUSPENDED = "suspended"
 STATUS_CLOSED = "closed"
 STATUS_CANCELLED = "cancelled"
 
-WORK_PERMIT_STATUSES = frozenset({
-    STATUS_DRAFT, STATUS_ISSUED, STATUS_SUSPENDED, STATUS_CLOSED, STATUS_CANCELLED,
-})
+WORK_PERMIT_STATUSES = frozenset(
+    {
+        STATUS_DRAFT,
+        STATUS_ISSUED,
+        STATUS_SUSPENDED,
+        STATUS_CLOSED,
+        STATUS_CANCELLED,
+    }
+)
 
 # огневые / газоопасные / на высоте / замкнутое пространство / земляные / электро
-WORK_TYPES = frozenset({
-    "hot_work", "gas_hazardous", "height", "confined_space", "excavation", "electrical",
-})
+WORK_TYPES = frozenset(
+    {
+        "hot_work",
+        "gas_hazardous",
+        "height",
+        "confined_space",
+        "excavation",
+        "electrical",
+    }
+)
 
 # выдающий наряд / ответственный руководитель / допускающий / производитель работ /
 # наблюдающий / член бригады
-MEMBER_ROLES = frozenset({
-    "issuer", "supervisor", "admitter", "foreman", "observer", "member",
-})
+MEMBER_ROLES = frozenset(
+    {
+        "issuer",
+        "supervisor",
+        "admitter",
+        "foreman",
+        "observer",
+        "member",
+    }
+)
 
-EVENT_TYPES = frozenset({
-    "issued", "suspended", "resumed", "closed", "cancelled", "extended",
-    "admitted", "member_added", "member_removed", "completion_recorded",
-})
+EVENT_TYPES = frozenset(
+    {
+        "issued",
+        "suspended",
+        "resumed",
+        "closed",
+        "cancelled",
+        "extended",
+        "admitted",
+        "member_added",
+        "member_removed",
+        "completion_recorded",
+    }
+)
 
 # системы обеспечения безопасности работ на высоте (782н):
 # удерживающие / позиционирования / страховочные / для эвакуации и спасения /
 # для подъёма и спуска (доступа)
-SAFETY_SYSTEMS = frozenset({
-    "restraint", "positioning", "fall_arrest", "rescue_evacuation", "access",
-})
+SAFETY_SYSTEMS = frozenset(
+    {
+        "restraint",
+        "positioning",
+        "fall_arrest",
+        "rescue_evacuation",
+        "access",
+    }
+)
 
 ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
     STATUS_DRAFT: frozenset({STATUS_ISSUED, STATUS_CANCELLED}),

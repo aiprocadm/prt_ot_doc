@@ -34,7 +34,6 @@ from app.models.models import AuditExportJob, RoleEnum
 from app.services.audit import AuditService
 from tests.utils.factories import TestDataFactory
 
-
 # -----------------------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------------------
@@ -92,7 +91,8 @@ async def test_audit_logs_returns_envelope_with_total_and_items(
     make_auth_headers,
 ) -> None:
     await _seed_logs(
-        sessionmaker, data_factory,
+        sessionmaker,
+        data_factory,
         entries=[
             {"action": "created", "object_type": "document", "object_id": "doc-A"},
             {"action": "updated", "object_type": "document", "object_id": "doc-A"},
@@ -116,7 +116,8 @@ async def test_audit_logs_orders_latest_first(
 ) -> None:
     now = datetime.now(tz=timezone.utc)
     await _seed_logs(
-        sessionmaker, data_factory,
+        sessionmaker,
+        data_factory,
         entries=[
             {"action": "created", "object_id": "ord-A", "when": now - timedelta(minutes=10)},
             {"action": "updated", "object_id": "ord-A", "when": now - timedelta(minutes=2)},
@@ -143,7 +144,8 @@ async def test_audit_logs_filter_by_entity_type(
     make_auth_headers,
 ) -> None:
     await _seed_logs(
-        sessionmaker, data_factory,
+        sessionmaker,
+        data_factory,
         entries=[
             {"action": "created", "object_type": "document", "object_id": "et-1"},
             {"action": "created", "object_type": "person", "object_id": "et-2"},
@@ -165,7 +167,8 @@ async def test_audit_logs_filter_by_entity_id(
     make_auth_headers,
 ) -> None:
     await _seed_logs(
-        sessionmaker, data_factory,
+        sessionmaker,
+        data_factory,
         entries=[
             {"action": "x", "object_id": "id-only-this"},
             {"action": "y", "object_id": "other"},
@@ -187,7 +190,8 @@ async def test_audit_logs_filter_by_action(
     make_auth_headers,
 ) -> None:
     await _seed_logs(
-        sessionmaker, data_factory,
+        sessionmaker,
+        data_factory,
         entries=[
             {"action": "approved", "object_id": "obj-a"},
             {"action": "rejected", "object_id": "obj-b"},
@@ -211,16 +215,28 @@ async def test_audit_logs_filter_by_actor_id(
 ) -> None:
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
-        user_a = await data_factory.create_user(tenant=tenant, session=session, email="actor-a@example.com")
-        user_b = await data_factory.create_user(tenant=tenant, session=session, email="actor-b@example.com")
+        user_a = await data_factory.create_user(
+            tenant=tenant, session=session, email="actor-a@example.com"
+        )
+        user_b = await data_factory.create_user(
+            tenant=tenant, session=session, email="actor-b@example.com"
+        )
         audit = AuditService(session)
         await audit.log_event(
-            tenant_id=str(tenant.id), action="x", object_type="doc",
-            object_id="d-aa", user_id=user_a.id, ip="127.0.0.1",
+            tenant_id=str(tenant.id),
+            action="x",
+            object_type="doc",
+            object_id="d-aa",
+            user_id=user_a.id,
+            ip="127.0.0.1",
         )
         await audit.log_event(
-            tenant_id=str(tenant.id), action="y", object_type="doc",
-            object_id="d-bb", user_id=user_b.id, ip="127.0.0.1",
+            tenant_id=str(tenant.id),
+            action="y",
+            object_type="doc",
+            object_id="d-bb",
+            user_id=user_b.id,
+            ip="127.0.0.1",
         )
         await session.commit()
         actor_a_id = user_a.id
@@ -244,7 +260,8 @@ async def test_audit_logs_filter_by_correlation_id(
 ) -> None:
     # AuditService picks up correlation_id from request_id field.
     await _seed_logs(
-        sessionmaker, data_factory,
+        sessionmaker,
+        data_factory,
         entries=[
             {"action": "a", "object_id": "c-1", "request_id": "corr-keep"},
             {"action": "b", "object_id": "c-2", "request_id": "corr-skip"},
@@ -267,7 +284,8 @@ async def test_audit_logs_filter_by_from_date(
 ) -> None:
     now = datetime.now(tz=timezone.utc)
     await _seed_logs(
-        sessionmaker, data_factory,
+        sessionmaker,
+        data_factory,
         entries=[
             {"action": "old", "object_id": "fd-old", "when": now - timedelta(days=5)},
             {"action": "new", "object_id": "fd-new", "when": now},
@@ -292,7 +310,8 @@ async def test_audit_logs_filter_by_to_date(
 ) -> None:
     now = datetime.now(tz=timezone.utc)
     await _seed_logs(
-        sessionmaker, data_factory,
+        sessionmaker,
+        data_factory,
         entries=[
             {"action": "early", "object_id": "td-early", "when": now - timedelta(days=10)},
             {"action": "late", "object_id": "td-late", "when": now},
@@ -300,9 +319,7 @@ async def test_audit_logs_filter_by_to_date(
     )
     headers = await _admin_headers(async_client, make_auth_headers)
     cutoff = (now - timedelta(days=1)).isoformat()
-    response = await async_client.get(
-        "/api/v1/audit/logs", headers=headers, params={"to": cutoff}
-    )
+    response = await async_client.get("/api/v1/audit/logs", headers=headers, params={"to": cutoff})
     ids = {item["entity_id"] for item in response.json()["items"]}
     assert "td-early" in ids
     assert "td-late" not in ids
@@ -314,9 +331,7 @@ async def test_audit_logs_pagination_clamps_limit_at_1000(
 ) -> None:
     """The route declares Query(ge=1, le=1000); 1001 must 422."""
     headers = await _admin_headers(async_client, make_auth_headers)
-    response = await async_client.get(
-        "/api/v1/audit/logs", headers=headers, params={"limit": 1001}
-    )
+    response = await async_client.get("/api/v1/audit/logs", headers=headers, params={"limit": 1001})
     assert response.status_code == 422
 
 
@@ -325,9 +340,7 @@ async def test_audit_logs_pagination_rejects_negative_offset(
     async_client: AsyncClient, make_auth_headers
 ) -> None:
     headers = await _admin_headers(async_client, make_auth_headers)
-    response = await async_client.get(
-        "/api/v1/audit/logs", headers=headers, params={"offset": -1}
-    )
+    response = await async_client.get("/api/v1/audit/logs", headers=headers, params={"offset": -1})
     assert response.status_code == 422
 
 
@@ -340,7 +353,8 @@ async def test_audit_logs_pagination_offset_slices_results(
 ) -> None:
     now = datetime.now(tz=timezone.utc)
     await _seed_logs(
-        sessionmaker, data_factory,
+        sessionmaker,
+        data_factory,
         entries=[
             {"action": "page", "object_id": f"pg-{i}", "when": now - timedelta(minutes=i)}
             for i in range(5)
@@ -377,7 +391,8 @@ async def test_audit_log_get_by_id_returns_entry(
     make_auth_headers,
 ) -> None:
     records = await _seed_logs(
-        sessionmaker, data_factory,
+        sessionmaker,
+        data_factory,
         entries=[{"action": "single", "object_id": "single-id"}],
     )
     audit_id = records[0].id
@@ -406,7 +421,8 @@ async def test_audit_log_get_by_id_404_for_other_tenant(
     make_auth_headers,
 ) -> None:
     records = await _seed_logs(
-        sessionmaker, data_factory,
+        sessionmaker,
+        data_factory,
         tenant_slug="audit-isolation-other",
         entries=[{"action": "foreign", "object_id": "foreign-1"}],
     )
@@ -486,9 +502,7 @@ async def test_get_export_returns_status(
 ) -> None:
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
-        job = AuditExportJob(
-            tenant_id=str(tenant.id), filters={}, format="csv", status="queued"
-        )
+        job = AuditExportJob(tenant_id=str(tenant.id), filters={}, format="csv", status="queued")
         session.add(job)
         await session.commit()
         job_id = job.id
@@ -503,13 +517,9 @@ async def test_get_export_returns_status(
 
 
 @pytest.mark.anyio
-async def test_get_export_404_missing(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_get_export_404_missing(async_client: AsyncClient, make_auth_headers) -> None:
     headers = await _admin_headers(async_client, make_auth_headers)
-    response = await async_client.get(
-        "/api/v1/audit/exports/does-not-exist", headers=headers
-    )
+    response = await async_client.get("/api/v1/audit/exports/does-not-exist", headers=headers)
     assert response.status_code == 404
 
 
@@ -551,17 +561,13 @@ async def test_download_export_404_when_storage_key_missing(
     """Queued export has no storage_key yet -> 404."""
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
-        job = AuditExportJob(
-            tenant_id=str(tenant.id), filters={}, format="csv", status="queued"
-        )
+        job = AuditExportJob(tenant_id=str(tenant.id), filters={}, format="csv", status="queued")
         session.add(job)
         await session.commit()
         job_id = job.id
 
     headers = await _admin_headers(async_client, make_auth_headers)
-    response = await async_client.get(
-        f"/api/v1/audit/exports/{job_id}/download", headers=headers
-    )
+    response = await async_client.get(f"/api/v1/audit/exports/{job_id}/download", headers=headers)
     assert response.status_code == 404
 
 
@@ -570,9 +576,7 @@ async def test_download_export_404_missing_job(
     async_client: AsyncClient, make_auth_headers
 ) -> None:
     headers = await _admin_headers(async_client, make_auth_headers)
-    response = await async_client.get(
-        "/api/v1/audit/exports/missing/download", headers=headers
-    )
+    response = await async_client.get("/api/v1/audit/exports/missing/download", headers=headers)
     assert response.status_code == 404
 
 
@@ -586,9 +590,7 @@ async def test_backward_list_blank_object_id_returns_400(
     async_client: AsyncClient, make_auth_headers
 ) -> None:
     headers = await _admin_headers(async_client, make_auth_headers)
-    response = await async_client.get(
-        "/api/v1/audit", headers=headers, params={"object_id": "   "}
-    )
+    response = await async_client.get("/api/v1/audit", headers=headers, params={"object_id": "   "})
     assert response.status_code == 400
     assert response.json()["detail"]["code"] == "AUDIT_VALIDATION_ERROR"
 
@@ -598,9 +600,7 @@ async def test_backward_list_blank_action_returns_400(
     async_client: AsyncClient, make_auth_headers
 ) -> None:
     headers = await _admin_headers(async_client, make_auth_headers)
-    response = await async_client.get(
-        "/api/v1/audit", headers=headers, params={"action": "  "}
-    )
+    response = await async_client.get("/api/v1/audit", headers=headers, params={"action": "  "})
     assert response.status_code == 400
 
 

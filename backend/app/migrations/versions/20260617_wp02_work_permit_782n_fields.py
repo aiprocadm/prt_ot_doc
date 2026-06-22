@@ -4,6 +4,7 @@
 VARCHAR/TEXT/JSON, no native enums. Table name LITERAL (AST-audit blindspot).
 Honest downgrade drops exactly the added columns.
 """
+
 from __future__ import annotations
 
 import sqlalchemy as sa
@@ -16,7 +17,9 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("work_permit", sa.Column("subdivision_text", sa.String(length=255), nullable=True))
+    op.add_column(
+        "work_permit", sa.Column("subdivision_text", sa.String(length=255), nullable=True)
+    )
     op.add_column("work_permit", sa.Column("content_text", sa.Text(), nullable=True))
     op.add_column("work_permit", sa.Column("conditions_text", sa.Text(), nullable=True))
     op.add_column("work_permit", sa.Column("safety_systems", sa.JSON(), nullable=True))

@@ -181,9 +181,7 @@ async def _seed_high_risk(
 class TestOperationalDashboardAuthScope:
     """Auth and tenant scope must be the first guards on the route."""
 
-    async def test_no_auth_returns_unauthenticated_code(
-        self, async_client: AsyncClient
-    ) -> None:
+    async def test_no_auth_returns_unauthenticated_code(self, async_client: AsyncClient) -> None:
         """Anonymous request never returns 200 with dashboard data.
 
         The exact code can be 400/401/403 depending on middleware ordering
@@ -531,12 +529,12 @@ class TestOperationalDashboardTenantIsolation:
         alerts_a = (await async_client.get(DASHBOARD_PATH, headers=headers_a)).json()["alerts"]
         alerts_b = (await async_client.get(DASHBOARD_PATH, headers=headers_b)).json()["alerts"]
 
-        assert any(a["category"] == "overdue" for a in alerts_a), (
-            "tenant A should see its own overdue alert"
-        )
-        assert not any(a["category"] == "overdue" for a in alerts_b), (
-            "tenant B must NOT see tenant A's overdue alert (cross-tenant leak)"
-        )
+        assert any(
+            a["category"] == "overdue" for a in alerts_a
+        ), "tenant A should see its own overdue alert"
+        assert not any(
+            a["category"] == "overdue" for a in alerts_b
+        ), "tenant B must NOT see tenant A's overdue alert (cross-tenant leak)"
 
     async def test_unassigned_tasks_do_not_leak_across_tenants(
         self,
@@ -554,12 +552,14 @@ class TestOperationalDashboardTenantIsolation:
         headers_a = _scope_headers(await _admin_for(make_auth_headers, "opsdash-iso-ta"))
         headers_b = _scope_headers(await _admin_for(make_auth_headers, "opsdash-iso-tb"))
 
-        cats_a = [a["category"] for a in (
-            await async_client.get(DASHBOARD_PATH, headers=headers_a)
-        ).json()["alerts"]]
-        cats_b = [a["category"] for a in (
-            await async_client.get(DASHBOARD_PATH, headers=headers_b)
-        ).json()["alerts"]]
+        cats_a = [
+            a["category"]
+            for a in (await async_client.get(DASHBOARD_PATH, headers=headers_a)).json()["alerts"]
+        ]
+        cats_b = [
+            a["category"]
+            for a in (await async_client.get(DASHBOARD_PATH, headers=headers_b)).json()["alerts"]
+        ]
 
         assert "unassigned_task" in cats_a
         assert "unassigned_task" not in cats_b
@@ -574,27 +574,21 @@ class TestOperationalDashboardTenantIsolation:
 class TestOperationalDashboardRBAC:
     """Route restricts access to admin/owner/hr/ot_pb_lead/line_manager/manager."""
 
-    async def test_admin_role_allowed(
-        self, async_client: AsyncClient, make_auth_headers
-    ) -> None:
+    async def test_admin_role_allowed(self, async_client: AsyncClient, make_auth_headers) -> None:
         response = await async_client.get(
             DASHBOARD_PATH,
             headers=_scope_headers(await make_auth_headers(RoleEnum.ADMIN)),
         )
         assert response.status_code == status.HTTP_200_OK
 
-    async def test_owner_role_allowed(
-        self, async_client: AsyncClient, make_auth_headers
-    ) -> None:
+    async def test_owner_role_allowed(self, async_client: AsyncClient, make_auth_headers) -> None:
         response = await async_client.get(
             DASHBOARD_PATH,
             headers=_scope_headers(await make_auth_headers(RoleEnum.OWNER)),
         )
         assert response.status_code == status.HTTP_200_OK
 
-    async def test_worker_role_denied(
-        self, async_client: AsyncClient, make_auth_headers
-    ) -> None:
+    async def test_worker_role_denied(self, async_client: AsyncClient, make_auth_headers) -> None:
         """``worker`` is not in the route's allowlist → ``rbac()`` returns 403."""
         response = await async_client.get(
             DASHBOARD_PATH,

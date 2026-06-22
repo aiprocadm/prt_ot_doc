@@ -38,7 +38,6 @@ from app.models.models import (
     WebhookEndpoint,
 )
 
-
 # -----------------------------------------------------------------------------
 # Helpers — small shared seeding utilities to keep tests focused.
 # -----------------------------------------------------------------------------
@@ -252,9 +251,7 @@ async def test_patch_webhook_replaces_secret_when_provided(
 
 
 @pytest.mark.anyio
-async def test_patch_webhook_404_when_missing(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_patch_webhook_404_when_missing(async_client: AsyncClient, make_auth_headers) -> None:
     headers = await make_auth_headers()
     response = await async_client.patch(
         "/api/v1/webhooks/endpoints/does-not-exist",
@@ -407,10 +404,16 @@ async def test_test_endpoint_queues_outbox_event(
     # Outbox row was created for this tenant + endpoint.
     async with sessionmaker() as session:
         rows = (
-            await session.execute(
-                select(Outbox).where(Outbox.tenant_id == tenant_id, Outbox.status == OutboxStatus.PENDING)
+            (
+                await session.execute(
+                    select(Outbox).where(
+                        Outbox.tenant_id == tenant_id, Outbox.status == OutboxStatus.PENDING
+                    )
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert any(row.payload.get("event_id") == f"test-{endpoint_id}" for row in rows)
 
 

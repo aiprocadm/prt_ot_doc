@@ -5,6 +5,7 @@ each evaluated from a manual status flag cross-checked against a deadline.
 The cross-check is the point of this engine: a stale ``valid`` status whose
 deadline has passed must NOT count as ready.
 """
+
 from __future__ import annotations
 
 import enum
@@ -53,8 +54,13 @@ def _as_date(value: datetime | date | None) -> date | None:
     return value.astimezone(timezone.utc).date()
 
 
-def _assess(requirement: str, status: ComplianceStatus, deadline: ContingentItemStatus | None,
-            violations: list[str], warnings: list[str]) -> None:
+def _assess(
+    requirement: str,
+    status: ComplianceStatus,
+    deadline: ContingentItemStatus | None,
+    violations: list[str],
+    warnings: list[str],
+) -> None:
     """Fold one requirement (status flag + optional deadline) into the verdict lists."""
     blocked = status in _BLOCKING_STATUSES or (deadline in _BLOCKING_DEADLINES)
     if blocked:
@@ -115,4 +121,6 @@ def evaluate_employee(
         status = ReadinessStatus.WARNING
     else:
         status = ReadinessStatus.ALLOWED
-    return EmployeeVerdict(employee_id=emp.id, status=status, violations=violations, warnings=warnings)
+    return EmployeeVerdict(
+        employee_id=emp.id, status=status, violations=violations, warnings=warnings
+    )

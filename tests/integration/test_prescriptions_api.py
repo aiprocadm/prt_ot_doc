@@ -66,13 +66,17 @@ async def test_prescription_crud_and_audit(
 
     async with sessionmaker() as session:
         logs = (
-            await session.execute(
-                select(AuditLog).where(
-                    AuditLog.object_type == "prescription",
-                    AuditLog.object_id == prescription_id,
+            (
+                await session.execute(
+                    select(AuditLog).where(
+                        AuditLog.object_type == "prescription",
+                        AuditLog.object_id == prescription_id,
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert logs
 
 
@@ -87,7 +91,9 @@ async def test_prescription_tenant_isolation(
         site = await data_factory.create_site(tenant=tenant, company=company, session=session)
         other_tenant = await data_factory.ensure_tenant(slug="acme", session=session)
         other_company = await data_factory.create_company(tenant=other_tenant, session=session)
-        other_site = await data_factory.create_site(tenant=other_tenant, company=other_company, session=session)
+        other_site = await data_factory.create_site(
+            tenant=other_tenant, company=other_company, session=session
+        )
         other_inspection = Inspection(
             tenant_id=other_tenant.id,
             company_id=other_company.id,

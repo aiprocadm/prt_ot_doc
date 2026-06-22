@@ -5,6 +5,7 @@ active issues with an expiry date, classify, enqueue one outbox event per
 (issue, status, UTC day). Idempotent via the idempotency key + a destination-
 agnostic pre-check (see contractor_documents._outbox_key_exists for the why).
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -29,10 +30,14 @@ async def _outbox_key_exists(session: AsyncSession, *, tenant_id: str, key: str)
     destination — both mean "already emitted today". See the sibling helper in
     ``contractor_documents`` for the full rationale.
     """
-    stmt = select(Outbox.id).where(
-        Outbox.tenant_id == tenant_id,
-        Outbox.idempotency_key == key,
-    ).limit(1)
+    stmt = (
+        select(Outbox.id)
+        .where(
+            Outbox.tenant_id == tenant_id,
+            Outbox.idempotency_key == key,
+        )
+        .limit(1)
+    )
     return (await session.execute(stmt)).scalar_one_or_none() is not None
 
 

@@ -60,6 +60,7 @@ class PackFromScenarioRequest(BaseSchema):
     description: str | None = None
     is_active: bool = True
 
+
 class PackRunRequest(BaseSchema):
     pack_code: str
     company_id: str

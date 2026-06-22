@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timedelta, timezone
 from collections import defaultdict
+from datetime import date, datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -63,16 +63,15 @@ class OperationalDashboardService:
             timestamp=datetime.now(tz=timezone.utc),
         )
 
-    async def _get_overdue_alerts(
-        self, tenant_id: str, db: AsyncSession
-    ) -> list[AlertItem]:
+    async def _get_overdue_alerts(self, tenant_id: str, db: AsyncSession) -> list[AlertItem]:
         """Get alerts for overdue items (training enrollments, medical, PPE)."""
         alerts: list[AlertItem] = []
         now = datetime.now(tz=timezone.utc)
         today = date.today()
 
         try:
-            from sqlalchemy import and_, func, select
+            from sqlalchemy import func, select
+
             from app.models.models import (
                 MedicalExam,
                 MedicalSuspension,
@@ -159,6 +158,7 @@ class OperationalDashboardService:
 
         try:
             from sqlalchemy import and_, func, select
+
             from app.models.document import Document, DocumentStatus
         except ImportError:
             return alerts
@@ -193,14 +193,13 @@ class OperationalDashboardService:
         """Integration telemetry (stub — persisted integration log schema not wired here)."""
         return []
 
-    async def _get_high_risk_alerts(
-        self, tenant_id: str, db: AsyncSession
-    ) -> list[AlertItem]:
+    async def _get_high_risk_alerts(self, tenant_id: str, db: AsyncSession) -> list[AlertItem]:
         """Escalations from risk register severity/level composites."""
         alerts: list[AlertItem] = []
 
         try:
             from sqlalchemy import and_, func, select
+
             from app.models.risk import Risk
         except ImportError:
             return alerts
@@ -240,6 +239,7 @@ class OperationalDashboardService:
 
         try:
             from sqlalchemy import and_, func, select
+
             from app.models.obligations import Task, TaskStatus
         except ImportError:
             return alerts
@@ -272,18 +272,14 @@ class OperationalDashboardService:
 
         return alerts
 
-    def _count_alerts_by_severity(
-        self, alerts: list[AlertItem]
-    ) -> dict[AlertSeverity, int]:
+    def _count_alerts_by_severity(self, alerts: list[AlertItem]) -> dict[AlertSeverity, int]:
         """Count alerts grouped by severity."""
         count: dict[AlertSeverity, int] = defaultdict(int)
         for alert in alerts:
             count[alert.severity] += 1
         return dict(count)
 
-    def _determine_overall_status(
-        self, alert_count: dict[AlertSeverity, int]
-    ) -> str:
+    def _determine_overall_status(self, alert_count: dict[AlertSeverity, int]) -> str:
         """Determine overall dashboard status based on alert counts."""
         if alert_count.get(AlertSeverity.CRITICAL, 0) > 0:
             return "critical"

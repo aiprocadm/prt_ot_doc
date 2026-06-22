@@ -4,6 +4,7 @@ Additive: одна новая таблица. FK→work_permit (CASCADE), FK→p
 Имена таблиц LITERAL (AST-audit blindspot). Honest downgrade drops the table.
 Подписи отдельной таблицы НЕ получают — живут в signature_requests (Подход A).
 """
+
 from __future__ import annotations
 
 import sqlalchemy as sa
@@ -36,9 +37,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["work_permit_id"], ["work_permit.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["conducted_by_person_id"], ["person.id"], ondelete="SET NULL"),
     )
-    op.create_index(
-        "ix_work_permit_briefing_permit", "work_permit_briefing", ["work_permit_id"]
-    )
+    op.create_index("ix_work_permit_briefing_permit", "work_permit_briefing", ["work_permit_id"])
 
 
 def downgrade() -> None:

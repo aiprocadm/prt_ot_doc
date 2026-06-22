@@ -128,11 +128,15 @@ def _resolve_session_tenant_identity(session) -> tuple[str | None, str | None, s
     except Exception:
         return None, tenant_slug, tenant_schema
 
-    row = session.connection().execute(
-        select(Tenant.id, Tenant.slug, Tenant.schema_name).where(
-            or_(Tenant.slug == tenant_slug, Tenant.code == tenant_slug)
+    row = (
+        session.connection()
+        .execute(
+            select(Tenant.id, Tenant.slug, Tenant.schema_name).where(
+                or_(Tenant.slug == tenant_slug, Tenant.code == tenant_slug)
+            )
         )
-    ).first()
+        .first()
+    )
     if row is None:
         return None, tenant_slug, tenant_schema
 
@@ -201,7 +205,9 @@ async def _hydrate_async_session_tenant_identity(
 
     resolved_tenant_id = str(row.id)
     resolved_tenant_slug = str(row.slug).strip().lower()
-    resolved_tenant_schema = str(row.schema_name or tenant_schema_name or tenant_schema(resolved_tenant_slug)).strip()
+    resolved_tenant_schema = str(
+        row.schema_name or tenant_schema_name or tenant_schema(resolved_tenant_slug)
+    ).strip()
     info["tenant_id"] = resolved_tenant_id
     info["tenant_slug"] = resolved_tenant_slug
     info["tenant_schema"] = resolved_tenant_schema
@@ -331,9 +337,7 @@ async def _create_shared_schema() -> None:
             if not _SUPPORTS_SCHEMAS:
                 tables = _tenant_tables_for_creation()
                 await conn.run_sync(
-                    lambda sync_conn: TenantBase.metadata.create_all(
-                        sync_conn, tables=tables
-                    )
+                    lambda sync_conn: TenantBase.metadata.create_all(sync_conn, tables=tables)
                 )
         finally:
             for table in mirrored:
@@ -354,9 +358,7 @@ async def _create_tenant_schema(schema: str) -> None:
             # used by run_sync may not propagate session-scoped SET reliably.
             # Apply SET LOCAL on both sides of the bridge and verify.
             await conn.execute(text(search_path_sql))
-            applied_async = (
-                await conn.execute(text("SHOW search_path"))
-            ).scalar_one()
+            applied_async = (await conn.execute(text("SHOW search_path"))).scalar_one()
             _logger.info(
                 "tenant.schema.create.async.search_path",
                 extra={"schema": schema, "search_path": applied_async},
@@ -536,7 +538,7 @@ async def _apply_search_path(session: AsyncSession) -> None:
     await session.execute(text(f"SET LOCAL search_path TO {formatted}"))
     ctx = get_tenant_context()
     if ctx and ctx.correlation_id:
-        safe = ctx.correlation_id.replace("\"", "")
+        safe = ctx.correlation_id.replace('"', "")
         await session.execute(text(f"SET LOCAL application_name TO 'api:{safe}'"))
 
 
@@ -614,7 +616,9 @@ async def get_session() -> AsyncIterator[AsyncSession]:
 
 
 @asynccontextmanager
-async def with_tenant_session(*, tenant_id: str, schema_name: str | None = None) -> AsyncIterator[AsyncSession]:
+async def with_tenant_session(
+    *, tenant_id: str, schema_name: str | None = None
+) -> AsyncIterator[AsyncSession]:
     """Compatibility helper that ensures tenant schema routing inside transaction scope."""
 
     schema = schema_name or resolve_tenant_schema(tenant_id)
@@ -631,16 +635,20 @@ async def get_tenant_session(
 ) -> AsyncIterator[AsyncSession]:
     """Return a tenant-bound session and enforce schema routing."""
 
-    async with AsyncSessionLocal(tenant=tenant, tenant_id=tenant_id, schema_name=schema_name) as session:
+    async with AsyncSessionLocal(
+        tenant=tenant, tenant_id=tenant_id, schema_name=schema_name
+    ) as session:
         if _SEARCH_PATH_SUPPORTED:
             schema = schema_name or tenant_schema(tenant or tenant_id or _DEFAULT_TENANT_SLUG)
             try:
-                await session.execute(text(f'SET LOCAL search_path TO "{schema}", "{_SHARED_SCHEMA}"'))
+                await session.execute(
+                    text(f'SET LOCAL search_path TO "{schema}", "{_SHARED_SCHEMA}"')
+                )
             except Exception:
                 await session.execute(text(f'SET search_path TO "{schema}", "{_SHARED_SCHEMA}"'))
             ctx = get_tenant_context()
             if ctx and ctx.correlation_id:
-                safe = ctx.correlation_id.replace("\"", "")
+                safe = ctx.correlation_id.replace('"', "")
                 await session.execute(text(f"SET LOCAL application_name TO 'api:{safe}'"))
         try:
             yield session
@@ -652,9 +660,7 @@ async def get_tenant_session(
                     pass
 
 
-def configure_engine(
-    *, database_url: str | None = None, echo: bool | None = None
-) -> None:
+def configure_engine(*, database_url: str | None = None, echo: bool | None = None) -> None:
     """Reconfigure the global SQLAlchemy engine.
 
     Useful for tests that need to bind the ORM to an in-memory database.

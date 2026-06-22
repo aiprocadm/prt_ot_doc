@@ -28,7 +28,9 @@ class SignatureRequestService:
     отклоняются с 409 до момента реальной интеграции.
     """
 
-    def __init__(self, session: AsyncSession, tenant_id: str, provider: SignatureProvider | None = None) -> None:
+    def __init__(
+        self, session: AsyncSession, tenant_id: str, provider: SignatureProvider | None = None
+    ) -> None:
         self.session = session
         self.tenant_id = tenant_id
         self.provider = provider
@@ -58,7 +60,9 @@ class SignatureVerificationService:
     provider=None означает «провайдер не сконфигурирован» — отклоняется с 409.
     """
 
-    def __init__(self, session: AsyncSession, tenant_id: str, provider: SignatureProvider | None = None) -> None:
+    def __init__(
+        self, session: AsyncSession, tenant_id: str, provider: SignatureProvider | None = None
+    ) -> None:
         self.session = session
         self.tenant_id = tenant_id
         self.provider = provider

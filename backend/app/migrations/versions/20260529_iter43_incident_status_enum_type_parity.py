@@ -71,7 +71,9 @@ INCIDENT_STATUS_VALUES = (
 
 def upgrade() -> None:
     bind = op.get_bind()
-    incident_status_enum = postgresql.ENUM(*INCIDENT_STATUS_VALUES, name="incidentstatus", create_type=False)
+    incident_status_enum = postgresql.ENUM(
+        *INCIDENT_STATUS_VALUES, name="incidentstatus", create_type=False
+    )
     incident_status_enum.create(bind, checkfirst=True)
     # PG cannot ALTER COLUMN TYPE while a server_default exists that it can't
     # auto-cast to the new enum type (iter-37/38 left a plain-string default

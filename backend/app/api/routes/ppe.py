@@ -40,7 +40,10 @@ from app.schemas.ppe import (
     PPEIssueCreate,
     PPEIssuePage,
     PPEIssueRead,
+    PPEIssueReplaceRequest,
+    PPEIssueReturnRequest,
     PPEIssueUpdate,
+    PPEIssueWriteoffRequest,
     PPEItemCreate,
     PPEItemPage,
     PPEItemRead,
@@ -49,9 +52,6 @@ from app.schemas.ppe import (
     PPENormPage,
     PPENormRead,
     PPENormUpdate,
-    PPEIssueReplaceRequest,
-    PPEIssueReturnRequest,
-    PPEIssueWriteoffRequest,
     PPESizesRead,
     PPESizesUpdate,
     PPEStockBatchCreate,
@@ -158,9 +158,7 @@ async def list_items(
     items = list((await session.execute(stmt)).scalars().all())
     total = (
         await session.execute(
-            select(func.count()).where(
-                PPEItem.tenant_id == tenant.id, PPEItem.deleted_at.is_(None)
-            )
+            select(func.count()).where(PPEItem.tenant_id == tenant.id, PPEItem.deleted_at.is_(None))
         )
     ).scalar_one()
     etag = compute_list_etag(
@@ -203,8 +201,13 @@ async def create_item(
 
 
 @router.get("/items/{item_id}", response_model=PPEItemRead)
-async def get_item(item_id: str, tenant: TenantDep, session: SessionDep, access: ManagerAccess,
-    correlation_id: str = Depends(get_correlation_id)) -> PPEItemRead:
+async def get_item(
+    item_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    access: ManagerAccess,
+    correlation_id: str = Depends(get_correlation_id),
+) -> PPEItemRead:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     item = await _get_item(session, tenant, item_id)
@@ -259,14 +262,25 @@ async def _get_norm(session: AsyncSession, tenant: Tenant, norm_id: str) -> PPEN
 async def _check_norm_refs(
     session: AsyncSession, tenant: Tenant, *, position_id: str, hazard_id: str, item_id: str
 ) -> PPEItem:
-    position = (await session.execute(select(Position).where(
-        Position.id == position_id, Position.tenant_id == tenant.id, Position.deleted_at.is_(None),
-    ))).scalar_one_or_none()
+    position = (
+        await session.execute(
+            select(Position).where(
+                Position.id == position_id,
+                Position.tenant_id == tenant.id,
+                Position.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
     if position is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Position not found")
-    hazard = (await session.execute(select(RiskHazard).where(
-        RiskHazard.id == hazard_id, RiskHazard.tenant_id == tenant.id,
-    ))).scalar_one_or_none()
+    hazard = (
+        await session.execute(
+            select(RiskHazard).where(
+                RiskHazard.id == hazard_id,
+                RiskHazard.tenant_id == tenant.id,
+            )
+        )
+    ).scalar_one_or_none()
     if hazard is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Hazard not found")
     return await _get_item(session, tenant, item_id)
@@ -308,7 +322,9 @@ async def list_norms(
         tenant_id=str(tenant.id),
         items=norms,
         scalars=[
-            ("total", int(total or 0)), ("limit", limit), ("offset", offset),
+            ("total", int(total or 0)),
+            ("limit", limit),
+            ("offset", offset),
             ("position", position_id or ""),
         ],
     )
@@ -332,15 +348,26 @@ async def create_norm(
     TenantContextValidator.ensure_tenant_context(tenant)
 
     item = await _check_norm_refs(
-        session, tenant,
-        position_id=payload.position_id, hazard_id=payload.hazard_id, item_id=payload.item_id,
+        session,
+        tenant,
+        position_id=payload.position_id,
+        hazard_id=payload.hazard_id,
+        item_id=payload.item_id,
     )
-    existing = (await session.execute(select(PPENorm).where(
-        PPENorm.tenant_id == tenant.id,
-        PPENorm.position_id == payload.position_id,
-        PPENorm.hazard_id == payload.hazard_id,
-        or_(PPENorm.item_name == item.name, PPENorm.item_id == item.id),
-    ))).scalars().first()
+    existing = (
+        (
+            await session.execute(
+                select(PPENorm).where(
+                    PPENorm.tenant_id == tenant.id,
+                    PPENorm.position_id == payload.position_id,
+                    PPENorm.hazard_id == payload.hazard_id,
+                    or_(PPENorm.item_name == item.name, PPENorm.item_id == item.id),
+                )
+            )
+        )
+        .scalars()
+        .first()
+    )
     if existing is not None:
         raise _norm_duplicate_conflict()
 
@@ -383,13 +410,21 @@ async def update_norm(
     new_item_id = updates.pop("item_id", None)
     if new_item_id is not None:
         item = await _get_item(session, tenant, new_item_id)
-        dup = (await session.execute(select(PPENorm).where(
-            PPENorm.tenant_id == tenant.id,
-            PPENorm.position_id == norm.position_id,
-            PPENorm.hazard_id == norm.hazard_id,
-            or_(PPENorm.item_name == item.name, PPENorm.item_id == item.id),
-            PPENorm.id != norm.id,
-        ))).scalars().first()
+        dup = (
+            (
+                await session.execute(
+                    select(PPENorm).where(
+                        PPENorm.tenant_id == tenant.id,
+                        PPENorm.position_id == norm.position_id,
+                        PPENorm.hazard_id == norm.hazard_id,
+                        or_(PPENorm.item_name == item.name, PPENorm.item_id == item.id),
+                        PPENorm.id != norm.id,
+                    )
+                )
+            )
+            .scalars()
+            .first()
+        )
         if dup is not None:
             raise _norm_duplicate_conflict()
         norm.item_id = item.id
@@ -534,7 +569,9 @@ async def return_issue_endpoint(
     TenantContextValidator.ensure_tenant_context(tenant)
     try:
         issue = await return_issue(
-            session, tenant_id=tenant.id, issue_id=issue_id,
+            session,
+            tenant_id=tenant.id,
+            issue_id=issue_id,
             returned_at=payload.returned_at,
             return_wear_percent=payload.return_wear_percent,
             signature_doc_ref=payload.signature_doc_ref,
@@ -574,7 +611,10 @@ async def writeoff_issue_endpoint(
     TenantContextValidator.ensure_tenant_context(tenant)
     try:
         issue = await writeoff_issue(
-            session, tenant_id=tenant.id, issue_id=issue_id, reason=payload.writeoff_reason,
+            session,
+            tenant_id=tenant.id,
+            issue_id=issue_id,
+            reason=payload.writeoff_reason,
         )
     except PPETransitionError as exc:
         raise _transition_conflict(exc) from exc
@@ -615,10 +655,15 @@ async def replace_issue_endpoint(
     TenantContextValidator.ensure_tenant_context(tenant)
     try:
         result = await replace_issue(
-            session, tenant_id=tenant.id, issue_id=issue_id,
-            item_id=payload.item_id, quantity=payload.quantity,
-            wear_days=payload.wear_days, expires_at=payload.expires_at,
-            certificate_no=payload.certificate_no, wear_percent=payload.wear_percent,
+            session,
+            tenant_id=tenant.id,
+            issue_id=issue_id,
+            item_id=payload.item_id,
+            quantity=payload.quantity,
+            wear_days=payload.wear_days,
+            expires_at=payload.expires_at,
+            certificate_no=payload.certificate_no,
+            wear_percent=payload.wear_percent,
             signature_doc_ref=payload.signature_doc_ref,
         )
     except PPETransitionError as exc:
@@ -749,7 +794,8 @@ async def list_stock_batches(
     response: Response,
     tenant: TenantDep,
     session: SessionDep,
-    access: ManagerAccess,    item_id: str | None = None,
+    access: ManagerAccess,
+    item_id: str | None = None,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> PPEStockBatchPage | Response:
@@ -802,7 +848,8 @@ async def create_stock_batch(
     payload: PPEStockBatchCreate,
     tenant: TenantDep,
     session: SessionDep,
-    access: EditorAccess,) -> PPEStockBatchRead:
+    access: EditorAccess,
+) -> PPEStockBatchRead:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     await _get_item(session, tenant, payload.item_id)
@@ -832,7 +879,8 @@ async def get_stock_batch(
     batch_id: str,
     tenant: TenantDep,
     session: SessionDep,
-    access: ManagerAccess,) -> PPEStockBatchRead:
+    access: ManagerAccess,
+) -> PPEStockBatchRead:
     TenantContextValidator.ensure_tenant_context(tenant)
     batch = await _get_batch(session, tenant, batch_id)
     return PPEStockBatchRead.model_validate(batch)
@@ -849,7 +897,8 @@ async def update_stock_batch(
     payload: PPEStockBatchUpdate,
     tenant: TenantDep,
     session: SessionDep,
-    access: EditorAccess,) -> PPEStockBatchRead:
+    access: EditorAccess,
+) -> PPEStockBatchRead:
     TenantContextValidator.ensure_tenant_context(tenant)
     batch = await _get_batch(session, tenant, batch_id)
     for field, value in payload.model_dump(exclude_unset=True).items():
@@ -867,7 +916,8 @@ async def update_stock_batch(
 async def list_stock_levels(
     tenant: TenantDep,
     session: SessionDep,
-    access: ManagerAccess,) -> PPEStockLevelPage:
+    access: ManagerAccess,
+) -> PPEStockLevelPage:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     agg_stmt = (
@@ -889,9 +939,7 @@ async def list_stock_levels(
     item_ids = [row[0] for row in rows]
     if item_ids:
         name_rows = (
-            await session.execute(
-                select(PPEItem.id, PPEItem.name).where(PPEItem.id.in_(item_ids))
-            )
+            await session.execute(select(PPEItem.id, PPEItem.name).where(PPEItem.id.in_(item_ids)))
         ).all()
         names = {item_id: name for item_id, name in name_rows}
 
@@ -923,7 +971,9 @@ async def get_personal_card(
     if card is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Person not found")
     person = card.person
-    full_name = " ".join(part for part in (person.last_name, person.first_name, person.middle_name) if part)
+    full_name = " ".join(
+        part for part in (person.last_name, person.first_name, person.middle_name) if part
+    )
     return PPECardRead(
         person_id=person.id,
         full_name=full_name,
@@ -933,17 +983,21 @@ async def get_personal_card(
         sizes=person.ppe_sizes,
         required=[
             PPECardRequiredLine(
-                item_id=line.item_id, item_name=line.item_name,
+                item_id=line.item_id,
+                item_name=line.item_name,
                 required_quantity=line.required_quantity,
-                interval_days=line.interval_days, status=line.status,
+                interval_days=line.interval_days,
+                status=line.status,
             )
             for line in card.required
         ],
         issues=[_issue_schema(issue) for issue in card.issues],
         timeline=[
             PPECardTimelineEvent(
-                occurred_at=event.occurred_at, event=event.event,
-                issue_id=event.issue_id, item_name=event.item_name,
+                occurred_at=event.occurred_at,
+                event=event.event,
+                issue_id=event.issue_id,
+                item_name=event.item_name,
             )
             for event in card.timeline
         ],
@@ -961,18 +1015,20 @@ async def put_person_sizes(
     access: EditorAccess,
 ) -> PPESizesRead:
     TenantContextValidator.ensure_tenant_context(tenant)
-    person = (await session.execute(select(Person).where(
-        Person.id == person_id,
-        Person.tenant_id == tenant.id,
-        Person.deleted_at.is_(None),
-    ))).scalar_one_or_none()
+    person = (
+        await session.execute(
+            select(Person).where(
+                Person.id == person_id,
+                Person.tenant_id == tenant.id,
+                Person.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
     if person is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Person not found")
     # PUT-семантика: полная замена; None-поля выбрасываются.
     person.ppe_sizes = {
-        key: value
-        for key, value in payload.model_dump().items()
-        if value is not None
+        key: value for key, value in payload.model_dump().items() if value is not None
     } or None
     await session.flush()
     await session.refresh(person)

@@ -212,9 +212,7 @@ class PackageExportService:
             stage=PipelineStage.STORED_S3,
         )
         try:
-            self._storage.put(
-                storage_key, archive_bytes, content_type=self.ZIP_CONTENT_TYPE
-            )
+            self._storage.put(storage_key, archive_bytes, content_type=self.ZIP_CONTENT_TYPE)
         except Exception as exc:
             metrics.record_pipeline_stage_end(
                 pipeline=PipelineType.DOCUMENT,

@@ -5,6 +5,7 @@ Revises: 6b6dee7c951f
 Create Date: 2024-02-29 00:00:00.000000
 
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -140,7 +141,9 @@ def upgrade() -> None:
             )
 
         # backfill hazard references for existing PPE norms
-        result = bind.execute(sa.text("SELECT DISTINCT tenant_id FROM ppe_norm WHERE hazard_id IS NULL"))
+        result = bind.execute(
+            sa.text("SELECT DISTINCT tenant_id FROM ppe_norm WHERE hazard_id IS NULL")
+        )
         tenants = [row[0] for row in result]
         now = datetime.now(timezone.utc)
         for tenant_id in tenants:

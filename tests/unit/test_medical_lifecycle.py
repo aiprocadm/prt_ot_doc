@@ -33,6 +33,7 @@ def test_referral_terminal_and_overdue_and_result():
 
 def test_compute_valid_until_and_next_due():
     from app.models.models import MedicalExamKind as K
+
     assert lc.compute_valid_until(date(2026, 1, 1), 365) == date(2027, 1, 1)
     assert lc.next_due(None, 365, date(2026, 6, 1)) == date(2026, 6, 1)
     assert lc.next_due(date(2026, 1, 1), 365, date(2026, 6, 1)) == date(2027, 1, 1)
@@ -46,6 +47,7 @@ def test_compute_valid_until_and_next_due():
 
 def test_classify_contingent():
     from app.domains.medical.lifecycle import ContingentItemStatus as C
+
     t = date(2026, 6, 1)
     assert lc.classify(None, t, 30) is C.MISSING
     assert lc.classify(date(2026, 5, 1), t, 30) is C.OVERDUE
@@ -58,6 +60,7 @@ def test_classify_contingent():
 
 def test_resolve_required_kinds():
     from app.models.models import MedicalExamKind as K
+
     norms = [
         ("p1", "h1", None, K.PERIODIC),
         ("p1", None, "3.1", K.PSYCHIATRIC),
@@ -73,8 +76,9 @@ def test_resolve_required_kinds():
 
 
 def test_suspension_rule():
-    from app.models.models import MedicalFitness as F
     from app.domains.medical.lifecycle import SuspensionAction as A
+    from app.models.models import MedicalFitness as F
+
     assert lc.requires_suspension(F.UNFIT) is True
     assert lc.requires_suspension(F.FIT) is False
     assert lc.suspension_action(False, F.UNFIT) is A.OPEN
@@ -86,5 +90,6 @@ def test_suspension_rule():
 
 def test_reason_for_exam():
     from app.models.models import MedicalSuspensionReason as Reason
+
     assert lc.reason_for(["asthma"]) is Reason.CONTRAINDICATION
     assert lc.reason_for([]) is Reason.UNFIT

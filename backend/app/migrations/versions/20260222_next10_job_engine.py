@@ -33,7 +33,11 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_document_jobs_tenant_status_updated", "document_jobs", ["tenant_id", "status", "updated_at"])
+    op.create_index(
+        "ix_document_jobs_tenant_status_updated",
+        "document_jobs",
+        ["tenant_id", "status", "updated_at"],
+    )
 
     op.create_table(
         "document_job_steps",

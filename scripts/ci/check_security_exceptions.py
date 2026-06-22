@@ -45,7 +45,9 @@ def _parse_date(value: str, field_name: str) -> dt.date:
     try:
         return dt.date.fromisoformat(value)
     except ValueError as exc:
-        raise SystemExit(f"ERROR: invalid {field_name} date '{value}' (expected YYYY-MM-DD)") from exc
+        raise SystemExit(
+            f"ERROR: invalid {field_name} date '{value}' (expected YYYY-MM-DD)"
+        ) from exc
 
 
 def validate_exceptions(exceptions: list[dict], today: dt.date) -> int:

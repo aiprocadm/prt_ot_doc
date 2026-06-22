@@ -69,9 +69,7 @@ async def test_cross_tenant_write_is_rejected(
 
 
 @pytest.mark.anyio("asyncio")
-async def test_cross_tenant_read_is_forbidden(
-    async_client: AsyncClient, make_auth_headers
-) -> None:
+async def test_cross_tenant_read_is_forbidden(async_client: AsyncClient, make_auth_headers) -> None:
     headers = {**dict(async_client.headers), **await make_auth_headers()}
     headers["x-tenant"] = "acme"
 

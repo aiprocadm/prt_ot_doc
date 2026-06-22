@@ -134,10 +134,14 @@ async def test_refresh_issues_new_token_pair(
     new_tokens = refresh_response.json()
     assert new_tokens.keys() == {"access_token"}
     assert new_tokens["access_token"] != tokens["access_token"]
-    assert refresh_response.cookies["prt_refresh_token"] != login_response.cookies["prt_refresh_token"]
+    assert (
+        refresh_response.cookies["prt_refresh_token"] != login_response.cookies["prt_refresh_token"]
+    )
 
     access_claims = verify_token(new_tokens["access_token"], expected_type="access")
-    refresh_claims = verify_token(refresh_response.cookies["prt_refresh_token"], expected_type="refresh")
+    refresh_claims = verify_token(
+        refresh_response.cookies["prt_refresh_token"], expected_type="refresh"
+    )
     assert access_claims["tenant"] == "test"
     assert refresh_claims["tenant"] == "test"
 

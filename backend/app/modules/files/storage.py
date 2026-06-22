@@ -42,7 +42,7 @@ def assert_tenant_key(*, tenant_id: str, key: str) -> None:
     if matched_prefix is None:
         raise PermissionError("tenant_key_forbidden")
     # The prefix alone is not a valid file key — require a non-empty file component.
-    if not key[len(matched_prefix):].strip("/"):
+    if not key[len(matched_prefix) :].strip("/"):
         raise PermissionError("tenant_key_forbidden")
 
 

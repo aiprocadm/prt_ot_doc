@@ -15,7 +15,9 @@ from app.models.notifications import (
 )
 
 
-async def test_calendar_events_returns_training_and_tasks(async_client, make_auth_headers, sessionmaker, data_factory) -> None:
+async def test_calendar_events_returns_training_and_tasks(
+    async_client, make_auth_headers, sessionmaker, data_factory
+) -> None:
     headers = await make_auth_headers(RoleEnum.ADMIN)
     async with sessionmaker() as session:
         tenant = await data_factory.ensure_tenant(session=session)
@@ -50,7 +52,9 @@ async def test_calendar_events_returns_training_and_tasks(async_client, make_aut
     assert any(item["source"] == "task" for item in payload)
 
 
-async def test_notifications_unread_filter_excludes_read(async_client, make_auth_headers, sessionmaker) -> None:
+async def test_notifications_unread_filter_excludes_read(
+    async_client, make_auth_headers, sessionmaker
+) -> None:
     headers = await make_auth_headers(RoleEnum.ADMIN)
     user_email = f"{RoleEnum.ADMIN.value}-api@example.com"
 
@@ -86,7 +90,9 @@ async def test_notifications_unread_filter_excludes_read(async_client, make_auth
         )
         await session.commit()
 
-    response = await async_client.get("/api/v1/notifications", headers=headers, params={"status": "unread"})
+    response = await async_client.get(
+        "/api/v1/notifications", headers=headers, params={"status": "unread"}
+    )
     assert response.status_code == 200
     payload = response.json()
     titles = {item["title"] for item in payload["items"]}
@@ -94,7 +100,9 @@ async def test_notifications_unread_filter_excludes_read(async_client, make_auth
     assert "Read" not in titles
 
 
-async def test_notifications_invalid_cursor_returns_structured_422(async_client, make_auth_headers) -> None:
+async def test_notifications_invalid_cursor_returns_structured_422(
+    async_client, make_auth_headers
+) -> None:
     headers = await make_auth_headers(RoleEnum.ADMIN)
 
     response = await async_client.get(

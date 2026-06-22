@@ -17,15 +17,14 @@ depends_on = None
 
 def upgrade() -> None:
     template_status = postgresql.ENUM(
-        "DRAFT", "ACTIVE", "ARCHIVED",
+        "DRAFT",
+        "ACTIVE",
+        "ARCHIVED",
         name="templatestatus",
         create_type=False,
     )
-    template_version_status = postgresql.ENUM(
-        "DRAFT", "ACTIVE", "ARCHIVED", "UPLOADED", "LINTED", "READY", "DEPRECATED",
-        name="templateversionstatus",
-        create_type=False,
-    )
+    # templateversionstatus is extended in-place below via ALTER TYPE ADD VALUE
+    # (it already exists from the initial schema), so no ENUM object is needed here.
     template_status.create(op.get_bind(), checkfirst=True)
 
     # templateversionstatus was created in 6b6dee7c951f_initial_schema with
@@ -40,26 +39,42 @@ def upgrade() -> None:
     bind = op.get_bind()
     if bind.dialect.name == "postgresql":
         for new_value in ("UPLOADED", "LINTED", "READY", "DEPRECATED"):
-            op.execute(
-                f"ALTER TYPE templateversionstatus ADD VALUE IF NOT EXISTS '{new_value}'"
-            )
+            op.execute(f"ALTER TYPE templateversionstatus ADD VALUE IF NOT EXISTS '{new_value}'")
 
     op.add_column("template", sa.Column("status", template_status, nullable=True))
     op.add_column("template", sa.Column("current_version_id", sa.String(length=36), nullable=True))
     op.execute("UPDATE template SET status = 'DRAFT' WHERE status IS NULL")
     op.alter_column("template", "status", nullable=False)
     op.create_foreign_key(
-        "fk_template_current_version", "template", "templateversion", ["current_version_id"], ["id"], ondelete="SET NULL"
+        "fk_template_current_version",
+        "template",
+        "templateversion",
+        ["current_version_id"],
+        ["id"],
+        ondelete="SET NULL",
     )
-    op.create_index("ix_template_current_version_id", "template", ["current_version_id"], unique=False)
-    op.create_index("ix_template_status_updated", "template", ["tenant_id", "status", "updated_at"], unique=False)
+    op.create_index(
+        "ix_template_current_version_id", "template", ["current_version_id"], unique=False
+    )
+    op.create_index(
+        "ix_template_status_updated",
+        "template",
+        ["tenant_id", "status", "updated_at"],
+        unique=False,
+    )
     op.create_index("ix_template_updated", "template", ["tenant_id", "updated_at"], unique=False)
 
     op.add_column("templateversion", sa.Column("size_bytes", sa.Integer(), nullable=True))
     op.add_column("templateversion", sa.Column("linter_report_json", sa.JSON(), nullable=True))
-    op.add_column("templateversion", sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True))
-    op.create_index("ix_template_version_status", "templateversion", ["tenant_id", "status"], unique=False)
-    op.create_index("ix_template_version_updated", "templateversion", ["tenant_id", "updated_at"], unique=False)
+    op.add_column(
+        "templateversion", sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True)
+    )
+    op.create_index(
+        "ix_template_version_status", "templateversion", ["tenant_id", "status"], unique=False
+    )
+    op.create_index(
+        "ix_template_version_updated", "templateversion", ["tenant_id", "updated_at"], unique=False
+    )
 
     op.create_table(
         "templateusage",
@@ -74,11 +89,23 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["template_version_id"], ["templateversion.id"]),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"]),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("template_version_id", "used_by_type", "used_by_id", name="uq_template_usage_target"),
+        sa.UniqueConstraint(
+            "template_version_id", "used_by_type", "used_by_id", name="uq_template_usage_target"
+        ),
     )
-    op.create_index("ix_templateusage_template_version_id", "templateusage", ["template_version_id"], unique=False)
+    op.create_index(
+        "ix_templateusage_template_version_id",
+        "templateusage",
+        ["template_version_id"],
+        unique=False,
+    )
     op.create_index("ix_templateusage_tenant_id", "templateusage", ["tenant_id"], unique=False)
-    op.create_index("ix_template_usage_lookup", "templateusage", ["tenant_id", "template_version_id"], unique=False)
+    op.create_index(
+        "ix_template_usage_lookup",
+        "templateusage",
+        ["tenant_id", "template_version_id"],
+        unique=False,
+    )
 
 
 def downgrade() -> None:

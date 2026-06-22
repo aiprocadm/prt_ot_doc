@@ -55,9 +55,12 @@ def _run_cli(*extra_args: str) -> subprocess.CompletedProcess[str]:
 
 def test_cli_rejects_token_and_login_together() -> None:
     result = _run_cli(
-        "--access-token", "jwt-x",
-        "--login-email", "a@example.com",
-        "--login-password", "p",
+        "--access-token",
+        "jwt-x",
+        "--login-email",
+        "a@example.com",
+        "--login-password",
+        "p",
     )
     assert result.returncode == 2, result.stderr
     assert "mutually exclusive" in result.stderr
@@ -74,12 +77,18 @@ def test_cli_accepts_only_login_email_with_password() -> None:
     will still fail later when no server is reachable, but parsing must succeed."""
 
     result = _run_cli(
-        "--login-email", "a@example.com",
-        "--login-password", "p",
-        "--requests", "1",
-        "--concurrency", "1",
-        "--path", "/health",
-        "--base-url", "http://127.0.0.1:1",  # unreachable
+        "--login-email",
+        "a@example.com",
+        "--login-password",
+        "p",
+        "--requests",
+        "1",
+        "--concurrency",
+        "1",
+        "--path",
+        "/health",
+        "--base-url",
+        "http://127.0.0.1:1",  # unreachable
     )
     # Parser passes; runtime fails on connect/login.
     assert "mutually exclusive" not in result.stderr

@@ -1,4 +1,5 @@
 """Safety core domain models for org structure, risk maps and PPE workflows."""
+
 from __future__ import annotations
 
 import enum
@@ -89,14 +90,23 @@ class SafetyRiskMap(TenantBaseModel, SoftDeleteMixin):
     risk_methodology_id: Mapped[str] = mapped_column(
         ForeignKey("risk_methodologies.id", ondelete="RESTRICT"), nullable=False, index=True
     )
-    status: Mapped[RecordStatus] = mapped_column(Enum(RecordStatus), nullable=False, default=RecordStatus.DRAFT)
+    status: Mapped[RecordStatus] = mapped_column(
+        Enum(RecordStatus), nullable=False, default=RecordStatus.DRAFT
+    )
     calculated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     source: Mapped[RiskMapSource | None] = mapped_column(Enum(RiskMapSource), nullable=True)
     created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
 
     __table_args__ = (
-        Index("ix_risk_maps_entity_status", "tenant_id", "entity_type", "entity_id", "status", "updated_at"),
+        Index(
+            "ix_risk_maps_entity_status",
+            "tenant_id",
+            "entity_type",
+            "entity_id",
+            "status",
+            "updated_at",
+        ),
     )
 
 
@@ -106,7 +116,9 @@ class SafetyRiskMethodology(TenantBaseModel, SoftDeleteMixin):
     code: Mapped[str] = mapped_column(String(64), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     type: Mapped[RiskMethodologyType] = mapped_column(Enum(RiskMethodologyType), nullable=False)
-    status: Mapped[RecordStatus] = mapped_column(Enum(RecordStatus), nullable=False, default=RecordStatus.DRAFT)
+    status: Mapped[RecordStatus] = mapped_column(
+        Enum(RecordStatus), nullable=False, default=RecordStatus.DRAFT
+    )
     version_no: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     formula_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     scale_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
@@ -115,7 +127,9 @@ class SafetyRiskMethodology(TenantBaseModel, SoftDeleteMixin):
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     __table_args__ = (
-        UniqueConstraint("tenant_id", "code", "version_no", name="uq_risk_methodologies_code_version"),
+        UniqueConstraint(
+            "tenant_id", "code", "version_no", name="uq_risk_methodologies_code_version"
+        ),
     )
 
 
@@ -126,7 +140,9 @@ class Hazard(TenantBaseModel, SoftDeleteMixin):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     category: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    source_type: Mapped[HazardSourceType | None] = mapped_column(Enum(HazardSourceType), nullable=True)
+    source_type: Mapped[HazardSourceType | None] = mapped_column(
+        Enum(HazardSourceType), nullable=True
+    )
     severity_default: Mapped[int | None] = mapped_column(Integer, nullable=True)
     probability_default: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
@@ -146,9 +162,15 @@ class HazardMeasure(TenantBase):
     __tenant_model__ = True
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=False, index=True)
-    hazard_id: Mapped[str] = mapped_column(ForeignKey("hazards.id", ondelete="CASCADE"), nullable=False, index=True)
-    measure_id: Mapped[str] = mapped_column(ForeignKey("risk_measures.id", ondelete="CASCADE"), nullable=False, index=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenant.id"), nullable=False, index=True
+    )
+    hazard_id: Mapped[str] = mapped_column(
+        ForeignKey("hazards.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    measure_id: Mapped[str] = mapped_column(
+        ForeignKey("risk_measures.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     is_recommended: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -159,8 +181,12 @@ class HazardBinding(TenantBase):
     __tenant_model__ = True
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=False, index=True)
-    hazard_id: Mapped[str] = mapped_column(ForeignKey("hazards.id", ondelete="CASCADE"), nullable=False, index=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenant.id"), nullable=False, index=True
+    )
+    hazard_id: Mapped[str] = mapped_column(
+        ForeignKey("hazards.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     binding_type: Mapped[HazardBindingType] = mapped_column(Enum(HazardBindingType), nullable=False)
     binding_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -171,8 +197,12 @@ class HazardBinding(TenantBase):
 class RiskMapItem(TenantBaseModel, SoftDeleteMixin):
     __tablename__ = "risk_map_items"
 
-    risk_map_id: Mapped[str] = mapped_column(ForeignKey("risk_maps.id", ondelete="CASCADE"), nullable=False, index=True)
-    hazard_id: Mapped[str] = mapped_column(ForeignKey("hazards.id", ondelete="RESTRICT"), nullable=False, index=True)
+    risk_map_id: Mapped[str] = mapped_column(
+        ForeignKey("risk_maps.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    hazard_id: Mapped[str] = mapped_column(
+        ForeignKey("hazards.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
     probability_value: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     severity_value: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     exposure_value: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
@@ -182,9 +212,7 @@ class RiskMapItem(TenantBaseModel, SoftDeleteMixin):
     residual_risk_level: Mapped[RiskLevel | None] = mapped_column(Enum(RiskLevel), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    __table_args__ = (
-        Index("ix_risk_map_items_level", "risk_map_id", "risk_level"),
-    )
+    __table_args__ = (Index("ix_risk_map_items_level", "risk_map_id", "risk_level"),)
 
 
 class RiskMapItemMeasure(TenantBase):
@@ -192,9 +220,15 @@ class RiskMapItemMeasure(TenantBase):
     __tenant_model__ = True
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenant.id"), nullable=False, index=True)
-    risk_map_item_id: Mapped[str] = mapped_column(ForeignKey("risk_map_items.id", ondelete="CASCADE"), nullable=False, index=True)
-    measure_id: Mapped[str] = mapped_column(ForeignKey("risk_measures.id", ondelete="RESTRICT"), nullable=False, index=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenant.id"), nullable=False, index=True
+    )
+    risk_map_item_id: Mapped[str] = mapped_column(
+        ForeignKey("risk_map_items.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    measure_id: Mapped[str] = mapped_column(
+        ForeignKey("risk_measures.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
     measure_order: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="planned")
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)

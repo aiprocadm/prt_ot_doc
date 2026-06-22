@@ -76,7 +76,9 @@ EditorAccess = Annotated[
 def _training_bad_request(message: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail=api_problem_detail(code="TRAINING_VALIDATION_ERROR", message=message, error_type="training"),
+        detail=api_problem_detail(
+            code="TRAINING_VALIDATION_ERROR", message=message, error_type="training"
+        ),
     )
 
 
@@ -162,8 +164,10 @@ async def list_courses(
         .offset(offset)
     )
     items = list((await session.execute(stmt)).scalars().all())
-    total_stmt = select(func.count()).select_from(TrainingCourse).where(
-        TrainingCourse.tenant_id == tenant.id, TrainingCourse.deleted_at.is_(None)
+    total_stmt = (
+        select(func.count())
+        .select_from(TrainingCourse)
+        .where(TrainingCourse.tenant_id == tenant.id, TrainingCourse.deleted_at.is_(None))
     )
     total = (await session.execute(total_stmt)).scalar_one()
     etag = compute_list_etag(
@@ -349,7 +353,9 @@ async def create_session(
     return TrainingSessionRead.model_validate(record)
 
 
-@router.post("/certificates", response_model=TrainingCertificateRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/certificates", response_model=TrainingCertificateRead, status_code=status.HTTP_201_CREATED
+)
 @audit_operation("create", "training_certificate")
 async def create_certificate(
     payload: TrainingCertificateCreate,
@@ -396,6 +402,8 @@ async def list_expiring_certificates(
     TenantContextValidator.ensure_tenant_context(tenant)
 
     cutoff = date.today() + timedelta(days=within_days)
-    certificates = await upcoming_certificate_expirations(session, tenant_id=tenant.id, before=cutoff)
+    certificates = await upcoming_certificate_expirations(
+        session, tenant_id=tenant.id, before=cutoff
+    )
     items = [TrainingCertificateRead.model_validate(item) for item in certificates]
     return TrainingCertificatePage(items=items, total=len(items))

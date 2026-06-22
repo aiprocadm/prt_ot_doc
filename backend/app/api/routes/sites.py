@@ -95,9 +95,7 @@ async def _get_workplace(session: AsyncSession, tenant: Tenant, workplace_id: st
     return workplace
 
 
-async def _ensure_hazards(
-    session: AsyncSession, tenant_id: str, hazard_ids: list[str]
-) -> None:
+async def _ensure_hazards(session: AsyncSession, tenant_id: str, hazard_ids: list[str]) -> None:
     if not hazard_ids:
         return
     stmt = select(RiskHazard.id).where(
@@ -159,8 +157,13 @@ async def create_site(
 
 
 @router.get("/sites/{site_id}", response_model=SiteRead)
-async def get_site(site_id: str, tenant: TenantDep, session: SessionDep, _: ManagerAccess,
-    correlation_id: str = Depends(get_correlation_id)) -> SiteRead:
+async def get_site(
+    site_id: str,
+    tenant: TenantDep,
+    session: SessionDep,
+    _: ManagerAccess,
+    correlation_id: str = Depends(get_correlation_id),
+) -> SiteRead:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     site = await _get_site(session, tenant, site_id)
@@ -191,9 +194,7 @@ async def update_site(
     return SiteRead.model_validate(site)
 
 
-@router.delete(
-    "/sites/{site_id}", response_model=None, status_code=status.HTTP_204_NO_CONTENT
-)
+@router.delete("/sites/{site_id}", response_model=None, status_code=status.HTTP_204_NO_CONTENT)
 @audit_operation("delete", "site")
 async def delete_site(
     site_id: str, tenant: TenantDep, session: SessionDep, _: EditorAccess
@@ -244,7 +245,10 @@ async def _replace_workplace_hazards(
         delete(WorkplaceHazardLink).where(WorkplaceHazardLink.workplace_id == workplace.id)
     )
     await _ensure_hazards(session, str(tenant.id), hazard_ids)
-    document_map = {hid: document_ids[idx] if idx < len(document_ids) else None for idx, hid in enumerate(hazard_ids)}
+    document_map = {
+        hid: document_ids[idx] if idx < len(document_ids) else None
+        for idx, hid in enumerate(hazard_ids)
+    }
     links = [
         WorkplaceHazardLink(
             tenant_id=workplace.tenant_id,
@@ -351,4 +355,3 @@ async def delete_workplace(
         delete(WorkplaceHazardLink).where(WorkplaceHazardLink.workplace_id == workplace.id)
     )
     await session.commit()
-

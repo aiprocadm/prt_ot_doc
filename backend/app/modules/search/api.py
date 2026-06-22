@@ -99,7 +99,9 @@ async def global_search(
     )
     service = SearchService(session=session, tenant_id=str(tenant.id))
     try:
-        payload = await service.search(q=q, types=requested_types, filters=filters, sort=sort, limit=limit, cursor=cursor)
+        payload = await service.search(
+            q=q, types=requested_types, filters=filters, sort=sort, limit=limit, cursor=cursor
+        )
     except (OperationalError, MissingGreenlet):
         await session.rollback()
         payload = {
@@ -117,7 +119,9 @@ async def global_search(
             "next_cursor": None,
         }
     try:
-        await service.track_recent_query(user_id=access.user.id, q=q, entity_types=requested_types, filters=filters)
+        await service.track_recent_query(
+            user_id=access.user.id, q=q, entity_types=requested_types, filters=filters
+        )
         await session.commit()
     except (OperationalError, MissingGreenlet):
         await session.rollback()
@@ -137,18 +141,38 @@ async def search_suggest(
     stmt = select(SearchIndexEntry).where(SearchIndexEntry.tenant_id == str(tenant.id))
     if q:
         stmt = stmt.where(SearchIndexEntry.title.ilike(like))
-    rows = (await session.execute(stmt.order_by(SearchIndexEntry.updated_at.desc()).limit(limit))).scalars().all()
-    return {"items": [{"entity_type": r.entity_type, "entity_id": r.entity_id, "title": r.title, "route": r.route} for r in rows]}
+    rows = (
+        (await session.execute(stmt.order_by(SearchIndexEntry.updated_at.desc()).limit(limit)))
+        .scalars()
+        .all()
+    )
+    return {
+        "items": [
+            {
+                "entity_type": r.entity_type,
+                "entity_id": r.entity_id,
+                "title": r.title,
+                "route": r.route,
+            }
+            for r in rows
+        ]
+    }
 
 
 @router.post("/search/reindex")
-async def reindex_all(session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict:
+async def reindex_all(
+    session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)
+) -> dict:
     count = await ProjectionOrchestrator(session, str(tenant.id)).rebuild_search_index()
     return {"status": "ok", "indexed": count}
 
 
 @router.post("/search/reindex/{entity_type}")
-async def reindex_by_entity(entity_type: str, session: AsyncSession = Depends(get_session), tenant: Tenant = Depends(get_tenant_record)) -> dict:
+async def reindex_by_entity(
+    entity_type: str,
+    session: AsyncSession = Depends(get_session),
+    tenant: Tenant = Depends(get_tenant_record),
+) -> dict:
     if entity_type not in _ALLOWED_TYPES:
         return {"status": "skipped", "entity_type": entity_type}
     count = await ProjectionOrchestrator(session, str(tenant.id)).rebuild_search_index()
@@ -163,7 +187,9 @@ async def list_recent_searches(
     access: AccessContext = Depends(rbac()),
 ) -> dict:
     try:
-        items = await SearchService(session=session, tenant_id=str(tenant.id)).list_recent_queries(user_id=access.user.id, limit=limit)
+        items = await SearchService(session=session, tenant_id=str(tenant.id)).list_recent_queries(
+            user_id=access.user.id, limit=limit
+        )
     except (OperationalError, MissingGreenlet):
         await session.rollback()
         items = []
@@ -177,7 +203,9 @@ async def list_saved_searches(
     access: AccessContext = Depends(rbac()),
 ) -> dict:
     try:
-        items = await SearchService(session=session, tenant_id=str(tenant.id)).list_saved_queries(user_id=access.user.id)
+        items = await SearchService(session=session, tenant_id=str(tenant.id)).list_saved_queries(
+            user_id=access.user.id
+        )
     except (OperationalError, MissingGreenlet):
         await session.rollback()
         items = []
@@ -203,7 +231,14 @@ async def create_saved_search(
         is_shared=bool(payload.get("is_shared") or False),
     )
     await session.commit()
-    return {"id": item.id, "name": item.name, "q": item.query_text, "types": item.entity_types or [], "filters": item.filters_json or {}, "is_shared": item.is_shared}
+    return {
+        "id": item.id,
+        "name": item.name,
+        "q": item.query_text,
+        "types": item.entity_types or [],
+        "filters": item.filters_json or {},
+        "is_shared": item.is_shared,
+    }
 
 
 @router.delete("/search/saved/{saved_query_id}")
@@ -213,7 +248,9 @@ async def delete_saved_search(
     tenant: Tenant = Depends(get_tenant_record),
     access: AccessContext = Depends(rbac()),
 ) -> dict:
-    deleted = await SearchService(session=session, tenant_id=str(tenant.id)).delete_saved_query(user_id=access.user.id, saved_query_id=saved_query_id)
+    deleted = await SearchService(session=session, tenant_id=str(tenant.id)).delete_saved_query(
+        user_id=access.user.id, saved_query_id=saved_query_id
+    )
     if not deleted:
         raise HTTPException(status_code=404, detail="saved search not found")
     await session.commit()

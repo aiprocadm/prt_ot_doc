@@ -128,20 +128,39 @@ def _to_endpoint_out(row: WebhookEndpoint) -> WebhookEndpointOut:
 
 
 @router.get("/endpoints", response_model=list[WebhookEndpointOut])
-async def list_webhooks(tenant: TenantDep, _: AdminAccess, session: SessionDep,
-    correlation_id: str = Depends(get_correlation_id)) -> list[WebhookEndpointOut]:
+async def list_webhooks(
+    tenant: TenantDep,
+    _: AdminAccess,
+    session: SessionDep,
+    correlation_id: str = Depends(get_correlation_id),
+) -> list[WebhookEndpointOut]:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     rows = (
-        await session.execute(select(WebhookEndpoint).where(WebhookEndpoint.tenant_id == tenant.id).order_by(WebhookEndpoint.created_at.desc()))
-    ).scalars().all()
+        (
+            await session.execute(
+                select(WebhookEndpoint)
+                .where(WebhookEndpoint.tenant_id == tenant.id)
+                .order_by(WebhookEndpoint.created_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
     return [_to_endpoint_out(row) for row in rows]
 
 
-@router.post("/endpoints", response_model=WebhookEndpointCreateOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/endpoints", response_model=WebhookEndpointCreateOut, status_code=status.HTTP_201_CREATED
+)
 @audit_operation("create", "webhook_endpoint")
-async def create_webhook(payload: WebhookEndpointIn, tenant: TenantDep, _: AdminAccess, session: SessionDep,
-    correlation_id: str = Depends(get_correlation_id)) -> WebhookEndpointOut:
+async def create_webhook(
+    payload: WebhookEndpointIn,
+    tenant: TenantDep,
+    _: AdminAccess,
+    session: SessionDep,
+    correlation_id: str = Depends(get_correlation_id),
+) -> WebhookEndpointOut:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     generated_secret = payload.secret or secrets.token_urlsafe(32)
@@ -163,8 +182,14 @@ async def create_webhook(payload: WebhookEndpointIn, tenant: TenantDep, _: Admin
 
 @router.patch("/endpoints/{webhook_id}", response_model=WebhookEndpointOut)
 @audit_operation("update", "webhook_endpoint")
-async def update_webhook(webhook_id: str, payload: WebhookEndpointIn, tenant: TenantDep, _: AdminAccess, session: SessionDep,
-    correlation_id: str = Depends(get_correlation_id)) -> WebhookEndpointOut:
+async def update_webhook(
+    webhook_id: str,
+    payload: WebhookEndpointIn,
+    tenant: TenantDep,
+    _: AdminAccess,
+    session: SessionDep,
+    correlation_id: str = Depends(get_correlation_id),
+) -> WebhookEndpointOut:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     row = await session.get(WebhookEndpoint, webhook_id)
@@ -190,10 +215,17 @@ async def update_webhook(webhook_id: str, payload: WebhookEndpointIn, tenant: Te
     return _to_endpoint_out(row)
 
 
-@router.delete("/endpoints/{webhook_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+@router.delete(
+    "/endpoints/{webhook_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None
+)
 @audit_operation("delete", "webhook_endpoint")
-async def delete_webhook(webhook_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep,
-    correlation_id: str = Depends(get_correlation_id)) -> None:
+async def delete_webhook(
+    webhook_id: str,
+    tenant: TenantDep,
+    _: AdminAccess,
+    session: SessionDep,
+    correlation_id: str = Depends(get_correlation_id),
+) -> None:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     row = await session.get(WebhookEndpoint, webhook_id)
@@ -212,8 +244,13 @@ async def delete_webhook(webhook_id: str, tenant: TenantDep, _: AdminAccess, ses
 
 @router.post("/endpoints/{webhook_id}:rotate-secret", response_model=WebhookEndpointCreateOut)
 @audit_operation("rotate_secret", "webhook_endpoint")
-async def rotate_webhook_secret(webhook_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep,
-    correlation_id: str = Depends(get_correlation_id)) -> WebhookEndpointCreateOut:
+async def rotate_webhook_secret(
+    webhook_id: str,
+    tenant: TenantDep,
+    _: AdminAccess,
+    session: SessionDep,
+    correlation_id: str = Depends(get_correlation_id),
+) -> WebhookEndpointCreateOut:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     row = await session.get(WebhookEndpoint, webhook_id)
@@ -236,8 +273,13 @@ async def rotate_webhook_secret(webhook_id: str, tenant: TenantDep, _: AdminAcce
 
 @router.post("/endpoints/{webhook_id}:disable", response_model=WebhookEndpointOut)
 @audit_operation("disable", "webhook_endpoint")
-async def disable_webhook(webhook_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep,
-    correlation_id: str = Depends(get_correlation_id)) -> WebhookEndpointOut:
+async def disable_webhook(
+    webhook_id: str,
+    tenant: TenantDep,
+    _: AdminAccess,
+    session: SessionDep,
+    correlation_id: str = Depends(get_correlation_id),
+) -> WebhookEndpointOut:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     row = await session.get(WebhookEndpoint, webhook_id)
@@ -258,8 +300,13 @@ async def disable_webhook(webhook_id: str, tenant: TenantDep, _: AdminAccess, se
 
 @router.post("/endpoints/{webhook_id}:enable", response_model=WebhookEndpointOut)
 @audit_operation("enable", "webhook_endpoint")
-async def enable_webhook(webhook_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep,
-    correlation_id: str = Depends(get_correlation_id)) -> WebhookEndpointOut:
+async def enable_webhook(
+    webhook_id: str,
+    tenant: TenantDep,
+    _: AdminAccess,
+    session: SessionDep,
+    correlation_id: str = Depends(get_correlation_id),
+) -> WebhookEndpointOut:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     row = await session.get(WebhookEndpoint, webhook_id)
@@ -289,7 +336,11 @@ async def list_deliveries(
 ) -> list[WebhookDeliveryOut]:
     TenantContextValidator.ensure_tenant_context(tenant)
 
-    stmt = select(WebhookDelivery, Outbox.event_type).join(Outbox, Outbox.id == WebhookDelivery.event_id).where(WebhookDelivery.tenant_id == tenant.id)
+    stmt = (
+        select(WebhookDelivery, Outbox.event_type)
+        .join(Outbox, Outbox.id == WebhookDelivery.event_id)
+        .where(WebhookDelivery.tenant_id == tenant.id)
+    )
     if status_filter:
         stmt = stmt.where(WebhookDelivery.status == status_filter)
     if endpoint_id:
@@ -317,8 +368,13 @@ async def list_deliveries(
 
 
 @router.get("/endpoints/{webhook_id}/deliveries", response_model=list[WebhookDeliveryOut])
-async def list_endpoint_deliveries(webhook_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep,
-    correlation_id: str = Depends(get_correlation_id)) -> list[WebhookDeliveryOut]:
+async def list_endpoint_deliveries(
+    webhook_id: str,
+    tenant: TenantDep,
+    _: AdminAccess,
+    session: SessionDep,
+    correlation_id: str = Depends(get_correlation_id),
+) -> list[WebhookDeliveryOut]:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     row = await session.get(WebhookEndpoint, webhook_id)
@@ -332,13 +388,19 @@ async def list_endpoint_deliveries(webhook_id: str, tenant: TenantDep, _: AdminA
         detail="webhook_not_found",
     )
     rows = (
-        await session.execute(
-            select(WebhookDelivery).where(
-                WebhookDelivery.tenant_id == tenant.id,
-                WebhookDelivery.endpoint_id == webhook_id,
-            ).order_by(WebhookDelivery.created_at.desc())
+        (
+            await session.execute(
+                select(WebhookDelivery)
+                .where(
+                    WebhookDelivery.tenant_id == tenant.id,
+                    WebhookDelivery.endpoint_id == webhook_id,
+                )
+                .order_by(WebhookDelivery.created_at.desc())
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return [
         WebhookDeliveryOut(
             id=delivery.id,
@@ -360,8 +422,13 @@ async def list_endpoint_deliveries(webhook_id: str, tenant: TenantDep, _: AdminA
 
 @router.post("/endpoints/{webhook_id}:test")
 @audit_operation("test", "webhook_endpoint")
-async def test_endpoint(webhook_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep,
-    correlation_id: str = Depends(get_correlation_id)) -> dict[str, str]:
+async def test_endpoint(
+    webhook_id: str,
+    tenant: TenantDep,
+    _: AdminAccess,
+    session: SessionDep,
+    correlation_id: str = Depends(get_correlation_id),
+) -> dict[str, str]:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     row = await session.get(WebhookEndpoint, webhook_id)
@@ -378,7 +445,16 @@ async def test_endpoint(webhook_id: str, tenant: TenantDep, _: AdminAccess, sess
         tenant_id=str(tenant.id),
         event_type="DocumentGenerated",
         destination=row.url,
-        payload={"tenant_id": str(tenant.id), "event_id": f"test-{webhook_id}", "document_id": "test", "document_version_id": "test", "template_id": "test", "template_version_id": "test", "company_id": "test", "status": "generated"},
+        payload={
+            "tenant_id": str(tenant.id),
+            "event_id": f"test-{webhook_id}",
+            "document_id": "test",
+            "document_version_id": "test",
+            "template_id": "test",
+            "template_version_id": "test",
+            "company_id": "test",
+            "status": "generated",
+        },
         headers={"X-Webhook-Endpoint-Id": row.id, "X-Correlation-Id": f"test-{webhook_id}"},
         idempotency_key=f"webhook-test:{webhook_id}:{datetime.now(timezone.utc).timestamp()}",
         status=OutboxStatus.PENDING,
@@ -426,7 +502,9 @@ def _extract_failure_diagnostics(
         error_message=error.get("error_message"),
         current_attempt=error.get("current_attempt", delivery.attempts),
         max_attempts=error.get("max_attempts", max_attempts),
-        attempts_remaining=error.get("attempts_remaining", max(0, max_attempts - delivery.attempts)),
+        attempts_remaining=error.get(
+            "attempts_remaining", max(0, max_attempts - delivery.attempts)
+        ),
         next_attempt_in_seconds=error.get("next_attempt_in_seconds"),
         timestamp=error.get("timestamp"),
     )
@@ -459,7 +537,8 @@ async def get_delivery_diagnostics(
         category = classify_failure(status_code=delivery.last_status_code)
         diag = WebhookFailureDiagnostics(
             failure_category=category,
-            retry_eligible=isinstance(category, FailureCategory) and category.value.startswith("retryable_"),
+            retry_eligible=isinstance(category, FailureCategory)
+            and category.value.startswith("retryable_"),
             http_status_code=delivery.last_status_code,
             current_attempt=delivery.attempts,
         )
@@ -510,11 +589,17 @@ async def get_delivery_retry_eligibility(
         else:
             # Infer from status code
             category = classify_failure(status_code=delivery.last_status_code)
-            eligible = isinstance(category, FailureCategory) and category.value.startswith("retryable_")
+            eligible = isinstance(category, FailureCategory) and category.value.startswith(
+                "retryable_"
+            )
             return WebhookRetryEligibility(
                 delivery_id=delivery_id,
                 eligible=eligible,
-                reason="Terminal failure, retries exhausted" if not eligible else "Transient failure, retryable",
+                reason=(
+                    "Terminal failure, retries exhausted"
+                    if not eligible
+                    else "Transient failure, retryable"
+                ),
                 failure_category=category,
             )
 
@@ -532,7 +617,10 @@ async def get_delivery_retry_eligibility(
     )
 
 
-@router.get("/endpoints/{endpoint_id}/failed-deliveries", response_model=list[WebhookDeliveryWithDiagnostics])
+@router.get(
+    "/endpoints/{endpoint_id}/failed-deliveries",
+    response_model=list[WebhookDeliveryWithDiagnostics],
+)
 async def list_failed_deliveries_with_diagnostics(
     endpoint_id: str,
     tenant: TenantDep,
@@ -555,17 +643,21 @@ async def list_failed_deliveries_with_diagnostics(
     )
 
     rows = (
-        await session.execute(
-            select(WebhookDelivery)
-            .where(
-                WebhookDelivery.tenant_id == tenant.id,
-                WebhookDelivery.endpoint_id == endpoint_id,
-                WebhookDelivery.status.in_(["failed", "pending"]),
+        (
+            await session.execute(
+                select(WebhookDelivery)
+                .where(
+                    WebhookDelivery.tenant_id == tenant.id,
+                    WebhookDelivery.endpoint_id == endpoint_id,
+                    WebhookDelivery.status.in_(["failed", "pending"]),
+                )
+                .order_by(WebhookDelivery.updated_at.desc())
+                .limit(limit)
             )
-            .order_by(WebhookDelivery.updated_at.desc())
-            .limit(limit)
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     result = []
     for delivery in rows:
@@ -589,11 +681,15 @@ async def list_failed_deliveries_with_diagnostics(
     return result
 
 
-
 @router.post("/deliveries/{delivery_id}:retry", response_model=dict[str, str])
 @audit_operation("retry", "webhook_delivery")
-async def retry_delivery(delivery_id: str, tenant: TenantDep, _: AdminAccess, session: SessionDep,
-    correlation_id: str = Depends(get_correlation_id)) -> dict[str, str]:
+async def retry_delivery(
+    delivery_id: str,
+    tenant: TenantDep,
+    _: AdminAccess,
+    session: SessionDep,
+    correlation_id: str = Depends(get_correlation_id),
+) -> dict[str, str]:
     TenantContextValidator.ensure_tenant_context(tenant)
 
     delivery = await session.get(WebhookDelivery, delivery_id)
