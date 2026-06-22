@@ -10,6 +10,10 @@ export const FIRE_FIGHTING_MEANS_CODES = [
   "extinguisher_powder", "extinguisher_co2", "water", "sand", "felt", "fire_hose",
 ] as const;
 
+export const RESPIRATORY_PPE_CODES = [
+  "hose_mask", "scba", "isolating_mask", "filter_mask", "air_supply",
+] as const;
+
 const gasMeasurementSchema = z.object({
   parameter: z.enum(GAS_PARAMETER_CODES),
   value: z.string(),
@@ -29,8 +33,14 @@ export const fireSafetySchema = z.object({
 });
 export type FireSafetyValues = z.infer<typeof fireSafetySchema>;
 
-// Надмножество ключей обоих видов — клиентская форма; серверная validate_type_specific — источник истины по виду.
-export const typeSpecificSchema = confinedEnvSchema.merge(fireSafetySchema);
+export const gasWorksSchema = z.object({
+  respiratory_ppe: z.array(z.enum(RESPIRATORY_PPE_CODES)).optional(),
+  gas_analysis: z.array(gasMeasurementSchema).optional(),
+});
+export type GasWorksValues = z.infer<typeof gasWorksSchema>;
+
+// Надмножество ключей всех видов — клиентская форма; серверная validate_type_specific — источник истины по виду.
+export const typeSpecificSchema = confinedEnvSchema.merge(fireSafetySchema).merge(gasWorksSchema);
 
 export const workPermitSchema = z.object({
   work_type: z.string().min(1, "Укажите вид работ"),

@@ -69,7 +69,7 @@ export const LEGAL_REFERENCE_LABELS: Record<string, string> = {
   confined_space: "Приказ Минтруда № 902н",
   electrical: "Приказ Минтруда № 903н",
   hot_work: "Постановление Правительства РФ № 1479 (ППР)",
-  gas_hazardous: "Правила газоопасных работ",
+  gas_hazardous: "Приказ Ростехнадзора № 528 (ФНП)",
   excavation: "Правила земляных работ",
 };
 
@@ -93,6 +93,14 @@ export const FIRE_FIGHTING_MEANS_LABELS: Record<string, string> = {
   sand: "Ящик с песком",
   felt: "Кошма / асбестовое полотно",
   fire_hose: "Пожарный кран/рукав",
+};
+
+export const RESPIRATORY_PPE_LABELS: Record<string, string> = {
+  hose_mask: "Шланговый противогаз (ПШ-1/ПШ-2)",
+  scba: "Автономный дыхательный аппарат (ИДА)",
+  isolating_mask: "Изолирующий противогаз",
+  filter_mask: "Фильтрующий противогаз/респиратор",
+  air_supply: "Аппарат с принудительной подачей воздуха",
 };
 
 export const labelOf = (map: Record<string, string>, code: string): string =>
