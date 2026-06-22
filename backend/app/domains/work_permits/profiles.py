@@ -36,6 +36,15 @@ FIRE_FIGHTING_MEANS = {
     "fire_hose": "Пожарный кран/рукав",
 }
 
+# --- словарь СИЗ органов дыхания (газоопасные работы, ФНП 528) ---
+RESPIRATORY_PPE = {
+    "hose_mask": "Шланговый противогаз (ПШ-1/ПШ-2)",
+    "scba": "Автономный дыхательный аппарат (ИДА)",
+    "isolating_mask": "Изолирующий противогаз",
+    "filter_mask": "Фильтрующий противогаз/респиратор",
+    "air_supply": "Аппарат с принудительной подачей воздуха",
+}
+
 
 @dataclass(frozen=True)
 class WorkTypeProfile:
@@ -71,7 +80,11 @@ PROFILES: dict[str, WorkTypeProfile] = {
         "fire_safety",
     ),
     "gas_hazardous": WorkTypeProfile(
-        "gas_hazardous", "Газоопасные работы", "Правила проведения газоопасных работ", None
+        "gas_hazardous",
+        "Газоопасные работы",
+        "Приказ Ростехнадзора от 15.12.2020 № 528 "
+        "(ФНП «Правила безопасного ведения газоопасных, огневых и ремонтных работ»)",
+        "gas_works",
     ),
     "excavation": WorkTypeProfile(
         "excavation",
@@ -110,6 +123,17 @@ def _validate_gas_analysis(rows: list | None) -> None:
             raise ValueError(f"invalid gas parameter: {r.get('parameter')!r}")
 
 
+def _validate_code_list(values, allowed, field_name) -> None:
+    """Список кодов ⊆ allowed (или None). Общий для fire_fighting_means и respiratory_ppe."""
+    if values is None:
+        return
+    if not isinstance(values, list):
+        raise ValueError(f"{field_name} must be a list")
+    for v in values:
+        if v not in allowed:
+            raise ValueError(f"invalid {field_name}: {v!r}")
+
+
 def validate_type_specific(work_type: str, payload: dict | None) -> None:
     """Raise ValueError если type_specific не соответствует профилю вида работ.
 
@@ -131,13 +155,13 @@ def validate_type_specific(work_type: str, payload: dict | None) -> None:
         unknown = set(payload) - {"fire_fighting_means", "gas_analysis"}
         if unknown:
             raise ValueError(f"unknown type_specific keys: {sorted(unknown)}")
-        means = payload.get("fire_fighting_means")
-        if means is not None:
-            if not isinstance(means, list):
-                raise ValueError("fire_fighting_means must be a list")
-            for m in means:
-                if m not in FIRE_FIGHTING_MEANS:
-                    raise ValueError(f"invalid fire_fighting_means: {m!r}")
+        _validate_code_list(payload.get("fire_fighting_means"), FIRE_FIGHTING_MEANS, "fire_fighting_means")
+        _validate_gas_analysis(payload.get("gas_analysis"))
+    elif kind == "gas_works":
+        unknown = set(payload) - {"respiratory_ppe", "gas_analysis"}
+        if unknown:
+            raise ValueError(f"unknown type_specific keys: {sorted(unknown)}")
+        _validate_code_list(payload.get("respiratory_ppe"), RESPIRATORY_PPE, "respiratory_ppe")
         _validate_gas_analysis(payload.get("gas_analysis"))
     else:
         raise ValueError(f"type_specific is not accepted for work_type {work_type!r}")
@@ -201,5 +225,17 @@ def build_structured_section(
             return None
         return pf.StructuredSection(
             title="Пожарная безопасность огневых работ (1479)", kv=kv, table=table
+        )
+    if kind == "gas_works":
+        ts = type_specific or {}
+        kv = []
+        ppe = ts.get("respiratory_ppe") or []
+        if ppe:
+            kv.append(("СИЗОД", ", ".join(RESPIRATORY_PPE.get(c, c) for c in ppe)))
+        table = _gas_table(ts.get("gas_analysis"))
+        if not kv and table is None:
+            return None
+        return pf.StructuredSection(
+            title="Защита органов дыхания и анализ среды (528)", kv=kv, table=table
         )
     return None

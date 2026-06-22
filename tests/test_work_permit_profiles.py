@@ -139,3 +139,56 @@ def test_build_section_hot_work_empty_returns_none():
     assert (
         pr.build_structured_section("hot_work", safety_systems=None, type_specific={}) is None
     )
+
+
+def test_legal_reference_gas_hazardous_is_528():
+    assert "528" in pr.legal_reference("gas_hazardous")
+
+
+def test_validate_gas_hazardous_accepts_valid_payload():
+    pr.validate_type_specific(
+        "gas_hazardous",
+        {
+            "respiratory_ppe": ["hose_mask", "scba"],
+            "gas_analysis": [{"parameter": "oxygen", "value": "20.9", "norm": "≥ 20 об.%"}],
+        },
+    )
+
+
+def test_validate_gas_hazardous_rejects_unknown_key():
+    with pytest.raises(ValueError):
+        pr.validate_type_specific("gas_hazardous", {"fire_fighting_means": ["sand"]})
+
+
+def test_validate_gas_hazardous_rejects_bad_ppe():
+    with pytest.raises(ValueError):
+        pr.validate_type_specific("gas_hazardous", {"respiratory_ppe": ["spacesuit"]})
+
+
+def test_validate_gas_hazardous_rejects_bad_gas_parameter():
+    with pytest.raises(ValueError):
+        pr.validate_type_specific(
+            "gas_hazardous", {"gas_analysis": [{"parameter": "xx", "value": "1"}]}
+        )
+
+
+def test_build_section_gas_hazardous_ppe_and_gas():
+    sec = pr.build_structured_section(
+        "gas_hazardous",
+        safety_systems=None,
+        type_specific={
+            "respiratory_ppe": ["hose_mask", "scba"],
+            "gas_analysis": [{"parameter": "oxygen", "value": "20.9", "norm": "≥ 20 об.%"}],
+        },
+    )
+    assert isinstance(sec, StructuredSection)
+    assert "528" in sec.title
+    assert any(k == "СИЗОД" for k, _ in sec.kv)
+    assert "Шланговый противогаз" in sec.kv[0][1]
+    assert sec.table is not None and "Кислород" in sec.table.rows[0][0]
+
+
+def test_build_section_gas_hazardous_empty_returns_none():
+    assert (
+        pr.build_structured_section("gas_hazardous", safety_systems=None, type_specific={}) is None
+    )
