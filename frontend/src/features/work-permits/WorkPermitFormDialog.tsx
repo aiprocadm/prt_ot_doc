@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type ChangeEvent, type ReactNode } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
@@ -130,6 +130,16 @@ export const WorkPermitFormDialog = ({ trigger, initialData, onSubmitted }: Prop
     }
   };
 
+  // Профили type_specific у видов работ не совпадают (height/confined_space/hot_work),
+  // поэтому при смене вида сбрасываем данные предыдущего вида, чтобы не отправить чужие
+  // ключи (сервер вернёт 422). Сброс срабатывает только при действии пользователя —
+  // первичная загрузка черновика идёт через form.reset в useEffect выше.
+  const workTypeReg = form.register("work_type");
+  const onWorkTypeChange = (e: ChangeEvent<HTMLSelectElement>) => {
+    void workTypeReg.onChange(e);
+    form.setValue("type_specific", null);
+  };
+
   const selected = new Set(form.watch("safety_systems") ?? []);
   const toggleSystem = (code: (typeof SAFETY_SYSTEM_CODES)[number]) => {
     const next = new Set(selected);
@@ -176,7 +186,8 @@ export const WorkPermitFormDialog = ({ trigger, initialData, onSubmitted }: Prop
               <select
                 id="work_type"
                 className="h-10 w-full rounded-md border px-3"
-                {...form.register("work_type")}
+                {...workTypeReg}
+                onChange={onWorkTypeChange}
               >
                 {Object.entries(WORK_TYPE_LABELS).map(([code, label]) => (
                   <option key={code} value={code}>
