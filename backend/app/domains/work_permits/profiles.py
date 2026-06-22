@@ -51,7 +51,7 @@ class WorkTypeProfile:
     code: str
     label: str
     legal_reference: str
-    structured_kind: str | None  # "safety_systems" | "confined_env" | "fire_safety" | None
+    structured_kind: str | None  # "safety_systems" | "confined_env" | "fire_safety" | "gas_works" | None
 
 
 PROFILES: dict[str, WorkTypeProfile] = {
@@ -123,7 +123,7 @@ def _validate_gas_analysis(rows: list | None) -> None:
             raise ValueError(f"invalid gas parameter: {r.get('parameter')!r}")
 
 
-def _validate_code_list(values, allowed, field_name) -> None:
+def _validate_code_list(values: list | None, allowed: dict, field_name: str) -> None:
     """Список кодов ⊆ allowed (или None). Общий для fire_fighting_means и respiratory_ppe."""
     if values is None:
         return
