@@ -392,6 +392,50 @@ async def _seed_work_permit_confined_demo(session, tenant_db_id: str, person) ->
         )
 
 
+async def _seed_work_permit_hot_work_demo(session, tenant_db_id: str, person) -> None:
+    """Демо-наряд огневых работ (1479) со средствами пожаротушения и замером — печатается «из коробки». Идемпотентно."""
+    from app.models.work_permit import WorkPermit, WorkPermitMember
+
+    wp = (
+        await session.execute(
+            select(WorkPermit).where(
+                WorkPermit.tenant_id == tenant_db_id,
+                WorkPermit.number == "WP-HOT-DEMO",
+            )
+        )
+    ).scalar_one_or_none()
+    if wp is None:
+        wp = WorkPermit(
+            tenant_id=tenant_db_id,
+            number="WP-HOT-DEMO",
+            work_type="hot_work",
+            zone_text="Эстакада №3, участок сварки",
+            status="draft",
+            type_specific={
+                "fire_fighting_means": ["extinguisher_powder", "sand"],
+                "gas_analysis": [{"parameter": "flammable", "value": "0", "norm": "≤ 10 % НКПР"}],
+            },
+        )
+        session.add(wp)
+        await session.flush()
+    member = (
+        await session.execute(
+            select(WorkPermitMember).where(
+                WorkPermitMember.tenant_id == tenant_db_id,
+                WorkPermitMember.work_permit_id == wp.id,
+                WorkPermitMember.person_id == person.id,
+                WorkPermitMember.role == "foreman",
+            )
+        )
+    ).scalar_one_or_none()
+    if member is None:
+        session.add(
+            WorkPermitMember(
+                tenant_id=tenant_db_id, work_permit_id=wp.id, person_id=person.id, role="foreman"
+            )
+        )
+
+
 async def bootstrap_demo_tenant(settings: Settings) -> None:
     """Create a deterministic tenant with baseline entities for demo walkthrough."""
 
@@ -617,6 +661,7 @@ async def bootstrap_demo_tenant(settings: Settings) -> None:
             await _seed_medical_factor_demo(session, tenant_db_id, str(position.id))
             await _seed_briefing_code_flow_demo(session, tenant_db_id, person)
             await _seed_work_permit_confined_demo(session, tenant_db_id, person)
+            await _seed_work_permit_hot_work_demo(session, tenant_db_id, person)
 
         await ensure_default_packs(session, tenant_slug=tenant_slug)
         logger.info(

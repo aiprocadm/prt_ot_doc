@@ -24,6 +24,7 @@ import {
   WORK_TYPE_LABELS,
   VENTILATION_LABELS,
   GAS_PARAMETER_LABELS,
+  FIRE_FIGHTING_MEANS_LABELS,
   labelOf,
 } from "@/lib/workPermitVocab";
 import { PERMISSIONS } from "@/permissions/permissions";
@@ -320,6 +321,22 @@ export default function WorkPermitDetailPage() {
               <div className="font-medium">Анализ воздушной среды и вентиляция (902н)</div>
               {(wp.type_specific as { ventilation?: string }).ventilation ? (
                 <div>Вентиляция: {VENTILATION_LABELS[(wp.type_specific as { ventilation: string }).ventilation] ?? "—"}</div>
+              ) : null}
+              {((wp.type_specific as { gas_analysis?: Array<{ parameter: string; value: string }> }).gas_analysis ?? []).map((m, i) => (
+                <div key={i}>{GAS_PARAMETER_LABELS[m.parameter] ?? m.parameter}: {m.value}</div>
+              ))}
+            </div>
+          ) : null}
+          {wp.work_type === "hot_work" && wp.type_specific ? (
+            <div className="text-sm">
+              <div className="font-medium">Пожарная безопасность огневых работ (1479)</div>
+              {((wp.type_specific as { fire_fighting_means?: string[] }).fire_fighting_means ?? []).length ? (
+                <div>
+                  Средства пожаротушения:{" "}
+                  {((wp.type_specific as { fire_fighting_means: string[] }).fire_fighting_means)
+                    .map((c) => FIRE_FIGHTING_MEANS_LABELS[c] ?? c)
+                    .join(", ")}
+                </div>
               ) : null}
               {((wp.type_specific as { gas_analysis?: Array<{ parameter: string; value: string }> }).gas_analysis ?? []).map((m, i) => (
                 <div key={i}>{GAS_PARAMETER_LABELS[m.parameter] ?? m.parameter}: {m.value}</div>

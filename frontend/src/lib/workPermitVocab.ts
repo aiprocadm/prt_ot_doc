@@ -86,5 +86,14 @@ export const VENTILATION_LABELS: Record<string, string> = {
   not_required: "Не требуется",
 };
 
+export const FIRE_FIGHTING_MEANS_LABELS: Record<string, string> = {
+  extinguisher_powder: "Огнетушитель порошковый",
+  extinguisher_co2: "Огнетушитель углекислотный",
+  water: "Вода (ёмкость/ведро)",
+  sand: "Ящик с песком",
+  felt: "Кошма / асбестовое полотно",
+  fire_hose: "Пожарный кран/рукав",
+};
+
 export const labelOf = (map: Record<string, string>, code: string): string =>
   map[code] ?? code;

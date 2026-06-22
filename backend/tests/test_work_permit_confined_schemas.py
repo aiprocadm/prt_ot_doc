@@ -33,3 +33,31 @@ def test_create_rejects_type_specific_on_height():
 def test_create_allows_no_type_specific():
     m = WorkPermitCreate(**_base())
     assert m.type_specific is None
+
+
+def test_create_accepts_valid_hot_work_type_specific():
+    m = WorkPermitCreate(
+        work_type="hot_work",
+        zone_text="эстакада №3",
+        type_specific={
+            "fire_fighting_means": ["extinguisher_powder", "sand"],
+            "gas_analysis": [{"parameter": "flammable", "value": "0", "norm": "≤ 10 % НКПР"}],
+        },
+    )
+    assert m.type_specific["fire_fighting_means"] == ["extinguisher_powder", "sand"]
+
+
+def test_create_rejects_bad_fire_fighting_means():
+    with pytest.raises(ValidationError):
+        WorkPermitCreate(
+            work_type="hot_work", zone_text="эстакада",
+            type_specific={"fire_fighting_means": ["laser"]},
+        )
+
+
+def test_create_rejects_ventilation_on_hot_work():
+    with pytest.raises(ValidationError):
+        WorkPermitCreate(
+            work_type="hot_work", zone_text="эстакада",
+            type_specific={"ventilation": "forced"},
+        )

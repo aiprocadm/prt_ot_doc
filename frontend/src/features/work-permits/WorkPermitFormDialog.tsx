@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type ChangeEvent, type ReactNode } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
@@ -21,6 +21,7 @@ import {
   SAFETY_SYSTEM_CODES,
   GAS_PARAMETER_CODES,
   VENTILATION_CODES,
+  FIRE_FIGHTING_MEANS_CODES,
   workPermitSchema,
   type WorkPermitFormValues,
 } from "@/types/forms/workPermits";
@@ -30,6 +31,7 @@ import {
   LEGAL_REFERENCE_LABELS,
   GAS_PARAMETER_LABELS,
   VENTILATION_LABELS,
+  FIRE_FIGHTING_MEANS_LABELS,
 } from "@/lib/workPermitVocab";
 import { applyApiFieldErrorsToForm, isApiError } from "@/utils/apiFormErrors";
 
@@ -109,7 +111,9 @@ export const WorkPermitFormDialog = ({ trigger, initialData, onSubmitted }: Prop
     ppe_text: v.ppe_text || null,
     planned_start: v.planned_start ? new Date(v.planned_start).toISOString() : null,
     planned_end: v.planned_end ? new Date(v.planned_end).toISOString() : null,
-    type_specific: v.work_type === "confined_space" ? (v.type_specific ?? null) : null,
+    type_specific: ["confined_space", "hot_work"].includes(v.work_type)
+      ? (v.type_specific ?? null)
+      : null,
   });
 
   const onSubmit = async (v: WorkPermitFormValues) => {
@@ -126,11 +130,33 @@ export const WorkPermitFormDialog = ({ trigger, initialData, onSubmitted }: Prop
     }
   };
 
+  // Профили type_specific у видов работ не совпадают (height/confined_space/hot_work),
+  // поэтому при смене вида сбрасываем данные предыдущего вида, чтобы не отправить чужие
+  // ключи (сервер вернёт 422). Сброс срабатывает только при действии пользователя —
+  // первичная загрузка черновика идёт через form.reset в useEffect выше.
+  const workTypeReg = form.register("work_type");
+  const onWorkTypeChange = (e: ChangeEvent<HTMLSelectElement>) => {
+    void workTypeReg.onChange(e);
+    form.setValue("type_specific", null);
+  };
+
   const selected = new Set(form.watch("safety_systems") ?? []);
   const toggleSystem = (code: (typeof SAFETY_SYSTEM_CODES)[number]) => {
     const next = new Set(selected);
     next.has(code) ? next.delete(code) : next.add(code);
     form.setValue("safety_systems", Array.from(next) as WorkPermitFormValues["safety_systems"]);
+  };
+
+  const selectedMeans = new Set(
+    ((form.watch("type_specific") as { fire_fighting_means?: string[] } | null)?.fire_fighting_means) ?? [],
+  );
+  const toggleMean = (code: (typeof FIRE_FIGHTING_MEANS_CODES)[number]) => {
+    const next = new Set(selectedMeans);
+    next.has(code) ? next.delete(code) : next.add(code);
+    form.setValue("type_specific", {
+      ...(form.watch("type_specific") ?? {}),
+      fire_fighting_means: Array.from(next),
+    } as WorkPermitFormValues["type_specific"]);
   };
 
   return (
@@ -160,7 +186,8 @@ export const WorkPermitFormDialog = ({ trigger, initialData, onSubmitted }: Prop
               <select
                 id="work_type"
                 className="h-10 w-full rounded-md border px-3"
-                {...form.register("work_type")}
+                {...workTypeReg}
+                onChange={onWorkTypeChange}
               >
                 {Object.entries(WORK_TYPE_LABELS).map(([code, label]) => (
                   <option key={code} value={code}>
@@ -246,6 +273,29 @@ export const WorkPermitFormDialog = ({ trigger, initialData, onSubmitted }: Prop
               <p className="text-xs text-muted-foreground">
                 Параметры замеров: {GAS_PARAMETER_CODES.map((c) => GAS_PARAMETER_LABELS[c]).join(", ")}.
                 Изоляция коммуникаций и средства эвакуации — в полях «Мероприятия» / «Особые условия».
+              </p>
+            </div>
+          )}
+
+          {form.watch("work_type") === "hot_work" && (
+            <div className="space-y-2">
+              <Label>Пожарная безопасность огневых работ (1479)</Label>
+              <Label className="text-xs">Средства пожаротушения</Label>
+              <div className="flex flex-wrap gap-3">
+                {FIRE_FIGHTING_MEANS_CODES.map((code) => (
+                  <label key={code} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={selectedMeans.has(code)}
+                      onChange={() => toggleMean(code)}
+                    />
+                    {FIRE_FIGHTING_MEANS_LABELS[code]}
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Параметры замеров концентрации: {GAS_PARAMETER_CODES.map((c) => GAS_PARAMETER_LABELS[c]).join(", ")}.
+                Подготовка/очистка места и контроль после работ — в полях «Мероприятия» / «Особые условия».
               </p>
             </div>
           )}

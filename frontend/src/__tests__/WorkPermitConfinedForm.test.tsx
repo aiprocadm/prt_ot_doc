@@ -13,4 +13,17 @@ describe("WorkPermitFormDialog confined section", () => {
     expect(screen.getByText(/Анализ воздушной среды/i)).toBeInTheDocument();
     expect(screen.queryByText("Системы обеспечения безопасности")).not.toBeInTheDocument();
   });
+
+  it("сбрасывает type_specific при смене вида работ (confined→hot→confined очищает вентиляцию)", () => {
+    render(<WorkPermitFormDialog trigger={<button>open</button>} />);
+    fireEvent.click(screen.getByText("open"));
+    const workType = screen.getByLabelText("Вид работ");
+    fireEvent.change(workType, { target: { value: "confined_space" } });
+    fireEvent.change(screen.getByLabelText("Вентиляция"), { target: { value: "forced" } });
+    expect((screen.getByLabelText("Вентиляция") as HTMLSelectElement).value).toBe("forced");
+    // смена вида → сброс предыдущего type_specific
+    fireEvent.change(workType, { target: { value: "hot_work" } });
+    fireEvent.change(workType, { target: { value: "confined_space" } });
+    expect((screen.getByLabelText("Вентиляция") as HTMLSelectElement).value).toBe("");
+  });
 });
