@@ -90,3 +90,52 @@ def test_build_section_none_profile_returns_none():
     assert (
         pr.build_structured_section("electrical", safety_systems=None, type_specific=None) is None
     )
+
+
+def test_validate_hot_work_accepts_valid_payload():
+    pr.validate_type_specific(
+        "hot_work",
+        {
+            "fire_fighting_means": ["extinguisher_powder", "sand"],
+            "gas_analysis": [{"parameter": "flammable", "value": "0", "norm": "≤ 10 % НКПР"}],
+        },
+    )
+
+
+def test_validate_hot_work_rejects_unknown_key():
+    with pytest.raises(ValueError):
+        pr.validate_type_specific("hot_work", {"ventilation": "forced"})
+
+
+def test_validate_hot_work_rejects_bad_means():
+    with pytest.raises(ValueError):
+        pr.validate_type_specific("hot_work", {"fire_fighting_means": ["laser"]})
+
+
+def test_validate_hot_work_rejects_bad_gas_parameter():
+    with pytest.raises(ValueError):
+        pr.validate_type_specific(
+            "hot_work", {"gas_analysis": [{"parameter": "xx", "value": "1"}]}
+        )
+
+
+def test_build_section_hot_work_means_and_gas():
+    sec = pr.build_structured_section(
+        "hot_work",
+        safety_systems=None,
+        type_specific={
+            "fire_fighting_means": ["extinguisher_powder", "sand"],
+            "gas_analysis": [{"parameter": "flammable", "value": "0", "norm": "≤ 10 % НКПР"}],
+        },
+    )
+    assert isinstance(sec, StructuredSection)
+    assert "1479" in sec.title
+    assert any(k == "Средства пожаротушения" for k, _ in sec.kv)
+    assert "Огнетушитель порошковый" in sec.kv[0][1]
+    assert sec.table is not None and "Горючие" in sec.table.rows[0][0]
+
+
+def test_build_section_hot_work_empty_returns_none():
+    assert (
+        pr.build_structured_section("hot_work", safety_systems=None, type_specific={}) is None
+    )
